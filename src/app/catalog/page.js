@@ -563,12 +563,31 @@ export default function CatalogPage() {
     setCart(cart.filter(item => item.product !== productName));
   };
 
-  // Calculate Cart Total
+  // Calculate Cart Subtotal (before discount)
   const getCartTotal = () => {
     return cart.reduce((acc, item) => {
       const price = getPriceAsNumber(item, currency);
       return acc + (price * item.qty);
     }, 0);
+  };
+
+  // Volume discount tiers: 5+ vials = 15%, 10+ vials = 20%
+  const getCartVialCount = (cartItems) => {
+    return (cartItems || cart).reduce((sum, item) => sum + item.qty, 0);
+  };
+
+  const getVolumeDiscountPct = (vialCount) => {
+    if (vialCount >= 10) return 20;
+    if (vialCount >= 5) return 15;
+    return 0;
+  };
+
+  const getDiscountedTotal = () => {
+    const subtotal = getCartTotal();
+    const vials = getCartVialCount();
+    const pct = getVolumeDiscountPct(vials);
+    if (pct > 0) return Math.round(subtotal * (1 - pct / 100));
+    return subtotal;
   };
 
   // Checkout submit
@@ -579,7 +598,10 @@ export default function CatalogPage() {
 
     setOrderSubmitting(true);
 
-    const totalVal = getCartTotal();
+    const subtotalVal = getCartTotal();
+    const totalVal = getDiscountedTotal();
+    const vialCount = getCartVialCount();
+    const discountPct = getVolumeDiscountPct(vialCount);
     const orderItems = cart.map(item => ({
       product: item.product,
       qty: item.qty,
@@ -633,6 +655,12 @@ export default function CatalogPage() {
       return `\n• ${item.product} (x${item.qty}) — ${formatPriceVal(p * item.qty, currency)}`;
     }).join('');
 
+    const discountReceipt = discountPct > 0
+      ? (lang === 'en'
+        ? `\n\n🏷️ *VOLUME DISCOUNT (${vialCount} vials): ${discountPct}% OFF*\n_Subtotal: ${formatPriceVal(subtotalVal, currency)}_`
+        : `\n\n🏷️ *DESCUENTO POR VOLUMEN (${vialCount} viales): ${discountPct}% DESC.*\n_Subtotal: ${formatPriceVal(subtotalVal, currency)}_`)
+      : '';
+
     const totalReceipt = lang === 'en'
       ? `\n\n*TOTAL DUE:* *${formatPriceVal(totalVal, currency)}*`
       : `\n\n*TOTAL A PAGAR:* *${formatPriceVal(totalVal, currency)}*`;
@@ -654,7 +682,7 @@ export default function CatalogPage() {
         : `\n\n*Método de Pago: Coordinación por WhatsApp*\n_¡Muchas gracias por su orden! Verificaremos disponibilidad y coordinaremos el despacho y pago de inmediato._`;
     }
 
-    const fullMessage = encodeURIComponent(`${receiptHeader}${receiptDetails}${itemReceipts}${totalReceipt}${instructionsText}`);
+    const fullMessage = encodeURIComponent(`${receiptHeader}${receiptDetails}${itemReceipts}${discountReceipt}${totalReceipt}${instructionsText}`);
     const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${fullMessage}`;
 
     // Open WhatsApp
@@ -689,13 +717,16 @@ export default function CatalogPage() {
       },
       createOrder: async () => {
         const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, shippingAddress: sAddress, lang: cLang } = checkoutDataRef.current;
-        const totalVal = currentCart.reduce((sum, item) => {
+        const subtotalVal = currentCart.reduce((sum, item) => {
           let p = item.priceCrc;
           if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
           if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
           return sum + (p * item.qty);
         }, 0);
         
+        const vials = getCartVialCount(currentCart);
+        const pct = getVolumeDiscountPct(vials);
+        const totalVal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
         const orderItems = currentCart.map(item => {
           let p = item.priceCrc;
@@ -730,13 +761,16 @@ export default function CatalogPage() {
       onApprove: async (data) => {
         const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, shippingAddress: sAddress, lang: cLang, sessionId: sid } = checkoutDataRef.current;
         
-        const totalVal = currentCart.reduce((sum, item) => {
+        const subtotalVal = currentCart.reduce((sum, item) => {
           let p = item.priceCrc;
           if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
           if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
           return sum + (p * item.qty);
         }, 0);
         
+        const vials = getCartVialCount(currentCart);
+        const pct = getVolumeDiscountPct(vials);
+        const totalVal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
         const orderItems = currentCart.map(item => {
           let p = item.priceCrc;
@@ -1245,9 +1279,54 @@ export default function CatalogPage() {
 
         {cart.length > 0 && !orderSuccess && (
           <div className="cart-footer">
-            <div className="cart-total-row">
-              <span className="cart-total-label">{lang === 'en' ? 'SUBTOTAL DUE' : 'SUBTOTAL A PAGAR'}</span>
-              <span className="cart-total-val">{formatPriceVal(getCartTotal(), currency)}</span>
+            {/* Subtotal row */}
+            <div className="cart-total-row" style={{ opacity: getVolumeDiscountPct(getCartVialCount()) > 0 ? 0.6 : 1 }}>
+              <span className="cart-total-label">{lang === 'en' ? 'SUBTOTAL' : 'SUBTOTAL'}</span>
+              <span className="cart-total-val" style={getVolumeDiscountPct(getCartVialCount()) > 0 ? { textDecoration: 'line-through', fontSize: '0.9rem' } : {}}>{formatPriceVal(getCartTotal(), currency)}</span>
+            </div>
+
+            {/* Volume discount banner */}
+            {getVolumeDiscountPct(getCartVialCount()) > 0 && (
+              <div style={{ background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1))', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '12px', padding: '10px 14px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '1.1rem' }}>🏷️</span>
+                  <div>
+                    <div style={{ color: '#4ade80', fontWeight: '800', fontSize: '0.8rem' }}>
+                      {lang === 'en'
+                        ? `Volume Discount: ${getVolumeDiscountPct(getCartVialCount())}% OFF`
+                        : `Desc. por Volumen: ${getVolumeDiscountPct(getCartVialCount())}% DESC.`}
+                    </div>
+                    <div style={{ color: '#86efac', fontSize: '0.7rem', marginTop: '2px' }}>
+                      {lang === 'en'
+                        ? `${getCartVialCount()} vials in cart`
+                        : `${getCartVialCount()} viales en carrito`}
+                    </div>
+                  </div>
+                </div>
+                <span style={{ color: '#4ade80', fontWeight: '900', fontSize: '0.85rem' }}>-{formatPriceVal(getCartTotal() - getDiscountedTotal(), currency)}</span>
+              </div>
+            )}
+
+            {/* Next tier hint */}
+            {getCartVialCount() >= 1 && getCartVialCount() < 5 && (
+              <div style={{ background: 'rgba(234, 179, 8, 0.08)', border: '1px solid rgba(234, 179, 8, 0.15)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: '#fbbf24' }}>
+                {lang === 'en'
+                  ? `🔥 Add ${5 - getCartVialCount()} more vial${5 - getCartVialCount() > 1 ? 's' : ''} for 15% OFF!`
+                  : `🔥 ¡Añade ${5 - getCartVialCount()} vial${5 - getCartVialCount() > 1 ? 'es' : ''} más para 15% DESC.!`}
+              </div>
+            )}
+            {getCartVialCount() >= 5 && getCartVialCount() < 10 && (
+              <div style={{ background: 'rgba(234, 179, 8, 0.08)', border: '1px solid rgba(234, 179, 8, 0.15)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: '#fbbf24' }}>
+                {lang === 'en'
+                  ? `🔥 Add ${10 - getCartVialCount()} more vial${10 - getCartVialCount() > 1 ? 's' : ''} to unlock 20% OFF!`
+                  : `🔥 ¡Añade ${10 - getCartVialCount()} vial${10 - getCartVialCount() > 1 ? 'es' : ''} más para desbloquear 20% DESC.!`}
+              </div>
+            )}
+
+            {/* Final total row */}
+            <div className="cart-total-row" style={{ marginBottom: '4px' }}>
+              <span className="cart-total-label" style={{ fontWeight: '900' }}>{lang === 'en' ? 'TOTAL DUE' : 'TOTAL A PAGAR'}</span>
+              <span className="cart-total-val" style={{ color: getVolumeDiscountPct(getCartVialCount()) > 0 ? '#4ade80' : undefined }}>{formatPriceVal(getDiscountedTotal(), currency)}</span>
             </div>
 
             <form onSubmit={handleCheckoutSubmit} className="checkout-form">
