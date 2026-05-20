@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -121,6 +121,11 @@ export default function CatalogPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState(false);
 
+  // PayPal States
+  const [paypalReady, setPaypalReady] = useState(false);
+  const paypalButtonRef = useRef(null);
+  const paypalRendered = useRef(false);
+
   // Local storage & URL params setup on mount
   useEffect(() => {
     // URL overrides
@@ -216,6 +221,22 @@ export default function CatalogPage() {
     return () => {
       supabase.removeChannel(channel);
     };
+  }, []);
+
+  // Load PayPal JS SDK
+  useEffect(() => {
+    const clientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
+    if (!clientId || document.getElementById('paypal-sdk')) {
+      if (window.paypal) setPaypalReady(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.id = 'paypal-sdk';
+    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
+    script.async = true;
+    script.onload = () => setPaypalReady(true);
+    script.onerror = () => console.error('Failed to load PayPal SDK');
+    document.head.appendChild(script);
   }, []);
 
   // Sync cart to localStorage and Supabase
@@ -536,6 +557,7 @@ export default function CatalogPage() {
   // Checkout submit
   const handleCheckoutSubmit = async (e) => {
     e.preventDefault();
+    if (paymentMethod === 'paypal') return; // PayPal is handled by its own buttons
     if (!customerName || !customerPhone || cart.length === 0) return;
 
     setOrderSubmitting(true);
@@ -631,6 +653,121 @@ export default function CatalogPage() {
       setIsCartOpen(false);
     }, 4000);
   };
+
+  // Render PayPal Buttons into the container
+  const renderPayPalButtons = useCallback(() => {
+    if (!paypalReady || !window.paypal || !paypalButtonRef.current) return;
+    
+    // Clear previous buttons
+    paypalButtonRef.current.innerHTML = '';
+    paypalRendered.current = true;
+
+    const totalVal = getCartTotal();
+    const usdTotal = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
+    const orderItems = cart.map(item => ({
+      product: item.product,
+      qty: item.qty,
+      price: getPriceAsNumber(item, currency)
+    }));
+
+    window.paypal.Buttons({
+      style: {
+        layout: 'vertical',
+        color: 'gold',
+        shape: 'rect',
+        label: 'paypal',
+        height: 45,
+      },
+      createOrder: async () => {
+        try {
+          const res = await fetch('/api/paypal/create-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              totalUsd: usdTotal,
+              items: orderItems,
+              customerName,
+              customerPhone,
+            }),
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error);
+          return data.id;
+        } catch (err) {
+          console.error('PayPal create order failed:', err);
+          alert(lang === 'en' ? 'Failed to create PayPal order. Please try again.' : 'Error al crear la orden de PayPal. Intente de nuevo.');
+        }
+      },
+      onApprove: async (data) => {
+        try {
+          setOrderSubmitting(true);
+          const res = await fetch('/api/paypal/capture-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderID: data.orderID }),
+          });
+          const captureData = await res.json();
+
+          if (captureData.status === 'COMPLETED') {
+            // Save order to Supabase as Paid
+            if (isSupabaseConfigured && supabase) {
+              try {
+                await supabase.from('orders').insert({
+                  customer_name: customerName || 'PayPal Customer',
+                  customer_phone: customerPhone || '',
+                  items: orderItems,
+                  total_usd: usdTotal,
+                  total_crc: Math.round(usdTotal * exchangeRate),
+                  currency: 'USD',
+                  payment_method: 'paypal',
+                  status: 'Paid'
+                });
+
+                if (sessionId) {
+                  await supabase.from('abandoned_carts').update({ status: 'converted' }).eq('session_id', sessionId);
+                  const newSid = 'session_' + Math.random().toString(36).substring(2, 15);
+                  localStorage.setItem('cart_session_id', newSid);
+                  setSessionId(newSid);
+                }
+              } catch (err) {
+                console.error('Failed to log PayPal order to Supabase:', err);
+              }
+            }
+
+            setOrderSubmitting(false);
+            setOrderSuccess(true);
+            setCart([]);
+            setCustomerName('');
+            setCustomerPhone('');
+            setTimeout(() => {
+              setOrderSuccess(false);
+              setIsCartOpen(false);
+            }, 4000);
+          } else {
+            setOrderSubmitting(false);
+            alert(lang === 'en' ? 'Payment was not completed. Please try again.' : 'El pago no se completó. Intente de nuevo.');
+          }
+        } catch (err) {
+          setOrderSubmitting(false);
+          console.error('PayPal capture failed:', err);
+          alert(lang === 'en' ? 'Payment processing failed. Please try again.' : 'Error al procesar el pago. Intente de nuevo.');
+        }
+      },
+      onCancel: () => {
+        console.log('PayPal payment cancelled by user');
+      },
+      onError: (err) => {
+        console.error('PayPal button error:', err);
+      }
+    }).render(paypalButtonRef.current);
+  }, [paypalReady, cart, currency, exchangeRate, customerName, customerPhone, lang, sessionId]);
+
+  // Re-render PayPal buttons when relevant state changes
+  useEffect(() => {
+    if (paymentMethod === 'paypal' && paypalReady && paypalButtonRef.current && cart.length > 0) {
+      renderPayPalButtons();
+    }
+  }, [paymentMethod, paypalReady, cart, currency, renderPayPalButtons]);
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
@@ -1081,17 +1218,35 @@ export default function CatalogPage() {
                 <option value="sinpe">{lang === 'en' ? 'Pay via SINPE Móvil' : 'Pago vía SINPE Móvil'}</option>
                 <option value="paypal">{lang === 'en' ? 'Pay via PayPal' : 'Pago vía PayPal'}</option>
               </select>
-              <button 
-                type="submit" 
-                className="whatsapp-btn"
-                disabled={orderSubmitting}
-              >
-                {orderSubmitting ? (
-                  <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
-                ) : (
-                  lang === 'en' ? 'Submit Order to WhatsApp' : 'Enviar Pedido por WhatsApp'
-                )}
-              </button>
+              {paymentMethod === 'paypal' ? (
+                <div style={{ marginTop: '16px' }}>
+                  {(!customerName || !customerPhone) ? (
+                    <div style={{ padding: '12px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.9rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+                      {lang === 'en' ? 'Please enter your name and phone number above to enable PayPal checkout.' : 'Por favor ingrese su nombre y teléfono arriba para habilitar el pago con PayPal.'}
+                    </div>
+                  ) : (
+                    <div ref={paypalButtonRef} style={{ minHeight: '45px' }}></div>
+                  )}
+                  {orderSubmitting && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '12px', color: '#94a3b8' }}>
+                      <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
+                      {lang === 'en' ? 'Processing payment...' : 'Procesando pago...'}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button 
+                  type="submit" 
+                  className="whatsapp-btn"
+                  disabled={orderSubmitting}
+                >
+                  {orderSubmitting ? (
+                    <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
+                  ) : (
+                    lang === 'en' ? 'Submit Order to WhatsApp' : 'Enviar Pedido por WhatsApp'
+                  )}
+                </button>
+              )}
             </form>
           </div>
         )}
