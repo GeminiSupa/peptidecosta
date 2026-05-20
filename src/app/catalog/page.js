@@ -62,18 +62,27 @@ const translateDiscount = (str, targetLang) => {
   if (!str) return '';
   const s = str.trim();
   
-  if (targetLang === 'en') {
-    let result = s.replace(/compra\s+(\d+)\+\s+viales,\s+(\d+)%\s+de\s+descuento/i, 'Buy $1+ vials, get $2% off');
-    result = result.replace(/compra\s+(\d+)\+\s+viales,\s+obtenga\s+(\d+)%\s+de\s+descuento/i, 'Buy $1+ vials, get $2% off');
-    return result;
-  } 
+  // Extract the quantity and percentage numbers using regex
+  const match = s.match(/(\d+).*?(\d+)%/);
+  if (match) {
+    const qty = match[1];
+    const pct = match[2];
+    if (targetLang === 'en') {
+      return `Buy ${qty}+ vials, get ${pct}% off`;
+    } else {
+      return `Compra ${qty}+ viales, ${pct}% de desc.`;
+    }
+  }
   
-  if (targetLang === 'es') {
-    let result = s.replace(/buy\s+(\d+)\+\s+vials,\s+get\s+(\d+)%\s+off/i, 'Compra $1+ viales, $2% de descuento');
+  // Fallback for strings that don't match standard patterns
+  if (targetLang === 'en') {
+    let result = s.replace(/compra/i, 'Buy');
+    result = result.replace(/descuento/i, 'off');
+    result = result.replace(/viales/i, 'vials');
     return result;
   }
   
-  return str;
+  return s;
 };
 
 export default function CatalogPage() {
@@ -1130,7 +1139,7 @@ export default function CatalogPage() {
                       <span className="price-main">{pMain}</span>
                       {pSub && <span className="price-sub">{pSub}</span>}
                     </div>
-                    {p.discount && <div className="discount-badge">{p.discount}</div>}
+                    {p.discount && <div className="discount-badge">{translateDiscount(p.discount, lang)}</div>}
                     <div className={`stock-badge ${inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`}>
                       {translateStatus(p.status)}
                     </div>
