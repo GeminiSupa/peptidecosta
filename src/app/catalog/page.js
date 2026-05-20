@@ -130,6 +130,10 @@ export default function CatalogPage() {
   // Ref to hold latest checkout data for PayPal callbacks without re-rendering
   const checkoutDataRef = useRef({ cart, currency: 'CRC', exchangeRate: FALLBACK_EXCHANGE_RATE, customerName, customerPhone, shippingAddress, lang: 'en', sessionId });
 
+  useEffect(() => {
+    checkoutDataRef.current = { cart, currency, exchangeRate, customerName, customerPhone, shippingAddress, lang, sessionId };
+  }, [cart, currency, exchangeRate, customerName, customerPhone, shippingAddress, lang, sessionId]);
+
   // Local storage & URL params setup on mount
   useEffect(() => {
     // URL overrides
@@ -803,10 +807,16 @@ export default function CatalogPage() {
 
   // Re-render PayPal buttons when relevant state changes
   useEffect(() => {
+    const hasDetails = customerName && customerPhone && shippingAddress;
+    if (!hasDetails) {
+      paypalRendered.current = false;
+      return;
+    }
+
     if (paymentMethod === 'paypal' && paypalReady && paypalButtonRef.current && cart.length > 0 && !paypalRendered.current) {
       renderPayPalButtons();
     }
-  }, [paymentMethod, paypalReady, cart.length, renderPayPalButtons]);
+  }, [paymentMethod, paypalReady, cart.length, renderPayPalButtons, customerName, customerPhone, shippingAddress]);
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
@@ -1149,7 +1159,8 @@ export default function CatalogPage() {
           </button>
         </div>
 
-        <div className="cart-items-container">
+        <div className="cart-body">
+          <div className="cart-items-container">
           {orderSuccess ? (
             <div style={{ textAlign: 'center', padding: '40px 10px', color: '#4ade80' }}>
               <Check size={48} style={{ margin: '0 auto 16px auto', display: 'block' }} />
@@ -1298,6 +1309,7 @@ export default function CatalogPage() {
             </form>
           </div>
         )}
+        </div>
       </div>
 
       {/* Product Detail Modal */}
