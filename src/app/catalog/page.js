@@ -1249,9 +1249,9 @@ export default function CatalogPage() {
               />
               <textarea 
                 className="checkout-input" 
-                placeholder={lang === 'en' ? "Full Shipping Address (City, State, Zip, Country, etc.)" : "Dirección Completa de Envío (Ciudad, Provincia, etc.)"}
+                placeholder={lang === 'en' ? "Full shipping address:\n\nName\nID / Passport\nProvince, Canton, District\nAddress\nZip code\nPhone" : "Dirección completa de envio:\n\nNombre\nCédula\nProvincia, Cantón, Distrito\nDirección\nCódigo postal\nTeléfono"}
                 required
-                rows={3}
+                rows={8}
                 style={{ resize: 'vertical' }}
                 value={shippingAddress}
                 onChange={(e) => setShippingAddress(e.target.value)}
