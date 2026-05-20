@@ -126,6 +126,9 @@ export default function CatalogPage() {
   const [paypalReady, setPaypalReady] = useState(false);
   const paypalButtonRef = useRef(null);
   const paypalRendered = useRef(false);
+  
+  // Ref to hold latest checkout data for PayPal callbacks without re-rendering
+  const checkoutDataRef = useRef({ cart, currency: 'CRC', exchangeRate: FALLBACK_EXCHANGE_RATE, customerName, customerPhone, shippingAddress, lang: 'en', sessionId });
 
   // Local storage & URL params setup on mount
   useEffect(() => {
@@ -659,19 +662,9 @@ export default function CatalogPage() {
 
   // Render PayPal Buttons into the container
   const renderPayPalButtons = useCallback(() => {
-    if (!paypalReady || !window.paypal || !paypalButtonRef.current) return;
+    if (!paypalReady || !window.paypal || !paypalButtonRef.current || paypalRendered.current) return;
     
-    // Clear previous buttons
-    paypalButtonRef.current.innerHTML = '';
     paypalRendered.current = true;
-
-    const totalVal = getCartTotal();
-    const usdTotal = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
-    const orderItems = cart.map(item => ({
-      product: item.product,
-      qty: item.qty,
-      price: getPriceAsNumber(item, currency)
-    }));
 
     window.paypal.Buttons({
       style: {
@@ -682,6 +675,26 @@ export default function CatalogPage() {
         height: 45,
       },
       createOrder: async () => {
+        const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, shippingAddress: sAddress, lang: cLang } = checkoutDataRef.current;
+        const totalVal = currentCart.reduce((sum, item) => {
+          let p = item.priceCrc;
+          if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
+          if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
+          return sum + (p * item.qty);
+        }, 0);
+        
+        const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
+        const orderItems = currentCart.map(item => {
+          let p = item.priceCrc;
+          if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
+          if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
+          return {
+            product: item.product,
+            qty: item.qty,
+            price: p
+          };
+        });
+
         try {
           const res = await fetch('/api/paypal/create-order', {
             method: 'POST',
@@ -689,8 +702,8 @@ export default function CatalogPage() {
             body: JSON.stringify({
               totalUsd: usdTotal,
               items: orderItems,
-              customerName,
-              customerPhone,
+              customerName: cName,
+              customerPhone: cPhone,
             }),
           });
           const data = await res.json();
@@ -698,10 +711,31 @@ export default function CatalogPage() {
           return data.id;
         } catch (err) {
           console.error('PayPal create order failed:', err);
-          alert(lang === 'en' ? 'Failed to create PayPal order. Please try again.' : 'Error al crear la orden de PayPal. Intente de nuevo.');
+          alert(cLang === 'en' ? 'Failed to create PayPal order. Please try again.' : 'Error al crear la orden de PayPal. Intente de nuevo.');
         }
       },
       onApprove: async (data) => {
+        const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, shippingAddress: sAddress, lang: cLang, sessionId: sid } = checkoutDataRef.current;
+        
+        const totalVal = currentCart.reduce((sum, item) => {
+          let p = item.priceCrc;
+          if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
+          if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
+          return sum + (p * item.qty);
+        }, 0);
+        
+        const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
+        const orderItems = currentCart.map(item => {
+          let p = item.priceCrc;
+          if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
+          if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
+          return {
+            product: item.product,
+            qty: item.qty,
+            price: p
+          };
+        });
+
         try {
           setOrderSubmitting(true);
           const res = await fetch('/api/paypal/capture-order', {
@@ -716,19 +750,19 @@ export default function CatalogPage() {
             if (isSupabaseConfigured && supabase) {
               try {
                 await supabase.from('orders').insert({
-                  customer_name: customerName || 'PayPal Customer',
-                  customer_phone: customerPhone || '',
-                  shipping_address: shippingAddress || '',
+                  customer_name: cName || 'PayPal Customer',
+                  customer_phone: cPhone || '',
+                  shipping_address: sAddress || '',
                   items: orderItems,
                   total_usd: usdTotal,
-                  total_crc: Math.round(usdTotal * exchangeRate),
+                  total_crc: Math.round(usdTotal * rate),
                   currency: 'USD',
                   payment_method: 'paypal',
                   status: 'Paid'
                 });
 
-                if (sessionId) {
-                  await supabase.from('abandoned_carts').update({ status: 'converted' }).eq('session_id', sessionId);
+                if (sid) {
+                  await supabase.from('abandoned_carts').update({ status: 'converted' }).eq('session_id', sid);
                   const newSid = 'session_' + Math.random().toString(36).substring(2, 15);
                   localStorage.setItem('cart_session_id', newSid);
                   setSessionId(newSid);
@@ -750,12 +784,12 @@ export default function CatalogPage() {
             }, 4000);
           } else {
             setOrderSubmitting(false);
-            alert(lang === 'en' ? 'Payment was not completed. Please try again.' : 'El pago no se completó. Intente de nuevo.');
+            alert(cLang === 'en' ? 'Payment was not completed. Please try again.' : 'El pago no se completó. Intente de nuevo.');
           }
         } catch (err) {
           setOrderSubmitting(false);
           console.error('PayPal capture failed:', err);
-          alert(lang === 'en' ? 'Payment processing failed. Please try again.' : 'Error al procesar el pago. Intente de nuevo.');
+          alert(cLang === 'en' ? 'Payment processing failed. Please try again.' : 'Error al procesar el pago. Intente de nuevo.');
         }
       },
       onCancel: () => {
@@ -765,14 +799,14 @@ export default function CatalogPage() {
         console.error('PayPal button error:', err);
       }
     }).render(paypalButtonRef.current);
-  }, [paypalReady, cart, currency, exchangeRate, customerName, customerPhone, shippingAddress, lang, sessionId]);
+  }, [paypalReady]);
 
   // Re-render PayPal buttons when relevant state changes
   useEffect(() => {
-    if (paymentMethod === 'paypal' && paypalReady && paypalButtonRef.current && cart.length > 0) {
+    if (paymentMethod === 'paypal' && paypalReady && paypalButtonRef.current && cart.length > 0 && !paypalRendered.current) {
       renderPayPalButtons();
     }
-  }, [paymentMethod, paypalReady, cart, currency, renderPayPalButtons]);
+  }, [paymentMethod, paypalReady, cart.length, renderPayPalButtons]);
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
