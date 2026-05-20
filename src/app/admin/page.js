@@ -147,20 +147,24 @@ export default function AdminPage() {
     fetchRate();
   }, []);
 
-  // Supabase Realtime subscription for live product sync
+  // Supabase Realtime subscription for live sync across all tables
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase || !isAuthenticated) return;
 
     const channel = supabase
-      .channel('admin-products-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'products' },
-        (payload) => {
-          console.log('Realtime product change detected:', payload.eventType);
-          loadAdminData();
-        }
-      )
+      .channel('admin-realtime-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+        loadAdminData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        loadAdminData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'abandoned_carts' }, () => {
+        loadAdminData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'product_reviews' }, () => {
+        loadAdminData();
+      })
       .subscribe();
 
     return () => {
