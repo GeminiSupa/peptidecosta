@@ -1587,44 +1587,64 @@ export default function AdminPage() {
                 No reviews found.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {reviews.map(r => (
-                  <div key={r.id} style={{ background: '#0e1626', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                      <div>
-                        <h3 style={{ margin: '0 0 4px 0', fontSize: '1rem', color: '#f8fafc' }}>{r.product_name}</h3>
-                        <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-                          Author: {r.customer_name} | {new Date(r.created_at).toLocaleString()}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ background: r.status === 'Approved' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)', color: r.status === 'Approved' ? '#4ade80' : '#3b82f6', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-block', marginBottom: '6px' }}>
-                          {r.status}
-                        </div>
-                        <div style={{ display: 'flex', gap: '2px', justifyContent: 'flex-end' }}>
-                          {[1, 2, 3, 4, 5].map(star => (
-                            <Star key={star} size={14} fill={star <= r.rating ? '#fbbf24' : 'transparent'} color="#fbbf24" />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <p style={{ fontSize: '0.9rem', color: '#cbd5e1', marginBottom: '16px', lineHeight: '1.5' }}>
-                      "{r.comment}"
-                    </p>
-                    
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                      {r.status !== 'Approved' && (
-                        <button onClick={() => handleApproveReview(r.id)} style={{ padding: '6px 12px', background: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                          Approve
-                        </button>
-                      )}
-                      <button onClick={() => handleDeleteReview(r.id)} style={{ padding: '6px 12px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              <div className="spreadsheet-container">
+                <table className="spreadsheet-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '100px' }}>Date</th>
+                      <th style={{ width: '180px' }}>Product</th>
+                      <th style={{ width: '150px' }}>Author</th>
+                      <th style={{ width: '100px', textAlign: 'center' }}>Rating</th>
+                      <th style={{ minWidth: '300px' }}>Review Comment</th>
+                      <th style={{ width: '90px', textAlign: 'center' }}>Status</th>
+                      <th style={{ width: '160px', textAlign: 'center' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reviews.map(r => (
+                      <tr key={r.id} style={{ opacity: r.status === 'Approved' ? 0.75 : 1 }}>
+                        <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                          {new Date(r.created_at).toLocaleDateString()}
+                        </td>
+                        <td style={{ fontWeight: 'bold' }}>{r.product_name}</td>
+                        <td>{r.customer_name}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '2px', justifyContent: 'center' }}>
+                            {[1, 2, 3, 4, 5].map(star => (
+                              <Star key={star} size={12} fill={star <= r.rating ? '#fbbf24' : 'transparent'} color="#fbbf24" />
+                            ))}
+                          </div>
+                        </td>
+                        <td style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+                           <div style={{ maxHeight: '60px', overflowY: 'auto', paddingRight: '4px', lineHeight: '1.4' }}>
+                             {r.comment}
+                           </div>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{ 
+                            background: r.status === 'Approved' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(59, 130, 246, 0.15)', 
+                            color: r.status === 'Approved' ? '#4ade80' : '#38bdf8', 
+                            padding: '4px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' 
+                          }}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                            {r.status !== 'Approved' && (
+                              <button onClick={() => handleApproveReview(r.id)} style={{ padding: '6px 10px', background: 'rgba(22, 163, 74, 0.15)', color: '#4ade80', border: '1px solid rgba(22, 163, 74, 0.3)', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                                Approve
+                              </button>
+                            )}
+                            <button onClick={() => handleDeleteReview(r.id)} style={{ padding: '6px 10px', background: 'rgba(220, 38, 38, 0.15)', color: '#f87171', border: '1px solid rgba(220, 38, 38, 0.3)', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
