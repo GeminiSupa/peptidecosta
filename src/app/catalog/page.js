@@ -106,6 +106,7 @@ export default function CatalogPage() {
   // Checkout inputs
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [shippingAddress, setShippingAddress] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('whatsapp');
   const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
@@ -558,7 +559,7 @@ export default function CatalogPage() {
   const handleCheckoutSubmit = async (e) => {
     e.preventDefault();
     if (paymentMethod === 'paypal') return; // PayPal is handled by its own buttons
-    if (!customerName || !customerPhone || cart.length === 0) return;
+    if (!customerName || !customerPhone || !shippingAddress || cart.length === 0) return;
 
     setOrderSubmitting(true);
 
@@ -579,6 +580,7 @@ export default function CatalogPage() {
           .insert({
             customer_name: customerName,
             customer_phone: customerPhone,
+            shipping_address: shippingAddress,
             items: orderItems,
             total_usd: currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate),
             total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
@@ -607,8 +609,8 @@ export default function CatalogPage() {
       : `*PÉPTIDOS COSTA RICA — NUEVA ORDEN*`;
       
     const receiptDetails = lang === 'en'
-      ? `\n\n*Customer Details:*\n• Name: ${customerName}\n• Phone: ${customerPhone}\n\n*Ordered Items:*`
-      : `\n\n*Detalles del Cliente:*\n• Nombre: ${customerName}\n• Teléfono: ${customerPhone}\n\n*Artículos Pedidos:*`;
+      ? `\n\n*Customer Details:*\n• Name: ${customerName}\n• Phone: ${customerPhone}\n• Address: ${shippingAddress}\n\n*Ordered Items:*`
+      : `\n\n*Detalles del Cliente:*\n• Nombre: ${customerName}\n• Teléfono: ${customerPhone}\n• Dirección: ${shippingAddress}\n\n*Artículos Pedidos:*`;
 
     const itemReceipts = cart.map(item => {
       const p = getPriceAsNumber(item, currency);
@@ -647,6 +649,7 @@ export default function CatalogPage() {
     setCart([]);
     setCustomerName('');
     setCustomerPhone('');
+    setShippingAddress('');
 
     setTimeout(() => {
       setOrderSuccess(false);
@@ -715,6 +718,7 @@ export default function CatalogPage() {
                 await supabase.from('orders').insert({
                   customer_name: customerName || 'PayPal Customer',
                   customer_phone: customerPhone || '',
+                  shipping_address: shippingAddress || '',
                   items: orderItems,
                   total_usd: usdTotal,
                   total_crc: Math.round(usdTotal * exchangeRate),
@@ -739,6 +743,7 @@ export default function CatalogPage() {
             setCart([]);
             setCustomerName('');
             setCustomerPhone('');
+            setShippingAddress('');
             setTimeout(() => {
               setOrderSuccess(false);
               setIsCartOpen(false);
@@ -760,7 +765,7 @@ export default function CatalogPage() {
         console.error('PayPal button error:', err);
       }
     }).render(paypalButtonRef.current);
-  }, [paypalReady, cart, currency, exchangeRate, customerName, customerPhone, lang, sessionId]);
+  }, [paypalReady, cart, currency, exchangeRate, customerName, customerPhone, shippingAddress, lang, sessionId]);
 
   // Re-render PayPal buttons when relevant state changes
   useEffect(() => {
@@ -1208,6 +1213,15 @@ export default function CatalogPage() {
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
               />
+              <textarea 
+                className="checkout-input" 
+                placeholder={lang === 'en' ? "Full Shipping Address (City, State, Zip, Country, etc.)" : "Dirección Completa de Envío (Ciudad, Provincia, etc.)"}
+                required
+                rows={3}
+                style={{ resize: 'vertical' }}
+                value={shippingAddress}
+                onChange={(e) => setShippingAddress(e.target.value)}
+              />
               <select
                 className="checkout-input"
                 value={paymentMethod}
@@ -1220,9 +1234,9 @@ export default function CatalogPage() {
               </select>
               {paymentMethod === 'paypal' ? (
                 <div style={{ marginTop: '16px' }}>
-                  {(!customerName || !customerPhone) ? (
+                  {(!customerName || !customerPhone || !shippingAddress) ? (
                     <div style={{ padding: '12px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.9rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-                      {lang === 'en' ? 'Please enter your name and phone number above to enable PayPal checkout.' : 'Por favor ingrese su nombre y teléfono arriba para habilitar el pago con PayPal.'}
+                      {lang === 'en' ? 'Please enter your name, phone number, and shipping address above to enable PayPal checkout.' : 'Por favor ingrese su nombre, teléfono y dirección de envío arriba para habilitar el pago con PayPal.'}
                     </div>
                   ) : (
                     <div ref={paypalButtonRef} style={{ minHeight: '45px' }}></div>

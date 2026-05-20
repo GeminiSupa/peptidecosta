@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
     total_crc NUMERIC,
     currency TEXT NOT NULL DEFAULT 'CRC',
     payment_method TEXT NOT NULL DEFAULT 'whatsapp',
+    shipping_address TEXT,
     status TEXT NOT NULL DEFAULT 'Pending',
     created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -228,6 +229,7 @@ USING (true);
 -- ALTER TABLE public.products ADD COLUMN IF NOT EXISTS description_en TEXT;
 -- ALTER TABLE public.products ADD COLUMN IF NOT EXISTS description_es TEXT;
 
--- 2. Added Payment Methods (Added May 20)
+-- 2. Added Payment Methods & Shipping (Added May 20)
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_method TEXT NOT NULL DEFAULT 'whatsapp';
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
 

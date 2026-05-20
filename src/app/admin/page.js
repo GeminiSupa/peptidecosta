@@ -688,8 +688,11 @@ export default function AdminPage() {
     if (orders.length === 0) return;
 
     const rows = [];
-    // Header
-    rows.push(['Order ID', 'Date (CR)', 'Customer Name', 'WhatsApp', 'Status', 'Currency', 'Items', 'Total USD', 'Total CRC']);
+    const headers = [
+      'Order ID', 'Date', 'Customer Name', 'Phone', 'Shipping Address', 'Status', 
+      'Payment Method', 'Items', 'Total (CRC)', 'Total (USD)'
+    ];
+    rows.push(headers);
 
     orders.forEach(order => {
       const items = Array.isArray(order.items) ? order.items : [];
@@ -698,13 +701,14 @@ export default function AdminPage() {
       rows.push([
         order.id,
         orderDate,
-        order.customer_name || '',
+        order.customer_name || 'N/A',
         order.customer_phone || '',
+        order.shipping_address || 'N/A',
         order.status || 'Pending',
-        order.currency || 'USD',
+        order.payment_method || 'whatsapp',
         itemsSummary,
-        order.total_usd || '',
-        order.total_crc || ''
+        order.total_crc || '',
+        order.total_usd || ''
       ]);
     });
 
@@ -1351,6 +1355,11 @@ export default function AdminPage() {
                         <div className="order-customer-info">
                           <h4>{order.customer_name}</h4>
                           <p>WhatsApp: {order.customer_phone}</p>
+                          {order.shipping_address && (
+                            <p style={{ marginTop: '4px', fontSize: '0.85rem', color: '#94a3b8' }}>
+                              <strong style={{ color: '#fff' }}>Address:</strong> {order.shipping_address}
+                            </p>
+                          )}
                         </div>
                         <div className="order-meta-info">
                           <span className="order-date">{orderDate}</span>
