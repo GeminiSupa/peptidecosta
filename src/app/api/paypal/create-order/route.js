@@ -27,8 +27,8 @@ export async function POST(request) {
     const { totalUsd, items, customerName, customerPhone } = await request.json();
 
     if (!totalUsd || totalUsd <= 0) {
-      require('fs').writeFileSync('/Users/apple/Desktop/costapeptides/paypal_error.log', 'Invalid total amount: ' + totalUsd);
-      return Response.json({ error: 'Invalid total amount' }, { status: 400 });
+      console.log('Invalid total amount:', totalUsd);
+      return Response.json({ error: 'Invalid total amount: ' + totalUsd }, { status: 400 });
     }
 
     const accessToken = await getPayPalAccessToken();
@@ -70,14 +70,12 @@ export async function POST(request) {
 
     if (!response.ok) {
       console.error('PayPal create order error:', order);
-      require('fs').writeFileSync('/Users/apple/Desktop/costapeptides/paypal_error.log', JSON.stringify(order, null, 2));
-      return Response.json({ error: 'Failed to create PayPal order: ' + JSON.stringify(order) }, { status: 500 });
+      return Response.json({ error: 'Failed to create PayPal order: ' + JSON.stringify(order) }, { status: 400 });
     }
 
     return Response.json({ id: order.id });
   } catch (err) {
     console.error('PayPal create order exception:', err);
-    require('fs').writeFileSync('/Users/apple/Desktop/costapeptides/paypal_error.log', 'Exception: ' + err.message);
-    return Response.json({ error: 'Server error creating PayPal order: ' + err.message }, { status: 500 });
+    return Response.json({ error: 'Server error creating PayPal order: ' + err.message }, { status: 400 });
   }
 }

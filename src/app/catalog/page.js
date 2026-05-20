@@ -715,7 +715,7 @@ export default function CatalogPage() {
           return data.id;
         } catch (err) {
           console.error('PayPal create order failed:', err);
-          alert(cLang === 'en' ? 'Failed to create PayPal order. Please try again.' : 'Error al crear la orden de PayPal. Intente de nuevo.');
+          alert((cLang === 'en' ? 'Failed to create PayPal order: ' : 'Error al crear la orden de PayPal: ') + err.message);
         }
       },
       onApprove: async (data) => {
