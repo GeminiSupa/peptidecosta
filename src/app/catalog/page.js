@@ -606,8 +606,8 @@ export default function CatalogPage() {
     } else if (paymentMethod === 'sinpe') {
       const crcTotal = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
       instructionsText = lang === 'en'
-        ? `\n\n*Payment Method: SINPE Móvil*\n_Please send ₡${crcTotal.toLocaleString('en-US')} CRC via SINPE to:_\n👉 *+506 8888-8888 (Name here)*\n\n_Please send the screenshot of the transfer to verify and coordinate dispatch._`
-        : `\n\n*Método de Pago: SINPE Móvil*\n_Por favor envíe ₡${crcTotal.toLocaleString('en-US')} CRC por SINPE a:_\n👉 *+506 8888-8888 (Name here)*\n\n_Por favor envíe el comprobante por aquí para verificar y coordinar el despacho._`;
+        ? `\n\n*Payment Method: SINPE Móvil*\n_Please send ₡${crcTotal.toLocaleString('en-US')} CRC via SINPE to:_\n👉 *+506 7264-9160*\n\n_Please send the screenshot of the transfer to verify and coordinate dispatch._`
+        : `\n\n*Método de Pago: SINPE Móvil*\n_Por favor envíe ₡${crcTotal.toLocaleString('en-US')} CRC por SINPE a:_\n👉 *+506 7264-9160*\n\n_Por favor envíe el comprobante por aquí para verificar y coordinar el despacho._`;
     } else {
       instructionsText = lang === 'en'
         ? `\n\n*Payment Method: WhatsApp Coordination*\n_Thank you for your order! We will verify stock availability and coordinate dispatch and payment details immediately._`
