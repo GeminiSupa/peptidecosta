@@ -1,7 +1,7 @@
 // PayPal Create Order API Route
 // This runs server-side to securely create a PayPal order using the secret key
 
-const PAYPAL_API = 'https://api-m.paypal.com'; // Use 'https://api-m.sandbox.paypal.com' for testing
+const PAYPAL_API = process.env.NEXT_PUBLIC_PAYPAL_ENV === 'production' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 
 async function getPayPalAccessToken() {
   const clientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
@@ -27,6 +27,7 @@ export async function POST(request) {
     const { totalUsd, items, customerName, customerPhone } = await request.json();
 
     if (!totalUsd || totalUsd <= 0) {
+      require('fs').writeFileSync('/Users/apple/Desktop/costapeptides/paypal_error.log', 'Invalid total amount: ' + totalUsd);
       return Response.json({ error: 'Invalid total amount' }, { status: 400 });
     }
 
@@ -69,12 +70,14 @@ export async function POST(request) {
 
     if (!response.ok) {
       console.error('PayPal create order error:', order);
-      return Response.json({ error: 'Failed to create PayPal order' }, { status: 500 });
+      require('fs').writeFileSync('/Users/apple/Desktop/costapeptides/paypal_error.log', JSON.stringify(order, null, 2));
+      return Response.json({ error: 'Failed to create PayPal order: ' + JSON.stringify(order) }, { status: 500 });
     }
 
     return Response.json({ id: order.id });
   } catch (err) {
     console.error('PayPal create order exception:', err);
-    return Response.json({ error: 'Server error creating PayPal order' }, { status: 500 });
+    require('fs').writeFileSync('/Users/apple/Desktop/costapeptides/paypal_error.log', 'Exception: ' + err.message);
+    return Response.json({ error: 'Server error creating PayPal order: ' + err.message }, { status: 500 });
   }
 }

@@ -1,7 +1,7 @@
 // PayPal Capture Order API Route
 // This runs server-side to capture (finalize) a PayPal payment after customer approval
 
-const PAYPAL_API = 'https://api-m.paypal.com'; // Use 'https://api-m.sandbox.paypal.com' for testing
+const PAYPAL_API = process.env.NEXT_PUBLIC_PAYPAL_ENV === 'production' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 
 async function getPayPalAccessToken() {
   const clientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
