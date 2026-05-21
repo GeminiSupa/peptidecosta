@@ -195,7 +195,9 @@ export default function CatalogPage() {
     // Background Data Collection
     const fetchMetadata = async () => {
       try {
-        const res = await fetch('https://ipapi.co/json/');
+        const res = await fetch('https://ipapi.co/json/').catch(() => null);
+        if (!res || !res.ok) return; // Silently exit if blocked by adblocker
+        
         const data = await res.json();
         
         let device = 'Unknown';
@@ -213,7 +215,7 @@ export default function CatalogPage() {
           device_info: device
         });
       } catch (err) {
-        console.error("Metadata fetch failed", err);
+        // Silently ignore to prevent Next.js error overlay from popping up due to browser extensions
       }
     };
     fetchMetadata();

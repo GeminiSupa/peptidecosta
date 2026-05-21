@@ -55,6 +55,8 @@ export default function AdminPage() {
   const [abandonedCarts, setAbandonedCarts] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [loadingAbandonedCarts, setLoadingAbandonedCarts] = useState(true);
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
@@ -670,6 +672,22 @@ export default function AdminPage() {
           .eq('id', orderId);
       } catch(err) {
         console.error("Order status update error:", err);
+      }
+    }
+  };
+
+  // Order tracking update
+  const handleOrderTrackingUpdate = async (orderId, trackingNumber) => {
+    setOrders(orders.map(o => o.id === orderId ? { ...o, tracking_number: trackingNumber } : o));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('orders')
+          .update({ tracking_number: trackingNumber })
+          .eq('id', orderId);
+      } catch(err) {
+        console.error("Order tracking update error:", err);
       }
     }
   };
@@ -1318,18 +1336,38 @@ export default function AdminPage() {
         {/* TAB 2: ORDERS LEDGER HISTORY */}
         {activeTab === 'orders' && (
           <div>
-            <div className="admin-toolbar">
-              <div>
+            <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: '16px' }}>
+              <div style={{ flex: '1 1 auto', minWidth: '300px' }}>
                 <h3>Customer Orders Log Ledger</h3>
-                <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
+                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 12px 0' }}>
                   A secure listing of all catalog order intents placed by customers. Double check entries here before coordinating dispatches on WhatsApp.
                 </p>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input 
+                    type="text" 
+                    placeholder="Search by name, phone, email, or tracking..." 
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', fontSize: '0.85rem', minWidth: '250px' }}
+                  />
+                  <select
+                    value={orderStatusFilter}
+                    onChange={(e) => setOrderStatusFilter(e.target.value)}
+                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', fontSize: '0.85rem' }}
+                  >
+                    <option value="All">All Statuses</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Paid">Paid</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
               </div>
               {orders.length > 0 && (
                 <button
                   className="admin-btn admin-btn-primary"
                   onClick={downloadOrdersXlsx}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, alignSelf: 'flex-start' }}
                 >
                   <Upload size={14} />
                   Export to Excel / Sheets
@@ -1349,7 +1387,22 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="orders-grid">
-                {orders.map(order => {
+                {orders
+                  .filter(o => {
+                    if (orderStatusFilter !== 'All' && o.status !== orderStatusFilter) return false;
+                    if (orderSearch) {
+                      const s = orderSearch.toLowerCase();
+                      return (
+                        o.customer_name?.toLowerCase().includes(s) || 
+                        o.customer_phone?.toLowerCase().includes(s) ||
+                        o.customer_email?.toLowerCase().includes(s) ||
+                        o.id?.toLowerCase().includes(s) ||
+                        o.tracking_number?.toLowerCase().includes(s)
+                      );
+                    }
+                    return true;
+                  })
+                  .map(order => {
                   const items = Array.isArray(order.items) ? order.items : [];
                   const orderDate = new Date(order.created_at).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
                   
@@ -1434,8 +1487,23 @@ export default function AdminPage() {
                             {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE Móvil' : '💬 WhatsApp'}
                           </span>
                         </div>
-                        
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {/* Tracking Number Input */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Tracking:</span>
+                            <input 
+                              type="text" 
+                              placeholder="Add tracking #" 
+                              defaultValue={order.tracking_number || ''}
+                              onBlur={(e) => {
+                                if (e.target.value !== order.tracking_number) {
+                                  handleOrderTrackingUpdate(order.id, e.target.value);
+                                }
+                              }}
+                              style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '0.8rem', outline: 'none', width: '120px' }}
+                            />
+                          </div>
+                          
                           {/* WhatsApp direct contact link */}
                           <a 
                             href={`https://wa.me/${order.customer_phone.replace(/[^0-9]/g, '')}`} 

@@ -233,3 +233,6 @@ USING (true);
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_method TEXT NOT NULL DEFAULT 'whatsapp';
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
 
+
+-- Add tracking_number for old order tracking
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS tracking_number TEXT;
