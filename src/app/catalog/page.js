@@ -1524,6 +1524,7 @@ export default function CatalogPage() {
               />
               <div className="payment-method-grid" role="radiogroup" aria-label={lang === 'en' ? 'Payment method' : 'Método de pago'}>
                 {[
+                  /* SINPE and Card (Tilopay) hidden until production account is activated
                   {
                     value: 'sinpe',
                     icon: <Smartphone size={18} />,
@@ -1536,6 +1537,7 @@ export default function CatalogPage() {
                     title: lang === 'en' ? 'Card' : 'Tarjeta',
                     detail: lang === 'en' ? 'Credit or debit' : 'Crédito o débito',
                   },
+                  */
                   {
                     value: 'whatsapp',
                     icon: <MessageCircle size={18} />,
