@@ -30,76 +30,41 @@ export async function GET() {
     return NextResponse.json({ error: 'Login failed: ' + err.message });
   }
 
-  if (!token) return NextResponse.json({ error: 'No token received' });
-
   const authHeaders = { ...headers, 'Authorization': `Bearer ${token}` };
   const uniqueOrder = 'TEST-' + Date.now();
 
-  // Test 1: Standard Card Payment Payload
-  const cardPayload = {
-    redirect: 'https://peptidecosta.vercel.app/catalog?payment=tilopay&order=' + uniqueOrder,
+  // Test 1: Link Payment Payload
+  const linkPayload = {
     key: TILOPAY_API_KEY,
-    amount: '35000.00',
+    amount: '35000',
     currency: 'CRC',
-    billToFirstName: 'Test',
-    billToLastName: 'User',
-    billToAddress: 'San Jose, Costa Rica - Edificio 1',
-    billToAddress2: 'N/A',
-    billToCity: 'San Jose',
-    billToState: 'CR-SJ',
-    billToZipPostCode: '10101',
-    billToCountry: 'CR',
-    billToTelephone: '8888-8888',
-    billToEmail: 'test@test.com',
-    shipToFirstName: 'Test',
-    shipToLastName: 'User',
-    shipToAddress: 'San Jose, Costa Rica - Edificio 1',
-    shipToAddress2: 'N/A',
-    shipToCity: 'San Jose',
-    shipToState: 'CR-SJ',
-    shipToZipPostCode: '10101',
-    shipToCountry: 'CR',
-    shipToTelephone: '8888-8888',
-    orderNumber: uniqueOrder + '-CARD',
-    capture: '1',
-    subscription: '0',
-    platform: 'PeptidesCR',
-    token_version: 'v2',
-    returnData: Buffer.from(JSON.stringify({ lang: 'es', orderNumber: uniqueOrder, paymentMethod: 'tilopay' })).toString('base64'),
-  };
-
-  // Test 2: SINPE Payload (same endpoint, but with method fields)
-  const sinpePayload = {
-    ...cardPayload,
-    orderNumber: uniqueOrder + '-SINPE',
-    method: 'sinpemovil',
-    sinpeMovilIdType: 'cedula',
-    sinpeMovilIdNumber: '101110111',
+    reference: uniqueOrder,
+    type: 1, // One-time use
+    description: 'Costa Peptides Order ' + uniqueOrder,
+    client: 'Test User',
+    callback_url: 'https://peptidecosta.vercel.app/catalog',
   };
 
   const results = {};
 
-  // Execute tests
-  for (const [label, payload] of [['CARD_TEST', cardPayload], ['SINPE_TEST', sinpePayload]]) {
-    try {
-      const res = await fetch(`${TILOPAY_BASE}/api/v1/processPayment`, {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify(payload),
-      });
-      const bodyText = await res.text();
-      let parsedBody = {};
-      try { parsedBody = JSON.parse(bodyText); } catch(e) {}
-      
-      results[label] = {
-        status: res.status,
-        urlReturned: parsedBody?.url || null,
-        errorReturned: parsedBody?.error || null,
-        rawResponse: bodyText.substring(0, 300)
-      };
-    } catch (err) {
-      results[label] = { error: err.message };
-    }
+  try {
+    const res = await fetch(`${TILOPAY_BASE}/api/v1/createLinkPayment`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify(linkPayload),
+    });
+    const bodyText = await res.text();
+    let parsedBody = {};
+    try { parsedBody = JSON.parse(bodyText); } catch(e) {}
+    
+    results['LINK_TEST'] = {
+      status: res.status,
+      urlReturned: parsedBody?.url || parsedBody?.data?.url || null,
+      errorReturned: parsedBody?.error || parsedBody?.message || null,
+      rawResponse: bodyText.substring(0, 300)
+    };
+  } catch (err) {
+    results['LINK_TEST'] = { error: err.message };
   }
 
   return NextResponse.json(results);
