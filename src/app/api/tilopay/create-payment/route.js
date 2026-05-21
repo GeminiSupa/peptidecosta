@@ -123,9 +123,9 @@ export async function POST(req) {
 
     // ─── Step 2: Get Hosted Payment Form URL ──────────────────────────────────
     const paymentPayload = {
-      redirect:        `${TILOPAY_REDIRECT_URL}?payment=${paymentMethod}&order=${encodeURIComponent(orderNumber)}`,
+      redirect:        TILOPAY_REDIRECT_URL,
       key:             TILOPAY_API_KEY,
-      amount:          String(Number(amount).toFixed(2)),
+      amount:          currency === 'CRC' ? String(Math.round(amount)) : String(Number(amount).toFixed(2)),
       currency:        currency,         // 'USD' or 'CRC'
       billToFirstName: firstName,
       billToLastName:  lastName,
