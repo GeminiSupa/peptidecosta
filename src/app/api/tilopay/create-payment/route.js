@@ -157,7 +157,7 @@ export async function POST(req) {
       returnData:      Buffer.from(JSON.stringify({ lang, orderNumber, paymentMethod })).toString('base64'),
     };
 
-    const paymentRes = await fetch(`${TILOPAY_BASE}/api/v1/transactions`, {
+    const paymentRes = await fetch(`${TILOPAY_BASE}/api/v1/processPayment`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
