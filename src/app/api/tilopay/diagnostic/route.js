@@ -12,7 +12,7 @@ export async function GET() {
     'Accept': 'application/json',
   };
 
-  // Step 1: Get token using the confirmed working endpoint
+  // Step 1: Login
   let token = null;
   try {
     const tokenRes = await fetch(`${TILOPAY_BASE}/api/v1/login`, {
@@ -30,19 +30,20 @@ export async function GET() {
     return NextResponse.json({ error: 'Login failed: ' + err.message });
   }
 
-  if (!token) {
-    return NextResponse.json({ error: 'No token received' });
-  }
+  if (!token) return NextResponse.json({ error: 'No token received' });
 
-  // Step 2: Test multiple transaction endpoint paths with the Bearer token
-  const dummyPayload = {
+  const authHeaders = { ...headers, 'Authorization': `Bearer ${token}` };
+  const uniqueOrder = 'TEST-' + Date.now();
+
+  // Test 1: Standard Card Payment Payload
+  const cardPayload = {
     redirect: 'https://peptidecosta.vercel.app/catalog',
     key: TILOPAY_API_KEY,
-    amount: '1.00',
-    currency: 'USD',
+    amount: '10.00',
+    currency: 'CRC',
     billToFirstName: 'Test',
     billToLastName: 'User',
-    billToAddress: 'Test Address',
+    billToAddress: 'San Jose Centro',
     billToAddress2: 'N/A',
     billToCity: 'San Jose',
     billToState: 'CR-SJ',
@@ -50,60 +51,41 @@ export async function GET() {
     billToCountry: 'CR',
     billToTelephone: '88888888',
     billToEmail: 'test@test.com',
-    shipToFirstName: 'Test',
-    shipToLastName: 'User',
-    shipToAddress: 'Test Address',
-    shipToAddress2: 'N/A',
-    shipToCity: 'San Jose',
-    shipToState: 'CR-SJ',
-    shipToZipPostCode: '10101',
-    shipToCountry: 'CR',
-    shipToTelephone: '88888888',
-    orderNumber: 'DIAG-' + Date.now(),
+    orderNumber: uniqueOrder + '-CARD',
     capture: '1',
     subscription: '0',
     platform: 'PeptidesCR',
     token_version: 'v2',
   };
 
-  const authHeaders = {
-    ...headers,
-    'Authorization': `Bearer ${token}`,
+  // Test 2: SINPE Payload (same endpoint, but with method fields)
+  const sinpePayload = {
+    ...cardPayload,
+    orderNumber: uniqueOrder + '-SINPE',
+    method: 'sinpemovil',
+    sinpeMovilIdType: 'cedula',
+    sinpeMovilIdNumber: '101110111',
   };
 
-  const endpoints = [
-    `${TILOPAY_BASE}/api/v1/transactions`,
-    `${TILOPAY_BASE}/api/v1/transaction`,
-    `${TILOPAY_BASE}/api/v1/charge`,
-    `${TILOPAY_BASE}/api/v1/charges`,
-    `${TILOPAY_BASE}/api/v1/payment`,
-    `${TILOPAY_BASE}/api/v1/payments`,
-    `${TILOPAY_BASE}/api/v1/process`,
-    `${TILOPAY_BASE}/api/transactions`,
-    `${TILOPAY_BASE}/api/transaction`,
-    `${TILOPAY_BASE}/api/charge`,
-    `${TILOPAY_BASE}/api/v1/order`,
-    `${TILOPAY_BASE}/api/v1/orders`,
-    `${TILOPAY_BASE}/api/v1/checkout`,
-  ];
+  const results = {};
 
-  const results = { tokenOk: true };
-
-  for (const url of endpoints) {
-    const label = url.replace(TILOPAY_BASE, '');
+  // Execute tests
+  for (const [label, payload] of [['CARD_TEST', cardPayload], ['SINPE_TEST', sinpePayload]]) {
     try {
-      const start = Date.now();
-      const res = await fetch(url, {
+      const res = await fetch(`${TILOPAY_BASE}/api/v1/processPayment`, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify(dummyPayload),
+        body: JSON.stringify(payload),
       });
-      const duration = Date.now() - start;
       const bodyText = await res.text();
+      let parsedBody = {};
+      try { parsedBody = JSON.parse(bodyText); } catch(e) {}
+      
       results[label] = {
         status: res.status,
-        durationMs: duration,
-        bodySnippet: bodyText.substring(0, 300),
+        urlReturned: parsedBody?.url || null,
+        errorReturned: parsedBody?.error || null,
+        rawResponse: bodyText.substring(0, 300)
       };
     } catch (err) {
       results[label] = { error: err.message };
