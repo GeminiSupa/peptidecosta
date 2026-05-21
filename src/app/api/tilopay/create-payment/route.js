@@ -123,41 +123,17 @@ export async function POST(req) {
 
     // ─── Step 2: Get Hosted Payment Form URL ──────────────────────────────────
     const paymentPayload = {
-      redirect:        TILOPAY_REDIRECT_URL,
-      key:             TILOPAY_API_KEY,
-      amount:          currency === 'CRC' ? String(Math.round(amount)) : String(Number(amount).toFixed(2)),
-      currency:        currency,         // 'USD' or 'CRC'
-      billToFirstName: firstName,
-      billToLastName:  lastName,
-      billToAddress:   billAddress,
-      billToAddress2:  billAddress2,
-      billToCity:      billCity,
-      billToState:     billState,
-      billToZipPostCode: billZip,
-      billToCountry:   billCountry,
-      billToTelephone: customerPhone || '00000000',
-      billToEmail:     customerEmail,
-      // Ship-to mirrors bill-to (physical product pickup / local delivery)
-      shipToFirstName: firstName,
-      shipToLastName:  lastName,
-      shipToAddress:   billAddress,
-      shipToAddress2:  billAddress2,
-      shipToCity:      billCity,
-      shipToState:     billState,
-      shipToZipPostCode: billZip,
-      shipToCountry:   billCountry,
-      shipToTelephone: customerPhone || '00000000',
-      orderNumber:     orderNumber,
-      capture:         '1',
-      subscription:    '0',
-      platform:        'PeptidesCR',
-      token_version:   'v2',
-      ...buildTilopayMethodFields({ paymentMethod, customerIdType, customerIdNumber, shippingAddress }),
-      // Pass details as returnData so result handling can identify the order/method.
-      returnData:      Buffer.from(JSON.stringify({ lang, orderNumber, paymentMethod })).toString('base64'),
+      key:          TILOPAY_API_KEY,
+      amount:       currency === 'CRC' ? String(Math.round(amount)) : String(Number(amount).toFixed(2)),
+      currency:     currency,         // 'USD' or 'CRC'
+      reference:    orderNumber,
+      type:         1,                // 1 = Single use link
+      description:  `Costa Peptides Order ${orderNumber} (${paymentMethod})`,
+      client:       `${firstName} ${lastName}`.trim(),
+      callback_url: TILOPAY_REDIRECT_URL,
     };
 
-    const paymentRes = await fetch(`${TILOPAY_BASE}/api/v1/processPayment`, {
+    const paymentRes = await fetch(`${TILOPAY_BASE}/api/v1/createLinkPayment`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
