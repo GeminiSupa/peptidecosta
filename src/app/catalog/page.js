@@ -152,7 +152,7 @@ export default function CatalogPage() {
     const langParam = urlParams.get('lang');
     const currencyParam = urlParams.get('currency');
 
-    let initialLang = 'es';
+    let initialLang = localStorage.getItem('lang') || 'es';
     let initialCurrency = 'CRC';
 
     if (langParam === 'en') {
@@ -168,6 +168,7 @@ export default function CatalogPage() {
 
     setLang(initialLang);
     setCurrency(initialCurrency);
+    localStorage.setItem('lang', initialLang);
 
     // Theme loaded from localStorage
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -521,6 +522,7 @@ export default function CatalogPage() {
   const handleLangToggle = (selectedLang) => {
     setLang(selectedLang);
     setCurrency(selectedLang === 'en' ? 'USD' : 'CRC');
+    localStorage.setItem('lang', selectedLang);
   };
 
   const handleThemeToggle = (selectedTheme) => {

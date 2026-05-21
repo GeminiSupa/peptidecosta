@@ -7,6 +7,7 @@ import Link from 'next/link';
 export default function ExitIntentPopup() {
   const [isVisible, setIsVisible] = useState(false);
   const [hasShown, setHasShown] = useState(false);
+  const [lang, setLang] = useState('es');
 
   useEffect(() => {
     // Check if we've already shown the popup in this session
@@ -21,6 +22,7 @@ export default function ExitIntentPopup() {
         setIsVisible(true);
         setHasShown(true);
         sessionStorage.setItem('exitIntentShown', 'true');
+        setLang(localStorage.getItem('lang') || 'es');
       }
     };
 
@@ -104,11 +106,13 @@ export default function ExitIntentPopup() {
         />
 
         <h2 style={{ fontSize: '1.3rem', fontWeight: '800', marginBottom: '8px', color: '#002766' }}>
-          Wait! Before you go...
+          {lang === 'en' ? 'Wait! Before you go...' : '¡Espera! Antes de irte...'}
         </h2>
         
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.5', marginBottom: '20px' }}>
-          Don't forget to complete your order today. We offer the highest purity and fastest local delivery.
+          {lang === 'en' 
+            ? "Don't forget to complete your order today. We offer the highest purity and fastest local delivery."
+            : "No olvides completar tu orden hoy. Ofrecemos la más alta pureza y la entrega local más rápida."}
         </p>
 
         <Link 
@@ -132,7 +136,7 @@ export default function ExitIntentPopup() {
           onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = '#001a40'; }}
           onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = '#002766'; }}
         >
-          Finish Your Order <ArrowRight size={18} />
+          {lang === 'en' ? 'Finish Your Order' : 'Terminar tu Orden'} <ArrowRight size={18} />
         </Link>
       </div>
       <style dangerouslySetInnerHTML={{__html: `
