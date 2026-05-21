@@ -1380,6 +1380,14 @@ export default function CatalogPage() {
                 onChange={(e) => setCustomerName(e.target.value)}
               />
               <input 
+                type="email" 
+                className="checkout-input" 
+                placeholder={lang === 'en' ? "Email Address" : "Correo Electrónico"}
+                required
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+              />
+              <input 
                 type="tel" 
                 className="checkout-input" 
                 placeholder={lang === 'en' ? "WhatsApp Phone Number" : "Número de WhatsApp"}
