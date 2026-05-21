@@ -6,69 +6,109 @@ export async function GET() {
   const TILOPAY_API_PASS = process.env.TILOPAY_API_PASS;
   const TILOPAY_API_KEY = process.env.TILOPAY_API_KEY;
 
-  const LOGIN_URL = `${TILOPAY_BASE}/api/v1/login`;
-
   const headers = {
     'Content-Type': 'application/json',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     'Accept': 'application/json',
   };
 
-  // Test different body key formats against the working endpoint
-  const bodyVariants = [
-    { label: 'camelCase', body: { apiUser: TILOPAY_API_USER, apiPassword: TILOPAY_API_PASS, apiKey: TILOPAY_API_KEY } },
-    { label: 'underscore', body: { api_user: TILOPAY_API_USER, api_password: TILOPAY_API_PASS, api_key: TILOPAY_API_KEY } },
-    { label: 'short_keys', body: { user: TILOPAY_API_USER, password: TILOPAY_API_PASS, key: TILOPAY_API_KEY } },
-    { label: 'email_style', body: { email: TILOPAY_API_USER, password: TILOPAY_API_PASS, api_key: TILOPAY_API_KEY } },
-    { label: 'username_style', body: { username: TILOPAY_API_USER, password: TILOPAY_API_PASS, api_key: TILOPAY_API_KEY } },
-  ];
-
-  // Also test with Basic Auth header
-  const basicAuth = Buffer.from(`${TILOPAY_API_USER}:${TILOPAY_API_PASS}`).toString('base64');
-
-  const tests = [];
-
-  // Test body variants
-  for (const variant of bodyVariants) {
-    tests.push({ label: `body_${variant.label}`, url: LOGIN_URL, headers, body: JSON.stringify(variant.body) });
+  // Step 1: Get token using the confirmed working endpoint
+  let token = null;
+  try {
+    const tokenRes = await fetch(`${TILOPAY_BASE}/api/v1/login`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        email: TILOPAY_API_USER,
+        password: TILOPAY_API_PASS,
+        api_key: TILOPAY_API_KEY,
+      }),
+    });
+    const tokenData = await tokenRes.json();
+    token = tokenData?.access_token;
+  } catch (err) {
+    return NextResponse.json({ error: 'Login failed: ' + err.message });
   }
 
-  // Test Basic Auth
-  tests.push({
-    label: 'basic_auth_empty_body',
-    url: LOGIN_URL,
-    headers: { ...headers, 'Authorization': `Basic ${basicAuth}` },
-    body: JSON.stringify({}),
-  });
-  tests.push({
-    label: 'basic_auth_with_key',
-    url: LOGIN_URL,
-    headers: { ...headers, 'Authorization': `Basic ${basicAuth}` },
-    body: JSON.stringify({ apiKey: TILOPAY_API_KEY }),
-  });
+  if (!token) {
+    return NextResponse.json({ error: 'No token received' });
+  }
 
-  const results = {};
+  // Step 2: Test multiple transaction endpoint paths with the Bearer token
+  const dummyPayload = {
+    redirect: 'https://peptidecosta.vercel.app/catalog',
+    key: TILOPAY_API_KEY,
+    amount: '1.00',
+    currency: 'USD',
+    billToFirstName: 'Test',
+    billToLastName: 'User',
+    billToAddress: 'Test Address',
+    billToAddress2: 'N/A',
+    billToCity: 'San Jose',
+    billToState: 'CR-SJ',
+    billToZipPostCode: '10101',
+    billToCountry: 'CR',
+    billToTelephone: '88888888',
+    billToEmail: 'test@test.com',
+    shipToFirstName: 'Test',
+    shipToLastName: 'User',
+    shipToAddress: 'Test Address',
+    shipToAddress2: 'N/A',
+    shipToCity: 'San Jose',
+    shipToState: 'CR-SJ',
+    shipToZipPostCode: '10101',
+    shipToCountry: 'CR',
+    shipToTelephone: '88888888',
+    orderNumber: 'DIAG-' + Date.now(),
+    capture: '1',
+    subscription: '0',
+    platform: 'PeptidesCR',
+    token_version: 'v2',
+  };
 
-  for (const test of tests) {
+  const authHeaders = {
+    ...headers,
+    'Authorization': `Bearer ${token}`,
+  };
+
+  const endpoints = [
+    `${TILOPAY_BASE}/api/v1/transactions`,
+    `${TILOPAY_BASE}/api/v1/transaction`,
+    `${TILOPAY_BASE}/api/v1/charge`,
+    `${TILOPAY_BASE}/api/v1/charges`,
+    `${TILOPAY_BASE}/api/v1/payment`,
+    `${TILOPAY_BASE}/api/v1/payments`,
+    `${TILOPAY_BASE}/api/v1/process`,
+    `${TILOPAY_BASE}/api/transactions`,
+    `${TILOPAY_BASE}/api/transaction`,
+    `${TILOPAY_BASE}/api/charge`,
+    `${TILOPAY_BASE}/api/v1/order`,
+    `${TILOPAY_BASE}/api/v1/orders`,
+    `${TILOPAY_BASE}/api/v1/checkout`,
+  ];
+
+  const results = { tokenOk: true };
+
+  for (const url of endpoints) {
+    const label = url.replace(TILOPAY_BASE, '');
     try {
       const start = Date.now();
-      const res = await fetch(test.url, {
+      const res = await fetch(url, {
         method: 'POST',
-        headers: test.headers,
-        body: test.body,
+        headers: authHeaders,
+        body: JSON.stringify(dummyPayload),
       });
       const duration = Date.now() - start;
       const bodyText = await res.text();
-      results[test.label] = {
+      results[label] = {
         status: res.status,
-        statusText: res.statusText,
         durationMs: duration,
-        bodySnippet: bodyText.substring(0, 500),
+        bodySnippet: bodyText.substring(0, 300),
       };
     } catch (err) {
-      results[test.label] = { error: err.message };
+      results[label] = { error: err.message };
     }
   }
 
-  return NextResponse.json({ endpoint: LOGIN_URL, results });
+  return NextResponse.json(results);
 }
