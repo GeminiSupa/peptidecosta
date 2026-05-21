@@ -705,13 +705,39 @@ export default function AdminPage() {
     }
   };
 
+  // Delete a single abandoned cart entry
+  const handleDeleteCart = async (sessionId) => {
+    if (!confirm('Remove this cart entry? This cannot be undone.')) return;
+    setAbandonedCarts(prev => prev.filter(c => c.session_id !== sessionId));
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('abandoned_carts').delete().eq('session_id', sessionId);
+      } catch(err) {
+        console.error('Cart delete error:', err);
+      }
+    }
+  };
+
+  // Clear ALL active abandoned carts
+  const handleClearAllCarts = async () => {
+    if (!confirm('Clear ALL active cart data? This cannot be undone.')) return;
+    setAbandonedCarts([]);
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('abandoned_carts').delete().eq('status', 'active');
+      } catch(err) {
+        console.error('Clear carts error:', err);
+      }
+    }
+  };
+
   // Export orders to XLSX (via CSV download that Google Sheets/Excel opens natively)
   const downloadOrdersXlsx = () => {
     if (orders.length === 0) return;
 
     const rows = [];
     const headers = [
-      'Order ID', 'Date', 'Customer Name', 'Phone', 'Shipping Address', 'Status', 
+      'Order ID', 'Order Number', 'Date', 'Customer Name', 'Phone', 'Shipping Address', 'Status', 
       'Payment Method', 'Items', 'Total (CRC)', 'Total (USD)'
     ];
     rows.push(headers);
@@ -722,6 +748,7 @@ export default function AdminPage() {
       const orderDate = new Date(order.created_at).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
       rows.push([
         order.id,
+        order.order_number || 'N/A',
         orderDate,
         order.customer_name || 'N/A',
         order.customer_phone || '',
@@ -1411,6 +1438,7 @@ export default function AdminPage() {
                       <div className="order-card-header">
                         <div className="order-customer-info">
                           <h4>{order.customer_name}</h4>
+                          {order.order_number && <p style={{ color: '#fbbf24', fontSize: '0.85rem', fontWeight: 600, marginTop: '2px' }}>Order #: {order.order_number}</p>}
                           <p>WhatsApp: {order.customer_phone}</p>
                           {order.customer_email && <p>Email: {order.customer_email}</p>}
                           {order.shipping_address && (
@@ -1484,7 +1512,7 @@ export default function AdminPage() {
                             }
                           </span>
                           <span style={{ marginLeft: '12px', fontSize: '0.75rem', fontWeight: 'bold', padding: '4px 8px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', color: '#94a3b8' }}>
-                            {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE Móvil' : '💬 WhatsApp'}
+                            {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE · Tilopay' : order.payment_method === 'tilopay' ? '💳 Tilopay Card' : '💬 WhatsApp'}
                           </span>
                         </div>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1600,9 +1628,19 @@ export default function AdminPage() {
           <div className="admin-orders-tab">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
               <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0 }}>🛒 Active / Abandoned Carts</h2>
-              <button className="admin-btn" onClick={loadAdminData} style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}>
-                Refresh
-              </button>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {abandonedCarts.length > 0 && (
+                  <button
+                    onClick={handleClearAllCarts}
+                    style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
+                  >
+                    <Trash2 size={13} /> Clear All
+                  </button>
+                )}
+                <button className="admin-btn" onClick={loadAdminData} style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}>
+                  Refresh
+                </button>
+              </div>
             </div>
             
             {loadingAbandonedCarts ? (
@@ -1630,11 +1668,18 @@ export default function AdminPage() {
                           </div>
                         )}
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-block', marginBottom: '6px' }}>Active Cart</div>
+                      <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                        <div style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-block' }}>Active Cart</div>
                         <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
                           Last Updated: {new Date(acart.last_updated).toLocaleString()}
                         </div>
+                        <button
+                          onClick={() => handleDeleteCart(acart.session_id)}
+                          title="Delete this cart entry"
+                          style={{ marginTop: '4px', padding: '5px 10px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#f87171', borderRadius: '7px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <Trash2 size={12} /> Delete
+                        </button>
                       </div>
                     </div>
                     

@@ -9,7 +9,8 @@ import {
   List, Grid, Sparkles, Phone, FileText, 
   Plus, Minus, Trash2, Check, AlertCircle, ArrowLeft,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
-  Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star
+  Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
+  CreditCard, Smartphone, MessageCircle
 } from 'lucide-react';
 
 const WHATSAPP_NUMBER = '50684046973';
@@ -118,6 +119,8 @@ export default function CatalogPage() {
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerMetadata, setCustomerMetadata] = useState(null);
   const [shippingAddress, setShippingAddress] = useState('');
+  const [customerIdType, setCustomerIdType] = useState('1');
+  const [customerIdNumber, setCustomerIdNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('whatsapp');
   const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
@@ -137,6 +140,9 @@ export default function CatalogPage() {
   const [paypalReady, setPaypalReady] = useState(false);
   const paypalButtonRef = useRef(null);
   const paypalRendered = useRef(false);
+
+  // Tilopay State
+  const [tilopaySubmitting, setTilopaySubmitting] = useState(false);
   
   // Ref to hold latest checkout data for PayPal callbacks without re-rendering
   const checkoutDataRef = useRef({ cart, currency: 'CRC', exchangeRate: FALLBACK_EXCHANGE_RATE, customerName, customerPhone, customerEmail, shippingAddress, lang: 'en', sessionId, customerMetadata });
@@ -192,6 +198,21 @@ export default function CatalogPage() {
       localStorage.setItem('cart_session_id', sid);
     }
     setSessionId(sid);
+
+    // Check for Tilopay redirect params
+    const paymentParam = urlParams.get('payment');
+    if (paymentParam === 'success' || urlParams.get('code') === '1') {
+      alert(initialLang === 'en' ? 'Payment Successful! Thank you for your order.' : '¡Pago exitoso! Gracias por su orden.');
+      setCart([]); // Clear cart on success
+      localStorage.removeItem('cart');
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (paymentParam === 'cancel') {
+      alert(initialLang === 'en' ? 'Payment was cancelled.' : 'El pago fue cancelado.');
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
 
     // Background Data Collection
     const fetchMetadata = async () => {
@@ -626,13 +647,101 @@ export default function CatalogPage() {
     return subtotal;
   };
 
+  const startTilopayCheckout = async (method) => {
+    if (tilopaySubmitting || cart.length === 0) return;
+
+    const requiresSinpeId = method === 'sinpe';
+    if (!customerName || !customerEmail || !customerPhone || !shippingAddress || (requiresSinpeId && !customerIdNumber)) {
+      return;
+    }
+
+    setTilopaySubmitting(true);
+
+    const orderNum = `${method === 'sinpe' ? 'SPCR' : 'TPCR'}-${Date.now().toString(36).toUpperCase()}`;
+    const totalVal = getDiscountedTotal();
+    const tilopayCurrency = method === 'sinpe' ? 'CRC' : currency;
+    const tilopayAmount = method === 'sinpe' && currency === 'USD'
+      ? Math.round(totalVal * exchangeRate)
+      : totalVal;
+    const orderItems = cart.map(item => ({
+      product: item.product,
+      qty: item.qty,
+      price: getPriceAsNumber(item, currency),
+    }));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('orders').insert({
+          order_number: orderNum,
+          customer_name: customerName,
+          customer_phone: customerPhone,
+          customer_email: customerEmail || null,
+          shipping_address: shippingAddress,
+          items: orderItems,
+          total_usd: currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate),
+          total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
+          currency,
+          payment_method: method === 'sinpe' ? 'sinpe' : 'tilopay',
+          status: method === 'sinpe' ? 'Pending - SINPE Tilopay' : 'Pending - Card',
+          ip_address: customerMetadata?.ip_address || null,
+          location_data: customerMetadata?.location_data || null,
+          device_info: customerMetadata?.device_info || null,
+        });
+      } catch (err) {
+        console.error('Order pre-log failed:', err);
+      }
+    }
+
+    try {
+      const res = await fetch('/api/tilopay/create-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: tilopayAmount,
+          currency: tilopayCurrency,
+          orderNumber: orderNum,
+          customerName,
+          customerPhone,
+          customerEmail,
+          shippingAddress,
+          lang,
+          paymentMethod: method,
+          customerIdType,
+          customerIdNumber,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.paymentUrl) {
+        window.location.href = data.paymentUrl;
+        return;
+      }
+
+      alert(lang === 'en'
+        ? `${method === 'sinpe' ? 'SINPE' : 'Card'} payment setup failed: ${data.error || 'Unknown error'}`
+        : `Error al configurar el pago ${method === 'sinpe' ? 'SINPE' : 'con tarjeta'}: ${data.error || 'Error desconocido'}`);
+      setTilopaySubmitting(false);
+    } catch (err) {
+      console.error('Tilopay error:', err);
+      alert(lang === 'en' ? 'Connection error. Please try again.' : 'Error de conexión. Intente de nuevo.');
+      setTilopaySubmitting(false);
+    }
+  };
+
   // Checkout submit
   const handleCheckoutSubmit = async (e) => {
     e.preventDefault();
     if (paymentMethod === 'paypal') return; // PayPal is handled by its own buttons
+    if (paymentMethod === 'tilopay' || paymentMethod === 'sinpe') {
+      // Tilopay is handled by its own button below — should not reach here
+      return;
+    }
     if (!customerName || !customerPhone || !shippingAddress || cart.length === 0) return;
 
     setOrderSubmitting(true);
+
+    const orderNum = 'WPCR-' + Date.now().toString(36).toUpperCase();
 
     const subtotalVal = getCartTotal();
     const totalVal = getDiscountedTotal();
@@ -652,6 +761,7 @@ export default function CatalogPage() {
         const { error } = await supabase
           .from('orders')
           .insert({
+            order_number: orderNum,
             customer_name: customerName,
             customer_phone: customerPhone,
             customer_email: customerEmail || null,
@@ -733,7 +843,9 @@ export default function CatalogPage() {
     setCart([]);
     setCustomerName('');
     setCustomerPhone('');
+    setCustomerEmail('');
     setShippingAddress('');
+    setCustomerIdNumber('');
 
     setTimeout(() => {
       setOrderSuccess(false);
@@ -869,7 +981,9 @@ export default function CatalogPage() {
             setCart([]);
             setCustomerName('');
             setCustomerPhone('');
+            setCustomerEmail('');
             setShippingAddress('');
+            setCustomerIdNumber('');
             setTimeout(() => {
               setOrderSuccess(false);
               setIsCartOpen(false);
@@ -1408,16 +1522,73 @@ export default function CatalogPage() {
                 value={shippingAddress}
                 onChange={(e) => setShippingAddress(e.target.value)}
               />
-              <select
-                className="checkout-input"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                style={{ appearance: 'auto' }}
-              >
-                <option value="whatsapp">{lang === 'en' ? 'Pay via WhatsApp Coordination' : 'Pago vía Coordinación por WhatsApp'}</option>
-                <option value="sinpe">{lang === 'en' ? 'Pay via SINPE Móvil' : 'Pago vía SINPE Móvil'}</option>
-                <option value="paypal">{lang === 'en' ? 'Pay via PayPal' : 'Pago vía PayPal'}</option>
-              </select>
+              <div className="payment-method-grid" role="radiogroup" aria-label={lang === 'en' ? 'Payment method' : 'Método de pago'}>
+                {[
+                  {
+                    value: 'sinpe',
+                    icon: <Smartphone size={18} />,
+                    title: lang === 'en' ? 'SINPE Móvil' : 'SINPE Móvil',
+                    detail: lang === 'en' ? 'Secure Tilopay checkout' : 'Pago seguro con Tilopay',
+                  },
+                  {
+                    value: 'tilopay',
+                    icon: <CreditCard size={18} />,
+                    title: lang === 'en' ? 'Card' : 'Tarjeta',
+                    detail: lang === 'en' ? 'Credit or debit' : 'Crédito o débito',
+                  },
+                  {
+                    value: 'whatsapp',
+                    icon: <MessageCircle size={18} />,
+                    title: lang === 'en' ? 'WhatsApp' : 'WhatsApp',
+                    detail: lang === 'en' ? 'Coordinate manually' : 'Coordinar manualmente',
+                  },
+                  {
+                    value: 'paypal',
+                    icon: <CreditCard size={18} />,
+                    title: 'PayPal',
+                    detail: lang === 'en' ? 'Pay in USD' : 'Pagar en USD',
+                  },
+                ].map(method => (
+                  <button
+                    key={method.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={paymentMethod === method.value}
+                    className={`payment-method-card ${paymentMethod === method.value ? 'active' : ''}`}
+                    onClick={() => setPaymentMethod(method.value)}
+                  >
+                    <span className="payment-method-icon">{method.icon}</span>
+                    <span>
+                      <strong>{method.title}</strong>
+                      <small>{method.detail}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {paymentMethod === 'sinpe' && (
+                <div className="sinpe-id-grid">
+                  <select
+                    className="checkout-input"
+                    value={customerIdType}
+                    onChange={(e) => setCustomerIdType(e.target.value)}
+                    style={{ appearance: 'auto' }}
+                    aria-label={lang === 'en' ? 'Identification type' : 'Tipo de identificación'}
+                  >
+                    <option value="1">{lang === 'en' ? 'Costa Rican ID' : 'Cédula física'}</option>
+                    <option value="6">DIMEX</option>
+                    <option value="5">{lang === 'en' ? 'Passport / Foreign ID' : 'Pasaporte / extranjero'}</option>
+                    <option value="2">{lang === 'en' ? 'Company ID' : 'Cédula jurídica'}</option>
+                  </select>
+                  <input
+                    type="text"
+                    className="checkout-input"
+                    placeholder={lang === 'en' ? 'ID number for SINPE' : 'Identificación para SINPE'}
+                    required={paymentMethod === 'sinpe'}
+                    value={customerIdNumber}
+                    onChange={(e) => setCustomerIdNumber(e.target.value)}
+                  />
+                </div>
+              )}
               {paymentMethod === 'paypal' ? (
                 <div style={{ marginTop: '16px' }}>
                   {(!customerName || !customerPhone || !shippingAddress) ? (
@@ -1433,6 +1604,48 @@ export default function CatalogPage() {
                       {lang === 'en' ? 'Processing payment...' : 'Procesando pago...'}
                     </div>
                   )}
+                </div>
+              ) : paymentMethod === 'tilopay' || paymentMethod === 'sinpe' ? (
+                <div className="tilopay-payment-panel">
+                  {(!customerName || !customerEmail || !customerPhone || !shippingAddress || (paymentMethod === 'sinpe' && !customerIdNumber)) ? (
+                    <div style={{ padding: '12px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.9rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+                      {paymentMethod === 'sinpe'
+                        ? (lang === 'en' ? 'Please enter your contact, shipping, and ID details to continue with SINPE Móvil.' : 'Ingrese sus datos de contacto, envío e identificación para continuar con SINPE Móvil.')
+                        : (lang === 'en' ? 'Please enter your full name, email, phone, and shipping address above to pay by card.' : 'Ingrese su nombre, correo, teléfono y dirección de envío para pagar con tarjeta.')}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={tilopaySubmitting || cart.length === 0}
+                      onClick={() => startTilopayCheckout(paymentMethod)}
+                      className={`tilopay-btn ${paymentMethod === 'sinpe' ? 'sinpe' : ''}`}
+                    >
+                      {tilopaySubmitting ? (
+                        <>
+                          <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
+                          {lang === 'en' ? 'Redirecting to payment...' : 'Redirigiendo al pago...'}
+                        </>
+                      ) : (
+                        <>
+                          {paymentMethod === 'sinpe' ? <Smartphone size={18} /> : <CreditCard size={18} />}
+                          {paymentMethod === 'sinpe'
+                            ? (lang === 'en'
+                              ? `Pay ${formatPriceVal(currency === 'CRC' ? getDiscountedTotal() : Math.round(getDiscountedTotal() * exchangeRate), 'CRC')} via SINPE`
+                              : `Pagar ${formatPriceVal(currency === 'CRC' ? getDiscountedTotal() : Math.round(getDiscountedTotal() * exchangeRate), 'CRC')} vía SINPE`)
+                            : (lang === 'en' ? `Pay ${formatPriceVal(getDiscountedTotal(), currency)} by Card` : `Pagar ${formatPriceVal(getDiscountedTotal(), currency)} con Tarjeta`)}
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <p className="tilopay-caption">
+                    {paymentMethod === 'sinpe'
+                      ? (lang === 'en'
+                        ? 'Tilopay will show the exact SINPE number, CRC amount, and reference code.'
+                        : 'Tilopay mostrará el número SINPE, monto exacto en CRC y código de referencia.')
+                      : (lang === 'en'
+                        ? 'Secure checkout powered by Tilopay · Visa, Mastercard & more'
+                        : 'Pago seguro con Tilopay · Visa, Mastercard y más')}
+                  </p>
                 </div>
               ) : (
                 <button 
