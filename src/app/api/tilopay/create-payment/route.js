@@ -75,7 +75,7 @@ export async function POST(req) {
     }
 
     // ─── Step 1: Get Bearer Token ──────────────────────────────────────────────
-    const tokenRes = await fetch(`${TILOPAY_BASE}/api/users/apilogin`, {
+    const tokenRes = await fetch(`${TILOPAY_BASE}/api/v1/login`, {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -83,9 +83,9 @@ export async function POST(req) {
         'Accept': 'application/json'
       },
       body: JSON.stringify({
-        apiUser: TILOPAY_API_USER,
-        apiPassword: TILOPAY_API_PASS,
-        apiKey: TILOPAY_API_KEY,
+        email: TILOPAY_API_USER,
+        password: TILOPAY_API_PASS,
+        api_key: TILOPAY_API_KEY,
       }),
     });
 
@@ -157,7 +157,7 @@ export async function POST(req) {
       returnData:      Buffer.from(JSON.stringify({ lang, orderNumber, paymentMethod })).toString('base64'),
     };
 
-    const paymentRes = await fetch(`${TILOPAY_BASE}/api/transactions`, {
+    const paymentRes = await fetch(`${TILOPAY_BASE}/api/v1/transactions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
