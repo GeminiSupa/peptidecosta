@@ -24,7 +24,7 @@ async function getPayPalAccessToken() {
 
 export async function POST(request) {
   try {
-    const { totalUsd, items, customerName, customerPhone } = await request.json();
+    const { totalUsd, items, customerName, customerPhone, customerEmail } = await request.json();
 
     if (!totalUsd || totalUsd <= 0) {
       console.log('Invalid total amount:', totalUsd);
@@ -45,7 +45,7 @@ export async function POST(request) {
             currency_code: 'USD',
             value: totalUsd.toFixed(2),
           },
-          custom_id: JSON.stringify({ customerName, customerPhone }).substring(0, 127),
+          custom_id: JSON.stringify({ customerName, customerPhone, customerEmail }).substring(0, 127),
         },
       ],
       application_context: {

@@ -115,6 +115,8 @@ export default function CatalogPage() {
   // Checkout inputs
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [customerMetadata, setCustomerMetadata] = useState(null);
   const [shippingAddress, setShippingAddress] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('whatsapp');
   const [orderSubmitting, setOrderSubmitting] = useState(false);
@@ -137,11 +139,11 @@ export default function CatalogPage() {
   const paypalRendered = useRef(false);
   
   // Ref to hold latest checkout data for PayPal callbacks without re-rendering
-  const checkoutDataRef = useRef({ cart, currency: 'CRC', exchangeRate: FALLBACK_EXCHANGE_RATE, customerName, customerPhone, shippingAddress, lang: 'en', sessionId });
+  const checkoutDataRef = useRef({ cart, currency: 'CRC', exchangeRate: FALLBACK_EXCHANGE_RATE, customerName, customerPhone, customerEmail, shippingAddress, lang: 'en', sessionId, customerMetadata });
 
   useEffect(() => {
-    checkoutDataRef.current = { cart, currency, exchangeRate, customerName, customerPhone, shippingAddress, lang, sessionId };
-  }, [cart, currency, exchangeRate, customerName, customerPhone, shippingAddress, lang, sessionId]);
+    checkoutDataRef.current = { cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata };
+  }, [cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata]);
 
   // Local storage & URL params setup on mount
   useEffect(() => {
@@ -189,6 +191,32 @@ export default function CatalogPage() {
       localStorage.setItem('cart_session_id', sid);
     }
     setSessionId(sid);
+
+    // Background Data Collection
+    const fetchMetadata = async () => {
+      try {
+        const res = await fetch('https://ipapi.co/json/');
+        const data = await res.json();
+        
+        let device = 'Unknown';
+        if (typeof window !== 'undefined') {
+          device = window.navigator.userAgent;
+        }
+
+        setCustomerMetadata({
+          ip_address: data.ip || 'Unknown',
+          location_data: {
+            city: data.city || 'Unknown',
+            region: data.region || 'Unknown',
+            country: data.country_name || 'Unknown'
+          },
+          device_info: device
+        });
+      } catch (err) {
+        console.error("Metadata fetch failed", err);
+      }
+    };
+    fetchMetadata();
 
     // Load Data
     loadCatalogData();
@@ -270,6 +298,10 @@ export default function CatalogPage() {
               cart_data: cart,
               customer_name: customerName || null,
               customer_phone: customerPhone || null,
+              customer_email: customerEmail || null,
+              ip_address: customerMetadata?.ip_address || null,
+              location_data: customerMetadata?.location_data || null,
+              device_info: customerMetadata?.device_info || null,
               last_updated: new Date().toISOString(),
               status: 'active'
             }, { onConflict: 'session_id' });
@@ -280,7 +312,7 @@ export default function CatalogPage() {
       }, 1000);
       return () => clearTimeout(timeoutId);
     }
-  }, [cart, customerName, customerPhone, sessionId]);
+  }, [cart, customerName, customerPhone, customerEmail, sessionId, customerMetadata]);
 
   // Load Catalog Data (Supabase or CSV fallback)
   const loadCatalogData = async () => {
@@ -618,13 +650,17 @@ export default function CatalogPage() {
           .insert({
             customer_name: customerName,
             customer_phone: customerPhone,
+            customer_email: customerEmail || null,
             shipping_address: shippingAddress,
             items: orderItems,
             total_usd: currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate),
             total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
             currency: currency,
             payment_method: paymentMethod,
-            status: 'Pending'
+            status: 'Pending',
+            ip_address: customerMetadata?.ip_address || null,
+            location_data: customerMetadata?.location_data || null,
+            device_info: customerMetadata?.device_info || null
           });
 
         if (!error) {
@@ -716,7 +752,7 @@ export default function CatalogPage() {
         height: 45,
       },
       createOrder: async () => {
-        const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, shippingAddress: sAddress, lang: cLang } = checkoutDataRef.current;
+        const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, customerEmail: cEmail, shippingAddress: sAddress, lang: cLang } = checkoutDataRef.current;
         const subtotalVal = currentCart.reduce((sum, item) => {
           let p = item.priceCrc;
           if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
@@ -748,6 +784,7 @@ export default function CatalogPage() {
               items: orderItems,
               customerName: cName,
               customerPhone: cPhone,
+              customerEmail: cEmail
             }),
           });
           const data = await res.json();
@@ -759,7 +796,7 @@ export default function CatalogPage() {
         }
       },
       onApprove: async (data) => {
-        const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, shippingAddress: sAddress, lang: cLang, sessionId: sid } = checkoutDataRef.current;
+        const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, customerEmail: cEmail, shippingAddress: sAddress, lang: cLang, sessionId: sid, customerMetadata } = checkoutDataRef.current;
         
         const subtotalVal = currentCart.reduce((sum, item) => {
           let p = item.priceCrc;
@@ -805,7 +842,11 @@ export default function CatalogPage() {
                   total_crc: Math.round(usdTotal * rate),
                   currency: 'USD',
                   payment_method: 'paypal',
-                  status: 'Paid'
+                  status: 'Paid',
+                  customer_email: cEmail || null,
+                  ip_address: customerMetadata?.ip_address || null,
+                  location_data: customerMetadata?.location_data || null,
+                  device_info: customerMetadata?.device_info || null
                 });
 
                 if (sid) {

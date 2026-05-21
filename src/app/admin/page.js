@@ -1359,10 +1359,18 @@ export default function AdminPage() {
                         <div className="order-customer-info">
                           <h4>{order.customer_name}</h4>
                           <p>WhatsApp: {order.customer_phone}</p>
+                          {order.customer_email && <p>Email: {order.customer_email}</p>}
                           {order.shipping_address && (
                             <p style={{ marginTop: '4px', fontSize: '0.85rem', color: '#94a3b8' }}>
                               <strong style={{ color: '#fff' }}>Address:</strong> {order.shipping_address}
                             </p>
+                          )}
+                          {(order.ip_address || order.location_data) && (
+                            <div style={{ marginTop: '8px', padding: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                              {order.location_data?.city && <div>📍 {order.location_data.city}, {order.location_data.country}</div>}
+                              {order.ip_address && <div>🌐 IP: {order.ip_address}</div>}
+                              {order.device_info && <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '250px' }} title={order.device_info}>💻 {order.device_info}</div>}
+                            </div>
                           )}
                         </div>
                         <div className="order-meta-info">
@@ -1544,7 +1552,15 @@ export default function AdminPage() {
                         <h3 style={{ margin: '0 0 4px 0', fontSize: '1rem', color: '#f8fafc' }}>{acart.customer_name || 'Anonymous User'}</h3>
                         <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
                           Phone: {acart.customer_phone || 'Not provided'}
+                          {acart.customer_email && <div>Email: {acart.customer_email}</div>}
                         </div>
+                        {(acart.ip_address || acart.location_data) && (
+                          <div style={{ marginTop: '8px', padding: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                            {acart.location_data?.city && <div>📍 {acart.location_data.city}, {acart.location_data.country}</div>}
+                            {acart.ip_address && <div>🌐 IP: {acart.ip_address}</div>}
+                            {acart.device_info && <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '250px' }} title={acart.device_info}>💻 {acart.device_info}</div>}
+                          </div>
+                        )}
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-block', marginBottom: '6px' }}>Active Cart</div>
