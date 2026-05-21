@@ -6,7 +6,7 @@ const TILOPAY_API_PASS = process.env.TILOPAY_API_PASS;
 const TILOPAY_API_KEY = process.env.TILOPAY_API_KEY;
 const TILOPAY_REDIRECT_URL = process.env.TILOPAY_REDIRECT_URL || 'https://peptidecosta.vercel.app/catalog';
 
-const SUPPORTED_METHODS = ['tilopay', 'sinpe'];
+const SUPPORTED_METHODS = ['tilopay', 'sinpe', 'sinpemovil'];
 
 const parseCustomerIdFromAddress = (shippingAddress = '') => {
   const lines = shippingAddress.split('\n').map(line => line.trim()).filter(Boolean);
@@ -14,20 +14,28 @@ const parseCustomerIdFromAddress = (shippingAddress = '') => {
 };
 
 const buildTilopayMethodFields = ({ paymentMethod, customerIdType, customerIdNumber, shippingAddress }) => {
-  if (paymentMethod !== 'sinpe') return {};
+  if (paymentMethod === 'sinpe' || paymentMethod === 'sinpemovil') {
+    const dni = (customerIdNumber || parseCustomerIdFromAddress(shippingAddress)).replace(/\s+/g, '');
+    return {
+      method: 'sinpemovil',
+      paymentMethod: 'sinpemovil',
+      typeDni: Number(customerIdType || 1),
+      dni,
+    };
+  }
 
-  const dni = (customerIdNumber || parseCustomerIdFromAddress(shippingAddress)).replace(/\s+/g, '');
-
-  return {
-    method: 'sinpemovil',
-    paymentMethod: 'sinpemovil',
-    typeDni: Number(customerIdType || 1),
-    dni,
-  };
+  // Card payment requires no extra method fields or specific card fields for Hosted checkout redirect.
+  return {};
 };
 
 export async function POST(req) {
   try {
+    // ─── Step 0: Validate configuration ─────────────────────────────────────────
+    if (!TILOPAY_API_USER || !TILOPAY_API_PASS || !TILOPAY_API_KEY) {
+      console.error('[Tilopay] Missing configuration credentials. USER:', !!TILOPAY_API_USER, 'PASS:', !!TILOPAY_API_PASS, 'KEY:', !!TILOPAY_API_KEY);
+      return NextResponse.json({ error: 'Tilopay credentials are not configured' }, { status: 500 });
+    }
+
     const body = await req.json();
     const {
       amount,
@@ -43,20 +51,27 @@ export async function POST(req) {
       customerIdNumber,
     } = body;
 
+    // Validate standard required fields
     if (!amount || !currency || !orderNumber || !customerName || !customerEmail) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    if (!TILOPAY_API_USER || !TILOPAY_API_PASS || !TILOPAY_API_KEY) {
-      return NextResponse.json({ error: 'Tilopay credentials are not configured' }, { status: 500 });
-    }
-
     if (!SUPPORTED_METHODS.includes(paymentMethod)) {
-      return NextResponse.json({ error: 'Unsupported Tilopay payment method' }, { status: 400 });
+      return NextResponse.json({ error: `Unsupported payment method: ${paymentMethod}` }, { status: 400 });
     }
 
-    if (paymentMethod === 'sinpe' && currency !== 'CRC') {
-      return NextResponse.json({ error: 'SINPE Móvil payments must be created in CRC' }, { status: 400 });
+    // Specific guard for Card payments (tilopay)
+    if (paymentMethod === 'tilopay') {
+      if (!customerPhone || !shippingAddress) {
+        return NextResponse.json({ error: 'Missing phone or address for billing card payment' }, { status: 400 });
+      }
+    }
+
+    // Specific guard for SINPE Móvil
+    if (paymentMethod === 'sinpe' || paymentMethod === 'sinpemovil') {
+      if (!customerIdNumber?.trim()) {
+        return NextResponse.json({ error: 'Identification (customerIdNumber) is required for SINPE Móvil' }, { status: 400 });
+      }
     }
 
     // ─── Step 1: Get Bearer Token ──────────────────────────────────────────────
@@ -76,16 +91,16 @@ export async function POST(req) {
 
     if (!tokenRes.ok) {
       const err = await tokenRes.text();
-      console.error('[Tilopay] Token request failed:', err);
-      return NextResponse.json({ error: 'Tilopay auth failed' }, { status: 502 });
+      console.error('[Tilopay] Token request failed:', err, 'Status:', tokenRes.status);
+      return NextResponse.json({ error: `Tilopay authentication failed: ${tokenRes.statusText || 'Gateway Error'}` }, { status: 502 });
     }
 
     const tokenData = await tokenRes.json();
     const token = tokenData?.token || tokenData?.access_token || tokenData?.data?.token;
 
     if (!token) {
-      console.error('[Tilopay] No token in response:', tokenData);
-      return NextResponse.json({ error: 'Tilopay did not return a token' }, { status: 502 });
+      console.error('[Tilopay] No token in response data:', tokenData);
+      return NextResponse.json({ error: 'Tilopay did not return an access token' }, { status: 502 });
     }
 
     // ─── Parse name ────────────────────────────────────────────────────────────
@@ -152,13 +167,17 @@ export async function POST(req) {
       },
       body: JSON.stringify(paymentPayload),
     });
-    const paymentData = await paymentRes.json().catch(() => ({}));
+    
+    const paymentData = await paymentRes.json().catch((e) => {
+      console.error('[Tilopay] Failed to parse transaction response JSON:', e);
+      return {};
+    });
 
     // Tilopay returns { url: '...' } or similar
     const paymentUrl = paymentData?.url || paymentData?.data?.url || paymentData?.redirectUrl;
 
     if (!paymentRes.ok || !paymentUrl) {
-      console.error('[Tilopay] No payment URL in response:', paymentData);
+      console.error('[Tilopay] Transaction request failed. Status:', paymentRes.status, 'Response Data:', paymentData);
       return NextResponse.json({
         error: paymentData?.description || paymentData?.message || 'Tilopay did not return a payment URL',
       }, { status: 502 });
