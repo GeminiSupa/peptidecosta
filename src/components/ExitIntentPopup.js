@@ -22,8 +22,8 @@ export default function ExitIntentPopup() {
       return;
     }
 
-    const handleMouseLeave = (e) => {
-      if (e.clientY <= 0 && !hasShown) {
+    const handleMouseOut = (e) => {
+      if (e.clientY < 50 && e.relatedTarget === null && !hasShown) {
         setIsVisible(true);
         setHasShown(true);
         sessionStorage.setItem('exitIntentShown', 'true');
@@ -31,10 +31,10 @@ export default function ExitIntentPopup() {
       }
     };
 
-    document.addEventListener('mouseleave', handleMouseLeave);
+    document.addEventListener('mouseout', handleMouseOut);
 
     return () => {
-      document.removeEventListener('mouseleave', handleMouseLeave);
+      document.removeEventListener('mouseout', handleMouseOut);
     };
   }, [hasShown, isAdmin]);
 
