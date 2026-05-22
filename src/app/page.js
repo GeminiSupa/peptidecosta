@@ -151,7 +151,7 @@ export default function LandingPage() {
       if (!isSupabaseConfigured || !supabase) return;
       const { data } = await supabase
         .from('products')
-        .select('product, price_usd, price_crc, status, image_url, category, emoji')
+        .select('product, price_usd, price_crc, original_price_usd, original_price_crc, status, image_url, category, emoji')
         .eq('status', 'In Stock')
         .order('priority', { ascending: true })
         .limit(4);
@@ -309,11 +309,27 @@ export default function LandingPage() {
                       </div>
                     )}
                     <div className="lp-product-body">
+                      {p.original_price_usd && p.original_price_usd !== p.price_usd && (
+                        <div className="sale-badge" style={{ position: 'absolute', top: '10px', left: '10px', background: '#ef4444', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', zIndex: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
+                          {lang === 'en' ? 'SALE' : 'OFERTA'}
+                        </div>
+                      )}
                       <span className={`lp-stock-badge${p.status?.toLowerCase() === 'in stock' ? ' in-stock' : ' out-stock'}`}>
                         {p.status?.toLowerCase() === 'in stock' ? t.in_stock : t.out_stock}
                       </span>
                       <h4>{p.product}</h4>
-                      <div className="lp-product-price">{p.price_usd}</div>
+                      <div className="lp-product-price">
+                        {p.original_price_usd && p.original_price_usd !== p.price_usd ? (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                            <span style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '0.9rem' }}>
+                              {lang === 'en' ? p.original_price_usd : p.original_price_crc || p.original_price_usd}
+                            </span>
+                            <span style={{ color: '#ef4444' }}>{lang === 'en' ? p.price_usd : p.price_crc || p.price_usd}</span>
+                          </div>
+                        ) : (
+                          lang === 'en' ? p.price_usd : p.price_crc || p.price_usd
+                        )}
+                      </div>
                       <Link href="/catalog" className="lp-product-btn">
                         {t.featured_btn} <ArrowRight size={14} />
                       </Link>

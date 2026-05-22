@@ -358,6 +358,8 @@ export default function CatalogPage() {
             category: item.category,
             priceUsd: item.price_usd,
             priceCrc: item.price_crc,
+            originalPriceUsd: item.original_price_usd,
+            originalPriceCrc: item.original_price_crc,
             discount: item.discount,
             status: item.status,
             coa: item.coa,
@@ -427,6 +429,8 @@ export default function CatalogPage() {
                     category: p.category,
                     priceUsd: cleanUsdStr,
                     priceCrc: calculatedCrc > 0 ? `₡${calculatedCrc.toLocaleString('en-US')}` : '',
+                    originalPriceUsd: '',
+                    originalPriceCrc: '',
                     discount: p.bulkDiscountEs || p.bulkDiscountEn || '',
                     status: p.status || 'In Stock',
                     coa: p.coa || '',
@@ -1392,13 +1396,27 @@ export default function CatalogPage() {
                         <span>{lang === 'en' ? 'OUT OF STOCK' : 'AGOTADO'}</span>
                       </div>
                     )}
+                    {inStock && p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd && (
+                      <div className="sale-badge" style={{ position: 'absolute', top: '10px', right: '10px', background: '#ef4444', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', zIndex: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
+                        {lang === 'en' ? 'SALE' : 'OFERTA'}
+                      </div>
+                    )}
                   </div>
                   <div className="product-info">
                     <div className="product-category">{translateCategory(p.category)}</div>
                     <h3 className="product-name">{p.product}</h3>
                     {renderRatingSummary(p.product)}
                     <div className="product-pricing">
-                      <span className="price-main">{pMain}</span>
+                      {p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="price-main" style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '1.1rem' }}>
+                            {currency === 'USD' ? p.originalPriceUsd : p.originalPriceCrc}
+                          </span>
+                          <span className="price-main" style={{ color: '#ef4444' }}>{pMain}</span>
+                        </div>
+                      ) : (
+                        <span className="price-main">{pMain}</span>
+                      )}
                       {pSub && <span className="price-sub">{pSub}</span>}
                     </div>
                     {p.discount && <div className="discount-badge">{translateDiscount(p.discount, lang)}</div>}

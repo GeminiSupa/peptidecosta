@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS public.products (
     category TEXT NOT NULL,
     price_usd TEXT NOT NULL,
     price_crc TEXT,
+    original_price_usd TEXT,
+    original_price_crc TEXT,
     discount TEXT,
     status TEXT NOT NULL DEFAULT 'In Stock',
     coa TEXT,
@@ -236,3 +238,7 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
 
 -- Add tracking_number for old order tracking
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS tracking_number TEXT;
+
+-- 3. Added Sale Prices (Added May)
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price_usd TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price_crc TEXT;

@@ -195,6 +195,8 @@ export default function AdminPage() {
             category: item.category || '',
             priceUsd: item.price_usd || '',
             priceCrc: item.price_crc || '',
+            originalPriceUsd: item.original_price_usd || '',
+            originalPriceCrc: item.original_price_crc || '',
             discount: item.discount || '',
             status: item.status || 'In Stock',
             coa: item.coa || '',
@@ -252,6 +254,8 @@ export default function AdminPage() {
                     category: p.category || '',
                     priceUsd: p.priceUsd || '',
                     priceCrc: calculatedCrc > 0 ? `₡${calculatedCrc.toLocaleString('en-US')}` : '',
+                    originalPriceUsd: '',
+                    originalPriceCrc: '',
                     discount: p.bulkDiscountEs || p.bulkDiscountEn || '',
                     status: p.status || 'In Stock',
                     coa: p.coa || '',
@@ -487,6 +491,8 @@ export default function AdminPage() {
       category: 'Weight Loss & Metabolism',
       priceUsd: '$100',
       priceCrc: '₡45,448',
+      originalPriceUsd: '',
+      originalPriceCrc: '',
       discount: 'Buy 5+ vials, get 15% off',
       status: 'In Stock',
       coa: '',
@@ -585,6 +591,8 @@ export default function AdminPage() {
               category: p.category || '',
               priceUsd: p.priceUsd || '',
               priceCrc: p.priceCrc || (calculatedCrc > 0 ? `₡${calculatedCrc.toLocaleString('en-US')}` : ''),
+              originalPriceUsd: '',
+              originalPriceCrc: '',
               discount: p.bulkDiscountEs || p.bulkDiscountEn || '',
               status: p.status || 'In Stock',
               coa: p.coa || '',
@@ -785,13 +793,20 @@ export default function AdminPage() {
 
     // Auto-fill missing CRC prices from USD before saving
     const filled = products.map(p => {
-      if (p.priceUsd && (!p.priceCrc || p.priceCrc.trim() === '')) {
-        const usdNum = parseFloat(String(p.priceUsd).replace(/[^0-9.]/g, '')) || 0;
+      let newP = { ...p };
+      if (newP.priceUsd && (!newP.priceCrc || newP.priceCrc.trim() === '')) {
+        const usdNum = parseFloat(String(newP.priceUsd).replace(/[^0-9.]/g, '')) || 0;
         if (usdNum > 0) {
-          return { ...p, priceCrc: `₡${Math.round(usdNum * exchangeRate).toLocaleString('en-US')}` };
+          newP.priceCrc = `₡${Math.round(usdNum * exchangeRate).toLocaleString('en-US')}`;
         }
       }
-      return p;
+      if (newP.originalPriceUsd && (!newP.originalPriceCrc || newP.originalPriceCrc.trim() === '')) {
+        const origUsdNum = parseFloat(String(newP.originalPriceUsd).replace(/[^0-9.]/g, '')) || 0;
+        if (origUsdNum > 0) {
+          newP.originalPriceCrc = `₡${Math.round(origUsdNum * exchangeRate).toLocaleString('en-US')}`;
+        }
+      }
+      return newP;
     });
     // Update state so the UI reflects the auto-filled values
     setProducts(filled);
@@ -824,6 +839,8 @@ export default function AdminPage() {
             category: p.category,
             price_usd: p.priceUsd,
             price_crc: p.priceCrc,
+            original_price_usd: p.originalPriceUsd || null,
+            original_price_crc: p.originalPriceCrc || null,
             discount: p.discount,
             status: p.status,
             coa: p.coa,
@@ -1143,6 +1160,8 @@ export default function AdminPage() {
                       <th style={{ minWidth: '180px' }}>Category</th>
                       <th style={{ width: '100px' }}>Price (USD)</th>
                       <th style={{ width: '100px' }}>Price (CRC)</th>
+                      <th style={{ width: '110px' }}>Orig. Price (USD)</th>
+                      <th style={{ width: '110px' }}>Orig. Price (CRC)</th>
                       <th style={{ minWidth: '180px' }}>Stock Status</th>
                       <th style={{ minWidth: '180px' }}>Volume/Bulk Discount Info</th>
                       <th style={{ minWidth: '200px' }}>Image URL / Physical Upload</th>
@@ -1225,6 +1244,38 @@ export default function AdminPage() {
                             onBlur={(e) => handleCellChange(p.id, 'priceCrc', e.target.innerText)}
                           >
                             {p.priceCrc}
+                          </div>
+                        </td>
+
+                        {/* Orig USD Price */}
+                        <td data-label="Orig. Price (USD)">
+                          <div 
+                            contentEditable 
+                            suppressContentEditableWarning
+                            className="cell-editable"
+                            onBlur={(e) => {
+                              const v = e.target.innerText;
+                              handleCellChange(p.id, 'originalPriceUsd', v);
+                              const origUsdNum = parseFloat(v.replace(/[^0-9.]/g, '')) || 0;
+                              if (origUsdNum > 0) {
+                                const calc = Math.round(origUsdNum * exchangeRate);
+                                handleCellChange(p.id, 'originalPriceCrc', `₡${calc.toLocaleString('en-US')}`);
+                              }
+                            }}
+                          >
+                            {p.originalPriceUsd}
+                          </div>
+                        </td>
+
+                        {/* Orig CRC Price */}
+                        <td data-label="Orig. Price (CRC)">
+                          <div 
+                            contentEditable 
+                            suppressContentEditableWarning
+                            className="cell-editable"
+                            onBlur={(e) => handleCellChange(p.id, 'originalPriceCrc', e.target.innerText)}
+                          >
+                            {p.originalPriceCrc}
                           </div>
                         </td>
 
