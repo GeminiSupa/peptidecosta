@@ -454,6 +454,7 @@ body {
 
 .product-info {
     flex-grow: 1;
+    min-width: 0;
 }
 
 .product-category {
@@ -465,6 +466,9 @@ body {
     letter-spacing: 0.5px;
     opacity: 0.8;
     padding-right: 90px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .product-name {
@@ -472,8 +476,13 @@ body {
     font-weight: 800;
     color: var(--text-main);
     margin-bottom: 6px;
-    line-height: 1.2;
+    line-height: 1.25;
     padding-right: 80px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .product-pricing {
@@ -556,6 +565,10 @@ body {
     color: var(--accent);
     font-weight: 800;
     margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 /* Modal */
@@ -1199,6 +1212,7 @@ body {
 .product-grid.compact-view .product-name {
     font-size: 0.95rem;
     margin-bottom: 2px;
+    -webkit-line-clamp: 1;
 }
 
 .product-grid.compact-view .product-pricing {
@@ -1237,7 +1251,7 @@ body {
 
 .product-grid.grid-view .product-card {
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     text-align: center;
     padding: 12px;
     gap: 8px;
@@ -1256,22 +1270,27 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
+    flex-grow: 1;
 }
 
 .product-grid.grid-view .product-category {
     padding-right: 0;
     font-size: 0.55rem;
     margin-bottom: 4px;
+    white-space: nowrap;
 }
 
 .product-grid.grid-view .product-name {
     padding-right: 0;
     font-size: 0.85rem;
     margin-bottom: 6px;
+    -webkit-line-clamp: 2;
+    text-align: center;
 }
 
 .product-grid.grid-view .product-pricing {
     justify-content: center;
+    margin-top: auto;
 }
 
 .product-grid.grid-view .stock-badge {
@@ -1295,6 +1314,7 @@ body {
     border-radius: 4px;
     font-size: 0.65rem;
     z-index: 2;
+    max-width: calc(100% - 16px);
 }
 
 /* ADMIN PANEL STYLING */
@@ -2099,6 +2119,15 @@ body {
     }
     .product-grid.grid-view {
         grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (min-width: 1024px) {
+    .product-grid:not(.compact-view):not(.grid-view) {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .product-grid.grid-view {
+        grid-template-columns: repeat(4, 1fr);
     }
 }
 
