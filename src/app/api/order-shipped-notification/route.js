@@ -176,8 +176,8 @@ export async function POST(request) {
     });
 
     const customerSubject = orderLang === 'en'
-      ? \`Your Order \${order.order_number || ''} has Shipped! - Peptides Costa Rica\`
-      : \`¡Su pedido \${order.order_number || ''} ha sido enviado! - Péptidos Costa Rica\`;
+      ? `Your Order ${order.order_number || ''} has Shipped! - Peptides Costa Rica`
+      : `¡Su pedido ${order.order_number || ''} ha sido enviado! - Péptidos Costa Rica`;
       
     const normalizedOrder = {
       orderNumber: order.order_number || order.id?.substring(0,8),
@@ -192,17 +192,17 @@ export async function POST(request) {
     const customerText = [
       orderLang === 'en' ? 'Your order is on the way!' : '¡Su pedido está en camino!',
       '',
-      \`\${orderLang === 'en' ? 'Tracking Number' : 'Número de Rastreo'}: \${order.tracking_number || 'N/A'}\`,
+      `${orderLang === 'en' ? 'Tracking Number' : 'Número de Rastreo'}: ${order.tracking_number || 'N/A'}`,
       '',
-      \`\${orderLang === 'en' ? 'Order Summary' : 'Resumen de su Orden'}:\`,
-      \`• \${orderLang === 'en' ? 'Reference' : 'Referencia'}: \${normalizedOrder.orderNumber}\`,
-      \`• \${orderLang === 'en' ? 'Total Paid' : 'Total Pagado'}: \${totalPrimary}\`,
+      `${orderLang === 'en' ? 'Order Summary' : 'Resumen de su Orden'}:`,
+      `• ${orderLang === 'en' ? 'Reference' : 'Referencia'}: ${normalizedOrder.orderNumber}`,
+      `• ${orderLang === 'en' ? 'Total Paid' : 'Total Pagado'}: ${totalPrimary}`,
       '',
-      \`\${orderLang === 'en' ? 'Delivery Details' : 'Detalles de Envío'}:\`,
+      `${orderLang === 'en' ? 'Delivery Details' : 'Detalles de Envío'}:`,
       normalizedOrder.shippingAddress || 'N/A',
       '',
-      \`\${orderLang === 'en' ? 'Products' : 'Productos'}:\`,
-      ...order.items.map(item => \`• \${item.product} x\${item.qty} (\${formatMoney(Number(item.price || 0) * Number(item.qty || 0), order.currency)})\`),
+      `${orderLang === 'en' ? 'Products' : 'Productos'}:`,
+      ...order.items.map(item => `• ${item.product} x${item.qty} (${formatMoney(Number(item.price || 0) * Number(item.qty || 0), order.currency)})`),
       '',
       orderLang === 'en' 
         ? 'Need help? Contact our support desk at +506 8404-6973 or reply to this email.'
@@ -217,7 +217,7 @@ export async function POST(request) {
       text: customerText,
     });
 
-    console.log(\`[Order Shipped Notification] Customer receipt dispatched: \${customerInfo.messageId} to \${order.customer_email}\`);
+    console.log(`[Order Shipped Notification] Customer receipt dispatched: ${customerInfo.messageId} to ${order.customer_email}`);
 
     return NextResponse.json({
       success: true,
