@@ -647,6 +647,23 @@ export default function CatalogPage() {
     return subtotal;
   };
 
+  const sendOrderNotification = async (orderPayload) => {
+    try {
+      const res = await fetch('/api/order-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderPayload),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Order notification failed:', data.error || res.statusText);
+      }
+    } catch (err) {
+      console.error('Order notification request failed:', err);
+    }
+  };
+
   const startTilopayCheckout = async (method) => {
     if (tilopaySubmitting || cart.length === 0) return;
 
@@ -663,6 +680,8 @@ export default function CatalogPage() {
     const tilopayAmount = method === 'sinpe' && currency === 'USD'
       ? Math.round(totalVal * exchangeRate)
       : totalVal;
+    const totalUsd = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
+    const totalCrc = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
     const orderItems = cart.map(item => ({
       product: item.product,
       qty: item.qty,
@@ -691,6 +710,21 @@ export default function CatalogPage() {
         console.error('Order pre-log failed:', err);
       }
     }
+
+    await sendOrderNotification({
+      orderNumber: orderNum,
+      customerName,
+      customerPhone,
+      customerEmail,
+      shippingAddress,
+      items: orderItems,
+      total: totalVal,
+      totalUsd,
+      totalCrc,
+      currency,
+      paymentMethod: method === 'sinpe' ? 'sinpe' : 'tilopay',
+      status: method === 'sinpe' ? 'Pending - SINPE Tilopay' : 'Pending - Card',
+    });
 
     try {
       const res = await fetch('/api/tilopay/create-payment', {
@@ -752,6 +786,8 @@ export default function CatalogPage() {
       qty: item.qty,
       price: getPriceAsNumber(item, currency)
     }));
+    const totalUsd = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
+    const totalCrc = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
 
     let dbSuccess = false;
 
@@ -790,6 +826,21 @@ export default function CatalogPage() {
         console.error("Order logging failed to Supabase:", err);
       }
     }
+
+    await sendOrderNotification({
+      orderNumber: orderNum,
+      customerName,
+      customerPhone,
+      customerEmail,
+      shippingAddress,
+      items: orderItems,
+      total: totalVal,
+      totalUsd,
+      totalCrc,
+      currency,
+      paymentMethod,
+      status: 'Pending',
+    });
 
     // 2. Open WhatsApp Receipt
     const receiptHeader = lang === 'en' 
@@ -946,10 +997,13 @@ export default function CatalogPage() {
           const captureData = await res.json();
 
           if (captureData.status === 'COMPLETED') {
+            const paypalOrderNum = `PPCR-${data.orderID || captureData.id || Date.now().toString(36).toUpperCase()}`;
+
             // Save order to Supabase as Paid
             if (isSupabaseConfigured && supabase) {
               try {
                 await supabase.from('orders').insert({
+                  order_number: paypalOrderNum,
                   customer_name: cName || 'PayPal Customer',
                   customer_phone: cPhone || '',
                   shipping_address: sAddress || '',
@@ -975,6 +1029,21 @@ export default function CatalogPage() {
                 console.error('Failed to log PayPal order to Supabase:', err);
               }
             }
+
+            await sendOrderNotification({
+              orderNumber: paypalOrderNum,
+              customerName: cName || 'PayPal Customer',
+              customerPhone: cPhone || '',
+              customerEmail: cEmail || '',
+              shippingAddress: sAddress || '',
+              items: orderItems,
+              total: usdTotal,
+              totalUsd: usdTotal,
+              totalCrc: Math.round(usdTotal * rate),
+              currency: 'USD',
+              paymentMethod: 'paypal',
+              status: 'Paid',
+            });
 
             setOrderSubmitting(false);
             setOrderSuccess(true);
