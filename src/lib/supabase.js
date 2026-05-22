@@ -6,5 +6,24 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOi
 export const isSupabaseConfigured = supabaseUrl && supabaseAnonKey;
 
 export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false,
+      },
+    })
   : null;
+
+// Auto-clear stale tokens so the console error doesn't repeat every page load
+if (supabase && typeof window !== 'undefined') {
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === 'TOKEN_REFRESHED') return;
+    if (event === 'SIGNED_OUT') {
+      // Wipe any stale sb- keys from localStorage
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('sb-'))
+        .forEach(k => localStorage.removeItem(k));
+    }
+  });
+}
