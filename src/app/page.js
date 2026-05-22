@@ -131,8 +131,20 @@ export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState(null);
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [scrolled, setScrolled] = useState(false);
+  const [cmsSettings, setCmsSettings] = useState(null);
 
-  const t = T[lang];
+  const t = { ...T[lang] };
+  if (cmsSettings) {
+    if (lang === 'en') {
+       if (cmsSettings.heroTitleEn) t.hero_title = cmsSettings.heroTitleEn;
+       if (cmsSettings.heroSubEn) t.hero_sub = cmsSettings.heroSubEn;
+       if (cmsSettings.heroTextEn) t.hero_text = cmsSettings.heroTextEn;
+    } else {
+       if (cmsSettings.heroTitleEs) t.hero_title = cmsSettings.heroTitleEs;
+       if (cmsSettings.heroSubEs) t.hero_sub = cmsSettings.heroSubEs;
+       if (cmsSettings.heroTextEs) t.hero_text = cmsSettings.heroTextEs;
+    }
+  }
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -149,13 +161,18 @@ export default function LandingPage() {
   useEffect(() => {
     const loadFeatured = async () => {
       if (!isSupabaseConfigured || !supabase) return;
-      const { data } = await supabase
+      const { data: prodData } = await supabase
         .from('products')
         .select('product, price_usd, price_crc, original_price_usd, original_price_crc, status, image_url, category, emoji')
         .eq('status', 'In Stock')
         .order('priority', { ascending: true })
         .limit(4);
-      if (data) setFeaturedProducts(data);
+      if (prodData) setFeaturedProducts(prodData);
+
+      const { data: settingsData } = await supabase.from('site_settings').select('value').eq('id', 'landing_page').single();
+      if (settingsData && settingsData.value) {
+        setCmsSettings(settingsData.value);
+      }
     };
     loadFeatured();
   }, []);
@@ -181,9 +198,14 @@ export default function LandingPage() {
 
   return (
     <div className="landing-layout min-h-screen">
+      {cmsSettings && cmsSettings.bannerActive && (
+        <div style={{ background: '#38bdf8', color: '#050b18', textAlign: 'center', padding: '8px 16px', fontSize: '0.85rem', fontWeight: 'bold' }}>
+          {lang === 'en' ? cmsSettings.bannerTextEn : cmsSettings.bannerTextEs}
+        </div>
+      )}
 
       {/* ── HEADER ────────────────────────────────────────── */}
-      <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`}>
+      <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`} style={cmsSettings?.bannerActive ? { top: scrolled ? '0' : 'auto' } : {}}>
         <div className="lp-header-inner">
           <div className="lp-controls">
             <div className="theme-toggle">

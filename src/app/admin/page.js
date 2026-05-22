@@ -63,6 +63,15 @@ export default function AdminPage() {
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(FALLBACK_EXCHANGE_RATE);
   
+  // CMS States
+  const [blogs, setBlogs] = useState([]);
+  const [loadingBlogs, setLoadingBlogs] = useState(true);
+  const [siteSettings, setSiteSettings] = useState(null);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [cmsSaveStatus, setCmsSaveStatus] = useState('');
+  const [cmsSaveLoading, setCmsSaveLoading] = useState(false);
+  const [editingBlog, setEditingBlog] = useState(null);
+  
   // CSV Import States
   const [csvDragActive, setCsvDragActive] = useState(false);
   const [csvStatus, setCsvStatus] = useState('');
@@ -331,6 +340,40 @@ export default function AdminPage() {
       }
     }
     setLoadingReviews(false);
+
+    // 5. Fetch Blogs
+    setLoadingBlogs(true);
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.from('blogs').select('*').order('created_at', { ascending: false });
+        if (!error && data) setBlogs(data);
+      } catch (err) { console.error("Failed to load blogs:", err); }
+    }
+    setLoadingBlogs(false);
+
+    // 6. Fetch Site Settings
+    setLoadingSettings(true);
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.from('site_settings').select('*').eq('id', 'landing_page').single();
+        if (!error && data) {
+           setSiteSettings(data.value);
+        } else {
+           setSiteSettings({
+              bannerActive: false,
+              bannerTextEn: "Flash Sale: 10% Off All Peptides!",
+              bannerTextEs: "Oferta Relámpago: ¡10% de descuento en todos los péptidos!",
+              heroTitleEn: "Buy Peptides in Costa Rica",
+              heroTitleEs: "Compra Péptidos en Costa Rica",
+              heroSubEn: "Lab-Tested. High Purity. Fast Local Delivery.",
+              heroSubEs: "Testados en Laboratorio. Alta Pureza. Entrega Local Rápida.",
+              heroTextEn: "Your trusted local source for premium, research-grade peptides. Verified quality, transparent pricing, and secure checkout.",
+              heroTextEs: "Tu fuente local de confianza para péptidos premium de grado investigación. Calidad verificada, precios transparentes y pago seguro."
+           });
+        }
+      } catch (err) { console.error("Failed to load settings:", err); }
+    }
+    setLoadingSettings(false);
   };
 
   // Trigger loading when authenticated
@@ -968,6 +1011,81 @@ export default function AdminPage() {
     setTimeout(() => setShareCopied(false), 2000);
   };
 
+  // CMS Handlers
+  const handleSaveSiteSettings = async () => {
+    setCmsSaveLoading(true);
+    setCmsSaveStatus('');
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from('site_settings').upsert({
+          id: 'landing_page',
+          value: siteSettings
+        });
+        if (error) throw error;
+        setCmsSaveStatus('success:Settings saved successfully.');
+      } catch (err) {
+        console.error("Failed to save settings:", err);
+        setCmsSaveStatus(`error:Failed to save settings (${err.message})`);
+      }
+    }
+    setCmsSaveLoading(false);
+    setTimeout(() => setCmsSaveStatus(''), 3000);
+  };
+
+  const handleSaveBlog = async (e) => {
+    e.preventDefault();
+    setCmsSaveLoading(true);
+    setCmsSaveStatus('');
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const isNew = !editingBlog.id;
+        const payload = {
+          slug: editingBlog.slug,
+          title_en: editingBlog.title_en,
+          title_es: editingBlog.title_es,
+          excerpt_en: editingBlog.excerpt_en,
+          excerpt_es: editingBlog.excerpt_es,
+          content_en: editingBlog.content_en,
+          content_es: editingBlog.content_es,
+          image_url: editingBlog.image_url,
+          published: editingBlog.published
+        };
+        
+        let error;
+        if (isNew) {
+          const res = await supabase.from('blogs').insert(payload).select();
+          error = res.error;
+          if (!error && res.data) setBlogs([res.data[0], ...blogs]);
+        } else {
+          const res = await supabase.from('blogs').update(payload).eq('id', editingBlog.id).select();
+          error = res.error;
+          if (!error && res.data) setBlogs(blogs.map(b => b.id === editingBlog.id ? res.data[0] : b));
+        }
+        
+        if (error) throw error;
+        setCmsSaveStatus('success:Blog post saved successfully.');
+        setEditingBlog(null);
+      } catch (err) {
+        console.error("Failed to save blog:", err);
+        setCmsSaveStatus(`error:Failed to save blog (${err.message})`);
+      }
+    }
+    setCmsSaveLoading(false);
+    setTimeout(() => setCmsSaveStatus(''), 3000);
+  };
+
+  const handleDeleteBlog = async (id) => {
+    if (!confirm('Are you sure you want to delete this blog post?')) return;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('blogs').delete().eq('id', id);
+        setBlogs(blogs.filter(b => b.id !== id));
+      } catch (err) {
+        console.error("Failed to delete blog:", err);
+      }
+    }
+  };
+
   // Prevent hydration mismatch by skipping SSR for admin portal entirely
   if (!mounted) return null;
 
@@ -1081,6 +1199,13 @@ export default function AdminPage() {
             <Star size={14} />
             <span className="tab-label">Reviews</span>
             {reviews.filter(r => r.status === 'Pending').length > 0 && <span className="tab-count" style={{ background: '#3b82f6' }}>{reviews.filter(r => r.status === 'Pending').length}</span>}
+          </button>
+          <button 
+            className={`admin-tab-btn ${activeTab === 'cms' ? 'active' : ''}`}
+            onClick={() => setActiveTab('cms')}
+          >
+            <FileText size={14} />
+            <span className="tab-label">Content (CMS)</span>
           </button>
         </div>
       </nav>
@@ -1844,9 +1969,186 @@ export default function AdminPage() {
             )}
           </div>
         )}
+
+        {/* TAB: CMS */}
+        {activeTab === 'cms' && (
+          <div className="admin-orders-tab">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+              <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0 }}><FileText size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-bottom', color: '#38bdf8' }} /> Content Management System</h2>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button className="admin-btn" onClick={loadAdminData} style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}>
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {cmsSaveStatus && (
+              <div style={{ 
+                padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.8rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px',
+                background: cmsSaveStatus.startsWith('error') ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.15)',
+                border: `1px solid ${cmsSaveStatus.startsWith('error') ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)'}`,
+                color: cmsSaveStatus.startsWith('error') ? '#f87171' : '#4ade80'
+              }}>
+                {cmsSaveStatus.startsWith('error') ? <AlertCircle size={16} /> : <Check size={16} />}
+                {cmsSaveStatus.replace(/^(error:|success:)/, '')}
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+              
+              {/* Landing Page Settings */}
+              <div style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Zap size={18} color="#f59e0b" /> Landing Page Controls
+                </h3>
+                
+                {loadingSettings ? (
+                  <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Loading settings...</div>
+                ) : siteSettings ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    
+                    {/* Announcement Banner */}
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <h4 style={{ margin: 0, color: '#f8fafc', fontSize: '0.95rem' }}>Announcement Banner</h4>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={siteSettings.bannerActive} onChange={e => setSiteSettings({...siteSettings, bannerActive: e.target.checked})} />
+                          <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>Enable Banner</span>
+                        </label>
+                      </div>
+                      <input type="text" placeholder="Banner Text (EN)" value={siteSettings.bannerTextEn} onChange={e => setSiteSettings({...siteSettings, bannerTextEn: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      <input type="text" placeholder="Banner Text (ES)" value={siteSettings.bannerTextEs} onChange={e => setSiteSettings({...siteSettings, bannerTextEs: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                    </div>
+
+                    {/* Hero Text Controls */}
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Hero Text (English)</h4>
+                      <input type="text" placeholder="Hero Title" value={siteSettings.heroTitleEn} onChange={e => setSiteSettings({...siteSettings, heroTitleEn: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      <input type="text" placeholder="Hero Subtitle" value={siteSettings.heroSubEn} onChange={e => setSiteSettings({...siteSettings, heroSubEn: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      <textarea placeholder="Hero Description" value={siteSettings.heroTextEn} onChange={e => setSiteSettings({...siteSettings, heroTextEn: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem', minHeight: '60px' }} />
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Hero Text (Español)</h4>
+                      <input type="text" placeholder="Hero Title" value={siteSettings.heroTitleEs} onChange={e => setSiteSettings({...siteSettings, heroTitleEs: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      <input type="text" placeholder="Hero Subtitle" value={siteSettings.heroSubEs} onChange={e => setSiteSettings({...siteSettings, heroSubEs: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      <textarea placeholder="Hero Description" value={siteSettings.heroTextEs} onChange={e => setSiteSettings({...siteSettings, heroTextEs: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem', minHeight: '60px' }} />
+                    </div>
+
+                    <button onClick={handleSaveSiteSettings} disabled={cmsSaveLoading} className="admin-btn admin-btn-primary" style={{ padding: '12px', justifyContent: 'center' }}>
+                      {cmsSaveLoading ? 'Saving...' : <><Save size={16} /> Save Landing Page Settings</>}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Blog Manager */}
+              <div style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <LayoutDashboard size={18} color="#10b981" /> Blog Post Manager
+                  </h3>
+                  <button className="admin-btn admin-btn-accent" onClick={() => setEditingBlog({ slug: '', title_en: '', title_es: '', excerpt_en: '', excerpt_es: '', content_en: '', content_es: '', image_url: '', published: false })}>
+                    <Plus size={16} /> New Post
+                  </button>
+                </div>
+
+                {loadingBlogs ? (
+                   <div style={{ color: '#94a3b8' }}>Loading blogs...</div>
+                ) : blogs.length === 0 ? (
+                   <div style={{ color: '#64748b', fontSize: '0.9rem', fontStyle: 'italic' }}>No blog posts found. Create your first post!</div>
+                ) : (
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                     {blogs.map(b => (
+                       <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#172237', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                         <div>
+                           <div style={{ color: '#f8fafc', fontWeight: 'bold', fontSize: '0.95rem' }}>{b.title_en}</div>
+                           <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>/{b.slug} &bull; {b.published ? <span style={{ color: '#4ade80' }}>Published</span> : <span style={{ color: '#f59e0b' }}>Draft</span>}</div>
+                         </div>
+                         <div style={{ display: 'flex', gap: '8px' }}>
+                           <button onClick={() => setEditingBlog(b)} className="admin-btn" style={{ padding: '6px 10px', fontSize: '0.8rem' }}>Edit</button>
+                           <button onClick={() => handleDeleteBlog(b.id)} className="admin-btn" style={{ padding: '6px 10px', fontSize: '0.8rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}><Trash2 size={14}/></button>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Change Password Modal */}
+      {/* Blog Editor Modal */}
+      {editingBlog && (
+        <div className="modal active" onClick={() => setEditingBlog(null)} style={{ zIndex: 200 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', width: '90%', maxHeight: '90vh', overflowY: 'auto', background: '#0e1626', color: '#f8fafc' }}>
+            <button className="close-modal" onClick={() => setEditingBlog(null)} style={{ color: '#94a3b8' }}>&times;</button>
+            <h2 style={{ fontSize: '1.3rem', fontWeight: '900', color: '#f8fafc', marginBottom: '20px' }}>{editingBlog.id ? 'Edit Blog Post' : 'New Blog Post'}</h2>
+            
+            <form onSubmit={handleSaveBlog} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Slug (URL path)</label>
+                  <input required type="text" value={editingBlog.slug} onChange={e => setEditingBlog({...editingBlog, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-')})} placeholder="e.g. what-are-peptides" style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Cover Image URL</label>
+                  <input type="text" value={editingBlog.image_url} onChange={e => setEditingBlog({...editingBlog, image_url: e.target.value})} placeholder="https://..." style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none' }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Title (EN)</label>
+                  <input required type="text" value={editingBlog.title_en} onChange={e => setEditingBlog({...editingBlog, title_en: e.target.value})} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Title (ES)</label>
+                  <input required type="text" value={editingBlog.title_es} onChange={e => setEditingBlog({...editingBlog, title_es: e.target.value})} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none' }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Excerpt (EN)</label>
+                  <textarea required value={editingBlog.excerpt_en} onChange={e => setEditingBlog({...editingBlog, excerpt_en: e.target.value})} style={{ width: '100%', height: '80px', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none', resize: 'vertical' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Excerpt (ES)</label>
+                  <textarea required value={editingBlog.excerpt_es} onChange={e => setEditingBlog({...editingBlog, excerpt_es: e.target.value})} style={{ width: '100%', height: '80px', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none', resize: 'vertical' }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Content (EN) - HTML/Markdown</label>
+                <textarea required value={editingBlog.content_en} onChange={e => setEditingBlog({...editingBlog, content_en: e.target.value})} style={{ width: '100%', height: '200px', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none', resize: 'vertical' }} />
+              </div>
+              
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Content (ES) - HTML/Markdown</label>
+                <textarea required value={editingBlog.content_es} onChange={e => setEditingBlog({...editingBlog, content_es: e.target.value})} style={{ width: '100%', height: '200px', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none', resize: 'vertical' }} />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', padding: '10px 16px', borderRadius: '8px' }}>
+                  <input type="checkbox" checked={editingBlog.published} onChange={e => setEditingBlog({...editingBlog, published: e.target.checked})} style={{ transform: 'scale(1.2)' }} />
+                  <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: editingBlog.published ? '#4ade80' : '#94a3b8' }}>
+                    {editingBlog.published ? 'Published (Live)' : 'Draft (Hidden)'}
+                  </span>
+                </label>
+                
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button type="button" className="admin-btn" onClick={() => setEditingBlog(null)}>Cancel</button>
+                  <button type="submit" disabled={cmsSaveLoading} className="admin-btn admin-btn-primary">
+                    {cmsSaveLoading ? 'Saving...' : <><Save size={16} /> Save Blog Post</>}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}      {/* Change Password Modal */}
       {showPasswordModal && (
         <div className="modal active" onClick={() => setShowPasswordModal(false)} style={{ zIndex: 200 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', background: '#0e1626', color: '#f8fafc' }}>

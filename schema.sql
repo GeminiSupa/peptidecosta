@@ -242,3 +242,57 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS tracking_number TEXT;
 -- 3. Added Sale Prices (Added May)
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price_usd TEXT;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price_crc TEXT;
+
+-- =========================================================================
+-- 6. CMS SETTINGS TABLE
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS public.site_settings (
+    id TEXT PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public read access to settings" ON public.site_settings;
+DROP POLICY IF EXISTS "Allow authenticated write access to settings" ON public.site_settings;
+
+CREATE POLICY "Allow public read access to settings" 
+ON public.site_settings FOR SELECT USING (true);
+
+CREATE POLICY "Allow authenticated write access to settings" 
+ON public.site_settings FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Insert defaults for CMS (safe on conflict)
+INSERT INTO public.site_settings (id, value) VALUES 
+('landing_page', '{"bannerActive": false, "bannerTextEn": "Flash Sale: 10% Off All Peptides!", "bannerTextEs": "Oferta Relámpago: ¡10% de descuento en todos los péptidos!", "heroTitleEn": "Buy Peptides in Costa Rica", "heroTitleEs": "Compra Péptidos en Costa Rica", "heroSubEn": "Lab-Tested. High Purity. Fast Local Delivery.", "heroSubEs": "Testados en Laboratorio. Alta Pureza. Entrega Local Rápida.", "heroTextEn": "Your trusted local source for premium, research-grade peptides. Verified quality, transparent pricing, and secure checkout.", "heroTextEs": "Tu fuente local de confianza para péptidos premium de grado investigación. Calidad verificada, precios transparentes y pago seguro."}'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+
+-- =========================================================================
+-- 7. BLOGS TABLE
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS public.blogs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    slug TEXT UNIQUE NOT NULL,
+    title_en TEXT NOT NULL,
+    title_es TEXT NOT NULL,
+    excerpt_en TEXT,
+    excerpt_es TEXT,
+    content_en TEXT,
+    content_es TEXT,
+    image_url TEXT,
+    published BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE public.blogs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public read access to published blogs" ON public.blogs;
+DROP POLICY IF EXISTS "Allow authenticated write access to blogs" ON public.blogs;
+
+CREATE POLICY "Allow public read access to published blogs" 
+ON public.blogs FOR SELECT USING (published = true);
+
+CREATE POLICY "Allow authenticated write access to blogs" 
+ON public.blogs FOR ALL TO authenticated USING (true) WITH CHECK (true);
