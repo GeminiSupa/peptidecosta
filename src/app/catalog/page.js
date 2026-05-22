@@ -1937,7 +1937,7 @@ export default function CatalogPage() {
               )}
             </div>
             <a 
-              href={`https://wa.me/${WHATSAPP_NUMBER}`} 
+              href={`https://wa.me/${WHATSAPP_NUMBER}?text=${lang === 'en' ? 'Hi!%20I%20have%20a%20question%20about%20my%20order.' : '%C2%A1Hola!%20Tengo%20algunas%20preguntas.'}`} 
               target="_blank" 
               rel="noreferrer"
               className="whatsapp-btn" 
@@ -1958,7 +1958,7 @@ export default function CatalogPage() {
             <a href="#" onClick={(e) => { e.preventDefault(); setHowToOrderOpen(true); }}>
               {lang === 'en' ? 'How to Order' : 'Cómo Ordenar'}
             </a>
-            <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer">
+            <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${lang === 'en' ? 'Hi!%20I%20have%20a%20question%20about%20my%20order.' : '%C2%A1Hola!%20Tengo%20algunas%20preguntas.'}`} target="_blank" rel="noreferrer">
               {lang === 'en' ? 'Contact WhatsApp' : 'Contactar WhatsApp'}
             </a>
             <a href="/admin" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: '500' }}>

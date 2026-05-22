@@ -148,7 +148,7 @@ export default function ExitIntentPopup() {
           <a
             href={lang === 'en' 
               ? "https://wa.me/50684046973?text=Hi!%20I%20have%20a%20question%20about%20my%20order."
-              : "https://wa.me/50684046973?text=¡Hola!%20Tengo%20una%20pregunta%20sobre%20mi%20orden."}
+              : "https://wa.me/50684046973?text=%C2%A1Hola!%20Tengo%20algunas%20preguntas."}
             target="_blank"
             rel="noopener noreferrer"
             style={{
