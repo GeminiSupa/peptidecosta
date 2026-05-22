@@ -678,6 +678,21 @@ export default function AdminPage() {
           .from('orders')
           .update({ status: newStatus })
           .eq('id', orderId);
+
+        if (newStatus === 'Completed') {
+          const updatedOrder = orders.find(o => o.id === orderId);
+          if (updatedOrder && updatedOrder.customer_email) {
+            fetch('/api/order-shipped-notification', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...updatedOrder, status: newStatus })
+            }).then(res => res.json()).then(data => {
+              if (data.success) {
+                alert(`Shipping tracking email successfully sent to ${updatedOrder.customer_email}`);
+              }
+            }).catch(err => console.error('Failed to send shipping email:', err));
+          }
+        }
       } catch(err) {
         console.error("Order status update error:", err);
       }
