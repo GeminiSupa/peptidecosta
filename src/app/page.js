@@ -413,6 +413,9 @@ export default function LandingPage() {
             <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Shop Catalog' : 'Catálogo'}</Link>
             <a href="mailto:info@peptidescostarica.net">info@peptidescostarica.net</a>
             <a href="tel:+50684046973">CR: +506 8404-6973</a>
+            <Link href="/admin" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: '500' }}>
+              {lang === 'en' ? 'Admin Portal' : 'Portal de Admin'}
+            </Link>
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
             © {new Date().getFullYear()} Peptides Costa Rica. {t.footer_copy}
