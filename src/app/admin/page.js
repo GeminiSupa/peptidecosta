@@ -10,8 +10,10 @@ import {
   AlertCircle, ChevronRight, ChevronUp, ChevronDown, MessageSquare, Database,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
-  KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText
+  KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users
 } from 'lucide-react';
+import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
+import CustomersCRM from '@/components/admin/CustomersCRM';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
 
@@ -1178,6 +1180,20 @@ export default function AdminPage() {
             {orders.length > 0 && <span className="tab-count" style={{ background: '#ef4444' }}>{orders.length}</span>}
           </button>
           <button 
+            className={`admin-tab-btn ${activeTab === 'customers' ? 'active' : ''}`}
+            onClick={() => setActiveTab('customers')}
+          >
+            <Users size={14} />
+            <span className="tab-label">Customers</span>
+          </button>
+          <button 
+            className={`admin-tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analytics')}
+          >
+            <BarChart2 size={14} />
+            <span className="tab-label">Analytics</span>
+          </button>
+          <button 
             className={`admin-tab-btn ${activeTab === 'share' ? 'active' : ''}`}
             onClick={() => setActiveTab('share')}
           >
@@ -2075,6 +2091,20 @@ export default function AdminPage() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TAB: ANALYTICS */}
+        {activeTab === 'analytics' && (
+          <div className="admin-orders-tab">
+            <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} />
+          </div>
+        )}
+
+        {/* TAB: CUSTOMERS CRM */}
+        {activeTab === 'customers' && (
+          <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
+            <CustomersCRM orders={orders} />
           </div>
         )}
       </div>

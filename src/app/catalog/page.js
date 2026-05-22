@@ -249,6 +249,82 @@ export default function CatalogPage() {
     fetchLiveExchangeRate();
   }, []);
 
+  // Telemetry: Sync visitor session details to Supabase when session and metadata are ready
+  useEffect(() => {
+    if (!sessionId || !customerMetadata || !isSupabaseConfigured || !supabase) return;
+
+    const logVisitorSession = async () => {
+      try {
+        const { city, region, country } = customerMetadata.location_data || {};
+        
+        // Try to fetch current accumulated duration in this session from localStorage (robust heartbeat recovery)
+        const localDuration = parseInt(localStorage.getItem(`catalog_dur_${sessionId}`) || '0', 10);
+
+        // Upsert visitor session row
+        await supabase.from('visitor_sessions').upsert({
+          session_id: sessionId,
+          city: city || 'Unknown',
+          region: region || 'Unknown',
+          country: country || 'Unknown',
+          ip_address: customerMetadata.ip_address || 'Unknown',
+          device_info: customerMetadata.device_info || 'Unknown',
+          catalog_duration: localDuration,
+          last_active: new Date().toISOString()
+        }, { onConflict: 'session_id' });
+      } catch (err) {
+        console.warn('Telemetry visitor session sync warning:', err);
+      }
+    };
+
+    logVisitorSession();
+  }, [sessionId, customerMetadata]);
+
+  // Telemetry: Heartbeat to track how long they keep catalog open
+  useEffect(() => {
+    if (!sessionId || !isSupabaseConfigured || !supabase) return;
+
+    // Start a 15-second heartbeat
+    const intervalId = setInterval(async () => {
+      // 1. Increment local session duration
+      const currentDur = parseInt(localStorage.getItem(`catalog_dur_${sessionId}`) || '0', 10) + 15;
+      localStorage.setItem(`catalog_dur_${sessionId}`, currentDur.toString());
+
+      // 2. Sync to Supabase
+      try {
+        await supabase
+          .from('visitor_sessions')
+          .update({
+            catalog_duration: currentDur,
+            last_active: new Date().toISOString()
+          })
+          .eq('session_id', sessionId);
+      } catch (err) {
+        console.warn('Telemetry heartbeat sync warning:', err);
+      }
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, [sessionId]);
+
+  // Telemetry: Log product detail views
+  useEffect(() => {
+    if (!selectedProduct || !sessionId || !isSupabaseConfigured || !supabase) return;
+
+    const logProductDetailView = async () => {
+      try {
+        await supabase.from('product_views').insert({
+          session_id: sessionId,
+          product_name: selectedProduct.product
+        });
+      } catch (err) {
+        console.warn('Telemetry product view sync warning:', err);
+      }
+    };
+
+    logProductDetailView();
+  }, [selectedProduct, sessionId]);
+
+
   // Live currency exchange rate fetch
   const fetchLiveExchangeRate = async () => {
     try {
@@ -1615,12 +1691,14 @@ export default function CatalogPage() {
                   {
                     value: 'sinpe',
                     icon: <Smartphone size={18} />,
+                    iconColor: '#f97316', // Orange
                     title: lang === 'en' ? 'SINPE Móvil' : 'SINPE Móvil',
                     detail: lang === 'en' ? 'Secure Tilopay checkout' : 'Pago seguro con Tilopay',
                   },
                   {
                     value: 'tilopay',
                     icon: <CreditCard size={18} />,
+                    iconColor: '#0ea5e9', // Blue
                     title: lang === 'en' ? 'Card' : 'Tarjeta',
                     detail: lang === 'en' ? 'Credit or debit' : 'Crédito o débito',
                   },
@@ -1628,12 +1706,14 @@ export default function CatalogPage() {
                   {
                     value: 'whatsapp',
                     icon: <MessageCircle size={18} />,
+                    iconColor: '#22c55e', // Green
                     title: lang === 'en' ? 'WhatsApp' : 'WhatsApp',
                     detail: lang === 'en' ? 'Coordinate manually' : 'Coordinar manualmente',
                   },
                   {
                     value: 'paypal',
                     icon: <CreditCard size={18} />,
+                    iconColor: '#3b82f6', // Blue for PayPal
                     title: 'PayPal',
                     detail: lang === 'en' ? 'Pay in USD' : 'Pagar en USD',
                   },
@@ -1646,7 +1726,7 @@ export default function CatalogPage() {
                     className={`payment-method-card ${paymentMethod === method.value ? 'active' : ''}`}
                     onClick={() => setPaymentMethod(method.value)}
                   >
-                    <span className="payment-method-icon">{method.icon}</span>
+                    <span className="payment-method-icon" style={method.iconColor ? { color: method.iconColor } : {}}>{method.icon}</span>
                     <span>
                       <strong>{method.title}</strong>
                       <small>{method.detail}</small>
