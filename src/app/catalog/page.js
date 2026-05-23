@@ -404,7 +404,9 @@ export default function CatalogPage() {
               location_data: customerMetadata?.location_data || null,
               device_info: customerMetadata?.device_info || null,
               last_updated: new Date().toISOString(),
-              status: 'active'
+              status: 'active',
+              lang: lang || 'es',
+              currency: currency || 'CRC'
             }, { onConflict: 'session_id' });
           } catch (err) {
             console.error('Failed to sync abandoned cart:', err);
@@ -413,7 +415,7 @@ export default function CatalogPage() {
       }, 1000);
       return () => clearTimeout(timeoutId);
     }
-  }, [cart, customerName, customerPhone, customerEmail, sessionId, customerMetadata]);
+  }, [cart, customerName, customerPhone, customerEmail, sessionId, customerMetadata, lang, currency]);
 
   // Load Catalog Data (Supabase or CSV fallback)
   const loadCatalogData = async () => {

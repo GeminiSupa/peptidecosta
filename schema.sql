@@ -296,3 +296,43 @@ ON public.blogs FOR SELECT USING (published = true);
 
 CREATE POLICY "Allow authenticated write access to blogs" 
 ON public.blogs FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+
+-- =========================================================================
+-- 8. WHATSAPP BUSINESS API INTEGRATION
+-- =========================================================================
+
+-- Add real WhatsApp number column to orders
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS whatsapp_wa_id TEXT;
+
+-- WhatsApp messages log table
+CREATE TABLE IF NOT EXISTS public.whatsapp_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    wa_id TEXT NOT NULL,
+    display_name TEXT,
+    message_text TEXT,
+    message_type TEXT DEFAULT 'text',
+    direction TEXT DEFAULT 'inbound',
+    matched_order_id UUID,
+    raw_payload JSONB,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.whatsapp_messages ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow anon insert to whatsapp_messages" ON public.whatsapp_messages;
+DROP POLICY IF EXISTS "Allow authenticated read access to whatsapp_messages" ON public.whatsapp_messages;
+DROP POLICY IF EXISTS "Allow authenticated delete access to whatsapp_messages" ON public.whatsapp_messages;
+
+CREATE POLICY "Allow anon insert to whatsapp_messages"
+ON public.whatsapp_messages FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow authenticated read access to whatsapp_messages"
+ON public.whatsapp_messages FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated delete access to whatsapp_messages"
+ON public.whatsapp_messages FOR DELETE TO authenticated USING (true);
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_wa_id ON public.whatsapp_messages (wa_id);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_matched_order ON public.whatsapp_messages (matched_order_id);
+CREATE INDEX IF NOT EXISTS idx_orders_whatsapp_wa_id ON public.orders (whatsapp_wa_id);

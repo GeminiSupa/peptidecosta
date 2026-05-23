@@ -5,7 +5,7 @@ import Papa from 'papaparse';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { 
-  Lock, LayoutDashboard, ListFilter, Plus, Trash2, 
+  Lock, LayoutDashboard, ListFilter, Plus, Trash2, Mail, MessageCircle,
   Save, Upload, Share2, Clipboard, LogOut, Check, 
   AlertCircle, ChevronRight, ChevronUp, ChevronDown, MessageSquare, Database,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
@@ -60,6 +60,7 @@ export default function AdminPage() {
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [loadingAbandonedCarts, setLoadingAbandonedCarts] = useState(true);
+  const [sendingRecoveryEmail, setSendingRecoveryEmail] = useState({});
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
   const [isDbConnected, setIsDbConnected] = useState(false);
@@ -783,6 +784,40 @@ export default function AdminPage() {
       } catch(err) {
         console.error('Cart delete error:', err);
       }
+    }
+  };
+
+  // Send recovery email
+  const handleSendRecoveryEmail = async (acart) => {
+    setSendingRecoveryEmail(prev => ({ ...prev, [acart.session_id]: true }));
+    try {
+      const response = await fetch('/api/abandoned-cart-notification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: acart.session_id,
+          customer_name: acart.customer_name,
+          customer_email: acart.customer_email,
+          cart_data: acart.cart_data,
+          lang: acart.lang || 'es',
+          currency: acart.currency || 'CRC',
+        }),
+      });
+
+      const result = await response.json();
+      if (response.ok && result.success) {
+        alert('Recovery email sent successfully!');
+        loadAdminData();
+      } else {
+        alert('Failed to send recovery email: ' + (result.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to send recovery email: ' + err.message);
+    } finally {
+      setSendingRecoveryEmail(prev => ({ ...prev, [acart.session_id]: false }));
     }
   };
 
@@ -1867,8 +1902,62 @@ export default function AdminPage() {
                           Phone: {acart.customer_phone || 'Not provided'}
                           {acart.customer_email && <div>Email: {acart.customer_email}</div>}
                         </div>
+                        
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                          {acart.customer_email && (
+                            <button
+                              onClick={() => handleSendRecoveryEmail(acart)}
+                              disabled={sendingRecoveryEmail[acart.session_id]}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '0.75rem',
+                                background: acart.recovery_email_sent ? 'rgba(56, 189, 248, 0.1)' : 'rgba(16, 185, 129, 0.15)',
+                                border: acart.recovery_email_sent ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
+                                color: acart.recovery_email_sent ? '#38bdf8' : '#34d399',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: '700',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                            >
+                              <Mail size={13} />
+                              {sendingRecoveryEmail[acart.session_id] ? 'Sending...' : acart.recovery_email_sent ? 'Send Email Again' : 'Send Recovery Email'}
+                            </button>
+                          )}
+                          
+                          {acart.customer_phone && (
+                            <a
+                              href={`https://wa.me/${acart.customer_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                                acart.lang === 'en'
+                                  ? `Hi ${acart.customer_name || ''}, we saved your cart at Peptides Costa Rica! Let us know if you have any questions or need help completing your order.`
+                                  : `Hola ${acart.customer_name || ''}, ¡guardamos tu carrito en Péptidos Costa Rica! Escríbenos si tienes dudas o necesitas ayuda para completar tu compra.`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '0.75rem',
+                                background: 'rgba(34, 197, 94, 0.15)',
+                                border: '1px solid rgba(34, 197, 94, 0.3)',
+                                color: '#4ade80',
+                                borderRadius: '8px',
+                                textDecoration: 'none',
+                                fontWeight: '700',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                            >
+                              <MessageCircle size={13} />
+                              Contact via WhatsApp
+                            </a>
+                          )}
+                        </div>
+
                         {(acart.ip_address || acart.location_data) && (
-                          <div style={{ marginTop: '8px', padding: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                          <div style={{ marginTop: '12px', padding: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', fontSize: '0.75rem', color: '#94a3b8' }}>
                             {acart.location_data?.city && <div>📍 {acart.location_data.city}, {acart.location_data.country}</div>}
                             {acart.ip_address && <div>🌐 IP: {acart.ip_address}</div>}
                             {acart.device_info && <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '250px' }} title={acart.device_info}>💻 {acart.device_info}</div>}
@@ -1877,6 +1966,17 @@ export default function AdminPage() {
                       </div>
                       <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                         <div style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-block' }}>Active Cart</div>
+                        
+                        {acart.recovery_email_sent ? (
+                          <div style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-block' }} title={acart.recovery_email_sent_at ? `Sent at: ${new Date(acart.recovery_email_sent_at).toLocaleString()}` : ''}>
+                            ✉️ Recovery Email Sent
+                          </div>
+                        ) : (
+                          <div style={{ background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-block' }}>
+                            ✉️ Recovery Never Sent
+                          </div>
+                        )}
+
                         <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
                           Last Updated: {new Date(acart.last_updated).toLocaleString()}
                         </div>
@@ -2104,7 +2204,7 @@ export default function AdminPage() {
         {/* TAB: CUSTOMERS CRM */}
         {activeTab === 'customers' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
-            <CustomersCRM orders={orders} />
+            <CustomersCRM orders={orders} abandonedCarts={abandonedCarts} />
           </div>
         )}
       </div>

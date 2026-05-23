@@ -1,14 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, User, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save } from 'lucide-react';
+import { Search, User, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save, Phone, BadgeCheck } from 'lucide-react';
 
-export default function CustomersCRM({ orders = [] }) {
+export default function CustomersCRM({ orders = [], abandonedCarts = [] }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', location: '' });
   const [saving, setSaving] = useState(false);
 
-  // Derived customer data from order history
+  // Derived customer data from order history and abandoned carts
   const customers = useMemo(() => {
     const map = {};
 
@@ -29,16 +29,20 @@ export default function CustomersCRM({ orders = [] }) {
                  (o.customer_name || '').toLowerCase() || 
                  'unknown';
                  
+      if (id === 'unknown' || id === '') return;
+
       if (!map[id]) {
         map[id] = {
           id,
           name: o.customer_name || 'Unknown',
           email: o.customer_email || '',
           phone: o.customer_phone || '',
+          whatsappWaId: o.whatsapp_wa_id || '',
           location: o.location_data?.city || extractCity(o.shipping_address),
           totalSpentUsd: 0,
           orderCount: 0,
-          lastOrderDate: o.created_at
+          lastOrderDate: o.created_at,
+          isLead: false
         };
       }
       
@@ -53,15 +57,52 @@ export default function CustomersCRM({ orders = [] }) {
          if (o.customer_name) map[id].name = o.customer_name;
          if (o.customer_email) map[id].email = o.customer_email;
          if (o.customer_phone) map[id].phone = o.customer_phone;
+         if (o.whatsapp_wa_id) map[id].whatsappWaId = o.whatsapp_wa_id;
          
          const newLoc = o.location_data?.city || extractCity(o.shipping_address);
          if (newLoc) map[id].location = newLoc;
       }
     });
+
+    // Merge named abandoned cart leads who haven't ordered yet
+    abandonedCarts.forEach(c => {
+      const id = (c.customer_email || '').toLowerCase() || 
+                 (c.customer_phone || '').replace(/\D/g, '') || 
+                 (c.customer_name || '').toLowerCase() || 
+                 'unknown';
+
+      if (id === 'unknown' || id === '') return; // Skip anonymous carts
+
+      if (!map[id]) {
+        map[id] = {
+          id,
+          name: c.customer_name || 'Pre-purchase Lead',
+          email: c.customer_email || '',
+          phone: c.customer_phone || '',
+          whatsappWaId: '',
+          location: c.location_data?.city || '',
+          totalSpentUsd: 0,
+          orderCount: 0,
+          lastOrderDate: c.last_updated,
+          isLead: true,
+          lang: c.lang || 'es',
+          currency: c.currency || 'CRC',
+          cartItems: c.cart_data || []
+        };
+      } else {
+        // If they already exist in orders, they are a customer (not a lead)
+        map[id].isLead = false;
+      }
+    });
     
-    // Convert to array and sort by LTV (Total Spent) descending
-    return Object.values(map).sort((a, b) => b.totalSpentUsd - a.totalSpentUsd);
-  }, [orders]);
+    // Convert to array and sort by customer type (Customers first, then Leads) and LTV/Last updated
+    return Object.values(map).sort((a, b) => {
+      if (a.isLead !== b.isLead) {
+        return a.isLead ? 1 : -1; // Customers first
+      }
+      return b.totalSpentUsd - a.totalSpentUsd || new Date(b.lastOrderDate) - new Date(a.lastOrderDate);
+    });
+  }, [orders, abandonedCarts]);
 
   // Filter based on search
   const filteredCustomers = customers.filter(c => 
@@ -107,8 +148,26 @@ export default function CustomersCRM({ orders = [] }) {
       }
 
       const { error } = await query;
-      
       if (error) throw error;
+      
+      // Update abandoned_carts table as well
+      const cartUpdates = {
+        customer_name: editForm.name,
+        customer_email: editForm.email,
+        customer_phone: editForm.phone,
+        location_data: { city: editForm.location }
+      };
+      
+      let cartQuery = supabase.from('abandoned_carts').update(cartUpdates);
+      if (editingCustomer.email) {
+        cartQuery = cartQuery.eq('customer_email', editingCustomer.email);
+      } else if (editingCustomer.phone) {
+        cartQuery = cartQuery.eq('customer_phone', editingCustomer.phone);
+      } else {
+        cartQuery = cartQuery.eq('customer_name', editingCustomer.name);
+      }
+
+      await cartQuery;
       
       // Close modal - realtime listeners in parent will auto-refresh the data
       setEditingCustomer(null);
@@ -338,11 +397,18 @@ export default function CustomersCRM({ orders = [] }) {
             <div key={cust.id} className="customer-card">
               
               <div className="cust-header">
-                <div className="cust-avatar">
+                <div className="cust-avatar" style={{ background: cust.isLead ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)' }}>
                   {cust.name.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <div className="cust-name">{cust.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <div className="cust-name">{cust.name}</div>
+                    {cust.isLead ? (
+                      <span style={{ fontSize: '0.65rem', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', padding: '2px 8px', borderRadius: '9999px', fontWeight: 'bold' }}>Cart Lead</span>
+                    ) : (
+                      <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', padding: '2px 8px', borderRadius: '9999px', fontWeight: 'bold' }}>Customer</span>
+                    )}
+                  </div>
                   {cust.location && (
                     <div className="cust-location">
                       <MapPin size={12} /> {cust.location}
@@ -376,27 +442,46 @@ export default function CustomersCRM({ orders = [] }) {
                     <a href={`mailto:${cust.email}`}>{cust.email}</a>
                   </div>
                 )}
+                {cust.whatsappWaId && (
+                  <div className="contact-item" style={{ background: 'rgba(34, 197, 94, 0.08)', padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(34, 197, 94, 0.15)' }}>
+                    <BadgeCheck size={14} color="#22c55e" />
+                    <span style={{ color: '#4ade80', fontWeight: 700 }}>+{cust.whatsappWaId}</span>
+                    <span style={{ fontSize: '0.6rem', color: '#22c55e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '4px' }}>Verified WA</span>
+                  </div>
+                )}
                 {cust.phone && (
                   <div className="contact-item">
-                    <MessageCircle size={14} color="#64748b" />
+                    <Phone size={14} color="#64748b" />
                     <a href={`tel:${cust.phone}`}>{cust.phone}</a>
+                    {!cust.whatsappWaId && <span style={{ fontSize: '0.6rem', color: '#64748b', marginLeft: '4px' }}>(from form)</span>}
                   </div>
                 )}
                 <div className="contact-item">
                   <Calendar size={14} color="#64748b" />
-                  <span>Last order: {new Date(cust.lastOrderDate).toLocaleDateString()}</span>
+                  <span>{cust.isLead ? 'Cart updated:' : 'Last order:'} {new Date(cust.lastOrderDate).toLocaleDateString()}</span>
                 </div>
+                {cust.isLead && cust.cartItems && cust.cartItems.length > 0 && (
+                  <div style={{ fontSize: '0.75rem', color: '#cbd5e1', background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px', marginTop: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Abandoned Cart:</div>
+                    {cust.cartItems.map((item, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                        <span>• {item.product}</span>
+                        <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>x{item.qty}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="cust-actions">
-                {cust.phone && (
+                {(cust.whatsappWaId || cust.phone) && (
                   <a 
-                    href={`https://wa.me/${cust.phone.replace(/[^0-9]/g, '')}?text=Hi ${cust.name}, `}
+                    href={`https://wa.me/${(cust.whatsappWaId || cust.phone).replace(/[^0-9]/g, '')}?text=Hi ${cust.name}, `}
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="cust-btn btn-wa"
                   >
-                    <MessageCircle size={14} /> WhatsApp
+                    <MessageCircle size={14} /> WhatsApp{cust.whatsappWaId ? ' ✓' : ''}
                   </a>
                 )}
                 {cust.email && (
