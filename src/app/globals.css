@@ -438,6 +438,58 @@ body {
     border-color: rgba(0, 33, 105, 0.15);
 }
 
+.add-to-cart-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: auto;
+    padding: 6px 14px;
+    background: var(--bg-secondary);
+    color: var(--primary);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+[data-theme="dark"] .add-to-cart-btn {
+    color: var(--text-main);
+}
+
+.add-to-cart-btn:hover:not(:disabled) {
+    background: var(--primary);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 39, 102, 0.15);
+}
+
+[data-theme="dark"] .add-to-cart-btn:hover:not(:disabled) {
+    background: var(--text-primary);
+    color: var(--bg-main);
+    box-shadow: 0 4px 12px rgba(56, 189, 248, 0.2);
+}
+
+.add-to-cart-btn:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+.add-to-cart-btn.added {
+    background: #10b981;
+    color: white;
+    border-color: #10b981;
+    transform: scale(1.05);
+}
+
+.add-to-cart-btn.out-of-stock-btn {
+    background: rgba(100, 116, 139, 0.1);
+    color: var(--text-muted);
+    cursor: not-allowed;
+    border: 1px dashed var(--border);
+}
+
 .product-image {
     width: 70px;
     height: 70px;
@@ -928,6 +980,49 @@ body {
 .suggestion-add-btn:hover {
     background: var(--accent);
     transform: scale(1.1);
+}
+
+/* Checkout Step Headers */
+.checkout-step-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    border-bottom: 2px dashed var(--border);
+    padding-bottom: 8px;
+}
+
+.checkout-step-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
+    font-size: 0.9rem;
+    font-weight: 800;
+}
+
+.checkout-step-header h3 {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--text-main);
+}
+
+.cart-sticky-submit {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 16px;
+    margin: 0 -24px;
+    width: calc(100% + 48px);
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -10px 20px rgba(0, 0, 0, 0.05);
+    z-index: 10;
 }
 
 /* Nav Cart Button */

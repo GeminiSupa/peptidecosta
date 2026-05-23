@@ -110,6 +110,7 @@ export default function CatalogPage() {
   // Cart & Modals States
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [addedProductId, setAddedProductId] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [howToOrderOpen, setHowToOrderOpen] = useState(false);
 
@@ -660,6 +661,13 @@ export default function CatalogPage() {
     setTimeout(() => setCartAnimating(false), 800);
   };
 
+  const addToCartWithAnimation = (e, productData) => {
+    e.stopPropagation(); // Prevent modal from opening
+    addToCart(productData);
+    setAddedProductId(productData.product);
+    setTimeout(() => setAddedProductId(null), 600); // Reset animation state
+  };
+
   // Get product suggestions based on cart items (Amazon-style)
   const getSuggestions = () => {
     if (cart.length === 0 || products.length === 0) return [];
@@ -872,6 +880,7 @@ export default function CatalogPage() {
     let dbSuccess = false;
 
     // 1. Submit to Supabase if connected
+    const whatsappSource = typeof window !== 'undefined' ? localStorage.getItem('whatsapp_source') : null;
     if (isSupabaseConfigured && supabase) {
       try {
         const { error } = await supabase
@@ -890,7 +899,8 @@ export default function CatalogPage() {
             status: 'Pending',
             ip_address: customerMetadata?.ip_address || null,
             location_data: customerMetadata?.location_data || null,
-            device_info: customerMetadata?.device_info || null
+            device_info: customerMetadata?.device_info || null,
+            whatsapp_source: whatsappSource || null,
           });
 
         if (!error) {
@@ -1080,6 +1090,7 @@ export default function CatalogPage() {
             const paypalOrderNum = `PPCR-${data.orderID || captureData.id || Date.now().toString(36).toUpperCase()}`;
 
             // Save order to Supabase as Paid
+            const ppWaSource = typeof window !== 'undefined' ? localStorage.getItem('whatsapp_source') : null;
             if (isSupabaseConfigured && supabase) {
               try {
                 await supabase.from('orders').insert({
@@ -1096,7 +1107,8 @@ export default function CatalogPage() {
                   customer_email: cEmail || null,
                   ip_address: customerMetadata?.ip_address || null,
                   location_data: customerMetadata?.location_data || null,
-                  device_info: customerMetadata?.device_info || null
+                  device_info: customerMetadata?.device_info || null,
+                  whatsapp_source: ppWaSource || null,
                 });
 
                 if (sid) {
@@ -1496,6 +1508,27 @@ export default function CatalogPage() {
                       {pSub && <span className="price-sub">{pSub}</span>}
                     </div>
                     {p.discount && <div className="discount-badge">{translateDiscount(p.discount, lang)}</div>}
+                    <div className="product-actions" style={{ marginTop: '10px', position: 'relative' }}>
+                      {inStock ? (
+                        <button 
+                          className={`add-to-cart-btn ${addedProductId === p.product ? 'added' : ''}`}
+                          onClick={(e) => addToCartWithAnimation(e, p)}
+                        >
+                          {addedProductId === p.product 
+                            ? <Check size={16} /> 
+                            : <Plus size={16} />
+                          }
+                          {addedProductId === p.product 
+                            ? (lang === 'en' ? 'Added' : 'Añadido') 
+                            : (lang === 'en' ? 'Add' : 'Agregar')
+                          }
+                        </button>
+                      ) : (
+                        <button className="add-to-cart-btn out-of-stock-btn" disabled>
+                          {lang === 'en' ? 'Out of Stock' : 'Agotado'}
+                        </button>
+                      )}
+                    </div>
                     <div className={`stock-badge ${inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`}>
                       {translateStatus(p.status)}
                     </div>
@@ -1508,6 +1541,157 @@ export default function CatalogPage() {
       </main>
 
 
+      {/* ─── Floating Cart FAB & Mobile Bottom Bar ─────────────────────────────────────── */}
+      <style>{`
+        @keyframes cart-badge-pop {
+          0%   { transform: scale(0.5); opacity: 0; }
+          60%  { transform: scale(1.3); opacity: 1; }
+          100% { transform: scale(1);   opacity: 1; }
+        }
+        @keyframes cart-fab-pulse {
+          0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.55); }
+          70%  { box-shadow: 0 0 0 14px rgba(34,197,94,0); }
+          100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+        }
+        
+        /* Default mobile view: bottom bar if items exist, otherwise floating right */
+        .cart-container-wrapper {
+          position: fixed;
+          z-index: 900;
+          pointer-events: none;
+          bottom: 0;
+          left: 0;
+          width: 100%;
+          padding: 16px;
+          display: flex;
+          justify-content: flex-end;
+        }
+
+        .cart-container-wrapper.has-items {
+          justify-content: center;
+          background: linear-gradient(to top, var(--bg-main) 50%, transparent);
+        }
+
+        .cart-fab-sticky {
+          pointer-events: all;
+          background: linear-gradient(135deg, #22c55e, #16a34a);
+          color: #fff;
+          border: none;
+          border-radius: 14px;
+          padding: 16px 20px;
+          font-size: 1.05rem;
+          font-weight: 800;
+          cursor: pointer;
+          box-shadow: 0 8px 30px rgba(34,197,94,0.4);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          width: 100%;
+          transition: transform 0.2s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s;
+        }
+
+        .cart-fab-sticky:active { transform: scale(0.97); }
+
+        .cart-fab-btn {
+          pointer-events: all;
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #22c55e, #16a34a);
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 6px 24px rgba(34,197,94,0.45);
+          transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s;
+          position: relative;
+        }
+        
+        .cart-fab-btn.empty-anim {
+          animation: cart-fab-pulse 2.5s ease-in-out infinite;
+        }
+
+        .cart-fab-btn:active { transform: scale(0.94); }
+        
+        .cart-fab-badge {
+          position: absolute;
+          top: -4px;
+          right: -4px;
+          background: #ef4444;
+          color: #fff;
+          font-size: 0.72rem;
+          font-weight: 800;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 2px solid #fff;
+          animation: cart-badge-pop 0.35s cubic-bezier(.34,1.56,.64,1);
+        }
+
+        @media (min-width: 900px) {
+          .cart-container-wrapper {
+            bottom: 32px;
+            right: 32px;
+            left: auto;
+            width: auto;
+            padding: 0;
+            background: none !important;
+          }
+          .cart-fab-sticky {
+            border-radius: 28px;
+            width: auto;
+            padding: 12px 24px;
+            font-size: 0.95rem;
+            gap: 12px;
+          }
+          .cart-fab-sticky:hover {
+            transform: translateY(-2px) scale(1.03);
+            box-shadow: 0 6px 24px rgba(34,197,94,0.55);
+          }
+          .cart-fab-btn { width: 66px; height: 66px; }
+          .cart-fab-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 8px 32px rgba(34,197,94,0.6);
+          }
+        }
+      `}</style>
+
+      <div className={`cart-container-wrapper ${cart.length > 0 ? 'has-items' : ''}`}>
+        {!isCartOpen && (
+          cart.length > 0 ? (
+            <button
+              id="floating-checkout-btn"
+              className="cart-fab-sticky"
+              onClick={() => setIsCartOpen(true)}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <ShoppingBag size={20} />
+                <span>
+                  {cart.reduce((s, i) => s + i.qty, 0)} {lang === 'en' ? (cart.reduce((s, i) => s + i.qty, 0) === 1 ? 'item' : 'items') : (cart.reduce((s, i) => s + i.qty, 0) === 1 ? 'artículo' : 'artículos')}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.85rem', opacity: 0.9, fontWeight: 600 }}>{lang === 'en' ? 'View Cart' : 'Ver Carrito'}</span>
+                <span>{formatPriceVal(getDiscountedTotal(), currency)}</span>
+              </div>
+            </button>
+          ) : (
+            <button
+              id="floating-cart-btn"
+              className="cart-fab-btn empty-anim"
+              onClick={() => setIsCartOpen(true)}
+              aria-label={lang === 'en' ? 'Open cart' : 'Abrir carrito'}
+              title={lang === 'en' ? 'Cart' : 'Carrito'}
+            >
+              <ShoppingBag size={26} color="#fff" />
+            </button>
+          )
+        )}
+      </div>
 
       {/* Cart Drawer Overlay */}
       <div 
@@ -1651,7 +1835,12 @@ export default function CatalogPage() {
               <span className="cart-total-val" style={{ color: getVolumeDiscountPct(getCartVialCount()) > 0 ? '#4ade80' : undefined }}>{formatPriceVal(getDiscountedTotal(), currency)}</span>
             </div>
 
-            <form onSubmit={handleCheckoutSubmit} className="checkout-form">
+            <form id="checkout-form-main" onSubmit={handleCheckoutSubmit} className="checkout-form" style={{ paddingBottom: '80px' }}>
+              
+              <div className="checkout-step-header">
+                <span className="checkout-step-number">1</span>
+                <h3>{lang === 'en' ? 'Contact & Shipping' : 'Contacto y Envío'}</h3>
+              </div>
               <input 
                 type="text" 
                 className="checkout-input" 
@@ -1685,6 +1874,11 @@ export default function CatalogPage() {
                 value={shippingAddress}
                 onChange={(e) => setShippingAddress(e.target.value)}
               />
+
+              <div className="checkout-step-header" style={{ marginTop: '24px' }}>
+                <span className="checkout-step-number">2</span>
+                <h3>{lang === 'en' ? 'Payment Method' : 'Método de Pago'}</h3>
+              </div>
               <div className="payment-method-grid" role="radiogroup" aria-label={lang === 'en' ? 'Payment method' : 'Método de pago'}>
                 {[
                   /* SINPE and Card (Tilopay) hidden until production account is activated
@@ -1817,17 +2011,21 @@ export default function CatalogPage() {
                   </p>
                 </div>
               ) : (
-                <button 
-                  type="submit" 
-                  className="whatsapp-btn"
-                  disabled={orderSubmitting}
-                >
-                  {orderSubmitting ? (
-                    <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
-                  ) : (
-                    lang === 'en' ? 'Submit Order to WhatsApp' : 'Enviar Pedido por WhatsApp'
-                  )}
-                </button>
+                <div className="cart-sticky-submit">
+                  <button 
+                    type="submit" 
+                    form="checkout-form-main"
+                    className="whatsapp-btn"
+                    disabled={orderSubmitting}
+                    style={{ width: '100%', padding: '16px', fontSize: '1.05rem', boxShadow: '0 -4px 20px rgba(0,0,0,0.1)' }}
+                  >
+                    {orderSubmitting ? (
+                      <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
+                    ) : (
+                      lang === 'en' ? 'Submit Order to WhatsApp' : 'Enviar Pedido por WhatsApp'
+                    )}
+                  </button>
+                </div>
               )}
             </form>
           </div>

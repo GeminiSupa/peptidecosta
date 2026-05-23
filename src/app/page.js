@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import {
   ArrowRight, ArrowUpRight, ShieldCheck, Truck, CreditCard, MessageCircle,
   Sun, Moon, ChevronDown, ChevronUp, Star, FlaskConical, Lock,
@@ -131,6 +132,15 @@ export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState(null);
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [scrolled, setScrolled] = useState(false);
+
+  // Click handler for WhatsApp links – logs source and stores it for checkout
+  /** @param {string} src */
+const handleWhatsAppClick = (src) => {
+    logWhatsAppSource(src);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('whatsapp_source', src);
+    }
+  };
   const [cmsSettings, setCmsSettings] = useState(null);
 
   const t = { ...T[lang] };
@@ -252,17 +262,22 @@ export default function LandingPage() {
                   {t.hero_cta} <ArrowUpRight size={18} />
                 </Link>
                 <a
-                  href="https://wa.me/50684046973"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-hero-secondary"
-                >
-                  <svg viewBox="0 0 24 24" width="20" height="20" style={{ flexShrink: 0 }}>
-                    <circle cx="12" cy="12" r="12" fill="#25D366" />
-                    <path fillRule="evenodd" clipRule="evenodd" d="M12.022 17.502c1.025 0 2.02-.276 2.894-.799l2.072.544-.553-2.021a5.459 5.459 0 0 0 .848-2.909c0-3.023-2.46-5.483-5.483-5.483-3.024 0-5.484 2.46-5.484 5.483 0 1.293.45 2.507 1.22 3.477l-.547 2.003 2.051-.537a5.46 5.46 0 0 0 2.482.642Z" fill="white" />
-                  </svg>
-                  {t.hero_cta2}
-                </a>
+          href={buildWhatsAppLink('50684046973', 'homepage')}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-hero-secondary"
+          onClick={() => handleWhatsAppClick('homepage')}
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20" style={{ flexShrink: 0 }}>
+            <circle cx="12" cy="12" r="12" fill="#25D366" />
+            <path fillRule="evenodd" clipRule="evenodd" d="M12.022 17.502c1.025 0 2.02-.276 2.894-.799l2.072.544-.553-2.021a5.459 5.459 0 0 0 .848-2.909c0-3.023-2.46-5.483-5.483-5.483-3.024 0-5.484 2.46-5.484 5.483 0 1.293.45 2.507 1.22 3.477l-.547 2.003 2.051-.537a5.46 5.46 0 0 0 2.482.642Z" fill="white" />
+          </svg>
+          {t.hero_cta2}
+        </a>
+                  
+
+
+  
               </div>
 
               <div className="hero-features-row">

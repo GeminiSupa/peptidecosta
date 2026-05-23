@@ -368,8 +368,10 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
     .sort((a, b) => a.views - b.views)
     .slice(0, 3);
 
-  // Payment channels metrics
+  // Payment channels and Source metrics
   const paymentBreakdown = {};
+  const whatsappSourceBreakdown = {};
+  
   orders.forEach(o => {
     const method = o.payment_method || 'whatsapp';
     if (!paymentBreakdown[method]) {
@@ -379,10 +381,24 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
     if (o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed') {
       paymentBreakdown[method].revenue += (parseFloat(o.total_usd) || 0);
     }
+    
+    // WhatsApp sources
+    const source = o.whatsapp_source || 'organic';
+    if (!whatsappSourceBreakdown[source]) {
+      whatsappSourceBreakdown[source] = { count: 0, revenue: 0 };
+    }
+    whatsappSourceBreakdown[source].count += 1;
+    if (o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed') {
+      whatsappSourceBreakdown[source].revenue += (parseFloat(o.total_usd) || 0);
+    }
   });
 
   const maxPaymentCount = Object.keys(paymentBreakdown).length > 0 
     ? Math.max(...Object.values(paymentBreakdown).map(p => p.count)) 
+    : 1;
+
+  const maxSourceCount = Object.keys(whatsappSourceBreakdown).length > 0 
+    ? Math.max(...Object.values(whatsappSourceBreakdown).map(s => s.count)) 
     : 1;
 
   return (
@@ -1530,6 +1546,43 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
                           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ color: color, display: 'flex', alignItems: 'center' }}>{icon}</span>
                             {cleanMethodName}
+                          </span>
+                          <span className="bar-row-value" style={{ color: color }}>
+                            {data.count} orders (${Math.round(data.revenue)})
+                          </span>
+                        </div>
+                        <div className="bar-track">
+                          <div className="bar-fill" style={{ width: `${pct}%`, background: color }}></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* WhatsApp Source Channels */}
+            <div>
+              <p style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
+                WhatsApp Attribution Sources
+              </p>
+
+              {Object.keys(whatsappSourceBreakdown).length === 0 ? (
+                <div style={{ color: '#64748b', fontSize: '0.8rem', padding: '10px 0' }}>No source attribution data.</div>
+              ) : (
+                <div className="bar-chart-list">
+                  {Object.entries(whatsappSourceBreakdown)
+                    .sort((a, b) => b[1].count - a[1].count)
+                    .map(([source, data]) => {
+                    const pct = (data.count / maxSourceCount) * 100;
+                    const color = '#34d399'; // Green theme for WhatsApp
+                    
+                    return (
+                      <div className="bar-chart-row" key={source}>
+                        <div className="bar-row-label-row">
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ color: color, display: 'flex', alignItems: 'center' }}><MessageCircle size={14} /></span>
+                            <span style={{ textTransform: 'capitalize' }}>{source}</span>
                           </span>
                           <span className="bar-row-value" style={{ color: color }}>
                             {data.count} orders (${Math.round(data.revenue)})
