@@ -1,8 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Search, User, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { Search, User, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save } from 'lucide-react';
 
 export default function CustomersCRM({ orders = [] }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', location: '' });
+  const [saving, setSaving] = useState(false);
 
   // Derived customer data from order history
   const customers = useMemo(() => {
@@ -52,6 +56,57 @@ export default function CustomersCRM({ orders = [] }) {
     c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.phone.includes(searchTerm)
   );
+
+  const openEditModal = (customer) => {
+    setEditingCustomer(customer);
+    setEditForm({
+      name: customer.name,
+      email: customer.email,
+      phone: customer.phone,
+      location: customer.location
+    });
+  };
+
+  const handleSaveCustomer = async () => {
+    if (!editingCustomer || !editForm.name) return;
+    setSaving(true);
+    
+    try {
+      // Build the update payload
+      const updates = {
+        customer_name: editForm.name,
+        customer_email: editForm.email,
+        customer_phone: editForm.phone,
+        // we'll update the location_data city inside a minimal JSON object
+        location_data: { city: editForm.location }
+      };
+
+      // Since the CRM derives identity primarily from email, then phone, then name,
+      // we must update all orders matching the old identity to the new one.
+      let query = supabase.from('orders').update(updates);
+      
+      if (editingCustomer.email) {
+        query = query.eq('customer_email', editingCustomer.email);
+      } else if (editingCustomer.phone) {
+        query = query.eq('customer_phone', editingCustomer.phone);
+      } else {
+        query = query.eq('customer_name', editingCustomer.name);
+      }
+
+      const { error } = await query;
+      
+      if (error) throw error;
+      
+      // Close modal - realtime listeners in parent will auto-refresh the data
+      setEditingCustomer(null);
+      
+    } catch (err) {
+      console.error("Failed to update customer:", err);
+      alert("Failed to save customer data. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="crm-container">
@@ -125,6 +180,7 @@ export default function CustomersCRM({ orders = [] }) {
           align-items: center;
           gap: 12px;
           margin-bottom: 16px;
+          position: relative;
         }
         .cust-avatar {
           width: 40px;
@@ -142,6 +198,24 @@ export default function CustomersCRM({ orders = [] }) {
           font-weight: 700;
           color: #f8fafc;
           font-size: 1rem;
+          padding-right: 24px; /* Space for edit icon */
+        }
+        .cust-edit-btn {
+          position: absolute;
+          top: 0;
+          right: 0;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.1);
+          color: #94a3b8;
+          border-radius: 6px;
+          padding: 4px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .cust-edit-btn:hover {
+          color: #0ea5e9;
+          background: rgba(14, 165, 233, 0.1);
+          border-color: rgba(14, 165, 233, 0.3);
         }
         .cust-location {
           font-size: 0.75rem;
@@ -262,6 +336,9 @@ export default function CustomersCRM({ orders = [] }) {
                     </div>
                   )}
                 </div>
+                <button className="cust-edit-btn" onClick={() => openEditModal(cust)} title="Edit Customer">
+                  <Edit2 size={12} />
+                </button>
               </div>
 
               <div className="cust-stats-row">
@@ -318,6 +395,85 @@ export default function CustomersCRM({ orders = [] }) {
 
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Edit Customer Modal */}
+      {editingCustomer && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999
+        }}>
+          <div style={{
+            background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '16px', padding: '24px', width: '90%', maxWidth: '400px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Edit2 size={18} color="#0ea5e9" /> Edit Profile
+              </h3>
+              <button onClick={() => setEditingCustomer(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '6px' }}>Full Name</label>
+                <input 
+                  type="text" 
+                  value={editForm.name} 
+                  onChange={e => setEditForm({...editForm, name: e.target.value})}
+                  style={{ width: '100%', padding: '10px', background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', outline: 'none' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '6px' }}>Email Address</label>
+                <input 
+                  type="email" 
+                  value={editForm.email} 
+                  onChange={e => setEditForm({...editForm, email: e.target.value})}
+                  style={{ width: '100%', padding: '10px', background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', outline: 'none' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '6px' }}>Phone Number</label>
+                <input 
+                  type="tel" 
+                  value={editForm.phone} 
+                  onChange={e => setEditForm({...editForm, phone: e.target.value})}
+                  style={{ width: '100%', padding: '10px', background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', outline: 'none' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '6px' }}>City / Location</label>
+                <input 
+                  type="text" 
+                  value={editForm.location} 
+                  onChange={e => setEditForm({...editForm, location: e.target.value})}
+                  style={{ width: '100%', padding: '10px', background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', outline: 'none' }}
+                />
+              </div>
+
+              <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+                <button 
+                  onClick={() => setEditingCustomer(null)}
+                  style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleSaveCustomer}
+                  disabled={saving}
+                  style={{ flex: 2, padding: '10px', background: '#0ea5e9', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 'bold' }}
+                >
+                  {saving ? 'Saving...' : <><Save size={16} /> Save Changes</>}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
