@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [] }) {
-  const [timeRange, setTimeRange] = useState('7d');
+  const [timeRange, setTimeRange] = useState('all');
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState(null);
@@ -150,8 +150,8 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
     let rawViews = [];
 
     if (isLive) {
-      rawOrders = dbOrders.length > 0 ? dbOrders : parentOrders;
-      rawCarts = dbCarts.length > 0 ? dbCarts : parentCarts;
+      rawOrders = parentOrders.length > 0 ? parentOrders : dbOrders;
+      rawCarts = parentCarts.length > 0 ? parentCarts : dbCarts;
       rawSessions = dbSessions;
       rawViews = dbProductViews;
     } else {

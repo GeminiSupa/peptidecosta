@@ -27,7 +27,7 @@ export default function CustomersCRM({ orders = [] }) {
         };
       }
       
-      if (o.status === 'Completed' || o.status === 'Paid') {
+      if (o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'paid') {
           map[id].totalSpentUsd += parseFloat(o.total_usd || 0);
       }
       map[id].orderCount += 1;
