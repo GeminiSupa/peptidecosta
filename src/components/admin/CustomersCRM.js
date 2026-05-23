@@ -11,6 +11,17 @@ export default function CustomersCRM({ orders = [] }) {
   // Derived customer data from order history
   const customers = useMemo(() => {
     const map = {};
+
+    const extractCity = (address) => {
+      if (!address) return '';
+      const lines = address.split('\n').map(l => l.trim()).filter(l => l);
+      if (lines.length >= 3) {
+        // Try to get Province, Canton line
+        return lines[2].substring(0, 40);
+      }
+      return address.replace(/\n/g, ', ').substring(0, 40);
+    };
+
     orders.forEach(o => {
       // Group primarily by email, fallback to phone, then name
       const id = (o.customer_email || '').toLowerCase() || 
@@ -24,7 +35,7 @@ export default function CustomersCRM({ orders = [] }) {
           name: o.customer_name || 'Unknown',
           email: o.customer_email || '',
           phone: o.customer_phone || '',
-          location: o.location_data?.city || '',
+          location: o.location_data?.city || extractCity(o.shipping_address),
           totalSpentUsd: 0,
           orderCount: 0,
           lastOrderDate: o.created_at
@@ -42,7 +53,9 @@ export default function CustomersCRM({ orders = [] }) {
          if (o.customer_name) map[id].name = o.customer_name;
          if (o.customer_email) map[id].email = o.customer_email;
          if (o.customer_phone) map[id].phone = o.customer_phone;
-         if (o.location_data?.city) map[id].location = o.location_data.city;
+         
+         const newLoc = o.location_data?.city || extractCity(o.shipping_address);
+         if (newLoc) map[id].location = newLoc;
       }
     });
     
