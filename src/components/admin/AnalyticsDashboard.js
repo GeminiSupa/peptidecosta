@@ -149,7 +149,9 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
     let rawSessions = [];
     let rawViews = [];
 
-    if (isLive) {
+    const useLive = isLive || isSupabaseConfigured;
+
+    if (useLive) {
       rawOrders = parentOrders.length > 0 ? parentOrders : dbOrders;
       rawCarts = parentCarts.length > 0 ? parentCarts : dbCarts;
       rawSessions = dbSessions;
@@ -1016,9 +1018,9 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
         
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {/* Live vs Simulation indicator */}
-          <div className={`mode-status-indicator ${isLive ? 'mode-live' : 'mode-simulated'}`}>
+          <div className={`mode-status-indicator ${isSupabaseConfigured || isLive ? 'mode-live' : 'mode-simulated'}`}>
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'currentColor', boxShadow: '0 0 8px currentColor' }}></div>
-            <span>{isLive ? 'Live Supabase Data' : 'Sandbox Simulation Mode'}</span>
+            <span>{isSupabaseConfigured || isLive ? 'Live Supabase Data' : 'Sandbox Simulation Mode'}</span>
           </div>
 
           <button 
