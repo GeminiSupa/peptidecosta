@@ -36,7 +36,35 @@ const CATEGORY_TRANSLATIONS = {
   'Tanning & Sexual Function': 'Bronceado y función sexual',
   'Skin & Hair': 'Piel y cabello',
   'Immune & Antioxidant': 'Sistema inmunitario y antioxidante',
-  'Reconstitution Supply': 'Suministro de reconstitución'
+};
+
+const getReferralLabel = (lead) => {
+  const source = lead.utm_source;
+  const referrer = lead.referrer;
+  
+  if (source) {
+    let cleanSource = source.toLowerCase();
+    if (cleanSource === 'ig' || cleanSource === 'instagram') return 'Instagram Ads';
+    if (cleanSource === 'fb' || cleanSource === 'facebook') return 'Facebook Ads';
+    if (cleanSource === 'google' || cleanSource === 'gads') return 'Google Ads';
+    return source.charAt(0).toUpperCase() + source.slice(1);
+  }
+  
+  if (referrer) {
+    try {
+      const url = new URL(referrer);
+      const host = url.hostname.toLowerCase();
+      if (host.includes('instagram.com')) return 'Instagram (Org)';
+      if (host.includes('facebook.com')) return 'Facebook (Org)';
+      if (host.includes('google.com')) return 'Google (Organic)';
+      if (host.includes('t.co') || host.includes('twitter.com') || host.includes('x.com')) return 'X / Twitter';
+      return url.hostname.replace('www.', '');
+    } catch (e) {
+      return 'Referral';
+    }
+  }
+  
+  return 'Direct';
 };
 
 export default function AdminPage() {
@@ -950,8 +978,22 @@ export default function AdminPage() {
           filename = `peptidescr-carts-${new Date().toISOString().slice(0, 10)}`;
           title = 'Costa Rica Peptides - Abandoned Carts Export';
         } else if (exportModalType === 'leads') {
-          headers = [ 'Lead ID', 'Date Captured', 'Method', 'Contact Info', 'Language' ];
-          dataRows = leads.map(l => [ l.id, new Date(l.created_at).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }), l.contact_method, l.contact_value, l.language ]);
+          headers = [ 'Lead ID', 'Date Captured', 'Method', 'Contact Info', 'IP Address', 'City', 'Region', 'Country', 'Referrer', 'UTM Source', 'UTM Medium', 'UTM Campaign', 'Language' ];
+          dataRows = leads.map(l => [
+            l.id,
+            new Date(l.created_at).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }),
+            l.contact_method,
+            l.contact_value,
+            l.ip_address || '',
+            l.city || '',
+            l.region || '',
+            l.country || '',
+            l.referrer || '',
+            l.utm_source || '',
+            l.utm_medium || '',
+            l.utm_campaign || '',
+            l.language
+          ]);
           filename = `peptidescr-leads-${new Date().toISOString().slice(0, 10)}`;
           title = 'Costa Rica Peptides - Catalog Leads Export';
         }
@@ -2485,6 +2527,8 @@ export default function AdminPage() {
                       <th style={{ padding: '16px' }}>Date</th>
                       <th style={{ padding: '16px' }}>Method</th>
                       <th style={{ padding: '16px' }}>Contact Info</th>
+                      <th style={{ padding: '16px' }}>Location</th>
+                      <th style={{ padding: '16px' }}>Attribution</th>
                       <th style={{ padding: '16px' }}>Behavior / Views</th>
                       <th style={{ padding: '16px' }}>Language</th>
                       <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
@@ -2541,6 +2585,48 @@ export default function AdminPage() {
                           ) : (
                             lead.contact_value
                           )}
+                        </td>
+                        <td style={{ padding: '16px' }}>
+                          {lead.city || lead.country ? (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontWeight: 600, color: '#f8fafc' }}>
+                                {[lead.city, lead.country].filter(Boolean).join(', ')}
+                              </span>
+                              {lead.ip_address && (
+                                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                  🌐 {lead.ip_address}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: '#64748b', fontSize: '0.8rem' }}>—</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '16px' }}>
+                          {(() => {
+                            const label = getReferralLabel(lead);
+                            const hasCampaign = lead.utm_campaign || lead.utm_medium;
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ 
+                                  background: label === 'Direct' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                  color: label === 'Direct' ? '#94a3b8' : '#f59e0b',
+                                  padding: '4px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 'bold',
+                                  width: 'fit-content'
+                                }} title={lead.referrer || ''}>
+                                  {label}
+                                </span>
+                                {hasCampaign && (
+                                  <span style={{ fontSize: '0.7rem', color: '#64748b' }} title={`Medium: ${lead.utm_medium || ''} | Campaign: ${lead.utm_campaign || ''}`}>
+                                    📢 {lead.utm_campaign || lead.utm_medium}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: '16px' }}>
                           {(() => {

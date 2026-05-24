@@ -183,10 +183,23 @@ export default function CatalogPage() {
       const isEmail = gateInput.includes('@');
       
       if (isSupabaseConfigured) {
+        const utmSource = localStorage.getItem('lead_utm_source') || null;
+        const utmMedium = localStorage.getItem('lead_utm_medium') || null;
+        const utmCampaign = localStorage.getItem('lead_utm_campaign') || null;
+        const referrer = localStorage.getItem('lead_referrer') || null;
+
         await supabase.from('catalog_leads').insert([{
           contact_method: isEmail ? 'email' : 'whatsapp',
           contact_value: gateInput.trim(),
-          language: lang
+          language: lang,
+          ip_address: customerMetadata?.ip_address || null,
+          city: customerMetadata?.location_data?.city || null,
+          region: customerMetadata?.location_data?.region || null,
+          country: customerMetadata?.location_data?.country || null,
+          utm_source: utmSource,
+          utm_medium: utmMedium,
+          utm_campaign: utmCampaign,
+          referrer: referrer
         }]);
       }
       
@@ -207,6 +220,22 @@ export default function CatalogPage() {
 
   // Local storage & URL params setup on mount
   useEffect(() => {
+    // Capture Referral and UTM Campaign parameters
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const utmSource = urlParams.get('utm_source');
+      const utmMedium = urlParams.get('utm_medium');
+      const utmCampaign = urlParams.get('utm_campaign');
+      const ref = document.referrer;
+
+      if (utmSource) localStorage.setItem('lead_utm_source', utmSource);
+      if (utmMedium) localStorage.setItem('lead_utm_medium', utmMedium);
+      if (utmCampaign) localStorage.setItem('lead_utm_campaign', utmCampaign);
+      if (ref && !ref.includes(window.location.hostname)) {
+        localStorage.setItem('lead_referrer', ref);
+      }
+    }
+
     // URL overrides
     const urlParams = new URLSearchParams(window.location.search);
     const langParam = urlParams.get('lang');
