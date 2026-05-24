@@ -10,7 +10,7 @@ import {
   Plus, Minus, Trash2, Check, AlertCircle, ArrowLeft,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
-  CreditCard, Smartphone, MessageCircle
+  CreditCard, Smartphone, MessageCircle, Lock
 } from 'lucide-react';
 
 const WHATSAPP_NUMBER = '50684046973';
@@ -137,6 +137,13 @@ export default function CatalogPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState(false);
 
+  // Access Gate States
+  const [gateAccessGranted, setGateAccessGranted] = useState(true); // Default true for SSR, updated in useEffect
+  const [gateLoading, setGateLoading] = useState(true);
+  const [gateInput, setGateInput] = useState('');
+  const [gateSubmitting, setGateSubmitting] = useState(false);
+  const [gateError, setGateError] = useState('');
+
   // PayPal States
   const [paypalReady, setPaypalReady] = useState(false);
   const paypalButtonRef = useRef(null);
@@ -151,6 +158,50 @@ export default function CatalogPage() {
   useEffect(() => {
     checkoutDataRef.current = { cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata };
   }, [cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata]);
+
+  // Check Access Gate Status
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
+      setGateAccessGranted(hasAccess);
+      setGateLoading(false);
+    }
+  }, []);
+
+  const handleGateSubmit = async (e) => {
+    e.preventDefault();
+    setGateError('');
+    
+    if (!gateInput || gateInput.length < 5) {
+      setGateError(lang === 'en' ? 'Please enter a valid phone number or email.' : 'Ingrese un número o correo válido.');
+      return;
+    }
+
+    setGateSubmitting(true);
+    
+    try {
+      const isEmail = gateInput.includes('@');
+      
+      if (isSupabaseConfigured) {
+        await supabase.from('catalog_leads').insert([{
+          contact_method: isEmail ? 'email' : 'whatsapp',
+          contact_value: gateInput.trim(),
+          language: lang
+        }]);
+      }
+      
+      // Grant access regardless of DB success to not block users if offline
+      localStorage.setItem('catalog_access_granted', 'true');
+      setGateAccessGranted(true);
+    } catch (err) {
+      console.error('Error saving lead:', err);
+      // Still grant access to prevent bad UX on error
+      localStorage.setItem('catalog_access_granted', 'true');
+      setGateAccessGranted(true);
+    } finally {
+      setGateSubmitting(false);
+    }
+  };
 
   // Local storage & URL params setup on mount
   useEffect(() => {
@@ -1447,8 +1498,64 @@ export default function CatalogPage() {
       </div>
 
       {/* Main Catalog View */}
-      <main className="main container">
-        {loading ? (
+      <main className="main container" style={{ position: 'relative', minHeight: '60vh' }}>
+        {gateLoading ? null : !gateAccessGranted ? (
+          <div className="access-gate-overlay" style={{
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', 
+            background: theme === 'dark' ? 'rgba(5, 11, 24, 0.8)' : 'rgba(244, 246, 249, 0.8)',
+            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+            zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '20px'
+          }}>
+            <div className="access-gate-card" style={{
+              background: 'var(--bg-card)', padding: '32px 24px', borderRadius: '24px',
+              boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)',
+              maxWidth: '400px', width: '100%', textAlign: 'center'
+            }}>
+              <div style={{ background: 'rgba(200, 83, 12, 0.1)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', color: 'var(--accent)' }}>
+                <Lock size={32} />
+              </div>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px' }}>
+                {lang === 'en' ? 'Exclusive Catalog Access' : 'Acceso Exclusivo al Catálogo'}
+              </h2>
+              <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.5 }}>
+                {lang === 'en' 
+                  ? 'Please provide your WhatsApp number or email address to view our premium peptide catalog and current pricing.' 
+                  : 'Por favor, ingrese su número de WhatsApp o correo electrónico para ver nuestro catálogo premium y precios actuales.'}
+              </p>
+              <form onSubmit={handleGateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <input 
+                  type="text" 
+                  placeholder={lang === 'en' ? 'WhatsApp Number or Email' : 'WhatsApp o Correo Electrónico'}
+                  value={gateInput}
+                  onChange={(e) => setGateInput(e.target.value)}
+                  style={{ 
+                    width: '100%', padding: '14px', borderRadius: '12px', 
+                    border: '1px solid var(--border)', background: 'var(--bg-secondary)', 
+                    color: 'var(--text-main)', fontSize: '1rem', outline: 'none'
+                  }}
+                  required
+                />
+                {gateError && <div style={{ color: '#ef4444', fontSize: '0.8rem', fontWeight: 'bold' }}>{gateError}</div>}
+                <button 
+                  type="submit" 
+                  disabled={gateSubmitting}
+                  className="whatsapp-btn" 
+                  style={{ padding: '14px', fontSize: '1rem', border: 'none', borderRadius: '12px', marginTop: '8px' }}
+                >
+                  {gateSubmitting ? (
+                    <div className="sync-spinner" style={{ width: '18px', height: '18px' }}></div>
+                  ) : (
+                    lang === 'en' ? 'Unlock Catalog' : 'Desbloquear Catálogo'
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+        ) : null}
+
+        <div style={{ opacity: (!gateLoading && !gateAccessGranted) ? 0.3 : 1, pointerEvents: (!gateLoading && !gateAccessGranted) ? 'none' : 'auto', transition: 'opacity 0.3s' }}>
+          {loading ? (
           <div className="loader">
             <div className="sync-spinner" style={{ marginBottom: '16px' }}></div>
             <div>{lang === 'en' ? 'Syncing catalog...' : 'Sincronizando catálogo...'}</div>
@@ -1540,6 +1647,7 @@ export default function CatalogPage() {
             })}
           </div>
         )}
+        </div>
       </main>
 
 
