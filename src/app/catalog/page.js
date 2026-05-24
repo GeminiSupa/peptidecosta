@@ -713,7 +713,13 @@ export default function CatalogPage() {
           contact_value: contact || null,
           product_id: product.id || product.product, // fallback to name if no id
           product_name: product.product
-        }]).then();
+        }]).then(({ error, data }) => {
+          if (error) {
+            console.error('SUPABASE INSERT ERROR:', error);
+          } else {
+            console.log('SUPABASE INSERT SUCCESS:', data);
+          }
+        });
       } catch (e) {
         // ignore tracking errors
       }
