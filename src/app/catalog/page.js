@@ -360,23 +360,7 @@ export default function CatalogPage() {
     return () => clearInterval(intervalId);
   }, [sessionId]);
 
-  // Telemetry: Log product detail views
-  useEffect(() => {
-    if (!selectedProduct || !sessionId || !isSupabaseConfigured || !supabase) return;
-
-    const logProductDetailView = async () => {
-      try {
-        await supabase.from('product_views').insert({
-          session_id: sessionId,
-          product_name: selectedProduct.product
-        });
-      } catch (err) {
-        console.warn('Telemetry product view sync warning:', err);
-      }
-    };
-
-    logProductDetailView();
-  }, [selectedProduct, sessionId]);
+  // Telemetry product view logging has been moved to handleProductClick
 
 
   // Live currency exchange rate fetch
@@ -722,17 +706,16 @@ export default function CatalogPage() {
     // Silently track behavioral product view
     if (isSupabaseConfigured) {
       const contact = localStorage.getItem('catalog_lead_contact');
-      if (contact) {
-        try {
-          // Fire and forget
-          supabase.from('product_views').insert([{
-            contact_value: contact,
-            product_id: product.id || product.product, // fallback to name if no id
-            product_name: product.product
-          }]).then();
-        } catch (e) {
-          // ignore tracking errors
-        }
+      try {
+        // Fire and forget, storing both session (for telemetry) and contact (for Leads CRM)
+        supabase.from('product_views').insert([{
+          session_id: sessionId || null,
+          contact_value: contact || null,
+          product_id: product.id || product.product, // fallback to name if no id
+          product_name: product.product
+        }]).then();
+      } catch (e) {
+        // ignore tracking errors
       }
     }
   };
