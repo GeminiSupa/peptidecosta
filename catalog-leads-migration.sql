@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS public.catalog_leads (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     contact_method VARCHAR(50) NOT NULL, -- 'email' or 'whatsapp'
-    contact_value VARCHAR(255) NOT NULL, -- The actual email address or phone number
+    contact_value VARCHAR(255) NOT NULL UNIQUE, -- The actual email address or phone number (Must be unique)
     language VARCHAR(10) DEFAULT 'en',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

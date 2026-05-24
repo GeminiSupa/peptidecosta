@@ -1329,7 +1329,7 @@ export default function CatalogPage() {
       {/* Static Top Header Section */}
       <header className="header-top-section">
         <div className="header-top container">
-          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)', textDecoration: 'none', fontWeight: 'bold' }}>
+          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)', textDecoration: 'none', fontWeight: 'bold', marginRight: 'auto' }}>
             <ArrowLeft size={16} />
             {lang === 'en' ? 'Back' : 'Volver'}
           </Link>

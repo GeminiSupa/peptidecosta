@@ -67,6 +67,8 @@ export default function AdminPage() {
   const [sendingRecoveryEmail, setSendingRecoveryEmail] = useState({});
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
+  const [leads, setLeads] = useState([]);
+  const [loadingLeads, setLoadingLeads] = useState(true);
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(FALLBACK_EXCHANGE_RATE);
   
@@ -185,6 +187,9 @@ export default function AdminPage() {
         loadAdminData();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'product_reviews' }, () => {
+        loadAdminData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'catalog_leads' }, () => {
         loadAdminData();
       })
       .subscribe();
@@ -351,6 +356,24 @@ export default function AdminPage() {
       }
     }
     setLoadingReviews(false);
+
+    // 5. Fetch Leads
+    setLoadingLeads(true);
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('catalog_leads')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          setLeads(data);
+        }
+      } catch (err) {
+        console.error("Failed to load leads:", err);
+      }
+    }
+    setLoadingLeads(false);
 
     // 5. Fetch Blogs
     setLoadingBlogs(true);
@@ -876,6 +899,11 @@ export default function AdminPage() {
           });
           filename = `peptidescr-carts-${new Date().toISOString().slice(0, 10)}`;
           title = 'Costa Rica Peptides - Abandoned Carts Export';
+        } else if (exportModalType === 'leads') {
+          headers = [ 'Lead ID', 'Date Captured', 'Method', 'Contact Info', 'Language' ];
+          dataRows = leads.map(l => [ l.id, new Date(l.created_at).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }), l.contact_method, l.contact_value, l.language ]);
+          filename = `peptidescr-leads-${new Date().toISOString().slice(0, 10)}`;
+          title = 'Costa Rica Peptides - Catalog Leads Export';
         }
 
         if (format === 'csv') {
@@ -1254,6 +1282,14 @@ export default function AdminPage() {
           >
             <Users size={14} />
             <span className="tab-label">Customers</span>
+          </button>
+          <button 
+            className={`admin-tab-btn ${activeTab === 'leads' ? 'active' : ''}`}
+            onClick={() => setActiveTab('leads')}
+          >
+            <Check size={14} />
+            <span className="tab-label">Leads</span>
+            {leads.length > 0 && <span className="tab-count" style={{ background: '#10b981' }}>{leads.length}</span>}
           </button>
           <button 
             className={`admin-tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
@@ -2259,6 +2295,59 @@ export default function AdminPage() {
             <CustomersCRM orders={orders} abandonedCarts={abandonedCarts} />
           </div>
         )}
+
+        {/* TAB: LEADS */}
+        {activeTab === 'leads' && (
+          <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
+            <div className="section-header" style={{ padding: '0 24px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2>Catalog Access Leads</h2>
+                <p>Users who provided their contact info to view the catalog.</p>
+              </div>
+              <button 
+                className="admin-btn"
+                onClick={() => setExportModalType('leads')}
+                disabled={leads.length === 0}
+                style={{ background: '#172237', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Upload size={16} /> Export Data
+              </button>
+            </div>
+            
+            {loadingLeads ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading leads...</div>
+            ) : leads.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No leads captured yet.</div>
+            ) : (
+              <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflow: 'hidden' }}>
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Method</th>
+                      <th>Contact Info</th>
+                      <th>Language</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leads.map(lead => (
+                      <tr key={lead.id}>
+                        <td>{new Date(lead.created_at).toLocaleString()}</td>
+                        <td>
+                          <span className={`status-badge ${lead.contact_method === 'whatsapp' ? 'status-delivered' : 'status-shipped'}`}>
+                            {lead.contact_method}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 'bold' }}>{lead.contact_value}</td>
+                        <td>{lead.language.toUpperCase()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Blog Editor Modal */}
@@ -2481,7 +2570,8 @@ export default function AdminPage() {
         title={
           exportModalType === 'orders' ? 'Export Orders' : 
           exportModalType === 'products' ? 'Export Products' : 
-          exportModalType === 'carts' ? 'Export Carts' : 'Export Data'
+          exportModalType === 'carts' ? 'Export Carts' : 
+          exportModalType === 'leads' ? 'Export Leads' : 'Export Data'
         }
         description={`Choose a format to download all ${exportModalType || ''} data.`}
         loading={exportLoading}
