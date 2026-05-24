@@ -1501,10 +1501,10 @@ export default function CatalogPage() {
       <main className="main container" style={{ position: 'relative', minHeight: '60vh' }}>
         {gateLoading ? null : !gateAccessGranted ? (
           <div className="access-gate-overlay" style={{
-            position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', 
+            position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', 
             background: theme === 'dark' ? 'rgba(5, 11, 24, 0.8)' : 'rgba(244, 246, 249, 0.8)',
             backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-            zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: '20px'
           }}>
             <div className="access-gate-card" style={{
@@ -1512,9 +1512,7 @@ export default function CatalogPage() {
               boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)',
               maxWidth: '400px', width: '100%', textAlign: 'center'
             }}>
-              <div style={{ background: 'rgba(200, 83, 12, 0.1)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto', color: 'var(--accent)' }}>
-                <Lock size={32} />
-              </div>
+              <img src="/logo.png" alt="Peptides Costa Rica Logo" style={{ height: '48px', margin: '0 auto 20px auto', display: 'block', borderRadius: '8px' }} />
               <h2 style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px' }}>
                 {lang === 'en' ? 'Exclusive Catalog Access' : 'Acceso Exclusivo al Catálogo'}
               </h2>
