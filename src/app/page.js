@@ -218,7 +218,7 @@ const handleWhatsAppClick = (src) => {
       <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`} style={cmsSettings?.bannerActive ? { top: scrolled ? '0' : 'auto' } : {}}>
         <div className="lp-header-inner">
           <Link href="/" className="lp-logo">
-            <img src="/logo.png" alt="Peptides Costa Rica" className="logo-img-custom" style={{ maxHeight: '34px', width: 'auto' }} />
+            <img src="/logo.png" alt="Peptides Costa Rica" className="logo-img-custom" style={{ maxHeight: '34px', width: 'auto', borderRadius: '4px' }} />
           </Link>
 
           <nav className="lp-nav">

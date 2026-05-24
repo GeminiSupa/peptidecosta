@@ -2358,59 +2358,69 @@ export default function AdminPage() {
             ) : leads.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No leads captured yet.</div>
             ) : (
-              <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflow: 'hidden' }}>
-                <table className="admin-table">
+              <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <table className="spreadsheet-table">
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Method</th>
-                      <th>Contact Info</th>
-                      <th>Language</th>
-                      <th>Actions</th>
+                      <th style={{ padding: '16px' }}>Date</th>
+                      <th style={{ padding: '16px' }}>Method</th>
+                      <th style={{ padding: '16px' }}>Contact Info</th>
+                      <th style={{ padding: '16px' }}>Language</th>
+                      <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {leads.map(lead => (
                       <tr key={lead.id}>
-                        <td>{new Date(lead.created_at).toLocaleString()}</td>
-                        <td>
+                        <td style={{ padding: '16px' }}>{new Date(lead.created_at).toLocaleString()}</td>
+                        <td style={{ padding: '16px' }}>
                           {editingLeadId === lead.id ? (
                             <select 
                               value={editLeadMethod} 
                               onChange={(e) => setEditLeadMethod(e.target.value)}
                               className="admin-input"
-                              style={{ width: '100px', padding: '4px 8px', height: 'auto', fontSize: '0.8rem' }}
+                              style={{ width: '100px', padding: '6px 12px', height: 'auto', fontSize: '0.85rem' }}
                             >
                               <option value="whatsapp">whatsapp</option>
                               <option value="email">email</option>
                             </select>
                           ) : (
-                            <span className={`status-badge ${lead.contact_method === 'whatsapp' ? 'status-delivered' : 'status-shipped'}`}>
+                            <span style={{ 
+                              background: lead.contact_method === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)', 
+                              color: lead.contact_method === 'whatsapp' ? '#4ade80' : '#38bdf8', 
+                              padding: '6px 12px', 
+                              borderRadius: '20px', 
+                              fontSize: '0.75rem', 
+                              fontWeight: 'bold',
+                              textTransform: 'uppercase',
+                              display: 'inline-block',
+                              border: lead.contact_method === 'whatsapp' ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'
+                            }}>
                               {lead.contact_method}
                             </span>
                           )}
                         </td>
-                        <td style={{ fontWeight: 'bold' }}>
+                        <td style={{ padding: '16px', fontWeight: 'bold' }}>
                           {editingLeadId === lead.id ? (
                             <input 
                               type="text" 
                               value={editLeadValue} 
                               onChange={(e) => setEditLeadValue(e.target.value)}
                               className="admin-input"
-                              style={{ width: '100%', padding: '4px 8px', height: 'auto', fontSize: '0.8rem' }}
+                              style={{ width: '100%', padding: '6px 12px', height: 'auto', fontSize: '0.85rem' }}
                             />
                           ) : (
                             lead.contact_value
                           )}
                         </td>
-                        <td>{lead.language.toUpperCase()}</td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '8px' }}>
+                        <td style={{ padding: '16px' }}>{lead.language.toUpperCase()}</td>
+                        <td style={{ padding: '16px' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                             {editingLeadId === lead.id ? (
                               <button 
-                                className="admin-btn admin-btn-primary" 
+                                className="admin-btn" 
                                 onClick={() => handleLeadUpdate(lead.id)}
-                                style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none' }}
                               >
                                 Save
                               </button>
@@ -2422,7 +2432,7 @@ export default function AdminPage() {
                                   setEditLeadValue(lead.contact_value);
                                   setEditLeadMethod(lead.contact_method);
                                 }}
-                                style={{ padding: '4px 8px', fontSize: '0.75rem', background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc' }}
+                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc' }}
                               >
                                 Edit
                               </button>
@@ -2430,7 +2440,7 @@ export default function AdminPage() {
                             <button 
                               className="admin-btn" 
                               onClick={() => handleLeadDelete(lead.id)}
-                              style={{ padding: '4px 8px', fontSize: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444' }}
+                              style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444' }}
                             >
                               Delete
                             </button>
