@@ -1629,7 +1629,7 @@ export default function CatalogPage() {
                           }
                           {addedProductId === p.product 
                             ? (lang === 'en' ? 'Added' : 'Añadido') 
-                            : (lang === 'en' ? 'Add To Cart' : 'Agregar')
+                            : (lang === 'en' ? 'Add To Cart' : 'Agregar al Carrito')
                           }
                         </button>
                       ) : (
