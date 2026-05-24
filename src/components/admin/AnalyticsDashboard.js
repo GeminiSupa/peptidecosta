@@ -4,8 +4,12 @@ import {
   TrendingUp, Users, ShoppingCart, Clock, 
   MapPin, Eye, DollarSign, Award, Target,
   RefreshCw, BarChart2, Calendar, ShieldAlert,
-  Smartphone, Monitor, ChevronRight, Zap, AlertTriangle, Play, HelpCircle, CreditCard, MessageCircle
+  Smartphone, Monitor, ChevronRight, Zap, AlertTriangle, Play, HelpCircle, CreditCard, MessageCircle, Upload
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import ExportModal from './ExportModal';
 
 export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [] }) {
   const [timeRange, setTimeRange] = useState('all');
@@ -23,6 +27,10 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   
   // Real-time counter of updates
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Export Modal States
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
 
   // Load live DB analytics data
   useEffect(() => {
@@ -400,6 +408,67 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   const maxSourceCount = Object.keys(whatsappSourceBreakdown).length > 0 
     ? Math.max(...Object.values(whatsappSourceBreakdown).map(s => s.count)) 
     : 1;
+
+  const handleExport = (format) => {
+    setExportLoading(true);
+    setTimeout(() => {
+      try {
+        const filename = `peptidescr-analytics-${new Date().toISOString().slice(0, 10)}`;
+
+        if (format === 'csv') {
+          const headers = [ 'Product', 'Views', 'Purchases', 'Conversion Rate (%)' ];
+          const dataRows = productMetrics.map(p => [p.name, p.views, p.purchases, p.conversion.toFixed(1)]);
+          const csvContent = [headers, ...dataRows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+          const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a'); link.href = url; link.download = `${filename}.csv`;
+          document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+        } else if (format === 'xlsx') {
+          const headers = [ 'Product', 'Views', 'Purchases', 'Conversion Rate (%)' ];
+          const dataRows = productMetrics.map(p => [p.name, p.views, p.purchases, p.conversion.toFixed(1)]);
+          const worksheetData = [headers, ...dataRows];
+          const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+          const wscols = headers.map(h => ({ wch: Math.max(15, h.length + 2) }));
+          worksheet['!cols'] = wscols;
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, 'Product Metrics');
+          XLSX.writeFile(workbook, `${filename}.xlsx`);
+        } else if (format === 'pdf') {
+          const doc = new jsPDF('portrait');
+          doc.setFontSize(22);
+          doc.text('Analytics Executive Summary', 14, 20);
+          doc.setFontSize(10);
+          doc.text(`Generated on: ${new Date().toLocaleString()} | Range: ${timeRange.toUpperCase()}`, 14, 28);
+          
+          doc.setFontSize(14);
+          doc.text('Key Performance Indicators', 14, 40);
+          doc.setFontSize(11);
+          doc.text(`Gross Revenue: $${totalRevenueUsd.toFixed(2)} (CRC ${totalRevenueCrc.toLocaleString()})`, 14, 50);
+          doc.text(`Average Order Value (AOV): $${aovUsd.toFixed(2)}`, 14, 58);
+          doc.text(`Conversion Rate: ${orderConversionRate.toFixed(1)}%`, 14, 66);
+          doc.text(`Total Orders: ${successfulOrders.length}`, 14, 74);
+          doc.text(`Total Visitors: ${uniqueVisitorCount}`, 14, 82);
+
+          doc.setFontSize(14);
+          doc.text('Top Products (By Views)', 14, 100);
+          const pHeaders = [['Product Name', 'Views', 'Purchases', 'Conversion']];
+          const pData = productMetrics.slice(0, 10).map(p => [p.name, p.views, p.purchases, `${p.conversion.toFixed(1)}%`]);
+          doc.autoTable({
+            head: pHeaders,
+            body: pData,
+            startY: 105,
+            styles: { fontSize: 9, cellPadding: 3 },
+            headStyles: { fillColor: [14, 22, 38], textColor: 255 },
+          });
+
+          doc.save(`${filename}.pdf`);
+        }
+      } finally {
+        setExportLoading(false);
+        setShowExportModal(false);
+      }
+    }, 500);
+  };
 
   return (
     <div className="analytics-dashboard-container">
@@ -1047,6 +1116,16 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
           >
             <RefreshCw size={12} className={loading ? 'sync-spinner' : ''} />
             <span>Sync</span>
+          </button>
+
+          <button
+            className="admin-btn"
+            style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)' }}
+            onClick={() => setShowExportModal(true)}
+            title="Export analytics report"
+          >
+            <Upload size={12} />
+            <span className="hide-on-mobile">Export</span>
           </button>
 
           <div className="time-filter-bar">
@@ -1781,6 +1860,18 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
           </div>
         </div>
       </div>
+
+
+      <ExportModal 
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Export Analytics Report"
+        description="Download an executive summary PDF or raw product metrics (Excel/CSV)."
+        loading={exportLoading}
+        onExportCSV={() => handleExport('csv')}
+        onExportXLSX={() => handleExport('xlsx')}
+        onExportPDF={() => handleExport('pdf')}
+      />
     </div>
   );
 }

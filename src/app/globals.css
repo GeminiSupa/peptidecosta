@@ -453,9 +453,9 @@ body {
     gap: 6px;
     width: auto;
     padding: 6px 14px;
-    background: var(--bg-secondary);
-    color: var(--primary);
-    border: 1px solid var(--border);
+    background: var(--accent);
+    color: white;
+    border: 1px solid var(--accent);
     border-radius: 20px;
     font-size: 0.75rem;
     font-weight: 700;
@@ -464,20 +464,20 @@ body {
 }
 
 [data-theme="dark"] .add-to-cart-btn {
-    color: var(--text-main);
+    color: white;
 }
 
 .add-to-cart-btn:hover:not(:disabled) {
-    background: var(--primary);
+    background: #A8450A; /* Darker orange on hover */
     color: white;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 39, 102, 0.15);
+    box-shadow: 0 4px 12px rgba(200, 83, 12, 0.15);
 }
 
 [data-theme="dark"] .add-to-cart-btn:hover:not(:disabled) {
-    background: var(--text-primary);
-    color: var(--bg-main);
-    box-shadow: 0 4px 12px rgba(56, 189, 248, 0.2);
+    background: #A8450A;
+    color: white;
+    box-shadow: 0 4px 12px rgba(200, 83, 12, 0.2);
 }
 
 .add-to-cart-btn:active:not(:disabled) {
@@ -622,13 +622,21 @@ body {
 
 .discount-badge {
     font-size: 0.75rem;
-    color: var(--accent);
+    color: var(--primary);
+    background: var(--bg-secondary);
+    padding: 2px 6px;
+    border-radius: 4px;
     font-weight: 800;
     margin-top: 4px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+    display: inline-block;
+}
+
+[data-theme="dark"] .discount-badge {
+    color: var(--text-main);
 }
 
 /* Modal */
@@ -1424,13 +1432,17 @@ body {
     top: 8px;
     left: 8px;
     margin-top: 0;
-    background: var(--accent);
-    color: white;
+    background: var(--bg-secondary);
+    color: var(--primary);
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.65rem;
     z-index: 2;
     max-width: calc(100% - 16px);
+}
+
+[data-theme="dark"] .product-grid.grid-view .discount-badge {
+    color: var(--text-main);
 }
 
 /* ADMIN PANEL STYLING */

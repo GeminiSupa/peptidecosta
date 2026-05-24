@@ -1,12 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, User, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save, Phone, BadgeCheck } from 'lucide-react';
+import { Search, User, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save, Phone, BadgeCheck, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import ExportModal from './ExportModal';
 
 export default function CustomersCRM({ orders = [], abandonedCarts = [] }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', location: '' });
   const [saving, setSaving] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
 
   // Derived customer data from order history and abandoned carts
   const customers = useMemo(() => {
@@ -178,6 +184,60 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [] }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleExport = (format) => {
+    setExportLoading(true);
+    setTimeout(() => {
+      try {
+        const headers = [ 'Name', 'Type', 'Email', 'Phone', 'Location', 'Total Spent (USD)', 'Orders', 'Last Active' ];
+        const dataRows = filteredCustomers.map(c => [
+          c.name,
+          c.isLead ? 'Lead' : 'Customer',
+          c.email,
+          c.whatsappWaId ? `+${c.whatsappWaId}` : c.phone,
+          c.location,
+          c.totalSpentUsd.toFixed(2),
+          c.orderCount,
+          new Date(c.lastOrderDate).toLocaleDateString()
+        ]);
+        const filename = `peptidescr-customers-${new Date().toISOString().slice(0, 10)}`;
+
+        if (format === 'csv') {
+          const csvContent = [headers, ...dataRows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+          const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a'); link.href = url; link.download = `${filename}.csv`;
+          document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+        } else if (format === 'xlsx') {
+          const worksheetData = [headers, ...dataRows];
+          const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+          const wscols = headers.map(h => ({ wch: Math.max(15, h.length + 2) }));
+          worksheet['!cols'] = wscols;
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, 'Customers');
+          XLSX.writeFile(workbook, `${filename}.xlsx`);
+        } else if (format === 'pdf') {
+          const doc = new jsPDF('landscape');
+          doc.setFontSize(16);
+          doc.text('Costa Rica Peptides - Customers Export', 14, 15);
+          doc.setFontSize(10);
+          doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 22);
+          doc.autoTable({
+            head: [headers],
+            body: dataRows,
+            startY: 28,
+            styles: { fontSize: 8, cellPadding: 2 },
+            headStyles: { fillColor: [14, 22, 38], textColor: 255 },
+            alternateRowStyles: { fillColor: [240, 240, 240] }
+          });
+          doc.save(`${filename}.pdf`);
+        }
+      } finally {
+        setExportLoading(false);
+        setShowExportModal(false);
+      }
+    }, 500);
   };
 
   return (
@@ -376,14 +436,24 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [] }) {
             Auto-generated customer profiles and lifetime value.
           </p>
         </div>
-        <div className="crm-search">
-          <Search size={16} className="crm-search-icon" />
-          <input 
-            type="text" 
-            placeholder="Search by name, email, or phone..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+        <div className="crm-search" style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <Search size={16} className="crm-search-icon" />
+            <input 
+              type="text" 
+              placeholder="Search by name, email, or phone..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          {filteredCustomers.length > 0 && (
+            <button
+              onClick={() => setShowExportModal(true)}
+              style={{ padding: '0 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
+            >
+              <Upload size={14} /> Export
+            </button>
+          )}
         </div>
       </div>
 
@@ -574,6 +644,17 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [] }) {
           </div>
         </div>
       )}
+
+      <ExportModal 
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Export Customers"
+        description="Choose a format to download the customer database."
+        loading={exportLoading}
+        onExportCSV={() => handleExport('csv')}
+        onExportXLSX={() => handleExport('xlsx')}
+        onExportPDF={() => handleExport('pdf')}
+      />
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
+import ExportModal from '@/components/admin/ExportModal';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
 
@@ -108,7 +109,7 @@ export default function AdminPage() {
   const [passwordLoading, setPasswordLoading] = useState(false);
 
   // Export Modal States
-  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportModalType, setExportModalType] = useState(null); // 'orders' | 'products' | 'carts'
   const [exportLoading, setExportLoading] = useState(false);
 
   // Auth session check on mount
@@ -841,109 +842,75 @@ export default function AdminPage() {
     }
   };
 
-  // Get formatted data for exports
-  const getOrdersExportData = () => {
-    const headers = [
-      'Order ID', 'Order Number', 'Date', 'Customer Name', 'Phone', 'Shipping Address', 'Status', 
-      'Payment Method', 'Items', 'Total (CRC)', 'Total (USD)'
-    ];
-    const dataRows = orders.map(order => {
-      const items = Array.isArray(order.items) ? order.items : [];
-      const itemsSummary = items.map(i => `${i.product} x${i.qty}`).join(' | ');
-      const orderDate = new Date(order.created_at).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
-      return [
-        order.id,
-        order.order_number || 'N/A',
-        orderDate,
-        order.customer_name || 'N/A',
-        order.customer_phone || '',
-        order.shipping_address || 'N/A',
-        order.status || 'Pending',
-        order.payment_method || 'whatsapp',
-        itemsSummary,
-        order.total_crc || '',
-        order.total_usd || ''
-      ];
-    });
-    return { headers, dataRows };
-  };
-
-  const exportOrdersToCSV = () => {
+  // Centralized Export Handler
+  const handleExport = (format) => {
     setExportLoading(true);
     setTimeout(() => {
       try {
-        const { headers, dataRows } = getOrdersExportData();
-        const csvContent = [headers, ...dataRows].map(row =>
-          row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
-        ).join('\n');
+        let headers = [];
+        let dataRows = [];
+        let filename = `peptidescr-export-${new Date().toISOString().slice(0, 10)}`;
+        let title = 'Export';
 
-        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `peptidescr-orders-${new Date().toISOString().slice(0, 10)}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        if (exportModalType === 'orders') {
+          headers = [ 'Order ID', 'Order Number', 'Date', 'Customer Name', 'Phone', 'Shipping Address', 'Status', 'Payment Method', 'Items', 'Total (CRC)', 'Total (USD)' ];
+          dataRows = orders.map(order => {
+             const items = Array.isArray(order.items) ? order.items : [];
+             const itemsSummary = items.map(i => `${i.product} x${i.qty}`).join(' | ');
+             const orderDate = new Date(order.created_at).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+             return [ order.id, order.order_number || 'N/A', orderDate, order.customer_name || 'N/A', order.customer_phone || '', order.shipping_address || 'N/A', order.status || 'Pending', order.payment_method || 'whatsapp', itemsSummary, order.total_crc || '', order.total_usd || '' ];
+          });
+          filename = `peptidescr-orders-${new Date().toISOString().slice(0, 10)}`;
+          title = 'Costa Rica Peptides - Orders Export';
+        } else if (exportModalType === 'products') {
+          headers = [ 'Product Name', 'Category', 'Price (USD)', 'Price (CRC)', 'Status', 'Bulk Discount' ];
+          dataRows = products.map(p => [ p.product, p.category, p.priceUsd, p.priceCrc, p.status, p.discount ]);
+          filename = `peptidescr-products-${new Date().toISOString().slice(0, 10)}`;
+          title = 'Costa Rica Peptides - Products Export';
+        } else if (exportModalType === 'carts') {
+          headers = [ 'Session ID', 'Date', 'Customer Name', 'Phone', 'Email', 'Cart Items', 'Status' ];
+          dataRows = abandonedCarts.map(c => {
+             const itemsSummary = c.cart_data ? c.cart_data.map(i => `${i.product} x${i.qty}`).join(' | ') : '';
+             const date = new Date(c.last_updated).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
+             return [ c.session_id, date, c.customer_name || '', c.customer_phone || '', c.customer_email || '', itemsSummary, c.status ];
+          });
+          filename = `peptidescr-carts-${new Date().toISOString().slice(0, 10)}`;
+          title = 'Costa Rica Peptides - Abandoned Carts Export';
+        }
+
+        if (format === 'csv') {
+          const csvContent = [headers, ...dataRows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+          const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a'); link.href = url; link.download = `${filename}.csv`;
+          document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+        } else if (format === 'xlsx') {
+          const worksheetData = [headers, ...dataRows];
+          const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+          const wscols = headers.map(h => ({ wch: Math.max(15, h.length + 2) }));
+          worksheet['!cols'] = wscols;
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+          XLSX.writeFile(workbook, `${filename}.xlsx`);
+        } else if (format === 'pdf') {
+          const doc = new jsPDF('landscape');
+          doc.setFontSize(16);
+          doc.text(title, 14, 15);
+          doc.setFontSize(10);
+          doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 22);
+          doc.autoTable({
+            head: [headers],
+            body: dataRows,
+            startY: 28,
+            styles: { fontSize: 7, cellPadding: 2 },
+            headStyles: { fillColor: [14, 22, 38], textColor: 255 },
+            alternateRowStyles: { fillColor: [240, 240, 240] }
+          });
+          doc.save(`${filename}.pdf`);
+        }
       } finally {
         setExportLoading(false);
-        setShowExportModal(false);
-      }
-    }, 500); // simulate tiny delay for UI feedback
-  };
-
-  const exportOrdersToXLSX = () => {
-    setExportLoading(true);
-    setTimeout(() => {
-      try {
-        const { headers, dataRows } = getOrdersExportData();
-        const worksheetData = [headers, ...dataRows];
-        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-        
-        // Auto-size columns slightly
-        const wscols = headers.map(h => ({ wch: Math.max(15, h.length + 2) }));
-        worksheet['!cols'] = wscols;
-
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Orders');
-        XLSX.writeFile(workbook, `peptidescr-orders-${new Date().toISOString().slice(0, 10)}.xlsx`);
-      } finally {
-        setExportLoading(false);
-        setShowExportModal(false);
-      }
-    }, 500);
-  };
-
-  const exportOrdersToPDF = () => {
-    setExportLoading(true);
-    setTimeout(() => {
-      try {
-        const doc = new jsPDF('landscape');
-        const { headers, dataRows } = getOrdersExportData();
-        
-        doc.setFontSize(16);
-        doc.text('Costa Rica Peptides - Orders Export', 14, 15);
-        doc.setFontSize(10);
-        doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 22);
-
-        doc.autoTable({
-          head: [headers],
-          body: dataRows,
-          startY: 28,
-          styles: { fontSize: 7, cellPadding: 2 },
-          headStyles: { fillColor: [14, 22, 38], textColor: 255 },
-          alternateRowStyles: { fillColor: [240, 240, 240] },
-          columnStyles: {
-            0: { cellWidth: 20 }, // Order ID
-            8: { cellWidth: 50 }, // Items
-          }
-        });
-
-        doc.save(`peptidescr-orders-${new Date().toISOString().slice(0, 10)}.pdf`);
-      } finally {
-        setExportLoading(false);
-        setShowExportModal(false);
+        setExportModalType(null);
       }
     }, 500);
   };
@@ -1354,6 +1321,16 @@ export default function AdminPage() {
                   <Save size={16} />
                   {saveLoading ? 'Syncing DB...' : 'Save Changes'}
                 </button>
+                {products.length > 0 && (
+                  <button
+                    className="admin-btn"
+                    onClick={() => setExportModalType('products')}
+                    style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)' }}
+                  >
+                    <Upload size={14} />
+                    Export Data
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1702,7 +1679,7 @@ export default function AdminPage() {
               {orders.length > 0 && (
                 <button
                   className="admin-btn admin-btn-primary"
-                  onClick={() => setShowExportModal(true)}
+                  onClick={() => setExportModalType('orders')}
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, alignSelf: 'flex-start' }}
                 >
                   <Upload size={14} />
@@ -1939,12 +1916,20 @@ export default function AdminPage() {
               <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0 }}>🛒 Active / Abandoned Carts</h2>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {abandonedCarts.length > 0 && (
-                  <button
-                    onClick={handleClearAllCarts}
-                    style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
-                  >
-                    <Trash2 size={13} /> Clear All
-                  </button>
+                  <>
+                    <button
+                      onClick={() => setExportModalType('carts')}
+                      style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <Upload size={13} /> Export Data
+                    </button>
+                    <button
+                      onClick={handleClearAllCarts}
+                      style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <Trash2 size={13} /> Clear All
+                    </button>
+                  </>
                 )}
                 <button className="admin-btn" onClick={loadAdminData} style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}>
                   Refresh
@@ -2487,51 +2472,23 @@ export default function AdminPage() {
             </div>
           </div>
         </div>
-        </div>
       )}
 
-      {/* Export Modal */}
-      {showExportModal && (
-        <div className="modal active" onClick={() => setShowExportModal(false)} style={{ zIndex: 200 }}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px', background: '#0e1626', color: '#f8fafc', padding: '24px', borderRadius: '16px' }}>
-            <button className="close-modal" onClick={() => setShowExportModal(false)} style={{ color: '#94a3b8', fontSize: '24px' }}>&times;</button>
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <div style={{ background: 'rgba(56, 189, 248, 0.1)', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto' }}>
-                <Upload size={24} color="#38bdf8" />
-              </div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: '0 0 8px 0' }}>Export Orders</h3>
-              <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: 0 }}>Choose a format to download all order data.</p>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button 
-                className="admin-btn"
-                onClick={exportOrdersToXLSX}
-                disabled={exportLoading}
-                style={{ width: '100%', padding: '12px', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: '#4ade80', fontSize: '1rem', fontWeight: 'bold', display: 'flex', justifyContent: 'center' }}
-              >
-                {exportLoading ? <div className="sync-spinner" style={{ width: '20px', height: '20px' }} /> : 'Excel Workbook (.xlsx)'}
-              </button>
-              <button 
-                className="admin-btn"
-                onClick={exportOrdersToPDF}
-                disabled={exportLoading}
-                style={{ width: '100%', padding: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: '1rem', fontWeight: 'bold', display: 'flex', justifyContent: 'center' }}
-              >
-                {exportLoading ? <div className="sync-spinner" style={{ width: '20px', height: '20px' }} /> : 'PDF Document (.pdf)'}
-              </button>
-              <button 
-                className="admin-btn"
-                onClick={exportOrdersToCSV}
-                disabled={exportLoading}
-                style={{ width: '100%', padding: '12px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', color: '#e2e8f0', fontSize: '1rem', fontWeight: 'bold', display: 'flex', justifyContent: 'center' }}
-              >
-                {exportLoading ? <div className="sync-spinner" style={{ width: '20px', height: '20px' }} /> : 'CSV File (.csv)'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Reusable Export Modal */}
+      <ExportModal 
+        isOpen={!!exportModalType}
+        onClose={() => setExportModalType(null)}
+        title={
+          exportModalType === 'orders' ? 'Export Orders' : 
+          exportModalType === 'products' ? 'Export Products' : 
+          exportModalType === 'carts' ? 'Export Carts' : 'Export Data'
+        }
+        description={`Choose a format to download all ${exportModalType || ''} data.`}
+        loading={exportLoading}
+        onExportCSV={() => handleExport('csv')}
+        onExportXLSX={() => handleExport('xlsx')}
+        onExportPDF={() => handleExport('pdf')}
+      />
     </div>
   );
 }

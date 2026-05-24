@@ -1522,7 +1522,7 @@ export default function CatalogPage() {
                           }
                           {addedProductId === p.product 
                             ? (lang === 'en' ? 'Added' : 'Añadido') 
-                            : (lang === 'en' ? 'Add' : 'Agregar')
+                            : (lang === 'en' ? 'Add To Cart' : 'Agregar')
                           }
                         </button>
                       ) : (
@@ -1777,7 +1777,7 @@ export default function CatalogPage() {
                     <span className="suggestion-name">{sug.product}</span>
                     <span className="suggestion-price">{currency === 'USD' ? sug.priceUsd : sug.priceCrc}</span>
                   </div>
-                  <button className="suggestion-add-btn" title={lang === 'en' ? 'Add' : 'Añadir'}>
+                  <button className="suggestion-add-btn" title={lang === 'en' ? 'Add To Cart' : 'Añadir'}>
                     <Plus size={14} />
                   </button>
                 </div>
