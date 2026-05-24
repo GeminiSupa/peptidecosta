@@ -16,7 +16,7 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState(null);
-  const [showProductFunnel, setShowProductFunnel] = useState(false);
+  const [showProductFunnel, setShowProductFunnel] = useState(true);
   const [expandedMetric, setExpandedMetric] = useState(null); // 'revenue'|'aov'|'carts'|'conversion'
   
   // Database analytics state

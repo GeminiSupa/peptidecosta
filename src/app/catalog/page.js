@@ -192,11 +192,13 @@ export default function CatalogPage() {
       
       // Grant access regardless of DB success to not block users if offline
       localStorage.setItem('catalog_access_granted', 'true');
+      localStorage.setItem('catalog_lead_contact', gateInput.trim());
       setGateAccessGranted(true);
     } catch (err) {
       console.error('Error saving lead:', err);
       // Still grant access to prevent bad UX on error
       localStorage.setItem('catalog_access_granted', 'true');
+      localStorage.setItem('catalog_lead_contact', gateInput.trim());
       setGateAccessGranted(true);
     } finally {
       setGateSubmitting(false);
@@ -712,6 +714,31 @@ export default function CatalogPage() {
     // Trigger cart bounce animation
     setCartAnimating(true);
     setTimeout(() => setCartAnimating(false), 800);
+  };
+
+  const handleProductClick = async (product) => {
+    setSelectedProduct(product);
+    
+    // Silently track behavioral product view
+    if (isSupabaseConfigured) {
+      const contact = localStorage.getItem('catalog_lead_contact');
+      if (contact) {
+        try {
+          // Fire and forget
+          supabase.from('product_views').insert([{
+            contact_value: contact,
+            product_id: product.id || product.product, // fallback to name if no id
+            product_name: product.product
+          }]).then();
+        } catch (e) {
+          // ignore tracking errors
+        }
+      }
+    }
+  };
+
+  const closeProductModal = () => {
+    setSelectedProduct(null);
   };
 
   const addToCartWithAnimation = (e, productData) => {
@@ -1576,7 +1603,7 @@ export default function CatalogPage() {
                 <div 
                   key={idx} 
                   className={cardClass}
-                  onClick={() => setSelectedProduct(p)}
+                  onClick={() => handleProductClick(p)}
                 >
                   <div className="product-image">
                     {p.imageUrl ? (
@@ -2144,9 +2171,9 @@ export default function CatalogPage() {
 
       {/* Product Detail Modal */}
       {selectedProduct && (
-        <div className="modal active" onClick={() => setSelectedProduct(null)}>
+        <div className="modal active" onClick={closeProductModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <button className="close-modal" onClick={() => setSelectedProduct(null)}>&times;</button>
+            <button className="close-modal" onClick={closeProductModal}>&times;</button>
             
             <div style={{ textAlign: 'center', marginBottom: '24px' }}>
               <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}>

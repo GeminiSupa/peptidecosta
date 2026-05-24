@@ -70,6 +70,7 @@ export default function AdminPage() {
   const [loadingReviews, setLoadingReviews] = useState(true);
   const [leads, setLeads] = useState([]);
   const [loadingLeads, setLoadingLeads] = useState(true);
+  const [productViews, setProductViews] = useState([]);
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(FALLBACK_EXCHANGE_RATE);
   
@@ -119,6 +120,7 @@ export default function AdminPage() {
   const [editingLeadId, setEditingLeadId] = useState(null);
   const [editLeadValue, setEditLeadValue] = useState('');
   const [editLeadMethod, setEditLeadMethod] = useState('');
+  const [selectedLeads, setSelectedLeads] = useState([]);
 
   // RBAC Profile State
   const [adminProfile, setAdminProfile] = useState(null);
@@ -448,6 +450,14 @@ export default function AdminPage() {
       } catch (err) { console.error("Failed to load settings:", err); }
     }
     setLoadingSettings(false);
+
+    // 7. Fetch Product Views
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase.from('product_views').select('*').order('created_at', { ascending: false });
+        if (!error && data) setProductViews(data);
+      } catch (err) { console.error("Failed to load product views:", err); }
+    }
   };
 
   // Trigger loading when authenticated
@@ -1015,6 +1025,35 @@ export default function AdminPage() {
         console.error("Failed to delete lead:", err);
       }
     }
+  };
+
+  const handleSelectLead = (id, checked) => {
+    setSelectedLeads(prev => 
+      checked ? [...prev, id] : prev.filter(leadId => leadId !== id)
+    );
+  };
+
+  const handleSelectAllLeads = (checked) => {
+    setSelectedLeads(checked ? leads.map(l => l.id) : []);
+  };
+
+  const handleBulkDeleteLeads = async () => {
+    if (selectedLeads.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedLeads.length} leads?`)) return;
+
+    setLeads(prev => prev.filter(l => !selectedLeads.includes(l.id)));
+    
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('catalog_leads')
+          .delete()
+          .in('id', selectedLeads);
+      } catch (err) {
+        console.error("Failed to bulk delete leads:", err);
+      }
+    }
+    setSelectedLeads([]);
   };
 
   // Save changes batch
@@ -2386,7 +2425,7 @@ export default function AdminPage() {
         {/* TAB: ANALYTICS */}
         {activeTab === 'analytics' && (
           <div className="admin-orders-tab">
-            <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} />
+            <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} productViews={productViews} />
           </div>
         )}
 
@@ -2405,14 +2444,25 @@ export default function AdminPage() {
                 <h2>Catalog Access Leads</h2>
                 <p>Users who provided their contact info to view the catalog.</p>
               </div>
-              <button 
-                className="admin-btn"
-                onClick={() => setExportModalType('leads')}
-                disabled={leads.length === 0}
-                style={{ background: '#172237', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Upload size={16} /> Export Data
-              </button>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                {selectedLeads.length > 0 && (
+                  <button 
+                    className="admin-btn delete-btn"
+                    onClick={handleBulkDeleteLeads}
+                    style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <Trash2 size={16} /> Delete Selected ({selectedLeads.length})
+                  </button>
+                )}
+                <button 
+                  className="admin-btn"
+                  onClick={() => setExportModalType('leads')}
+                  disabled={leads.length === 0}
+                  style={{ background: '#172237', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Upload size={16} /> Export Data
+                </button>
+              </div>
             </div>
             
             {loadingLeads ? (
@@ -2424,9 +2474,18 @@ export default function AdminPage() {
                 <table className="spreadsheet-table">
                   <thead>
                     <tr>
+                      <th style={{ padding: '16px', width: '40px' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={leads.length > 0 && selectedLeads.length === leads.length}
+                          onChange={(e) => handleSelectAllLeads(e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                      </th>
                       <th style={{ padding: '16px' }}>Date</th>
                       <th style={{ padding: '16px' }}>Method</th>
                       <th style={{ padding: '16px' }}>Contact Info</th>
+                      <th style={{ padding: '16px' }}>Behavior / Views</th>
                       <th style={{ padding: '16px' }}>Language</th>
                       <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
                     </tr>
@@ -2434,6 +2493,14 @@ export default function AdminPage() {
                   <tbody>
                     {leads.map(lead => (
                       <tr key={lead.id}>
+                        <td style={{ padding: '16px' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={selectedLeads.includes(lead.id)}
+                            onChange={(e) => handleSelectLead(lead.id, e.target.checked)}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        </td>
                         <td style={{ padding: '16px' }}>{new Date(lead.created_at).toLocaleString()}</td>
                         <td style={{ padding: '16px' }}>
                           {editingLeadId === lead.id ? (
@@ -2475,7 +2542,27 @@ export default function AdminPage() {
                             lead.contact_value
                           )}
                         </td>
-                        <td style={{ padding: '16px' }}>{lead.language.toUpperCase()}</td>
+                        <td style={{ padding: '16px' }}>
+                          {(() => {
+                            const views = productViews.filter(v => v.contact_value === lead.contact_value);
+                            if (views.length === 0) return <span style={{ color: '#64748b', fontSize: '0.8rem' }}>No products viewed</span>;
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                {views.slice(0, 3).map((v, i) => (
+                                  <span key={i} style={{ fontSize: '0.8rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', padding: '2px 6px', borderRadius: '4px', width: 'fit-content' }}>
+                                    {v.product_name}
+                                  </span>
+                                ))}
+                                {views.length > 3 && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>+{views.length - 3} more</span>}
+                              </div>
+                            );
+                          })()}
+                        </td>
+                        <td style={{ padding: '16px' }}>
+                          <span style={{ padding: '4px 8px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                            {lead.language ? lead.language.toUpperCase() : 'EN'}
+                          </span>
+                        </td>
                         <td style={{ padding: '16px' }}>
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                             {editingLeadId === lead.id ? (
