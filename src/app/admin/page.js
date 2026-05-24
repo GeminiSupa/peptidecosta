@@ -114,6 +114,11 @@ export default function AdminPage() {
   const [exportModalType, setExportModalType] = useState(null); // 'orders' | 'products' | 'carts'
   const [exportLoading, setExportLoading] = useState(false);
 
+  // Leads Editing States
+  const [editingLeadId, setEditingLeadId] = useState(null);
+  const [editLeadValue, setEditLeadValue] = useState('');
+  const [editLeadMethod, setEditLeadMethod] = useState('');
+
   // Auth session check on mount
   useEffect(() => {
     setMounted(true);
@@ -941,6 +946,40 @@ export default function AdminPage() {
         setExportModalType(null);
       }
     }, 500);
+  };
+
+  // Leads Actions
+  const handleLeadUpdate = async (id) => {
+    setLeads(prev => prev.map(l => l.id === id ? { ...l, contact_value: editLeadValue, contact_method: editLeadMethod } : l));
+    setEditingLeadId(null);
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('catalog_leads')
+          .update({ contact_value: editLeadValue, contact_method: editLeadMethod })
+          .eq('id', id);
+      } catch (err) {
+        console.error("Failed to update lead:", err);
+      }
+    }
+  };
+  
+  const handleLeadDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this lead?")) return;
+    
+    setLeads(prev => prev.filter(l => l.id !== id));
+    
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('catalog_leads')
+          .delete()
+          .eq('id', id);
+      } catch (err) {
+        console.error("Failed to delete lead:", err);
+      }
+    }
   };
 
   // Save changes batch
@@ -2327,6 +2366,7 @@ export default function AdminPage() {
                       <th>Method</th>
                       <th>Contact Info</th>
                       <th>Language</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2334,12 +2374,68 @@ export default function AdminPage() {
                       <tr key={lead.id}>
                         <td>{new Date(lead.created_at).toLocaleString()}</td>
                         <td>
-                          <span className={`status-badge ${lead.contact_method === 'whatsapp' ? 'status-delivered' : 'status-shipped'}`}>
-                            {lead.contact_method}
-                          </span>
+                          {editingLeadId === lead.id ? (
+                            <select 
+                              value={editLeadMethod} 
+                              onChange={(e) => setEditLeadMethod(e.target.value)}
+                              className="admin-input"
+                              style={{ width: '100px', padding: '4px 8px', height: 'auto', fontSize: '0.8rem' }}
+                            >
+                              <option value="whatsapp">whatsapp</option>
+                              <option value="email">email</option>
+                            </select>
+                          ) : (
+                            <span className={`status-badge ${lead.contact_method === 'whatsapp' ? 'status-delivered' : 'status-shipped'}`}>
+                              {lead.contact_method}
+                            </span>
+                          )}
                         </td>
-                        <td style={{ fontWeight: 'bold' }}>{lead.contact_value}</td>
+                        <td style={{ fontWeight: 'bold' }}>
+                          {editingLeadId === lead.id ? (
+                            <input 
+                              type="text" 
+                              value={editLeadValue} 
+                              onChange={(e) => setEditLeadValue(e.target.value)}
+                              className="admin-input"
+                              style={{ width: '100%', padding: '4px 8px', height: 'auto', fontSize: '0.8rem' }}
+                            />
+                          ) : (
+                            lead.contact_value
+                          )}
+                        </td>
                         <td>{lead.language.toUpperCase()}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {editingLeadId === lead.id ? (
+                              <button 
+                                className="admin-btn admin-btn-primary" 
+                                onClick={() => handleLeadUpdate(lead.id)}
+                                style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                              >
+                                Save
+                              </button>
+                            ) : (
+                              <button 
+                                className="admin-btn" 
+                                onClick={() => {
+                                  setEditingLeadId(lead.id);
+                                  setEditLeadValue(lead.contact_value);
+                                  setEditLeadMethod(lead.contact_method);
+                                }}
+                                style={{ padding: '4px 8px', fontSize: '0.75rem', background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc' }}
+                              >
+                                Edit
+                              </button>
+                            )}
+                            <button 
+                              className="admin-btn" 
+                              onClick={() => handleLeadDelete(lead.id)}
+                              style={{ padding: '4px 8px', fontSize: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444' }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
