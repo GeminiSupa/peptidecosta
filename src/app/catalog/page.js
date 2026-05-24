@@ -1565,6 +1565,7 @@ export default function CatalogPage() {
           left: 0;
           width: 100%;
           padding: 16px;
+          padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
           display: flex;
           justify-content: flex-end;
         }
