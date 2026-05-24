@@ -18,6 +18,7 @@ import {
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
 import ExportModal from '@/components/admin/ExportModal';
+import TeamManagement from '@/components/admin/TeamManagement';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
 
@@ -119,6 +120,37 @@ export default function AdminPage() {
   const [editLeadValue, setEditLeadValue] = useState('');
   const [editLeadMethod, setEditLeadMethod] = useState('');
 
+  // RBAC Profile State
+  const [adminProfile, setAdminProfile] = useState(null);
+
+  const fetchAdminProfile = async (userId) => {
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      const { data, error } = await supabase.from('admin_profiles').select('*').eq('user_id', userId).single();
+      if (!error && data) {
+        setAdminProfile(data);
+        // Automatically switch tab if current one is not permitted
+        if (!data.is_superadmin && data.permissions && !data.permissions.includes(activeTab)) {
+          if (data.permissions.length > 0) setActiveTab(data.permissions[0]);
+        }
+      }
+    } catch(e) {
+      console.error("Failed to load admin profile", e);
+    }
+  };
+
+  const hasAccess = (tabId) => {
+    // Hardcoded fallback to prevent locking out the main founders
+    const currentUserEmail = loggedInEmail.current;
+    if (currentUserEmail === 'joe@peptides.com' || currentUserEmail === 'info@peptidescostarica.net') {
+      return true;
+    }
+
+    if (!adminProfile) return true; // Default allow if not loaded or failed
+    if (adminProfile.is_superadmin) return true;
+    return adminProfile.permissions && adminProfile.permissions.includes(tabId);
+  };
+
   // Auth session check on mount
   useEffect(() => {
     setMounted(true);
@@ -132,6 +164,7 @@ export default function AdminPage() {
           loggedInEmail.current = session.user.email || savedEmail;
           setIsAuthenticated(true);
           loadAdminData();
+          fetchAdminProfile(session.user.id);
         }
       });
 
@@ -139,8 +172,10 @@ export default function AdminPage() {
         if (session) {
           setIsAuthenticated(true);
           loadAdminData();
+          fetchAdminProfile(session.user.id);
         } else {
           setIsAuthenticated(false);
+          setAdminProfile(null);
         }
       });
 
@@ -1300,73 +1335,100 @@ export default function AdminPage() {
           </div>
         </div>
         <div className="admin-nav-actions">
-          <button 
-            className={`admin-tab-btn ${activeTab === 'spreadsheet' ? 'active' : ''}`}
-            onClick={() => setActiveTab('spreadsheet')}
-          >
-            <Table size={14} />
-            <span className="tab-label">Products</span>
-          </button>
-          <button 
-            className={`admin-tab-btn ${activeTab === 'orders' ? 'active' : ''}`}
-            onClick={() => setActiveTab('orders')}
-          >
-            <ClipboardList size={14} />
-            <span className="tab-label">Orders</span>
-            {orders.length > 0 && <span className="tab-count" style={{ background: '#ef4444' }}>{orders.length}</span>}
-          </button>
-          <button 
-            className={`admin-tab-btn ${activeTab === 'customers' ? 'active' : ''}`}
-            onClick={() => setActiveTab('customers')}
-          >
-            <Users size={14} />
-            <span className="tab-label">Customers</span>
-          </button>
-          <button 
-            className={`admin-tab-btn ${activeTab === 'leads' ? 'active' : ''}`}
-            onClick={() => setActiveTab('leads')}
-          >
-            <Check size={14} />
-            <span className="tab-label">Leads</span>
-            {leads.length > 0 && <span className="tab-count" style={{ background: '#10b981' }}>{leads.length}</span>}
-          </button>
-          <button 
-            className={`admin-tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
-            onClick={() => setActiveTab('analytics')}
-          >
-            <BarChart2 size={14} />
-            <span className="tab-label">Analytics</span>
-          </button>
-          <button 
-            className={`admin-tab-btn ${activeTab === 'share' ? 'active' : ''}`}
-            onClick={() => setActiveTab('share')}
-          >
-            <Link2 size={14} />
-            <span className="tab-label">Share</span>
-          </button>
-          <button 
-            className={`admin-tab-btn ${activeTab === 'abandoned' ? 'active' : ''}`}
-            onClick={() => setActiveTab('abandoned')}
-          >
-            <ShoppingCart size={14} />
-            <span className="tab-label">Carts</span>
-            {abandonedCarts.length > 0 && <span className="tab-count" style={{ background: '#f59e0b' }}>{abandonedCarts.length}</span>}
-          </button>
-          <button 
-            className={`admin-tab-btn ${activeTab === 'reviews' ? 'active' : ''}`}
-            onClick={() => setActiveTab('reviews')}
-          >
-            <Star size={14} />
-            <span className="tab-label">Reviews</span>
-            {reviews.filter(r => r.status === 'Pending').length > 0 && <span className="tab-count" style={{ background: '#3b82f6' }}>{reviews.filter(r => r.status === 'Pending').length}</span>}
-          </button>
-          <button 
-            className={`admin-tab-btn ${activeTab === 'cms' ? 'active' : ''}`}
-            onClick={() => setActiveTab('cms')}
-          >
-            <FileText size={14} />
-            <span className="tab-label">Content (CMS)</span>
-          </button>
+          {hasAccess('spreadsheet') && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'spreadsheet' ? 'active' : ''}`}
+              onClick={() => setActiveTab('spreadsheet')}
+            >
+              <Table size={14} />
+              <span className="tab-label">Products</span>
+            </button>
+          )}
+          {hasAccess('orders') && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'orders' ? 'active' : ''}`}
+              onClick={() => setActiveTab('orders')}
+            >
+              <ClipboardList size={14} />
+              <span className="tab-label">Orders</span>
+              {orders.length > 0 && <span className="tab-count" style={{ background: '#ef4444' }}>{orders.length}</span>}
+            </button>
+          )}
+          {hasAccess('customers') && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'customers' ? 'active' : ''}`}
+              onClick={() => setActiveTab('customers')}
+            >
+              <Users size={14} />
+              <span className="tab-label">Customers</span>
+            </button>
+          )}
+          {hasAccess('leads') && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'leads' ? 'active' : ''}`}
+              onClick={() => setActiveTab('leads')}
+            >
+              <Check size={14} />
+              <span className="tab-label">Leads</span>
+              {leads.length > 0 && <span className="tab-count" style={{ background: '#10b981' }}>{leads.length}</span>}
+            </button>
+          )}
+          {hasAccess('analytics') && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
+              onClick={() => setActiveTab('analytics')}
+            >
+              <BarChart2 size={14} />
+              <span className="tab-label">Analytics</span>
+            </button>
+          )}
+          {hasAccess('share') && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'share' ? 'active' : ''}`}
+              onClick={() => setActiveTab('share')}
+            >
+              <Link2 size={14} />
+              <span className="tab-label">Share</span>
+            </button>
+          )}
+          {hasAccess('carts') && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'carts' ? 'active' : ''}`}
+              onClick={() => setActiveTab('carts')}
+            >
+              <ShoppingCart size={14} />
+              <span className="tab-label">Carts</span>
+              {abandonedCarts.length > 0 && <span className="tab-count" style={{ background: '#f59e0b' }}>{abandonedCarts.length}</span>}
+            </button>
+          )}
+          {hasAccess('reviews') && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'reviews' ? 'active' : ''}`}
+              onClick={() => setActiveTab('reviews')}
+            >
+              <Star size={14} />
+              <span className="tab-label">Reviews</span>
+              {reviews.filter(r => r.status === 'Pending').length > 0 && <span className="tab-count" style={{ background: '#3b82f6' }}>{reviews.filter(r => r.status === 'Pending').length}</span>}
+            </button>
+          )}
+          {hasAccess('cms') && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'cms' ? 'active' : ''}`}
+              onClick={() => setActiveTab('cms')}
+            >
+              <FileText size={14} />
+              <span className="tab-label">Content (CMS)</span>
+            </button>
+          )}
+          {(!adminProfile || adminProfile.is_superadmin) && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'team' ? 'active' : ''}`}
+              onClick={() => setActiveTab('team')}
+            >
+              <Shield size={14} />
+              <span className="tab-label">Team</span>
+            </button>
+          )}
         </div>
       </nav>
 
@@ -1985,7 +2047,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {activeTab === 'abandoned' && (
+        {activeTab === 'carts' && (
           <div className="admin-orders-tab">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
               <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0 }}>🛒 Active / Abandoned Carts</h2>
@@ -2452,6 +2514,13 @@ export default function AdminPage() {
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* TAB: TEAM MANAGEMENT */}
+        {activeTab === 'team' && (
+          <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
+            <TeamManagement currentUserProfile={adminProfile} currentUserEmail={loggedInEmail.current} />
           </div>
         )}
       </div>

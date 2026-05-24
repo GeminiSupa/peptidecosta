@@ -2366,18 +2366,25 @@ body {
         overflow-x: auto;
         padding-bottom: 4px;
         display: flex;
-        gap: 4px;
+        flex-wrap: nowrap;
+        gap: 8px;
         -webkit-overflow-scrolling: touch;
+        scrollbar-width: none; /* Firefox */
+    }
+    
+    .admin-nav-actions::-webkit-scrollbar {
+        display: none; /* Chrome/Safari */
     }
     
     .admin-tab-btn {
         white-space: nowrap;
-        padding: 8px 10px;
-        font-size: 0.75rem;
+        padding: 8px 12px;
+        font-size: 0.8rem;
+        flex-shrink: 0;
     }
 
     .admin-tab-btn .tab-label {
-        display: none;
+        display: inline; /* Ensure labels are visible on mobile since they swipe now */
     }
     
     /* Toolbar spacing optimizations */
