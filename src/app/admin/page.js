@@ -1923,7 +1923,7 @@ export default function AdminPage() {
                               }}
                             >
                               <Mail size={13} />
-                              {sendingRecoveryEmail[acart.session_id] ? 'Sending...' : acart.recovery_email_sent ? 'Send Email Again' : 'Send Recovery Email'}
+                              {sendingRecoveryEmail[acart.session_id] ? 'Sending...' : acart.recovery_email_sent ? 'Recovery email already sent' : 'Send Recovery Email'}
                             </button>
                           )}
                           
