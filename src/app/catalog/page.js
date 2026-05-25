@@ -524,12 +524,17 @@ export default function CatalogPage() {
         if (cart.length > 0 || localStorage.getItem('had_items')) {
           if (cart.length > 0) localStorage.setItem('had_items', 'true');
           try {
+            const leadContact = localStorage.getItem('catalog_lead_contact');
+            const isEmail = leadContact && leadContact.includes('@');
+            const resolvedEmail = customerEmail || (isEmail ? leadContact : null);
+            const resolvedPhone = customerPhone || (leadContact && !isEmail ? leadContact : null);
+
             await supabase.from('abandoned_carts').upsert({
               session_id: sessionId,
               cart_data: cart,
               customer_name: customerName || null,
-              customer_phone: customerPhone || null,
-              customer_email: customerEmail || null,
+              customer_phone: resolvedPhone || null,
+              customer_email: resolvedEmail || null,
               ip_address: customerMetadata?.ip_address || null,
               location_data: customerMetadata?.location_data || null,
               device_info: customerMetadata?.device_info || null,
