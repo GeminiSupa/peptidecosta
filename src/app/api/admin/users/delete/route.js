@@ -11,6 +11,10 @@ export async function DELETE(request) {
     }
 
     const supabaseAdmin = getSupabaseAdmin();
+    
+    console.log('--- DEBUG DELETE USER ---');
+    console.log('URL loaded:', process.env.NEXT_PUBLIC_SUPABASE_URL ? process.env.NEXT_PUBLIC_SUPABASE_URL.substring(0, 15) : 'MISSING');
+    console.log('KEY loaded:', process.env.SUPABASE_SERVICE_ROLE_KEY ? process.env.SUPABASE_SERVICE_ROLE_KEY.substring(0, 15) : 'MISSING');
 
     // Delete user from Auth. 
     // Since `admin_profiles.user_id` has ON DELETE CASCADE, the profile will be automatically removed.
