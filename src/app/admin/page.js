@@ -58,6 +58,7 @@ const getReferralLabel = (lead) => {
       if (host.includes('facebook.com')) return 'Facebook (Org)';
       if (host.includes('google.com')) return 'Google (Organic)';
       if (host.includes('t.co') || host.includes('twitter.com') || host.includes('x.com')) return 'X / Twitter';
+      if (host.includes('l.wl.co') || host.includes('whatsapp')) return 'Whatsapp';
       return url.hostname.replace('www.', '');
     } catch (e) {
       return 'Referral';
