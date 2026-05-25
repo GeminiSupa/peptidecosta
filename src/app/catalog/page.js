@@ -188,14 +188,57 @@ export default function CatalogPage() {
         const utmCampaign = localStorage.getItem('lead_utm_campaign') || null;
         const referrer = localStorage.getItem('lead_referrer') || null;
 
+        let ip = customerMetadata?.ip_address || null;
+        let city = customerMetadata?.location_data?.city || null;
+        let region = customerMetadata?.location_data?.region || null;
+        let country = customerMetadata?.location_data?.country || null;
+
+        // Fallback: If metadata is not loaded yet (e.g. quick form submission or adblocker delay), fetch it on-the-fly
+        if (!ip) {
+          try {
+            // Attempt 1: ipapi.co
+            let res = await fetch('https://ipapi.co/json/').catch(() => null);
+            if (res && res.ok) {
+              const data = await res.json();
+              ip = data.ip || null;
+              city = data.city || null;
+              region = data.region || null;
+              country = data.country_name || null;
+            }
+            
+            // Attempt 2: db-ip.com as backup (HTTPS & Free)
+            if (!ip) {
+              res = await fetch('https://api.db-ip.com/v2/free/self').catch(() => null);
+              if (res && res.ok) {
+                const data = await res.json();
+                ip = data.ipAddress || null;
+                city = data.city || null;
+                region = data.stateProv || null;
+                country = data.countryName || null;
+              }
+            }
+
+            // Attempt 3: ipify.org (raw IP backup)
+            if (!ip) {
+              res = await fetch('https://api.ipify.org?format=json').catch(() => null);
+              if (res && res.ok) {
+                const data = await res.json();
+                ip = data.ip || null;
+              }
+            }
+          } catch (e) {
+            console.warn("Failed to fetch IP fallback on submit:", e);
+          }
+        }
+
         await supabase.from('catalog_leads').insert([{
           contact_method: isEmail ? 'email' : 'whatsapp',
           contact_value: gateInput.trim(),
           language: lang,
-          ip_address: customerMetadata?.ip_address || null,
-          city: customerMetadata?.location_data?.city || null,
-          region: customerMetadata?.location_data?.region || null,
-          country: customerMetadata?.location_data?.country || null,
+          ip_address: ip,
+          city: city,
+          region: region,
+          country: country,
           utm_source: utmSource,
           utm_medium: utmMedium,
           utm_campaign: utmCampaign,

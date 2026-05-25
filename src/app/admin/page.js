@@ -97,6 +97,8 @@ export default function AdminPage() {
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
   const [leads, setLeads] = useState([]);
+  const [expandedLeadViews, setExpandedLeadViews] = useState({});
+  const [selectedLeadDetails, setSelectedLeadDetails] = useState(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [productViews, setProductViews] = useState([]);
   const [isDbConnected, setIsDbConnected] = useState(false);
@@ -2525,12 +2527,10 @@ export default function AdminPage() {
                         />
                       </th>
                       <th style={{ padding: '16px' }}>Date</th>
-                      <th style={{ padding: '16px' }}>Method</th>
-                      <th style={{ padding: '16px' }}>Contact Info</th>
+                      <th style={{ padding: '16px' }}>Contact Details</th>
                       <th style={{ padding: '16px' }}>Location</th>
                       <th style={{ padding: '16px' }}>Attribution</th>
-                      <th style={{ padding: '16px' }}>Behavior / Views</th>
-                      <th style={{ padding: '16px' }}>Language</th>
+                      <th style={{ padding: '16px' }}>Browsing History</th>
                       <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
@@ -2545,137 +2545,135 @@ export default function AdminPage() {
                             style={{ cursor: 'pointer' }}
                           />
                         </td>
-                        <td style={{ padding: '16px' }}>{new Date(lead.created_at).toLocaleString()}</td>
+                        <td style={{ padding: '16px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                          {new Date(lead.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
+                        </td>
                         <td style={{ padding: '16px' }}>
                           {editingLeadId === lead.id ? (
-                            <select 
-                              value={editLeadMethod} 
-                              onChange={(e) => setEditLeadMethod(e.target.value)}
-                              className="admin-input"
-                              style={{ width: '100px', padding: '6px 12px', height: 'auto', fontSize: '0.85rem' }}
-                            >
-                              <option value="whatsapp">whatsapp</option>
-                              <option value="email">email</option>
-                            </select>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <select 
+                                value={editLeadMethod} 
+                                onChange={(e) => setEditLeadMethod(e.target.value)}
+                                className="admin-input"
+                                style={{ width: '90px', padding: '4px 8px', height: 'auto', fontSize: '0.8rem' }}
+                              >
+                                <option value="whatsapp">whatsapp</option>
+                                <option value="email">email</option>
+                              </select>
+                              <input 
+                                type="text" 
+                                value={editLeadValue} 
+                                onChange={(e) => setEditLeadValue(e.target.value)}
+                                className="admin-input"
+                                style={{ flex: 1, padding: '4px 8px', height: 'auto', fontSize: '0.8rem' }}
+                              />
+                            </div>
                           ) : (
-                            <span style={{ 
-                              background: lead.contact_method === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)', 
-                              color: lead.contact_method === 'whatsapp' ? '#4ade80' : '#38bdf8', 
-                              padding: '6px 12px', 
-                              borderRadius: '20px', 
-                              fontSize: '0.75rem', 
-                              fontWeight: 'bold',
-                              textTransform: 'uppercase',
-                              display: 'inline-block',
-                              border: lead.contact_method === 'whatsapp' ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'
-                            }}>
-                              {lead.contact_method}
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ padding: '16px', fontWeight: 'bold' }}>
-                          {editingLeadId === lead.id ? (
-                            <input 
-                              type="text" 
-                              value={editLeadValue} 
-                              onChange={(e) => setEditLeadValue(e.target.value)}
-                              className="admin-input"
-                              style={{ width: '100%', padding: '6px 12px', height: 'auto', fontSize: '0.85rem' }}
-                            />
-                          ) : (
-                            lead.contact_value
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ 
+                                background: lead.contact_method === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)', 
+                                color: lead.contact_method === 'whatsapp' ? '#4ade80' : '#38bdf8', 
+                                padding: '4px 8px', 
+                                borderRadius: '6px', 
+                                fontSize: '0.7rem', 
+                                fontWeight: 'bold',
+                                textTransform: 'uppercase',
+                                border: lead.contact_method === 'whatsapp' ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'
+                              }}>
+                                {lead.contact_method === 'whatsapp' ? '💬 WA' : '✉️ Email'}
+                              </span>
+                              <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem' }}>
+                                {lead.contact_value}
+                              </span>
+                              <span style={{ padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 'bold' }}>
+                                {lead.language ? lead.language.toUpperCase() : 'EN'}
+                              </span>
+                            </div>
                           )}
                         </td>
                         <td style={{ padding: '16px' }}>
                           {lead.city || lead.country ? (
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontWeight: 600, color: '#f8fafc' }}>
-                                {[lead.city, lead.country].filter(Boolean).join(', ')}
-                              </span>
-                              {lead.ip_address && (
-                                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                                  🌐 {lead.ip_address}
-                                </span>
-                              )}
-                            </div>
+                            <span style={{ color: '#f8fafc', fontSize: '0.85rem' }}>
+                              {[lead.city, lead.country].filter(Boolean).join(', ')}
+                            </span>
                           ) : (
-                            <span style={{ color: '#64748b', fontSize: '0.8rem' }}>—</span>
+                            <span style={{ color: '#64748b', fontSize: '0.85rem' }}>—</span>
                           )}
                         </td>
                         <td style={{ padding: '16px' }}>
-                          {(() => {
-                            const label = getReferralLabel(lead);
-                            const hasCampaign = lead.utm_campaign || lead.utm_medium;
-                            return (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <span style={{ 
-                                  background: label === 'Direct' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                                  color: label === 'Direct' ? '#94a3b8' : '#f59e0b',
-                                  padding: '4px 8px',
-                                  borderRadius: '12px',
-                                  fontSize: '0.75rem',
-                                  fontWeight: 'bold',
-                                  width: 'fit-content'
-                                }} title={lead.referrer || ''}>
-                                  {label}
-                                </span>
-                                {hasCampaign && (
-                                  <span style={{ fontSize: '0.7rem', color: '#64748b' }} title={`Medium: ${lead.utm_medium || ''} | Campaign: ${lead.utm_campaign || ''}`}>
-                                    📢 {lead.utm_campaign || lead.utm_medium}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })()}
+                          <span style={{ 
+                            background: getReferralLabel(lead) === 'Direct' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                            color: getReferralLabel(lead) === 'Direct' ? '#94a3b8' : '#f59e0b',
+                            padding: '4px 8px',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold'
+                          }}>
+                            {getReferralLabel(lead)}
+                          </span>
                         </td>
                         <td style={{ padding: '16px' }}>
                           {(() => {
                             const views = productViews.filter(v => v.contact_value === lead.contact_value);
-                            if (views.length === 0) return <span style={{ color: '#64748b', fontSize: '0.8rem' }}>No products viewed</span>;
+                            if (views.length === 0) return <span style={{ color: '#64748b', fontSize: '0.8rem' }}>No views</span>;
                             return (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {views.slice(0, 3).map((v, i) => (
-                                  <span key={i} style={{ fontSize: '0.8rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', padding: '2px 6px', borderRadius: '4px', width: 'fit-content' }}>
-                                    {v.product_name}
-                                  </span>
-                                ))}
-                                {views.length > 3 && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>+{views.length - 3} more</span>}
-                              </div>
+                              <button 
+                                onClick={() => setSelectedLeadDetails(lead)}
+                                style={{ 
+                                  background: 'rgba(56, 189, 248, 0.1)', 
+                                  border: '1px solid rgba(56, 189, 248, 0.2)', 
+                                  color: '#38bdf8', 
+                                  padding: '4px 10px', 
+                                  borderRadius: '20px', 
+                                  fontSize: '0.75rem', 
+                                  fontWeight: 'bold',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px'
+                                }}
+                              >
+                                👀 {views.length} {views.length === 1 ? 'Product' : 'Products'}
+                              </button>
                             );
                           })()}
                         </td>
                         <td style={{ padding: '16px' }}>
-                          <span style={{ padding: '4px 8px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                            {lead.language ? lead.language.toUpperCase() : 'EN'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '16px' }}>
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
                             {editingLeadId === lead.id ? (
                               <button 
                                 className="admin-btn" 
                                 onClick={() => handleLeadUpdate(lead.id)}
-                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none' }}
+                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
                               >
                                 Save
                               </button>
                             ) : (
-                              <button 
-                                className="admin-btn" 
-                                onClick={() => {
-                                  setEditingLeadId(lead.id);
-                                  setEditLeadValue(lead.contact_value);
-                                  setEditLeadMethod(lead.contact_method);
-                                }}
-                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc' }}
-                              >
-                                Edit
-                              </button>
+                              <>
+                                <button 
+                                  className="admin-btn" 
+                                  onClick={() => setSelectedLeadDetails(lead)}
+                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                                >
+                                  Details
+                                </button>
+                                <button 
+                                  className="admin-btn" 
+                                  onClick={() => {
+                                    setEditingLeadId(lead.id);
+                                    setEditLeadValue(lead.contact_value);
+                                    setEditLeadMethod(lead.contact_method);
+                                  }}
+                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', borderRadius: '6px' }}
+                                >
+                                  Edit
+                                </button>
+                              </>
                             )}
                             <button 
                               className="admin-btn" 
                               onClick={() => handleLeadDelete(lead.id)}
-                              style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444' }}
+                              style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', borderRadius: '6px' }}
                             >
                               Delete
                             </button>
@@ -2697,6 +2695,150 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {/* Lead Details Modal */}
+      {selectedLeadDetails && (
+        <div className="modal active" onClick={() => setSelectedLeadDetails(null)} style={{ zIndex: 210 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', padding: '30px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <button className="close-modal" onClick={() => setSelectedLeadDetails(null)} style={{ color: '#94a3b8', fontSize: '1.5rem', top: '20px', right: '20px', background: 'none', border: 'none', cursor: 'pointer' }}>&times;</button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ padding: '10px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '12px', color: '#38bdf8', fontSize: '1.5rem' }}>👤</div>
+              <div>
+                <h2 style={{ fontSize: '1.3rem', fontWeight: '900', color: '#f8fafc', margin: 0 }}>Lead Profile</h2>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>ID: {selectedLeadDetails.id}</span>
+              </div>
+            </div>
+
+            {/* Profile Grid */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {/* SECTION: CONTACT & BASICS */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Contact Details</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Method</label>
+                    <span style={{ 
+                      background: selectedLeadDetails.contact_method === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)', 
+                      color: selectedLeadDetails.contact_method === 'whatsapp' ? '#4ade80' : '#38bdf8', 
+                      padding: '4px 10px', 
+                      borderRadius: '20px', 
+                      fontSize: '0.75rem', 
+                      fontWeight: 'bold',
+                      textTransform: 'uppercase',
+                      display: 'inline-block',
+                      border: selectedLeadDetails.contact_method === 'whatsapp' ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'
+                    }}>{selectedLeadDetails.contact_method}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Value</label>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc' }}>{selectedLeadDetails.contact_value}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Captured On</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{new Date(selectedLeadDetails.created_at).toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Language</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>{selectedLeadDetails.language ? selectedLeadDetails.language.toUpperCase() : 'EN'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: GEOGRAPHICAL DETAILS */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Geographic Insights</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>IP Address</label>
+                    <span style={{ fontSize: '0.85rem', color: '#f8fafc', fontFamily: 'monospace' }}>🌐 {selectedLeadDetails.ip_address || 'Not captured'}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Location</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: '600' }}>
+                      📍 {[selectedLeadDetails.city, selectedLeadDetails.region, selectedLeadDetails.country].filter(Boolean).join(', ') || 'Not captured'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: ATTRIBUTION & CAMPAIGN */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Marketing Attribution</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Attribution Source</label>
+                      <span style={{ 
+                        background: getReferralLabel(selectedLeadDetails) === 'Direct' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        color: getReferralLabel(selectedLeadDetails) === 'Direct' ? '#94a3b8' : '#f59e0b',
+                        padding: '4px 10px',
+                        borderRadius: '20px',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold',
+                        display: 'inline-block'
+                      }}>{getReferralLabel(selectedLeadDetails)}</span>
+                    </div>
+                    {selectedLeadDetails.utm_campaign && (
+                      <div>
+                        <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>UTM Campaign</label>
+                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>📢 {selectedLeadDetails.utm_campaign}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {selectedLeadDetails.utm_source && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div>
+                        <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>UTM Source</label>
+                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{selectedLeadDetails.utm_source}</span>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>UTM Medium</label>
+                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{selectedLeadDetails.utm_medium || '—'}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedLeadDetails.referrer && (
+                    <div>
+                      <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>HTTP Referrer</label>
+                      <span style={{ fontSize: '0.8rem', color: '#64748b', wordBreak: 'break-all', display: 'block', background: 'rgba(0,0,0,0.2)', padding: '6px 10px', borderRadius: '6px' }}>
+                        {selectedLeadDetails.referrer}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION: PRODUCT VIEWS (BEHAVIOR) */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', maxHeight: '300px', overflowY: 'auto' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Browsing Behavior ({productViews.filter(v => v.contact_value === selectedLeadDetails.contact_value).length} views)</h3>
+                {(() => {
+                  const views = productViews.filter(v => v.contact_value === selectedLeadDetails.contact_value);
+                  if (views.length === 0) {
+                    return <span style={{ color: '#64748b', fontSize: '0.85rem' }}>No catalog products viewed yet.</span>;
+                  }
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {views.map((v, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(56, 189, 248, 0.05)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
+                          <span style={{ fontSize: '0.85rem', color: '#38bdf8', fontWeight: 'bold' }}>{v.product_name}</span>
+                          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                            {v.viewed_at ? new Date(v.viewed_at).toLocaleTimeString() : 'Viewed'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Blog Editor Modal */}
       {editingBlog && (
