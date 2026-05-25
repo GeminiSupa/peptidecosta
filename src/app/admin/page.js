@@ -1445,7 +1445,7 @@ export default function AdminPage() {
             >
               <ClipboardList size={14} />
               <span className="tab-label">Orders</span>
-              {orders.length > 0 && <span className="tab-count" style={{ background: '#ef4444' }}>{orders.length}</span>}
+              {orders.filter(o => (o.status || 'Pending') === 'Pending').length > 0 && <span className="tab-count" style={{ background: '#ef4444' }}>{orders.filter(o => (o.status || 'Pending') === 'Pending').length}</span>}
             </button>
           )}
           {hasAccess('customers') && (
@@ -1901,9 +1901,8 @@ export default function AdminPage() {
                   >
                     <option value="All">All Statuses</option>
                     <option value="Pending">Pending</option>
-                    <option value="Paid">Paid</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Cancelled">Cancelled</option>
+                    <option value="Processing">Processing</option>
+                    <option value="Order Complete">Order Complete</option>
                   </select>
                 </div>
               </div>
@@ -2016,18 +2015,17 @@ export default function AdminPage() {
                                   borderRadius: '6px',
                                   fontSize: '0.75rem',
                                   width: '110px',
-                                  background: order.status === 'Completed' ? 'rgba(34, 197, 94, 0.15)' : order.status === 'Paid' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                                  color: order.status === 'Completed' ? '#4ade80' : order.status === 'Paid' ? '#38bdf8' : '#f59e0b',
+                                  background: order.status === 'Order Complete' ? 'rgba(34, 197, 94, 0.15)' : order.status === 'Processing' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                  color: order.status === 'Order Complete' ? '#4ade80' : order.status === 'Processing' ? '#38bdf8' : '#f59e0b',
                                   fontWeight: 'bold',
-                                  border: order.status === 'Completed' ? '1px solid rgba(34, 197, 94, 0.3)' : order.status === 'Paid' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                                  border: order.status === 'Order Complete' ? '1px solid rgba(34, 197, 94, 0.3)' : order.status === 'Processing' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
                                   textAlign: 'center',
                                   cursor: 'pointer'
                                 }}
                               >
                                 <option value="Pending">Pending</option>
-                                <option value="Paid">Paid</option>
-                                <option value="Completed">Completed</option>
-                                <option value="Cancelled">Cancelled</option>
+                                <option value="Processing">Processing</option>
+                                <option value="Order Complete">Order Complete</option>
                               </select>
                             </td>
                             <td style={{ padding: '16px' }}>

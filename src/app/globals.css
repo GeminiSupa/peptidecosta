@@ -4243,3 +4243,15 @@ body {
     }
 }
 
+/* Premium Gen-Peptide Glassmorphism Styles */
+.glassmorphism-overlay {
+    background: rgba(0, 39, 102, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .glassmorphism-overlay {
+    background: rgba(5, 11, 24, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}

@@ -248,9 +248,10 @@ const handleWhatsAppClick = (src) => {
       <main>
 
         {/* ── HERO ──────────────────────────────────────────── */}
-        <section className="lp-hero">
-          <div className="lp-hero-glow" />
-          <div className="container lp-hero-grid">
+        <section className="lp-hero" style={{ position: 'relative', overflow: 'hidden' }}>
+          <div className="lp-hero-bg-image" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundImage: 'url(/peptide_molecular_3d.png)', backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.15, zIndex: 0 }} />
+          <div className="lp-hero-glow" style={{ zIndex: 1 }} />
+          <div className="container lp-hero-grid" style={{ position: 'relative', zIndex: 2 }}>
             <div className="lp-hero-text-block">
               <div className="hero-badge">{t.badge}</div>
               <h1 className="hero-title">{t.hero_title}</h1>
@@ -293,9 +294,9 @@ const handleWhatsAppClick = (src) => {
 
             <div className="lp-hero-visual-block">
               <div className="lp-hero-image-glow" />
-              <img src="/hero_peptide_vial.png" alt="Peptides Costa Rica Vial" className="lp-hero-main-img" />
+              <img src="/vial_costarica_hero.png" alt="Peptides Costa Rica Vial" className="lp-hero-main-img" style={{ mixBlendMode: 'multiply' }} />
 
-              <div className="lp-floating-badge">
+              <div className="lp-floating-badge" style={{ backdropFilter: 'blur(12px)', background: 'rgba(255, 255, 255, 0.1)' }}>
                 <div className="lp-badge-icon">
                   <FlaskConical size={18} />
                 </div>
@@ -322,8 +323,8 @@ const handleWhatsAppClick = (src) => {
             <div className="lp-about-cards-grid">
               {/* Card 1: Scientist/Lab Image */}
               <div className="lp-about-card lp-about-card--image">
-                <img src="/science_lab_about.png" alt="Science Laboratory" className="lp-about-card-img" />
-                <div className="lp-about-card-overlay">
+                <img src="/vials_group_costarica.png" alt="Peptides Costa Rica Group" className="lp-about-card-img" style={{ mixBlendMode: 'multiply', width: '100%', height: 'auto' }} />
+                <div className="lp-about-card-overlay glassmorphism-overlay">
                   <h3>{lang === 'en' ? 'Trust, Transparency, Results' : 'Confianza, Transparencia, Resultados'}</h3>
                   <p>{lang === 'en' ? 'Rigorous verification of every single batch we supply.' : 'Verificación rigurosa de cada lote que distribuimos.'}</p>
                 </div>

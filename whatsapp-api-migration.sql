@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.whatsapp_messages (
     wa_id TEXT NOT NULL,               -- Real WhatsApp phone number (e.g. "50612345678")
     display_name TEXT,                 -- WhatsApp profile name
     message_text TEXT,
-    message_type TEXT DEFAULT 'text',  -- text, image, document, etc.
+    message_type TEXT DEFAULT 'text',  -- text, image, document, etc.a
     direction TEXT DEFAULT 'inbound',  -- inbound = customer→business, outbound = business→customer
     matched_order_id UUID,             -- Link to the order if we can match it
     raw_payload JSONB,                 -- Full webhook payload for debugging
