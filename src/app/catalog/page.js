@@ -11,7 +11,7 @@ import {
   Plus, Minus, Trash2, Check, AlertCircle, ArrowLeft,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
-  CreditCard, Smartphone, MessageCircle, Lock
+  CreditCard, Smartphone, MessageCircle, Lock, Share2
 } from 'lucide-react';
 
 const WHATSAPP_NUMBER = '50684046973';
@@ -816,6 +816,22 @@ export default function CatalogPage() {
       } catch (e) {
         // ignore tracking errors
       }
+    }
+  };
+
+  const handleShareProduct = (e, product) => {
+    if (e) e.stopPropagation();
+    const url = `${window.location.origin}/catalog?product=${encodeURIComponent(product.product)}`;
+    if (navigator.share) {
+      navigator.share({
+        title: product.product,
+        url: url
+      }).catch((err) => {
+        if (err.name !== 'AbortError') console.error('Share error:', err);
+      });
+    } else {
+      navigator.clipboard.writeText(url);
+      alert(lang === 'en' ? 'Link copied to clipboard!' : '¡Enlace copiado al portapapeles!');
     }
   };
 
@@ -2272,9 +2288,18 @@ export default function CatalogPage() {
               <div className="product-category" style={{ color: 'var(--text-primary)', paddingRight: 0 }}>
                 {translateCategory(selectedProduct.category)}
               </div>
-              <h2 style={{ fontSize: '1.5rem', color: 'var(--text-main)', fontWeight: '800', paddingRight: 0 }}>
-                {selectedProduct.product}
-              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                <h2 style={{ fontSize: '1.5rem', color: 'var(--text-main)', fontWeight: '800', margin: 0 }}>
+                  {selectedProduct.product}
+                </h2>
+                <button 
+                  onClick={(e) => handleShareProduct(e, selectedProduct)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="Share Product"
+                >
+                  <Share2 size={18} />
+                </button>
+              </div>
             </div>
             
             <div style={{ background: 'var(--bg-secondary)', padding: '20px', borderRadius: '16px', marginBottom: '24px', border: '1px solid var(--border)' }}>
