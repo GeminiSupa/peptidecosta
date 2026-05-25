@@ -99,6 +99,8 @@ export default function AdminPage() {
   const [leads, setLeads] = useState([]);
   const [expandedLeadViews, setExpandedLeadViews] = useState({});
   const [selectedLeadDetails, setSelectedLeadDetails] = useState(null);
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
+  const [selectedCartDetails, setSelectedCartDetails] = useState(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [productViews, setProductViews] = useState([]);
   const [isDbConnected, setIsDbConnected] = useState(false);
@@ -1919,150 +1921,138 @@ export default function AdminPage() {
                 No orders registered in the system yet.
               </div>
             ) : (
-              <div className="orders-grid">
-                {orders
-                  .filter(o => {
-                    if (orderStatusFilter !== 'All' && o.status !== orderStatusFilter) return false;
-                    if (orderSearch) {
-                      const s = orderSearch.toLowerCase();
-                      return (
-                        o.customer_name?.toLowerCase().includes(s) || 
-                        o.customer_phone?.toLowerCase().includes(s) ||
-                        o.customer_email?.toLowerCase().includes(s) ||
-                        o.id?.toLowerCase().includes(s) ||
-                        o.tracking_number?.toLowerCase().includes(s)
-                      );
-                    }
-                    return true;
-                  })
-                  .map(order => {
-                  const items = Array.isArray(order.items) ? order.items : [];
-                  const orderDate = new Date(order.created_at).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
-                  
-                  return (
-                    <div key={order.id} className="order-card">
-                      <div className="order-card-header">
-                        <div className="order-customer-info">
-                          <h4>{order.customer_name}</h4>
-                          {order.order_number && <p style={{ color: '#fbbf24', fontSize: '0.85rem', fontWeight: 600, marginTop: '2px' }}>Order #: {order.order_number}</p>}
-                          <p>WhatsApp: {order.customer_phone}</p>
-                          {order.customer_email && <p>Email: {order.customer_email}</p>}
-                          {order.shipping_address && (
-                            <p style={{ marginTop: '4px', fontSize: '0.85rem', color: '#94a3b8' }}>
-                              <strong style={{ color: '#fff' }}>Address:</strong> {order.shipping_address}
-                            </p>
-                          )}
-                          {(order.ip_address || order.location_data) && (
-                            <div style={{ marginTop: '8px', padding: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', fontSize: '0.75rem', color: '#94a3b8' }}>
-                              {order.location_data?.city && <div>📍 {order.location_data.city}, {order.location_data.country}</div>}
-                              {order.ip_address && <div>🌐 IP: {order.ip_address}</div>}
-                              {order.device_info && <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '250px' }} title={order.device_info}>💻 {order.device_info}</div>}
-                            </div>
-                          )}
-                        </div>
-                        <div className="order-meta-info">
-                          <span className="order-date">{orderDate}</span>
-                          <select 
-                            className="cell-select"
-                            value={order.status || 'Pending'}
-                            onChange={(e) => handleOrderStatusUpdate(order.id, e.target.value)}
-                            style={{
-                              width: '120px',
-                              background: order.status === 'Completed' ? 'rgba(34, 197, 94, 0.2)' : order.status === 'Paid' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(245, 158, 11, 0.2)',
-                              color: order.status === 'Completed' ? '#4ade80' : order.status === 'Paid' ? '#38bdf8' : '#f59e0b',
-                              fontWeight: 'bold',
-                              border: 'none',
-                              textAlign: 'center'
-                            }}
-                          >
-                            <option value="Pending">Pending</option>
-                            <option value="Paid">Paid</option>
-                            <option value="Completed">Completed</option>
-                            <option value="Cancelled">Cancelled</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <table className="order-items-table">
-                        <thead>
-                          <tr>
-                            <th>Item Name</th>
-                            <th style={{ width: '80px', textAlign: 'center' }}>Qty</th>
-                            <th style={{ width: '120px', textAlign: 'right' }}>Price Each</th>
-                            <th style={{ width: '140px', textAlign: 'right' }}>Total</th>
+              <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <table className="spreadsheet-table">
+                  <thead>
+                    <tr>
+                      <th style={{ padding: '16px' }}>Date</th>
+                      <th style={{ padding: '16px' }}>Order Info</th>
+                      <th style={{ padding: '16px' }}>Customer Details</th>
+                      <th style={{ padding: '16px' }}>Total Amount</th>
+                      <th style={{ padding: '16px' }}>Payment</th>
+                      <th style={{ padding: '16px' }}>Status</th>
+                      <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders
+                      .filter(o => {
+                        if (orderStatusFilter !== 'All' && o.status !== orderStatusFilter) return false;
+                        if (orderSearch) {
+                          const s = orderSearch.toLowerCase();
+                          return (
+                            o.customer_name?.toLowerCase().includes(s) || 
+                            o.customer_phone?.toLowerCase().includes(s) ||
+                            o.customer_email?.toLowerCase().includes(s) ||
+                            o.id?.toLowerCase().includes(s) ||
+                            o.tracking_number?.toLowerCase().includes(s)
+                          );
+                        }
+                        return true;
+                      })
+                      .map(order => {
+                        const items = Array.isArray(order.items) ? order.items : [];
+                        const orderDate = new Date(order.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+                        
+                        return (
+                          <tr key={order.id}>
+                            <td style={{ padding: '16px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                              {orderDate}
+                            </td>
+                            <td style={{ padding: '16px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ fontWeight: 'bold', color: '#fbbf24', fontSize: '0.85rem' }}>
+                                  #{order.order_number || order.id.slice(0, 8)}
+                                </span>
+                                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                  {items.length} {items.length === 1 ? 'item' : 'items'}
+                                </span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '16px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem' }}>
+                                  {order.customer_name}
+                                </span>
+                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                  💬 {order.customer_phone}
+                                </span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8', fontSize: '0.9rem' }}>
+                              {order.currency === 'USD' 
+                                ? `$${order.total_usd}` 
+                                : `₡${order.total_crc.toLocaleString('en-US')}`
+                              }
+                            </td>
+                            <td style={{ padding: '16px' }}>
+                              <span style={{ 
+                                padding: '4px 8px', 
+                                borderRadius: '6px', 
+                                background: 'rgba(255,255,255,0.05)', 
+                                color: '#94a3b8',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold'
+                              }}>
+                                {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE' : order.payment_method === 'tilopay' ? '💳 Card' : '💬 WA'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '16px' }}>
+                              <select 
+                                className="cell-select"
+                                value={order.status || 'Pending'}
+                                onChange={(e) => handleOrderStatusUpdate(order.id, e.target.value)}
+                                style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                  width: '110px',
+                                  background: order.status === 'Completed' ? 'rgba(34, 197, 94, 0.15)' : order.status === 'Paid' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                  color: order.status === 'Completed' ? '#4ade80' : order.status === 'Paid' ? '#38bdf8' : '#f59e0b',
+                                  fontWeight: 'bold',
+                                  border: order.status === 'Completed' ? '1px solid rgba(34, 197, 94, 0.3)' : order.status === 'Paid' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                                  textAlign: 'center',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <option value="Pending">Pending</option>
+                                <option value="Paid">Paid</option>
+                                <option value="Completed">Completed</option>
+                                <option value="Cancelled">Cancelled</option>
+                              </select>
+                            </td>
+                            <td style={{ padding: '16px' }}>
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                <button 
+                                  className="admin-btn" 
+                                  onClick={() => setSelectedOrderDetails(order)}
+                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                                >
+                                  Details
+                                </button>
+                                <a 
+                                  href={`https://wa.me/${order.customer_phone.replace(/[^0-9]/g, '')}`} 
+                                  target="_blank" 
+                                  rel="noreferrer"
+                                  className="admin-btn"
+                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: '#4ade80', borderRadius: '6px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                  WhatsApp
+                                </a>
+                                <button
+                                  className="admin-btn"
+                                  onClick={() => handleDeleteOrder(order.id)}
+                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', borderRadius: '6px' }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {items.map((item, i) => (
-                            <tr key={i}>
-                              <td>{item.product}</td>
-                              <td style={{ textAlign: 'center' }}>x{item.qty}</td>
-                              <td style={{ textAlign: 'right' }}>
-                                {order.currency === 'USD' ? `$${item.price}` : `₡${item.price.toLocaleString('en-US')}`}
-                              </td>
-                              <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
-                                {order.currency === 'USD' ? `$${item.price * item.qty}` : `₡${(item.price * item.qty).toLocaleString('en-US')}`}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-
-                      <div className="order-card-footer">
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                          <span className="order-total-lbl">Revenues:</span>
-                          <span className="order-total-val">
-                            {order.currency === 'USD' 
-                              ? `$${order.total_usd}` 
-                              : `₡${order.total_crc.toLocaleString('en-US')}`
-                            }
-                          </span>
-                          <span style={{ marginLeft: '12px', fontSize: '0.75rem', fontWeight: 'bold', padding: '4px 8px', borderRadius: '12px', background: 'rgba(255,255,255,0.1)', color: '#94a3b8' }}>
-                            {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE · Tilopay' : order.payment_method === 'tilopay' ? '💳 Tilopay Card' : '💬 WhatsApp'}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                          {/* Tracking Number Input */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Tracking:</span>
-                            <input 
-                              type="text" 
-                              placeholder="Add tracking #" 
-                              defaultValue={order.tracking_number || ''}
-                              onBlur={(e) => {
-                                if (e.target.value !== order.tracking_number) {
-                                  handleOrderTrackingUpdate(order.id, e.target.value);
-                                }
-                              }}
-                              style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '0.8rem', outline: 'none', width: '120px' }}
-                            />
-                          </div>
-                          
-                          {/* WhatsApp direct contact link */}
-                          <a 
-                            href={`https://wa.me/${order.customer_phone.replace(/[^0-9]/g, '')}`} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="admin-btn"
-                            style={{ background: 'rgba(34, 197, 94, 0.1)', borderColor: 'rgba(34, 197, 94, 0.2)', color: '#4ade80' }}
-                          >
-                            <MessageSquare size={14} />
-                            WhatsApp
-                          </a>
-                          {/* Delete order */}
-                          <button
-                            className="admin-btn"
-                            onClick={() => handleDeleteOrder(order.id)}
-                            style={{ background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)', color: '#f87171' }}
-                          >
-                            <Trash2 size={14} />
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                        );
+                      })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -2156,7 +2146,7 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
-            
+
             {loadingAbandonedCarts ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading carts...</div>
             ) : abandonedCarts.length === 0 ? (
@@ -2164,115 +2154,130 @@ export default function AdminPage() {
                 No active or abandoned carts currently.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {abandonedCarts.map(acart => (
-                  <div key={acart.session_id} style={{ background: '#0e1626', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                      <div>
-                        <h3 style={{ margin: '0 0 4px 0', fontSize: '1rem', color: '#f8fafc' }}>{acart.customer_name || 'Anonymous User'}</h3>
-                        <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-                          Phone: {acart.customer_phone || 'Not provided'}
-                          {acart.customer_email && <div>Email: {acart.customer_email}</div>}
-                        </div>
-                        
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                          {acart.customer_email && (
-                            <button
-                              onClick={() => handleSendRecoveryEmail(acart)}
-                              disabled={sendingRecoveryEmail[acart.session_id]}
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '0.75rem',
-                                background: acart.recovery_email_sent ? 'rgba(56, 189, 248, 0.1)' : 'rgba(16, 185, 129, 0.15)',
-                                border: acart.recovery_email_sent ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
-                                color: acart.recovery_email_sent ? '#38bdf8' : '#34d399',
-                                borderRadius: '8px',
+              <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <table className="spreadsheet-table">
+                  <thead>
+                    <tr>
+                      <th style={{ padding: '16px' }}>Last Updated</th>
+                      <th style={{ padding: '16px' }}>Customer</th>
+                      <th style={{ padding: '16px' }}>Cart Details</th>
+                      <th style={{ padding: '16px' }}>Recovery Email</th>
+                      <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {abandonedCarts.map(acart => {
+                      const totalQty = acart.cart_data ? acart.cart_data.reduce((acc, item) => acc + (item.qty || 0), 0) : 0;
+                      
+                      return (
+                        <tr key={acart.session_id}>
+                          <td style={{ padding: '16px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                            {new Date(acart.last_updated).toLocaleString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
+                          </td>
+                          <td style={{ padding: '16px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem' }}>
+                                {acart.customer_name || 'Anonymous User'}
+                              </span>
+                              {acart.customer_phone && (
+                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                  💬 {acart.customer_phone}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px' }}>
+                            <button 
+                              onClick={() => setSelectedCartDetails(acart)}
+                              style={{ 
+                                background: 'rgba(56, 189, 248, 0.1)', 
+                                border: '1px solid rgba(56, 189, 248, 0.2)', 
+                                color: '#38bdf8', 
+                                padding: '4px 10px', 
+                                borderRadius: '20px', 
+                                fontSize: '0.75rem', 
+                                fontWeight: 'bold',
                                 cursor: 'pointer',
-                                fontWeight: '700',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px'
-                              }}
-                            >
-                              <Mail size={13} />
-                              {sendingRecoveryEmail[acart.session_id] ? 'Sending...' : acart.recovery_email_sent ? 'Recovery email already sent' : 'Send Recovery Email'}
-                            </button>
-                          )}
-                          
-                          {acart.customer_phone && (
-                            <a
-                              href={`https://wa.me/${acart.customer_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-                                acart.lang === 'en'
-                                  ? `Hi ${acart.customer_name || ''}, we saved your cart at Peptides Costa Rica! Let us know if you have any questions or need help completing your order.`
-                                  : `Hola ${acart.customer_name || ''}, ¡guardamos tu carrito en Péptidos Costa Rica! Escríbenos si tienes dudas o necesitas ayuda para completar tu compra.`
-                              )}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '0.75rem',
-                                background: 'rgba(34, 197, 94, 0.15)',
-                                border: '1px solid rgba(34, 197, 94, 0.3)',
-                                color: '#4ade80',
-                                borderRadius: '8px',
-                                textDecoration: 'none',
-                                fontWeight: '700',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '6px'
                               }}
                             >
-                              <MessageCircle size={13} />
-                              Contact via WhatsApp
-                            </a>
-                          )}
-                        </div>
-
-                        {(acart.ip_address || acart.location_data) && (
-                          <div style={{ marginTop: '12px', padding: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', fontSize: '0.75rem', color: '#94a3b8' }}>
-                            {acart.location_data?.city && <div>📍 {acart.location_data.city}, {acart.location_data.country}</div>}
-                            {acart.ip_address && <div>🌐 IP: {acart.ip_address}</div>}
-                            {acart.device_info && <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '250px' }} title={acart.device_info}>💻 {acart.device_info}</div>}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-                        <div style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-block' }}>Active Cart</div>
-                        
-                        {acart.recovery_email_sent ? (
-                          <div style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-block' }} title={acart.recovery_email_sent_at ? `Sent at: ${new Date(acart.recovery_email_sent_at).toLocaleString()}` : ''}>
-                            ✉️ Recovery Email Sent
-                          </div>
-                        ) : (
-                          <div style={{ background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', display: 'inline-block' }}>
-                            ✉️ Recovery Never Sent
-                          </div>
-                        )}
-
-                        <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
-                          Last Updated: {new Date(acart.last_updated).toLocaleString()}
-                        </div>
-                        <button
-                          onClick={() => handleDeleteCart(acart.session_id)}
-                          title="Delete this cart entry"
-                          style={{ marginTop: '4px', padding: '5px 10px', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.25)', color: '#f87171', borderRadius: '7px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        >
-                          <Trash2 size={12} /> Delete
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <h4 style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '8px' }}>Items in Cart:</h4>
-                    <div style={{ background: '#172237', padding: '12px', borderRadius: '8px' }}>
-                      {acart.cart_data.map((item, idx) => (
-                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: idx < acart.cart_data.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none', color: '#f8fafc' }}>
-                          <span>{item.product}</span>
-                          <span style={{ fontWeight: 'bold', color: '#38bdf8' }}>x{item.qty}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                              🛒 {totalQty} {totalQty === 1 ? 'Item' : 'Items'}
+                            </button>
+                          </td>
+                          <td style={{ padding: '16px' }}>
+                            <span style={{ 
+                              background: acart.recovery_email_sent ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                              color: acart.recovery_email_sent ? '#34d399' : '#94a3b8',
+                              padding: '4px 10px',
+                              borderRadius: '20px',
+                              fontSize: '0.75rem',
+                              fontWeight: 'bold',
+                              display: 'inline-block'
+                            }}>
+                              {acart.recovery_email_sent ? '✉️ Sent' : '✉️ Never Sent'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '16px' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                              <button 
+                                className="admin-btn" 
+                                onClick={() => setSelectedCartDetails(acart)}
+                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                              >
+                                Details
+                              </button>
+                              
+                              {acart.customer_email && (
+                                <button
+                                  onClick={() => handleSendRecoveryEmail(acart)}
+                                  disabled={sendingRecoveryEmail[acart.session_id]}
+                                  className="admin-btn"
+                                  style={{ 
+                                    padding: '6px 12px', 
+                                    fontSize: '0.8rem', 
+                                    background: 'rgba(56, 189, 248, 0.1)', 
+                                    border: '1px solid rgba(56, 189, 248, 0.2)', 
+                                    color: '#38bdf8', 
+                                    borderRadius: '6px',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  {sendingRecoveryEmail[acart.session_id] ? 'Sending...' : 'Email'}
+                                </button>
+                              )}
+                              
+                              {acart.customer_phone && (
+                                <a
+                                  href={`https://wa.me/${acart.customer_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                                    acart.lang === 'en'
+                                      ? `Hi ${acart.customer_name || ''}, we saved your cart at Peptides Costa Rica! Let us know if you have any questions or need help completing your order.`
+                                      : `Hola ${acart.customer_name || ''}, ¡guardamos tu carrito en Péptidos Costa Rica! Escríbenos si tienes dudas o necesitas ayuda para completar tu compra.`
+                                  )}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="admin-btn"
+                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)', color: '#4ade80', borderRadius: '6px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                                >
+                                  WhatsApp
+                                </a>
+                              )}
+                              
+                              <button
+                                onClick={() => handleDeleteCart(acart.session_id)}
+                                className="admin-btn"
+                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', borderRadius: '6px' }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -2833,6 +2838,251 @@ export default function AdminPage() {
                     </div>
                   );
                 })()}
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Details Modal */}
+      {selectedOrderDetails && (
+        <div className="modal active" onClick={() => setSelectedOrderDetails(null)} style={{ zIndex: 210 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '650px', width: '90%', maxHeight: '90vh', overflowY: 'auto', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', padding: '30px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <button className="close-modal" onClick={() => setSelectedOrderDetails(null)} style={{ color: '#94a3b8', fontSize: '1.5rem', top: '20px', right: '20px', background: 'none', border: 'none', cursor: 'pointer' }}>&times;</button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ padding: '10px', background: 'rgba(251, 191, 36, 0.1)', borderRadius: '12px', color: '#fbbf24', fontSize: '1.5rem' }}>📦</div>
+              <div>
+                <h2 style={{ fontSize: '1.3rem', fontWeight: '900', color: '#f8fafc', margin: 0 }}>Order Details</h2>
+                <span style={{ fontSize: '0.75rem', color: '#fbbf24', fontWeight: 'bold' }}>Order ID: #{selectedOrderDetails.order_number || selectedOrderDetails.id}</span>
+              </div>
+            </div>
+
+            {/* Profile Grid */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {/* SECTION: CUSTOMER INFO */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Customer Profile</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Name</label>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc' }}>{selectedOrderDetails.customer_name}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>WhatsApp / Phone</label>
+                    <span style={{ fontSize: '0.9rem', color: '#4ade80', fontWeight: 'bold' }}>💬 {selectedOrderDetails.customer_phone}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Email</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{selectedOrderDetails.customer_email || 'Not provided'}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Ordered On</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{new Date(selectedOrderDetails.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+                {selectedOrderDetails.shipping_address && (
+                  <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Shipping Address</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.4' }}>📍 {selectedOrderDetails.shipping_address}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION: TRANSACTION & STATUS */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Transaction & Status</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Payment Method</label>
+                    <span style={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: 'bold' }}>
+                      {selectedOrderDetails.payment_method === 'paypal' ? '💳 PayPal' : selectedOrderDetails.payment_method === 'sinpe' ? '📱 SINPE · Tilopay' : selectedOrderDetails.payment_method === 'tilopay' ? '💳 Credit Card' : '💬 WhatsApp Coordinate'}
+                    </span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Order Status</label>
+                    <span style={{ 
+                      background: selectedOrderDetails.status === 'Completed' ? 'rgba(34, 197, 94, 0.15)' : selectedOrderDetails.status === 'Paid' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                      color: selectedOrderDetails.status === 'Completed' ? '#4ade80' : selectedOrderDetails.status === 'Paid' ? '#38bdf8' : '#f59e0b',
+                      padding: '4px 10px',
+                      borderRadius: '20px',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold',
+                      display: 'inline-block'
+                    }}>{selectedOrderDetails.status || 'Pending'}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Tracking Number</label>
+                    <input 
+                      type="text" 
+                      placeholder="Add tracking number..." 
+                      defaultValue={selectedOrderDetails.tracking_number || ''}
+                      onBlur={(e) => handleOrderTrackingUpdate(selectedOrderDetails.id, e.target.value)}
+                      style={{ background: '#172237', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.8rem', padding: '6px 10px', borderRadius: '6px', outline: 'none', width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Currency Preferred</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>{selectedOrderDetails.currency || 'USD'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: GEOGRAPHICAL DETAILS */}
+              {(selectedOrderDetails.ip_address || selectedOrderDetails.location_data) && (
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Geographic Insights</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    {selectedOrderDetails.ip_address && (
+                      <div>
+                        <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>IP Address</label>
+                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontFamily: 'monospace' }}>🌐 {selectedOrderDetails.ip_address}</span>
+                      </div>
+                    )}
+                    {selectedOrderDetails.location_data && (
+                      <div>
+                        <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Location (IP resolved)</label>
+                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+                          📍 {[selectedOrderDetails.location_data.city, selectedOrderDetails.location_data.region, selectedOrderDetails.location_data.country].filter(Boolean).join(', ')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION: ORDER INVOICE ITEMS */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Items Purchased</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {(() => {
+                    const items = Array.isArray(selectedOrderDetails.items) ? selectedOrderDetails.items : [];
+                    return items.map((item, idx) => (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#f8fafc' }}>{item.product}</span>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                            Unit Price: {selectedOrderDetails.currency === 'USD' ? `$${item.price}` : `₡${item.price.toLocaleString('en-US')}`}
+                          </span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.85rem', color: '#cbd5e1', marginRight: '16px' }}>x{item.qty}</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#38bdf8' }}>
+                            {selectedOrderDetails.currency === 'USD' ? `$${item.price * item.qty}` : `₡${(item.price * item.qty).toLocaleString('en-US')}`}
+                          </span>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                  
+                  {/* Total summary info */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px', marginTop: '8px' }}>
+                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#f8fafc' }}>Total Invoice:</span>
+                    <span style={{ fontSize: '1.1rem', fontWeight: '900', color: '#38bdf8' }}>
+                      {selectedOrderDetails.currency === 'USD' 
+                        ? `$${selectedOrderDetails.total_usd}` 
+                        : `₡${selectedOrderDetails.total_crc.toLocaleString('en-US')}`
+                      }
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cart Details Modal */}
+      {selectedCartDetails && (
+        <div className="modal active" onClick={() => setSelectedCartDetails(null)} style={{ zIndex: 210 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', padding: '30px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <button className="close-modal" onClick={() => setSelectedCartDetails(null)} style={{ color: '#94a3b8', fontSize: '1.5rem', top: '20px', right: '20px', background: 'none', border: 'none', cursor: 'pointer' }}>&times;</button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+              <div style={{ padding: '10px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '12px', color: '#38bdf8', fontSize: '1.5rem' }}>🛒</div>
+              <div>
+                <h2 style={{ fontSize: '1.3rem', fontWeight: '900', color: '#f8fafc', margin: 0 }}>Abandoned Cart Detail</h2>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Session: {selectedCartDetails.session_id.slice(0, 12)}...</span>
+              </div>
+            </div>
+
+            {/* Profile Grid */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {/* SECTION: CUSTOMER CONTACT */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Customer Profile</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Name</label>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc' }}>{selectedCartDetails.customer_name || 'Anonymous User'}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Phone</label>
+                    <span style={{ fontSize: '0.9rem', color: '#4ade80', fontWeight: 'bold' }}>💬 {selectedCartDetails.customer_phone || 'Not provided'}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Email</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{selectedCartDetails.customer_email || 'Not provided'}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Language Preferences</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>{selectedCartDetails.lang ? selectedCartDetails.lang.toUpperCase() : 'EN'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: DATES & TELEMETRY */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Cart Telemetry</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Last Updated</label>
+                    <span style={{ fontSize: '0.85rem', color: '#f8fafc' }}>{new Date(selectedCartDetails.last_updated).toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Recovery Email Status</label>
+                    <span style={{ 
+                      background: selectedCartDetails.recovery_email_sent ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                      color: selectedCartDetails.recovery_email_sent ? '#34d399' : '#94a3b8',
+                      padding: '4px 10px',
+                      borderRadius: '20px',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold',
+                      display: 'inline-block'
+                    }}>{selectedCartDetails.recovery_email_sent ? '✉️ Sent' : '✉️ Not Sent'}</span>
+                  </div>
+                  {selectedCartDetails.ip_address && (
+                    <div>
+                      <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>IP Address</label>
+                      <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontFamily: 'monospace' }}>🌐 {selectedCartDetails.ip_address}</span>
+                    </div>
+                  )}
+                  {selectedCartDetails.location_data && (
+                    <div>
+                      <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Location (IP resolved)</label>
+                      <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+                        📍 {[selectedCartDetails.location_data.city, selectedCartDetails.location_data.region, selectedCartDetails.location_data.country].filter(Boolean).join(', ')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION: ITEMS IN CART */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Cart Items</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {selectedCartDetails.cart_data && selectedCartDetails.cart_data.map((item, idx) => (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#f8fafc' }}>{item.product}</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#38bdf8' }}>x{item.qty}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
             </div>
