@@ -24,7 +24,6 @@ export const metadata = {
     images: ['/logo.png'],
   },
   icons: {
-    icon: '/favicon.ico',
     apple: '/logo.png',
   },
 };
@@ -39,7 +38,6 @@ export default function RootLayout({ children }) {
   return (
     <html lang="es" className={`${montserrat.variable} ${inter.variable}`} suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/favicon.ico" />
       </head>
       <body suppressHydrationWarning>
         {children}
