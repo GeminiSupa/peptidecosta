@@ -169,6 +169,26 @@ export default function CatalogPage() {
     }
   }, []);
 
+  // Handle 'product' URL parameter linking
+  useEffect(() => {
+    if (products.length > 0 && typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const productParam = urlParams.get('product');
+      if (productParam) {
+        const decodedParam = decodeURIComponent(productParam);
+        const matchingProduct = products.find(p => 
+          p.product.toLowerCase() === decodedParam.toLowerCase() || 
+          p.id === decodedParam
+        );
+        if (matchingProduct) {
+          setSelectedProduct(matchingProduct);
+          // Optional: clear the url param so refreshing doesn't keep opening it if they closed it
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.search.replace(/&?product=[^&]+/, ''));
+        }
+      }
+    }
+  }, [products]);
+
   const handleGateSubmit = async (e) => {
     e.preventDefault();
     setGateError('');

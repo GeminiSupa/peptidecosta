@@ -135,6 +135,7 @@ export default function AdminPage() {
   const [shareLang, setShareLang] = useState('es');
   const [shareCurrency, setShareCurrency] = useState('CRC');
   const [shareSource, setShareSource] = useState('none');
+  const [shareProduct, setShareProduct] = useState('all');
   const [shareCopied, setShareCopied] = useState(false);
 
   // Password change states
@@ -1262,6 +1263,9 @@ export default function AdminPage() {
   const getShareUrl = () => {
     const domain = typeof window !== 'undefined' ? window.location.origin : 'https://costapeptides.vercel.app';
     let url = `${domain}/catalog?lang=${shareLang}&currency=${shareCurrency}`;
+    if (shareProduct !== 'all') {
+      url += `&product=${encodeURIComponent(shareProduct)}`;
+    }
     if (shareSource !== 'none') {
       url += `&utm_source=${shareSource}`;
     }
@@ -2098,6 +2102,21 @@ export default function AdminPage() {
                     >
                       <option value="CRC">CRC / Colones Costarricenses</option>
                       <option value="USD">USD / Dólares Estadounidenses</option>
+                    </select>
+                  </div>
+                  <div className="filter-group">
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '800' }}>Specific Product</label>
+                    <select 
+                      className="cell-select" 
+                      value={shareProduct}
+                      onChange={(e) => setShareProduct(e.target.value)}
+                    >
+                      <option value="all">Entire Catalog</option>
+                      {products.map(p => (
+                        <option key={p.id || p.product} value={p.product}>
+                          {p.product}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="filter-group">
