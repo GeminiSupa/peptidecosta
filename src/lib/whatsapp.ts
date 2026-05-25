@@ -8,10 +8,33 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
  */
 export const buildWhatsAppLink = (
   phone: string,
-  source: string,
   baseMessage = "Hello I'm interested"
 ): string => {
-  const encodedMessage = encodeURIComponent(`${baseMessage} from ${source}`);
+  let trackingText = '';
+  
+  if (typeof window !== 'undefined') {
+    const source = localStorage.getItem('lead_utm_source');
+    const campaign = localStorage.getItem('lead_utm_campaign');
+    const referrer = localStorage.getItem('lead_referrer');
+    
+    let sourceLabel = '';
+    if (source) {
+      sourceLabel = source;
+    } else if (referrer) {
+      try {
+        const url = new URL(referrer);
+        sourceLabel = url.hostname.replace('www.', '');
+      } catch (e) {
+        // ignore invalid urls
+      }
+    }
+    
+    if (sourceLabel) {
+      trackingText = `\n\n[Source: ${sourceLabel}${campaign ? ` (Camp: ${campaign})` : ''}]`;
+    }
+  }
+
+  const encodedMessage = encodeURIComponent(`${baseMessage}${trackingText}`);
   return `https://wa.me/${phone}?text=${encodedMessage}`;
 };
 

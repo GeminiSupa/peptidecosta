@@ -134,6 +134,7 @@ export default function AdminPage() {
   // Link share builder states
   const [shareLang, setShareLang] = useState('es');
   const [shareCurrency, setShareCurrency] = useState('CRC');
+  const [shareSource, setShareSource] = useState('none');
   const [shareCopied, setShareCopied] = useState(false);
 
   // Password change states
@@ -1260,7 +1261,11 @@ export default function AdminPage() {
   // Copy shareable link
   const getShareUrl = () => {
     const domain = typeof window !== 'undefined' ? window.location.origin : 'https://costapeptides.vercel.app';
-    return `${domain}/catalog?lang=${shareLang}&currency=${shareCurrency}`;
+    let url = `${domain}/catalog?lang=${shareLang}&currency=${shareCurrency}`;
+    if (shareSource !== 'none') {
+      url += `&utm_source=${shareSource}`;
+    }
+    return url;
   };
 
   const handleCopyLink = () => {
@@ -2093,6 +2098,22 @@ export default function AdminPage() {
                     >
                       <option value="CRC">CRC / Colones Costarricenses</option>
                       <option value="USD">USD / Dólares Estadounidenses</option>
+                    </select>
+                  </div>
+                  <div className="filter-group">
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '800' }}>Tracking Source</label>
+                    <select 
+                      className="cell-select" 
+                      value={shareSource}
+                      onChange={(e) => setShareSource(e.target.value)}
+                    >
+                      <option value="none">None</option>
+                      <option value="whatsapp">WhatsApp</option>
+                      <option value="facebook">Facebook</option>
+                      <option value="instagram">Instagram</option>
+                      <option value="linkedin">LinkedIn</option>
+                      <option value="reddit">Reddit</option>
+                      <option value="pinterest">Pinterest</option>
                     </select>
                   </div>
                 </div>

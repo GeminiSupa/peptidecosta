@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Sparkles, ArrowRight } from 'lucide-react';
+import { buildWhatsAppLink } from '@/lib/whatsapp';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -146,9 +147,11 @@ export default function ExitIntentPopup() {
 
         <div style={{ marginTop: '20px' }}>
           <a
-            href={lang === 'en' 
-              ? "https://wa.me/50684046973?text=Hi!%20I%20have%20a%20question%20about%20my%20order."
-              : "https://wa.me/50684046973?text=%C2%A1Hola!%20Tengo%20algunas%20preguntas."}
+            href="https://wa.me/50684046973"
+            onClick={(e) => {
+              e.preventDefault();
+              window.open(buildWhatsAppLink('50684046973', lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
+            }}
             target="_blank"
             rel="noopener noreferrer"
             style={{

@@ -261,12 +261,16 @@ const handleWhatsAppClick = (src) => {
                 <Link href={`/catalog?lang=${lang}`} className="btn-hero-primary">
                   {t.hero_cta} <ArrowUpRight size={18} />
                 </Link>
-                <a
-          href={buildWhatsAppLink('50684046973', 'homepage')}
+                <a 
+          className="lp-hero-btn-secondary lp-wa-btn-main"
+          href="https://wa.me/50684046973"
           target="_blank"
           rel="noopener noreferrer"
-          className="btn-hero-secondary"
-          onClick={() => handleWhatsAppClick('homepage')}
+          onClick={(e) => {
+            e.preventDefault();
+            handleWhatsAppClick('homepage');
+            window.open(buildWhatsAppLink('50684046973'), '_blank');
+          }}
         >
           <svg viewBox="0 0 24 24" width="20" height="20" style={{ flexShrink: 0 }}>
             <circle cx="12" cy="12" r="12" fill="#25D366" />
@@ -488,7 +492,16 @@ const handleWhatsAppClick = (src) => {
               <p>{lang === 'en' ? 'Our customer support team is available on WhatsApp and Email to answer all your questions about peptides, shipping, or payments.' : 'Nuestro equipo de soporte está disponible en WhatsApp y correo para responder sus dudas sobre péptidos, envíos o pagos.'}</p>
 
               <div className="lp-faq-contact-actions">
-                <a href="https://wa.me/50684046973" target="_blank" rel="noopener noreferrer" className="lp-faq-btn-wa">
+                <a 
+                  href="https://wa.me/50684046973" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="lp-faq-btn-wa"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.open(buildWhatsAppLink('50684046973', lang === 'en' ? 'Chat on WhatsApp' : 'Chatear por WhatsApp'), '_blank');
+                  }}
+                >
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                     <path d="M12.031 2a9.992 9.992 0 0 0-8.675 14.901L2 22l5.256-1.378A9.972 9.972 0 0 0 12.03 22c5.523 0 10-4.477 10-10S17.554 2 12.03 2Zm5.535 14.288c-.247.697-1.218 1.282-1.687 1.332-.469.052-.937.28-3.007-.582-2.483-1.034-4.045-3.565-4.168-3.73-.124-.165-1.007-1.34-1.007-2.555 0-1.217.638-1.815.865-2.062.227-.247.495-.309.66-.309.165 0 .33.003.475.01.155.007.361-.059.567.433.206.495.701 1.71.763 1.834.062.124.103.268.02.433-.082.165-.124.268-.247.412-.124.144-.262.32-.375.43-.124.124-.253.258-.108.505.144.248.643 1.056 1.382 1.713.953.847 1.753 1.109 2.001 1.233.247.124.392.103.536-.062.144-.165.619-.722.784-.969.165-.247.33-.206.557-.124.227.082 1.443.68 1.691.804.247.124.412.185.474.289.062.103.062.597-.186 1.294Z" />
                   </svg>
@@ -540,6 +553,10 @@ const handleWhatsAppClick = (src) => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="lp-cta-secondary"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.open(buildWhatsAppLink('50684046973'), '_blank');
+                }}
               >
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style={{ marginRight: 6 }}>
                   <path d="M12.031 2a9.992 9.992 0 0 0-8.675 14.901L2 22l5.256-1.378A9.972 9.972 0 0 0 12.03 22c5.523 0 10-4.477 10-10S17.554 2 12.03 2Z" />

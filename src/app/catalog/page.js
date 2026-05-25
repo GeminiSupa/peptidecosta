@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { 
   ShoppingBag, X, Search, Settings, 
   List, Grid, Sparkles, Phone, FileText, 
@@ -1114,8 +1115,8 @@ export default function CatalogPage() {
         : `\n\n*Método de Pago: Coordinación por WhatsApp*\n_¡Muchas gracias por su orden! Verificaremos disponibilidad y coordinaremos el despacho y pago de inmediato._`;
     }
 
-    const fullMessage = encodeURIComponent(`${receiptHeader}${receiptDetails}${itemReceipts}${discountReceipt}${totalReceipt}${instructionsText}`);
-    const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${fullMessage}`;
+    const fullMessage = `${receiptHeader}${receiptDetails}${itemReceipts}${discountReceipt}${totalReceipt}${instructionsText}`;
+    const whatsappUrl = buildWhatsAppLink(WHATSAPP_NUMBER, fullMessage);
 
     // Open WhatsApp
     window.open(whatsappUrl, '_blank');
@@ -2430,10 +2431,14 @@ export default function CatalogPage() {
               )}
             </div>
             <a 
-              href={`https://wa.me/${WHATSAPP_NUMBER}?text=${lang === 'en' ? 'Hi!%20I%20have%20a%20question%20about%20my%20order.' : '%C2%A1Hola!%20Tengo%20algunas%20preguntas.'}`} 
+              href={`https://wa.me/${WHATSAPP_NUMBER}`} 
               target="_blank" 
               rel="noreferrer"
               className="whatsapp-btn" 
+              onClick={(e) => {
+                e.preventDefault();
+                window.open(buildWhatsAppLink(WHATSAPP_NUMBER, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
+              }}
               style={{ marginTop: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
             >
               <Phone size={16} />
@@ -2451,7 +2456,10 @@ export default function CatalogPage() {
             <a href="#" onClick={(e) => { e.preventDefault(); setHowToOrderOpen(true); }}>
               {lang === 'en' ? 'How to Order' : 'Cómo Ordenar'}
             </a>
-            <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${lang === 'en' ? 'Hi!%20I%20have%20a%20question%20about%20my%20order.' : '%C2%A1Hola!%20Tengo%20algunas%20preguntas.'}`} target="_blank" rel="noreferrer">
+            <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer" onClick={(e) => {
+              e.preventDefault();
+              window.open(buildWhatsAppLink(WHATSAPP_NUMBER, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
+            }}>
               {lang === 'en' ? 'Contact WhatsApp' : 'Contactar WhatsApp'}
             </a>
             <a href="/admin" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: '500' }}>
