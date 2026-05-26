@@ -969,6 +969,24 @@ export default function CatalogPage() {
     return subtotal;
   };
 
+  const getShippingFee = () => {
+    if (cart.length === 0) return 0;
+    const itemsTotal = getDiscountedTotal();
+    const itemsTotalUsd = currency === 'USD' ? itemsTotal : (itemsTotal / exchangeRate);
+    if (itemsTotalUsd < 500) {
+      if (currency === 'CRC') {
+        return 3500;
+      } else {
+        return parseFloat((3500 / exchangeRate).toFixed(2));
+      }
+    }
+    return 0;
+  };
+
+  const getFinalTotal = () => {
+    return getDiscountedTotal() + getShippingFee();
+  };
+
   const sendOrderNotification = async (orderPayload) => {
     try {
       const res = await fetch('/api/order-notification', {
@@ -997,7 +1015,7 @@ export default function CatalogPage() {
     setTilopaySubmitting(true);
 
     const orderNum = `${method === 'sinpe' ? 'SPCR' : 'TPCR'}-${Date.now().toString(36).toUpperCase()}`;
-    const totalVal = getDiscountedTotal();
+    const totalVal = getFinalTotal();
     const tilopayCurrency = method === 'sinpe' ? 'CRC' : currency;
     const tilopayAmount = method === 'sinpe' && currency === 'USD'
       ? Math.round(totalVal * exchangeRate)
@@ -1100,7 +1118,7 @@ export default function CatalogPage() {
     const orderNum = 'WPCR-' + Date.now().toString(36).toUpperCase();
 
     const subtotalVal = getCartTotal();
-    const totalVal = getDiscountedTotal();
+    const totalVal = getFinalTotal();
     const vialCount = getCartVialCount();
     const discountPct = getVolumeDiscountPct(vialCount);
     const orderItems = cart.map(item => ({
@@ -1186,6 +1204,15 @@ export default function CatalogPage() {
         : `\n\n🏷️ *DESCUENTO POR VOLUMEN (${vialCount} viales): ${discountPct}% DESC.*\n_Subtotal: ${formatPriceVal(subtotalVal, currency)}_`)
       : '';
 
+    const shipFee = getShippingFee();
+    const shippingReceipt = shipFee > 0
+      ? (lang === 'en'
+        ? `\n\n🚚 *SHIPPING:* *${formatPriceVal(shipFee, currency)}*`
+        : `\n\n🚚 *ENVÍO:* *${formatPriceVal(shipFee, currency)}*`)
+      : (lang === 'en'
+        ? `\n\n🚚 *SHIPPING:* *FREE*`
+        : `\n\n🚚 *ENVÍO:* *GRATIS*`);
+
     const totalReceipt = lang === 'en'
       ? `\n\n*TOTAL DUE:* *${formatPriceVal(totalVal, currency)}*`
       : `\n\n*TOTAL A PAGAR:* *${formatPriceVal(totalVal, currency)}*`;
@@ -1207,7 +1234,7 @@ export default function CatalogPage() {
         : `\n\n*Método de Pago: Coordinación por WhatsApp*\n_¡Muchas gracias por su orden! Verificaremos disponibilidad y coordinaremos el despacho y pago de inmediato._`;
     }
 
-    const fullMessage = `${receiptHeader}${receiptDetails}${itemReceipts}${discountReceipt}${totalReceipt}${instructionsText}`;
+    const fullMessage = `${receiptHeader}${receiptDetails}${itemReceipts}${discountReceipt}${shippingReceipt}${totalReceipt}${instructionsText}`;
     const whatsappUrl = buildWhatsAppLink(WHATSAPP_NUMBER, fullMessage);
 
     // Open WhatsApp
@@ -1253,7 +1280,14 @@ export default function CatalogPage() {
         
         const vials = getCartVialCount(currentCart);
         const pct = getVolumeDiscountPct(vials);
-        const totalVal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
+        const itemsTotal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
+        const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
+        
+        let shippingFee = 0;
+        if (itemsTotalUsd < 500) {
+          shippingFee = cur === 'USD' ? parseFloat((3500 / rate).toFixed(2)) : 3500;
+        }
+        const totalVal = itemsTotal + shippingFee;
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
         const orderItems = currentCart.map(item => {
           let p = item.priceCrc;
@@ -1298,7 +1332,14 @@ export default function CatalogPage() {
         
         const vials = getCartVialCount(currentCart);
         const pct = getVolumeDiscountPct(vials);
-        const totalVal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
+        const itemsTotal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
+        const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
+        
+        let shippingFee = 0;
+        if (itemsTotalUsd < 500) {
+          shippingFee = cur === 'USD' ? parseFloat((3500 / rate).toFixed(2)) : 3500;
+        }
+        const totalVal = itemsTotal + shippingFee;
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
         const orderItems = currentCart.map(item => {
           let p = item.priceCrc;
@@ -1973,7 +2014,7 @@ export default function CatalogPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '0.85rem', opacity: 0.9, fontWeight: 600 }}>{lang === 'en' ? 'View Cart' : 'Ver Carrito'}</span>
-                <span>{formatPriceVal(getDiscountedTotal(), currency)}</span>
+                <span>{formatPriceVal(getFinalTotal(), currency)}</span>
               </div>
             </button>
           ) : (
@@ -2126,10 +2167,18 @@ export default function CatalogPage() {
               </div>
             )}
 
+            {/* Shipping row */}
+            <div className="cart-total-row" style={{ marginBottom: '4px' }}>
+              <span className="cart-total-label">{lang === 'en' ? 'SHIPPING' : 'ENVÍO'}</span>
+              <span className="cart-total-val" style={{ color: getShippingFee() > 0 ? undefined : '#4ade80', fontWeight: getShippingFee() > 0 ? 'normal' : '800' }}>
+                {getShippingFee() > 0 ? formatPriceVal(getShippingFee(), currency) : (lang === 'en' ? 'FREE' : 'GRATIS')}
+              </span>
+            </div>
+
             {/* Final total row */}
             <div className="cart-total-row" style={{ marginBottom: '4px' }}>
               <span className="cart-total-label" style={{ fontWeight: '900' }}>{lang === 'en' ? 'TOTAL DUE' : 'TOTAL A PAGAR'}</span>
-              <span className="cart-total-val" style={{ color: getVolumeDiscountPct(getCartVialCount()) > 0 ? '#4ade80' : undefined }}>{formatPriceVal(getDiscountedTotal(), currency)}</span>
+              <span className="cart-total-val" style={{ color: '#4ade80', fontWeight: '900' }}>{formatPriceVal(getFinalTotal(), currency)}</span>
             </div>
 
             <form id="checkout-form-main" onSubmit={handleCheckoutSubmit} className="checkout-form" style={{ paddingBottom: '80px' }}>
@@ -2290,9 +2339,9 @@ export default function CatalogPage() {
                           {paymentMethod === 'sinpe' ? <Smartphone size={18} /> : <CreditCard size={18} />}
                           {paymentMethod === 'sinpe'
                             ? (lang === 'en'
-                              ? `Pay ${formatPriceVal(currency === 'CRC' ? getDiscountedTotal() : Math.round(getDiscountedTotal() * exchangeRate), 'CRC')} via SINPE`
-                              : `Pagar ${formatPriceVal(currency === 'CRC' ? getDiscountedTotal() : Math.round(getDiscountedTotal() * exchangeRate), 'CRC')} vía SINPE`)
-                            : (lang === 'en' ? `Pay ${formatPriceVal(getDiscountedTotal(), currency)} by Card` : `Pagar ${formatPriceVal(getDiscountedTotal(), currency)} con Tarjeta`)}
+                              ? `Pay ${formatPriceVal(currency === 'CRC' ? getFinalTotal() : Math.round(getFinalTotal() * exchangeRate), 'CRC')} via SINPE`
+                              : `Pagar ${formatPriceVal(currency === 'CRC' ? getFinalTotal() : Math.round(getFinalTotal() * exchangeRate), 'CRC')} vía SINPE`)
+                            : (lang === 'en' ? `Pay ${formatPriceVal(getFinalTotal(), currency)} by Card` : `Pagar ${formatPriceVal(getFinalTotal(), currency)} con Tarjeta`)}
                         </>
                       )}
                     </button>
