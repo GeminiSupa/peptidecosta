@@ -2347,11 +2347,15 @@ export default function AdminPage() {
                               <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem' }}>
                                 {acart.customer_name || 'Anonymous User'}
                               </span>
-                              {acart.customer_phone && (
+                              {acart.customer_phone ? (
                                 <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
                                   💬 {acart.customer_phone}
                                 </span>
-                              )}
+                              ) : acart.customer_email ? (
+                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                                  ✉️ {acart.customer_email}
+                                </span>
+                              ) : null}
                             </div>
                           </td>
                           <td style={{ padding: '16px' }}>
