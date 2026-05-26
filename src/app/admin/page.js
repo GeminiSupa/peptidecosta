@@ -169,6 +169,9 @@ export default function AdminPage() {
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
   const [selectedCartDetails, setSelectedCartDetails] = useState(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
+  const [leadsSearch, setLeadsSearch] = useState('');
+  const [leadsSourceFilter, setLeadsSourceFilter] = useState('All');
+  const [leadsAreaFilter, setLeadsAreaFilter] = useState('All');
   const [productViews, setProductViews] = useState([]);
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(FALLBACK_EXCHANGE_RATE);
@@ -1194,8 +1197,50 @@ export default function AdminPage() {
     );
   };
 
+  const filteredLeads = leads.filter(lead => {
+    // 1. Search Query
+    if (leadsSearch.trim() !== '') {
+      const q = leadsSearch.toLowerCase();
+      const contactVal = (lead.contact_value || '').toLowerCase();
+      const cityVal = (lead.city || '').toLowerCase();
+      const regionVal = (lead.region || '').toLowerCase();
+      const countryVal = (lead.country || '').toLowerCase();
+      const campaignVal = (lead.utm_campaign || '').toLowerCase();
+      const mediumVal = (lead.utm_medium || '').toLowerCase();
+      const sourceVal = (lead.utm_source || '').toLowerCase();
+      
+      const match = contactVal.includes(q) || 
+                    cityVal.includes(q) || 
+                    regionVal.includes(q) || 
+                    countryVal.includes(q) ||
+                    campaignVal.includes(q) ||
+                    mediumVal.includes(q) ||
+                    sourceVal.includes(q);
+      if (!match) return false;
+    }
+
+    // 2. Source Filter
+    if (leadsSourceFilter !== 'All') {
+      if (leadsSourceFilter === 'Direct') {
+        if (lead.utm_source) return false;
+      } else if (leadsSourceFilter === 'Ads') {
+        if (!lead.utm_source) return false;
+      } else {
+        if ((lead.utm_source || '').toLowerCase() !== leadsSourceFilter.toLowerCase()) return false;
+      }
+    }
+
+    // 3. Area Filter
+    if (leadsAreaFilter !== 'All') {
+      const leadArea = lead.region || lead.city || 'Unknown';
+      if (leadArea !== leadsAreaFilter) return false;
+    }
+
+    return true;
+  });
+
   const handleSelectAllLeads = (checked) => {
-    setSelectedLeads(checked ? leads.map(l => l.id) : []);
+    setSelectedLeads(checked ? filteredLeads.map(l => l.id) : []);
   };
 
   const handleBulkDeleteLeads = async () => {
@@ -2730,62 +2775,160 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* TAB: LEADS */}
-        {activeTab === 'leads' && (
-          <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
-            <div className="section-header" style={{ padding: '0 24px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h2>Catalog Access Leads</h2>
-                <p>Users who provided their contact info to view the catalog.</p>
-              </div>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                {selectedLeads.length > 0 && (
+        {activeTab === 'leads' && (() => {
+          const uniqueAreas = Array.from(new Set(leads.map(l => l.region || l.city).filter(Boolean))).sort();
+          return (
+            <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
+              <div className="section-header" style={{ padding: '0 24px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h2>Catalog Access Leads</h2>
+                  <p>Users who provided their contact info to view the catalog.</p>
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  {selectedLeads.length > 0 && (
+                    <button 
+                      className="admin-btn delete-btn"
+                      onClick={handleBulkDeleteLeads}
+                      style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <Trash2 size={16} /> Delete Selected ({selectedLeads.length})
+                    </button>
+                  )}
                   <button 
-                    className="admin-btn delete-btn"
-                    onClick={handleBulkDeleteLeads}
-                    style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    className="admin-btn"
+                    onClick={() => setExportModalType('leads')}
+                    disabled={leads.length === 0}
+                    style={{ background: '#172237', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    <Trash2 size={16} /> Delete Selected ({selectedLeads.length})
+                    <Upload size={16} /> Export Data
                   </button>
-                )}
-                <button 
-                  className="admin-btn"
-                  onClick={() => setExportModalType('leads')}
-                  disabled={leads.length === 0}
-                  style={{ background: '#172237', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <Upload size={16} /> Export Data
-                </button>
+                </div>
               </div>
-            </div>
-            
-            {loadingLeads ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading leads...</div>
-            ) : leads.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No leads captured yet.</div>
-            ) : (
-              <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <table className="spreadsheet-table">
-                  <thead>
-                    <tr>
-                      <th style={{ padding: '16px', width: '40px' }}>
-                        <input 
-                          type="checkbox" 
-                          checked={leads.length > 0 && selectedLeads.length === leads.length}
-                          onChange={(e) => handleSelectAllLeads(e.target.checked)}
-                          style={{ cursor: 'pointer' }}
-                        />
-                      </th>
-                      <th style={{ padding: '16px' }}>Date</th>
-                      <th style={{ padding: '16px' }}>Contact Details</th>
-                      <th style={{ padding: '16px' }}>Location</th>
-                      <th style={{ padding: '16px' }}>Attribution</th>
-                      <th style={{ padding: '16px' }}>Browsing History</th>
-                      <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leads.map(lead => (
+
+              {/* Filtering Controls */}
+              <div style={{ padding: '0 24px', marginBottom: '16px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', flex: '1 1 auto', minWidth: '220px' }}>
+                  <input 
+                    type="text" 
+                    placeholder="Search by email, phone, city, campaign..." 
+                    value={leadsSearch}
+                    onChange={(e) => setLeadsSearch(e.target.value)}
+                    style={{ 
+                      padding: '8px 12px 8px 36px', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(255,255,255,0.1)', 
+                      background: 'rgba(0,0,0,0.2)', 
+                      color: 'white', 
+                      fontSize: '0.85rem', 
+                      width: '100%',
+                      outline: 'none'
+                    }}
+                  />
+                  <span style={{ position: 'absolute', left: '12px', top: '52%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.9rem' }}>🔍</span>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {/* Source Filter */}
+                  <select
+                    value={leadsSourceFilter}
+                    onChange={(e) => setLeadsSourceFilter(e.target.value)}
+                    style={{ 
+                      padding: '8px 12px', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(255,255,255,0.1)', 
+                      background: 'rgba(0,0,0,0.2)', 
+                      color: 'white', 
+                      fontSize: '0.85rem',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="All">📢 All Attribution Sources</option>
+                    <option value="Ads">🎯 Paid Ads (Any utm_source)</option>
+                    <option value="Direct">🌐 Direct / Organic Traffic</option>
+                    <option value="instagram">📸 Instagram</option>
+                    <option value="facebook">👥 Facebook</option>
+                    <option value="google">🔎 Google</option>
+                    <option value="whatsapp">💬 WhatsApp</option>
+                    <option value="linkedin">👔 LinkedIn</option>
+                    <option value="pinterest">📌 Pinterest</option>
+                  </select>
+
+                  {/* Area/Region Filter */}
+                  <select
+                    value={leadsAreaFilter}
+                    onChange={(e) => setLeadsAreaFilter(e.target.value)}
+                    style={{ 
+                      padding: '8px 12px', 
+                      borderRadius: '8px', 
+                      border: '1px solid rgba(255,255,255,0.1)', 
+                      background: 'rgba(0,0,0,0.2)', 
+                      color: 'white', 
+                      fontSize: '0.85rem',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="All">📍 All Areas / Locations</option>
+                    {uniqueAreas.map(area => (
+                      <option key={area} value={area}>{area}</option>
+                    ))}
+                  </select>
+                  
+                  {/* Clear Filters */}
+                  {(leadsSearch || leadsSourceFilter !== 'All' || leadsAreaFilter !== 'All') && (
+                    <button
+                      onClick={() => {
+                        setLeadsSearch('');
+                        setLeadsSourceFilter('All');
+                        setLeadsAreaFilter('All');
+                      }}
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                        color: '#f87171',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+              
+              {loadingLeads ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading leads...</div>
+              ) : leads.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No leads captured yet.</div>
+              ) : filteredLeads.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No leads match your active filters.</div>
+              ) : (
+                <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <table className="spreadsheet-table">
+                    <thead>
+                      <tr>
+                        <th style={{ padding: '16px', width: '40px' }}>
+                          <input 
+                            type="checkbox" 
+                            checked={filteredLeads.length > 0 && filteredLeads.every(l => selectedLeads.includes(l.id))}
+                            onChange={(e) => handleSelectAllLeads(e.target.checked)}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        </th>
+                        <th style={{ padding: '16px' }}>Date</th>
+                        <th style={{ padding: '16px' }}>Contact Details</th>
+                        <th style={{ padding: '16px' }}>Location</th>
+                        <th style={{ padding: '16px' }}>Attribution</th>
+                        <th style={{ padding: '16px' }}>Browsing History</th>
+                        <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredLeads.map(lead => (
                       <tr key={lead.id}>
                         <td style={{ padding: '16px' }}>
                           <input 
@@ -2966,7 +3109,8 @@ export default function AdminPage() {
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* TAB: TEAM MANAGEMENT */}
         {activeTab === 'team' && (
