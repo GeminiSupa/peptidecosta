@@ -202,6 +202,8 @@ export default function AdminPage() {
   const [shareLang, setShareLang] = useState('es');
   const [shareCurrency, setShareCurrency] = useState('CRC');
   const [shareSource, setShareSource] = useState('none');
+  const [shareMedium, setShareMedium] = useState('');
+  const [shareCampaign, setShareCampaign] = useState('');
   const [shareProduct, setShareProduct] = useState('all');
   const [shareCopied, setShareCopied] = useState(false);
 
@@ -1380,6 +1382,12 @@ export default function AdminPage() {
     if (shareSource !== 'none') {
       url += `&utm_source=${shareSource}`;
     }
+    if (shareMedium.trim() !== '') {
+      url += `&utm_medium=${encodeURIComponent(shareMedium.trim())}`;
+    }
+    if (shareCampaign.trim() !== '') {
+      url += `&utm_campaign=${encodeURIComponent(shareCampaign.trim())}`;
+    }
     return url;
   };
 
@@ -2244,6 +2252,48 @@ export default function AdminPage() {
                       <option value="pinterest">Pinterest</option>
                     </select>
                   </div>
+                  <div className="filter-group">
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '800' }}>Tracking Medium</label>
+                    <input 
+                      type="text"
+                      className="cell-select" 
+                      style={{ 
+                        background: '#172237',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        color: 'white',
+                        borderRadius: '4px',
+                        padding: '6px 8px',
+                        fontSize: '0.75rem',
+                        outline: 'none',
+                        width: '100%',
+                        cursor: 'text'
+                      }}
+                      placeholder="e.g. cpc, bio, story, banner"
+                      value={shareMedium}
+                      onChange={(e) => setShareMedium(e.target.value)}
+                    />
+                  </div>
+                  <div className="filter-group">
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '800' }}>Tracking Campaign</label>
+                    <input 
+                      type="text"
+                      className="cell-select" 
+                      style={{ 
+                        background: '#172237',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        color: 'white',
+                        borderRadius: '4px',
+                        padding: '6px 8px',
+                        fontSize: '0.75rem',
+                        outline: 'none',
+                        width: '100%',
+                        cursor: 'text'
+                      }}
+                      placeholder="e.g. summer_promo"
+                      value={shareCampaign}
+                      onChange={(e) => setShareCampaign(e.target.value)}
+                    />
+                  </div>
                 </div>
 
                 <div style={{ marginTop: '12px' }}>
@@ -2801,15 +2851,46 @@ export default function AdminPage() {
                           )}
                         </td>
                         <td style={{ padding: '16px' }}>
-                          <span style={{ 
-                            ...getReferralBadgeStyles(getReferralLabel(lead)),
-                            padding: '4px 8px',
-                            borderRadius: '12px',
-                            fontSize: '0.75rem',
-                            fontWeight: 'bold'
-                          }}>
-                            {getReferralLabel(lead)}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                            <span style={{ 
+                              ...getReferralBadgeStyles(getReferralLabel(lead)),
+                              padding: '4px 8px',
+                              borderRadius: '12px',
+                              fontSize: '0.75rem',
+                              fontWeight: 'bold',
+                              display: 'inline-block'
+                            }}>
+                              {getReferralLabel(lead)}
+                            </span>
+                            {lead.utm_campaign && (
+                              <span style={{ 
+                                fontSize: '0.7rem', 
+                                color: '#38bdf8', 
+                                fontWeight: '800', 
+                                background: 'rgba(56, 189, 248, 0.1)', 
+                                padding: '2px 6px', 
+                                borderRadius: '4px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                border: '1px solid rgba(56, 189, 248, 0.15)'
+                              }}>
+                                📢 {lead.utm_campaign}
+                              </span>
+                            )}
+                            {lead.utm_medium && (
+                              <span style={{ 
+                                fontSize: '0.65rem', 
+                                color: '#94a3b8',
+                                background: 'rgba(255, 255, 255, 0.03)',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                display: 'inline-block'
+                              }}>
+                                medium: <span style={{ color: '#cbd5e1', fontWeight: 'bold' }}>{lead.utm_medium}</span>
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td style={{ padding: '16px' }}>
                           {(() => {
