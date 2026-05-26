@@ -139,7 +139,7 @@ export default function CatalogPage() {
   const [reviewSuccess, setReviewSuccess] = useState(false);
 
   // Access Gate States
-  const [gateAccessGranted, setGateAccessGranted] = useState(true); // Default true for SSR, updated in useEffect
+  const [gateAccessGranted, setGateAccessGranted] = useState(false); // Default false for security, updated in useEffect
   const [gateLoading, setGateLoading] = useState(true);
   const [gateInput, setGateInput] = useState('');
   const [gateSubmitting, setGateSubmitting] = useState(false);
@@ -346,6 +346,36 @@ export default function CatalogPage() {
     }
     setSessionId(sid);
 
+    // Load customer checkout details from localStorage if they filled them out previously
+    const savedName = localStorage.getItem('checkout_customer_name') || '';
+    const savedPhone = localStorage.getItem('checkout_customer_phone') || '';
+    const savedEmail = localStorage.getItem('checkout_customer_email') || '';
+    const savedAddress = localStorage.getItem('checkout_shipping_address') || '';
+    const leadContact = localStorage.getItem('catalog_lead_contact') || '';
+
+    if (savedName) setCustomerName(savedName);
+    if (savedAddress) setShippingAddress(savedAddress);
+
+    // Pre-fill phone and email dynamically from either saved checkout info or gate input
+    if (savedPhone) {
+      setCustomerPhone(savedPhone);
+    } else if (leadContact && !leadContact.includes('@')) {
+      setCustomerPhone(leadContact);
+    }
+
+    if (savedEmail) {
+      setCustomerEmail(savedEmail);
+    } else if (leadContact && leadContact.includes('@')) {
+      setCustomerEmail(leadContact);
+    }
+
+    // Bypass gate if they already have access granted or have contact info
+    const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
+    if (hasAccess || savedPhone || savedEmail || leadContact || savedName) {
+      setGateAccessGranted(true);
+      localStorage.setItem('catalog_access_granted', 'true');
+    }
+
     // Check for Tilopay redirect params
     const paymentParam = urlParams.get('payment');
     if (paymentParam === 'success' || urlParams.get('code') === '1') {
@@ -395,6 +425,22 @@ export default function CatalogPage() {
     // Fetch live exchange rate
     fetchLiveExchangeRate();
   }, []);
+
+  // Persist checkout details to localStorage as they type, to auto-prefill on future visits
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (customerName) localStorage.setItem('checkout_customer_name', customerName);
+      if (customerPhone) {
+        localStorage.setItem('checkout_customer_phone', customerPhone);
+        localStorage.setItem('catalog_access_granted', 'true');
+      }
+      if (customerEmail) {
+        localStorage.setItem('checkout_customer_email', customerEmail);
+        localStorage.setItem('catalog_access_granted', 'true');
+      }
+      if (shippingAddress) localStorage.setItem('checkout_shipping_address', shippingAddress);
+    }
+  }, [customerName, customerPhone, customerEmail, shippingAddress]);
 
   // Telemetry: Sync visitor session details to Supabase when session and metadata are ready
   useEffect(() => {
@@ -528,6 +574,11 @@ export default function CatalogPage() {
             const isEmail = leadContact && leadContact.includes('@');
             const resolvedEmail = customerEmail || (isEmail ? leadContact : null);
             const resolvedPhone = customerPhone || (leadContact && !isEmail ? leadContact : null);
+
+            // ONLY sync to abandoned_carts database if we have at least one way of contacting/identifying them
+            if (!customerName && !resolvedPhone && !resolvedEmail) {
+              return;
+            }
 
             await supabase.from('abandoned_carts').upsert({
               session_id: sessionId,
@@ -1629,7 +1680,12 @@ export default function CatalogPage() {
 
       {/* Main Catalog View */}
       <main className="main container" style={{ position: 'relative', minHeight: '60vh' }}>
-        {gateLoading ? null : !gateAccessGranted ? (
+        {gateLoading ? (
+          <div className="loader">
+            <div className="sync-spinner" style={{ marginBottom: '16px' }}></div>
+            <div>{lang === 'en' ? 'Syncing catalog...' : 'Sincronizando catálogo...'}</div>
+          </div>
+        ) : !gateAccessGranted ? (
           <div className="access-gate-overlay" style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', 
             background: theme === 'dark' ? 'rgba(5, 11, 24, 0.8)' : 'rgba(244, 246, 249, 0.8)',
@@ -1682,7 +1738,8 @@ export default function CatalogPage() {
           </div>
         ) : null}
 
-        <div style={{ opacity: (!gateLoading && !gateAccessGranted) ? 0.3 : 1, pointerEvents: (!gateLoading && !gateAccessGranted) ? 'none' : 'auto', transition: 'opacity 0.3s' }}>
+        {!gateLoading && gateAccessGranted && (
+          <div style={{ opacity: 1, pointerEvents: 'auto', transition: 'opacity 0.3s' }}>
           {loading ? (
           <div className="loader">
             <div className="sync-spinner" style={{ marginBottom: '16px' }}></div>
@@ -1776,10 +1833,11 @@ export default function CatalogPage() {
           </div>
         )}
         </div>
+      )}
       </main>
 
 
-      {/* ─── Floating Cart FAB & Mobile Bottom Bar ─────────────────────────────────────── */}
+      {/* Floating Cart FAB & Mobile Bottom Bar */}
       <style>{`
         @keyframes cart-badge-pop {
           0%   { transform: scale(0.5); opacity: 0; }

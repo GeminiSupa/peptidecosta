@@ -937,6 +937,60 @@ export default function AdminPage() {
     }
   };
 
+  // Send recovery WhatsApp message
+  const handleSendRecoveryWhatsApp = async (acart) => {
+    if (!acart.customer_phone) return;
+    
+    const phone = acart.customer_phone.replace(/[^0-9]/g, '');
+    const isEn = acart.lang === 'en';
+    
+    // Dynamic checkout URL to allow recovery
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://peptidecosta.vercel.app';
+    const checkoutUrl = `${origin}/catalog?session_id=${acart.session_id}&recovered=true`;
+    
+    const message = isEn
+      ? `Hi ${acart.customer_name || ''}, we saved your cart at Peptides Costa Rica! You can review your items and complete your purchase here:\n${checkoutUrl}\n\nLet us know if you have any questions or need help!`
+      : `Hola ${acart.customer_name || ''}, ¡guardamos tu carrito en Péptidos Costa Rica! Puedes revisar tus artículos y completar tu compra aquí:\n${checkoutUrl}\n\n¡Escríbenos si tienes dudas o necesitas ayuda!`;
+      
+    const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    
+    // Open in a new tab
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+    
+    // Update local state immediately for reactive UI
+    setAbandonedCarts(prev => 
+      prev.map(c => 
+        c.session_id === acart.session_id 
+          ? { ...c, recovery_whatsapp_sent: true, recovery_whatsapp_sent_at: new Date().toISOString() } 
+          : c
+      )
+    );
+    
+    // If details modal is open for this cart, update it
+    if (selectedCartDetails && selectedCartDetails.session_id === acart.session_id) {
+      setSelectedCartDetails(prev => ({
+        ...prev,
+        recovery_whatsapp_sent: true,
+        recovery_whatsapp_sent_at: new Date().toISOString()
+      }));
+    }
+    
+    // Update Supabase database
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('abandoned_carts')
+          .update({
+            recovery_whatsapp_sent: true,
+            recovery_whatsapp_sent_at: new Date().toISOString()
+          })
+          .eq('session_id', acart.session_id);
+      } catch (err) {
+        console.error('Failed to record WhatsApp recovery status in DB:', err);
+      }
+    }
+  };
+
   // Clear ALL active abandoned carts
   const handleClearAllCarts = async () => {
     if (!confirm('Clear ALL active cart data? This cannot be undone.')) return;
@@ -976,11 +1030,21 @@ export default function AdminPage() {
           filename = `peptidescr-products-${new Date().toISOString().slice(0, 10)}`;
           title = 'Costa Rica Peptides - Products Export';
         } else if (exportModalType === 'carts') {
-          headers = [ 'Session ID', 'Date', 'Customer Name', 'Phone', 'Email', 'Cart Items', 'Status' ];
+          headers = [ 
+            'Session ID', 'Date', 'Customer Name', 'Phone', 'Email', 'Cart Items', 'Status',
+            'Recovery Email Sent', 'Recovery Email Sent At', 
+            'Recovery WhatsApp Sent', 'Recovery WhatsApp Sent At' 
+          ];
           dataRows = abandonedCarts.map(c => {
              const itemsSummary = c.cart_data ? c.cart_data.map(i => `${i.product} x${i.qty}`).join(' | ') : '';
              const date = new Date(c.last_updated).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
-             return [ c.session_id, date, c.customer_name || '', c.customer_phone || '', c.customer_email || '', itemsSummary, c.status ];
+             const emailSentAt = c.recovery_email_sent_at ? new Date(c.recovery_email_sent_at).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : '';
+             const waSentAt = c.recovery_whatsapp_sent_at ? new Date(c.recovery_whatsapp_sent_at).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' }) : '';
+             return [ 
+               c.session_id, date, c.customer_name || '', c.customer_phone || '', c.customer_email || '', itemsSummary, c.status,
+               c.recovery_email_sent ? 'Yes' : 'No', emailSentAt,
+               c.recovery_whatsapp_sent ? 'Yes' : 'No', waSentAt
+             ];
           });
           filename = `peptidescr-carts-${new Date().toISOString().slice(0, 10)}`;
           title = 'Costa Rica Peptides - Abandoned Carts Export';
@@ -2200,7 +2264,7 @@ export default function AdminPage() {
                       <th style={{ padding: '16px' }}>Last Updated</th>
                       <th style={{ padding: '16px' }}>Customer</th>
                       <th style={{ padding: '16px' }}>Cart Details</th>
-                      <th style={{ padding: '16px' }}>Recovery Email</th>
+                      <th style={{ padding: '16px' }}>Recovery Status</th>
                       <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
@@ -2246,17 +2310,51 @@ export default function AdminPage() {
                             </button>
                           </td>
                           <td style={{ padding: '16px' }}>
-                            <span style={{ 
-                              background: acart.recovery_email_sent ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)',
-                              color: acart.recovery_email_sent ? '#34d399' : '#94a3b8',
-                              padding: '4px 10px',
-                              borderRadius: '20px',
-                              fontSize: '0.75rem',
-                              fontWeight: 'bold',
-                              display: 'inline-block'
-                            }}>
-                              {acart.recovery_email_sent ? '✉️ Sent' : '✉️ Never Sent'}
-                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                              {acart.customer_email && (
+                                <span style={{ 
+                                  background: acart.recovery_email_sent ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                                  color: acart.recovery_email_sent ? '#34d399' : '#94a3b8',
+                                  padding: '4px 10px',
+                                  borderRadius: '20px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 'bold',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  ✉️ {acart.recovery_email_sent ? 'Email Sent' : 'Email Not Sent'}
+                                </span>
+                              )}
+                              {acart.customer_phone && (
+                                <span style={{ 
+                                  background: acart.recovery_whatsapp_sent ? 'rgba(34, 197, 94, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                                  color: acart.recovery_whatsapp_sent ? '#4ade80' : '#94a3b8',
+                                  padding: '4px 10px',
+                                  borderRadius: '20px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 'bold',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  💬 {acart.recovery_whatsapp_sent ? 'WhatsApp Sent' : 'WA Not Sent'}
+                                </span>
+                              )}
+                              {!acart.customer_email && !acart.customer_phone && (
+                                <span style={{ 
+                                  background: 'rgba(239, 68, 68, 0.1)',
+                                  color: '#f87171',
+                                  padding: '4px 10px',
+                                  borderRadius: '20px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 'bold',
+                                  display: 'inline-block'
+                                }}>
+                                  🚫 No Contact Info
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td style={{ padding: '16px' }}>
                             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
@@ -2288,19 +2386,25 @@ export default function AdminPage() {
                               )}
                               
                               {acart.customer_phone && (
-                                <a
-                                  href={`https://wa.me/${acart.customer_phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-                                    acart.lang === 'en'
-                                      ? `Hi ${acart.customer_name || ''}, we saved your cart at Peptides Costa Rica! Let us know if you have any questions or need help completing your order.`
-                                      : `Hola ${acart.customer_name || ''}, ¡guardamos tu carrito en Péptidos Costa Rica! Escríbenos si tienes dudas o necesitas ayuda para completar tu compra.`
-                                  )}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                <button
+                                  onClick={() => handleSendRecoveryWhatsApp(acart)}
                                   className="admin-btn"
-                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)', color: '#4ade80', borderRadius: '6px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                                  style={{ 
+                                    padding: '6px 12px', 
+                                    fontSize: '0.8rem', 
+                                    background: 'rgba(34, 197, 94, 0.15)', 
+                                    border: '1px solid rgba(34, 197, 94, 0.3)', 
+                                    color: '#4ade80', 
+                                    borderRadius: '6px', 
+                                    display: 'inline-flex', 
+                                    alignItems: 'center', 
+                                    gap: '4px', 
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer'
+                                  }}
                                 >
                                   WhatsApp
-                                </a>
+                                </button>
                               )}
                               
                               <button
@@ -3092,7 +3196,27 @@ export default function AdminPage() {
                       fontSize: '0.75rem',
                       fontWeight: 'bold',
                       display: 'inline-block'
-                    }}>{selectedCartDetails.recovery_email_sent ? '✉️ Sent' : '✉️ Not Sent'}</span>
+                    }}>
+                      {selectedCartDetails.recovery_email_sent 
+                        ? `✉️ Sent (${new Date(selectedCartDetails.recovery_email_sent_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})})` 
+                        : '✉️ Not Sent'}
+                    </span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Recovery WhatsApp Status</label>
+                    <span style={{ 
+                      background: selectedCartDetails.recovery_whatsapp_sent ? 'rgba(34, 197, 94, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                      color: selectedCartDetails.recovery_whatsapp_sent ? '#4ade80' : '#94a3b8',
+                      padding: '4px 10px',
+                      borderRadius: '20px',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold',
+                      display: 'inline-block'
+                    }}>
+                      {selectedCartDetails.recovery_whatsapp_sent 
+                        ? `💬 Sent (${new Date(selectedCartDetails.recovery_whatsapp_sent_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})})` 
+                        : '💬 Not Sent'}
+                    </span>
                   </div>
                   {selectedCartDetails.ip_address && (
                     <div>
