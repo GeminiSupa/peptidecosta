@@ -68,6 +68,71 @@ const getReferralLabel = (lead) => {
   return 'Direct';
 };
 
+const getReferralBadgeStyles = (label) => {
+  if (!label) {
+    return {
+      background: 'rgba(148, 163, 184, 0.15)',
+      color: '#94a3b8'
+    };
+  }
+
+  const lower = label.toLowerCase();
+  
+  if (lower.includes('whatsapp')) {
+    return {
+      background: 'rgba(34, 197, 94, 0.15)',
+      color: '#4ade80',
+      border: '1px solid rgba(34, 197, 94, 0.3)'
+    };
+  }
+  
+  if (lower.includes('instagram') || lower === 'ig') {
+    return {
+      background: 'rgba(236, 72, 153, 0.15)',
+      color: '#f472b6',
+      border: '1px solid rgba(236, 72, 153, 0.3)'
+    };
+  }
+  
+  if (lower.includes('facebook') || lower === 'fb') {
+    return {
+      background: 'rgba(59, 130, 246, 0.15)',
+      color: '#60a5fa',
+      border: '1px solid rgba(59, 130, 246, 0.3)'
+    };
+  }
+  
+  if (lower.includes('google') || lower === 'gads') {
+    return {
+      background: 'rgba(99, 102, 241, 0.15)',
+      color: '#818cf8',
+      border: '1px solid rgba(99, 102, 241, 0.3)'
+    };
+  }
+  
+  if (lower.includes('twitter') || lower === 'x' || lower.includes('x /')) {
+    return {
+      background: 'rgba(14, 165, 233, 0.15)',
+      color: '#38bdf8',
+      border: '1px solid rgba(14, 165, 233, 0.3)'
+    };
+  }
+  
+  if (lower === 'direct') {
+    return {
+      background: 'rgba(148, 163, 184, 0.15)',
+      color: '#94a3b8',
+      border: '1px solid rgba(148, 163, 184, 0.3)'
+    };
+  }
+
+  return {
+    background: 'rgba(168, 85, 247, 0.15)',
+    color: '#c084fc',
+    border: '1px solid rgba(168, 85, 247, 0.3)'
+  };
+};
+
 export default function AdminPage() {
   const router = useRouter();
   
@@ -2750,8 +2815,7 @@ export default function AdminPage() {
                         </td>
                         <td style={{ padding: '16px' }}>
                           <span style={{ 
-                            background: getReferralLabel(lead) === 'Direct' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                            color: getReferralLabel(lead) === 'Direct' ? '#94a3b8' : '#f59e0b',
+                            ...getReferralBadgeStyles(getReferralLabel(lead)),
                             padding: '4px 8px',
                             borderRadius: '12px',
                             fontSize: '0.75rem',
@@ -2919,8 +2983,7 @@ export default function AdminPage() {
                     <div>
                       <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Attribution Source</label>
                       <span style={{ 
-                        background: getReferralLabel(selectedLeadDetails) === 'Direct' ? 'rgba(148, 163, 184, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                        color: getReferralLabel(selectedLeadDetails) === 'Direct' ? '#94a3b8' : '#f59e0b',
+                        ...getReferralBadgeStyles(getReferralLabel(selectedLeadDetails)),
                         padding: '4px 10px',
                         borderRadius: '20px',
                         fontSize: '0.75rem',
