@@ -52,7 +52,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [] }) {
         };
       }
       
-      if (o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'paid') {
+      if (o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'order complete') {
           map[id].totalSpentUsd += parseFloat(o.total_usd || 0);
       }
       map[id].orderCount += 1;
@@ -290,143 +290,139 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [] }) {
           transform: translateY(-50%);
           color: #64748b;
         }
-        .customer-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-          gap: 16px;
-          padding: 20px;
+        .crm-table-wrapper {
+          overflow-x: auto;
+          background: rgba(14, 26, 51, 0.2);
         }
-        .customer-card {
-          background: rgba(30, 41, 59, 0.4);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 12px;
-          padding: 16px;
-          transition: transform 0.2s, border-color 0.2s;
+        .crm-table {
+          width: 100%;
+          border-collapse: collapse;
+          text-align: left;
         }
-        .customer-card:hover {
-          transform: translateY(-2px);
-          border-color: rgba(14, 165, 233, 0.3);
+        .crm-table th {
+          padding: 14px 16px;
+          background: rgba(15, 23, 42, 0.4);
+          color: #94a3b8;
+          font-size: 0.75rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         }
-        .cust-header {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          margin-bottom: 16px;
-          position: relative;
+        .crm-table td {
+          padding: 10px 16px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+          color: #cbd5e1;
+          font-size: 0.85rem;
+          vertical-align: middle;
         }
-        .cust-avatar {
-          width: 40px;
-          height: 40px;
+        .crm-table tr:hover td {
+          background: rgba(255, 255, 255, 0.02);
+        }
+        .cust-avatar-mini {
+          width: 28px;
+          height: 28px;
           border-radius: 50%;
-          background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%);
-          display: flex;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
           color: white;
           font-weight: bold;
-          font-size: 1.1rem;
+          font-size: 0.85rem;
         }
-        .cust-name {
+        .cust-row-name {
           font-weight: 700;
           color: #f8fafc;
-          font-size: 1rem;
-          padding-right: 24px; /* Space for edit icon */
-        }
-        .cust-edit-btn {
-          position: absolute;
-          top: 0;
-          right: 0;
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.1);
-          color: #94a3b8;
-          border-radius: 6px;
-          padding: 4px;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        .cust-edit-btn:hover {
-          color: #0ea5e9;
-          background: rgba(14, 165, 233, 0.1);
-          border-color: rgba(14, 165, 233, 0.3);
-        }
-        .cust-location {
-          font-size: 0.75rem;
-          color: #94a3b8;
           display: flex;
           align-items: center;
-          gap: 4px;
+          gap: 8px;
         }
-        .cust-stats-row {
-          display: flex;
-          gap: 12px;
-          margin-bottom: 16px;
-          padding: 12px 0;
-          border-top: 1px solid rgba(255,255,255,0.05);
-          border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        .cust-stat {
-          flex: 1;
-        }
-        .cust-stat-label {
+        .cust-row-badge {
           font-size: 0.65rem;
-          color: #64748b;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin-bottom: 2px;
+          padding: 2px 8px;
+          border-radius: 9999px;
+          font-weight: bold;
+          display: inline-block;
         }
-        .cust-stat-val {
-          font-size: 1.1rem;
-          font-weight: 800;
-          color: #e2e8f0;
-          display: flex;
-          align-items: center;
-          gap: 4px;
+        .cust-badge-lead {
+          background: rgba(245, 158, 11, 0.15);
+          color: #fbbf24;
         }
-        .cust-stat-val.green { color: #34d399; }
-        .cust-contact {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          margin-bottom: 16px;
+        .cust-badge-customer {
+          background: rgba(16, 185, 129, 0.15);
+          color: #34d399;
         }
-        .contact-item {
-          display: flex;
-          align-items: center;
-          gap: 8px;
+        .crm-cell-location {
           font-size: 0.8rem;
           color: #cbd5e1;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
         }
-        .contact-item a {
+        .crm-cell-contact {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          font-size: 0.8rem;
+        }
+        .crm-cell-contact a {
           color: #cbd5e1;
           text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
         }
-        .contact-item a:hover {
+        .crm-cell-contact a:hover {
           color: #0ea5e9;
         }
-        .cust-actions {
-          display: flex;
-          gap: 8px;
+        .crm-cell-val {
+          font-weight: 800;
+          color: #e2e8f0;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
         }
-        .cust-btn {
-          flex: 1;
+        .crm-cell-val.green {
+          color: #34d399;
+        }
+        .crm-compact-actions {
           display: flex;
+          gap: 6px;
+          justify-content: flex-end;
+        }
+        .crm-icon-btn {
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.1);
+          color: #cbd5e1;
+          border-radius: 6px;
+          padding: 6px;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          gap: 6px;
-          padding: 8px;
-          border-radius: 8px;
-          border: none;
-          font-size: 0.75rem;
-          font-weight: 600;
-          cursor: pointer;
-          transition: background 0.2s;
-          color: white;
           text-decoration: none;
         }
-        .btn-wa { background: #16a34a; }
-        .btn-wa:hover { background: #15803d; }
-        .btn-mail { background: #334155; }
-        .btn-mail:hover { background: #475569; }
+        .crm-icon-btn:hover {
+          background: rgba(14, 165, 233, 0.15);
+          border-color: rgba(14, 165, 233, 0.3);
+          color: #0ea5e9;
+        }
+        .crm-icon-btn.wa {
+          background: rgba(34, 197, 94, 0.08);
+          border-color: rgba(34, 197, 94, 0.15);
+          color: #22c55e;
+        }
+        .crm-icon-btn.wa:hover {
+          background: rgba(34, 197, 94, 0.15);
+          border-color: rgba(34, 197, 94, 0.3);
+          color: #4ade80;
+        }
+        .crm-icon-btn.edit:hover {
+          background: rgba(56, 189, 248, 0.15);
+          border-color: rgba(56, 189, 248, 0.3);
+          color: #38bdf8;
+        }
       `}} />
 
       <div className="crm-header">
@@ -462,107 +458,138 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [] }) {
           No customers found matching your search.
         </div>
       ) : (
-        <div className="customer-grid">
-          {filteredCustomers.map(cust => (
-            <div key={cust.id} className="customer-card">
-              
-              <div className="cust-header">
-                <div className="cust-avatar" style={{ background: cust.isLead ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)' }}>
-                  {cust.name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <div className="cust-name">{cust.name}</div>
-                    {cust.isLead ? (
-                      <span style={{ fontSize: '0.65rem', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', padding: '2px 8px', borderRadius: '9999px', fontWeight: 'bold' }}>Cart Lead</span>
-                    ) : (
-                      <span style={{ fontSize: '0.65rem', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', padding: '2px 8px', borderRadius: '9999px', fontWeight: 'bold' }}>Customer</span>
-                    )}
-                  </div>
-                  {cust.location && (
-                    <div className="cust-location">
-                      <MapPin size={12} /> {cust.location}
-                    </div>
-                  )}
-                </div>
-                <button className="cust-edit-btn" onClick={() => openEditModal(cust)} title="Edit Customer">
-                  <Edit2 size={12} />
-                </button>
-              </div>
-
-              <div className="cust-stats-row">
-                <div className="cust-stat">
-                  <div className="cust-stat-label">Lifetime Value</div>
-                  <div className="cust-stat-val green">
-                    <DollarSign size={14} />{cust.totalSpentUsd.toFixed(0)}
-                  </div>
-                </div>
-                <div className="cust-stat">
-                  <div className="cust-stat-label">Orders</div>
-                  <div className="cust-stat-val">
-                    <ShoppingBag size={14} />{cust.orderCount}
-                  </div>
-                </div>
-              </div>
-
-              <div className="cust-contact">
-                {cust.email && (
-                  <div className="contact-item">
-                    <Mail size={14} color="#64748b" />
-                    <a href={`mailto:${cust.email}`}>{cust.email}</a>
-                  </div>
-                )}
-                {cust.whatsappWaId && (
-                  <div className="contact-item" style={{ background: 'rgba(34, 197, 94, 0.08)', padding: '6px 10px', borderRadius: '8px', border: '1px solid rgba(34, 197, 94, 0.15)' }}>
-                    <BadgeCheck size={14} color="#22c55e" />
-                    <span style={{ color: '#4ade80', fontWeight: 700 }}>+{cust.whatsappWaId}</span>
-                    <span style={{ fontSize: '0.6rem', color: '#22c55e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginLeft: '4px' }}>Verified WA</span>
-                  </div>
-                )}
-                {cust.phone && (
-                  <div className="contact-item">
-                    <Phone size={14} color="#64748b" />
-                    <a href={`tel:${cust.phone}`}>{cust.phone}</a>
-                    {!cust.whatsappWaId && <span style={{ fontSize: '0.6rem', color: '#64748b', marginLeft: '4px' }}>(from form)</span>}
-                  </div>
-                )}
-                <div className="contact-item">
-                  <Calendar size={14} color="#64748b" />
-                  <span>{cust.isLead ? 'Cart updated:' : 'Last order:'} {new Date(cust.lastOrderDate).toLocaleDateString()}</span>
-                </div>
-                {cust.isLead && cust.cartItems && cust.cartItems.length > 0 && (
-                  <div style={{ fontSize: '0.75rem', color: '#cbd5e1', background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px', marginTop: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px', fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Abandoned Cart:</div>
-                    {cust.cartItems.map((item, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                        <span>• {item.product}</span>
-                        <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>x{item.qty}</span>
+        <div className="crm-table-wrapper">
+          <table className="crm-table">
+            <thead>
+              <tr>
+                <th>Customer / Lead</th>
+                <th>Contact details</th>
+                <th>Location</th>
+                <th style={{ textAlign: 'center' }}>Orders</th>
+                <th style={{ textAlign: 'center' }}>Lifetime Value</th>
+                <th>Last Active</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCustomers.map(cust => {
+                const contactPhone = cust.whatsappWaId || cust.phone;
+                return (
+                  <tr key={cust.id}>
+                    {/* Customer Profile Column */}
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div className="cust-avatar-mini" style={{ background: cust.isLead ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)' }}>
+                          {cust.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="cust-row-name">
+                            {cust.name}
+                            <span className={`cust-row-badge ${cust.isLead ? 'cust-badge-lead' : 'cust-badge-customer'}`}>
+                              {cust.isLead ? 'Cart Lead' : 'Customer'}
+                            </span>
+                          </div>
+                          {cust.isLead && cust.cartItems && cust.cartItems.length > 0 && (
+                            <div style={{ fontSize: '0.7rem', color: '#fbbf24', marginTop: '2px', fontWeight: '500' }}>
+                              🛒 {cust.cartItems.map(item => `${item.product} (x${item.qty})`).join(', ')}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                    </td>
 
-              <div className="cust-actions">
-                {(cust.whatsappWaId || cust.phone) && (
-                  <a 
-                    href={`https://wa.me/${(cust.whatsappWaId || cust.phone).replace(/[^0-9]/g, '')}?text=Hi ${cust.name}, `}
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="cust-btn btn-wa"
-                  >
-                    <MessageCircle size={14} /> WhatsApp{cust.whatsappWaId ? ' ✓' : ''}
-                  </a>
-                )}
-                {cust.email && (
-                  <a href={`mailto:${cust.email}`} className="cust-btn btn-mail">
-                    <Mail size={14} /> Email
-                  </a>
-                )}
-              </div>
+                    {/* Contact Info Column */}
+                    <td>
+                      <div className="crm-cell-contact">
+                        {cust.email && (
+                          <a href={`mailto:${cust.email}`} title="Send Email">
+                            <Mail size={12} style={{ color: '#64748b' }} /> {cust.email}
+                          </a>
+                        )}
+                        {contactPhone && (
+                          <a href={`tel:${contactPhone}`} title="Call Phone">
+                            {cust.whatsappWaId ? (
+                              <BadgeCheck size={12} style={{ color: '#22c55e' }} />
+                            ) : (
+                              <Phone size={12} style={{ color: '#64748b' }} />
+                            )}
+                            <span style={{ color: cust.whatsappWaId ? '#4ade80' : '#cbd5e1', fontWeight: cust.whatsappWaId ? 700 : 'normal' }}>
+                              +{contactPhone}
+                            </span>
+                          </a>
+                        )}
+                      </div>
+                    </td>
 
-            </div>
-          ))}
+                    {/* Location Column */}
+                    <td>
+                      {cust.location ? (
+                        <span className="crm-cell-location">
+                          <MapPin size={12} style={{ color: '#64748b' }} />
+                          {cust.location}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#475569', fontSize: '0.75rem' }}>—</span>
+                      )}
+                    </td>
+
+                    {/* Orders Count Column */}
+                    <td style={{ textAlign: 'center' }}>
+                      <span className="crm-cell-val">
+                        <ShoppingBag size={12} style={{ color: '#64748b' }} />
+                        {cust.orderCount}
+                      </span>
+                    </td>
+
+                    {/* Lifetime Value Column */}
+                    <td style={{ textAlign: 'center' }}>
+                      <span className="crm-cell-val green">
+                        <DollarSign size={12} />
+                        {cust.totalSpentUsd.toFixed(0)}
+                      </span>
+                    </td>
+
+                    {/* Last Active Column */}
+                    <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Calendar size={12} />
+                        <span>{new Date(cust.lastOrderDate).toLocaleDateString()}</span>
+                      </div>
+                    </td>
+
+                    {/* Actions Column */}
+                    <td>
+                      <div className="crm-compact-actions">
+                        <button className="crm-icon-btn edit" onClick={() => openEditModal(cust)} title="Edit Profile">
+                          <Edit2 size={13} />
+                        </button>
+                        {contactPhone && (
+                          <a 
+                            href={`https://wa.me/${contactPhone.replace(/[^0-9]/g, '')}?text=Hi ${cust.name}, `}
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="crm-icon-btn wa"
+                            title="Chat on WhatsApp"
+                          >
+                            <MessageCircle size={13} />
+                          </a>
+                        )}
+                        {cust.email && (
+                          <a 
+                            href={`mailto:${cust.email}`} 
+                            className="crm-icon-btn"
+                            title="Send Email"
+                          >
+                            <Mail size={13} />
+                          </a>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 

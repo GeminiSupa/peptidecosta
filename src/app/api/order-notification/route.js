@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 
-const NOTIFICATION_TO = process.env.ORDER_NOTIFICATION_TO || 'omerforce@gmail.com, info@peptidescostarica.net, surfyesi@hotmail.com';
+const rawNotificationTo = process.env.ORDER_NOTIFICATION_TO || 'omerforce@gmail.com, info@peptidescostarica.net';
+const NOTIFICATION_TO = rawNotificationTo.includes('surfyesi@hotmail.com')
+  ? rawNotificationTo
+  : `${rawNotificationTo}, surfyesi@hotmail.com`;
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';

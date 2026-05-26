@@ -160,6 +160,7 @@ export default function AdminPage() {
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [loadingAbandonedCarts, setLoadingAbandonedCarts] = useState(true);
   const [sendingRecoveryEmail, setSendingRecoveryEmail] = useState({});
+  const [sendingRecoveryWhatsApp, setSendingRecoveryWhatsApp] = useState({});
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
   const [leads, setLeads] = useState([]);
@@ -906,7 +907,7 @@ export default function AdminPage() {
           .update({ status: newStatus })
           .eq('id', orderId);
 
-        if (newStatus === 'Completed') {
+        if (newStatus === 'Completed' || newStatus === 'Order Complete') {
           const updatedOrder = orders.find(o => o.id === orderId);
           if (updatedOrder && updatedOrder.customer_email) {
             fetch('/api/order-shipped-notification', {
@@ -1006,53 +1007,33 @@ export default function AdminPage() {
   const handleSendRecoveryWhatsApp = async (acart) => {
     if (!acart.customer_phone) return;
     
-    const phone = acart.customer_phone.replace(/[^0-9]/g, '');
-    const isEn = acart.lang === 'en';
-    
-    // Dynamic checkout URL to allow recovery
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://peptidecosta.vercel.app';
-    const checkoutUrl = `${origin}/catalog?session_id=${acart.session_id}&recovered=true`;
-    
-    const message = isEn
-      ? `Hi ${acart.customer_name || ''}, we saved your cart at Peptides Costa Rica! You can review your items and complete your purchase here:\n${checkoutUrl}\n\nLet us know if you have any questions or need help!`
-      : `Hola ${acart.customer_name || ''}, ¡guardamos tu carrito en Péptidos Costa Rica! Puedes revisar tus artículos y completar tu compra aquí:\n${checkoutUrl}\n\n¡Escríbenos si tienes dudas o necesitas ayuda!`;
-      
-    const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-    
-    // Open in a new tab
-    window.open(waUrl, '_blank', 'noopener,noreferrer');
-    
-    // Update local state immediately for reactive UI
-    setAbandonedCarts(prev => 
-      prev.map(c => 
-        c.session_id === acart.session_id 
-          ? { ...c, recovery_whatsapp_sent: true, recovery_whatsapp_sent_at: new Date().toISOString() } 
-          : c
-      )
-    );
-    
-    // If details modal is open for this cart, update it
-    if (selectedCartDetails && selectedCartDetails.session_id === acart.session_id) {
-      setSelectedCartDetails(prev => ({
-        ...prev,
-        recovery_whatsapp_sent: true,
-        recovery_whatsapp_sent_at: new Date().toISOString()
-      }));
-    }
-    
-    // Update Supabase database
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase
-          .from('abandoned_carts')
-          .update({
-            recovery_whatsapp_sent: true,
-            recovery_whatsapp_sent_at: new Date().toISOString()
-          })
-          .eq('session_id', acart.session_id);
-      } catch (err) {
-        console.error('Failed to record WhatsApp recovery status in DB:', err);
+    setSendingRecoveryWhatsApp(prev => ({ ...prev, [acart.session_id]: true }));
+    try {
+      const response = await fetch('/api/abandoned-cart-whatsapp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: acart.session_id,
+          customer_name: acart.customer_name,
+          customer_phone: acart.customer_phone,
+          lang: acart.lang || 'es',
+        }),
+      });
+
+      const result = await response.json();
+      if (response.ok && result.success) {
+        alert('Recovery WhatsApp message sent successfully!');
+        loadAdminData();
+      } else {
+        alert('Failed to send recovery WhatsApp message: ' + (result.error || 'Unknown error'));
       }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to send recovery WhatsApp message: ' + err.message);
+    } finally {
+      setSendingRecoveryWhatsApp(prev => ({ ...prev, [acart.session_id]: false }));
     }
   };
 
@@ -2457,6 +2438,7 @@ export default function AdminPage() {
                               {acart.customer_phone && (
                                 <button
                                   onClick={() => handleSendRecoveryWhatsApp(acart)}
+                                  disabled={sendingRecoveryWhatsApp[acart.session_id]}
                                   className="admin-btn"
                                   style={{ 
                                     padding: '6px 12px', 
@@ -2469,10 +2451,11 @@ export default function AdminPage() {
                                     alignItems: 'center', 
                                     gap: '4px', 
                                     fontWeight: 'bold',
-                                    cursor: 'pointer'
+                                    cursor: 'pointer',
+                                    opacity: sendingRecoveryWhatsApp[acart.session_id] ? 0.6 : 1
                                   }}
                                 >
-                                  WhatsApp
+                                  {sendingRecoveryWhatsApp[acart.session_id] ? 'Sending...' : 'WhatsApp'}
                                 </button>
                               )}
                               
@@ -3114,8 +3097,8 @@ export default function AdminPage() {
                   <div>
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Order Status</label>
                     <span style={{ 
-                      background: selectedOrderDetails.status === 'Completed' ? 'rgba(34, 197, 94, 0.15)' : selectedOrderDetails.status === 'Paid' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                      color: selectedOrderDetails.status === 'Completed' ? '#4ade80' : selectedOrderDetails.status === 'Paid' ? '#38bdf8' : '#f59e0b',
+                      background: (selectedOrderDetails.status === 'Completed' || selectedOrderDetails.status === 'Order Complete') ? 'rgba(34, 197, 94, 0.15)' : selectedOrderDetails.status === 'Paid' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                      color: (selectedOrderDetails.status === 'Completed' || selectedOrderDetails.status === 'Order Complete') ? '#4ade80' : selectedOrderDetails.status === 'Paid' ? '#38bdf8' : '#f59e0b',
                       padding: '4px 10px',
                       borderRadius: '20px',
                       fontSize: '0.75rem',

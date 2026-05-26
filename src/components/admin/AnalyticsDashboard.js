@@ -200,9 +200,9 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   // CALCULATE FINANCIAL STATISTICS
   // -------------------------------------------------------------
   
-  // Successful orders (Paid, Completed)
+  // Successful orders (Paid, Completed, Order Complete)
   const successfulOrders = orders.filter(o => 
-    o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed'
+    o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'order complete'
   );
   
   const totalRevenueUsd = successfulOrders.reduce((sum, o) => sum + (parseFloat(o.total_usd) || 0), 0);
@@ -386,7 +386,7 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
       paymentBreakdown[method] = { count: 0, revenue: 0 };
     }
     paymentBreakdown[method].count += 1;
-    if (o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed') {
+    if (o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'order complete') {
       paymentBreakdown[method].revenue += (parseFloat(o.total_usd) || 0);
     }
     
@@ -396,7 +396,7 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
       whatsappSourceBreakdown[source] = { count: 0, revenue: 0 };
     }
     whatsappSourceBreakdown[source].count += 1;
-    if (o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed') {
+    if (o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'order complete') {
       whatsappSourceBreakdown[source].revenue += (parseFloat(o.total_usd) || 0);
     }
   });
