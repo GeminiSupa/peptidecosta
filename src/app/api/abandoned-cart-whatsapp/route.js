@@ -26,9 +26,22 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Meta WhatsApp credentials (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID) are not configured on the server.' }, { status: 500 });
     }
 
-    const cleanPhone = customer_phone.replace(/[^0-9]/g, '');
-    if (!cleanPhone || cleanPhone.length < 8) {
-      return NextResponse.json({ error: 'Invalid phone number format' }, { status: 400 });
+    let cleanPhone = customer_phone.replace(/[^0-9]/g, '');
+    
+    // Auto-remove leading zeros if it starts with 00 followed by country code
+    if (cleanPhone.startsWith('00')) {
+      cleanPhone = cleanPhone.substring(2);
+    }
+    
+    // If it's a standard Costa Rican 8-digit phone number, automatically prepend the '506' country code
+    if (cleanPhone.length === 8) {
+      cleanPhone = '506' + cleanPhone;
+    }
+
+    if (!cleanPhone || cleanPhone.length < 8 || cleanPhone.length > 15) {
+      return NextResponse.json({ 
+        error: `Invalid phone number: "${customer_phone}". WhatsApp numbers must be between 8 and 15 digits, including the country code (e.g. 50684046973 or 84046973).` 
+      }, { status: 400 });
     }
 
     // Dynamic checkout URL to allow recovery
@@ -44,7 +57,7 @@ export async function POST(request) {
 
     // Invoke Meta Cloud API
     const metaResponse = await fetch(
-      `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`,
+      `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
       {
         method: 'POST',
         headers: {

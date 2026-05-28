@@ -148,7 +148,7 @@ export async function POST(request) {
                 : `¡Hola ${displayName || ''}! 👋 Gracias por contactarnos. Un agente te responderá pronto.\n\nHi ${displayName || ''}! 👋 Thanks for reaching out. An agent will reply shortly.`;
 
               await fetch(
-                `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`,
+                `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
                 {
                   method: 'POST',
                   headers: {

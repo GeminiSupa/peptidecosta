@@ -15,7 +15,7 @@ const supabase = supabaseUrl && (supabaseServiceKey || supabaseAnonKey)
 export async function POST(request) {
   try {
     const payload = await request.json();
-    const { to, message, customerName, orderId } = payload;
+    const { to, message, customerName, orderId, sessionId } = payload;
 
     if (!to || !message) {
       return NextResponse.json({ error: 'Missing required parameters: "to" and "message" are required' }, { status: 400 });
@@ -26,16 +26,29 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Meta WhatsApp credentials (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID) are not configured on the server.' }, { status: 500 });
     }
 
-    const cleanPhone = to.replace(/[^0-9]/g, '');
-    if (!cleanPhone || cleanPhone.length < 8) {
-      return NextResponse.json({ error: 'Invalid phone number format' }, { status: 400 });
+    let cleanPhone = to.replace(/[^0-9]/g, '');
+    
+    // Auto-remove leading zeros if it starts with 00 followed by country code
+    if (cleanPhone.startsWith('00')) {
+      cleanPhone = cleanPhone.substring(2);
+    }
+    
+    // If it's a standard Costa Rican 8-digit phone number, automatically prepend the '506' country code
+    if (cleanPhone.length === 8) {
+      cleanPhone = '506' + cleanPhone;
+    }
+
+    if (!cleanPhone || cleanPhone.length < 8 || cleanPhone.length > 15) {
+      return NextResponse.json({ 
+        error: `Invalid phone number: "${to}". WhatsApp numbers must be between 8 and 15 digits, including the country code (e.g. 50684046973 or 84046973).` 
+      }, { status: 400 });
     }
 
     console.log(`[WhatsApp Outbound] Sending message to ${cleanPhone} via Meta API...`);
 
     // Invoke Meta Cloud API
     const metaResponse = await fetch(
-      `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`,
+      `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
       {
         method: 'POST',
         headers: {
@@ -79,6 +92,23 @@ export async function POST(request) {
           console.error('[WhatsApp Outbound] Failed to log outbound message in DB:', logErr);
         } else {
           console.log('[WhatsApp Outbound] Successfully logged outbound message to DB');
+        }
+
+        // If a sessionId is provided, update the abandoned cart status in the database
+        if (sessionId) {
+          const { error: cartErr } = await supabase
+            .from('abandoned_carts')
+            .update({
+              recovery_whatsapp_sent: true,
+              recovery_whatsapp_sent_at: new Date().toISOString()
+            })
+            .eq('session_id', sessionId);
+
+          if (cartErr) {
+            console.error('[WhatsApp Outbound] Failed to update abandoned cart status in DB:', cartErr);
+          } else {
+            console.log(`[WhatsApp Outbound] Successfully updated abandoned cart status for session ${sessionId}`);
+          }
         }
       } catch (dbCrash) {
         console.error('[WhatsApp Outbound] Unexpected crash during CRM DB logging:', dbCrash);

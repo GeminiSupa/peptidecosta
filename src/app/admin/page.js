@@ -13,7 +13,8 @@ import {
   AlertCircle, ChevronRight, ChevronUp, ChevronDown, MessageSquare, Database,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
-  KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, Send
+  KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, Send,
+  Bell, X
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
@@ -169,6 +170,12 @@ export default function AdminPage() {
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
   const [selectedCartDetails, setSelectedCartDetails] = useState(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
+  
+  // Facebook Notifications States
+  const [facebookNotifications, setFacebookNotifications] = useState([]);
+  const [loadingFbNotifications, setLoadingFbNotifications] = useState(true);
+  const [fbFilter, setFbFilter] = useState('All');
+  const [toastMessage, setToastMessage] = useState('');
   const [leadsSearch, setLeadsSearch] = useState('');
   const [leadsSourceFilter, setLeadsSourceFilter] = useState('All');
   const [leadsAreaFilter, setLeadsAreaFilter] = useState('All');
@@ -488,6 +495,26 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       .on('postgres_changes', { event: '*', schema: 'public', table: 'catalog_leads' }, () => {
         loadAdminData();
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'facebook_notifications' }, (payload) => {
+        // Trigger live audio alert
+        try {
+          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-600.wav');
+          audio.volume = 0.5;
+          audio.play();
+        } catch (audioErr) {
+          console.warn('Audio play blocked or failed:', audioErr);
+        }
+        
+        // Show real-time alert toast
+        const item = payload.new;
+        setToastMessage(`New Facebook ${item.type || 'Alert'} from ${item.sender_name || 'Visitor'}!`);
+        setTimeout(() => setToastMessage(''), 6000);
+        
+        loadAdminData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'facebook_notifications' }, () => {
+        loadAdminData();
+      })
       .subscribe();
 
     return () => {
@@ -712,6 +739,23 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         if (!error && data) setProductViews(data);
       } catch (err) { console.error("Failed to load product views:", err); }
     }
+
+    // 8. Fetch Facebook Notifications
+    setLoadingFbNotifications(true);
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('facebook_notifications')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error && data) {
+          setFacebookNotifications(data);
+        }
+      } catch (err) {
+        console.error("Failed to load facebook notifications:", err);
+      }
+    }
+    setLoadingFbNotifications(false);
   };
 
   // Trigger loading when authenticated
@@ -1342,7 +1386,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           to: waRecipient.phone,
           message: waMessageText,
           customerName: waRecipient.name,
-          orderId: waRecipient.orderDbId
+          orderId: waRecipient.orderDbId,
+          sessionId: waRecipient.session_id
         })
       });
 
@@ -1791,6 +1836,49 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     } catch (err) { console.error(err); }
   };
 
+  const handleMarkNotificationRead = async (id) => {
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      const { error } = await supabase
+        .from('facebook_notifications')
+        .update({ status: 'read' })
+        .eq('id', id);
+      if (error) throw error;
+      setFacebookNotifications(prev => prev.map(n => n.id === id ? { ...n, status: 'read' } : n));
+    } catch (err) {
+      console.error("Failed to update notification status:", err);
+    }
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    if (!isSupabaseConfigured || !supabase) return;
+    try {
+      const { error } = await supabase
+        .from('facebook_notifications')
+        .update({ status: 'read' })
+        .eq('status', 'unread');
+      if (error) throw error;
+      setFacebookNotifications(prev => prev.map(n => ({ ...n, status: 'read' })));
+    } catch (err) {
+      console.error("Failed to mark all notifications read:", err);
+    }
+  };
+
+  const handleDeleteNotification = async (id) => {
+    if (!isSupabaseConfigured || !supabase) return;
+    if (!confirm('Are you sure you want to delete this notification?')) return;
+    try {
+      const { error } = await supabase
+        .from('facebook_notifications')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      setFacebookNotifications(prev => prev.filter(n => n.id !== id));
+    } catch (err) {
+      console.error("Failed to delete notification:", err);
+    }
+  };
+
   // Science/peptide themed icon for visual rendering (no pills!)
   const getCategoryIcon = (cat, size = 20) => {
     const c = (cat || '').toLowerCase();
@@ -1960,6 +2048,32 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   return (
     <div className="admin-layout min-h-screen" suppressHydrationWarning>
+      {/* Toast Alert Notification */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          background: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
+          color: 'white',
+          padding: '16px 24px',
+          borderRadius: '12px',
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.4)',
+          zIndex: 999999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          fontWeight: 'bold',
+          animation: 'slideInRight 0.3s ease-out forwards',
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          <Bell className="animate-bounce" size={20} />
+          <span>{toastMessage}</span>
+          <button onClick={() => setToastMessage('')} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', marginLeft: '12px', opacity: 0.8 }} onMouseOver={(e) => e.target.style.opacity = '1'}>
+            <X size={16} />
+          </button>
+        </div>
+      )}
       {/* Navbar Header */}
       <nav className="admin-navbar">
         <div className="admin-nav-top-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '12px' }}>
@@ -2069,6 +2183,21 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             >
               <FileText size={14} />
               <span className="tab-label">Content (CMS)</span>
+            </button>
+          )}
+          {hasAccess('facebook') && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'facebook' ? 'active' : ''}`}
+              onClick={() => setActiveTab('facebook')}
+              style={{ position: 'relative' }}
+            >
+              <MessageCircle size={14} />
+              <span className="tab-label">Facebook Alerts</span>
+              {facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
+                <span className="tab-count" style={{ background: '#0284c7' }}>
+                  {facebookNotifications.filter(n => n.status === 'unread').length}
+                </span>
+              )}
             </button>
           )}
           <button 
@@ -3125,6 +3254,281 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* TAB: Facebook Notifications */}
+        {activeTab === 'facebook' && (
+          <div className="admin-orders-tab">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <MessageCircle size={22} style={{ color: '#0ea5e9' }} /> Facebook Alerts & Leads
+                </h2>
+                <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '4px 0 0 0' }}>
+                  Real-time Messenger conversations, feed comments, and Lead Ads submissions
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                {facebookNotifications.some(n => n.status === 'unread') && (
+                  <button 
+                    className="admin-btn" 
+                    onClick={handleMarkAllNotificationsRead} 
+                    style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(14, 165, 233, 0.15)', border: '1px solid rgba(14, 165, 233, 0.3)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}
+                  >
+                    Mark All Read
+                  </button>
+                )}
+                <button 
+                  className="admin-btn" 
+                  onClick={loadAdminData} 
+                  style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* Filter toolbar */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              {['All', 'unread', 'lead', 'message', 'comment'].map(filterVal => {
+                const label = filterVal === 'All' ? 'All Alerts' : filterVal === 'unread' ? 'Unread Only' : filterVal.charAt(0).toUpperCase() + filterVal.slice(1) + 's';
+                const isActive = fbFilter === filterVal;
+                
+                // Count unread for that category
+                let count = 0;
+                if (filterVal === 'All') count = facebookNotifications.length;
+                else if (filterVal === 'unread') count = facebookNotifications.filter(n => n.status === 'unread').length;
+                else count = facebookNotifications.filter(n => n.type === filterVal).length;
+
+                return (
+                  <button
+                    key={filterVal}
+                    onClick={() => setFbFilter(filterVal)}
+                    style={{
+                      background: isActive ? '#0284c7' : '#0f172a',
+                      color: isActive ? 'white' : '#94a3b8',
+                      border: `1px solid ${isActive ? '#0284c7' : 'rgba(255,255,255,0.08)'}`,
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {label}
+                    <span style={{ 
+                      fontSize: '0.7rem', 
+                      background: isActive ? 'rgba(255,255,255,0.2)' : 'rgba(148,163,184,0.1)', 
+                      color: isActive ? 'white' : '#64748b', 
+                      padding: '2px 6px', 
+                      borderRadius: '10px' 
+                    }}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {loadingFbNotifications ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading alerts...</div>
+            ) : facebookNotifications.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 40px', background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8' }}>
+                <Bell size={40} style={{ color: '#475569', marginBottom: '12px' }} />
+                <h3 style={{ margin: '0 0 4px 0', color: '#cbd5e1' }}>No Facebook Alerts Found</h3>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>When Facebook Webhook triggers, alerts will instantly appear here.</p>
+              </div>
+            ) : (() => {
+              const filtered = facebookNotifications.filter(n => {
+                if (fbFilter === 'All') return true;
+                if (fbFilter === 'unread') return n.status === 'unread';
+                return n.type === fbFilter;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div style={{ textAlign: 'center', padding: '40px', background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8' }}>
+                    No alerts match the selected filter.
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {filtered.map(item => {
+                    const isUnread = item.status === 'unread';
+                    
+                    // Style mapping based on type
+                    let typeLabel = 'Alert';
+                    let typeColor = '#64748b';
+                    let typeBg = 'rgba(100, 116, 139, 0.15)';
+                    let IconComponent = Bell;
+
+                    if (item.type === 'lead') {
+                      typeLabel = 'Lead Form';
+                      typeColor = '#10b981';
+                      typeBg = 'rgba(16, 185, 129, 0.15)';
+                      IconComponent = Users;
+                    } else if (item.type === 'message') {
+                      typeLabel = 'Messenger';
+                      typeColor = '#0ea5e9';
+                      typeBg = 'rgba(14, 165, 233, 0.15)';
+                      IconComponent = MessageSquare;
+                    } else if (item.type === 'comment') {
+                      typeLabel = 'Comment';
+                      typeColor = '#ec4899';
+                      typeBg = 'rgba(236, 72, 153, 0.15)';
+                      IconComponent = MessageCircle;
+                    }
+
+                    return (
+                      <div
+                        key={item.id}
+                        style={{
+                          background: isUnread ? 'rgba(14, 165, 233, 0.05)' : '#0e1626',
+                          borderRadius: '12px',
+                          border: `1px solid ${isUnread ? 'rgba(14, 165, 233, 0.2)' : 'rgba(255,255,255,0.05)'}`,
+                          borderLeft: isUnread ? '4px solid #0ea5e9' : '1px solid rgba(255,255,255,0.05)',
+                          padding: '16px 20px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: '20px',
+                          flexWrap: 'wrap',
+                          transition: 'all 0.2s ease',
+                          opacity: isUnread ? 1 : 0.8
+                        }}
+                      >
+                        <div style={{ display: 'flex', gap: '16px', flex: '1', minWidth: '280px' }}>
+                          <div style={{ 
+                            background: typeBg, 
+                            color: typeColor, 
+                            width: '40px', 
+                            height: '40px', 
+                            borderRadius: '10px', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <IconComponent size={20} />
+                          </div>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.95rem' }}>
+                                {item.sender_name || 'Facebook Visitor'}
+                              </span>
+                              <span style={{ 
+                                color: typeColor, 
+                                background: typeBg, 
+                                padding: '2px 8px', 
+                                borderRadius: '12px', 
+                                fontSize: '0.7rem', 
+                                fontWeight: 'bold',
+                                textTransform: 'uppercase'
+                              }}>
+                                {typeLabel}
+                              </span>
+                              {isUnread && (
+                                <span style={{ 
+                                  color: '#0284c7', 
+                                  background: 'rgba(2, 132, 199, 0.15)', 
+                                  padding: '2px 8px', 
+                                  borderRadius: '12px', 
+                                  fontSize: '0.7rem', 
+                                  fontWeight: 'bold' 
+                                }}>
+                                  New
+                                </span>
+                              )}
+                            </div>
+
+                            <p style={{ color: '#cbd5e1', fontSize: '0.85rem', margin: '8px 0', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
+                              {item.content}
+                            </p>
+
+                            {/* Additional metadata for Lead Ads */}
+                            {item.type === 'lead' && (item.email || item.phone) && (
+                              <div style={{ display: 'flex', gap: '16px', fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px', flexWrap: 'wrap' }}>
+                                {item.email && (
+                                  <span>📧 {item.email}</span>
+                                )}
+                                {item.phone && (
+                                  <span>📞 {item.phone}</span>
+                                )}
+                              </div>
+                            )}
+
+                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                              🕒 {new Date(item.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Actions buttons */}
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          {item.external_link && (
+                            <a 
+                              href={item.external_link} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              style={{ 
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                padding: '6px 12px', 
+                                background: 'rgba(255,255,255,0.05)', 
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: '#f8fafc',
+                                textDecoration: 'none',
+                                borderRadius: '8px', 
+                                fontSize: '0.75rem', 
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                              onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                            >
+                              Open in Meta
+                            </a>
+                          )}
+                          {isUnread && (
+                            <button 
+                              onClick={() => handleMarkNotificationRead(item.id)} 
+                              style={{ padding: '6px 12px', background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' }}
+                            >
+                              Mark Read
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => handleDeleteNotification(item.id)} 
+                            style={{ 
+                              padding: '6px 8px', 
+                              background: 'rgba(220, 38, 38, 0.15)', 
+                              color: '#f87171', 
+                              border: '1px solid rgba(220, 38, 38, 0.3)', 
+                              borderRadius: '8px', 
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                            title="Delete Alert"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
 
