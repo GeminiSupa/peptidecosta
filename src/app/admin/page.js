@@ -13,7 +13,7 @@ import {
   AlertCircle, ChevronRight, ChevronUp, ChevronDown, MessageSquare, Database,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
-  KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users
+  KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, Send
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
@@ -200,6 +200,154 @@ export default function AdminPage() {
   const [editDescProduct, setEditDescProduct] = useState(null);
   const [editDescEn, setEditDescEn] = useState('');
   const [editDescEs, setEditDescEs] = useState('');
+  const [loadingAiDesc, setLoadingAiDesc] = useState(false);
+  const [loadingAiTranslate, setLoadingAiTranslate] = useState(false);
+
+  // AI WhatsApp Outbound Composer States
+  const [waModalOpen, setWaModalOpen] = useState(false);
+  const [waRecipient, setWaRecipient] = useState(null); // { name, phone, orderId, cartItems, context }
+  const [waMessageText, setWaMessageText] = useState('');
+  const [waSending, setWaSending] = useState(false);
+  const [waDrafting, setWaDrafting] = useState(false);
+
+  // AI Copilot States
+  const [aiChatMessages, setAiChatMessages] = useState([
+    { role: 'assistant', text: '¡Hola! Soy tu Copiloto de Inteligencia Artificial para Costa Peptides. 🧬 ¿En qué te puedo asistir hoy?\n\nPuedo redactar boletines de marketing, traducir descripciones científicas, formular resúmenes de investigación para tus blogs, o estructurar plantillas de mensajes de WhatsApp altamente personalizadas.' }
+  ]);
+  const [aiInputText, setAiInputText] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+
+  // Carts AI Audit States
+  const [cartsAiText, setCartsAiText] = useState('');
+  const [generatingCartsAi, setGeneratingCartsAi] = useState(false);
+
+  const handleGenerateCartsAi = async () => {
+    setGeneratingCartsAi(true);
+    setCartsAiText('');
+    try {
+      const activeAbandoned = abandonedCarts.filter(c => c.status === 'active' || !c.status);
+      const totalPotentialVal = activeAbandoned.reduce((sum, c) => {
+        if (!Array.isArray(c.cart_data)) return sum;
+        return sum + c.cart_data.reduce((acc, item) => {
+          const price = parseFloat((item.price_usd || item.priceUsd || '0').replace(/[^0-9.]/g, '')) || 0;
+          return acc + (price * (item.qty || 1));
+        }, 0);
+      }, 0);
+
+      const itemsDropped = {};
+      activeAbandoned.forEach(c => {
+        if (Array.isArray(c.cart_data)) {
+          c.cart_data.forEach(item => {
+            const pName = item.product || 'Unknown Product';
+            itemsDropped[pName] = (itemsDropped[pName] || 0) + (item.qty || 1);
+          });
+        }
+      });
+
+      const prompt = `You are the chief cart recovery optimizer at Peptides Costa Rica.
+Analyze the following active abandoned carts statistics:
+- Total Active Abandoned Carts: ${activeAbandoned.length}
+- Total Potential Recoverable Value: $${totalPotentialVal.toFixed(2)} USD (CRC ${(totalPotentialVal * exchangeRate).toLocaleString()})
+- Items Dropped in Carts (Frequency List): ${Object.entries(itemsDropped).map(([name, qty]) => `${name} (x${qty})`).join(', ') || 'No item data available'}
+
+Please provide the recovery analysis in BOTH English and Spanish. 
+Format it as two clear, consecutive sections:
+"🇬🇧 ENGLISH CARTS RECOVERY STRATEGY"
+and
+"🇪🇸 ESTRATEGIA DE RECUPERACIÓN EN ESPAÑOL"
+
+For each language section, include:
+1. **Auditor Verdict** (1 bold sentence regarding the urgency/magnitude of this recoverable pool).
+2. **Frequency Leader analysis** (Explain which peptide is most abandoned and why: e.g. BPC-157 recovery hooks, Semaglutide commitment dropoff).
+3. **Drafted High-converting Pitch Templates** (Write 2 custom WhatsApp templates to recover the top items, including an explicit 10% coupon hook or free courier shipping hook).
+
+Keep your tone highly professional, precise, data-driven, and empowering. Format with clean Markdown (bold text, bullet points). Do not write any greetings or preambles, just start directly with the English header.`;
+
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'chat',
+          prompt
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCartsAiText(data.text);
+      } else {
+        alert('Failed to generate insights: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to generate insights: ' + err.message);
+    } finally {
+      setGeneratingCartsAi(false);
+    }
+  };
+
+  // Leads AI Audit States
+  const [leadsAiText, setLeadsAiText] = useState('');
+  const [generatingLeadsAi, setGeneratingLeadsAi] = useState(false);
+
+  const handleGenerateLeadsAi = async () => {
+    setGeneratingLeadsAi(true);
+    setLeadsAiText('');
+    try {
+      const totalLeads = leads.length;
+      const referralSources = {};
+      const cities = {};
+
+      leads.forEach(l => {
+        const source = l.utm_source || l.source || 'Organic/Direct';
+        referralSources[source] = (referralSources[source] || 0) + 1;
+
+        const city = l.region || l.city || 'Unknown Region';
+        cities[city] = (cities[city] || 0) + 1;
+      });
+
+      const prompt = `You are the lead marketing director at Peptides Costa Rica.
+Analyze the following catalog access leads pipeline statistics:
+- Total Leads Captured: ${totalLeads}
+- Traffic Source Breakdown: ${Object.entries(referralSources).map(([source, count]) => `${source} (${count} leads)`).join(', ') || 'No source data'}
+- Top Geographic Regions: ${Object.entries(cities).slice(0, 5).map(([city, count]) => `${city} (${count} leads)`).join(', ') || 'No region data'}
+
+Please provide a highly strategic lead acquisition & conversion analysis in BOTH English and Spanish.
+Format it as two clear, consecutive sections:
+"🇬🇧 ENGLISH LEADS STRATEGY & CAMPAIGNS"
+and
+"🇪🇸 ESTRATEGIA Y CAMPAÑAS DE PROSPECTOS"
+
+For each language section, include:
+1. **Auditor Verdict** (1 bold sentence grading your lead acquisition speed and geographical interest).
+2. **Channel Performance analysis** (Identify which acquisition channels are working best and how to optimize them, e.g. paid ads vs instagram influencers).
+3. **Outbound Outreach Campaign** (Draft a highly persuasive, hyper-targeted cold outreach email & WhatsApp message in both languages targeting prospects who haven't completed checkout yet, offering an educational catalog review or specific scientific explanation).
+
+Keep your tone highly professional, precise, data-driven, and empowering. Format with clean Markdown (bold text, bullet points). Do not write any greetings or preambles, just start directly with the English header.`;
+
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'chat',
+          prompt
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setLeadsAiText(data.text);
+      } else {
+        alert('Failed to generate insights: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to generate insights: ' + err.message);
+    } finally {
+      setGeneratingLeadsAi(false);
+    }
+  };
+
 
   // Link share builder states
   const [shareLang, setShareLang] = useState('es');
@@ -1042,6 +1190,251 @@ export default function AdminPage() {
     }
   };
 
+  // ─── AI INTEGRATION HANDLERS (GEMINI) ───
+
+  // 1. Translate Product Descriptions with AI
+  const handleAiTranslate = async (text, direction) => {
+    if (!text || text.trim() === '') {
+      alert('Please enter some text to translate.');
+      return;
+    }
+    
+    setLoadingAiTranslate(true);
+    try {
+      const sourceLang = direction === 'en-to-es' ? 'en' : 'es';
+      const targetLang = direction === 'en-to-es' ? 'es' : 'en';
+      
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'translate',
+          text,
+          sourceLang,
+          targetLang
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (direction === 'en-to-es') {
+          setEditDescEs(data.text);
+        } else {
+          setEditDescEn(data.text);
+        }
+      } else {
+        alert('Translation failed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Translation failed: ' + err.message);
+    } finally {
+      setLoadingAiTranslate(false);
+    }
+  };
+
+  // 2. Generate Rich Peptide Details / Info
+  const handleAiGenerateDesc = async (peptideName) => {
+    if (!peptideName || peptideName.trim() === '') {
+      alert('Peptide name is required.');
+      return;
+    }
+
+    setLoadingAiDesc(true);
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'generate_info',
+          text: peptideName
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        // Try parsing the JSON block from response text
+        try {
+          const cleanText = data.text.replace(/```json/g, '').replace(/```/g, '').trim();
+          const parsed = JSON.parse(cleanText);
+          if (parsed.en) setEditDescEn(parsed.en);
+          if (parsed.es) setEditDescEs(parsed.es);
+        } catch (e) {
+          // If not strict JSON, just set the raw output as English description
+          setEditDescEn(data.text);
+          alert('AI response received, but could not parse EN/ES split. Entire output applied to English.');
+        }
+      } else {
+        alert('Generation failed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Generation failed: ' + err.message);
+    } finally {
+      setLoadingAiDesc(false);
+    }
+  };
+
+  // 3. Open Custom WhatsApp Composer Modal
+  const openWhatsAppComposer = (recipient) => {
+    setWaRecipient(recipient);
+    // Draft a basic template based on recipient context
+    let defaultMsg = `Hola ${recipient.name}, `;
+    if (recipient.orderNumber) {
+      defaultMsg = `Hola ${recipient.name}, te contactamos de Péptidos Costa Rica respecto a tu orden ${recipient.orderNumber}. ¿Todo bien?`;
+    } else if (recipient.cartItems) {
+      defaultMsg = `Hola ${recipient.name}, vimos que dejaste algunos artículos en tu carrito de Péptidos Costa Rica. ¿Tienes alguna pregunta o necesitas ayuda para completar tu compra?`;
+    }
+    setWaMessageText(defaultMsg);
+    setWaModalOpen(true);
+  };
+
+  // 4. Draft Personalized WhatsApp message using AI
+  const handleDraftWaMessage = async () => {
+    if (!waRecipient) return;
+    
+    setWaDrafting(true);
+    try {
+      let prompt = `Write a friendly, professional, highly persuasive e-commerce customer support/sales message for a customer named "${waRecipient.name}" who `;
+      if (waRecipient.orderNumber) {
+        prompt += `placed an order (Order Ref: ${waRecipient.orderNumber}) containing: ${waRecipient.cartItems ? waRecipient.cartItems.map(i => `${i.product} (x${i.qty})`).join(', ') : 'peptides'}. Write a status check-in, coordinating delivery details in a warm, polite tone.`;
+      } else if (waRecipient.cartItems) {
+        prompt += `has an active abandoned cart containing: ${waRecipient.cartItems.map(i => `${i.product} (x${i.qty || i.quantity})`).join(', ')}. Politely remind them that we saved their items, offer support, and include a brief call to action.`;
+      } else {
+        prompt += `is in our CRM database. Highlight our premium lab-tested peptides, fast local shipping in Costa Rica, and invite them to ask any questions.`;
+      }
+      
+      prompt += ` Keep it brief, conversational, and split with natural line breaks. Write the message in Spanish, as that is our primary language. Do not include subject lines, greetings placeholders, or quotes. Just give the exact chat body ready to send.`;
+
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'chat',
+          prompt
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setWaMessageText(data.text.trim());
+      } else {
+        alert('Failed to draft AI message: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to draft AI message: ' + err.message);
+    } finally {
+      setWaDrafting(false);
+    }
+  };
+
+  // 5. Send Automated Outbound WhatsApp Message
+  const handleSendWaMessage = async () => {
+    if (!waRecipient || !waMessageText.trim()) return;
+
+    setWaSending(true);
+    try {
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: waRecipient.phone,
+          message: waMessageText,
+          customerName: waRecipient.name,
+          orderId: waRecipient.orderDbId
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert('✅ WhatsApp message sent automatically from your business number!');
+        setWaModalOpen(false);
+        setWaRecipient(null);
+        setWaMessageText('');
+        loadAdminData(); // Refresh to log into outbound history
+      } else {
+        alert('❌ Failed to send WhatsApp automatically: ' + (data.error || 'Unknown error') + '\n\nYou can still use the "Open in Personal WhatsApp" fallback link below.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('❌ Failed to send WhatsApp: ' + err.message);
+    } finally {
+      setWaSending(false);
+    }
+  };
+
+  // 6. AI Copilot Chat Handler
+  const handleSendAiChatMessage = async () => {
+    if (!aiInputText.trim()) return;
+
+    const userMessage = { role: 'user', text: aiInputText };
+    setAiChatMessages(prev => [...prev, userMessage]);
+    const promptToSend = aiInputText;
+    setAiInputText('');
+    setAiLoading(true);
+
+    try {
+      // Generate Lead attribution counts
+      const leadAttributions = {};
+      leads.forEach(l => {
+        const src = l.utm_source || l.source || 'Organic/Direct';
+        leadAttributions[src] = (leadAttributions[src] || 0) + 1;
+      });
+
+      // Generate Carts item counts & active vs completed
+      const cartItemsCount = {};
+      const activeCarts = abandonedCarts.filter(c => c.status === 'active' || !c.status);
+      activeCarts.forEach(c => {
+        if (Array.isArray(c.cart_data)) {
+          c.cart_data.forEach(item => {
+            const pName = item.product || 'Unknown Product';
+            cartItemsCount[pName] = (cartItemsCount[pName] || 0) + (item.qty || 1);
+          });
+        }
+      });
+
+      const context = {
+        products: products.map(p => ({
+          product: p.product,
+          category: p.category,
+          priceUsd: p.price_usd || p.priceUsd,
+          priceCrc: p.price_crc || p.priceCrc
+        })),
+        stats: {
+          totalOrders: orders.length,
+          abandonedCartsCount: abandonedCarts.length,
+          activeCartsCount: activeCarts.length,
+          leadsCount: leads.length,
+          leadAttributions,
+          cartItemsCount
+        }
+      };
+
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'chat',
+          prompt: promptToSend,
+          context
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAiChatMessages(prev => [...prev, { role: 'assistant', text: data.text }]);
+      } else {
+        setAiChatMessages(prev => [...prev, { role: 'assistant', text: `⚠️ Error de Copiloto: ${data.error || 'No se pudo obtener respuesta.'}` }]);
+      }
+    } catch (err) {
+      console.error(err);
+      setAiChatMessages(prev => [...prev, { role: 'assistant', text: `⚠️ Error de conexión: ${err.message}` }]);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   // Clear ALL active abandoned carts
   const handleClearAllCarts = async () => {
     if (!confirm('Clear ALL active cart data? This cannot be undone.')) return;
@@ -1678,6 +2071,14 @@ export default function AdminPage() {
               <span className="tab-label">Content (CMS)</span>
             </button>
           )}
+          <button 
+            className={`admin-tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
+            onClick={() => setActiveTab('ai')}
+            style={{ borderLeft: activeTab === 'ai' ? '3px solid #38bdf8' : 'none', background: activeTab === 'ai' ? 'rgba(56, 189, 248, 0.08)' : 'transparent' }}
+          >
+            <Brain size={14} style={{ color: '#38bdf8' }} />
+            <span className="tab-label" style={{ color: '#38bdf8', fontWeight: 'bold' }}>AI Copilot</span>
+          </button>
           {(!adminProfile || adminProfile.is_superadmin) && (
             <button 
               className={`admin-tab-btn ${activeTab === 'team' ? 'active' : ''}`}
@@ -2201,15 +2602,19 @@ export default function AdminPage() {
                                 >
                                   Details
                                 </button>
-                                <a 
-                                  href={`https://wa.me/${order.customer_phone.replace(/[^0-9]/g, '')}`} 
-                                  target="_blank" 
-                                  rel="noreferrer"
+                                 <button 
+                                  onClick={() => openWhatsAppComposer({ 
+                                    name: order.customer_name, 
+                                    phone: order.customer_phone, 
+                                    orderNumber: order.order_number, 
+                                    orderDbId: order.id, 
+                                    cartItems: order.cart_data || [] 
+                                  })}
                                   className="admin-btn"
-                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: '#4ade80', borderRadius: '6px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: '#4ade80', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                 >
                                   WhatsApp
-                                </a>
+                                </button>
                                 <button
                                   className="admin-btn"
                                   onClick={() => handleDeleteOrder(order.id)}
@@ -2391,6 +2796,73 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* CARTS AI RECOVERY INSIGHTS CARD */}
+            <div style={{ marginBottom: '24px' }}>
+              {generatingCartsAi ? (
+                <div style={{ background: 'linear-gradient(135deg, rgba(14, 22, 38, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', padding: '24px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div className="sync-spinner" style={{ color: '#38bdf8' }}><Brain size={32} /></div>
+                    <div>
+                      <h4 style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0' }}>🧬 AI Copilot is auditing active abandoned carts and pipeline...</h4>
+                      <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>Compiling peptide cart values, measuring checkout leakage frequency, and drafting recovery discount hooks...</p>
+                    </div>
+                  </div>
+                </div>
+              ) : cartsAiText ? (
+                <div style={{ background: 'linear-gradient(135deg, rgba(14, 26, 51, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px -10px rgba(56, 189, 248, 0.15)', position: 'relative' }}>
+                  <button 
+                    onClick={() => setCartsAiText('')}
+                    style={{ position: 'absolute', top: '16px', right: '16px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#94a3b8', borderRadius: '50%', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    &times;
+                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
+                    <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '8px', borderRadius: '10px', color: '#38bdf8' }}>
+                      <Sparkles size={20} />
+                    </div>
+                    <div>
+                      <h4 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#f8fafc', margin: 0 }}>🧬 Real-Time AI Cart Recovery Strategy</h4>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Generated by Gemini • Data-Driven Recovery hooks</span>
+                    </div>
+                  </div>
+                  
+                  <div 
+                    style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}
+                    dangerouslySetInnerHTML={{
+                      __html: cartsAiText
+                        .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #38bdf8">$1</strong>')
+                        .replace(/^- (.*)$/gm, '<li style="margin-left: 12px; margin-bottom: 6px; list-style-type: square">$1</li>')
+                    }}
+                  />
+                </div>
+              ) : (
+                <div 
+                  onClick={handleGenerateCartsAi}
+                  style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.25) 0%, rgba(15, 23, 42, 0.45) 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.2s', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '10px', borderRadius: '12px', color: '#38bdf8' }}>
+                      <Brain size={20} />
+                    </div>
+                    <div>
+                      <h4 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 2px 0' }}>✨ Generate Real-Time AI Cart Recovery Insights</h4>
+                      <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>Analyze abandoned carts list, map product abandonment frequency, and draft high-converting Spanish WhatsApp pitches.</p>
+                    </div>
+                  </div>
+                  <button 
+                    className="admin-btn admin-btn-primary" 
+                    style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleGenerateCartsAi();
+                    }}
+                  >
+                    <Sparkles size={13} /> Audit Carts
+                  </button>
+                </div>
+              )}
+            </div>
+
             {loadingAbandonedCarts ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading carts...</div>
             ) : abandonedCarts.length === 0 ? (
@@ -2532,8 +3004,12 @@ export default function AdminPage() {
                               
                               {acart.customer_phone && (
                                 <button
-                                  onClick={() => handleSendRecoveryWhatsApp(acart)}
-                                  disabled={sendingRecoveryWhatsApp[acart.session_id]}
+                                  onClick={() => openWhatsAppComposer({ 
+                                    name: acart.customer_name, 
+                                    phone: acart.customer_phone, 
+                                    cartItems: acart.cart_data || [], 
+                                    session_id: acart.session_id 
+                                  })}
                                   className="admin-btn"
                                   style={{ 
                                     padding: '6px 12px', 
@@ -2546,11 +3022,10 @@ export default function AdminPage() {
                                     alignItems: 'center', 
                                     gap: '4px', 
                                     fontWeight: 'bold',
-                                    cursor: 'pointer',
-                                    opacity: sendingRecoveryWhatsApp[acart.session_id] ? 0.6 : 1
+                                    cursor: 'pointer'
                                   }}
                                 >
-                                  {sendingRecoveryWhatsApp[acart.session_id] ? 'Sending...' : 'WhatsApp'}
+                                  WhatsApp
                                 </button>
                               )}
                               
@@ -2771,7 +3246,11 @@ export default function AdminPage() {
         {/* TAB: CUSTOMERS CRM */}
         {activeTab === 'customers' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
-            <CustomersCRM orders={orders} abandonedCarts={abandonedCarts} />
+            <CustomersCRM 
+              orders={orders} 
+              abandonedCarts={abandonedCarts} 
+              onWhatsAppClick={(recipient) => openWhatsAppComposer(recipient)} 
+            />
           </div>
         )}
 
@@ -2803,6 +3282,73 @@ export default function AdminPage() {
                     <Upload size={16} /> Export Data
                   </button>
                 </div>
+              </div>
+
+              {/* LEADS AI CAMPAIGN STRATEGY CARD */}
+              <div style={{ padding: '0 24px', marginBottom: '24px' }}>
+                {generatingLeadsAi ? (
+                  <div style={{ background: 'linear-gradient(135deg, rgba(14, 22, 38, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', padding: '24px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <div className="sync-spinner" style={{ color: '#38bdf8' }}><Brain size={32} /></div>
+                      <div>
+                        <h4 style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0' }}>🧬 AI Copilot is scoring catalog access leads and campaigns...</h4>
+                        <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>Mapping geographical interest densities, analyzing UTM traffic conversion velocity, and drafting custom bilingual pitch hooks...</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : leadsAiText ? (
+                  <div style={{ background: 'linear-gradient(135deg, rgba(14, 26, 51, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px -10px rgba(56, 189, 248, 0.15)', position: 'relative' }}>
+                    <button 
+                      onClick={() => setLeadsAiText('')}
+                      style={{ position: 'absolute', top: '16px', right: '16px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#94a3b8', borderRadius: '50%', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      &times;
+                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
+                      <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '8px', borderRadius: '10px', color: '#38bdf8' }}>
+                        <Sparkles size={20} />
+                      </div>
+                      <div>
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#f8fafc', margin: 0 }}>🧬 Real-Time AI Leads Acquisition & Outreach Strategy</h4>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Generated by Gemini • Bilingual Traffic Analysis</span>
+                      </div>
+                    </div>
+                    
+                    <div 
+                      style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}
+                      dangerouslySetInnerHTML={{
+                        __html: leadsAiText
+                          .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #38bdf8">$1</strong>')
+                          .replace(/^- (.*)$/gm, '<li style="margin-left: 12px; margin-bottom: 6px; list-style-type: square">$1</li>')
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div 
+                    onClick={handleGenerateLeadsAi}
+                    style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.25) 0%, rgba(15, 23, 42, 0.45) 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.2s', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '10px', borderRadius: '12px', color: '#38bdf8' }}>
+                        <Brain size={20} />
+                      </div>
+                      <div>
+                        <h4 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 2px 0' }}>✨ Generate Real-Time AI Lead Insights & Campaigns</h4>
+                        <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>Score catalog lead sources, analyze regional demand densities, and draft hyper-targeted outbound campaigns in English & Spanish.</p>
+                      </div>
+                    </div>
+                    <button 
+                      className="admin-btn admin-btn-primary" 
+                      style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleGenerateLeadsAi();
+                      }}
+                    >
+                      <Sparkles size={13} /> Audit Leads
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Filtering Controls */}
@@ -3116,6 +3662,138 @@ export default function AdminPage() {
         {activeTab === 'team' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
             <TeamManagement currentUserProfile={adminProfile} currentUserEmail={loggedInEmail.current} />
+          </div>
+        )}
+
+        {/* TAB: AI COPILOT */}
+        {activeTab === 'ai' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '24px', padding: '20px 0', minHeight: '650px' }}>
+            
+            {/* Left Column: Preset Utilities & Quick Actions */}
+            <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#f8fafc', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>🧬 Copilot Presets</h3>
+                <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>Click any preset to draft instant marketing or support copy.</p>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <h4 style={{ fontSize: '0.75rem', fontWeight: '800', color: '#38bdf8', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>💬 WhatsApp & CRM</h4>
+                
+                <button 
+                  onClick={() => setAiInputText("Draft a polite WhatsApp message to recover an abandoned cart containing BPC-157. Include a friendly 10% discount hook.")}
+                  style={{ textAlign: 'left', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '10px', fontSize: '0.75rem', color: '#cbd5e1', cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  🛒 BPC-157 Cart Recovery
+                </button>
+                
+                <button 
+                  onClick={() => setAiInputText("Draft a WhatsApp order confirmation message in Spanish, thanking the customer and mentioning their order is being prepared for fast courier shipment.")}
+                  style={{ textAlign: 'left', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '10px', fontSize: '0.75rem', color: '#cbd5e1', cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  📦 Order Confirmed (ES)
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <h4 style={{ fontSize: '0.75rem', fontWeight: '800', color: '#c084fc', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>✍️ Content Marketing</h4>
+                
+                <button 
+                  onClick={() => setAiInputText("Write an educational newsletter in English explaining the synergistic benefits of combining BPC-157 and TB-500 for connective tissue repair.")}
+                  style={{ textAlign: 'left', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '10px', fontSize: '0.75rem', color: '#cbd5e1', cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  📰 BPC & TB Synergies
+                </button>
+
+                <button 
+                  onClick={() => setAiInputText("Draft a short, engaging scientific Instagram caption in Spanish for Semaglutide, emphasizing metabolic research, safety, and pure laboratory testing.")}
+                  style={{ textAlign: 'left', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', padding: '10px', fontSize: '0.75rem', color: '#cbd5e1', cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  📸 Semaglutide Promo (ES)
+                </button>
+              </div>
+
+              <div style={{ marginTop: 'auto', padding: '12px', background: 'rgba(56,189,248,0.05)', border: '1px solid rgba(56,189,248,0.1)', borderRadius: '10px' }}>
+                <span style={{ fontSize: '0.7rem', fontWeight: 'bold', color: '#38bdf8', display: 'block', marginBottom: '4px' }}>💡 Dashboard Context:</span>
+                <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block' }}>Copilot is fed your active products list and orders metrics, enabling it to reference real catalog details in drafts automatically!</span>
+              </div>
+            </div>
+
+            {/* Right Column: Premium AI Chat Console */}
+            <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              
+              {/* Header */}
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={16} style={{ color: '#38bdf8' }} />
+                  <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc' }}>Active E-Commerce Copilot Session</span>
+                </div>
+                <span style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80', fontSize: '0.65rem', padding: '3px 8px', borderRadius: '20px', fontWeight: 'bold', border: '1px solid rgba(34, 197, 94, 0.2)' }}>
+                  ● Gemini Flash Online
+                </span>
+              </div>
+
+              {/* Chat Stream */}
+              <div style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '420px', minHeight: '400px' }}>
+                {aiChatMessages.map((msg, index) => (
+                  <div 
+                    key={index}
+                    style={{ 
+                      alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                      maxWidth: '80%',
+                      background: msg.role === 'user' ? '#1d4ed8' : 'rgba(255,255,255,0.03)',
+                      border: msg.role === 'user' ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                      color: '#f8fafc',
+                      borderRadius: msg.role === 'user' ? '12px 12px 0 12px' : '12px 12px 12px 0',
+                      padding: '12px 16px',
+                      fontSize: '0.85rem',
+                      lineHeight: '1.5',
+                      whiteSpace: 'pre-wrap'
+                    }}
+                  >
+                    <div style={{ fontSize: '0.65rem', color: msg.role === 'user' ? '#93c5fd' : '#38bdf8', fontWeight: 'bold', marginBottom: '4px', textTransform: 'uppercase' }}>
+                      {msg.role === 'user' ? 'You (Administrator)' : '🧬 Costa Peptides Copilot'}
+                    </div>
+                    {msg.text}
+                  </div>
+                ))}
+
+                {aiLoading && (
+                  <div style={{ alignSelf: 'flex-start', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px 12px 12px 0', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <div style={{ width: '6px', height: '6px', background: '#38bdf8', borderRadius: '50%' }} />
+                      <div style={{ width: '6px', height: '6px', background: '#38bdf8', borderRadius: '50%' }} />
+                      <div style={{ width: '6px', height: '6px', background: '#38bdf8', borderRadius: '50%' }} />
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Thinking...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Chat Input Console */}
+              <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <textarea
+                  value={aiInputText}
+                  onChange={(e) => setAiInputText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendAiChatMessage();
+                    }
+                  }}
+                  placeholder="Ask Copilot anything..."
+                  style={{ flex: 1, height: '44px', background: '#172237', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '8px', padding: '10px 14px', fontSize: '0.85rem', outline: 'none', resize: 'none', fontFamily: 'inherit' }}
+                />
+                <button
+                  className="admin-btn admin-btn-primary"
+                  disabled={aiLoading || !aiInputText.trim()}
+                  onClick={handleSendAiChatMessage}
+                  style={{ height: '44px', padding: '0 20px', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '8px', opacity: (aiLoading || !aiInputText.trim()) ? 0.5 : 1 }}
+                >
+                  <Send size={14} /> Send
+                </button>
+              </div>
+
+            </div>
           </div>
         )}
       </div>
@@ -3717,6 +4395,39 @@ export default function AdminPage() {
                 />
               </div>
 
+              {/* AI Assistant Action Panel */}
+              <div style={{ display: 'flex', gap: '8px', padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Sparkles size={14} style={{ color: '#38bdf8' }} /> AI Copilot (Gemini)
+                </span>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button
+                    className="admin-btn"
+                    disabled={loadingAiDesc || loadingAiTranslate}
+                    onClick={() => handleAiGenerateDesc(editDescProduct.product)}
+                    style={{ padding: '6px 10px', fontSize: '0.75rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', cursor: 'pointer', borderRadius: '6px', opacity: (loadingAiDesc || loadingAiTranslate) ? 0.5 : 1 }}
+                  >
+                    {loadingAiDesc ? 'Generating...' : '🧬 Generate scientific details'}
+                  </button>
+                  <button
+                    className="admin-btn"
+                    disabled={loadingAiDesc || loadingAiTranslate}
+                    onClick={() => handleAiTranslate(editDescEn, 'en-to-es')}
+                    style={{ padding: '6px 10px', fontSize: '0.75rem', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: '#4ade80', cursor: 'pointer', borderRadius: '6px', opacity: (loadingAiDesc || loadingAiTranslate) ? 0.5 : 1 }}
+                  >
+                    {loadingAiTranslate ? 'Translating...' : '🌎 EN ➔ ES'}
+                  </button>
+                  <button
+                    className="admin-btn"
+                    disabled={loadingAiDesc || loadingAiTranslate}
+                    onClick={() => handleAiTranslate(editDescEs, 'es-to-en')}
+                    style={{ padding: '6px 10px', fontSize: '0.75rem', background: 'rgba(168, 85, 247, 0.1)', border: '1px solid rgba(168, 85, 247, 0.2)', color: '#c084fc', cursor: 'pointer', borderRadius: '6px', opacity: (loadingAiDesc || loadingAiTranslate) ? 0.5 : 1 }}
+                  >
+                    {loadingAiTranslate ? 'Translating...' : '🌎 ES ➔ EN'}
+                  </button>
+                </div>
+              </div>
+
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
                 <button
                   className="admin-btn"
@@ -3735,6 +4446,86 @@ export default function AdminPage() {
                 >
                   Apply & Close
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI WhatsApp Outbound Composer Modal */}
+      {waModalOpen && waRecipient && (
+        <div className="modal active" onClick={() => setWaModalOpen(false)} style={{ zIndex: 200 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '550px', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+            <button className="close-modal" onClick={() => setWaModalOpen(false)} style={{ color: '#94a3b8', fontSize: '1.5rem' }}>&times;</button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '16px', marginBottom: '20px' }}>
+              <div style={{ background: 'rgba(34, 197, 94, 0.15)', borderRadius: '50%', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <MessageCircle size={24} style={{ color: '#22c55e' }} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '900', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  WhatsApp Outbound Composer
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>
+                  Sending to: <span style={{ color: '#4ade80', fontWeight: 'bold' }}>{waRecipient.name}</span> (+{waRecipient.phone})
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {waRecipient.cartItems && waRecipient.cartItems.length > 0 && (
+                <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                  <strong style={{ color: '#fbbf24' }}>🛒 Cart/Order Items:</strong> {waRecipient.cartItems.map(item => `${item.product} (x${item.qty || item.quantity || 1})`).join(', ')}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>
+                  Message Content
+                </label>
+                <button
+                  className="admin-btn"
+                  disabled={waDrafting || waSending}
+                  onClick={handleDraftWaMessage}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', fontSize: '0.75rem', background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#c084fc', cursor: 'pointer', borderRadius: '6px', opacity: (waDrafting || waSending) ? 0.5 : 1 }}
+                >
+                  <Sparkles size={12} style={{ color: '#c084fc' }} /> {waDrafting ? 'Drafting...' : '✨ Let Gemini Draft It'}
+                </button>
+              </div>
+
+              <textarea
+                value={waMessageText}
+                onChange={(e) => setWaMessageText(e.target.value)}
+                placeholder="Type your WhatsApp message..."
+                style={{ width: '100%', height: '140px', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.4' }}
+              />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
+                <button
+                  className="admin-btn admin-btn-primary"
+                  disabled={waSending || waDrafting || !waMessageText.trim()}
+                  onClick={handleSendWaMessage}
+                  style={{ width: '100%', padding: '12px', background: 'linear-gradient(135deg, #22c55e 0%, #15803d 100%)', border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(34, 197, 94, 0.2)', opacity: (waSending || waDrafting || !waMessageText.trim()) ? 0.5 : 1 }}
+                >
+                  <Zap size={16} /> {waSending ? 'Sending automatically...' : '🚀 Send from Business Number'}
+                </button>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                  <a
+                    href={`https://wa.me/${waRecipient.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(waMessageText)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: '0.75rem', color: '#38bdf8', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    🔗 Open manually in WhatsApp (wa.me fallback)
+                  </a>
+                  <button
+                    onClick={() => setWaModalOpen(false)}
+                    style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </div>
           </div>

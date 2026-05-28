@@ -6,7 +6,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
 
-export default function CustomersCRM({ orders = [], abandonedCarts = [] }) {
+export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhatsAppClick }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', location: '' });
@@ -564,15 +564,24 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [] }) {
                           <Edit2 size={13} />
                         </button>
                         {contactPhone && (
-                          <a 
-                            href={`https://wa.me/${contactPhone.replace(/[^0-9]/g, '')}?text=Hi ${cust.name}, `}
-                            target="_blank" 
-                            rel="noopener noreferrer"
+                          <button 
+                            onClick={() => {
+                              if (onWhatsAppClick) {
+                                onWhatsAppClick({
+                                  name: cust.name,
+                                  phone: contactPhone,
+                                  cartItems: cust.cartItems || []
+                                });
+                              } else {
+                                window.open(`https://wa.me/${contactPhone.replace(/[^0-9]/g, '')}?text=Hi ${cust.name}, `, '_blank');
+                              }
+                            }}
                             className="crm-icon-btn wa"
+                            style={{ cursor: 'pointer' }}
                             title="Chat on WhatsApp"
                           >
                             <MessageCircle size={13} />
-                          </a>
+                          </button>
                         )}
                         {cust.email && (
                           <a 

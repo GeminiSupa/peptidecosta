@@ -4,7 +4,7 @@ import {
   TrendingUp, Users, ShoppingCart, Clock, 
   MapPin, Eye, DollarSign, Award, Target,
   RefreshCw, BarChart2, Calendar, ShieldAlert,
-  Smartphone, Monitor, ChevronRight, Zap, AlertTriangle, Play, HelpCircle, CreditCard, MessageCircle, Upload
+  Smartphone, Monitor, ChevronRight, Zap, AlertTriangle, Play, HelpCircle, CreditCard, MessageCircle, Upload, Sparkles, Brain
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -19,6 +19,63 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   const [showProductFunnel, setShowProductFunnel] = useState(true);
   const [expandedMetric, setExpandedMetric] = useState(null); // 'revenue'|'aov'|'carts'|'conversion'
   
+  // AI Insights States
+  const [aiInsightText, setAiInsightText] = useState('');
+  const [generatingAiInsights, setGeneratingAiInsights] = useState(false);
+
+  const generateAiInsights = async () => {
+    setGeneratingAiInsights(true);
+    setAiInsightText('');
+    try {
+      const prompt = `You are the chief e-commerce financial analyst at Peptides Costa Rica.
+Analyze the following store metrics and provide a comprehensive executive e-commerce audit report:
+- Gross Revenue: $${totalRevenueUsd.toFixed(2)} (CRC ${totalRevenueCrc.toLocaleString()})
+- Total Paid Orders: ${successfulOrders.length}
+- Average Order Value (AOV): $${aovUsd.toFixed(2)}
+- Conversion Rate: ${orderConversionRate.toFixed(2)}% (visitors: ${uniqueVisitorCount}, orders: ${orders.length})
+- Abandoned Cart Rate: ${cartAbandonmentRate.toFixed(2)}% (active abandoned: ${activeAbandonedCarts.length})
+- Potential Recoverable Revenue from Carts: $${potentialAbandonedRevenueUsd.toFixed(2)}
+- Average Catalog Engagement: ${formatDuration(averageDurationSeconds)}
+- Top Selling Products: ${productMetrics.slice(0, 3).map(p => `${p.name} (${p.purchases} sales, ${p.views} views, ${p.conversion.toFixed(1)}% conv)`).join(', ')}
+- Zero Click / Cold Products: ${coldPeptides.map(p => `${p.name} (${p.views} views)`).join(', ')}
+
+Please provide the analysis in BOTH English and Spanish. 
+Format it as two clear, consecutive sections:
+"🇬🇧 ENGLISH EXECUTIVE REPORT"
+and
+"🇪🇸 REPORTE EJECUTIVO EN ESPAÑOL"
+
+For each language section, include:
+1. **Performance Verdict** (1 bold sentence grading the setup).
+2. **Key Positive Discoveries** (2-3 bullet points).
+3. **Severe Leaks & Bottlenecks** (2-3 bullet points).
+4. **Actionable Recommendations** (3-4 bullet points).
+
+Keep your tone highly professional, precise, data-driven, and empowering. Format with clean Markdown (bold text, bullet points). Do not write any greetings or preambles, just start directly with the English header.`;
+
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'chat',
+          prompt
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAiInsightText(data.text);
+      } else {
+        alert('Failed to generate insights: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to generate insights: ' + err.message);
+    } finally {
+      setGeneratingAiInsights(false);
+    }
+  };
+
   // Database analytics state
   const [dbSessions, setDbSessions] = useState([]);
   const [dbProductViews, setDbProductViews] = useState([]);
@@ -1155,6 +1212,73 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
             </button>
           </div>
         </div>
+      </div>
+
+      {/* AI COPILOT ANALYTICS INSIGHTS SYSTEM */}
+      <div style={{ marginBottom: '24px' }}>
+        {generatingAiInsights ? (
+          <div style={{ background: 'linear-gradient(135deg, rgba(14, 22, 38, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', padding: '24px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div className="sync-spinner" style={{ color: '#38bdf8' }}><Brain size={32} /></div>
+              <div>
+                <h4 style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0' }}>🧬 AI Copilot is auditing store transactions and metrics...</h4>
+                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>Performing real-time revenue leakage audits, conversion rate calculations, customer engagement audits, and hot/cold products mapping...</p>
+              </div>
+            </div>
+          </div>
+        ) : aiInsightText ? (
+          <div style={{ background: 'linear-gradient(135deg, rgba(14, 26, 51, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px -10px rgba(56, 189, 248, 0.15)', position: 'relative' }}>
+            <button 
+              onClick={() => setAiInsightText('')}
+              style={{ position: 'absolute', top: '16px', right: '16px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#94a3b8', borderRadius: '50%', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              &times;
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
+              <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '8px', borderRadius: '10px', color: '#38bdf8' }}>
+                <Sparkles size={20} />
+              </div>
+              <div>
+                <h4 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#f8fafc', margin: 0 }}>🧬 Real-Time AI Business Analysis & Forecast</h4>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Generated instantly by Gemini • Context-Aware store audit</span>
+              </div>
+            </div>
+            
+            <div 
+              style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}
+              dangerouslySetInnerHTML={{
+                __html: aiInsightText
+                  .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #38bdf8">$1</strong>')
+                  .replace(/^- (.*)$/gm, '<li style="margin-left: 12px; margin-bottom: 6px; list-style-type: square">$1</li>')
+              }}
+            />
+          </div>
+        ) : (
+          <div 
+            onClick={generateAiInsights}
+            style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.25) 0%, rgba(15, 23, 42, 0.45) 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.2s', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '10px', borderRadius: '12px', color: '#38bdf8' }}>
+                <Brain size={20} />
+              </div>
+              <div>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 2px 0' }}>✨ Generate Real-Time AI Business Analysis & Market Insights</h4>
+                <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>Let Gemini Copilot automatically audit your sales funnel, conversion bottlenecks, and potential revenue leakages.</p>
+              </div>
+            </div>
+            <button 
+              className="admin-btn admin-btn-primary" 
+              style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                generateAiInsights();
+              }}
+            >
+              <Sparkles size={13} /> Audit Store
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 2. Top Metrics Section */}
