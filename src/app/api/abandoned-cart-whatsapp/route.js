@@ -48,14 +48,12 @@ export async function POST(request) {
     const origin = request.headers.get('origin') || 'https://peptidecosta.vercel.app';
     const checkoutUrl = `${origin}/catalog?session_id=${session_id}&recovered=true`;
 
-    const isEn = lang === 'en';
-    const message = isEn
-      ? `Hi ${customer_name || ''}, we saved your cart at Peptides Costa Rica! You can review your items and complete your purchase here:\n${checkoutUrl}\n\nLet us know if you have any questions or need help!`
-      : `Hola ${customer_name || ''}, ¡guardamos tu carrito en Péptidos Costa Rica! Puedes revisar tus artículos y completar tu compra aquí:\n${checkoutUrl}\n\n¡Escríbenos si tienes dudas o necesitas ayuda!`;
+    const customerDisplayName = customer_name || 'Cliente';
+    const message = `Hola ${customerDisplayName}, dejaste algunos productos en tu carrito en Peptides Costa Rica.\n\nTus productos seleccionados aún están disponibles. Puedes completar tu pedido aquí:\n${checkoutUrl}\n\nSi tienes alguna pregunta antes de ordenar, nuestro equipo con gusto te ayuda.`;
 
-    console.log(`[Abandoned Cart WhatsApp] Sending automated WhatsApp recovery to ${cleanPhone}...`);
+    console.log(`[Abandoned Cart WhatsApp] Sending automated WhatsApp template recovery to ${cleanPhone}...`);
 
-    // Invoke Meta Cloud API
+    // Invoke Meta Cloud API with the approved template
     const metaResponse = await fetch(
       `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
       {
@@ -67,8 +65,20 @@ export async function POST(request) {
         body: JSON.stringify({
           messaging_product: 'whatsapp',
           to: cleanPhone,
-          type: 'text',
-          text: { body: message },
+          type: 'template',
+          template: {
+            name: 'abandoned_cart_recovery_v1',
+            language: { code: 'es' },
+            components: [
+              {
+                type: 'body',
+                parameters: [
+                  { type: 'text', text: customerDisplayName },
+                  { type: 'text', text: checkoutUrl }
+                ]
+              }
+            ]
+          }
         }),
       }
     );

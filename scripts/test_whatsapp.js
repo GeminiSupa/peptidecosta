@@ -28,11 +28,16 @@ if (!ACCESS_TOKEN || !PHONE_NUMBER_ID) {
   process.exit(1);
 }
 
-// Recipient phone number: +1 (831) 471-5559
-const recipient = '18314715559';
+// Recipient phone number: Read from command line arguments or default
+const recipient = process.argv[2] || '923490554719';
 
 async function runTest() {
-  console.log(`\nSending test template message (3p_direct_integration_test_template) to ${recipient}...`);
+  if (!process.argv[2]) {
+    console.log('💡 TIP: You can specify a phone number to test by running: node scripts/test_whatsapp.js <number_with_country_code>');
+    console.log(`Using default recipient: ${recipient}`);
+  }
+
+  console.log(`\nSending test template message (jaspers_market_plain_text_v1) to ${recipient}...`);
   
   try {
     const response = await fetch(
@@ -48,7 +53,7 @@ async function runTest() {
           to: recipient,
           type: 'template',
           template: {
-            name: '3p_direct_integration_test_template',
+            name: 'jaspers_market_plain_text_v1',
             language: { code: 'en_US' }
           }
         }),
