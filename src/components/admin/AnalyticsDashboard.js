@@ -4,7 +4,8 @@ import {
   TrendingUp, Users, ShoppingCart, Clock, 
   MapPin, Eye, DollarSign, Award, Target,
   RefreshCw, BarChart2, Calendar, ShieldAlert,
-  Smartphone, Monitor, ChevronRight, Zap, AlertTriangle, Play, HelpCircle, CreditCard, MessageCircle, Upload, Sparkles, Brain
+  Smartphone, Monitor, ChevronRight, Zap, AlertTriangle, Play, HelpCircle, CreditCard, MessageCircle, Upload, Sparkles, Brain,
+  Dna, Atom, Phone
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
