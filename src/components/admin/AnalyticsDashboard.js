@@ -81,6 +81,11 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [dbProductViews, setDbProductViews] = useState([]);
   const [dbOrders, setDbOrders] = useState([]);
   const [dbCarts, setDbCarts] = useState([]);
+  const [dbClickEvents, setDbClickEvents] = useState([]);
+
+  // Heatmap UI States
+  const [heatmapViewMode, setHeatmapViewMode] = useState('simulation'); // 'live' | 'simulation'
+  const [heatmapIntentFilter, setHeatmapIntentFilter] = useState('all'); // 'all' | 'intent'
   
   // Real-time counter of updates
   const [refreshKey, setRefreshKey] = useState(0);
@@ -121,10 +126,24 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             .select('*')
             .order('created_at', { ascending: false });
 
+          // 5. Fetch latest click events
+          const { data: clicks, error: clErr } = await supabase
+            .from('click_events')
+            .select('*')
+            .eq('is_mobile', true)
+            .order('created_at', { ascending: false });
+
           if (!sErr && sessions) setDbSessions(sessions);
           if (!vErr && views) setDbProductViews(views);
           if (!oErr && oData) setDbOrders(oData);
           if (!cErr && cData) setDbCarts(cData);
+          if (!clErr && clicks) {
+            setDbClickEvents(clicks);
+            // If we actually have live clicks, default our heatmap to show live data!
+            if (clicks.length > 0) {
+              setHeatmapViewMode('live');
+            }
+          }
 
           // If we successfully fetched at least some data, set as live database mode
           if (!sErr && sessions && sessions.length > 0) {
@@ -204,7 +223,36 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       { product_name: 'BPC-157 5mg', created_at: new Date(now - 40 * 3600000).toISOString() }
     ];
 
-    return { simOrders, simCarts, simSessions, simViews };
+    // Simulate mobile click events
+    const simClicks = [
+      { element_name: 'WhatsApp Floating Icon', x_pct: 86, y_pct: 91, path: '/catalog', is_mobile: true, created_at: new Date(now - 1 * 3600000).toISOString() },
+      { element_name: 'WhatsApp Floating Icon', x_pct: 85, y_pct: 92, path: '/catalog', is_mobile: true, created_at: new Date(now - 3 * 3600000).toISOString() },
+      { element_name: 'WhatsApp Floating Icon', x_pct: 88, y_pct: 90, path: '/catalog', is_mobile: true, created_at: new Date(now - 6 * 3600000).toISOString() },
+      { element_name: 'WhatsApp Floating Icon', x_pct: 86, y_pct: 93, path: '/catalog', is_mobile: true, created_at: new Date(now - 12 * 3600000).toISOString() },
+      
+      { element_name: 'Añadir al Carrito (BPC-157 5mg)', x_pct: 50, y_pct: 61, path: '/catalog', is_mobile: true, created_at: new Date(now - 2 * 3600000).toISOString() },
+      { element_name: 'Añadir al Carrito (BPC-157 5mg)', x_pct: 48, y_pct: 62, path: '/catalog', is_mobile: true, created_at: new Date(now - 4 * 3600000).toISOString() },
+      { element_name: 'Añadir al Carrito (BPC-157 5mg)', x_pct: 52, y_pct: 60, path: '/catalog', is_mobile: true, created_at: new Date(now - 7 * 3600000).toISOString() },
+      { element_name: 'Añadir al Carrito (BPC-157 5mg)', x_pct: 50, y_pct: 62, path: '/catalog', is_mobile: true, created_at: new Date(now - 9 * 3600000).toISOString() },
+      { element_name: 'Añadir al Carrito (BPC-157 5mg)', x_pct: 51, y_pct: 63, path: '/catalog', is_mobile: true, created_at: new Date(now - 18 * 3600000).toISOString() },
+
+      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', x_pct: 49, y_pct: 85, path: '/catalog', is_mobile: true, created_at: new Date(now - 3 * 3600000).toISOString() },
+      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', x_pct: 53, y_pct: 86, path: '/catalog', is_mobile: true, created_at: new Date(now - 8 * 3600000).toISOString() },
+      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', x_pct: 50, y_pct: 87, path: '/catalog', is_mobile: true, created_at: new Date(now - 11 * 3600000).toISOString() },
+      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', x_pct: 51, y_pct: 85, path: '/catalog', is_mobile: true, created_at: new Date(now - 22 * 3600000).toISOString() },
+
+      { element_name: '#search-input', x_pct: 35, y_pct: 8, path: '/catalog', is_mobile: true, created_at: new Date(now - 2 * 3600000).toISOString() },
+      { element_name: '#search-input', x_pct: 45, y_pct: 9, path: '/catalog', is_mobile: true, created_at: new Date(now - 5 * 3600000).toISOString() },
+      { element_name: '#search-input', x_pct: 20, y_pct: 8, path: '/catalog', is_mobile: true, created_at: new Date(now - 10 * 3600000).toISOString() },
+
+      { element_name: 'Tab: Recuperación', x_pct: 25, y_pct: 35, path: '/catalog', is_mobile: true, created_at: new Date(now - 1 * 3600000).toISOString() },
+      { element_name: 'Tab: Pérdida de Peso', x_pct: 65, y_pct: 35, path: '/catalog', is_mobile: true, created_at: new Date(now - 4 * 3600000).toISOString() },
+      
+      { element_name: 'Cart Icon (Header)', x_pct: 88, y_pct: 8, path: '/catalog', is_mobile: true, created_at: new Date(now - 3 * 3600000).toISOString() },
+      { element_name: 'Cart Icon (Header)', x_pct: 89, y_pct: 9, path: '/catalog', is_mobile: true, created_at: new Date(now - 15 * 3600000).toISOString() }
+    ];
+
+    return { simOrders, simCarts, simSessions, simViews, simClicks };
   };
 
   // Compile active data source based on whether we are in Live or Simulated mode
@@ -213,6 +261,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     let rawCarts = [];
     let rawSessions = [];
     let rawViews = [];
+    let rawClicks = [];
 
     const useLive = isLive || isSupabaseConfigured;
 
@@ -221,6 +270,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       rawCarts = parentCarts.length > 0 ? parentCarts : dbCarts;
       rawSessions = dbSessions;
       rawViews = dbProductViews;
+      rawClicks = dbClickEvents;
     } else {
       const sim = getSimulatedData();
       // Supplement with whatever parent state has if it is non-empty
@@ -228,6 +278,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       rawCarts = parentCarts.length > 0 ? parentCarts : sim.simCarts;
       rawSessions = dbSessions.length > 0 ? dbSessions : sim.simSessions;
       rawViews = dbProductViews.length > 0 ? dbProductViews : sim.simViews;
+      rawClicks = dbClickEvents.length > 0 ? dbClickEvents : sim.simClicks;
     }
 
     // Filter by Time Range
@@ -247,11 +298,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       orders: rawOrders.filter(filterByTime),
       carts: rawCarts.filter(filterByTime),
       sessions: rawSessions.filter(filterByTime),
-      productViews: rawViews.filter(filterByTime)
+      productViews: rawViews.filter(filterByTime),
+      clicks: rawClicks.filter(filterByTime)
     };
   };
 
-  const { orders, carts, sessions, productViews } = getProcessedData();
+  const { orders, carts, sessions, productViews, clicks } = getProcessedData();
 
   // -------------------------------------------------------------
   // CALCULATE FINANCIAL STATISTICS
@@ -527,6 +579,205 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     }, 500);
   };
 
+  // -------------------------------------------------------------
+  // MOBILE HEATMAP UTILITIES & DATA PARSING
+  // -------------------------------------------------------------
+  
+  // Resolve coordinates for visual clusters over the mock mobile catalog elements
+  const getMockCoords = (elementName) => {
+    const el = (elementName || '').toLowerCase();
+    
+    if (el.includes('whatsapp')) {
+      return { x: 86, y: 91 };
+    }
+    if (el.includes('bpc-157') || el.includes('bpc157')) {
+      return { x: 50, y: 61 };
+    }
+    if (el.includes('semaglutide') || el.includes('sema')) {
+      return { x: 50, y: 85 };
+    }
+    if (el.includes('search') || el.includes('#search')) {
+      return { x: 35, y: 8 };
+    }
+    if (el.includes('recuper')) {
+      return { x: 25, y: 35 };
+    }
+    if (el.includes('peso') || el.includes('metabol')) {
+      return { x: 65, y: 35 };
+    }
+    if (el.includes('cart') || el.includes('carrito')) {
+      return { x: 88, y: 8 };
+    }
+    
+    return null;
+  };
+
+  const getHeatmapSource = () => {
+    const now = new Date();
+    if (heatmapViewMode === 'live') {
+      return clicks;
+    }
+    
+    return [
+      { element_name: 'WhatsApp Floating Icon', created_at: new Date(now - 1000 * 60 * 5).toISOString() },
+      { element_name: 'WhatsApp Floating Icon', created_at: new Date(now - 1000 * 60 * 15).toISOString() },
+      { element_name: 'WhatsApp Floating Icon', created_at: new Date(now - 1000 * 60 * 35).toISOString() },
+      { element_name: 'WhatsApp Floating Icon', created_at: new Date(now - 1000 * 60 * 70).toISOString() },
+      
+      { element_name: 'Añadir al Carrito (BPC-157 5mg)', created_at: new Date(now - 1000 * 60 * 2).toISOString() },
+      { element_name: 'Añadir al Carrito (BPC-157 5mg)', created_at: new Date(now - 1000 * 60 * 8).toISOString() },
+      { element_name: 'Añadir al Carrito (BPC-157 5mg)', created_at: new Date(now - 1000 * 60 * 18).toISOString() },
+      { element_name: 'Añadir al Carrito (BPC-157 5mg)', created_at: new Date(now - 1000 * 60 * 22).toISOString() },
+      { element_name: 'Añadir al Carrito (BPC-157 5mg)', created_at: new Date(now - 1000 * 60 * 45).toISOString() },
+
+      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', created_at: new Date(now - 1000 * 60 * 12).toISOString() },
+      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', created_at: new Date(now - 1000 * 60 * 20).toISOString() },
+      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', created_at: new Date(now - 1000 * 60 * 42).toISOString() },
+      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', created_at: new Date(now - 1000 * 60 * 65).toISOString() },
+
+      { element_name: '#search-input', created_at: new Date(now - 1000 * 60 * 3).toISOString() },
+      { element_name: '#search-input', created_at: new Date(now - 1000 * 60 * 11).toISOString() },
+      { element_name: '#search-input', created_at: new Date(now - 1000 * 60 * 55).toISOString() },
+
+      { element_name: 'Tab: Recuperación', created_at: new Date(now - 1000 * 60 * 6).toISOString() },
+      { element_name: 'Tab: Pérdida de Peso', created_at: new Date(now - 1000 * 60 * 19).toISOString() },
+      
+      { element_name: 'Cart Icon (Header)', created_at: new Date(now - 1000 * 60 * 4).toISOString() },
+      { element_name: 'Cart Icon (Header)', created_at: new Date(now - 1000 * 60 * 30).toISOString() }
+    ];
+  };
+
+  const getRankedTargets = () => {
+    const raw = getHeatmapSource();
+    const map = {};
+    
+    raw.forEach(c => {
+      const name = c.element_name || 'Generic Area';
+      map[name] = (map[name] || 0) + 1;
+    });
+
+    const list = Object.entries(map).map(([name, count]) => ({ name, count }));
+    list.sort((a, b) => b.count - a.count);
+    return list.slice(0, 5);
+  };
+
+  const getLatestClicks = () => {
+    const raw = [...getHeatmapSource()];
+    raw.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
+    return raw.slice(0, 4).map(c => {
+      const diffMin = Math.round((new Date() - new Date(c.created_at)) / 60000);
+      let timeStr = 'just now';
+      if (diffMin > 0 && diffMin < 60) {
+        timeStr = `${diffMin}m ago`;
+      } else if (diffMin >= 60) {
+        timeStr = `${Math.round(diffMin / 60)}h ago`;
+      }
+      return {
+        element_name: c.element_name || 'Generic click',
+        timeStr
+      };
+    });
+  };
+
+  const getAddCartShare = () => {
+    const list = getRankedTargets();
+    const total = list.reduce((s, t) => s + t.count, 0);
+    if (total === 0) return 0;
+    
+    const cartClicks = list
+      .filter(t => t.name.toLowerCase().includes('carrito') || t.name.toLowerCase().includes('cart'))
+      .reduce((s, t) => s + t.count, 0);
+      
+    return Math.round((cartClicks / total) * 100);
+  };
+
+  const getWhatsAppShare = () => {
+    const list = getRankedTargets();
+    const total = list.reduce((s, t) => s + t.count, 0);
+    if (total === 0) return 0;
+    
+    const waClicks = list
+      .filter(t => t.name.toLowerCase().includes('whatsapp'))
+      .reduce((s, t) => s + t.count, 0);
+      
+    return Math.round((waClicks / total) * 100);
+  };
+
+  const renderHeatmapDots = () => {
+    const source = getHeatmapSource();
+    const clusters = {};
+    
+    source.forEach(c => {
+      let x = c.x_pct;
+      let y = c.y_pct;
+      const elName = c.element_name || '';
+      
+      if (heatmapIntentFilter === 'intent') {
+        const lower = elName.toLowerCase();
+        const isIntent = lower.includes('carrito') || lower.includes('cart') || lower.includes('whatsapp');
+        if (!isIntent) return;
+      }
+
+      const resolved = getMockCoords(elName);
+      if (resolved) {
+        x = resolved.x;
+        y = resolved.y;
+      }
+      
+      if (x === undefined || y === undefined) return;
+      
+      const key = `${x}_${y}`;
+      if (!clusters[key]) {
+        clusters[key] = { x, y, count: 0, target: elName };
+      }
+      clusters[key].count += 1;
+    });
+
+    const maxCount = Math.max(...Object.values(clusters).map(cl => cl.count), 1);
+
+    return Object.entries(clusters).map(([key, cl]) => {
+      const ratio = cl.count / maxCount;
+      let bg = 'radial-gradient(circle, rgba(52, 211, 153, 0.85) 0%, rgba(52, 211, 153, 0.3) 50%, transparent 100%)';
+      
+      if (ratio > 0.6) {
+        bg = 'radial-gradient(circle, rgba(239, 68, 68, 0.9) 0%, rgba(245, 158, 11, 0.5) 40%, rgba(52, 211, 153, 0.1) 70%, transparent 100%)';
+      } else if (ratio > 0.35) {
+        bg = 'radial-gradient(circle, rgba(245, 158, 11, 0.85) 0%, rgba(251, 191, 36, 0.4) 40%, rgba(52, 211, 153, 0.1) 70%, transparent 100%)';
+      } else if (ratio > 0.15) {
+        bg = 'radial-gradient(circle, rgba(251, 191, 36, 0.85) 0%, rgba(52, 211, 153, 0.3) 55%, transparent 100%)';
+      }
+
+      const wiggleX = (parseInt(key.split('_')[0]) % 3 - 1) * 1.5;
+      const wiggleY = (parseInt(key.split('_')[1]) % 3 - 1) * 1.5;
+      const leftPct = cl.x + wiggleX;
+      const topPct = cl.y + wiggleY;
+
+      const size = 30 + Math.min(ratio * 30, 25);
+
+      return (
+        <div 
+          className="heatmap-dot"
+          key={key}
+          style={{
+            position: 'absolute',
+            left: `${leftPct}%`,
+            top: `${topPct}%`,
+            width: `${size}px`,
+            height: `${size}px`,
+            transform: 'translate(-50%, -50%)',
+            background: bg,
+            borderRadius: '50%',
+            pointerEvents: 'auto',
+            cursor: 'pointer',
+            zIndex: 100
+          }}
+          title={`${cl.target}: ${cl.count} clicks`}
+        />
+      );
+    });
+  };
+
   return (
     <div className="analytics-dashboard-container">
       {/* CSS Styling scoped for Analytics Dashboard */}
@@ -611,6 +862,269 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           background: #0ea5e9;
           color: white;
           box-shadow: 0 4px 12px rgba(14, 165, 233, 0.25);
+        }
+
+        /* ─── Mobile Click Heatmap CSS Mockup ───────────── */
+        .phone-mockup-frame {
+          width: 270px;
+          height: 480px;
+          background: #090d16;
+          border: 9px solid #1e293b;
+          border-radius: 34px;
+          position: relative;
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.15);
+          margin: 0 auto;
+          overflow: hidden;
+        }
+
+        .phone-notch {
+          width: 90px;
+          height: 14px;
+          background: #1e293b;
+          border-radius: 0 0 10px 10px;
+          position: absolute;
+          top: 0;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 50;
+        }
+
+        .phone-glare {
+          position: absolute;
+          top: 0;
+          left: -80px;
+          width: 120px;
+          height: 100%;
+          background: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.03) 50%, rgba(255, 255, 255, 0) 100%);
+          transform: skewX(-20deg);
+          pointer-events: none;
+          z-index: 45;
+        }
+
+        .phone-screen-viewport {
+          width: 100%;
+          height: 100%;
+          overflow-y: auto;
+          overflow-x: hidden;
+          position: relative;
+          padding-top: 14px;
+          scrollbar-width: none; /* Hide scrollbars */
+        }
+        .phone-screen-viewport::-webkit-scrollbar {
+          display: none;
+        }
+
+        /* Mock Catalog Storefront Content styling */
+        .mock-storefront-wrapper {
+          color: #e2e8f0;
+          font-family: system-ui, -apple-system, sans-serif;
+          font-size: 11px;
+          padding: 8px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          background: #020617;
+          min-height: 520px;
+        }
+
+        .mock-store-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 6px 8px;
+          background: #0f172a;
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.03);
+        }
+
+        .mock-logo {
+          font-weight: 700;
+          color: #34d399;
+          font-size: 0.75rem;
+        }
+
+        .mock-cart-badge {
+          background: rgba(255, 255, 255, 0.05);
+          padding: 3px 5px;
+          border-radius: 6px;
+          display: flex;
+          align-items: center;
+          gap: 3px;
+        }
+
+        .mock-cart-count {
+          color: #34d399;
+          font-weight: 700;
+        }
+
+        .mock-store-hero {
+          text-align: center;
+          padding: 10px 6px;
+          background: linear-gradient(135deg, #0b1528 0%, #031c15 100%);
+          border-radius: 10px;
+          border: 1px solid rgba(16, 185, 129, 0.1);
+        }
+
+        .mock-store-hero h1 {
+          font-size: 0.85rem;
+          font-weight: 800;
+          color: #fff;
+          margin: 0 0 4px;
+        }
+
+        .mock-store-hero p {
+          font-size: 0.6rem;
+          color: #94a3b8;
+          margin: 0 0 6px;
+          line-height: 1.3;
+        }
+
+        .mock-search-bar {
+          background: #0f172a;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          color: #64748b;
+          font-size: 0.6rem;
+          padding: 5px;
+          border-radius: 6px;
+          text-align: left;
+        }
+
+        .mock-store-categories {
+          display: flex;
+          gap: 6px;
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+        .mock-store-categories::-webkit-scrollbar {
+          display: none;
+        }
+
+        .mock-cat-tab {
+          padding: 3px 6px;
+          border-radius: 6px;
+          background: #0f172a;
+          color: #64748b;
+          white-space: nowrap;
+          font-size: 0.6rem;
+          font-weight: 500;
+        }
+
+        .mock-cat-tab.active {
+          background: rgba(52, 211, 153, 0.1);
+          color: #34d399;
+          border: 1px solid rgba(52, 211, 153, 0.2);
+        }
+
+        .mock-products-section {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .mock-product-card {
+          background: #0f172a;
+          border: 1px solid rgba(255, 255, 255, 0.02);
+          border-radius: 10px;
+          padding: 8px;
+          position: relative;
+        }
+
+        .mock-prod-img-box {
+          height: 40px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 6px;
+        }
+
+        .mock-prod-img-box.healing-theme {
+          background: linear-gradient(135deg, rgba(52, 211, 153, 0.1) 0%, rgba(5, 150, 105, 0.03) 100%);
+        }
+
+        .mock-prod-img-box.metabolism-theme {
+          background: linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(2, 132, 199, 0.03) 100%);
+        }
+
+        .mock-product-card h3 {
+          font-size: 0.72rem;
+          margin: 0 0 2px;
+          color: #fff;
+          font-weight: 700;
+        }
+
+        .mock-prod-tag {
+          font-size: 0.58rem;
+          color: #94a3b8;
+          margin-bottom: 4px;
+        }
+
+        .mock-prod-price {
+          font-size: 0.72rem;
+          color: #fff;
+          font-weight: 700;
+          margin-bottom: 6px;
+        }
+
+        .mock-add-cart-btn {
+          width: 100%;
+          padding: 5px;
+          border-radius: 6px;
+          border: none;
+          color: #fff;
+          font-weight: 700;
+          font-size: 0.6rem;
+          cursor: pointer;
+        }
+
+        .btn-healing {
+          background: #10b981;
+        }
+
+        .btn-metabolism {
+          background: #0ea5e9;
+        }
+
+        .mock-footer {
+          text-align: center;
+          font-size: 0.58rem;
+          color: #475569;
+          margin-top: 12px;
+          padding-top: 8px;
+          border-top: 1px solid rgba(255,255,255,0.02);
+        }
+
+        .mock-whatsapp-widget {
+          position: absolute;
+          bottom: 10px;
+          right: 10px;
+          width: 28px;
+          height: 28px;
+          background: #25D366;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 3px 8px rgba(37,211,102,0.3);
+          z-index: 90;
+        }
+
+        /* Pulsing microanimation for heatmap dots */
+        @keyframes pulseHeatmap {
+          0% { transform: translate(-50%, -50%) scale(1); opacity: 0.95; }
+          50% { transform: translate(-50%, -50%) scale(1.08); opacity: 0.8; }
+          100% { transform: translate(-50%, -50%) scale(1); opacity: 0.95; }
+        }
+
+        .heatmap-dot {
+          animation: pulseHeatmap 3s infinite ease-in-out;
+          transition: all 0.2s ease;
+        }
+
+        .heatmap-dot:hover {
+          transform: translate(-50%, -50%) scale(1.25) !important;
+          box-shadow: 0 0 16px rgba(255,255,255,0.4);
+          z-index: 1000 !important;
         }
 
         /* ─── KPI metric cards ──────────────────────────── */
@@ -1584,6 +2098,258 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
               <Monitor size={14} style={{ color: '#a78bfa' }} />
               <span>Desktop ({desktopPct.toFixed(0)}%)</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* SECTION 3.2: Mobile Viewport Click Heatmap Visualizer */}
+      <div className="analytics-double-panel" style={{ marginTop: '20px' }}>
+        
+        {/* PANEL A: Interactive Smartphone Heatmap */}
+        <div className="dashboard-section-card phone-heatmap-section">
+          <div className="section-card-title" style={{ justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Smartphone size={16} style={{ color: '#34d399' }} />
+              <span>Mobile Click Heatmap Overlay</span>
+            </div>
+            
+            {/* Toggles */}
+            <div className="heatmap-control-pills">
+              <button 
+                type="button"
+                className={`heatmap-pill-btn ${heatmapViewMode === 'live' ? 'active' : ''}`}
+                onClick={() => setHeatmapViewMode('live')}
+                disabled={clicks.length === 0}
+                style={{
+                  background: heatmapViewMode === 'live' ? '#10b981' : 'transparent',
+                  color: heatmapViewMode === 'live' ? '#fff' : '#64748b',
+                  opacity: clicks.length === 0 ? 0.5 : 1,
+                  cursor: clicks.length === 0 ? 'not-allowed' : 'pointer',
+                  border: 'none',
+                  fontSize: '0.75rem',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  fontWeight: 500
+                }}
+                title={clicks.length === 0 ? "No live telemetry database records found yet" : "Show live database clicks"}
+              >
+                Live ({clicks.length})
+              </button>
+              <button 
+                type="button"
+                className={`heatmap-pill-btn ${heatmapViewMode === 'simulation' ? 'active' : ''}`}
+                onClick={() => setHeatmapViewMode('simulation')}
+                style={{
+                  background: heatmapViewMode === 'simulation' ? '#fbbf24' : 'transparent',
+                  color: heatmapViewMode === 'simulation' ? '#1e293b' : '#64748b',
+                  cursor: 'pointer',
+                  border: 'none',
+                  fontSize: '0.75rem',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  fontWeight: 500,
+                  marginLeft: '4px'
+                }}
+              >
+                Simulation
+              </button>
+            </div>
+          </div>
+
+          <p style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '16px', marginTop: '-10px' }}>
+            {heatmapViewMode === 'live' 
+              ? "Displaying actual real-time click coordinates captured from mobile storefront visitors." 
+              : "Displaying simulated research-grade hotspots across key catalog components."
+            }
+          </p>
+
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <span style={{ fontSize: '0.72rem', color: '#64748b', alignSelf: 'center', fontWeight: 500 }}>Filter Clicks:</span>
+            <button 
+              type="button"
+              className={`heatmap-filter-btn ${heatmapIntentFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setHeatmapIntentFilter('all')}
+              style={{
+                background: heatmapIntentFilter === 'all' ? 'rgba(255,255,255,0.08)' : 'transparent',
+                color: heatmapIntentFilter === 'all' ? '#fff' : '#64748b',
+                border: '1px solid rgba(255,255,255,0.05)',
+                fontSize: '0.7rem',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              All Clicks
+            </button>
+            <button 
+              type="button"
+              className={`heatmap-filter-btn ${heatmapIntentFilter === 'intent' ? 'active' : ''}`}
+              onClick={() => setHeatmapIntentFilter('intent')}
+              style={{
+                background: heatmapIntentFilter === 'intent' ? 'rgba(52,211,153,0.1)' : 'transparent',
+                color: heatmapIntentFilter === 'intent' ? '#34d399' : '#64748b',
+                border: '1px solid rgba(52,211,153,0.2)',
+                fontSize: '0.7rem',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px'
+              }}
+            >
+              <Sparkles size={10} />
+              High Intent
+            </button>
+          </div>
+
+          {/* Smartphone bezel mockup */}
+          <div className="phone-mockup-frame">
+            <div className="phone-notch"></div>
+            <div className="phone-glare"></div>
+            
+            {/* Scrollable screen viewport */}
+            <div className="phone-screen-viewport">
+              
+              {/* Mock Catalog Storefront */}
+              <div className="mock-storefront-wrapper">
+                
+                {/* Header */}
+                <div className="mock-store-header">
+                  <div className="mock-logo">🧪 PéptidosCR</div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div className="mock-cart-badge">🛒 <span className="mock-cart-count">2</span></div>
+                  </div>
+                </div>
+
+                {/* Hero */}
+                <div className="mock-store-hero">
+                  <h1>Compra Péptidos en Costa Rica</h1>
+                  <p>Pureza y potencia garantizadas por laboratorios certificados.</p>
+                  <div className="mock-search-bar" id="search-input">
+                    🔍 Ingrese término...
+                  </div>
+                </div>
+
+                {/* Categories */}
+                <div className="mock-store-categories">
+                  <div className="mock-cat-tab active">🧬 Recuperación</div>
+                  <div className="mock-cat-tab">⚖️ Metabolismo</div>
+                </div>
+
+                {/* Products */}
+                <div className="mock-products-section">
+                  <div className="mock-product-card">
+                    <div className="mock-prod-img-box healing-theme">
+                      <Dna size={24} style={{ color: '#34d399' }} />
+                    </div>
+                    <h3>BPC-157 5mg</h3>
+                    <div className="mock-prod-tag">Recuperación</div>
+                    <div className="mock-prod-price">₡43,100</div>
+                    <button type="button" className="mock-add-cart-btn btn-healing">Añadir al Carrito</button>
+                  </div>
+
+                  <div className="mock-product-card" style={{ marginTop: '12px' }}>
+                    <div className="mock-prod-img-box metabolism-theme">
+                      <Atom size={24} style={{ color: '#0ea5e9' }} />
+                    </div>
+                    <h3>Semaglutide 5mg</h3>
+                    <div className="mock-prod-tag">Metabolismo</div>
+                    <div className="mock-prod-price">₡43,100</div>
+                    <button type="button" className="mock-add-cart-btn btn-metabolism">Añadir al Carrito</button>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="mock-footer">
+                  © 2026 Péptidos Costa Rica
+                </div>
+              </div>
+
+              {/* Floating WhatsApp icon */}
+              <div className="mock-whatsapp-widget">
+                <Phone size={14} style={{ color: '#fff' }} />
+              </div>
+
+              {/* Interactive Heatmap Dots Layer */}
+              {renderHeatmapDots()}
+
+            </div>
+          </div>
+        </div>
+
+        {/* PANEL B: Top Click Targets & Analytics */}
+        <div className="dashboard-section-card">
+          <div className="section-card-title">
+            <TrendingUp size={16} style={{ color: '#38bdf8' }} />
+            <span>Top Mobile Clicks & Analytics Feed</span>
+          </div>
+
+          {/* Targets List */}
+          <div className="top-targets-container">
+            <h4 style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 600, letterSpacing: '0.5px' }}>
+              Ranking by Target Density
+            </h4>
+            
+            {getRankedTargets().length === 0 ? (
+              <div style={{ color: '#64748b', fontSize: '0.8rem', padding: '10px 0' }}>No telemetry click data found in selected time range.</div>
+            ) : (
+              <div className="bar-chart-list">
+                {getRankedTargets().map((target, idx) => {
+                  const maxVal = Math.max(...getRankedTargets().map(t => t.count));
+                  const pct = maxVal > 0 ? (target.count / maxVal) * 100 : 0;
+                  return (
+                    <div className="bar-chart-row" key={target.name}>
+                      <div className="bar-row-label-row">
+                        <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>
+                          <span style={{ color: '#64748b', marginRight: '6px' }}>#{idx+1}</span>
+                          {target.name}
+                        </span>
+                        <span className="bar-row-value" style={{ color: '#38bdf8', fontSize: '0.8rem' }}>{target.count} clicks</span>
+                      </div>
+                      <div className="bar-track" style={{ background: 'rgba(255,255,255,0.05)', height: '6px', borderRadius: '3px' }}>
+                        <div className="bar-fill fill-sky" style={{ width: `${pct}%`, background: '#38bdf8', height: '100%', borderRadius: '3px' }}></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Micro stats banner */}
+          <div className="micro-stats-banner" style={{ marginTop: '20px', padding: '14px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
+            <h4 style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 600, marginBottom: '8px' }}>🚀 Heatmap Telemetry Insights</h4>
+            <ul style={{ paddingLeft: '16px', margin: 0, fontSize: '0.75rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <li>
+                <strong style={{ color: '#34d399' }}>Purchase Friction Alert:</strong> Add to Cart actions make up <strong style={{ color: '#fff' }}>{getAddCartShare()}%</strong> of all mobile storefront clicks. This indicates incredibly high conversion intent.
+              </li>
+              <li>
+                <strong style={{ color: '#a78bfa' }}>Support Engagement:</strong> Over <strong style={{ color: '#fff' }}>{getWhatsAppShare()}%</strong> of mobile visitors rely on the quick WhatsApp button, correlating with high custom research cycles inquiries.
+              </li>
+            </ul>
+          </div>
+
+          {/* Live stream ticker */}
+          <div className="live-stream-ticker" style={{ marginTop: '20px' }}>
+            <h4 style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 600, letterSpacing: '0.5px' }}>
+              Live Telemetry Clicks Feed
+            </h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {getLatestClicks().map((c, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(30,41,59,0.3)', border: '1px solid rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34d399', display: 'inline-block' }}></span>
+                    <span style={{ color: '#f1f5f9', fontWeight: 500 }}>{c.element_name}</span>
+                  </div>
+                  <span style={{ color: '#64748b' }}>{c.timeStr}</span>
+                </div>
+              ))}
+              {getLatestClicks().length === 0 && (
+                <div style={{ color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic' }}>Waiting for storefront mobile interactions...</div>
+              )}
             </div>
           </div>
         </div>

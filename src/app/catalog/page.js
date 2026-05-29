@@ -499,6 +499,64 @@ export default function CatalogPage() {
     return () => clearInterval(intervalId);
   }, [sessionId]);
 
+  // Telemetry: Storefront Mobile Click tracker for Heatmaps
+  useEffect(() => {
+    const handleDocumentClick = (e) => {
+      // Check if user is in mobile viewport view
+      const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+      if (!isMobile) return;
+
+      // Identify click target recursively
+      let currentEl = e.target;
+      let targetName = '';
+      
+      // Traverse up to find meaningful target tags/elements
+      while (currentEl && currentEl !== document.body) {
+        if (currentEl.getAttribute && currentEl.getAttribute('data-heatmap-name')) {
+          targetName = currentEl.getAttribute('data-heatmap-name');
+          break;
+        }
+        if (currentEl.tagName === 'BUTTON') {
+          targetName = currentEl.innerText?.trim().substring(0, 30) || 'Button';
+          break;
+        }
+        if (currentEl.tagName === 'A') {
+          targetName = `Link: ${currentEl.innerText?.trim().substring(0, 30) || 'Anchor'}`;
+          break;
+        }
+        if (currentEl.id) {
+          targetName = `#${currentEl.id}`;
+          break;
+        }
+        currentEl = currentEl.parentElement;
+      }
+
+      if (!targetName && e.target) {
+        targetName = e.target.tagName?.toLowerCase() || 'div';
+      }
+
+      // Convert coordinates to relative percentages
+      const xPct = Math.round((e.clientX / window.innerWidth) * 100);
+      const yPct = Math.round((e.clientY / window.innerHeight) * 100);
+
+      // Post payload to analytics route
+      fetch('/api/analytics/clicks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          element_name: targetName || 'Generic Area',
+          x_pct: xPct,
+          y_pct: yPct,
+          path: window.location.pathname,
+          is_mobile: true
+        })
+      }).catch(() => {});
+    };
+
+    document.addEventListener('click', handleDocumentClick, { passive: true });
+    return () => document.removeEventListener('click', handleDocumentClick);
+  }, []);
+
   // Telemetry product view logging has been moved to handleProductClick
 
 
