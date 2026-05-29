@@ -1545,22 +1545,25 @@ body {
 }
 
 /* Admin Dashboard Header */
+/* Admin Dashboard Header (Mobile-First Defaults for Screens under 1024px) */
 .admin-navbar {
     background: #0b132b;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    padding: 16px 24px;
+    padding: 12px;
     display: flex;
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
     position: sticky;
     top: 0;
     z-index: 100;
+    gap: 12px;
 }
 
 .admin-nav-logo {
     display: flex;
     align-items: center;
     gap: 10px;
+    width: auto;
 }
 
 .admin-nav-logo h2 {
@@ -1584,14 +1587,24 @@ body {
 .admin-nav-actions {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 8px;
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+}
+
+.admin-nav-actions::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
 }
 
 .admin-tab-btn {
     background: transparent;
     border: none;
     color: #94a3b8;
-    padding: 8px 14px;
+    padding: 8px 12px;
     font-weight: 700;
     cursor: pointer;
     font-size: 0.8rem;
@@ -1602,6 +1615,11 @@ body {
     gap: 6px;
     white-space: nowrap;
     position: relative;
+    flex-shrink: 0;
+}
+
+.admin-tab-btn .tab-label {
+    display: inline;
 }
 
 .admin-tab-btn:hover {
@@ -1642,19 +1660,18 @@ body {
 
 /* Admin Panels Container */
 .admin-container {
-    max-width: 1400px;
+    width: 100%;
+    padding: 16px;
     margin: 0 auto;
-    padding: 24px;
 }
 
 /* Top utility bar */
 .admin-toolbar {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     margin-bottom: 20px;
     gap: 16px;
-    flex-wrap: wrap;
 }
 
 .admin-toolbar h3 {
@@ -1665,9 +1682,8 @@ body {
 
 .admin-actions-row {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .admin-btn {
@@ -2342,67 +2358,130 @@ body {
         width: 100%;
         max-width: 100%;
     }
-    
-    /* Admin Navbar Mobile Overhaul */
+}
+
+/* Premium Left Sidebar for Desktop (Screens 1024px and wider) */
+@media (min-width: 1024px) {
     .admin-navbar {
-        flex-direction: column;
-        align-items: flex-start;
-        padding: 12px;
-        gap: 12px;
+        width: 280px !important;
+        height: 100vh !important;
+        position: fixed !important;
+        left: 0 !important;
+        top: 0 !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-bottom: none !important;
+        padding: 24px 16px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        align-items: stretch !important;
+        gap: 24px !important;
+        overflow-y: auto !important;
+        background: #0b132b !important;
+        flex-shrink: 0 !important;
+        box-shadow: 4px 0 16px rgba(0, 0, 0, 0.15) !important;
+    }
+    
+    /* Custom premium scrollbar for sidebar */
+    .admin-navbar::-webkit-scrollbar {
+        width: 4px !important;
+        display: block !important;
+    }
+    .admin-navbar::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.05) !important;
+    }
+    .admin-navbar::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1) !important;
+        border-radius: 2px !important;
+    }
+    .admin-navbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 212, 255, 0.3) !important;
     }
     
     .admin-nav-top-row {
-        flex-direction: column;
-        align-items: flex-start !important;
-        gap: 12px;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        margin-bottom: 0 !important;
+        gap: 16px !important;
     }
     
-    .admin-nav-logo {
-        width: auto;
+    .admin-nav-top-row > div:first-child {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 8px !important;
+    }
+    
+    .admin-nav-top-row > div:last-child {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        width: 100% !important;
+        margin-top: 10px !important;
+        gap: 8px !important;
+    }
+    
+    .admin-logout-btn {
+        width: 100% !important;
+        text-align: left !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        justify-content: flex-start !important;
     }
     
     .admin-nav-actions {
-        width: 100%;
-        overflow-x: auto;
-        padding-bottom: 4px;
-        display: flex;
-        flex-wrap: nowrap;
-        gap: 8px;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none; /* Firefox */
-    }
-    
-    .admin-nav-actions::-webkit-scrollbar {
-        display: none; /* Chrome/Safari */
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 6px !important;
+        width: 100% !important;
+        overflow-x: visible !important;
+        padding-bottom: 0 !important;
     }
     
     .admin-tab-btn {
-        white-space: nowrap;
-        padding: 8px 12px;
-        font-size: 0.8rem;
-        flex-shrink: 0;
-    }
-
-    .admin-tab-btn .tab-label {
-        display: inline; /* Ensure labels are visible on mobile since they swipe now */
+        width: 100% !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        padding: 10px 14px !important;
+        font-size: 0.85rem !important;
+        border-radius: 8px !important;
+        border-left: 3px solid transparent !important;
+        flex-shrink: 0 !important;
     }
     
-    /* Toolbar spacing optimizations */
+    .admin-tab-btn:hover {
+        background: rgba(255, 255, 255, 0.04) !important;
+        color: #f8fafc !important;
+    }
+    
+    .admin-tab-btn.active {
+        background: rgba(0, 212, 255, 0.08) !important;
+        color: #00D4FF !important;
+        border-left: 3px solid #00D4FF !important;
+    }
+    
+    .admin-navbar ~ .admin-container {
+        margin-left: 280px !important;
+        width: calc(100% - 280px) !important;
+        padding: 32px !important;
+        max-width: 1600px !important;
+    }
+    
     .admin-toolbar {
-        flex-direction: column;
-        align-items: stretch;
+        flex-direction: row !important;
+        justify-content: space-between !important;
+        align-items: center !important;
     }
     
     .admin-actions-row {
-        flex-direction: column;
-        gap: 8px;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 12px !important;
     }
     
     .admin-actions-row button {
-        width: 100%;
-        justify-content: center;
-        padding: 14px;
-        font-size: 0.9rem;
+        width: auto !important;
+        padding: 8px 16px !important;
+        font-size: 0.8rem !important;
     }
 }
 
