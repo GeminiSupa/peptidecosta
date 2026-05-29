@@ -224,6 +224,143 @@ export default function AdminPage() {
   const [aiInputText, setAiInputText] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
 
+  // WhatsApp AI Live Inbox States
+  const [whatsappMessages, setWhatsappMessages] = useState([]);
+  const [loadingWhatsappMessages, setLoadingWhatsappMessages] = useState(true);
+  const [activeChatWaId, setActiveChatWaId] = useState(null);
+  const [whatsappSettings, setWhatsappSettings] = useState({
+    ai_auto_reply: true,
+    ai_system_prompt: "You are 'Costa Peptides Support Copilot', a warm, professional customer support agent for Peptides Costa Rica. Answer customer questions about peptides (like BPC-157, TB-500, CJC-1295, Semaglutide, etc.) scientifically yet clearly. Mention shipping in Costa Rica is via Correos de Costa Rica (takes 1-3 days, free for orders over 30,000 CRC). Always refer to catalog prices in Costa Rican Colones or US Dollars. Speak fluently in Costa Rican Spanish (use polite terms, 'con gusto', 'Pura vida' if appropriate but remain professional)."
+  });
+  const [savingWaSettings, setSavingWaSettings] = useState(false);
+  const [chatInputText, setChatInputText] = useState('');
+  const [draftingAiReply, setDraftingAiReply] = useState(false);
+
+  // Save WhatsApp settings handler
+  const handleSaveWhatsappSettings = async (settings) => {
+    setSavingWaSettings(true);
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase
+          .from('site_settings')
+          .upsert({ id: 'whatsapp_settings', value: settings });
+        if (error) throw error;
+        setWhatsappSettings(settings);
+        alert('✅ WhatsApp AI autopilot settings saved successfully!');
+      } else {
+        alert('Supabase is not configured. Saving locally in memory.');
+        setWhatsappSettings(settings);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save settings: ' + err.message);
+    } finally {
+      setSavingWaSettings(false);
+    }
+  };
+
+  // Ask Gemini to draft response contextually
+  const handleDraftAiChatReply = async (waId) => {
+    if (!waId) return;
+    setDraftingAiReply(true);
+    try {
+      const activeThread = whatsappMessages
+        .filter(m => m.wa_id === waId)
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      
+      const threadContext = activeThread.map(m => 
+        `${m.direction === 'inbound' ? 'Customer' : 'Store Assistant (' + (m.display_name || 'AI') + ')'}: "${m.message_text}"`
+      ).join('\n');
+
+      const latestMsg = activeThread[activeThread.length - 1]?.message_text || '';
+
+      const promptText = `
+System Instructions:
+${whatsappSettings.ai_system_prompt}
+
+Active Products in Catalog:
+${products.map(p => `- ${p.product} (Category: ${p.category}, Price: ${p.priceUsd} USD / ${p.priceCrc || 'N/A'} CRC, Status: ${p.status})`).join('\n')}
+
+Recent Conversation Thread:
+${threadContext}
+
+Customer's Latest Message:
+"${latestMsg}"
+
+Please draft a perfect next response to this customer. Write only the reply body ready to send. Keep it natural, polite, and scientific yet friendly. Return ONLY the reply text, no headers or meta-notes.
+`;
+
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'chat',
+          prompt: promptText
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setChatInputText(data.text.trim());
+      } else {
+        alert('Failed to draft AI response: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error generating draft: ' + err.message);
+    } finally {
+      setDraftingAiReply(false);
+    }
+  };
+
+  // Send Manual reply via WhatsApp Cloud API
+  const handleSendLiveWhatsappMessage = async () => {
+    if (!activeChatWaId || !chatInputText.trim()) return;
+    
+    const textToSend = chatInputText.trim();
+    setChatInputText('');
+
+    // Optimistically insert message into UI state thread
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMessage = {
+      id: tempId,
+      wa_id: activeChatWaId,
+      display_name: 'Peptides Costa Rica',
+      message_text: textToSend,
+      message_type: 'text',
+      direction: 'outbound',
+      created_at: new Date().toISOString()
+    };
+    
+    setWhatsappMessages(prev => [optimisticMessage, ...prev]);
+
+    try {
+      const res = await fetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: activeChatWaId,
+          message: textToSend,
+          customerName: 'Peptides Customer'
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        loadAdminData();
+      } else {
+        alert('❌ Failed to send WhatsApp: ' + (data.error || 'Unknown error'));
+        setWhatsappMessages(prev => prev.filter(m => m.id !== tempId));
+        setChatInputText(textToSend);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('❌ Failed to send WhatsApp: ' + err.message);
+      setWhatsappMessages(prev => prev.filter(m => m.id !== tempId));
+      setChatInputText(textToSend);
+    }
+  };
+
   // Carts AI Audit States
   const [cartsAiText, setCartsAiText] = useState('');
   const [generatingCartsAi, setGeneratingCartsAi] = useState(false);
@@ -731,6 +868,16 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
            });
         }
       } catch (err) { console.error("Failed to load settings:", err); }
+
+      // Fetch WhatsApp Settings as well
+      try {
+        const { data: waData, error: waError } = await supabase.from('site_settings').select('*').eq('id', 'whatsapp_settings').limit(1).maybeSingle();
+        if (!waError && waData) {
+          setWhatsappSettings(waData.value);
+        }
+      } catch (err) {
+        console.error("Failed to load whatsapp settings:", err);
+      }
     }
     setLoadingSettings(false);
 
@@ -758,6 +905,23 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       }
     }
     setLoadingFbNotifications(false);
+
+    // 9. Fetch WhatsApp Messages log
+    setLoadingWhatsappMessages(true);
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('whatsapp_messages')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error && data) {
+          setWhatsappMessages(data);
+        }
+      } catch (err) {
+        console.error("Failed to load whatsapp messages:", err);
+      }
+    }
+    setLoadingWhatsappMessages(false);
   };
 
   // Trigger loading when authenticated
@@ -2212,6 +2376,14 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           >
             <Brain size={14} style={{ color: '#38bdf8' }} />
             <span className="tab-label" style={{ color: '#38bdf8', fontWeight: 'bold' }}>AI Copilot</span>
+          </button>
+          <button 
+            className={`admin-tab-btn ${activeTab === 'whatsapp_ai' ? 'active' : ''}`}
+            onClick={() => setActiveTab('whatsapp_ai')}
+            style={{ borderLeft: activeTab === 'whatsapp_ai' ? '3px solid #10b981' : 'none', background: activeTab === 'whatsapp_ai' ? 'rgba(16, 185, 129, 0.08)' : 'transparent' }}
+          >
+            <MessageSquare size={14} style={{ color: '#10b981' }} />
+            <span className="tab-label" style={{ color: '#10b981', fontWeight: 'bold' }}>WhatsApp AI</span>
           </button>
           {(!adminProfile || adminProfile.is_superadmin) && (
             <button 
@@ -4205,6 +4377,292 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             </div>
           </div>
         )}
+
+        {/* TAB: WHATSAPP AI INBOX */}
+        {activeTab === 'whatsapp_ai' && (() => {
+          // Derive unique chats memo
+          const chatsList = (() => {
+            const chatsMap = new Map();
+            const chronological = [...whatsappMessages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            
+            chronological.forEach(m => {
+              chatsMap.set(m.wa_id, {
+                waId: m.wa_id,
+                displayName: m.display_name && m.display_name !== 'AI Copilot' ? m.display_name : 'Customer ' + m.wa_id.slice(-4),
+                lastMessageText: m.message_text,
+                lastMessageAt: m.created_at,
+                direction: m.direction
+              });
+            });
+
+            return Array.from(chatsMap.values()).sort((a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt));
+          })();
+
+          const activeChatMessages = whatsappMessages
+            .filter(m => m.wa_id === activeChatWaId)
+            .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '24px', padding: '10px 0', height: '680px' }}>
+              
+              {/* Left Column: Chats List & Global Autopilot Settings */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', overflowY: 'hidden' }}>
+                
+                {/* 1. Global AI Autopilot Settings Card */}
+                <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Brain size={16} style={{ color: '#10b981' }} />
+                      AI Copilot Autopilot
+                    </span>
+                    <label style={{ position: 'relative', display: 'inline-block', width: '38px', height: '20px', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={whatsappSettings.ai_auto_reply}
+                        onChange={(e) => handleSaveWhatsappSettings({
+                          ...whatsappSettings,
+                          ai_auto_reply: e.target.checked
+                        })}
+                        style={{ opacity: 0, width: 0, height: 0 }}
+                      />
+                      <span style={{
+                        position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundColor: whatsappSettings.ai_auto_reply ? '#10b981' : '#334155',
+                        transition: '0.3s', borderRadius: '20px'
+                      }}>
+                        <span style={{
+                          position: 'absolute', content: '""', height: '14px', width: '14px', left: whatsappSettings.ai_auto_reply ? '20px' : '3px', bottom: '3px',
+                          backgroundColor: 'white', transition: '0.3s', borderRadius: '50%'
+                        }} />
+                      </span>
+                    </label>
+                  </div>
+                  
+                  <p style={{ fontSize: '0.7rem', color: '#94a3b8', margin: 0 }}>
+                    When active, Gemini instantly drafts and replies to all incoming WhatsApp customer messages automatically.
+                  </p>
+
+                  <details style={{ marginTop: '4px' }}>
+                    <summary style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#38bdf8', cursor: 'pointer', outline: 'none' }}>
+                      Edit AI System Prompt
+                    </summary>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                      <textarea
+                        value={whatsappSettings.ai_system_prompt}
+                        onChange={(e) => setWhatsappSettings({
+                          ...whatsappSettings,
+                          ai_system_prompt: e.target.value
+                        })}
+                        style={{
+                          width: '100%', height: '120px', background: '#172237', border: '1px solid rgba(255,255,255,0.1)',
+                          color: '#cbd5e1', borderRadius: '8px', padding: '8px', fontSize: '0.7rem', outline: 'none', resize: 'vertical'
+                        }}
+                      />
+                      <button
+                        onClick={() => handleSaveWhatsappSettings(whatsappSettings)}
+                        disabled={savingWaSettings}
+                        style={{
+                          background: '#10b981', color: 'white', border: 'none', borderRadius: '6px',
+                          padding: '6px 12px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer', alignSelf: 'flex-end'
+                        }}
+                      >
+                        {savingWaSettings ? 'Saving...' : 'Save Settings'}
+                      </button>
+                    </div>
+                  </details>
+                </div>
+
+                {/* 2. Conversations List Pane */}
+                <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Active WhatsApp Chats
+                    </span>
+                  </div>
+
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+                    {loadingWhatsappMessages ? (
+                      <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '0.8rem' }}>Loading conversations...</div>
+                    ) : chatsList.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '40px 10px', color: '#64748b', fontSize: '0.75rem' }}>
+                        No conversations found in database. Incoming messages will appear here.
+                      </div>
+                    ) : (
+                      chatsList.map(chat => {
+                        const isActive = activeChatWaId === chat.waId;
+                        const isAiLast = chat.direction === 'outbound' && whatsappMessages.find(m => m.wa_id === chat.waId)?.display_name === 'AI Copilot';
+                        
+                        return (
+                          <div
+                            key={chat.waId}
+                            onClick={() => setActiveChatWaId(chat.waId)}
+                            style={{
+                              display: 'flex', flexDirection: 'column', gap: '4px', padding: '12px',
+                              background: isActive ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
+                              border: `1px solid ${isActive ? 'rgba(16, 185, 129, 0.2)' : 'transparent'}`,
+                              borderRadius: '10px', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '4px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: isActive ? '#4ade80' : '#cbd5e1' }}>
+                                👤 {chat.displayName}
+                              </span>
+                              <span style={{ fontSize: '0.6rem', color: '#64748b' }}>
+                                {new Date(chat.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', flex: 1 }}>
+                                {chat.lastMessageText}
+                              </span>
+                              {isAiLast ? (
+                                <span style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#4ade80', fontSize: '0.55rem', padding: '1px 5px', borderRadius: '4px', fontWeight: 'bold', flexShrink: 0 }}>
+                                  ✨ AI
+                                </span>
+                              ) : chat.direction === 'outbound' ? (
+                                <span style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontSize: '0.55rem', padding: '1px 5px', borderRadius: '4px', fontWeight: 'bold', flexShrink: 0 }}>
+                                  👤 Human
+                                </span>
+                              ) : (
+                                <span style={{ width: '6px', height: '6px', background: '#e11d48', borderRadius: '50%', flexShrink: 0 }} />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Right Column: Active Conversation Console */}
+              <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                
+                {activeChatWaId ? (() => {
+                  const currentChat = chatsList.find(c => c.waId === activeChatWaId);
+                  
+                  return (
+                    <>
+                      {/* Active Chat Header */}
+                      <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', display: 'block' }}>
+                            💬 Chatting with {currentChat?.displayName || activeChatWaId}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                            Phone: +{activeChatWaId}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          {whatsappSettings.ai_auto_reply && (
+                            <span style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#4ade80', fontSize: '0.65rem', padding: '3px 8px', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.2)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ width: '5px', height: '5px', background: '#10b981', borderRadius: '50%', display: 'inline-block' }} />
+                              AI Autopilot Active
+                            </span>
+                          )}
+                          <button
+                            className="admin-btn"
+                            onClick={loadAdminData}
+                            style={{ padding: '4px 10px', fontSize: '0.75rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', borderRadius: '6px', cursor: 'pointer' }}
+                          >
+                            Refresh
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Conversation History Stream */}
+                      <div style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', background: 'radial-gradient(circle at top left, #0b111e, #070a12)' }}>
+                        {activeChatMessages.map((msg, index) => {
+                          const isInbound = msg.direction === 'inbound';
+                          const isAi = msg.display_name === 'AI Copilot';
+                          
+                          return (
+                            <div
+                              key={msg.id || index}
+                              style={{
+                                alignSelf: isInbound ? 'flex-start' : 'flex-end',
+                                maxWidth: '70%',
+                                background: isInbound ? '#1f2937' : isAi ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                                border: isInbound ? '1px solid rgba(255,255,255,0.05)' : isAi ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(56, 189, 248, 0.2)',
+                                color: '#f8fafc',
+                                borderRadius: isInbound ? '12px 12px 12px 0' : '12px 12px 0 12px',
+                                padding: '10px 14px',
+                                fontSize: '0.8rem',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '0.6rem', color: isInbound ? '#94a3b8' : isAi ? '#4ade80' : '#38bdf8', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                                  {isInbound ? (msg.display_name || 'Customer') : isAi ? '✨ AI Copilot' : '👤 Administrator'}
+                                </span>
+                                <span style={{ fontSize: '0.55rem', color: '#64748b' }}>
+                                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </div>
+                              <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
+                                {msg.message_text}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Chat Input Bar & AI Drafting Panel */}
+                      <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <textarea
+                            value={chatInputText}
+                            onChange={(e) => setChatInputText(e.target.value)}
+                            placeholder="Type a manual WhatsApp message or generate an AI draft..."
+                            style={{
+                              flex: 1, height: '60px', background: '#172237', border: '1px solid rgba(255,255,255,0.1)',
+                              color: 'white', borderRadius: '8px', padding: '10px 12px', fontSize: '0.8rem', outline: 'none', resize: 'none', fontFamily: 'inherit'
+                            }}
+                          />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <button
+                              onClick={handleSendLiveWhatsappMessage}
+                              disabled={!chatInputText.trim()}
+                              style={{
+                                background: '#10b981', color: 'white', border: 'none', borderRadius: '8px',
+                                padding: '8px 16px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', height: '28px',
+                                opacity: !chatInputText.trim() ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center'
+                              }}
+                            >
+                              <Send size={12} /> Send
+                            </button>
+                            <button
+                              onClick={() => handleDraftAiChatReply(activeChatWaId)}
+                              disabled={draftingAiReply}
+                              style={{
+                                background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px',
+                                padding: '8px 16px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer', height: '28px',
+                                display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center'
+                              }}
+                            >
+                              {draftingAiReply ? 'Drafting...' : '✨ AI Draft'}
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    </>
+                  );
+                })() : (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#64748b', gap: '12px' }}>
+                    <MessageCircle size={48} style={{ color: '#334155' }} />
+                    <span style={{ fontSize: '0.85rem' }}>Select a WhatsApp conversation from the left pane to start live messaging.</span>
+                  </div>
+                )}
+
+              </div>
+
+            </div>
+          );
+        })()}
       </div>
 
       {/* Lead Details Modal */}

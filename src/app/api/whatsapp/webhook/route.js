@@ -143,10 +143,131 @@ export async function POST(request) {
           // ── Send auto-reply (within 24h service window — FREE) ──
           if (ACCESS_TOKEN && PHONE_NUMBER_ID) {
             try {
-              const replyText = matchedOrderId
-                ? `¡Hola ${displayName || ''}! 👋 Hemos recibido tu pedido. Te contactaremos pronto para coordinar el envío. 🚀\n\nHi ${displayName || ''}! 👋 We've received your order. We'll be in touch shortly to coordinate delivery. 🚀`
-                : `¡Hola ${displayName || ''}! 👋 Gracias por contactarnos. Un agente te responderá pronto.\n\nHi ${displayName || ''}! 👋 Thanks for reaching out. An agent will reply shortly.`;
+              let aiAutoReply = !!process.env.GEMINI_API_KEY;
+              let aiSystemPrompt = "You are 'Costa Peptides Support Copilot', a warm, professional customer support agent for Peptides Costa Rica. Answer customer questions about peptides (like BPC-157, TB-500, CJC-1295, Semaglutide, etc.) scientifically yet clearly. Mention shipping in Costa Rica is via Correos de Costa Rica (takes 1-3 days, free for orders over 30,000 CRC). Always refer to catalog prices in Costa Rican Colones or US Dollars. Speak fluently in Costa Rican Spanish (use polite terms, 'con gusto', 'Pura vida' if appropriate but remain professional).";
+              
+              // 1. Fetch settings from Supabase
+              if (supabase) {
+                try {
+                  const { data: settingsData } = await supabase
+                    .from('site_settings')
+                    .select('value')
+                    .eq('id', 'whatsapp_settings')
+                    .limit(1)
+                    .single();
+                  
+                  if (settingsData && settingsData.value) {
+                    aiAutoReply = settingsData.value.ai_auto_reply !== false;
+                    if (settingsData.value.ai_system_prompt) {
+                      aiSystemPrompt = settingsData.value.ai_system_prompt;
+                    }
+                  }
+                } catch (err) {
+                  console.warn('[WhatsApp Webhook] Failed to fetch site_settings, using defaults:', err.message);
+                }
+              }
 
+              // 2. Fetch Catalog Context
+              let catalogContext = "";
+              if (supabase && aiAutoReply) {
+                try {
+                  const { data: products } = await supabase
+                    .from('products')
+                    .select('product, category, price_usd, price_crc, status, description_es');
+                  if (products && products.length > 0) {
+                    catalogContext = "Active Products in Catalog:\n" + products.map(p => 
+                      `- ${p.product} (Category: ${p.category}, Price: ${p.price_usd} USD / ${p.price_crc || 'N/A'} CRC, Stock Status: ${p.status}, Description: ${p.description_es || 'No description'})`
+                    ).join('\n');
+                  }
+                } catch (err) {
+                  console.error('[WhatsApp Webhook] Failed to load products for AI context:', err);
+                }
+              }
+
+              // 3. Fetch Conversation Memory (last 8 messages)
+              let memoryContext = "";
+              if (supabase && aiAutoReply) {
+                try {
+                  const { data: pastMessages } = await supabase
+                    .from('whatsapp_messages')
+                    .select('direction, message_text, display_name')
+                    .eq('wa_id', waId)
+                    .order('created_at', { ascending: false })
+                    .limit(8);
+                  if (pastMessages && pastMessages.length > 0) {
+                    const chronological = [...pastMessages].reverse();
+                    memoryContext = "Recent Conversation History:\n" + chronological.map(m => 
+                      `${m.direction === 'inbound' ? 'Customer' : 'Store Assistant (' + (m.display_name || 'AI') + ')'}: "${m.message_text}"`
+                    ).join('\n');
+                  }
+                } catch (err) {
+                  console.error('[WhatsApp Webhook] Failed to load conversation history for AI memory:', err);
+                }
+              }
+
+              // 4. Generate AI Reply or fallback
+              let replyText = "";
+              let isAiGenerated = false;
+
+              if (aiAutoReply && process.env.GEMINI_API_KEY) {
+                try {
+                  const prompt = `
+System Instructions:
+${aiSystemPrompt}
+
+${catalogContext}
+
+${memoryContext}
+
+Customer Information:
+- Display Name: ${displayName || 'Valued Customer'}
+- WhatsApp ID/Phone: ${waId}
+${matchedOrderId ? `- Matched Order ID: ${matchedOrderId}` : ''}
+
+New Inbound Customer Message:
+"${messageText}"
+
+Please reply naturally, keeping the tone warm, professional, helpful, and highly scientific yet accessible. Output ONLY the response text to send back. Do not include any JSON wrapping or markdown preamble. Keep under 1000 characters if possible.
+`;
+
+                  const response = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        contents: [
+                          { parts: [{ text: prompt }] }
+                        ]
+                      })
+                    }
+                  );
+
+                  if (response.ok) {
+                    const resData = await response.json();
+                    const aiText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (aiText) {
+                      replyText = aiText.trim();
+                      isAiGenerated = true;
+                      console.log('[WhatsApp Webhook] ✅ Gemini generated response successfully!');
+                    }
+                  } else {
+                    const errData = await response.json();
+                    console.error('[WhatsApp Webhook] Gemini API failed with error status:', response.status, errData);
+                  }
+                } catch (aiErr) {
+                  console.error('[WhatsApp Webhook] Failed to generate AI reply:', aiErr);
+                }
+              }
+
+              // Fallback if AI reply failed or was disabled
+              if (!replyText) {
+                replyText = matchedOrderId
+                  ? `¡Hola ${displayName || ''}! 👋 Hemos recibido tu pedido. Te contactaremos pronto para coordinar el envío. 🚀\n\nHi ${displayName || ''}! 👋 We've received your order. We'll be in touch shortly to coordinate delivery. 🚀`
+                  : `¡Hola ${displayName || ''}! 👋 Gracias por contactarnos. Un agente te responderá pronto.\n\nHi ${displayName || ''}! 👋 Thanks for reaching out. An agent will reply shortly.`;
+              }
+
+              // Send the reply via WhatsApp Cloud API
               await fetch(
                 `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
                 {
@@ -166,11 +287,11 @@ export async function POST(request) {
 
               console.log(`[WhatsApp Webhook] 📤 Auto-reply sent to ${waId}`);
 
-              // Log the outbound reply
+              // Log the outbound reply in Supabase
               if (supabase) {
                 await supabase.from('whatsapp_messages').insert({
                   wa_id: waId,
-                  display_name: 'Peptides Costa Rica',
+                  display_name: isAiGenerated ? 'AI Copilot' : 'Peptides Costa Rica',
                   message_text: replyText,
                   message_type: 'text',
                   direction: 'outbound',
@@ -179,7 +300,6 @@ export async function POST(request) {
               }
             } catch (replyErr) {
               console.error('[WhatsApp Webhook] Auto-reply failed:', replyErr);
-              // Don't fail the webhook — auto-reply is optional
             }
           }
         }
