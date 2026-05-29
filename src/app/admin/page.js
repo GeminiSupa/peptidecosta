@@ -793,7 +793,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           .order('last_updated', { ascending: false });
 
         if (!error && data) {
-          setAbandonedCarts(data.filter(c => c.cart_data && c.cart_data.length > 0));
+          setAbandonedCarts(data);
         }
       } catch (err) {
         console.error("Failed to load abandoned carts:", err);
@@ -5065,6 +5065,11 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                       <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#38bdf8' }}>x{item.qty}</span>
                     </div>
                   ))}
+                  {(!selectedCartDetails.cart_data || selectedCartDetails.cart_data.length === 0) && (
+                    <div style={{ padding: '14px', textAlign: 'center', color: '#64748b', fontSize: '0.85rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.05)' }}>
+                      No items currently in this cart.
+                    </div>
+                  )}
                 </div>
               </div>
 
