@@ -1324,7 +1324,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     setWaRecipient(recipient);
     // Draft a basic template based on recipient context
     let defaultMsg = `Hola ${recipient.name}, `;
-    if (recipient.orderNumber) {
+    if (recipient.prefilledText) {
+      defaultMsg = recipient.prefilledText;
+    } else if (recipient.orderNumber) {
       defaultMsg = `Hola ${recipient.name}, te contactamos de Péptidos Costa Rica respecto a tu orden ${recipient.orderNumber}. ¿Todo bien?`;
     } else if (recipient.cartItems) {
       defaultMsg = `Hola ${recipient.name}, vimos que dejaste algunos artículos en tu carrito de Péptidos Costa Rica. ¿Tienes alguna pregunta o necesitas ayuda para completar tu compra?`;

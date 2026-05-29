@@ -1,10 +1,69 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, User, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save, Phone, BadgeCheck, Upload } from 'lucide-react';
+import { Search, User, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save, Phone, BadgeCheck, Upload, Sparkles, Brain } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
+
+const resolveRecommendation = (cust) => {
+  // Combine past purchases and cart items to search for keywords
+  const items = [
+    ...(cust.purchasedItems || []),
+    ...(cust.cartItems ? cust.cartItems.map(i => i.product) : [])
+  ].map(i => i.toLowerCase());
+
+  // 1. Healing / Recovery (BPC-157 / TB-500)
+  if (items.some(name => name.includes('bpc') || name.includes('157') || name.includes('tb-') || name.includes('tb500'))) {
+    // If they already bought BPC-157 but not TB-500, recommend TB-500. Otherwise recommend BPC-157
+    const hasTb = items.some(name => name.includes('tb-') || name.includes('tb500'));
+    return {
+      product: hasTb ? 'BPC-157 5mg' : 'TB-500 5mg',
+      subtext: hasTb ? 'Emparejamiento de Tejidos' : 'Sinergia de Recuperación Muscular',
+      theme: 'healing',
+      badgeBg: 'rgba(16, 185, 129, 0.12)',
+      badgeBorder: 'rgba(16, 185, 129, 0.3)',
+      badgeColor: '#34d399'
+    };
+  }
+
+  // 2. Weight Loss / Metabolic (Semaglutide / Tirzepatide / Retatrutide)
+  if (items.some(name => name.includes('sema') || name.includes('ozempic') || name.includes('tirz') || name.includes('mounj') || name.includes('retat'))) {
+    // If bought Semaglutide but not Tirzepatide, suggest Tirzepatide
+    const hasTirz = items.some(name => name.includes('tirz') || name.includes('mounj'));
+    return {
+      product: hasTirz ? 'Retatrutide 10mg' : 'Tirzepatide 10mg',
+      subtext: hasTirz ? 'Termogénico Fase III' : 'Metabolismo de Grasa Avanzado',
+      theme: 'metabolic',
+      badgeBg: 'rgba(245, 158, 11, 0.12)',
+      badgeBorder: 'rgba(245, 158, 11, 0.3)',
+      badgeColor: '#fbbf24'
+    };
+  }
+
+  // 3. Anti-Aging / Skin & Hair (GHK-Cu / Ipamorelin / CJC-1295)
+  if (items.some(name => name.includes('ghk') || name.includes('cobre') || name.includes('copper') || name.includes('ipam') || name.includes('cjc') || name.includes('sermor'))) {
+    const hasCjc = items.some(name => name.includes('cjc') || name.includes('ipam'));
+    return {
+      product: hasCjc ? 'GHK-Cu 50mg' : 'CJC-1295 + Ipamorelin 10mg',
+      subtext: hasCjc ? 'Protocolo Estimulación de Colágeno' : 'Estimulador Hormona de Crecimiento',
+      theme: 'anti-aging',
+      badgeBg: 'rgba(168, 85, 247, 0.12)',
+      badgeBorder: 'rgba(168, 85, 247, 0.3)',
+      badgeColor: '#c084fc'
+    };
+  }
+
+  // Default: General Scientific Standard (Suggest BPC-157 as the universal entry peptide)
+  return {
+    product: 'BPC-157 5mg',
+    subtext: 'Péptido Regenerativo Estándar',
+    theme: 'general',
+    badgeBg: 'rgba(14, 165, 233, 0.12)',
+    badgeBorder: 'rgba(14, 165, 233, 0.3)',
+    badgeColor: '#38bdf8'
+  };
+};
 
 export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhatsAppClick }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -13,6 +72,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
   const [saving, setSaving] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+  const [generatingPitchId, setGeneratingPitchId] = useState(null);
 
   // Derived customer data from order history and abandoned carts
   const customers = useMemo(() => {
@@ -48,8 +108,28 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           totalSpentUsd: 0,
           orderCount: 0,
           lastOrderDate: o.created_at,
-          isLead: false
+          isLead: false,
+          purchasedItems: []
         };
+      }
+      
+      let parsedItems = [];
+      if (o.items) {
+        if (Array.isArray(o.items)) {
+          parsedItems = o.items;
+        } else if (typeof o.items === 'string') {
+          try {
+            parsedItems = JSON.parse(o.items);
+          } catch (e) {}
+        }
+      }
+      
+      if (Array.isArray(parsedItems)) {
+        parsedItems.forEach(item => {
+          if (item && item.product && !map[id].purchasedItems.includes(item.product)) {
+            map[id].purchasedItems.push(item.product);
+          }
+        });
       }
       
       if (o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'order complete') {
@@ -240,6 +320,54 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
     }, 500);
   };
 
+  const handleGeneratePitch = async (cust, recommendedProduct) => {
+    if (!cust) return;
+    setGeneratingPitchId(cust.id);
+
+    try {
+      const purchasedProducts = cust.isLead 
+        ? (cust.cartItems || []).map(i => i.product)
+        : (cust.purchasedItems || []);
+
+      const response = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'cross_sell',
+          context: {
+            customerName: cust.name,
+            purchasedProducts,
+            recommendation: recommendedProduct
+          }
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        const contactPhone = cust.whatsappWaId || cust.phone;
+        if (onWhatsAppClick) {
+          onWhatsAppClick({
+            name: cust.name,
+            phone: contactPhone,
+            prefilledText: data.text.trim(),
+            cartItems: cust.cartItems || []
+          });
+        } else {
+          // Fallback if callback is not wired
+          window.open(`https://wa.me/${contactPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(data.text.trim())}`, '_blank');
+        }
+      } else {
+        alert('Failed to generate AI pitch: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Error generating AI pitch:', err);
+      alert('Error generating AI pitch: ' + err.message);
+    } finally {
+      setGeneratingPitchId(null);
+    }
+  };
+
   return (
     <div className="crm-container">
       <style dangerouslySetInnerHTML={{__html: `
@@ -423,6 +551,10 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           border-color: rgba(56, 189, 248, 0.3);
           color: #38bdf8;
         }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
       `}} />
 
       <div className="crm-header">
@@ -468,6 +600,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                 <th style={{ textAlign: 'center' }}>Orders</th>
                 <th style={{ textAlign: 'center' }}>Lifetime Value</th>
                 <th>Last Active</th>
+                <th>AI Cross-Sell</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
@@ -555,6 +688,72 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                         <Calendar size={12} />
                         <span>{new Date(cust.lastOrderDate).toLocaleDateString()}</span>
                       </div>
+                    </td>
+
+                    {/* AI Recommendation Column */}
+                    <td>
+                      {(() => {
+                        const rec = resolveRecommendation(cust);
+                        const isGenerating = generatingPitchId === cust.id;
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                            <span style={{ 
+                              background: rec.badgeBg, 
+                              border: `1px solid ${rec.badgeBorder}`, 
+                              color: rec.badgeColor, 
+                              padding: '2px 8px', 
+                              borderRadius: '6px', 
+                              fontSize: '0.72rem', 
+                              fontWeight: '700',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              <Sparkles size={11} style={{ flexShrink: 0 }} /> {rec.product}
+                            </span>
+                            <span style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: '500', marginLeft: '2px' }}>
+                              {rec.subtext}
+                            </span>
+                            {contactPhone ? (
+                              <button
+                                onClick={() => handleGeneratePitch(cust, rec.product)}
+                                disabled={generatingPitchId !== null}
+                                style={{
+                                  background: 'rgba(56, 189, 248, 0.08)',
+                                  border: '1px solid rgba(56, 189, 248, 0.15)',
+                                  color: '#38bdf8',
+                                  padding: '3px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '0.7rem',
+                                  fontWeight: '700',
+                                  cursor: (generatingPitchId !== null) ? 'not-allowed' : 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  marginTop: '2px',
+                                  opacity: (generatingPitchId !== null && !isGenerating) ? 0.4 : 1,
+                                  transition: 'all 0.2s'
+                                }}
+                              >
+                                {isGenerating ? (
+                                  <>
+                                    <div className="sync-spinner-mini" style={{ width: '10px', height: '10px', borderWidth: '1px', borderStyle: 'solid', borderColor: '#38bdf8 transparent #38bdf8 transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                                    <span>Creando...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Brain size={10} />
+                                    <span>Redactar Oferta</span>
+                                  </>
+                                )}
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '0.65rem', color: '#475569', fontStyle: 'italic' }}>Falta teléfono</span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* Actions Column */}

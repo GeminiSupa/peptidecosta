@@ -74,6 +74,28 @@ Guidelines:
 
 Administrator Query:
 ${prompt}`;
+    } else if (mode === 'cross_sell') {
+      const { customerName = 'Investigador', purchasedProducts = [], recommendation = '' } = context;
+      const purchasedStr = purchasedProducts.length > 0 
+        ? purchasedProducts.join(', ') 
+        : 'nuestros péptidos';
+        
+      finalPrompt = `You are "Costa Peptides Marketing Copilot", an elite e-commerce and biotech marketing strategist.
+Write a highly personalized, warm, and scientifically persuasive WhatsApp sales message in Costa Rican Spanish targeting the customer: "${customerName}".
+
+Customer Context:
+- Past purchased compound(s) or cart compound(s): "${purchasedStr}"
+- Highly synergistic product recommended for their next research phase: "${recommendation}"
+
+Instructions:
+1. Greet them warmly and professionally in Costa Rican style (friendly yet highly respectful, e.g. "Estimado/a", "Espero que se encuentre muy bien").
+2. Follow up on their research with the previous compound ("${purchasedStr}").
+3. Explain the scientific, synergistic reasons why introducing "${recommendation}" is the perfect next phase or addition for their research. Focus on technical benefits (joint repair, tissue regeneration, fat metabolism, anti-aging cellular repair) depending on the products.
+4. Keep the message professional, research-focused, and exciting. Do not use hyper-salesy or cheesy marketing buzzwords. Keep it scientifically grounded.
+5. Format the message for WhatsApp using bullet points, natural line breaks, and simple text formatting (e.g. use asterisks *like this* for bolding keywords).
+6. End with a gentle, clear invitation to ask any questions or purchase the vial directly. Do NOT write placeholders, URLs, or brackets like [link].
+
+Output ONLY the clean Spanish message text ready to be sent.`;
     } else {
       // Default fallback
       finalPrompt = prompt || text;
