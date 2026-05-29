@@ -495,6 +495,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       .on('postgres_changes', { event: '*', schema: 'public', table: 'catalog_leads' }, () => {
         loadAdminData();
       })
+      /* Facebook notifications temporarily disabled
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'facebook_notifications' }, (payload) => {
         // Trigger live audio alert
         try {
@@ -515,6 +516,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       .on('postgres_changes', { event: '*', schema: 'public', table: 'facebook_notifications' }, () => {
         loadAdminData();
       })
+      */
       .subscribe();
 
     return () => {
@@ -2187,7 +2189,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               <span className="tab-label">Content (CMS)</span>
             </button>
           )}
-          {hasAccess('facebook') && (
+          {/* Facebook Alerts temporarily hidden until integration is active */}
+          {hasAccess('facebook') && false && (
             <button 
               className={`admin-tab-btn ${activeTab === 'facebook' ? 'active' : ''}`}
               onClick={() => setActiveTab('facebook')}
