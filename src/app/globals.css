@@ -1590,10 +1590,14 @@ body {
     gap: 8px;
     width: 100%;
     overflow-x: auto;
-    padding-bottom: 4px;
+    padding: 6px 12px;
     flex-wrap: nowrap;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none; /* Firefox */
+    
+    /* Premium scroll edge indicator: smooth linear gradients using CSS masking */
+    mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
 }
 
 .admin-nav-actions::-webkit-scrollbar {
@@ -1604,11 +1608,11 @@ body {
     background: transparent;
     border: none;
     color: #94a3b8;
-    padding: 8px 12px;
+    padding: 8px 14px;
     font-weight: 700;
     cursor: pointer;
     font-size: 0.8rem;
-    transition: all 0.2s;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     border-radius: 8px;
     display: flex;
     align-items: center;
@@ -1628,17 +1632,19 @@ body {
 }
 
 .admin-tab-btn.active {
-    background: rgba(0, 212, 255, 0.1);
+    background: rgba(0, 212, 255, 0.08);
     color: #00D4FF;
+    border-left: 2px solid #00D4FF;
+    box-shadow: inset 1px 0 0 rgba(0, 212, 255, 0.1);
 }
 
 .tab-count {
     color: white;
     font-size: 0.6rem;
-    padding: 1px 5px;
-    border-radius: 4px;
+    padding: 2px 6px;
+    border-radius: 6px;
     font-weight: 800;
-    line-height: 1.4;
+    line-height: 1;
 }
 
 .admin-logout-btn {
@@ -1686,36 +1692,116 @@ body {
     gap: 8px;
 }
 
+/* ==========================================
+   ADMIN BUTTON DESIGN SYSTEM (GLASSMORPHIC)
+   ========================================== */
+
+/* 1. Base Admin Button */
 .admin-btn {
-    background: #1e293b;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    color: white;
+    background: rgba(30, 41, 59, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #cbd5e1;
     padding: 8px 16px;
     border-radius: 8px;
     font-size: 0.8rem;
     font-weight: 700;
     cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    transition: all 0.2s;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    outline: none;
 }
 
 .admin-btn:hover {
-    background: #334155;
+    background: rgba(47, 63, 89, 0.6);
+    border-color: rgba(0, 212, 255, 0.35);
+    color: #00D4FF;
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.15);
 }
 
+.admin-btn:active {
+    transform: scale(0.97);
+}
+
+.admin-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+/* 2. Primary Action Button */
 .admin-btn-primary {
     background: linear-gradient(135deg, #00D4FF 0%, #0072FF 100%);
-    color: #060b13;
+    color: #050b14 !important;
     border: none;
+    font-weight: 800;
+    box-shadow: 0 4px 14px rgba(0, 212, 255, 0.25);
 }
 
 .admin-btn-primary:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+    box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4);
+    color: #050b14 !important; /* Keep text dark */
 }
 
+.admin-btn-primary:active {
+    transform: translateY(1px) scale(0.97);
+}
+
+/* 3. Secondary / Neutral Outlined Button */
+.admin-btn-secondary {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #f8fafc;
+}
+
+.admin-btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+/* 4. Destructive / Danger Button */
+.admin-btn-danger {
+    background: rgba(239, 68, 68, 0.08) !important;
+    border: 1px solid rgba(239, 68, 68, 0.25) !important;
+    color: #f87171 !important;
+}
+
+.admin-btn-danger:hover {
+    background: rgba(239, 68, 68, 0.18) !important;
+    border-color: rgba(239, 68, 68, 0.5) !important;
+    color: #fca5a5 !important;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.2);
+}
+
+.admin-btn-danger:active {
+    transform: scale(0.97);
+}
+
+/* 5. Success / Converted Button */
+.admin-btn-success {
+    background: rgba(34, 197, 94, 0.08) !important;
+    border: 1px solid rgba(34, 197, 94, 0.25) !important;
+    color: #4ade80 !important;
+}
+
+.admin-btn-success:hover {
+    background: rgba(34, 197, 94, 0.18) !important;
+    border-color: rgba(34, 197, 94, 0.5) !important;
+    color: #86efac !important;
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.2);
+}
+
+.admin-btn-success:active {
+    transform: scale(0.97);
+}
+
+/* Accent highlight button */
 .admin-btn-accent {
     background: var(--accent);
     color: white;
@@ -2398,6 +2484,22 @@ body {
         background: rgba(0, 212, 255, 0.3) !important;
     }
     
+    /* Custom premium scrollbar for responsive tables */
+    .table-responsive::-webkit-scrollbar {
+        height: 6px !important;
+        display: block !important;
+    }
+    .table-responsive::-webkit-scrollbar-track {
+        background: rgba(14, 22, 38, 0.4) !important;
+    }
+    .table-responsive::-webkit-scrollbar-thumb {
+        background: rgba(56, 189, 248, 0.25) !important;
+        border-radius: 3px !important;
+    }
+    .table-responsive::-webkit-scrollbar-thumb:hover {
+        background: rgba(56, 189, 248, 0.5) !important;
+    }
+    
     .admin-nav-top-row {
         flex-direction: column !important;
         align-items: stretch !important;
@@ -2435,6 +2537,10 @@ body {
         width: 100% !important;
         overflow-x: visible !important;
         padding-bottom: 0 !important;
+        
+        /* Disable scroll fade mask on vertical desktop sidebar */
+        mask-image: none !important;
+        -webkit-mask-image: none !important;
     }
     
     .admin-tab-btn {
@@ -2451,12 +2557,14 @@ body {
     .admin-tab-btn:hover {
         background: rgba(255, 255, 255, 0.04) !important;
         color: #f8fafc !important;
+        transform: translateX(4px) !important; /* Premium slide-in transition */
     }
     
     .admin-tab-btn.active {
         background: rgba(0, 212, 255, 0.08) !important;
         color: #00D4FF !important;
         border-left: 3px solid #00D4FF !important;
+        box-shadow: none !important;
     }
     
     .admin-navbar ~ .admin-container {
@@ -2485,6 +2593,89 @@ body {
     }
 }
 
+/* =========================================================
+   ADMIN PORTAL PAGINATION STYLES
+   ========================================================= */
+.admin-pagination-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 24px;
+    background: rgba(14, 26, 51, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    margin: 16px 24px;
+    gap: 16px;
+    flex-wrap: wrap;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.admin-pagination-info {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.admin-pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.admin-pagination-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #cbd5e1;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 6px 12px;
+    min-width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+    user-select: none;
+}
+
+.admin-pagination-btn:hover:not(:disabled) {
+    background: rgba(0, 212, 255, 0.1);
+    border-color: rgba(0, 212, 255, 0.3);
+    color: #00D4FF;
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.15);
+}
+
+.admin-pagination-btn.active {
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 114, 255, 0.15) 100%);
+    border-color: #00D4FF;
+    color: #00D4FF;
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.25);
+}
+
+.admin-pagination-btn:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+}
+
+.admin-pagination-limit {
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #e2e8f0;
+    font-size: 0.8rem;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+
+.admin-pagination-limit:focus {
+    border-color: #00D4FF;
+}
 
 /* =========================================================
    LANDING PAGE STYLES

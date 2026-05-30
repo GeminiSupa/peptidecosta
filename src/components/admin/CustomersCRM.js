@@ -67,6 +67,8 @@ const resolveRecommendation = (cust) => {
 
 export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhatsAppClick }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [customersPerPage, setCustomersPerPage] = useState(25);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', location: '' });
   const [saving, setSaving] = useState(false);
@@ -195,6 +197,12 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.phone.includes(searchTerm)
+  );
+
+  const totalCustomersPages = Math.ceil(filteredCustomers.length / customersPerPage);
+  const paginatedCustomers = filteredCustomers.slice(
+    (currentPage - 1) * customersPerPage,
+    currentPage * customersPerPage
   );
 
   const openEditModal = (customer) => {
@@ -571,7 +579,10 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
               type="text" 
               placeholder="Search by name, email, or phone..." 
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
             />
           </div>
           {filteredCustomers.length > 0 && (
@@ -605,7 +616,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
               </tr>
             </thead>
             <tbody>
-              {filteredCustomers.map(cust => {
+              {paginatedCustomers.map(cust => {
                 const contactPhone = cust.whatsappWaId || cust.phone;
                 return (
                   <tr key={cust.id}>
@@ -798,6 +809,71 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
               })}
             </tbody>
           </table>
+          {filteredCustomers.length > 0 && (
+            <div className="admin-pagination-bar" style={{ margin: '16px 0 0 0' }}>
+              <div className="admin-pagination-info">
+                Showing {Math.min(filteredCustomers.length, (currentPage - 1) * customersPerPage + 1)} to {Math.min(filteredCustomers.length, currentPage * customersPerPage)} of {filteredCustomers.length} customers
+              </div>
+              <div className="admin-pagination-controls">
+                <button 
+                  className="admin-pagination-btn"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  &laquo; Prev
+                </button>
+                {Array.from({ length: totalCustomersPages }, (_, i) => i + 1)
+                  .filter(page => {
+                    return page === 1 || 
+                           page === totalCustomersPages || 
+                           Math.abs(page - currentPage) <= 1;
+                  })
+                  .map((page, index, array) => {
+                    const elements = [];
+                    if (index > 0 && page - array[index - 1] > 1) {
+                      elements.push(
+                        <span key={`ell-${page}`} style={{ padding: '0 8px', color: '#64748b', fontSize: '0.8rem' }}>
+                          ...
+                        </span>
+                      );
+                    }
+                    elements.push(
+                      <button
+                        key={page}
+                        className={`admin-pagination-btn ${currentPage === page ? 'active' : ''}`}
+                        onClick={() => setCurrentPage(page)}
+                      >
+                        {page}
+                      </button>
+                    );
+                    return elements;
+                  })
+                }
+                <button 
+                  className="admin-pagination-btn"
+                  onClick={() => setCurrentPage(p => Math.min(totalCustomersPages, p + 1))}
+                  disabled={currentPage === totalCustomersPages}
+                >
+                  Next &raquo;
+                </button>
+              </div>
+              <div>
+                <select
+                  className="admin-pagination-limit"
+                  value={customersPerPage}
+                  onChange={(e) => {
+                    setCustomersPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                >
+                  <option value={10}>Show 10</option>
+                  <option value={25}>Show 25</option>
+                  <option value={50}>Show 50</option>
+                  <option value={100}>Show 100</option>
+                </select>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

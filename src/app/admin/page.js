@@ -14,7 +14,7 @@ import {
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, Send,
-  Bell, X
+  Bell, X, TrendingUp, Target, Smartphone
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
@@ -179,6 +179,13 @@ export default function AdminPage() {
   const [leadsSearch, setLeadsSearch] = useState('');
   const [leadsSourceFilter, setLeadsSourceFilter] = useState('All');
   const [leadsAreaFilter, setLeadsAreaFilter] = useState('All');
+  
+  // Pagination States
+  const [leadsCurrentPage, setLeadsCurrentPage] = useState(1);
+  const [leadsPerPage, setLeadsPerPage] = useState(25);
+  const [ordersCurrentPage, setOrdersCurrentPage] = useState(1);
+  const [ordersPerPage, setOrdersPerPage] = useState(25);
+
   const [productViews, setProductViews] = useState([]);
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(FALLBACK_EXCHANGE_RATE);
@@ -520,6 +527,107 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [editLeadMethod, setEditLeadMethod] = useState('');
   const [selectedLeads, setSelectedLeads] = useState([]);
 
+  // Dynamic CRM states
+  const [generatingIndividualAi, setGeneratingIndividualAi] = useState(false);
+  const [individualAiText, setIndividualAiText] = useState('');
+
+  const getLeadConversion = (lead) => {
+    if (!lead || !lead.contact_value) return { converted: false };
+    const val = lead.contact_value.trim().toLowerCase();
+    const isEmail = val.includes('@');
+    
+    if (isEmail) {
+      const match = orders.find(o => o.customer_email && o.customer_email.trim().toLowerCase() === val);
+      if (match) return { converted: true, order: match };
+    } else {
+      const cleanLeadPhone = val.replace(/[^0-9]/g, '');
+      if (cleanLeadPhone.length >= 6) {
+        const match = orders.find(o => {
+          if (!o.customer_phone) return false;
+          const cleanOrderPhone = o.customer_phone.replace(/[^0-9]/g, '');
+          return cleanOrderPhone.endsWith(cleanLeadPhone) || cleanLeadPhone.endsWith(cleanOrderPhone);
+        });
+        if (match) return { converted: true, order: match };
+      }
+    }
+    return { converted: false };
+  };
+
+  const handleLeadFieldUpdate = async (id, fieldName, value) => {
+    // Update local state first
+    setLeads(prev => prev.map(l => l.id === id ? { ...l, [fieldName]: value } : l));
+
+    // Save to localStorage in case database schema lacks status/notes columns
+    localStorage.setItem(`lead_${fieldName}_${id}`, value);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from('catalog_leads')
+          .update({ [fieldName]: value })
+          .eq('id', id);
+
+        if (error) {
+          console.warn(`Supabase catalog_leads update warning (using local fallback):`, error.message);
+        }
+      } catch (err) {
+        console.warn(`Supabase catalog_leads update error:`, err);
+      }
+    }
+  };
+
+  const handleGenerateIndividualAi = async (lead) => {
+    if (!lead || !lead.contact_value) return;
+    setGeneratingIndividualAi(true);
+    setIndividualAiText('');
+
+    try {
+      const views = productViews.filter(v => v.contact_value === lead.contact_value);
+      const viewedProducts = views.map(v => v.product_name).join(', ') || 'our scientific peptide catalog';
+      const cleanPhoneOrEmail = lead.contact_value;
+      const location = [lead.city, lead.region, lead.country].filter(Boolean).join(', ') || 'Unknown';
+      const langLabel = lead.language === 'es' ? 'Spanish' : 'English';
+
+      const prompt = `You are an elite, highly professional scientific sales representative at Peptides Costa Rica.
+Draft a hyper-personalized outbound outreach message to a prospect who just requested catalog access but hasn't completed checkout yet.
+
+Prospect Details:
+- Contact Method: ${lead.contact_method} (${cleanPhoneOrEmail})
+- Location: ${location}
+- Attribution: ${lead.utm_source ? `Source: ${lead.utm_source}, Campaign: ${lead.utm_campaign || 'N/A'}` : 'Organic/Direct'}
+- Preferred Language: ${langLabel}
+- Exact Catalog Browsing History: Viewed products: [${viewedProducts}]
+
+Outreach Channel Requirements:
+- This is for ${lead.contact_method === 'whatsapp' ? 'WhatsApp (highly conversational, friendly yet professional, uses bullet points, concise, with direct call-to-actions)' : 'Email (includes a compelling subject line, structured, educational, research-focused, professional sign-off)'}.
+- Keep the tone exceptionally professional, consultative, and scientifically precise (acknowledging their interest in ${viewedProducts} without being creepy).
+- Provide a value hook: Answer scientific or metabolic benefits of the specific peptides they viewed (e.g. tissue repair for BPC-157, fat loss/appetite regulation for Semaglutide, collagen repair for skin peptides).
+- Provide a clear, polite closing offering them a direct consultation link or a custom 10% coupon code (COSTA10) to finalize their checkout on WhatsApp.
+- Write the response ENTIRELY in ${langLabel} and format it clearly. Do not write any preambles, greetings, or placeholders. Just output the final outreach text.`;
+
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'chat',
+          prompt
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIndividualAiText(data.text);
+      } else {
+        alert('Failed to generate individual outreach: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to generate outreach: ' + err.message);
+    } finally {
+      setGeneratingIndividualAi(false);
+    }
+  };
+
   // RBAC Profile State
   const [adminProfile, setAdminProfile] = useState(null);
 
@@ -829,7 +937,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           .order('created_at', { ascending: false });
 
         if (!error && data) {
-          setLeads(data);
+          // Enrich leads with local storage fallbacks if status/notes are absent or null
+          const enriched = data.map(l => ({
+            ...l,
+            status: l.status !== undefined ? (l.status || 'New') : (localStorage.getItem(`lead_status_${l.id}`) || 'New'),
+            notes: l.notes !== undefined ? (l.notes || '') : (localStorage.getItem(`lead_notes_${l.id}`) || '')
+          }));
+          setLeads(enriched);
         }
       } catch (err) {
         console.error("Failed to load leads:", err);
@@ -1845,8 +1959,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     return true;
   });
 
+  const paginatedLeads = filteredLeads.slice(
+    (leadsCurrentPage - 1) * leadsPerPage,
+    leadsCurrentPage * leadsPerPage
+  );
+
   const handleSelectAllLeads = (checked) => {
-    setSelectedLeads(checked ? filteredLeads.map(l => l.id) : []);
+    setSelectedLeads(checked ? paginatedLeads.map(l => l.id) : []);
   };
 
   const handleBulkDeleteLeads = async () => {
@@ -2749,8 +2868,30 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         )}
 
         {/* TAB 2: ORDERS LEDGER HISTORY */}
-        {activeTab === 'orders' && (
-          <div>
+        {activeTab === 'orders' && (() => {
+          const filteredOrders = orders.filter(o => {
+            if (orderStatusFilter !== 'All' && o.status !== orderStatusFilter) return false;
+            if (orderSearch) {
+              const s = orderSearch.toLowerCase();
+              return (
+                o.customer_name?.toLowerCase().includes(s) || 
+                o.customer_phone?.toLowerCase().includes(s) ||
+                o.customer_email?.toLowerCase().includes(s) ||
+                o.id?.toLowerCase().includes(s) ||
+                o.tracking_number?.toLowerCase().includes(s)
+              );
+            }
+            return true;
+          });
+
+          const totalOrdersPages = Math.ceil(filteredOrders.length / ordersPerPage);
+          const paginatedOrders = filteredOrders.slice(
+            (ordersCurrentPage - 1) * ordersPerPage,
+            ordersCurrentPage * ordersPerPage
+          );
+
+          return (
+            <div>
             <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: '16px' }}>
               <div style={{ flex: '1 1 auto', minWidth: '300px' }}>
                 <h3>Customer Orders Log Ledger</h3>
@@ -2762,12 +2903,18 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                     type="text" 
                     placeholder="Search by name, phone, email, or tracking..." 
                     value={orderSearch}
-                    onChange={(e) => setOrderSearch(e.target.value)}
+                    onChange={(e) => {
+                      setOrderSearch(e.target.value);
+                      setOrdersCurrentPage(1);
+                    }}
                     style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', fontSize: '0.85rem', minWidth: '250px' }}
                   />
                   <select
                     value={orderStatusFilter}
-                    onChange={(e) => setOrderStatusFilter(e.target.value)}
+                    onChange={(e) => {
+                      setOrderStatusFilter(e.target.value);
+                      setOrdersCurrentPage(1);
+                    }}
                     style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', fontSize: '0.85rem' }}
                   >
                     <option value="All">All Statuses</option>
@@ -2800,45 +2947,30 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 No orders registered in the system yet.
               </div>
             ) : (
-              <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <table className="spreadsheet-table">
                   <thead>
                     <tr>
-                      <th style={{ padding: '16px' }}>Date</th>
-                      <th style={{ padding: '16px' }}>Order Info</th>
-                      <th style={{ padding: '16px' }}>Customer Details</th>
-                      <th style={{ padding: '16px' }}>Total Amount</th>
-                      <th style={{ padding: '16px' }}>Payment</th>
-                      <th style={{ padding: '16px' }}>Status</th>
-                      <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
+                      <th style={{ padding: '10px 12px' }}>Date</th>
+                      <th style={{ padding: '10px 12px' }}>Order Info</th>
+                      <th style={{ padding: '10px 12px' }}>Customer Details</th>
+                      <th style={{ padding: '10px 12px' }}>Total Amount</th>
+                      <th style={{ padding: '10px 12px' }}>Payment</th>
+                      <th style={{ padding: '10px 12px' }}>Status</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {orders
-                      .filter(o => {
-                        if (orderStatusFilter !== 'All' && o.status !== orderStatusFilter) return false;
-                        if (orderSearch) {
-                          const s = orderSearch.toLowerCase();
-                          return (
-                            o.customer_name?.toLowerCase().includes(s) || 
-                            o.customer_phone?.toLowerCase().includes(s) ||
-                            o.customer_email?.toLowerCase().includes(s) ||
-                            o.id?.toLowerCase().includes(s) ||
-                            o.tracking_number?.toLowerCase().includes(s)
-                          );
-                        }
-                        return true;
-                      })
-                      .map(order => {
+                    {paginatedOrders.map(order => {
                         const items = Array.isArray(order.items) ? order.items : [];
                         const orderDate = new Date(order.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
                         
                         return (
                           <tr key={order.id}>
-                            <td style={{ padding: '16px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                            <td style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
                               {orderDate}
                             </td>
-                            <td style={{ padding: '16px' }}>
+                            <td style={{ padding: '10px 12px' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                 <span style={{ fontWeight: 'bold', color: '#fbbf24', fontSize: '0.85rem' }}>
                                   #{order.order_number || order.id.slice(0, 8)}
@@ -2848,7 +2980,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                                 </span>
                               </div>
                             </td>
-                            <td style={{ padding: '16px' }}>
+                            <td style={{ padding: '10px 12px' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                 <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem' }}>
                                   {order.customer_name}
@@ -2858,13 +2990,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                                 </span>
                               </div>
                             </td>
-                            <td style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8', fontSize: '0.9rem' }}>
+                            <td style={{ padding: '10px 12px', fontWeight: 'bold', color: '#38bdf8', fontSize: '0.9rem' }}>
                               {order.currency === 'USD' 
                                 ? `$${order.total_usd}` 
                                 : `₡${order.total_crc.toLocaleString('en-US')}`
                               }
                             </td>
-                            <td style={{ padding: '16px' }}>
+                            <td style={{ padding: '10px 12px' }}>
                               <span style={{ 
                                 padding: '4px 8px', 
                                 borderRadius: '6px', 
@@ -2876,7 +3008,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                                 {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE' : order.payment_method === 'tilopay' ? '💳 Card' : '💬 WA'}
                               </span>
                             </td>
-                            <td style={{ padding: '16px' }}>
+                            <td style={{ padding: '10px 12px' }}>
                               <select 
                                 className="cell-select"
                                 value={order.status || 'Pending'}
@@ -2899,8 +3031,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                                 <option value="Order Complete">Order Complete</option>
                               </select>
                             </td>
-                            <td style={{ padding: '16px' }}>
-                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            <td style={{ padding: '10px 12px' }}>
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', minWidth: '240px', whiteSpace: 'nowrap' }}>
                                 <button 
                                   className="admin-btn" 
                                   onClick={() => setSelectedOrderDetails(order)}
@@ -2937,8 +3069,75 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 </table>
               </div>
             )}
+            
+            {filteredOrders.length > 0 && (
+              <div className="admin-pagination-bar">
+                <div className="admin-pagination-info">
+                  Showing {Math.min(filteredOrders.length, (ordersCurrentPage - 1) * ordersPerPage + 1)} to {Math.min(filteredOrders.length, ordersCurrentPage * ordersPerPage)} of {filteredOrders.length} orders
+                </div>
+                <div className="admin-pagination-controls">
+                  <button 
+                    className="admin-pagination-btn"
+                    onClick={() => setOrdersCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={ordersCurrentPage === 1}
+                  >
+                    &laquo; Prev
+                  </button>
+                  {Array.from({ length: totalOrdersPages }, (_, i) => i + 1)
+                    .filter(page => {
+                      return page === 1 || 
+                             page === totalOrdersPages || 
+                             Math.abs(page - ordersCurrentPage) <= 1;
+                    })
+                    .map((page, index, array) => {
+                      const elements = [];
+                      if (index > 0 && page - array[index - 1] > 1) {
+                        elements.push(
+                          <span key={`ell-${page}`} style={{ padding: '0 8px', color: '#64748b', fontSize: '0.8rem' }}>
+                            ...
+                          </span>
+                        );
+                      }
+                      elements.push(
+                        <button
+                          key={page}
+                          className={`admin-pagination-btn ${ordersCurrentPage === page ? 'active' : ''}`}
+                          onClick={() => setOrdersCurrentPage(page)}
+                        >
+                          {page}
+                        </button>
+                      );
+                      return elements;
+                    })
+                  }
+                  <button 
+                    className="admin-pagination-btn"
+                    onClick={() => setOrdersCurrentPage(p => Math.min(totalOrdersPages, p + 1))}
+                    disabled={ordersCurrentPage === totalOrdersPages}
+                  >
+                    Next &raquo;
+                  </button>
+                </div>
+                <div>
+                  <select
+                    className="admin-pagination-limit"
+                    value={ordersPerPage}
+                    onChange={(e) => {
+                      setOrdersPerPage(Number(e.target.value));
+                      setOrdersCurrentPage(1);
+                    }}
+                  >
+                    <option value={10}>Show 10</option>
+                    <option value={25}>Show 25</option>
+                    <option value={50}>Show 50</option>
+                    <option value={100}>Show 100</option>
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+          );
+        })()}
 
         {/* TAB 3: SHARE LINKS GENERATOR */}
         {activeTab === 'share' && (
@@ -3176,15 +3375,15 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 No active or abandoned carts currently.
               </div>
             ) : (
-              <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <table className="spreadsheet-table">
                   <thead>
                     <tr>
-                      <th style={{ padding: '16px' }}>Last Updated</th>
-                      <th style={{ padding: '16px' }}>Customer</th>
-                      <th style={{ padding: '16px' }}>Cart Details</th>
-                      <th style={{ padding: '16px' }}>Recovery Status</th>
-                      <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
+                      <th style={{ padding: '10px 12px' }}>Last Updated</th>
+                      <th style={{ padding: '10px 12px' }}>Customer</th>
+                      <th style={{ padding: '10px 12px' }}>Cart Details</th>
+                      <th style={{ padding: '10px 12px' }}>Recovery Status</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3193,10 +3392,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                       
                       return (
                         <tr key={acart.session_id}>
-                          <td style={{ padding: '16px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                          <td style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
                             {new Date(acart.last_updated).toLocaleString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
                           </td>
-                          <td style={{ padding: '16px' }}>
+                          <td style={{ padding: '10px 12px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                               <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem' }}>
                                 {acart.customer_name || 'Anonymous User'}
@@ -3212,7 +3411,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                               ) : null}
                             </div>
                           </td>
-                          <td style={{ padding: '16px' }}>
+                          <td style={{ padding: '10px 12px' }}>
                             <button 
                               onClick={() => setSelectedCartDetails(acart)}
                               style={{ 
@@ -3232,7 +3431,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                               🛒 {totalQty} {totalQty === 1 ? 'Item' : 'Items'}
                             </button>
                           </td>
-                          <td style={{ padding: '16px' }}>
+                          <td style={{ padding: '10px 12px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
                               {acart.customer_email && (
                                 <span style={{ 
@@ -3279,8 +3478,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                               )}
                             </div>
                           </td>
-                          <td style={{ padding: '16px' }}>
-                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                          <td style={{ padding: '10px 12px' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', minWidth: '240px', whiteSpace: 'nowrap' }}>
                               <button 
                                 className="admin-btn" 
                                 onClick={() => setSelectedCartDetails(acart)}
@@ -3837,6 +4036,24 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
         {activeTab === 'leads' && (() => {
           const uniqueAreas = Array.from(new Set(leads.map(l => l.region || l.city).filter(Boolean))).sort();
+          
+          // Calculate Stats dynamically
+          const totalLeads = leads.length;
+          const waLeads = leads.filter(l => l.contact_method === 'whatsapp').length;
+          const emailLeads = totalLeads - waLeads;
+          const waPercent = totalLeads > 0 ? Math.round((waLeads / totalLeads) * 100) : 0;
+          const emailPercent = totalLeads > 0 ? 100 - waPercent : 0;
+          
+          const convertedLeads = leads.filter(l => getLeadConversion(l).converted).length;
+          const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0.0';
+          
+          const adsLeads = leads.filter(l => l.utm_source || l.utm_medium || l.utm_campaign).length;
+          const organicLeads = totalLeads - adsLeads;
+          const adsPercent = totalLeads > 0 ? Math.round((adsLeads / totalLeads) * 100) : 0;
+          const organicPercent = totalLeads > 0 ? 100 - adsPercent : 0;
+
+          const totalLeadsPages = Math.ceil(filteredLeads.length / leadsPerPage);
+
           return (
             <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
               <div className="section-header" style={{ padding: '0 24px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3847,21 +4064,148 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 <div style={{ display: 'flex', gap: '12px' }}>
                   {selectedLeads.length > 0 && (
                     <button 
-                      className="admin-btn delete-btn"
+                      className="admin-btn admin-btn-danger"
                       onClick={handleBulkDeleteLeads}
-                      style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px' }}
                     >
                       <Trash2 size={16} /> Delete Selected ({selectedLeads.length})
                     </button>
                   )}
                   <button 
-                    className="admin-btn"
+                    className="admin-btn admin-btn-secondary"
                     onClick={() => setExportModalType('leads')}
                     disabled={leads.length === 0}
-                    style={{ background: '#172237', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
                     <Upload size={16} /> Export Data
                   </button>
+                </div>
+              </div>
+
+              {/* Funnel Metrics Grid */}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+                gap: '16px', 
+                padding: '0 24px', 
+                marginBottom: '24px' 
+              }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '16px',
+                  padding: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
+                  backdropFilter: 'blur(4px)'
+                }}>
+                  <div style={{
+                    background: 'rgba(56, 189, 248, 0.1)',
+                    border: '1px solid rgba(56, 189, 248, 0.2)',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    color: '#38bdf8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Users size={24} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Captured Leads</div>
+                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#f8fafc', margin: '4px 0 2px 0', lineHeight: '1' }}>{totalLeads}</div>
+                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Lifetime visitors captured</div>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '16px',
+                  padding: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
+                  backdropFilter: 'blur(4px)'
+                }}>
+                  <div style={{
+                    background: 'rgba(34, 197, 94, 0.1)',
+                    border: '1px solid rgba(34, 197, 94, 0.2)',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    color: '#4ade80',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <TrendingUp size={24} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lead-to-Order Conversion</div>
+                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#4ade80', margin: '4px 0 2px 0', lineHeight: '1' }}>{conversionRate}%</div>
+                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{convertedLeads} matched purchases</div>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '16px',
+                  padding: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
+                  backdropFilter: 'blur(4px)'
+                }}>
+                  <div style={{
+                    background: 'rgba(168, 85, 247, 0.1)',
+                    border: '1px solid rgba(168, 85, 247, 0.2)',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    color: '#c084fc',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Smartphone size={24} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Preferred Method</div>
+                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#c084fc', margin: '4px 0 2px 0', lineHeight: '1' }}>{waPercent}%</div>
+                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>WhatsApp ({emailPercent}% Email requests)</div>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  borderRadius: '16px',
+                  padding: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
+                  backdropFilter: 'blur(4px)'
+                }}>
+                  <div style={{
+                    background: 'rgba(245, 158, 11, 0.1)',
+                    border: '1px solid rgba(245, 158, 11, 0.2)',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    color: '#fbbf24',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Target size={24} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Attribution Mix</div>
+                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#fbbf24', margin: '4px 0 2px 0', lineHeight: '1' }}>{adsPercent}%</div>
+                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Paid Ads ({organicPercent}% Organic / Direct)</div>
+                  </div>
                 </div>
               </div>
 
@@ -3939,7 +4283,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                     type="text" 
                     placeholder="Search by email, phone, city, campaign..." 
                     value={leadsSearch}
-                    onChange={(e) => setLeadsSearch(e.target.value)}
+                    onChange={(e) => {
+                      setLeadsSearch(e.target.value);
+                      setLeadsCurrentPage(1);
+                    }}
                     style={{ 
                       padding: '8px 12px 8px 36px', 
                       borderRadius: '8px', 
@@ -3958,7 +4305,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   {/* Source Filter */}
                   <select
                     value={leadsSourceFilter}
-                    onChange={(e) => setLeadsSourceFilter(e.target.value)}
+                    onChange={(e) => {
+                      setLeadsSourceFilter(e.target.value);
+                      setLeadsCurrentPage(1);
+                    }}
                     style={{ 
                       padding: '8px 12px', 
                       borderRadius: '8px', 
@@ -3984,7 +4334,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   {/* Area/Region Filter */}
                   <select
                     value={leadsAreaFilter}
-                    onChange={(e) => setLeadsAreaFilter(e.target.value)}
+                    onChange={(e) => {
+                      setLeadsAreaFilter(e.target.value);
+                      setLeadsCurrentPage(1);
+                    }}
                     style={{ 
                       padding: '8px 12px', 
                       borderRadius: '8px', 
@@ -4009,109 +4362,183 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                         setLeadsSearch('');
                         setLeadsSourceFilter('All');
                         setLeadsAreaFilter('All');
+                        setLeadsCurrentPage(1);
                       }}
                       style={{
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        border: '1px solid rgba(239, 68, 68, 0.2)',
-                        color: '#f87171',
-                        borderRadius: '8px',
-                        padding: '8px 12px',
-                        fontSize: '0.85rem',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </div>
-              
-              {loadingLeads ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading leads...</div>
-              ) : leads.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No leads captured yet.</div>
-              ) : filteredLeads.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No leads match your active filters.</div>
-              ) : (
-                <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <table className="spreadsheet-table">
-                    <thead>
-                      <tr>
-                        <th style={{ padding: '16px', width: '40px' }}>
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    color: '#f87171',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    fontSize: '0.85rem',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {loadingLeads ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading leads...</div>
+          ) : leads.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No leads captured yet.</div>
+          ) : filteredLeads.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No leads match your active filters.</div>
+          ) : (
+            <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <table className="spreadsheet-table">
+                <thead>
+                  <tr>
+                    <th style={{ padding: '10px 12px', width: '40px' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={paginatedLeads.length > 0 && paginatedLeads.every(l => selectedLeads.includes(l.id))}
+                        onChange={(e) => handleSelectAllLeads(e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </th>
+                    <th style={{ padding: '10px 12px' }}>Date</th>
+                    <th style={{ padding: '10px 12px' }}>Contact Details</th>
+                    <th style={{ padding: '10px 12px', minWidth: '150px' }}>Location</th>
+                    <th style={{ padding: '10px 12px' }}>Attribution</th>
+                    <th style={{ padding: '10px 12px' }}>Pipeline Status</th>
+                    <th style={{ padding: '10px 12px' }}>Browsing History</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedLeads.map(lead => (
+                  <tr key={lead.id}>
+                    <td style={{ padding: '10px 12px' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedLeads.includes(lead.id)}
+                        onChange={(e) => handleSelectLead(lead.id, e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </td>
+                    <td style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                      {new Date(lead.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      {editingLeadId === lead.id ? (
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <select 
+                            value={editLeadMethod} 
+                            onChange={(e) => setEditLeadMethod(e.target.value)}
+                            className="admin-input"
+                            style={{ width: '90px', padding: '4px 8px', height: 'auto', fontSize: '0.8rem' }}
+                          >
+                            <option value="whatsapp">whatsapp</option>
+                            <option value="email">email</option>
+                          </select>
                           <input 
-                            type="checkbox" 
-                            checked={filteredLeads.length > 0 && filteredLeads.every(l => selectedLeads.includes(l.id))}
-                            onChange={(e) => handleSelectAllLeads(e.target.checked)}
-                            style={{ cursor: 'pointer' }}
+                            type="text" 
+                            value={editLeadValue} 
+                            onChange={(e) => setEditLeadValue(e.target.value)}
+                            className="admin-input"
+                            style={{ flex: 1, padding: '4px 8px', height: 'auto', fontSize: '0.8rem' }}
                           />
-                        </th>
-                        <th style={{ padding: '16px' }}>Date</th>
-                        <th style={{ padding: '16px' }}>Contact Details</th>
-                        <th style={{ padding: '16px' }}>Location</th>
-                        <th style={{ padding: '16px' }}>Attribution</th>
-                        <th style={{ padding: '16px' }}>Browsing History</th>
-                        <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredLeads.map(lead => (
-                      <tr key={lead.id}>
-                        <td style={{ padding: '16px' }}>
-                          <input 
-                            type="checkbox" 
-                            checked={selectedLeads.includes(lead.id)}
-                            onChange={(e) => handleSelectLead(lead.id, e.target.checked)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        </td>
-                        <td style={{ padding: '16px', fontSize: '0.85rem', color: '#cbd5e1' }}>
-                          {new Date(lead.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
-                        </td>
-                        <td style={{ padding: '16px' }}>
-                          {editingLeadId === lead.id ? (
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                              <select 
-                                value={editLeadMethod} 
-                                onChange={(e) => setEditLeadMethod(e.target.value)}
-                                className="admin-input"
-                                style={{ width: '90px', padding: '4px 8px', height: 'auto', fontSize: '0.8rem' }}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ 
+                              background: lead.contact_method === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)', 
+                              color: lead.contact_method === 'whatsapp' ? '#4ade80' : '#38bdf8', 
+                              padding: '4px 8px', 
+                              borderRadius: '6px', 
+                              fontSize: '0.7rem', 
+                              fontWeight: 'bold',
+                              textTransform: 'uppercase',
+                              border: lead.contact_method === 'whatsapp' ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'
+                            }}>
+                              {lead.contact_method === 'whatsapp' ? '💬 WA' : '✉️ Email'}
+                            </span>
+                            <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem' }}>
+                              {lead.contact_value}
+                            </span>
+                            <span style={{ padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 'bold' }}>
+                              {lead.language ? lead.language.toUpperCase() : 'EN'}
+                            </span>
+                            {lead.contact_method === 'whatsapp' ? (
+                              <a 
+                                href={`https://wa.me/${(lead.contact_value.replace(/[^0-9]/g, '').length === 8 ? '506' : '') + lead.contact_value.replace(/[^0-9]/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  color: '#4ade80',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: 'rgba(34, 197, 94, 0.1)',
+                                  borderRadius: '50%',
+                                  width: '22px',
+                                  height: '22px',
+                                  fontSize: '0.75rem',
+                                  border: '1px solid rgba(34, 197, 94, 0.2)'
+                                }}
+                                title="Quick WhatsApp outreach"
                               >
-                                <option value="whatsapp">whatsapp</option>
-                                <option value="email">email</option>
-                              </select>
-                              <input 
-                                type="text" 
-                                value={editLeadValue} 
-                                onChange={(e) => setEditLeadValue(e.target.value)}
-                                className="admin-input"
-                                style={{ flex: 1, padding: '4px 8px', height: 'auto', fontSize: '0.8rem' }}
-                              />
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ 
-                                background: lead.contact_method === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)', 
-                                color: lead.contact_method === 'whatsapp' ? '#4ade80' : '#38bdf8', 
-                                padding: '4px 8px', 
-                                borderRadius: '6px', 
-                                fontSize: '0.7rem', 
-                                fontWeight: 'bold',
-                                textTransform: 'uppercase',
-                                border: lead.contact_method === 'whatsapp' ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'
-                              }}>
-                                {lead.contact_method === 'whatsapp' ? '💬 WA' : '✉️ Email'}
-                              </span>
-                              <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem' }}>
-                                {lead.contact_value}
-                              </span>
-                              <span style={{ padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 'bold' }}>
-                                {lead.language ? lead.language.toUpperCase() : 'EN'}
-                              </span>
+                                💬
+                              </a>
+                            ) : (
+                              <a 
+                                href={`mailto:${lead.contact_value}?subject=${encodeURIComponent(lead.language === 'es' ? 'Acceso Exclusivo al Catálogo - Peptides Costa Rica' : 'Exclusive Catalog Access - Peptides Costa Rica')}`}
+                                style={{
+                                  color: '#38bdf8',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: 'rgba(56, 189, 248, 0.1)',
+                                  borderRadius: '50%',
+                                  width: '22px',
+                                  height: '22px',
+                                  fontSize: '0.75rem',
+                                  border: '1px solid rgba(56, 189, 248, 0.2)'
+                                }}
+                                title="Quick Email outreach"
+                              >
+                                ✉️
+                              </a>
+                            )}
+                          </div>
+                              {(() => {
+                                const conv = getLeadConversion(lead);
+                                if (conv.converted) {
+                                  return (
+                                    <span 
+                                      onClick={() => setSelectedOrderDetails(conv.order)}
+                                      style={{ 
+                                        padding: '2px 6px', 
+                                        background: 'rgba(34, 197, 94, 0.15)', 
+                                        borderRadius: '4px', 
+                                        fontSize: '0.68rem', 
+                                        color: '#4ade80', 
+                                        fontWeight: 'bold', 
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '2px',
+                                        border: '1px solid rgba(34, 197, 94, 0.2)',
+                                        alignSelf: 'flex-start',
+                                        marginTop: '2px'
+                                      }}
+                                      title={`Matches Order #${conv.order.order_number || conv.order.id}`}
+                                    >
+                                      🎉 Converted (Order #{conv.order.order_number || conv.order.id?.substring(0, 6)})
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
                           )}
                         </td>
-                        <td style={{ padding: '16px' }}>
+                        <td style={{ padding: '10px 12px', minWidth: '150px', whiteSpace: 'nowrap' }}>
                           {lead.city || lead.country ? (
                             <span style={{ color: '#f8fafc', fontSize: '0.85rem' }}>
                               {[lead.city, lead.country].filter(Boolean).join(', ')}
@@ -4120,7 +4547,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                             <span style={{ color: '#64748b', fontSize: '0.85rem' }}>—</span>
                           )}
                         </td>
-                        <td style={{ padding: '16px' }}>
+                        <td style={{ padding: '10px 12px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
                             <span style={{ 
                               ...getReferralBadgeStyles(getReferralLabel(lead)),
@@ -4162,7 +4589,35 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                             )}
                           </div>
                         </td>
-                        <td style={{ padding: '16px' }}>
+                        <td style={{ padding: '10px 12px' }}>
+                          <select 
+                            value={lead.status || 'New'}
+                            onChange={(e) => handleLeadFieldUpdate(lead.id, 'status', e.target.value)}
+                            style={{
+                              background: (lead.status || 'New') === 'Converted' ? 'rgba(34, 197, 94, 0.15)' :
+                                          (lead.status || 'New') === 'Contacted' ? 'rgba(56, 189, 248, 0.15)' :
+                                          (lead.status || 'New') === 'Cold' ? 'rgba(148, 163, 184, 0.15)' :
+                                          'rgba(239, 68, 68, 0.15)',
+                              color: (lead.status || 'New') === 'Converted' ? '#4ade80' :
+                                     (lead.status || 'New') === 'Contacted' ? '#38bdf8' :
+                                     (lead.status || 'New') === 'Cold' ? '#94a3b8' :
+                                     '#f87171',
+                              border: '1px solid rgba(255,255,255,0.08)',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              fontSize: '0.8rem',
+                              fontWeight: 'bold',
+                              cursor: 'pointer',
+                              outline: 'none'
+                            }}
+                          >
+                            <option value="New" style={{ background: '#0e1626', color: '#f87171' }}>New</option>
+                            <option value="Contacted" style={{ background: '#0e1626', color: '#38bdf8' }}>Contacted</option>
+                            <option value="Converted" style={{ background: '#0e1626', color: '#4ade80' }}>Converted</option>
+                            <option value="Cold" style={{ background: '#0e1626', color: '#94a3b8' }}>Cold</option>
+                          </select>
+                        </td>
+                        <td style={{ padding: '10px 12px' }}>
                           {(() => {
                             const views = productViews.filter(v => v.contact_value === lead.contact_value);
                             if (views.length === 0) return <span style={{ color: '#64748b', fontSize: '0.8rem' }}>No views</span>;
@@ -4188,42 +4643,38 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                             );
                           })()}
                         </td>
-                        <td style={{ padding: '16px' }}>
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <td style={{ padding: '10px 12px' }}>
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', minWidth: '220px', whiteSpace: 'nowrap' }}>
                             {editingLeadId === lead.id ? (
                               <button 
-                                className="admin-btn" 
+                                className="admin-btn admin-btn-success" 
                                 onClick={() => handleLeadUpdate(lead.id)}
-                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
                               >
                                 Save
                               </button>
                             ) : (
                               <>
                                 <button 
-                                  className="admin-btn" 
+                                  className="admin-btn admin-btn-primary" 
                                   onClick={() => setSelectedLeadDetails(lead)}
-                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
                                 >
                                   Details
                                 </button>
                                 <button 
-                                  className="admin-btn" 
+                                  className="admin-btn admin-btn-secondary" 
                                   onClick={() => {
                                     setEditingLeadId(lead.id);
                                     setEditLeadValue(lead.contact_value);
                                     setEditLeadMethod(lead.contact_method);
                                   }}
-                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', borderRadius: '6px' }}
                                 >
                                   Edit
                                 </button>
                               </>
                             )}
                             <button 
-                              className="admin-btn" 
+                              className="admin-btn admin-btn-danger" 
                               onClick={() => handleLeadDelete(lead.id)}
-                              style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', borderRadius: '6px' }}
                             >
                               Delete
                             </button>
@@ -4233,6 +4684,72 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+            
+            {filteredLeads.length > 0 && (
+              <div className="admin-pagination-bar">
+                <div className="admin-pagination-info">
+                  Showing {Math.min(filteredLeads.length, (leadsCurrentPage - 1) * leadsPerPage + 1)} to {Math.min(filteredLeads.length, leadsCurrentPage * leadsPerPage)} of {filteredLeads.length} leads
+                </div>
+                <div className="admin-pagination-controls">
+                  <button 
+                    className="admin-pagination-btn"
+                    onClick={() => setLeadsCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={leadsCurrentPage === 1}
+                  >
+                    &laquo; Prev
+                  </button>
+                  {Array.from({ length: totalLeadsPages }, (_, i) => i + 1)
+                    .filter(page => {
+                      return page === 1 || 
+                             page === totalLeadsPages || 
+                             Math.abs(page - leadsCurrentPage) <= 1;
+                    })
+                    .map((page, index, array) => {
+                      const elements = [];
+                      if (index > 0 && page - array[index - 1] > 1) {
+                        elements.push(
+                          <span key={`ell-${page}`} style={{ padding: '0 8px', color: '#64748b', fontSize: '0.8rem' }}>
+                            ...
+                          </span>
+                        );
+                      }
+                      elements.push(
+                        <button
+                          key={page}
+                          className={`admin-pagination-btn ${leadsCurrentPage === page ? 'active' : ''}`}
+                          onClick={() => setLeadsCurrentPage(page)}
+                        >
+                          {page}
+                        </button>
+                      );
+                      return elements;
+                    })
+                  }
+                  <button 
+                    className="admin-pagination-btn"
+                    onClick={() => setLeadsCurrentPage(p => Math.min(totalLeadsPages, p + 1))}
+                    disabled={leadsCurrentPage === totalLeadsPages}
+                  >
+                    Next &raquo;
+                  </button>
+                </div>
+                <div>
+                  <select
+                    className="admin-pagination-limit"
+                    value={leadsPerPage}
+                    onChange={(e) => {
+                      setLeadsPerPage(Number(e.target.value));
+                      setLeadsCurrentPage(1);
+                    }}
+                  >
+                    <option value={10}>Show 10</option>
+                    <option value={25}>Show 25</option>
+                    <option value={50}>Show 50</option>
+                    <option value={100}>Show 100</option>
+                  </select>
+                </div>
               </div>
             )}
           </div>
@@ -4666,7 +5183,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       </div>
 
       {/* Lead Details Modal */}
-      {selectedLeadDetails && (
+      {selectedLeadDetails && (() => {
+        const currentLead = leads.find(l => l.id === selectedLeadDetails.id) || selectedLeadDetails;
+        return (
         <div className="modal active" onClick={() => setSelectedLeadDetails(null)} style={{ zIndex: 210 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', padding: '30px', border: '1px solid rgba(255,255,255,0.1)' }}>
             <button className="close-modal" onClick={() => setSelectedLeadDetails(null)} style={{ color: '#94a3b8', fontSize: '1.5rem', top: '20px', right: '20px', background: 'none', border: 'none', cursor: 'pointer' }}>&times;</button>
@@ -4675,7 +5194,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               <div style={{ padding: '10px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '12px', color: '#38bdf8', fontSize: '1.5rem' }}>👤</div>
               <div>
                 <h2 style={{ fontSize: '1.3rem', fontWeight: '900', color: '#f8fafc', margin: 0 }}>Lead Profile</h2>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>ID: {selectedLeadDetails.id}</span>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>ID: {currentLead.id}</span>
               </div>
             </div>
 
@@ -4689,28 +5208,71 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   <div>
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Method</label>
                     <span style={{ 
-                      background: selectedLeadDetails.contact_method === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)', 
-                      color: selectedLeadDetails.contact_method === 'whatsapp' ? '#4ade80' : '#38bdf8', 
+                      background: currentLead.contact_method === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)', 
+                      color: currentLead.contact_method === 'whatsapp' ? '#4ade80' : '#38bdf8', 
                       padding: '4px 10px', 
                       borderRadius: '20px', 
                       fontSize: '0.75rem', 
                       fontWeight: 'bold',
                       textTransform: 'uppercase',
                       display: 'inline-block',
-                      border: selectedLeadDetails.contact_method === 'whatsapp' ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'
-                    }}>{selectedLeadDetails.contact_method}</span>
+                      border: currentLead.contact_method === 'whatsapp' ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'
+                    }}>{currentLead.contact_method}</span>
                   </div>
                   <div>
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Value</label>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc' }}>{selectedLeadDetails.contact_value}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc' }}>{currentLead.contact_value}</span>
+                      {currentLead.contact_method === 'whatsapp' ? (
+                        <a 
+                          href={`https://wa.me/${(currentLead.contact_value.replace(/[^0-9]/g, '').length === 8 ? '506' : '') + currentLead.contact_value.replace(/[^0-9]/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            color: '#4ade80',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: 'rgba(34, 197, 94, 0.1)',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            fontSize: '0.8rem',
+                            border: '1px solid rgba(34, 197, 94, 0.2)'
+                          }}
+                          title="Contact on WhatsApp"
+                        >
+                          💬
+                        </a>
+                      ) : (
+                        <a 
+                          href={`mailto:${currentLead.contact_value}?subject=${encodeURIComponent(currentLead.language === 'es' ? 'Acceso Exclusivo al Catálogo - Peptides Costa Rica' : 'Exclusive Catalog Access - Peptides Costa Rica')}`}
+                          style={{
+                            color: '#38bdf8',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: 'rgba(56, 189, 248, 0.1)',
+                            borderRadius: '50%',
+                            width: '24px',
+                            height: '24px',
+                            fontSize: '0.8rem',
+                            border: '1px solid rgba(56, 189, 248, 0.2)'
+                          }}
+                          title="Contact via Email"
+                        >
+                          ✉️
+                        </a>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Captured On</label>
-                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{new Date(selectedLeadDetails.created_at).toLocaleString()}</span>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{new Date(currentLead.created_at).toLocaleString()}</span>
                   </div>
                   <div>
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Language</label>
-                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>{selectedLeadDetails.language ? selectedLeadDetails.language.toUpperCase() : 'EN'}</span>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>{currentLead.language ? currentLead.language.toUpperCase() : 'EN'}</span>
                   </div>
                 </div>
               </div>
@@ -4721,12 +5283,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>IP Address</label>
-                    <span style={{ fontSize: '0.85rem', color: '#f8fafc', fontFamily: 'monospace' }}>🌐 {selectedLeadDetails.ip_address || 'Not captured'}</span>
+                    <span style={{ fontSize: '0.85rem', color: '#f8fafc', fontFamily: 'monospace' }}>🌐 {currentLead.ip_address || 'Not captured'}</span>
                   </div>
                   <div>
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Location</label>
                     <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: '600' }}>
-                      📍 {[selectedLeadDetails.city, selectedLeadDetails.region, selectedLeadDetails.country].filter(Boolean).join(', ') || 'Not captured'}
+                      📍 {[currentLead.city, currentLead.region, currentLead.country].filter(Boolean).join(', ') || 'Not captured'}
                     </span>
                   </div>
                 </div>
@@ -4740,51 +5302,175 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                     <div>
                       <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Attribution Source</label>
                       <span style={{ 
-                        ...getReferralBadgeStyles(getReferralLabel(selectedLeadDetails)),
+                        ...getReferralBadgeStyles(getReferralLabel(currentLead)),
                         padding: '4px 10px',
                         borderRadius: '20px',
                         fontSize: '0.75rem',
                         fontWeight: 'bold',
                         display: 'inline-block'
-                      }}>{getReferralLabel(selectedLeadDetails)}</span>
+                      }}>{getReferralLabel(currentLead)}</span>
                     </div>
-                    {selectedLeadDetails.utm_campaign && (
+                    {currentLead.utm_campaign && (
                       <div>
                         <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>UTM Campaign</label>
-                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>📢 {selectedLeadDetails.utm_campaign}</span>
+                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>📢 {currentLead.utm_campaign}</span>
                       </div>
                     )}
                   </div>
                   
-                  {selectedLeadDetails.utm_source && (
+                  {currentLead.utm_source && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                       <div>
                         <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>UTM Source</label>
-                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{selectedLeadDetails.utm_source}</span>
+                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{currentLead.utm_source}</span>
                       </div>
                       <div>
                         <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>UTM Medium</label>
-                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{selectedLeadDetails.utm_medium || '—'}</span>
+                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{currentLead.utm_medium || '—'}</span>
                       </div>
                     </div>
                   )}
 
-                  {selectedLeadDetails.referrer && (
+                  {currentLead.referrer && (
                     <div>
                       <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>HTTP Referrer</label>
                       <span style={{ fontSize: '0.8rem', color: '#64748b', wordBreak: 'break-all', display: 'block', background: 'rgba(0,0,0,0.2)', padding: '6px 10px', borderRadius: '6px' }}>
-                        {selectedLeadDetails.referrer}
+                        {currentLead.referrer}
                       </span>
                     </div>
                   )}
                 </div>
               </div>
 
+              {/* SECTION: CRM CONSULTATION NOTES */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', marginTop: 0, letterSpacing: '0.05em' }}>CRM Consultation Notes</h3>
+                <textarea
+                  value={currentLead.notes || ''}
+                  onChange={(e) => handleLeadFieldUpdate(currentLead.id, 'notes', e.target.value)}
+                  placeholder="Type manual follow-up consultation notes here... (e.g. wants Semaglutide bulk pricing, call back on Friday)"
+                  style={{
+                    width: '100%',
+                    height: '90px',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '8px',
+                    padding: '10px',
+                    fontSize: '0.8rem',
+                    color: '#f8fafc',
+                    resize: 'vertical',
+                    outline: 'none',
+                    fontFamily: 'sans-serif'
+                  }}
+                />
+                <span style={{ fontSize: '0.65rem', color: '#64748b', display: 'block', marginTop: '4px' }}>📝 Notes auto-save to database & local backup as you type.</span>
+              </div>
+
+              {/* SECTION: AI OUTREACH ASSISTANT */}
+              <div style={{ 
+                background: 'linear-gradient(135deg, rgba(14, 26, 51, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)', 
+                padding: '20px', 
+                borderRadius: '16px', 
+                border: '1px solid rgba(56, 189, 248, 0.25)',
+                boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '10px' }}>
+                  <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '6px', borderRadius: '8px', color: '#38bdf8' }}>
+                    <Brain size={16} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#f8fafc', margin: 0 }}>🧬 Personalized AI Outreach Copilot</h3>
+                    <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Gemini drafts target-aware pitches using browsing history</span>
+                  </div>
+                </div>
+
+                {individualAiText ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ 
+                      background: 'rgba(0,0,0,0.3)', 
+                      padding: '12px', 
+                      borderRadius: '10px', 
+                      border: '1px solid rgba(255,255,255,0.04)',
+                      fontSize: '0.8rem',
+                      lineHeight: '1.5',
+                      color: '#cbd5e1',
+                      whiteSpace: 'pre-wrap',
+                      maxHeight: '180px',
+                      overflowY: 'auto',
+                      fontFamily: 'sans-serif'
+                    }}>
+                      {individualAiText}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(individualAiText);
+                          alert('Outreach text copied to clipboard!');
+                        }}
+                        className="admin-btn admin-btn-secondary"
+                      >
+                        <Clipboard size={12} /> Copy
+                      </button>
+                      {currentLead.contact_method === 'whatsapp' ? (
+                        <button
+                          onClick={() => {
+                            const cleanPhone = currentLead.contact_value.replace(/[^0-9]/g, '');
+                            const formattedPhone = cleanPhone.length === 8 ? '506' + cleanPhone : cleanPhone;
+                            window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(individualAiText)}`, '_blank');
+                          }}
+                          className="admin-btn admin-btn-success"
+                        >
+                          <Send size={12} /> Send WhatsApp
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            const email = currentLead.contact_value;
+                            const subject = encodeURIComponent(currentLead.language === 'es' ? 'Información sobre Péptidos de Costa Rica' : 'Peptides Costa Rica Inquiry');
+                            window.location.href = `mailto:${email}?subject=${subject}&body=${encodeURIComponent(individualAiText)}`;
+                          }}
+                          className="admin-btn admin-btn-primary"
+                        >
+                          <Mail size={12} /> Send Email
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setIndividualAiText('')}
+                        className="admin-btn admin-btn-secondary"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                    <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '0 0 12px 0' }}>Generate a hyper-personalized outbound draft matching their peptide interests, language, and geography.</p>
+                    <button
+                      onClick={() => handleGenerateIndividualAi(currentLead)}
+                      disabled={generatingIndividualAi}
+                      className="admin-btn admin-btn-primary"
+                      style={{ margin: '0 auto' }}
+                    >
+                      {generatingIndividualAi ? (
+                        <>
+                          <div className="sync-spinner" style={{ width: '12px', height: '12px', border: '2px solid transparent', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block', marginRight: '4px' }}></div>
+                          Drafting pitch...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={13} /> Generate Custom Outreach
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* SECTION: PRODUCT VIEWS (BEHAVIOR) */}
               <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', maxHeight: '300px', overflowY: 'auto' }}>
-                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Browsing Behavior ({productViews.filter(v => v.contact_value === selectedLeadDetails.contact_value).length} views)</h3>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Browsing Behavior ({productViews.filter(v => v.contact_value === currentLead.contact_value).length} views)</h3>
                 {(() => {
-                  const views = productViews.filter(v => v.contact_value === selectedLeadDetails.contact_value);
+                  const views = productViews.filter(v => v.contact_value === currentLead.contact_value);
                   if (views.length === 0) {
                     return <span style={{ color: '#64748b', fontSize: '0.85rem' }}>No catalog products viewed yet.</span>;
                   }
@@ -4806,7 +5492,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             </div>
           </div>
         </div>
-      )}
+      );
+      })()}
 
       {/* Order Details Modal */}
       {selectedOrderDetails && (
