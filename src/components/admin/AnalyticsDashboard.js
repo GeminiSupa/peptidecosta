@@ -13,6 +13,122 @@ import 'jspdf-autotable';
 import ExportModal from './ExportModal';
 
 export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [] }) {
+  const [explainerTopic, setExplainerTopic] = useState(null);
+
+  const EXPLAINER_DATA = {
+    active_users: {
+      title: "🟢 Active Visitors on Catalog",
+      concept: "Visitantes Activos en Catálogo",
+      description: "The number of real customers currently browsing your catalog page this very second. We detect them through a secure 'heartbeat' signal that their browser sends to our server every 15 seconds to report that they are online and engaged.",
+      spanish: "El número de clientes reales que están navegando en tu catálogo en este mismo segundo. Los detectamos a través de una señal segura de 'latido' (heartbeat) que su navegador envía cada 15 segundos para reportar que están en línea y activos."
+    },
+    revenue: {
+      title: "💵 Total Sales (Revenue)",
+      concept: "Ventas Totales (Ingresos)",
+      description: "This is your gross income from all successfully completed and paid orders. It shows your business performance in both US Dollars ($) and Costa Rican Colones (₡). This doesn't include pending or cancelled orders.",
+      spanish: "Este es el ingreso bruto de todos los pedidos pagados y completados con éxito. Muestra el rendimiento de tu negocio tanto en dólares ($) como en colones costarricenses (₡). No incluye pedidos pendientes o cancelados."
+    },
+    aov: {
+      title: "📈 Average Order Value (AOV)",
+      concept: "Valor Promedio del Pedido (AOV)",
+      description: "The average amount of money a customer spends when they make a purchase on your store (Revenue divided by number of successful orders). A higher Average Order Value means customers are buying more products per checkout, which dramatically boosts profit margins!",
+      spanish: "La cantidad promedio de dinero que gasta un cliente cuando compra en tu tienda (Ingresos divididos por el número de pedidos exitosos). ¡Un valor de pedido promedio más alto significa que los clientes comran más productos por compra, lo que aumenta enormemente las ganancias!"
+    },
+    conversion_rate: {
+      title: "🎯 Store Conversion Rate",
+      concept: "Tasa de Conversión de la Tienda",
+      description: "The percentage of website visitors who ended up buying something. For example, if 100 people visit your site and 2 people complete a checkout, your conversion rate is 2%. Standard e-commerce conversion rates range between 1.5% and 3%. High numbers indicate great pricing and highly trustable branding!",
+      spanish: "El porcentaje de visitantes de la web que terminaron comprando algo. Por ejemplo, si 100 personas visitan tu sitio y 2 completan una compra, tu tasa de conversión es del 2%. Las tasas normales de comercio electrónico oscilan entre 1.5% y 3%. ¡Las tasas altas indican precios excelentes y una marca muy confiable!"
+    },
+    abandoned_carts: {
+      title: "🛒 Abandoned Shopping Carts",
+      concept: "Carritos de Compra Abandonados",
+      description: "These are shopping carts created by visitors who added peptides to their cart but left the website before finishing their checkout. Think of it like a customer leaving a physical cart full of groceries in a supermarket aisle. In online sales, these are high-intent leads that can be recovered with a quick follow-up message!",
+      spanish: "Estos son carritos de compras creados por visitantes que agregaron péptidos a su carrito pero abandonaron el sitio web antes de finalizar el pago. Piensa en ello como un cliente que deja un carrito lleno de compras en un pasillo de supermercado. En las ventas en línea, ¡estos son clientes de alto interés que pueden recuperarse con un recordatorio rápido!"
+    },
+    recovery_rate: {
+      title: "🔄 Cart Recovery Rate",
+      concept: "Tasa de Recuperación de Carritos",
+      description: "The percentage of abandoned shopping carts that you successfully rescued (meaning the customer returned and purchased their items) after sending them WhatsApp or email recovery reminders. Rescuing abandoned carts is the easiest way to immediately increase your revenue!",
+      spanish: "El porcentaje de carritos de compras abandonados que rescataste con éxito (es decir, el cliente regresó y compró sus artículos) después de enviarles recordatorios de WhatsApp o correo electrónico. ¡Rescatar carritos abandonados es la forma más fácil de aumentar tus ingresos de inmediato!"
+    },
+    potential_revenue: {
+      title: "💎 Potential Recoverable Value",
+      concept: "Valor Potencial Recuperable",
+      description: "The total monetary value of all items currently sitting inside active abandoned shopping carts. This represents 'almost captured' money. Sending recovery messages to these customers helps you capture these sales and claim this revenue!",
+      spanish: "El valor monetario total de todos los artículos que se encuentran actualmente dentro de los carritos de compras abandonados activos. Esto representa dinero 'casi capturado'. ¡Enviar mensajes de recuperación a estos clientes te ayuda a capturar estas ventas y reclamar estos ingresos!"
+    },
+    open_time: {
+      title: "⏱️ Average Catalog View Time",
+      concept: "Tiempo Promedio de Vista del Catálogo",
+      description: "The average duration (in minutes and seconds) a visitor spends reading through your peptide products list. A higher view time (e.g. over 2 minutes) means customers are highly engaged, reading the clinical descriptions, and actively considering a purchase!",
+      spanish: "La duración promedio (en minutos y segundos) que pasa un visitante leyendo tu lista de productos de péptidos. ¡Un mayor tiempo de visualización (por ejemplo, más de 2 minutos) significa que los clientes están muy interesados, leyendo las descripciones clínicas y considerando activamente una compra!"
+    },
+    device_breakdown: {
+      title: "📱 Device Usage (Mobile vs. Desktop)",
+      concept: "Uso de Dispositivos (Móvil vs. Escritorio)",
+      description: "This tells you whether your visitors are accessing your catalog on smartphones (Mobile) or laptops/desktop computers (Desktop). Over 85% of modern traffic in Costa Rica comes from mobile, which is why having an outstanding mobile storefront visualizer is critical!",
+      spanish: "Esto te indica si tus visitantes acceden a tu catálogo desde teléfonos inteligentes (Móvil) o desde computadoras portátiles/de escritorio (Escritorio). Más del 85% del tráfico moderno proviene de dispositivos móviles, por lo que es vital que el escaparate móvil funcione a la perfección."
+    },
+    clicks_feed: {
+      title: "⚡ Live Telemetry Clicks Feed",
+      concept: "Canal de Clicks de Telemetría en Vivo",
+      description: "A chronological live stream showing exactly what buttons or links visitors are clicking on your storefront in real time. For example, if a user clicks 'Ver Certificado de Análisis', it means they are looking at the lab purity sheet for that peptide product, displaying extreme buyer interest!",
+      spanish: "Una transmisión cronológica en vivo que muestra exactamente qué botones o enlaces están pulsando los visitantes en tu tienda en tiempo real. Por ejemplo, si un usuario hace click en 'Ver Certificado de Análisis', significa que está mirando el reporte de pureza de laboratorio, mostrando un interés de compra extremo."
+    },
+    heatmap: {
+      title: "🔥 Smartphone Click Heatmap Visualizer",
+      concept: "Visualizador de Mapa de Calor de Clicks",
+      description: "A color-coded visual map showing where visitors tap most on your storefront preview screen. Hotter areas (red, orange) indicate high click activity (like buy buttons or image sliders), while green/blue areas represent occasional clicks. It shows you exactly what products draw the most customer eyeballs!",
+      spanish: "Un mapa visual codificado por colores que muestra dónde pulsan más los visitantes en la pantalla de vista previa de tu tienda. Las áreas más cálidas (rojo, naranja) indican una alta actividad de clicks (como botones de compra o galerías de imágenes), mientras que las áreas verdes/azules representan clicks ocasionales. ¡Te muestra exactamente qué productos atraen la atención del cliente!"
+    },
+    geo_insights: {
+      title: "📍 Customer Locations (Top Cities)",
+      concept: "Ubicaciones de Clientes (Ciudades Principales)",
+      description: "Shows which cities in Costa Rica (like San José, Alajuela, Heredia, or Escazú) your visitors are accessing your site from. You can use this geographical data to offer free shipping promos or target specific local marketing campaigns!",
+      spanish: "Muestra desde qué ciudades de Costa Rica (como San José, Alajuela, Heredia o Escazú) acceden los visitantes a tu sitio. ¡Puedes usar estos datos geográficos para ofrecer promociones de envío gratis o dirigir campañas de marketing local específicas!"
+    }
+  };
+
+  const renderExplainerTrigger = (topic) => {
+    return (
+      <span 
+        onClick={(e) => {
+          e.stopPropagation();
+          setExplainerTopic(topic);
+        }}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '18px',
+          height: '18px',
+          borderRadius: '50%',
+          background: 'rgba(56, 189, 248, 0.12)',
+          border: '1px solid rgba(56, 189, 248, 0.3)',
+          color: '#38bdf8',
+          fontSize: '0.65rem',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          zIndex: 10,
+          transition: 'all 0.2s',
+          marginLeft: '6px'
+        }}
+        title="What does this mean? / ¿Qué significa esto?"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(56, 189, 248, 0.25)';
+          e.currentTarget.style.transform = 'scale(1.15)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'rgba(56, 189, 248, 0.12)';
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
+      >
+        💡
+      </span>
+    );
+  };
+
   const [timeRange, setTimeRange] = useState('all');
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
@@ -305,6 +421,25 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   };
 
   const { orders, carts, sessions, productViews, clicks } = getProcessedData();
+
+  // Calculate currently active live users (heartbeat within last 45 seconds)
+  const getActiveLiveUsers = () => {
+    if (!isLive && !isSupabaseConfigured) {
+      // Sandbox mode: deterministic simulation of active users
+      const hour = new Date().getHours();
+      let base = 2;
+      if (hour >= 9 && hour <= 21) base = 4;
+      const seconds = new Date().getSeconds();
+      const fluctuation = (seconds % 3); 
+      return base + fluctuation;
+    }
+    
+    // Live mode: filter dbSessions by last_active within 45s of present time
+    const threshold = new Date(Date.now() - 45000);
+    return dbSessions.filter(s => s.last_active && new Date(s.last_active) >= threshold).length;
+  };
+
+  const activeLiveUsers = getActiveLiveUsers();
 
   // -------------------------------------------------------------
   // CALCULATE FINANCIAL STATISTICS
@@ -720,6 +855,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         if (!isIntent) return;
       }
 
+      if (heatmapIntentFilter === 'active') {
+        // Filter to very recent active clicks (within the last 15 minutes)
+        const date = new Date(c.created_at || Date.now());
+        const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
+        if (date < fifteenMinsAgo) return;
+      }
+
       const resolved = getMockCoords(elName);
       if (resolved) {
         x = resolved.x;
@@ -823,6 +965,20 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           background: rgba(16, 185, 129, 0.1);
           border: 1px solid rgba(16, 185, 129, 0.2);
           color: #34d399;
+        }
+
+        .active-pulse-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #10b981;
+          box-shadow: 0 0 8px #10b981;
+          animation: activePulse 1.8s infinite alternate ease-in-out;
+        }
+
+        @keyframes activePulse {
+          0% { transform: scale(0.8); opacity: 0.6; box-shadow: 0 0 4px #10b981; }
+          100% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 12px #10b981; }
         }
 
         .mode-simulated {
@@ -1680,6 +1836,20 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             <span>{isSupabaseConfigured || isLive ? 'Live Supabase Data' : 'Sandbox Simulation Mode'}</span>
           </div>
 
+          {/* Currently Active Live Users Counter */}
+          <div className="mode-status-indicator mode-live" style={{ 
+            background: 'rgba(16, 185, 129, 0.1)', 
+            border: '1px solid rgba(16, 185, 129, 0.2)', 
+            color: '#34d399',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            <div className="active-pulse-dot"></div>
+            <span style={{ fontWeight: 600 }}>{activeLiveUsers} Active on Catalog</span>
+            {renderExplainerTrigger('active_users')}
+          </div>
+
           <button 
             className="admin-btn" 
             style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -1688,6 +1858,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           >
             <RefreshCw size={12} className={loading ? 'sync-spinner' : ''} />
             <span>Sync</span>
+            {renderExplainerTrigger('sync')}
           </button>
 
           <button
@@ -1698,6 +1869,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           >
             <Upload size={12} />
             <span className="hide-on-mobile">Export</span>
+            {renderExplainerTrigger('export')}
           </button>
 
           <div className="time-filter-bar">
@@ -1726,6 +1898,30 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               All
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* 💡 Layman Guide Mode Active Welcome Banner */}
+      <div 
+        className="layman-help-banner" 
+        style={{
+          background: 'rgba(56, 189, 248, 0.08)',
+          border: '1px dashed rgba(56, 189, 248, 0.25)',
+          padding: '12px 16px',
+          borderRadius: '12px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          fontSize: '0.82rem',
+          color: '#38bdf8',
+          boxShadow: '0 4px 15px rgba(56, 189, 248, 0.03)'
+        }}
+      >
+        <span style={{ fontSize: '1.2rem', animation: 'activePulse 1.5s infinite alternate ease-in-out' }}>💡</span>
+        <div>
+          <span style={{ fontWeight: 600, color: '#f8fafc' }}>Guía para Principiantes Activa / Layman Guide Mode Active: </span>
+          ¿No estás seguro de qué significan algunos de estos gráficos o datos? Simplemente haz click en el ícono de la bombilla 💡 al lado de **cualquier tarjeta, título o sección** para abrir una explicación súper sencilla y amigable.
         </div>
       </div>
 
@@ -1805,7 +2001,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           onClick={() => setExpandedMetric(expandedMetric === 'revenue' ? null : 'revenue')}
         >
           <div className="metric-header">
-            <span>Gross Revenue (Realized)</span>
+            <span>Gross Revenue (Realized) {renderExplainerTrigger('revenue')}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div className="metric-icon-box icon-green"><DollarSign size={16} /></div>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
@@ -1844,7 +2040,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           onClick={() => setExpandedMetric(expandedMetric === 'aov' ? null : 'aov')}
         >
           <div className="metric-header">
-            <span>Average Order Value (AOV)</span>
+            <span>Average Order Value (AOV) {renderExplainerTrigger('aov')}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div className="metric-icon-box icon-blue"><TrendingUp size={16} /></div>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
@@ -1894,7 +2090,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           onClick={() => setExpandedMetric(expandedMetric === 'carts' ? null : 'carts')}
         >
           <div className="metric-header">
-            <span>Abandoned Carts Value</span>
+            <span>Abandoned Carts Value {renderExplainerTrigger('abandoned_carts')}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div className="metric-icon-box icon-amber"><ShoppingCart size={16} /></div>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#facc15" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
@@ -1937,7 +2133,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           onClick={() => setExpandedMetric(expandedMetric === 'conversion' ? null : 'conversion')}
         >
           <div className="metric-header">
-            <span>Visitor Conversion Rate</span>
+            <span>Visitor Conversion Rate {renderExplainerTrigger('conversion_rate')}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div className="metric-icon-box icon-purple"><Target size={16} /></div>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
@@ -1986,7 +2182,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         <div className="dashboard-section-card">
           <div className="section-card-title">
             <MapPin size={16} style={{ color: '#0ea5e9' }} />
-            <span>Geographic Distribution (Costa Rica Demographics)</span>
+            <span>Geographic Distribution (Costa Rica Demographics) {renderExplainerTrigger('geo_insights')}</span>
           </div>
 
           <div className="geo-cities-grid">
@@ -2050,7 +2246,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         <div className="dashboard-section-card">
           <div className="section-card-title">
             <Clock size={16} style={{ color: '#a78bfa' }} />
-            <span>Storefront Telemetry & Engagement Stats</span>
+            <span>Storefront Telemetry & Engagement Stats {renderExplainerTrigger('open_time')}</span>
           </div>
 
           <div className="behavior-stats-grid">
@@ -2089,7 +2285,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
           {/* Device & OS statistics */}
           <p style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', fontWeight: 600 }}>
-            Traffic Device Segment
+            Traffic Device Segment {renderExplainerTrigger('device_breakdown')}
           </p>
           <div className="device-indicator-container">
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
@@ -2113,7 +2309,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           <div className="section-card-title" style={{ justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Smartphone size={16} style={{ color: '#34d399' }} />
-              <span>Mobile Click Heatmap Overlay</span>
+              <span>Mobile Click Heatmap Overlay {renderExplainerTrigger('heatmap')}</span>
             </div>
             
             {/* Toggles */}
@@ -2132,11 +2328,22 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   fontSize: '0.75rem',
                   padding: '4px 8px',
                   borderRadius: '4px',
-                  fontWeight: 500
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
                 }}
-                title={clicks.length === 0 ? "No live telemetry database records found yet" : "Show live database clicks"}
+                title={clicks.length === 0 ? "No recorded telemetry clicks in database yet" : "Show live storefront click heatmap"}
               >
-                Live ({clicks.length})
+                <span style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: clicks.length === 0 ? '#64748b' : '#34d399',
+                  boxShadow: clicks.length === 0 ? 'none' : '0 0 6px #34d399',
+                  display: 'inline-block'
+                }}></span>
+                Live: {activeLiveUsers} Active Users
               </button>
               <button 
                 type="button"
@@ -2161,7 +2368,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
           <p style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '16px', marginTop: '-10px' }}>
             {heatmapViewMode === 'live' 
-              ? "Displaying actual real-time click coordinates captured from mobile storefront visitors." 
+              ? `There are currently ${activeLiveUsers} active visitor sessions on your storefront catalog (heartbeats tracked in the last 45 seconds). Displaying cumulative mobile click telemetry.` 
               : "Displaying simulated research-grade hotspots across key catalog components."
             }
           </p>
@@ -2204,6 +2411,34 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               <Sparkles size={10} />
               High Intent
             </button>
+            <button 
+              type="button"
+              className={`heatmap-filter-btn ${heatmapIntentFilter === 'active' ? 'active' : ''}`}
+              onClick={() => setHeatmapIntentFilter('active')}
+              style={{
+                background: heatmapIntentFilter === 'active' ? 'rgba(56, 189, 248, 0.1)' : 'transparent',
+                color: heatmapIntentFilter === 'active' ? '#38bdf8' : '#64748b',
+                border: '1px solid rgba(56, 189, 248, 0.2)',
+                fontSize: '0.7rem',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                marginLeft: '4px'
+              }}
+            >
+              <span style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: '#38bdf8',
+                boxShadow: '0 0 6px #38bdf8',
+                display: 'inline-block'
+              }}></span>
+              Active Clicks
+            </button>
           </div>
 
           {/* Smartphone bezel mockup */}
@@ -2212,70 +2447,54 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             <div className="phone-glare"></div>
             
             {/* Scrollable screen viewport */}
-            <div className="phone-screen-viewport">
+            <div className="phone-screen-viewport" style={{ overflow: 'hidden', padding: 0 }}>
               
-              {/* Mock Catalog Storefront */}
-              <div className="mock-storefront-wrapper">
+              {/* Mock Browser Address Bar */}
+              <div className="mock-browser-address-bar" style={{
+                background: '#1e293b',
+                padding: '6px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                fontSize: '0.65rem',
+                color: '#94a3b8',
+                gap: '6px',
+                zIndex: 48,
+                userSelect: 'none',
+                position: 'absolute',
+                top: '14px', // Below notch
+                left: 0,
+                right: 0
+              }}>
+                <span style={{ fontSize: '0.6rem', color: '#10b981' }}>🔒</span>
+                <span style={{ fontWeight: 500, letterSpacing: '0.3px', color: '#cbd5e1' }}>peptidescostarica.net/catalog</span>
+              </div>
+              
+              {/* Actual Storefront Viewport using Iframe */}
+              <div style={{ 
+                position: 'absolute', 
+                top: '40px', // Below notch & address bar
+                left: 0, 
+                right: 0, 
+                bottom: 0, 
+                overflow: 'hidden'
+              }}>
+                <iframe 
+                  src="/catalog?admin_preview=true" 
+                  title="Live Catalog Telemetry Preview"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    border: 'none',
+                    pointerEvents: 'auto',
+                    background: '#020617'
+                  }}
+                />
                 
-                {/* Header */}
-                <div className="mock-store-header">
-                  <div className="mock-logo">🧪 PéptidosCR</div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <div className="mock-cart-badge">🛒 <span className="mock-cart-count">2</span></div>
-                  </div>
-                </div>
-
-                {/* Hero */}
-                <div className="mock-store-hero">
-                  <h1>Compra Péptidos en Costa Rica</h1>
-                  <p>Pureza y potencia garantizadas por laboratorios certificados.</p>
-                  <div className="mock-search-bar" id="search-input">
-                    🔍 Ingrese término...
-                  </div>
-                </div>
-
-                {/* Categories */}
-                <div className="mock-store-categories">
-                  <div className="mock-cat-tab active">🧬 Recuperación</div>
-                  <div className="mock-cat-tab">⚖️ Metabolismo</div>
-                </div>
-
-                {/* Products */}
-                <div className="mock-products-section">
-                  <div className="mock-product-card">
-                    <div className="mock-prod-img-box healing-theme">
-                      <Dna size={24} style={{ color: '#34d399' }} />
-                    </div>
-                    <h3>BPC-157 5mg</h3>
-                    <div className="mock-prod-tag">Recuperación</div>
-                    <div className="mock-prod-price">₡43,100</div>
-                    <button type="button" className="mock-add-cart-btn btn-healing">Añadir al Carrito</button>
-                  </div>
-
-                  <div className="mock-product-card" style={{ marginTop: '12px' }}>
-                    <div className="mock-prod-img-box metabolism-theme">
-                      <Atom size={24} style={{ color: '#0ea5e9' }} />
-                    </div>
-                    <h3>Semaglutide 5mg</h3>
-                    <div className="mock-prod-tag">Metabolismo</div>
-                    <div className="mock-prod-price">₡43,100</div>
-                    <button type="button" className="mock-add-cart-btn btn-metabolism">Añadir al Carrito</button>
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div className="mock-footer">
-                  © 2026 Péptidos Costa Rica
-                </div>
+                {/* Interactive Heatmap Dots Layer */}
+                {renderHeatmapDots()}
               </div>
-
-              {/* Floating WhatsApp icon */}
-              <div className="mock-whatsapp-widget">
-                <Phone size={14} style={{ color: '#fff' }} />
-              </div>
-
-              {/* Interactive Heatmap Dots Layer */}
-              {renderHeatmapDots()}
 
             </div>
           </div>
@@ -2336,7 +2555,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           {/* Live stream ticker */}
           <div className="live-stream-ticker" style={{ marginTop: '20px' }}>
             <h4 style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 600, letterSpacing: '0.5px' }}>
-              Live Telemetry Clicks Feed
+              Live Telemetry Clicks Feed {renderExplainerTrigger('clicks_feed')}
             </h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {getLatestClicks().map((c, i) => (
@@ -2763,6 +2982,124 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         onExportXLSX={() => handleExport('xlsx')}
         onExportPDF={() => handleExport('pdf')}
       />
+
+      {/* 💡 Layman Explainer Modal */}
+      {explainerTopic && EXPLAINER_DATA[explainerTopic] && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(5, 8, 16, 0.75)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            animation: 'fadeIn 0.25s ease-out'
+          }}
+          onClick={() => setExplainerTopic(null)}
+        >
+          <div 
+            style={{
+              background: 'rgba(15, 23, 42, 0.9)',
+              border: '1px solid rgba(56, 189, 248, 0.25)',
+              borderRadius: '24px',
+              padding: '30px',
+              maxWidth: '520px',
+              width: '100%',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+              position: 'relative',
+              textAlign: 'left',
+              color: '#f8fafc'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Explainer Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: '#f8fafc' }}>
+                  {EXPLAINER_DATA[explainerTopic].title}
+                </h3>
+                <span style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  {EXPLAINER_DATA[explainerTopic].concept}
+                </span>
+              </div>
+              <button 
+                onClick={() => setExplainerTopic(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: 'none',
+                  color: '#94a3b8',
+                  borderRadius: '50%',
+                  width: '28px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'; e.currentTarget.style.color = '#fff'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; e.currentTarget.style.color = '#94a3b8'; }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Explainer Modal Body */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', lineHeight: 1.6 }}>
+              {/* English Explanation */}
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                  🇬🇧 English Explanation
+                </div>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#cbd5e1' }}>
+                  {EXPLAINER_DATA[explainerTopic].description}
+                </p>
+              </div>
+
+              {/* Spanish Explanation */}
+              <div style={{ background: 'rgba(56, 189, 248, 0.02)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                  🇨🇷 Explicación Sencilla (Español)
+                </div>
+                <p style={{ margin: 0, fontSize: '0.82rem', color: '#e2e8f0' }}>
+                  {EXPLAINER_DATA[explainerTopic].spanish}
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button 
+                onClick={() => setExplainerTopic(null)}
+                style={{
+                  background: '#38bdf8',
+                  color: '#0f172a',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'opacity 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = 0.9}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = 1}
+              >
+                Got it! / ¡Entendido!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

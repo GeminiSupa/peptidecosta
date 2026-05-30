@@ -76,11 +76,20 @@ export async function POST(request) {
     // Log the outbound message in Supabase
     if (supabase) {
       try {
+        let cleanDisplayName = 'Peptides Customer';
+        if (customerName && typeof customerName === 'string') {
+          const trimmed = customerName.trim();
+          const lower = trimmed.toLowerCase();
+          if (trimmed && !['null', 'undefined', 'n/a', 'unknown'].includes(lower)) {
+            cleanDisplayName = trimmed;
+          }
+        }
+
         const { error: logErr } = await supabase
           .from('whatsapp_messages')
           .insert({
             wa_id: cleanPhone,
-            display_name: customerName || 'Peptides Customer',
+            display_name: cleanDisplayName,
             message_text: message,
             message_type: 'text',
             direction: 'outbound',

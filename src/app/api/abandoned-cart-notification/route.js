@@ -65,9 +65,19 @@ const buildItemsRows = (items = [], currency, exchangeRate = 454.48) => items.ma
 const buildRecoveryHtml = (cartData, customerName, checkoutUrl, currency, lang) => {
   const isEn = lang === 'en';
   
+  // Sanitize name to prevent literal 'null', 'undefined', 'n/a', etc.
+  let cleanName = '';
+  if (customerName && typeof customerName === 'string') {
+    const trimmed = customerName.trim();
+    const lower = trimmed.toLowerCase();
+    if (trimmed && !['null', 'undefined', 'n/a', 'unknown'].includes(lower)) {
+      cleanName = trimmed;
+    }
+  }
+  
   const strings = {
     title: isEn ? 'We saved your cart! 🧪' : '¡Guardamos tu carrito! 🧪',
-    greeting: isEn ? `Hi ${customerName || 'there'},` : `Hola ${customerName || 'Hola'},`,
+    greeting: isEn ? `Hi ${cleanName || 'there'},` : `Hola ${cleanName || 'Hola'},`,
     body1: isEn 
       ? "We noticed you were browsing our selection of high-purity research peptides, but didn't get a chance to complete your order. Don't worry—we saved your cart so you can pick up right where you left off!" 
       : 'Notamos que estabas buscando en nuestra selección de péptidos de alta pureza para investigación, pero no tuviste la oportunidad de completar tu orden. ¡No te preocupes! Guardamos tu carrito para que puedas continuar justo donde lo dejaste.',
@@ -188,14 +198,24 @@ export async function POST(request) {
     const origin = request.headers.get('origin') || 'https://peptidecosta.vercel.app';
     const checkoutUrl = `${origin}/catalog?session_id=${session_id}&recovered=true`;
 
+    // Sanitize customer name to prevent literal 'null', 'undefined', 'n/a', etc.
+    let cleanCustomerName = '';
+    if (customer_name && typeof customer_name === 'string') {
+      const trimmed = customer_name.trim();
+      const lower = trimmed.toLowerCase();
+      if (trimmed && !['null', 'undefined', 'n/a', 'unknown'].includes(lower)) {
+        cleanCustomerName = trimmed;
+      }
+    }
+
     const recoveryHtml = buildRecoveryHtml(cart_data, customer_name, checkoutUrl, currency, lang);
 
     const recoveryText = [
       isEn ? 'We saved your cart for you!' : '¡Guardamos tu carrito para ti!',
       '',
       isEn 
-        ? `Hi ${customer_name || 'there'}, we noticed you left some items in your cart. You can complete your purchase using the following link:` 
-        : `Hola ${customer_name || 'Hola'}, notamos que dejaste algunos artículos en tu carrito. Puedes completar tu compra usando el siguiente enlace:`,
+        ? `Hi ${cleanCustomerName || 'there'}, we noticed you left some items in your cart. You can complete your purchase using the following link:` 
+        : `Hola ${cleanCustomerName || 'Hola'}, notamos que dejaste algunos artículos en tu carrito. Puedes completar tu compra usando el siguiente enlace:`,
       checkoutUrl,
       '',
       isEn ? 'Items in your cart:' : 'Artículos en tu carrito:',

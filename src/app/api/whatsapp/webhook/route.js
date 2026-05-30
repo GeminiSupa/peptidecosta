@@ -59,9 +59,19 @@ export async function POST(request) {
 
           // Get display name from contacts array
           const contact = contacts.find(c => c.wa_id === waId);
-          const displayName = contact?.profile?.name || '';
+          let rawDisplayName = contact?.profile?.name || '';
+          if (rawDisplayName && typeof rawDisplayName === 'string') {
+            const trimmed = rawDisplayName.trim();
+            const lower = trimmed.toLowerCase();
+            if (['null', 'undefined', 'n/a', 'unknown'].includes(lower)) {
+              rawDisplayName = '';
+            } else {
+              rawDisplayName = trimmed;
+            }
+          }
+          const displayName = rawDisplayName;
 
-          console.log(`[WhatsApp Webhook] 📩 Message from ${waId} (${displayName}): "${messageText.substring(0, 100)}..."`);
+          console.log(`[WhatsApp Webhook] 📩 Message from ${waId} (${displayName || 'Unknown'}): "${messageText.substring(0, 100)}..."`);
 
           // ── Try to match to an existing order ──
           let matchedOrderId = null;
@@ -262,9 +272,11 @@ Please reply naturally, keeping the tone warm, professional, helpful, and highly
 
               // Fallback if AI reply failed or was disabled
               if (!replyText) {
+                const greetingEs = displayName ? `¡Hola ${displayName}!` : '¡Hola!';
+                const greetingEn = displayName ? `Hi ${displayName}!` : 'Hi!';
                 replyText = matchedOrderId
-                  ? `¡Hola ${displayName || ''}! 👋 Hemos recibido tu pedido. Te contactaremos pronto para coordinar el envío. 🚀\n\nHi ${displayName || ''}! 👋 We've received your order. We'll be in touch shortly to coordinate delivery. 🚀`
-                  : `¡Hola ${displayName || ''}! 👋 Gracias por contactarnos. Un agente te responderá pronto.\n\nHi ${displayName || ''}! 👋 Thanks for reaching out. An agent will reply shortly.`;
+                  ? `${greetingEs} 👋 Hemos recibido tu pedido. Te contactaremos pronto para coordinar el envío. 🚀\n\n${greetingEn} 👋 We've received your order. We'll be in touch shortly to coordinate delivery. 🚀`
+                  : `${greetingEs} 👋 Gracias por contactarnos. Un agente te responderá pronto.\n\n${greetingEn} 👋 Thanks for reaching out. An agent will reply shortly.`;
               }
 
               // Send the reply via WhatsApp Cloud API

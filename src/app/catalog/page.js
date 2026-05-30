@@ -1,5 +1,33 @@
 "use client";
 
+// Polyfill localStorage to be memory-backed if we are inside a restricted iframe
+if (typeof window !== 'undefined') {
+  try {
+    const testKey = '__ls_test';
+    window.localStorage.setItem(testKey, 'test');
+    window.localStorage.removeItem(testKey);
+  } catch (e) {
+    console.warn('LocalStorage is blocked (restricted iframe). Polyfilling window.localStorage in-memory.');
+    const memoryStore = {};
+    try {
+      Object.defineProperty(window, 'localStorage', {
+        value: {
+          getItem: (key) => memoryStore[key] || null,
+          setItem: (key, val) => { memoryStore[key] = String(val); },
+          removeItem: (key) => { delete memoryStore[key]; },
+          clear: () => { for (const k in memoryStore) delete memoryStore[k]; },
+          key: (index) => Object.keys(memoryStore)[index] || null,
+          get length() { return Object.keys(memoryStore).length; }
+        },
+        writable: true,
+        configurable: true
+      });
+    } catch (err) {
+      console.error('Failed to polyfill localStorage:', err);
+    }
+  }
+}
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Papa from 'papaparse';
@@ -369,12 +397,14 @@ export default function CatalogPage() {
       setCustomerEmail(leadContact);
     }
 
-    // Bypass gate if they already have access granted or have contact info
+    // Bypass gate if they already have access granted or have contact info or admin preview URL param
+    const adminPreview = urlParams.get('admin_preview') === 'true';
     const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
-    if (hasAccess || savedPhone || savedEmail || leadContact || savedName) {
+    if (hasAccess || savedPhone || savedEmail || leadContact || savedName || adminPreview) {
       setGateAccessGranted(true);
       localStorage.setItem('catalog_access_granted', 'true');
     }
+
 
     // Check for Tilopay redirect params
     const paymentParam = urlParams.get('payment');

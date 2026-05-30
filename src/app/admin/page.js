@@ -1602,14 +1602,25 @@ Outreach Channel Requirements:
   // 3. Open Custom WhatsApp Composer Modal
   const openWhatsAppComposer = (recipient) => {
     setWaRecipient(recipient);
+    
+    // Sanitize recipient name to prevent literal 'null', 'undefined', 'n/a', etc.
+    let cleanName = 'Cliente';
+    if (recipient.name && typeof recipient.name === 'string') {
+      const trimmed = recipient.name.trim();
+      const lower = trimmed.toLowerCase();
+      if (trimmed && !['null', 'undefined', 'n/a', 'unknown'].includes(lower)) {
+        cleanName = trimmed;
+      }
+    }
+
     // Draft a basic template based on recipient context
-    let defaultMsg = `Hola ${recipient.name}, `;
+    let defaultMsg = `Hola ${cleanName}, `;
     if (recipient.prefilledText) {
       defaultMsg = recipient.prefilledText;
     } else if (recipient.orderNumber) {
-      defaultMsg = `Hola ${recipient.name}, te contactamos de Péptidos Costa Rica respecto a tu orden ${recipient.orderNumber}. ¿Todo bien?`;
+      defaultMsg = `Hola ${cleanName}, te contactamos de Péptidos Costa Rica respecto a tu orden ${recipient.orderNumber}. ¿Todo bien?`;
     } else if (recipient.cartItems) {
-      defaultMsg = `Hola ${recipient.name}, vimos que dejaste algunos artículos en tu carrito de Péptidos Costa Rica. ¿Tienes alguna pregunta o necesitas ayuda para completar tu compra?`;
+      defaultMsg = `Hola ${cleanName}, vimos que dejaste algunos artículos en tu carrito de Péptidos Costa Rica. ¿Tienes alguna pregunta o necesitas ayuda para completar tu compra?`;
     }
     setWaMessageText(defaultMsg);
     setWaModalOpen(true);

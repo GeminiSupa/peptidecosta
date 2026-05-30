@@ -48,7 +48,16 @@ export async function POST(request) {
     const origin = request.headers.get('origin') || 'https://peptidecosta.vercel.app';
     const checkoutUrl = `${origin}/catalog?session_id=${session_id}&recovered=true`;
 
-    const customerDisplayName = customer_name || 'Cliente';
+    // Sanitize customer name to prevent literal 'null', 'undefined', 'n/a', etc.
+    let customerDisplayName = 'Cliente';
+    if (customer_name && typeof customer_name === 'string') {
+      const trimmed = customer_name.trim();
+      const lower = trimmed.toLowerCase();
+      if (trimmed && !['null', 'undefined', 'n/a', 'unknown'].includes(lower)) {
+        customerDisplayName = trimmed;
+      }
+    }
+
     const message = `Hola ${customerDisplayName}, dejaste algunos productos en tu carrito en Peptides Costa Rica.\n\nTus productos seleccionados aún están disponibles. Puedes completar tu pedido aquí:\n${checkoutUrl}\n\nSi tienes alguna pregunta antes de ordenar, nuestro equipo con gusto te ayuda.`;
 
     console.log(`[Abandoned Cart WhatsApp] Sending automated WhatsApp template recovery to ${cleanPhone}...`);
@@ -114,7 +123,7 @@ export async function POST(request) {
           .from('whatsapp_messages')
           .insert({
             wa_id: cleanPhone,
-            display_name: customer_name || 'Peptides Customer',
+            display_name: customerDisplayName === 'Cliente' ? 'Peptides Customer' : customerDisplayName,
             message_text: message,
             message_type: 'text',
             direction: 'outbound',
