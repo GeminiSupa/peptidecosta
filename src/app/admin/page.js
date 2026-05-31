@@ -783,6 +783,12 @@ Outreach Channel Requirements:
           .select('*')
           .order('priority', { ascending: true });
 
+        if (error) {
+          console.error("❌ SUPABASE ADMIN PRODUCTS SELECT ERROR:", error);
+        } else {
+          console.log("✅ SUPABASE ADMIN PRODUCTS LOADED:", data?.length, "rows");
+        }
+
         if (!error && data) {
           loadedProducts = data.map(item => ({
             id: item.id,

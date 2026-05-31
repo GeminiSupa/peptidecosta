@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { safeLocalStorage as localStorage } from '@/lib/storage';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';

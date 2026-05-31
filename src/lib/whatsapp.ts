@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { safeLocalStorage as localStorage } from '@/lib/storage';
 
 /**
  * Build a WhatsApp link that includes a source identifier.

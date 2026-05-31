@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { safeLocalStorage as localStorage, safeSessionStorage as sessionStorage } from '@/lib/storage';
 import { X, Sparkles, ArrowRight } from 'lucide-react';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
 import Link from 'next/link';

@@ -104,7 +104,7 @@ async function seed() {
 
         const rowData = {};
         headers.forEach((header, colIdx) => {
-          const key = header.replace(/\s+/g, '');
+          const key = header.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
           rowData[key] = line[colIdx] || '';
         });
 

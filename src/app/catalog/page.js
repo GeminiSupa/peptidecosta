@@ -1,32 +1,6 @@
 "use client";
 
-// Polyfill localStorage to be memory-backed if we are inside a restricted iframe
-if (typeof window !== 'undefined') {
-  try {
-    const testKey = '__ls_test';
-    window.localStorage.setItem(testKey, 'test');
-    window.localStorage.removeItem(testKey);
-  } catch (e) {
-    console.warn('LocalStorage is blocked (restricted iframe). Polyfilling window.localStorage in-memory.');
-    const memoryStore = {};
-    try {
-      Object.defineProperty(window, 'localStorage', {
-        value: {
-          getItem: (key) => memoryStore[key] || null,
-          setItem: (key, val) => { memoryStore[key] = String(val); },
-          removeItem: (key) => { delete memoryStore[key]; },
-          clear: () => { for (const k in memoryStore) delete memoryStore[k]; },
-          key: (index) => Object.keys(memoryStore)[index] || null,
-          get length() { return Object.keys(memoryStore).length; }
-        },
-        writable: true,
-        configurable: true
-      });
-    } catch (err) {
-      console.error('Failed to polyfill localStorage:', err);
-    }
-  }
-}
+import { safeLocalStorage as localStorage } from '@/lib/storage';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
@@ -113,6 +87,57 @@ const translateDiscount = (str, targetLang) => {
   }
   
   return s;
+};
+
+// Get high-quality, category/product-specific Costa Rica peptide vial image fallback
+const getProductFallbackImage = (productName, category) => {
+  const nameLower = (productName || '').toLowerCase();
+  const catLower = (category || '').toLowerCase();
+
+  // Reconstitution/water
+  if (nameLower.includes('bac water') || nameLower.includes('bacteriostatic')) {
+    return '/modern_3d_vial_hero.png';
+  }
+
+  // Stacks, blends, or combinations
+  if (
+    nameLower.includes('blend') || 
+    nameLower.includes('stack') || 
+    nameLower.includes('+') || 
+    nameLower.includes('wolverine') ||
+    nameLower.includes('group')
+  ) {
+    return productName.length % 2 === 0 ? '/vials_group_costarica.png' : '/modern_3d_vials_group.png';
+  }
+
+  // Categories mapping
+  if (catLower.includes('weight') || catLower.includes('peso') || catLower.includes('metabol')) {
+    return '/vial_costarica_hero.png';
+  }
+  if (catLower.includes('recovery') || catLower.includes('healing') || catLower.includes('curación')) {
+    return '/hero_peptide_vial.png';
+  }
+  if (catLower.includes('performance') || catLower.includes('hormon') || catLower.includes('rendimiento')) {
+    return '/modern_3d_vial_hero.png';
+  }
+  if (catLower.includes('aging') || catLower.includes('longevity') || catLower.includes('longevidad')) {
+    return '/vial_costarica_hero.png';
+  }
+  if (catLower.includes('cognitive') || catLower.includes('mood') || catLower.includes('cognitivo')) {
+    return '/hero_peptide_vial.png';
+  }
+  if (catLower.includes('skin') || catLower.includes('hair') || catLower.includes('piel') || catLower.includes('cabello')) {
+    return '/modern_3d_vial_hero.png';
+  }
+
+  // Fallbacks
+  if (productName.length % 3 === 0) {
+    return '/vial_costarica_hero.png';
+  } else if (productName.length % 3 === 1) {
+    return '/modern_3d_vial_hero.png';
+  } else {
+    return '/hero_peptide_vial.png';
+  }
 };
 
 export default function CatalogPage() {
@@ -705,6 +730,12 @@ export default function CatalogPage() {
           .select('*')
           .order('priority', { ascending: true });
 
+        if (error) {
+          console.error("❌ SUPABASE CATALOG PRODUCTS ERROR:", error);
+        } else {
+          console.log("✅ SUPABASE CATALOG PRODUCTS LOADED:", data?.length, "rows");
+        }
+
         if (!error && data && data.length > 0) {
           loadedProducts = data.map(item => ({
             product: item.product,
@@ -716,7 +747,7 @@ export default function CatalogPage() {
             discount: item.discount,
             status: item.status,
             coa: item.coa,
-            imageUrl: item.image_url,
+            imageUrl: item.image_url || getProductFallbackImage(item.product, item.category),
             descriptionEn: item.description_en || '',
             descriptionEs: item.description_es || '',
             emoji: item.emoji || getEmojiForCategory(item.category)
@@ -787,7 +818,7 @@ export default function CatalogPage() {
                     discount: p.bulkDiscountEs || p.bulkDiscountEn || '',
                     status: p.status || 'In Stock',
                     coa: p.coa || '',
-                    imageUrl: p.imageUrl || '',
+                    imageUrl: p.imageUrl || getProductFallbackImage(p.product, p.category),
                     descriptionEn: '',
                     descriptionEs: '',
                     emoji: getEmojiForCategory(p.category || '')
@@ -1689,13 +1720,12 @@ export default function CatalogPage() {
           </div>
         </div>
 
-        <div className="header-content container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <a href="/" className="logo" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div className="header-content container">
+          <a href="/" className="logo">
             <img 
               src="/logo.png" 
               alt="Peptides Costa Rica Logo" 
               className="logo-img-custom"
-              style={{ maxHeight: '70px', width: 'auto', objectFit: 'contain', borderRadius: '12px', boxShadow: '0 2px 16px rgba(0,0,0,0.15)' }}
             />
           </a>
 
