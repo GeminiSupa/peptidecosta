@@ -190,6 +190,10 @@ export default function AdminPage() {
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(FALLBACK_EXCHANGE_RATE);
   
+  // Storage Bucket States
+  const [bucketImages, setBucketImages] = useState([]);
+  const [loadingBucketImages, setLoadingBucketImages] = useState(false);
+  
   // CMS States
   const [blogs, setBlogs] = useState([]);
   const [loadingBlogs, setLoadingBlogs] = useState(true);
@@ -769,11 +773,48 @@ Outreach Channel Requirements:
     };
   }, [isAuthenticated]);
 
+  // Fetch list of files/images in the Supabase product-pics storage bucket
+  const fetchBucketImages = async () => {
+    if (!isSupabaseConfigured || !supabase) return;
+    setLoadingBucketImages(true);
+    try {
+      const { data, error } = await supabase.storage
+        .from('product-pics')
+        .list('', {
+          limit: 100,
+          sortBy: { column: 'name', order: 'asc' }
+        });
+      if (error) throw error;
+      if (data) {
+        // Map list results to public URLs, filter out placeholder folder entries
+        const images = data
+          .filter(file => file.name !== '.emptyFolderPlaceholder')
+          .map(file => {
+            const { data: { publicUrl } } = supabase.storage
+              .from('product-pics')
+              .getPublicUrl(file.name);
+            return {
+              name: file.name,
+              url: publicUrl
+            };
+          });
+        setBucketImages(images);
+      }
+    } catch (err) {
+      console.error("Failed to list bucket images from Supabase storage:", err);
+    } finally {
+      setLoadingBucketImages(false);
+    }
+  };
+
   // Fetch admin products and orders
   const loadAdminData = async () => {
     setLoadingProducts(true);
     setLoadingOrders(true);
     let loadedProducts = [];
+
+    // Fetch bucket images
+    fetchBucketImages();
 
     // 1. Fetch Products
     if (isSupabaseConfigured && supabase) {
@@ -785,6 +826,7 @@ Outreach Channel Requirements:
 
         if (error) {
           console.error("❌ SUPABASE ADMIN PRODUCTS SELECT ERROR:", error);
+          setIsDbConnected(false);
         } else {
           console.log("✅ SUPABASE ADMIN PRODUCTS LOADED:", data?.length, "rows");
         }
@@ -810,6 +852,7 @@ Outreach Channel Requirements:
         }
       } catch (err) {
         console.error("Failed to load products from database:", err);
+        setIsDbConnected(false);
       }
     }
 
@@ -1366,6 +1409,7 @@ Outreach Channel Requirements:
           .getPublicUrl(filePath);
 
         handleCellChange(productId, 'imageUrl', publicUrl);
+        fetchBucketImages(); // Refresh the list of images in the background
       } catch (err) {
         console.error("Storage upload error:", err);
         handleCellChange(productId, 'imageUrl', '');
@@ -1375,6 +1419,44 @@ Outreach Channel Requirements:
       // Local simulation URL
       const dummyUrl = URL.createObjectURL(file);
       handleCellChange(productId, 'imageUrl', dummyUrl);
+      alert("Local Simulation: Image loaded inside browser memory. To upload permanently, connect Supabase!");
+    }
+  };
+
+  // Image Upload handler for Blog Cover
+  const handleBlogImageUpload = async (e) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+
+    // Show uploading indicator in the field
+    setEditingBlog(prev => ({ ...prev, image_url: 'Uploading...' }));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `blog-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('product-pics')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('product-pics')
+          .getPublicUrl(filePath);
+
+        setEditingBlog(prev => ({ ...prev, image_url: publicUrl }));
+        fetchBucketImages(); // Refresh the list of images so it appears in dropdowns
+      } catch (err) {
+        console.error("Blog storage upload error:", err);
+        setEditingBlog(prev => ({ ...prev, image_url: '' }));
+        alert("Image upload failed. Please verify that your Supabase Storage bucket 'product-pics' exists and is set to public.");
+      }
+    } else {
+      const dummyUrl = URL.createObjectURL(file);
+      setEditingBlog(prev => ({ ...prev, image_url: dummyUrl }));
       alert("Local Simulation: Image loaded inside browser memory. To upload permanently, connect Supabase!");
     }
   };
@@ -2008,6 +2090,13 @@ Outreach Channel Requirements:
   const handleSaveChanges = async () => {
     setSaveLoading(true);
     setSaveStatus('');
+
+    if (!isDbConnected) {
+      setSaveStatus("❌ Cannot save: Database is offline or in local fallback mode. Verify database connection before saving.");
+      setSaveLoading(false);
+      setTimeout(() => setSaveStatus(''), 5000);
+      return;
+    }
 
     // Auto-fill missing CRC prices from USD before saving
     const filled = products.map(p => {
@@ -2781,26 +2870,50 @@ Outreach Channel Requirements:
                           </div>
                         </td>
 
-                        {/* Image cell with Drag physical upload */}
+                        {/* Image cell with Dropdown & Direct Physical Upload */}
                         <td data-label="Image URL / Physical Upload">
-                          <div className="admin-image-cell">
-                            <div className="admin-image-preview">
+                          <div className="admin-image-cell" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '220px' }}>
+                            <div className="admin-image-preview" style={{ width: '32px', height: '32px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.05)' }}>
                               {p.imageUrl && p.imageUrl.startsWith('http') ? (
                                 <img src={p.imageUrl} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               ) : (
                                 getCategoryIcon(p.category)
                               )}
                             </div>
-                            <div 
-                              contentEditable 
-                              suppressContentEditableWarning
-                              className="cell-editable"
-                              style={{ flexGrow: 1, minWidth: '80px', maxWidth: '150px', fontSize: '0.7rem', color: '#94a3b8', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}
-                              onBlur={(e) => handleCellChange(p.id, 'imageUrl', e.target.innerText)}
-                              title={p.imageUrl}
-                            >
-                              {p.imageUrl}
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexGrow: 1, minWidth: '120px' }}>
+                              <select
+                                className="cell-select"
+                                value={bucketImages.find(img => img.url === p.imageUrl)?.url || (p.imageUrl ? 'custom' : '')}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === 'custom') return;
+                                  handleCellChange(p.id, 'imageUrl', val);
+                                }}
+                                style={{
+                                  padding: '3px 6px',
+                                  borderRadius: '6px',
+                                  border: '1px solid rgba(255,255,255,0.1)',
+                                  background: '#0f172a',
+                                  color: '#e2e8f0',
+                                  fontSize: '0.7rem',
+                                  width: '100%',
+                                  outline: 'none',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <option value="">-- No Image / Select --</option>
+                                {p.imageUrl && !bucketImages.some(img => img.url === p.imageUrl) && (
+                                  <option value="custom">Custom: {p.imageUrl.split('/').pop()?.substring(0, 15) || 'URL'}</option>
+                                )}
+                                {bucketImages.map((img) => (
+                                  <option key={img.name} value={img.url}>
+                                    {img.name.length > 20 ? img.name.substring(0, 17) + '...' : img.name}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
+
                             <input 
                               type="file"
                               accept="image/*"
@@ -2808,12 +2921,27 @@ Outreach Channel Requirements:
                               id={`imageUpload-${p.id}`}
                               onChange={(e) => handleImageCellUpload(p.id, e)}
                             />
+                            
                             <button 
                               className="admin-image-upload-btn"
-                              title="Upload picture"
+                              title="Upload new image"
                               onClick={() => document.getElementById(`imageUpload-${p.id}`).click()}
+                              style={{
+                                width: '26px',
+                                height: '26px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '6px',
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: '#e2e8f0',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                flexShrink: 0
+                              }}
                             >
-                              <Upload size={12} />
+                              <Upload size={11} />
                             </button>
                           </div>
                         </td>
@@ -5796,8 +5924,78 @@ Outreach Channel Requirements:
                   <input required type="text" value={editingBlog.slug} onChange={e => setEditingBlog({...editingBlog, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-')})} placeholder="e.g. what-are-peptides" style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none' }} />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Cover Image URL</label>
-                  <input type="text" value={editingBlog.image_url} onChange={e => setEditingBlog({...editingBlog, image_url: e.target.value})} placeholder="https://..." style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none' }} />
+                  <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>Cover Image</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input 
+                        type="text" 
+                        value={editingBlog.image_url} 
+                        onChange={e => setEditingBlog({...editingBlog, image_url: e.target.value})} 
+                        placeholder="Image URL (https://...)" 
+                        style={{ flexGrow: 1, padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none' }} 
+                      />
+                      <input 
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        id="blogImageUpload"
+                        onChange={handleBlogImageUpload}
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => document.getElementById('blogImageUpload').click()}
+                        style={{
+                          padding: '10px 16px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: '#2563eb',
+                          color: '#ffffff',
+                          fontSize: '0.85rem',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <Upload size={14} /> Upload
+                      </button>
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '700' }}>Or select from Bucket:</span>
+                      <select
+                        value={bucketImages.find(img => img.url === editingBlog.image_url)?.url || (editingBlog.image_url ? 'custom' : '')}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === 'custom') return;
+                          setEditingBlog({ ...editingBlog, image_url: val });
+                        }}
+                        style={{
+                          flexGrow: 1,
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: '#172237',
+                          color: '#f8fafc',
+                          fontSize: '0.8rem',
+                          outline: 'none',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="">-- Select from Supabase Bucket --</option>
+                        {editingBlog.image_url && !bucketImages.some(img => img.url === editingBlog.image_url) && (
+                          <option value="custom">Custom / Manually Entered URL</option>
+                        )}
+                        {bucketImages.map((img) => (
+                          <option key={img.name} value={img.url}>
+                            {img.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
 

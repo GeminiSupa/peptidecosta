@@ -732,6 +732,7 @@ export default function CatalogPage() {
 
         if (error) {
           console.error("❌ SUPABASE CATALOG PRODUCTS ERROR:", error);
+          setIsDbBacked(false);
         } else {
           console.log("✅ SUPABASE CATALOG PRODUCTS LOADED:", data?.length, "rows");
         }
@@ -766,6 +767,7 @@ export default function CatalogPage() {
         }
       } catch (err) {
         console.error("Supabase load error, falling back to local spreadsheet CSV...", err);
+        setIsDbBacked(false);
       }
     }
 
