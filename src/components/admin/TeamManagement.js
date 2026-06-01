@@ -6,6 +6,13 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // Sub-tabs & Payout states
+  const [activeSubTab, setActiveSubTab] = useState('members'); // 'members' or 'payouts'
+  const [payouts, setPayouts] = useState([]);
+  const [loadingPayouts, setLoadingPayouts] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [syncingCommissions, setSyncingCommissions] = useState(false);
+
   // Form states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
@@ -40,9 +47,69 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     setLoading(false);
   };
 
+  const fetchPayouts = async () => {
+    setLoadingPayouts(true);
+    try {
+      const { data, error } = await supabase
+        .from('commission_payouts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (data) setPayouts(data);
+    } catch (err) {
+      console.error(err);
+    }
+    setLoadingPayouts(false);
+  };
+
+  const handlePayoutAction = async (payoutId, action) => {
+    setActionLoadingId(payoutId);
+    try {
+      const response = await fetch('/api/admin/commissions/approve', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ payoutId, action })
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert(`Payout successfully ${action === 'Approved' ? 'Approved & Email Dispatched' : 'Rejected'}!`);
+        fetchPayouts();
+      } else {
+        alert(`Failed to process payout: ${data.error}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error trying to process payout.');
+    }
+    setActionLoadingId(null);
+  };
+
+  const handleSyncCommissions = async () => {
+    setSyncingCommissions(true);
+    try {
+      const response = await fetch('/api/admin/commissions/weekly-report');
+      const data = await response.json();
+      if (data.success) {
+        alert('Successfully synced weekly commissions and generated pending payouts!');
+        fetchPayouts();
+      } else {
+        alert(`Failed to sync commissions: ${data.error}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error syncing weekly commissions.');
+    }
+    setSyncingCommissions(false);
+  };
+
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (activeSubTab === 'members') {
+      fetchUsers();
+    } else {
+      fetchPayouts();
+    }
+  }, [activeSubTab]);
 
   const handleOpenModal = (user = null) => {
     setFormError('');
@@ -144,70 +211,215 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     return <div style={{ padding: '40px', textAlign: 'center', color: '#ef4444' }}>Access Denied. Superadmin only.</div>;
   }
 
+  const formatMoneyUI = (val, curr) => {
+    const num = Number(val || 0);
+    if (curr === 'USD') return `$${num.toFixed(2)}`;
+    return `₡${Math.round(num).toLocaleString('en-US')}`;
+  };
+
   return (
     <div style={{ padding: '24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Team Management</h2>
-          <p style={{ color: '#94a3b8' }}>Manage admin users and their access permissions.</p>
+          <p style={{ color: '#94a3b8' }}>Manage admin users, commission rates, and payouts.</p>
         </div>
-        <button className="admin-btn admin-btn-primary" onClick={() => handleOpenModal()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Plus size={16} /> Add User
+        {activeSubTab === 'members' ? (
+          <button className="admin-btn admin-btn-primary" onClick={() => handleOpenModal()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Plus size={16} /> Add User
+          </button>
+        ) : (
+          <button 
+            className="admin-btn admin-btn-primary" 
+            onClick={handleSyncCommissions} 
+            disabled={syncingCommissions}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#a855f7', borderColor: '#a855f7' }}
+          >
+            {syncingCommissions ? 'Calculating...' : '🔄 Run Commission Scan'}
+          </button>
+        )}
+      </div>
+
+      {/* Sub-tab Toggle buttons */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
+        <button 
+          onClick={() => setActiveSubTab('members')}
+          className="admin-btn"
+          style={{ 
+            background: activeSubTab === 'members' ? '#38bdf8' : 'rgba(255,255,255,0.02)', 
+            color: activeSubTab === 'members' ? '#0e1626' : '#94a3b8',
+            border: '1px solid rgba(255,255,255,0.05)',
+            fontWeight: 'bold',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          👥 Manage Members & Rates
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('payouts')}
+          className="admin-btn"
+          style={{ 
+            background: activeSubTab === 'payouts' ? '#38bdf8' : 'rgba(255,255,255,0.02)', 
+            color: activeSubTab === 'payouts' ? '#0e1626' : '#94a3b8',
+            border: '1px solid rgba(255,255,255,0.05)',
+            fontWeight: 'bold',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          💰 Commission Payouts
         </button>
       </div>
 
-      {loading ? (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading team members...</div>
-      ) : (
-        <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <table className="spreadsheet-table">
-            <thead>
-              <tr>
-                <th style={{ padding: '16px' }}>Name</th>
-                <th style={{ padding: '16px' }}>Email</th>
-                <th style={{ padding: '16px' }}>Role</th>
-                <th style={{ padding: '16px' }}>Commission</th>
-                <th style={{ padding: '16px' }}>Access</th>
-                <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(u => (
-                <tr key={u.id}>
-                  <td style={{ padding: '16px', fontWeight: 'bold' }}>{u.name || 'N/A'}</td>
-                  <td style={{ padding: '16px' }}>{u.email}</td>
-                  <td style={{ padding: '16px' }}>
-                    {u.is_superadmin ? (
-                      <span className="status-badge" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
-                        <Shield size={12} /> Superadmin
-                      </span>
-                    ) : (
-                      <span className="status-badge" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', width: 'fit-content' }}>
-                        Staff
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '16px', fontWeight: 'bold', color: '#c084fc' }}>
-                    {u.commission_rate !== undefined ? `${u.commission_rate}%` : '0%'}
-                  </td>
-                  <td style={{ padding: '16px', fontSize: '0.8rem', color: '#94a3b8', maxWidth: '200px' }}>
-                    {u.is_superadmin ? 'Full Access' : (u.permissions && u.permissions.length > 0 ? u.permissions.join(', ') : 'No Access')}
-                  </td>
-                  <td style={{ padding: '16px', textAlign: 'right' }}>
-                    <button className="admin-btn" onClick={() => handleOpenModal(u)} style={{ marginRight: '8px', padding: '6px 10px' }}>
-                      <Edit2 size={14} />
-                    </button>
-                    {u.user_id !== currentUserProfile?.user_id && (
-                      <button className="admin-btn" onClick={() => handleDelete(u.user_id)} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 10px' }}>
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </td>
+      {activeSubTab === 'members' ? (
+        loading ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading team members...</div>
+        ) : (
+          <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <table className="spreadsheet-table">
+              <thead>
+                <tr>
+                  <th style={{ padding: '16px' }}>Name</th>
+                  <th style={{ padding: '16px' }}>Email</th>
+                  <th style={{ padding: '16px' }}>Role</th>
+                  <th style={{ padding: '16px' }}>Commission</th>
+                  <th style={{ padding: '16px' }}>Access</th>
+                  <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {users.map(u => (
+                  <tr key={u.id}>
+                    <td style={{ padding: '16px', fontWeight: 'bold' }}>{u.name || 'N/A'}</td>
+                    <td style={{ padding: '16px' }}>{u.email}</td>
+                    <td style={{ padding: '16px' }}>
+                      {u.is_superadmin ? (
+                        <span className="status-badge" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
+                          <Shield size={12} /> Superadmin
+                        </span>
+                      ) : (
+                        <span className="status-badge" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', width: 'fit-content' }}>
+                          Staff
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>
+                      {u.commission_rate !== undefined ? `${u.commission_rate}%` : '0%'}
+                    </td>
+                    <td style={{ padding: '16px', fontSize: '0.8rem', color: '#94a3b8', maxWidth: '200px' }}>
+                      {u.is_superadmin ? 'Full Access' : (u.permissions && u.permissions.length > 0 ? u.permissions.join(', ') : 'No Access')}
+                    </td>
+                    <td style={{ padding: '16px', textAlign: 'right' }}>
+                      <button className="admin-btn" onClick={() => handleOpenModal(u)} style={{ marginRight: '8px', padding: '6px 10px' }}>
+                        <Edit2 size={14} />
+                      </button>
+                      {u.user_id !== currentUserProfile?.user_id && (
+                        <button className="admin-btn" onClick={() => handleDelete(u.user_id)} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 10px' }}>
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : (
+        loadingPayouts ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading payouts history...</div>
+        ) : payouts.length === 0 ? (
+          <div style={{ padding: '40px', textAlign: 'center', background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8' }}>
+            No commission payouts found. Click <strong>Run Commission Scan</strong> to check for weekly sales!
+          </div>
+        ) : (
+          <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <table className="spreadsheet-table">
+              <thead>
+                <tr>
+                  <th style={{ padding: '16px' }}>Agent</th>
+                  <th style={{ padding: '16px' }}>Period</th>
+                  <th style={{ padding: '16px' }}>Gross Sales</th>
+                  <th style={{ padding: '16px' }}>Rate</th>
+                  <th style={{ padding: '16px' }}>Commission</th>
+                  <th style={{ padding: '16px' }}>Status</th>
+                  <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payouts.map(p => {
+                  const formattedPeriod = `${new Date(p.start_date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})} - ${new Date(p.end_date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}`;
+                  return (
+                    <tr key={p.id}>
+                      <td style={{ padding: '16px', fontWeight: 'bold' }}>
+                        <div style={{ color: '#f8fafc' }}>{p.agent_name || 'N/A'}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.agent_email}</div>
+                      </td>
+                      <td style={{ padding: '16px', color: '#cbd5e1', fontSize: '0.85rem' }}>{formattedPeriod}</td>
+                      <td style={{ padding: '16px', fontSize: '0.85rem' }}>
+                        <div style={{ color: '#cbd5e1' }}>USD: <span style={{ fontWeight: 'bold', color: '#f8fafc' }}>{formatMoneyUI(p.usd_sales, 'USD')}</span></div>
+                        <div style={{ color: '#cbd5e1' }}>CRC: <span style={{ fontWeight: 'bold', color: '#f8fafc' }}>{formatMoneyUI(p.crc_sales, 'CRC')}</span></div>
+                      </td>
+                      <td style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>{p.commission_rate}%</td>
+                      <td style={{ padding: '16px', fontSize: '0.85rem' }}>
+                        <div style={{ color: '#c084fc', fontWeight: 'bold' }}>USD: {formatMoneyUI(p.usd_commission, 'USD')}</div>
+                        <div style={{ color: '#c084fc', fontWeight: 'bold' }}>CRC: {formatMoneyUI(p.crc_commission, 'CRC')}</div>
+                      </td>
+                      <td style={{ padding: '16px' }}>
+                        {p.status === 'Pending' ? (
+                          <span className="status-badge" style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#eab308', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                            Pending Approval
+                          </span>
+                        ) : p.status === 'Approved' ? (
+                          <span className="status-badge" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                            Approved
+                          </span>
+                        ) : (
+                          <span className="status-badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                            Rejected
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'right' }}>
+                        {p.status === 'Pending' ? (
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button 
+                              className="admin-btn"
+                              disabled={actionLoadingId !== null}
+                              onClick={() => handlePayoutAction(p.id, 'Approved')}
+                              style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.2)', padding: '6px 12px', fontSize: '0.75rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              {actionLoadingId === p.id ? '...' : <Check size={12} />} Approve & Send
+                            </button>
+                            <button 
+                              className="admin-btn"
+                              disabled={actionLoadingId !== null}
+                              onClick={() => handlePayoutAction(p.id, 'Rejected')}
+                              style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 12px', fontSize: '0.75rem', fontWeight: 'bold' }}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        ) : p.status === 'Approved' ? (
+                          <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                            Approved on {new Date(p.approved_at).toLocaleDateString()}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '0.75rem', color: '#ef4444' }}>
+                            Rejected
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
 
       {/* Edit/Create Modal */}
@@ -232,22 +444,22 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Full Name</label>
-                    <input type="text" value={formName} onChange={e => setFormName(e.target.value)} required className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)' }} placeholder="John Doe" />
+                    <input type="text" value={formName} onChange={e => setFormName(e.target.value)} required className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder="John Doe" />
                   </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email Address</label>
-                    <input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} required={!editingUserId} disabled={!!editingUserId} className="admin-input" style={{ width: '100%', background: editingUserId ? 'rgba(255,255,255,0.02)' : '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: editingUserId ? '#64748b' : '#f8fafc' }} placeholder="john@example.com" />
+                    <input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} required={!editingUserId} disabled={!!editingUserId} className="admin-input" style={{ width: '100%', background: editingUserId ? 'rgba(255,255,255,0.02)' : '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: editingUserId ? '#64748b' : '#38bdf8' }} placeholder="john@example.com" />
                   </div>
                 </div>
                 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Password</label>
-                    <input type="password" value={formPassword} onChange={e => setFormPassword(e.target.value)} required={!editingUserId} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)' }} placeholder={editingUserId ? "Leave blank to keep current" : "Enter temporary password"} />
+                    <input type="password" value={formPassword} onChange={e => setFormPassword(e.target.value)} required={!editingUserId} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder={editingUserId ? "Leave blank to keep current" : "Enter temporary password"} />
                   </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Commission Rate (%)</label>
-                    <input type="number" min="0" max="100" step="0.1" value={formCommissionRate} onChange={e => setFormCommissionRate(parseFloat(e.target.value) || 0)} required className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)' }} placeholder="e.g. 10.0" />
+                    <input type="number" min="0" max="100" step="0.1" value={formCommissionRate} onChange={e => setFormCommissionRate(parseFloat(e.target.value) || 0)} required className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder="e.g. 10.0" />
                   </div>
                 </div>
                 

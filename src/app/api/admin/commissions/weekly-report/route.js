@@ -186,26 +186,52 @@ export async function GET(request) {
         </div>
       `;
 
-      let emailSent = false;
-      let emailError = null;
+      // 6. Save or update Pending payout in database
+      const { data: existingPayout } = await supabaseAdmin
+        .from('commission_payouts')
+        .select('*')
+        .eq('agent_email', agent.email)
+        .eq('status', 'Pending')
+        .maybeSingle();
 
-      // 6. Send the automated invoice email to agent and CC admin
-      if (transporter && agent.email) {
-        try {
-          const subject = `Weekly Commissions Invoice - ${agent.name || agent.email} [${rate}%]`;
-          await transporter.sendMail({
-            from: NOTIFICATION_FROM,
-            to: agent.email.trim(),
-            cc: ADMIN_CC_EMAILS,
-            subject: subject,
-            html: emailHtml,
-            text: `Weekly Commissions Invoice for ${agent.name || agent.email}.\nGross USD: ${formatMoney(usdSales, 'USD')}\nGross CRC: ${formatMoney(crcSales, 'CRC')}\nCommission Owed: ${formatMoney(usdCommission, 'USD')} + ${formatMoney(crcCommission, 'CRC')}`
-          });
-          emailSent = true;
-        } catch (mailErr) {
-          console.error(`[Weekly Commissions] Failed to email agent ${agent.email}:`, mailErr);
-          emailError = mailErr.message;
-        }
+      let saveError = null;
+      if (existingPayout) {
+        const { error } = await supabaseAdmin
+          .from('commission_payouts')
+          .update({
+            agent_id: agent.user_id || null,
+            agent_name: agent.name || null,
+            start_date: startDateStr,
+            end_date: new Date().toISOString(),
+            usd_sales: usdSales,
+            crc_sales: crcSales,
+            commission_rate: rate,
+            usd_commission: usdCommission,
+            crc_commission: crcCommission,
+            orders_data: agentOrders,
+            email_html: emailHtml
+          })
+          .eq('id', existingPayout.id);
+        saveError = error;
+      } else {
+        const { error } = await supabaseAdmin
+          .from('commission_payouts')
+          .insert([{
+            agent_id: agent.user_id || null,
+            agent_email: agent.email,
+            agent_name: agent.name || null,
+            start_date: startDateStr,
+            end_date: new Date().toISOString(),
+            usd_sales: usdSales,
+            crc_sales: crcSales,
+            commission_rate: rate,
+            usd_commission: usdCommission,
+            crc_commission: crcCommission,
+            status: 'Pending',
+            orders_data: agentOrders,
+            email_html: emailHtml
+          }]);
+        saveError = error;
       }
 
       reportResults.push({
@@ -218,9 +244,76 @@ export async function GET(request) {
         crcSales: formatMoney(crcSales, 'CRC'),
         usdCommission: formatMoney(usdCommission, 'USD'),
         crcCommission: formatMoney(crcCommission, 'CRC'),
-        emailSent,
-        emailError
+        savedSuccessfully: !saveError,
+        saveError: saveError ? saveError.message : null
       });
+    }
+
+    let adminEmailSent = false;
+    let adminEmailError = null;
+
+    // 7. Send notification email to admins
+    if (transporter && reportResults.length > 0) {
+      try {
+        const adminEmailHtml = `
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#e2e8f0;background:#0b0f19;max-width:640px;margin:0 auto;padding:32px 24px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;">
+            <div style="text-align:center;margin-bottom:24px;">
+              <div style="display:inline-block;padding:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;margin-bottom:12px;">
+                <span style="font-size:24px;font-weight:bold;color:#f8fafc;letter-spacing:1px;">🧬 PEPTIDES COSTA RICA</span>
+              </div>
+              <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:-0.5px;">Pending Commissions Action Required</h1>
+              <p style="color:#94a3b8;font-size:13px;margin:0;">Weekly commission calculations are complete and awaiting admin approval.</p>
+            </div>
+
+            <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:12px;padding:20px;margin-bottom:24px;">
+              <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                  <tr style="border-bottom:1px solid rgba(255,255,255,0.08);text-align:left;">
+                    <th style="padding:10px;font-size:11px;font-weight:bold;color:#94a3b8;text-transform:uppercase;">Representative</th>
+                    <th style="padding:10px;font-size:11px;font-weight:bold;text-align:center;color:#94a3b8;text-transform:uppercase;">Closed Orders</th>
+                    <th style="padding:10px;font-size:11px;font-weight:bold;text-align:right;color:#94a3b8;text-transform:uppercase;">Pending Payout</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${reportResults.map(r => `
+                    <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
+                      <td style="padding:12px 10px;font-size:13px;font-weight:bold;color:#f8fafc;">${r.name || r.email}</td>
+                      <td style="padding:12px 10px;font-size:13px;text-align:center;color:#cbd5e1;">${r.closedOrdersCount}</td>
+                      <td style="padding:12px 10px;font-size:13px;text-align:right;font-weight:bold;color:#c084fc;">
+                        ${r.usdCommission !== '$0.00' ? r.usdCommission : ''}
+                        ${r.usdCommission !== '$0.00' && r.crcCommission !== '₡0' ? ' + ' : ''}
+                        ${r.crcCommission !== '₡0' ? r.crcCommission : ''}
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+
+            <div style="text-align:center;margin-bottom:24px;">
+              <a href="https://peptidescostarica.net/admin?tab=team" style="display:inline-block;background:#38bdf8;color:#0b0f19;font-weight:bold;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:13px;">
+                Review & Approve Payouts
+              </a>
+            </div>
+
+            <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:16px;text-align:center;font-size:11px;color:#64748b;">
+              Peptides Costa Rica Administrative Automated CRM · Sales and Invoicing Ledger
+            </div>
+          </div>
+        `;
+
+        await transporter.sendMail({
+          from: NOTIFICATION_FROM,
+          to: ADMIN_CC_EMAILS,
+          subject: `🧬 [Action Required] Weekly Commissions Pending Approval (${reportResults.length} Agents)`,
+          html: adminEmailHtml,
+          text: `Weekly commission reports are generated and pending approval for: ${reportResults.map(r => `${r.name || r.email} (Payout: ${r.usdCommission} + ${r.crcCommission})`).join(', ')}`
+        });
+        adminEmailSent = true;
+      } catch (mailErr) {
+        console.error('[Weekly Commissions] Failed to notify admins:', mailErr);
+        adminEmailError = mailErr.message;
+      }
     }
 
     return NextResponse.json({
@@ -229,7 +322,11 @@ export async function GET(request) {
         start: startDateStr,
         end: new Date().toISOString()
       },
-      payoutReport: reportResults
+      payoutReport: reportResults,
+      adminNotification: {
+        emailSent: adminEmailSent,
+        error: adminEmailError
+      }
     });
 
   } catch (err) {
