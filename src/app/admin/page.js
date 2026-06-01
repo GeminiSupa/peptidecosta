@@ -192,6 +192,7 @@ export default function AdminPage() {
   
   // Storage Bucket States
   const [bucketImages, setBucketImages] = useState([]);
+  const [agents, setAgents] = useState([]);
   const [loadingBucketImages, setLoadingBucketImages] = useState(false);
   
   // CMS States
@@ -807,6 +808,30 @@ Outreach Channel Requirements:
     }
   };
 
+  // Fetch active sales agents from admin_profiles
+  const fetchAgents = async () => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: agentData, error: agentError } = await supabase
+          .from('admin_profiles')
+          .select('name, email')
+          .order('name', { ascending: true });
+        
+        if (!agentError && agentData) {
+          const loadedAgents = agentData.map(a => a.name || a.email).filter(Boolean);
+          setAgents(loadedAgents.length > 0 ? loadedAgents : ['Joe', 'info@peptidescostarica.net']);
+        } else {
+          setAgents(['Joe', 'info@peptidescostarica.net']);
+        }
+      } catch (err) {
+        console.error("Failed to load agents:", err);
+        setAgents(['Joe', 'info@peptidescostarica.net']);
+      }
+    } else {
+      setAgents(['Joe', 'info@peptidescostarica.net']);
+    }
+  };
+
   // Fetch admin products and orders
   const loadAdminData = async () => {
     setLoadingProducts(true);
@@ -815,6 +840,9 @@ Outreach Channel Requirements:
 
     // Fetch bucket images
     fetchBucketImages();
+
+    // Fetch agents
+    fetchAgents();
 
     // 1. Fetch Products
     if (isSupabaseConfigured && supabase) {
@@ -1488,6 +1516,34 @@ Outreach Channel Requirements:
         }
       } catch(err) {
         console.error("Order status update error:", err);
+      }
+    }
+  };
+
+  // Order sales agent update
+  const handleOrderSalesAgentUpdate = async (orderId, agentName) => {
+    let finalAgentName = agentName;
+
+    if (agentName === 'ADD_CUSTOM_AGENT') {
+      const customName = prompt("Enter Custom Sales Agent Name:");
+      if (customName === null) return; // Admin cancelled the prompt
+      finalAgentName = customName.trim();
+    }
+
+    setOrders(orders.map(o => o.id === orderId ? { ...o, sales_agent: finalAgentName } : o));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from('orders')
+          .update({ sales_agent: finalAgentName || null })
+          .eq('id', orderId);
+
+        if (error) {
+          console.error("Supabase order sales agent update error:", error);
+        }
+      } catch (err) {
+        console.error("Order sales agent update error:", err);
       }
     }
   };
@@ -3066,6 +3122,7 @@ Outreach Channel Requirements:
                     <option value="Pending">Pending</option>
                     <option value="Processing">Processing</option>
                     <option value="Order Complete">Order Complete</option>
+                    <option value="Cancelled">Cancelled</option>
                   </select>
                 </div>
               </div>
@@ -3102,6 +3159,7 @@ Outreach Channel Requirements:
                       <th style={{ padding: '10px 12px' }}>Total Amount</th>
                       <th style={{ padding: '10px 12px' }}>Payment</th>
                       <th style={{ padding: '10px 12px' }}>Status</th>
+                      <th style={{ padding: '10px 12px' }}>Agent</th>
                       <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
@@ -3109,6 +3167,7 @@ Outreach Channel Requirements:
                     {paginatedOrders.map(order => {
                         const items = Array.isArray(order.items) ? order.items : [];
                         const orderDate = new Date(order.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+                        const isCustomAgent = order.sales_agent && !agents.includes(order.sales_agent);
                         
                         return (
                           <tr key={order.id}>
@@ -3162,11 +3221,11 @@ Outreach Channel Requirements:
                                   padding: '4px 8px',
                                   borderRadius: '6px',
                                   fontSize: '0.75rem',
-                                  width: '110px',
-                                  background: order.status === 'Order Complete' ? 'rgba(34, 197, 94, 0.15)' : order.status === 'Processing' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                                  color: order.status === 'Order Complete' ? '#4ade80' : order.status === 'Processing' ? '#38bdf8' : '#f59e0b',
+                                  width: '120px',
+                                  background: order.status === 'Order Complete' ? 'rgba(34, 197, 94, 0.15)' : order.status === 'Processing' ? 'rgba(56, 189, 248, 0.15)' : order.status === 'Cancelled' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                  color: order.status === 'Order Complete' ? '#4ade80' : order.status === 'Processing' ? '#38bdf8' : order.status === 'Cancelled' ? '#f87171' : '#f59e0b',
                                   fontWeight: 'bold',
-                                  border: order.status === 'Order Complete' ? '1px solid rgba(34, 197, 94, 0.3)' : order.status === 'Processing' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                                  border: order.status === 'Order Complete' ? '1px solid rgba(34, 197, 94, 0.3)' : order.status === 'Processing' ? '1px solid rgba(56, 189, 248, 0.3)' : order.status === 'Cancelled' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
                                   textAlign: 'center',
                                   cursor: 'pointer'
                                 }}
@@ -3174,6 +3233,35 @@ Outreach Channel Requirements:
                                 <option value="Pending">Pending</option>
                                 <option value="Processing">Processing</option>
                                 <option value="Order Complete">Order Complete</option>
+                                <option value="Cancelled">Cancelled</option>
+                              </select>
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <select 
+                                className="cell-select"
+                                value={order.sales_agent || ''}
+                                onChange={(e) => handleOrderSalesAgentUpdate(order.id, e.target.value)}
+                                style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.75rem',
+                                  width: '120px',
+                                  background: order.sales_agent ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                                  color: order.sales_agent ? '#c084fc' : '#94a3b8',
+                                  fontWeight: 'bold',
+                                  border: order.sales_agent ? '1px solid rgba(168, 85, 247, 0.3)' : '1px solid rgba(255,255,255,0.05)',
+                                  textAlign: 'center',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <option value="">-- Unassigned --</option>
+                                {agents.map(agent => (
+                                  <option key={agent} value={agent}>{agent}</option>
+                                ))}
+                                {isCustomAgent && (
+                                  <option value={order.sales_agent}>{order.sales_agent} (Custom)</option>
+                                )}
+                                <option value="ADD_CUSTOM_AGENT">✍️ Add Custom...</option>
                               </select>
                             </td>
                             <td style={{ padding: '10px 12px' }}>
@@ -4904,7 +4992,7 @@ Outreach Channel Requirements:
         {/* TAB: TEAM MANAGEMENT */}
         {activeTab === 'team' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
-            <TeamManagement currentUserProfile={adminProfile} currentUserEmail={loggedInEmail.current} />
+            <TeamManagement currentUserProfile={adminProfile} currentUserEmail={loggedInEmail.current} onTeamChanged={fetchAgents} />
           </div>
         )}
 

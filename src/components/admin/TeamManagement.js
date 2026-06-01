@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Plus, Trash2, Edit2, Shield, Check } from 'lucide-react';
 
-export default function TeamManagement({ currentUserProfile, currentUserEmail }) {
+export default function TeamManagement({ currentUserProfile, currentUserEmail, onTeamChanged }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -28,10 +28,6 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail })
     { id: 'cms', label: 'Content (CMS)' }
   ];
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
   const fetchUsers = async () => {
     setLoading(true);
     try {
@@ -42,6 +38,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail })
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   const handleOpenModal = (user = null) => {
     setFormError('');
@@ -110,6 +110,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail })
       
       setIsModalOpen(false);
       fetchUsers();
+      onTeamChanged?.();
     } catch (err) {
       setFormError(err.message);
     }
@@ -126,6 +127,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail })
         throw new Error(data.error);
       }
       fetchUsers();
+      onTeamChanged?.();
     } catch (err) {
       alert(err.message);
     }
@@ -186,7 +188,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail })
                     <button className="admin-btn" onClick={() => handleOpenModal(u)} style={{ marginRight: '8px', padding: '6px 10px' }}>
                       <Edit2 size={14} />
                     </button>
-                    {u.user_id !== currentUserProfile.user_id && (
+                    {u.user_id !== currentUserProfile?.user_id && (
                       <button className="admin-btn" onClick={() => handleDelete(u.user_id)} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 10px' }}>
                         <Trash2 size={14} />
                       </button>
