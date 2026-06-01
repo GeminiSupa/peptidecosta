@@ -12,6 +12,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [loadingPayouts, setLoadingPayouts] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [syncingCommissions, setSyncingCommissions] = useState(false);
+  const [scanPeriod, setScanPeriod] = useState('previous'); // 'previous' or 'current'
 
   // Form states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -88,10 +89,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const handleSyncCommissions = async () => {
     setSyncingCommissions(true);
     try {
-      const response = await fetch('/api/admin/commissions/weekly-report');
+      const response = await fetch(`/api/admin/commissions/weekly-report?period=${scanPeriod}`);
       const data = await response.json();
       if (data.success) {
-        alert('Successfully synced weekly commissions and generated pending payouts!');
+        alert(`Successfully synced weekly commissions for the ${scanPeriod === 'previous' ? 'previous completed week (Mon-Sun)' : 'current week-to-date (Mon-Now)'} and generated pending payouts!`);
         fetchPayouts();
       } else {
         alert(`Failed to sync commissions: ${data.error}`);
@@ -229,14 +230,36 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             <Plus size={16} /> Add User
           </button>
         ) : (
-          <button 
-            className="admin-btn admin-btn-primary" 
-            onClick={handleSyncCommissions} 
-            disabled={syncingCommissions}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#a855f7', borderColor: '#a855f7' }}
-          >
-            {syncingCommissions ? 'Calculating...' : '🔄 Run Commission Scan'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <select
+              value={scanPeriod}
+              onChange={(e) => setScanPeriod(e.target.value)}
+              disabled={syncingCommissions}
+              style={{
+                background: 'rgba(15, 23, 42, 0.8)',
+                color: '#e2e8f0',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                outline: 'none',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)'
+              }}
+            >
+              <option value="previous">Previous Week (Mon-Sun)</option>
+              <option value="current">Current Week (Mon-Now)</option>
+            </select>
+            <button 
+              className="admin-btn admin-btn-primary" 
+              onClick={handleSyncCommissions} 
+              disabled={syncingCommissions}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#a855f7', borderColor: '#a855f7' }}
+            >
+              {syncingCommissions ? 'Calculating...' : '🔄 Run Commission Scan'}
+            </button>
+          </div>
         )}
       </div>
 

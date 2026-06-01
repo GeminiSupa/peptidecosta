@@ -162,6 +162,9 @@ export default function AdminPage() {
   const [loadingAbandonedCarts, setLoadingAbandonedCarts] = useState(true);
   const [sendingRecoveryEmail, setSendingRecoveryEmail] = useState({});
   const [sendingRecoveryWhatsApp, setSendingRecoveryWhatsApp] = useState({});
+  const [selectedCartIds, setSelectedCartIds] = useState([]);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkProgressText, setBulkProgressText] = useState('');
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
   const [leads, setLeads] = useState([]);
@@ -1655,6 +1658,114 @@ Outreach Channel Requirements:
       alert('Failed to send recovery WhatsApp message: ' + err.message);
     } finally {
       setSendingRecoveryWhatsApp(prev => ({ ...prev, [acart.session_id]: false }));
+    }
+  };
+
+  // Bulk Email reminders
+  const handleBulkEmail = async () => {
+    const cartsToProcess = abandonedCarts.filter(c => selectedCartIds.includes(c.session_id) && c.customer_email);
+    if (cartsToProcess.length === 0) {
+      alert('None of the selected carts have an email address.');
+      return;
+    }
+    if (!confirm(`Are you sure you want to send recovery emails to ${cartsToProcess.length} customers?`)) return;
+    
+    setBulkProcessing(true);
+    let successCount = 0;
+    for (let i = 0; i < cartsToProcess.length; i++) {
+      const acart = cartsToProcess[i];
+      setBulkProgressText(`Sending email ${i + 1}/${cartsToProcess.length} to ${acart.customer_name || 'Customer'}...`);
+      try {
+        const response = await fetch('/api/abandoned-cart-notification', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: acart.session_id,
+            customer_name: acart.customer_name,
+            customer_email: acart.customer_email,
+            cart_data: acart.cart_data,
+            lang: acart.lang || 'es',
+            currency: acart.currency || 'CRC',
+          }),
+        });
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) successCount++;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+      await new Promise(r => setTimeout(r, 400));
+    }
+    setBulkProcessing(false);
+    alert(`✅ Sent ${successCount} recovery emails successfully!`);
+    setSelectedCartIds([]);
+    loadAdminData();
+  };
+
+  // Bulk WhatsApp reminders
+  const handleBulkWhatsApp = async () => {
+    const cartsToProcess = abandonedCarts.filter(c => selectedCartIds.includes(c.session_id) && c.customer_phone);
+    if (cartsToProcess.length === 0) {
+      alert('None of the selected carts have a WhatsApp phone number.');
+      return;
+    }
+    if (!confirm(`Are you sure you want to send automated WhatsApp reminders to ${cartsToProcess.length} customers?`)) return;
+
+    setBulkProcessing(true);
+    let successCount = 0;
+    for (let i = 0; i < cartsToProcess.length; i++) {
+      const acart = cartsToProcess[i];
+      setBulkProgressText(`Sending WhatsApp ${i + 1}/${cartsToProcess.length} to ${acart.customer_name || 'Customer'}...`);
+      try {
+        const response = await fetch('/api/abandoned-cart-whatsapp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: acart.session_id,
+            customer_name: acart.customer_name,
+            customer_phone: acart.customer_phone,
+            lang: acart.lang || 'es',
+          }),
+        });
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) successCount++;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+      await new Promise(r => setTimeout(r, 400));
+    }
+    setBulkProcessing(false);
+    alert(`✅ Sent ${successCount} WhatsApp reminders successfully!`);
+    setSelectedCartIds([]);
+    loadAdminData();
+  };
+
+  // Bulk Delete carts
+  const handleBulkDelete = async () => {
+    if (!confirm(`Are you sure you want to delete ${selectedCartIds.length} selected cart entries? This cannot be undone.`)) return;
+
+    setBulkProcessing(true);
+    setBulkProgressText(`Deleting ${selectedCartIds.length} carts...`);
+    try {
+      setAbandonedCarts(prev => prev.filter(c => !selectedCartIds.includes(c.session_id)));
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase
+          .from('abandoned_carts')
+          .delete()
+          .in('session_id', selectedCartIds);
+        if (error) throw error;
+      }
+      alert(`🗑️ Deleted ${selectedCartIds.length} carts successfully!`);
+    } catch (err) {
+      console.error('Bulk delete error:', err);
+      alert(`Failed to delete carts: ${err.message}`);
+    } finally {
+      setBulkProcessing(false);
+      setSelectedCartIds([]);
+      loadAdminData();
     }
   };
 
@@ -3601,6 +3712,70 @@ Outreach Channel Requirements:
               )}
             </div>
 
+            {/* BULK PROCESSING PROGRESS INDICATOR OVERLAY */}
+            {bulkProcessing && (
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(14, 22, 38, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%)',
+                border: '1px solid rgba(56, 189, 248, 0.3)',
+                borderRadius: '16px',
+                padding: '24px',
+                marginBottom: '20px',
+                boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px'
+              }}>
+                <div className="sync-spinner" style={{ color: '#38bdf8' }}><Brain size={32} /></div>
+                <div>
+                  <h4 style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0' }}>⚡ Processing Bulk Operation...</h4>
+                  <p style={{ fontSize: '0.85rem', color: '#38bdf8', margin: 0, fontWeight: 'bold' }}>{bulkProgressText}</p>
+                </div>
+              </div>
+            )}
+
+            {selectedCartIds.length > 0 && !bulkProcessing && (
+              <div style={{ 
+                background: 'linear-gradient(90deg, rgba(56, 189, 248, 0.12) 0%, rgba(168, 85, 247, 0.12) 100%)', 
+                border: '1px solid rgba(56, 189, 248, 0.3)', 
+                borderRadius: '12px', 
+                padding: '16px 20px', 
+                marginBottom: '20px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)'
+              }}>
+                <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>
+                  ⚡ Selected <span style={{ color: '#38bdf8', fontSize: '1rem' }}>{selectedCartIds.length}</span> {selectedCartIds.length === 1 ? 'cart' : 'carts'} for bulk actions
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button 
+                    onClick={handleBulkEmail}
+                    className="admin-btn"
+                    style={{ background: 'rgba(56, 189, 248, 0.25)', border: '1px solid rgba(56, 189, 248, 0.4)', color: '#38bdf8', padding: '8px 16px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', borderRadius: '8px' }}
+                  >
+                    ✉️ Bulk Email Reminder
+                  </button>
+                  <button 
+                    onClick={handleBulkWhatsApp}
+                    className="admin-btn"
+                    style={{ background: 'rgba(34, 197, 94, 0.25)', border: '1px solid rgba(34, 197, 94, 0.4)', color: '#4ade80', padding: '8px 16px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', borderRadius: '8px' }}
+                  >
+                    💬 Bulk WhatsApp Reminder
+                  </button>
+                  <button 
+                    onClick={handleBulkDelete}
+                    className="admin-btn"
+                    style={{ background: 'rgba(239, 68, 68, 0.25)', border: '1px solid rgba(239, 68, 68, 0.4)', color: '#f87171', padding: '8px 16px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', borderRadius: '8px' }}
+                  >
+                    🗑️ Bulk Delete Carts
+                  </button>
+                </div>
+              </div>
+            )}
+
             {loadingAbandonedCarts ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading carts...</div>
             ) : abandonedCarts.length === 0 ? (
@@ -3612,6 +3787,20 @@ Outreach Channel Requirements:
                 <table className="spreadsheet-table">
                   <thead>
                     <tr>
+                      <th style={{ padding: '10px 12px', width: '40px', textAlign: 'center' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedCartIds.length === abandonedCarts.length && abandonedCarts.length > 0} 
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCartIds(abandonedCarts.map(c => c.session_id));
+                            } else {
+                              setSelectedCartIds([]);
+                            }
+                          }}
+                          style={{ cursor: 'pointer', transform: 'scale(1.1)' }}
+                        />
+                      </th>
                       <th style={{ padding: '10px 12px' }}>Last Updated</th>
                       <th style={{ padding: '10px 12px' }}>Customer</th>
                       <th style={{ padding: '10px 12px' }}>Cart Details</th>
@@ -3625,6 +3814,20 @@ Outreach Channel Requirements:
                       
                       return (
                         <tr key={acart.session_id}>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={selectedCartIds.includes(acart.session_id)} 
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCartIds(prev => [...prev, acart.session_id]);
+                                } else {
+                                  setSelectedCartIds(prev => prev.filter(id => id !== acart.session_id));
+                                }
+                              }}
+                              style={{ cursor: 'pointer', transform: 'scale(1.1)' }}
+                            />
+                          </td>
                           <td style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
                             {new Date(acart.last_updated).toLocaleString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
                           </td>

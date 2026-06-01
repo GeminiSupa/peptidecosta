@@ -22,16 +22,47 @@ export async function GET(request) {
     // 1. Initialize Supabase Admin Client
     const supabaseAdmin = getSupabaseAdmin();
 
-    // 2. Calculate the 7-day range (e.g. from 7 days ago to today)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const startDateStr = sevenDaysAgo.toISOString();
+    // 2. Parse query parameters to support period selection
+    const { searchParams } = new URL(request.url);
+    const period = searchParams.get('period') || 'previous';
 
-    // 3. Fetch all non-cancelled orders completed in the last 7 days
+    // 3. Calculate Monday-to-Sunday boundaries
+    const now = new Date();
+    const day = now.getDay();
+    const dayOffset = day === 0 ? 7 : day; // Normalize so Monday is 1, Sunday is 7
+
+    // Get current week's Monday at 00:00:00.000 local time
+    const currentMonday = new Date(now);
+    currentMonday.setDate(now.getDate() - dayOffset + 1);
+    currentMonday.setHours(0, 0, 0, 0);
+
+    let startDate, endDate;
+
+    if (period === 'current') {
+      startDate = currentMonday;
+      endDate = new Date(); // Up to the current moment
+    } else {
+      // previous complete week
+      const prevMonday = new Date(currentMonday);
+      prevMonday.setDate(currentMonday.getDate() - 7);
+
+      const prevSunday = new Date(prevMonday);
+      prevSunday.setDate(prevMonday.getDate() + 6);
+      prevSunday.setHours(23, 59, 59, 999);
+
+      startDate = prevMonday;
+      endDate = prevSunday;
+    }
+
+    const startDateStr = startDate.toISOString();
+    const endDateStr = endDate.toISOString();
+
+    // 4. Fetch all non-cancelled orders completed in the scanned period
     const { data: orders, error: ordersError } = await supabaseAdmin
       .from('orders')
       .select('*')
       .gte('created_at', startDateStr)
+      .lte('created_at', endDateStr)
       .not('status', 'eq', 'Cancelled');
 
     if (ordersError) {
@@ -128,7 +159,7 @@ export async function GET(request) {
               <span style="font-size:24px;font-weight:bold;color:#f8fafc;letter-spacing:1px;">🧬 PEPTIDES COSTA RICA</span>
             </div>
             <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:-0.5px;">Weekly Sales Commission Invoice</h1>
-            <p style="color:#94a3b8;font-size:13px;margin:0;">Invoice Period: ${new Date(startDateStr).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})} to ${new Date().toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}</p>
+            <p style="color:#94a3b8;font-size:13px;margin:0;">Invoice Period: ${new Date(startDateStr).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})} to ${new Date(endDateStr).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}</p>
           </div>
 
           <!-- Greeting Card -->
@@ -202,7 +233,7 @@ export async function GET(request) {
             agent_id: agent.user_id || null,
             agent_name: agent.name || null,
             start_date: startDateStr,
-            end_date: new Date().toISOString(),
+            end_date: endDateStr,
             usd_sales: usdSales,
             crc_sales: crcSales,
             commission_rate: rate,
@@ -221,7 +252,7 @@ export async function GET(request) {
             agent_email: agent.email,
             agent_name: agent.name || null,
             start_date: startDateStr,
-            end_date: new Date().toISOString(),
+            end_date: endDateStr,
             usd_sales: usdSales,
             crc_sales: crcSales,
             commission_rate: rate,
@@ -320,7 +351,7 @@ export async function GET(request) {
       success: true,
       period: {
         start: startDateStr,
-        end: new Date().toISOString()
+        end: endDateStr
       },
       payoutReport: reportResults,
       adminNotification: {

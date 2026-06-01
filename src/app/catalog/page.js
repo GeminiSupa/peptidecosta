@@ -4,6 +4,7 @@ import { safeLocalStorage as localStorage } from '@/lib/storage';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -142,6 +143,8 @@ const getProductFallbackImage = (productName, category) => {
 };
 
 export default function CatalogPage() {
+  const router = useRouter();
+  
   // Theme, Lang, Currency States
   const [theme, setTheme] = useState('light');
   const [lang, setLang] = useState('es');
@@ -435,11 +438,11 @@ export default function CatalogPage() {
     // Check for Tilopay redirect params
     const paymentParam = urlParams.get('payment');
     if (paymentParam === 'success' || urlParams.get('code') === '1') {
-      alert(initialLang === 'en' ? 'Payment Successful! Thank you for your order.' : '¡Pago exitoso! Gracias por su orden.');
       setCart([]); // Clear cart on success
       localStorage.removeItem('cart');
-      // Clean up URL
+      // Clean up URL and redirect to thank-you conversion page
       window.history.replaceState({}, document.title, window.location.pathname);
+      window.location.href = `/thank-you?lang=${initialLang}`;
     } else if (paymentParam === 'cancel') {
       alert(initialLang === 'en' ? 'Payment was cancelled.' : 'El pago fue cancelado.');
       // Clean up URL
@@ -1186,6 +1189,7 @@ export default function CatalogPage() {
       currency,
       paymentMethod: method === 'sinpe' ? 'sinpe' : 'tilopay',
       status: method === 'sinpe' ? 'Pending - SINPE Tilopay' : 'Pending - Card',
+      lang,
     });
 
     try {
@@ -1304,6 +1308,7 @@ export default function CatalogPage() {
       currency,
       paymentMethod,
       status: 'Pending',
+      lang,
     });
 
     // 2. Open WhatsApp Receipt
@@ -1363,7 +1368,6 @@ export default function CatalogPage() {
     window.open(whatsappUrl, '_blank');
 
     setOrderSubmitting(false);
-    setOrderSuccess(true);
     setCart([]);
     setCustomerName('');
     setCustomerPhone('');
@@ -1371,10 +1375,8 @@ export default function CatalogPage() {
     setShippingAddress('');
     setCustomerIdNumber('');
 
-    setTimeout(() => {
-      setOrderSuccess(false);
-      setIsCartOpen(false);
-    }, 4000);
+    // Redirect to the thank-you conversion page
+    router.push(`/thank-you?lang=${lang}`);
   };
 
   // Render PayPal Buttons into the container
@@ -1532,20 +1534,19 @@ export default function CatalogPage() {
               currency: 'USD',
               paymentMethod: 'paypal',
               status: 'Paid',
+              lang: cLang,
             });
 
             setOrderSubmitting(false);
-            setOrderSuccess(true);
             setCart([]);
             setCustomerName('');
             setCustomerPhone('');
             setCustomerEmail('');
             setShippingAddress('');
             setCustomerIdNumber('');
-            setTimeout(() => {
-              setOrderSuccess(false);
-              setIsCartOpen(false);
-            }, 4000);
+            
+            // Redirect to the thank-you conversion page
+            router.push(`/thank-you?lang=${cLang}`);
           } else {
             setOrderSubmitting(false);
             alert(cLang === 'en' ? 'Payment was not completed. Please try again.' : 'El pago no se completó. Intente de nuevo.');
