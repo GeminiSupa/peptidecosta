@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 export async function PUT(request) {
   try {
     const body = await request.json();
-    const { userId, email, password, name, permissions, is_superadmin } = body;
+    const { userId, email, password, name, permissions, is_superadmin, commission_rate } = body;
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
@@ -29,6 +29,7 @@ export async function PUT(request) {
     if (name !== undefined) updateData.name = name;
     if (permissions !== undefined) updateData.permissions = permissions;
     if (is_superadmin !== undefined) updateData.is_superadmin = is_superadmin;
+    if (commission_rate !== undefined) updateData.commission_rate = parseFloat(commission_rate) || 0;
 
     if (Object.keys(updateData).length > 0) {
       const { data: profileData, error: profileError } = await supabaseAdmin

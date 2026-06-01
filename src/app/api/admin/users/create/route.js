@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { email, password, name, permissions, is_superadmin } = body;
+    const { email, password, name, permissions, is_superadmin, commission_rate } = body;
 
     if (!email || !password || !name) {
       return NextResponse.json({ error: 'Email, password, and name are required' }, { status: 400 });
@@ -36,7 +36,8 @@ export async function POST(request) {
           email: email,
           name: name,
           permissions: permissions || [],
-          is_superadmin: is_superadmin || false
+          is_superadmin: is_superadmin || false,
+          commission_rate: commission_rate !== undefined ? parseFloat(commission_rate) : 0
         }
       ])
       .select()

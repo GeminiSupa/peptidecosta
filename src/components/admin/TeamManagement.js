@@ -14,6 +14,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [formName, setFormName] = useState('');
   const [formPermissions, setFormPermissions] = useState([]);
   const [formIsSuperadmin, setFormIsSuperadmin] = useState(false);
+  const [formCommissionRate, setFormCommissionRate] = useState(0);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -52,6 +53,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormName(user.name || '');
       setFormPermissions(user.permissions || []);
       setFormIsSuperadmin(user.is_superadmin || false);
+      setFormCommissionRate(user.commission_rate || 0);
     } else {
       setEditingUserId(null);
       setFormEmail('');
@@ -59,6 +61,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormName('');
       setFormPermissions([]);
       setFormIsSuperadmin(false);
+      setFormCommissionRate(0);
     }
     setIsModalOpen(true);
   };
@@ -85,7 +88,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             password: formPassword || undefined,
             name: formName,
             permissions: formPermissions,
-            is_superadmin: formIsSuperadmin
+            is_superadmin: formIsSuperadmin,
+            commission_rate: formCommissionRate
           })
         });
         const data = await res.json();
@@ -101,7 +105,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             password: formPassword,
             name: formName,
             permissions: formPermissions,
-            is_superadmin: formIsSuperadmin
+            is_superadmin: formIsSuperadmin,
+            commission_rate: formCommissionRate
           })
         });
         const data = await res.json();
@@ -161,6 +166,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                 <th style={{ padding: '16px' }}>Name</th>
                 <th style={{ padding: '16px' }}>Email</th>
                 <th style={{ padding: '16px' }}>Role</th>
+                <th style={{ padding: '16px' }}>Commission</th>
                 <th style={{ padding: '16px' }}>Access</th>
                 <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
               </tr>
@@ -180,6 +186,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                         Staff
                       </span>
                     )}
+                  </td>
+                  <td style={{ padding: '16px', fontWeight: 'bold', color: '#c084fc' }}>
+                    {u.commission_rate !== undefined ? `${u.commission_rate}%` : '0%'}
                   </td>
                   <td style={{ padding: '16px', fontSize: '0.8rem', color: '#94a3b8', maxWidth: '200px' }}>
                     {u.is_superadmin ? 'Full Access' : (u.permissions && u.permissions.length > 0 ? u.permissions.join(', ') : 'No Access')}
@@ -231,9 +240,15 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   </div>
                 </div>
                 
-                <div style={{ marginBottom: '24px' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Password</label>
-                  <input type="password" value={formPassword} onChange={e => setFormPassword(e.target.value)} required={!editingUserId} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)' }} placeholder={editingUserId ? "Leave blank to keep current password" : "Enter a secure temporary password"} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Password</label>
+                    <input type="password" value={formPassword} onChange={e => setFormPassword(e.target.value)} required={!editingUserId} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)' }} placeholder={editingUserId ? "Leave blank to keep current" : "Enter temporary password"} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Commission Rate (%)</label>
+                    <input type="number" min="0" max="100" step="0.1" value={formCommissionRate} onChange={e => setFormCommissionRate(parseFloat(e.target.value) || 0)} required className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)' }} placeholder="e.g. 10.0" />
+                  </div>
                 </div>
                 
                 <div style={{ background: 'rgba(0, 0, 0, 0.2)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: '24px' }}>
