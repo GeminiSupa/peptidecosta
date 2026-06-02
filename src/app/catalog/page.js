@@ -1982,19 +1982,21 @@ export default function CatalogPage() {
                             ? <Check size={16} /> 
                             : <Plus size={16} />
                           }
-                          {addedProductId === p.product 
-                            ? (lang === 'en' ? 'Added' : 'Añadido') 
-                            : (lang === 'en' ? 'Add To Cart' : 'Agregar al Carrito')
-                          }
+                          <span>
+                            {addedProductId === p.product 
+                              ? (lang === 'en' ? 'Added' : 'Añadido') 
+                              : (lang === 'en' ? 'Add To Cart' : 'Agregar al Carrito')
+                            }
+                          </span>
                         </button>
                       ) : (
                         <button className="add-to-cart-btn out-of-stock-btn" disabled>
-                          {lang === 'en' ? 'Out of Stock' : 'Agotado'}
+                          <span>{lang === 'en' ? 'Out of Stock' : 'Agotado'}</span>
                         </button>
                       )}
                     </div>
                     <div className={`stock-badge ${inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`}>
-                      {translateStatus(p.status)}
+                      <span>{translateStatus(p.status)}</span>
                     </div>
                   </div>
                 </div>

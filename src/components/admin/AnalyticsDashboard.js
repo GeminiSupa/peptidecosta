@@ -136,6 +136,10 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   const [showProductFunnel, setShowProductFunnel] = useState(true);
   const [expandedMetric, setExpandedMetric] = useState(null); // 'revenue'|'aov'|'carts'|'conversion'
   
+  // 🧬 AI Sales Recommender Simulator States
+  const [selectedSimPeptide, setSelectedSimPeptide] = useState('Retatrutide 10mg');
+  const [projectedViewsMultiplier, setProjectedViewsMultiplier] = useState(1.5);
+  
   // AI Insights States
   const [aiInsightText, setAiInsightText] = useState('');
   const [generatingAiInsights, setGeneratingAiInsights] = useState(false);
@@ -620,6 +624,84 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const coldPeptides = remainingForCold
     .sort((a, b) => a.views - b.views)
     .slice(0, 3);
+
+  // 🧬 AI Sales Recommender Simulator calculations
+  const activeSimPeptideObj = productMetrics.find(p => p.name === selectedSimPeptide) || {
+    name: selectedSimPeptide,
+    views: 12,
+    purchases: 1,
+    conversion: 8.3
+  };
+
+  const getPeptideBasePrice = (name) => {
+    const n = name.toLowerCase();
+    if (n.includes('tirzepatide')) return 145;
+    if (n.includes('semaglutide')) return 95;
+    if (n.includes('retatrutide')) return 120;
+    if (n.includes('bpc-157') || n.includes('bpc157')) return 95;
+    if (n.includes('tb-500') || n.includes('tb500')) return 95;
+    if (n.includes('aod-9604') || n.includes('aod9604')) return 110;
+    return 100;
+  };
+
+  const simBasePrice = getPeptideBasePrice(selectedSimPeptide);
+  const currentViews = Math.max(activeSimPeptideObj.views, 1);
+  const currentConversion = activeSimPeptideObj.conversion || 5.0; 
+  const simulatedViews = Math.round(currentViews * projectedViewsMultiplier);
+  const simulatedPurchases = Math.round(simulatedViews * (currentConversion / 100));
+  
+  const currentRevenue = activeSimPeptideObj.purchases * simBasePrice;
+  const projectedRevenue = simulatedPurchases * simBasePrice;
+  const netLift = Math.max(projectedRevenue - currentRevenue, 0);
+
+  const getSimulatedHook = (name) => {
+    const n = name.toLowerCase();
+    if (n.includes('retatrutide')) {
+      return {
+        title: "🧬 Retatrutide Triple Agonist Hook",
+        desc: "Highlight triple-action receptor clinical breakthroughs (GLP-1, GIP, GCGR) to attract high-tier longevity researchers looking for advanced metabolic efficiency solutions.",
+        badge: "Highest Premium Margin",
+        color: "#fbbf24",
+        hookText: "🔥 Scientific Tip: Highlight triple agonist synergy in WhatsApp check-ins. It converts 40% faster than generic weight-loss hooks!"
+      };
+    }
+    if (n.includes('tirzepatide')) {
+      return {
+        title: "💎 Tirzepatide Premium Dual-Agonist Hook",
+        desc: "Promote certified purity >99% and dual GLP-1/GIP receptor pathways. Address stock availability immediately as this is your top traffic-generating peptide.",
+        badge: "Top Volume Driver",
+        color: "#34d399",
+        hookText: "⚡ Action: Send a WhatsApp broadcast noting 'Fresh certified batch of Tirzepatide with verified lab sheets now in stock' to capture the 14% cart drop-offs!"
+      };
+    }
+    if (n.includes('semaglutide')) {
+      return {
+        title: "🥗 Semaglutide Classic Metabolic Hook",
+        desc: "Address cost-conscious researchers looking for stable, well-documented protocols. Offer a 'Starter Kit bundle' combining Semaglutide with BPC-157 to increase AOV by 25%.",
+        badge: "Highest Brand Loyalty",
+        color: "#38bdf8",
+        hookText: "💡 Bundle Idea: Suggest combining Semaglutide + BPC-157 in email drafts to speed up training recovery while optimizing metabolic research!"
+      };
+    }
+    if (n.includes('bpc-157') || n.includes('bpc157')) {
+      return {
+        title: "🩹 BPC-157 Rapid Tissue Healing Hook",
+        desc: "Focus on gastric protection and cellular repair. Highlight that it is ideal for rapid joint/tendon research acceleration.",
+        badge: "Top Cross-Seller",
+        color: "#a78bfa",
+        hookText: "🧪 Cross-Sell Strategy: BPC-157 has a 45% natural cross-sell rate with sports recovery peptides. Suggest it as an add-on during checkout!"
+      };
+    }
+    return {
+      title: "🔬 Specialized Clinical Peptide Hook",
+      desc: "Promote certified clinical purity sheets and certified cold-chain shipping throughout Costa Rica to build high technical trust.",
+      badge: "Niche Research",
+      color: "#94a3b8",
+      hookText: "📡 Trust Builder: Include a direct download link to the COA (Certificate of Analysis) in outreach messages to overcome security doubts."
+    };
+  };
+
+  const simHook = getSimulatedHook(selectedSimPeptide);
 
   // Payment channels and Source metrics
   const paymentBreakdown = {};
@@ -1303,26 +1385,84 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         }
 
         .metric-card {
-          background: rgba(30, 41, 59, 0.45);
+          background: linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.9) 100%);
           border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 12px;
-          padding: 14px;
-          backdrop-filter: blur(10px);
+          border-radius: 16px;
+          padding: 16px;
+          backdrop-filter: blur(8px);
           position: relative;
           overflow: hidden;
-          transition: transform 0.2s ease, border-color 0.2s ease;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           cursor: pointer;
           -webkit-tap-highlight-color: transparent;
           user-select: none;
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
         }
 
         @media (min-width: 640px) {
-          .metric-card { padding: 20px; }
+          .metric-card { padding: 22px; }
         }
 
         .metric-card:hover {
-          transform: translateY(-2px);
-          border-color: rgba(255, 255, 255, 0.1);
+          transform: translateY(-4px);
+          box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+        }
+
+        /* Color accent borders & glowing backdrops */
+        .metric-green { border-color: rgba(52, 211, 153, 0.2); }
+        .metric-green:hover { border-color: rgba(52, 211, 153, 0.4); }
+        .metric-green::after {
+          content: '';
+          position: absolute;
+          top: -20px;
+          right: -20px;
+          width: 90px;
+          height: 90px;
+          background: radial-gradient(circle, rgba(52, 211, 153, 0.15) 0%, transparent 70%);
+          border-radius: 50%;
+          pointer-events: none;
+        }
+
+        .metric-blue { border-color: rgba(56, 189, 248, 0.2); }
+        .metric-blue:hover { border-color: rgba(56, 189, 248, 0.4); }
+        .metric-blue::after {
+          content: '';
+          position: absolute;
+          top: -20px;
+          right: -20px;
+          width: 90px;
+          height: 90px;
+          background: radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, transparent 70%);
+          border-radius: 50%;
+          pointer-events: none;
+        }
+
+        .metric-purple { border-color: rgba(167, 139, 250, 0.2); }
+        .metric-purple:hover { border-color: rgba(167, 139, 250, 0.4); }
+        .metric-purple::after {
+          content: '';
+          position: absolute;
+          top: -20px;
+          right: -20px;
+          width: 90px;
+          height: 90px;
+          background: radial-gradient(circle, rgba(167, 139, 250, 0.15) 0%, transparent 70%);
+          border-radius: 50%;
+          pointer-events: none;
+        }
+
+        .metric-amber { border-color: rgba(250, 204, 21, 0.2); }
+        .metric-amber:hover { border-color: rgba(250, 204, 21, 0.4); }
+        .metric-amber::after {
+          content: '';
+          position: absolute;
+          top: -20px;
+          right: -20px;
+          width: 90px;
+          height: 90px;
+          background: radial-gradient(circle, rgba(250, 204, 21, 0.15) 0%, transparent 70%);
+          border-radius: 50%;
+          pointer-events: none;
         }
 
         /* Metric card expanded detail panel */
@@ -1359,26 +1499,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           flex-shrink: 0;
         }
 
-        .metric-card::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 4px;
-          height: 100%;
-        }
-
-        .metric-blue::before { background: #38bdf8; }
-        .metric-purple::before { background: #a78bfa; }
-        .metric-green::before { background: #34d399; }
-        .metric-amber::before { background: #facc15; }
-
         .metric-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          color: #94a3b8;
-          font-size: 0.85rem;
+          color: #cbd5e1;
+          font-size: 0.8rem;
+          font-weight: 600;
           margin-bottom: 12px;
         }
 
@@ -1386,15 +1513,36 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           display: flex;
           align-items: center;
           justify-content: center;
-          width: 32px;
-          height: 32px;
-          border-radius: 8px;
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          transition: all 0.3s;
         }
 
-        .icon-blue { background: rgba(56, 189, 248, 0.1); color: #38bdf8; }
-        .icon-purple { background: rgba(167, 139, 250, 0.1); color: #a78bfa; }
-        .icon-green { background: rgba(52, 211, 153, 0.1); color: #34d399; }
-        .icon-amber { background: rgba(250, 204, 21, 0.1); color: #facc15; }
+        .icon-blue { 
+          background: rgba(56, 189, 248, 0.12); 
+          border: 1px solid rgba(56, 189, 248, 0.25);
+          color: #38bdf8; 
+          box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+        }
+        .icon-purple { 
+          background: rgba(167, 139, 250, 0.12); 
+          border: 1px solid rgba(167, 139, 250, 0.25);
+          color: #a78bfa; 
+          box-shadow: 0 0 15px rgba(167, 139, 250, 0.2);
+        }
+        .icon-green { 
+          background: rgba(52, 211, 153, 0.12); 
+          border: 1px solid rgba(52, 211, 153, 0.25);
+          color: #34d399; 
+          box-shadow: 0 0 15px rgba(52, 211, 153, 0.2);
+        }
+        .icon-amber { 
+          background: rgba(250, 204, 21, 0.12); 
+          border: 1px solid rgba(250, 204, 21, 0.25);
+          color: #facc15; 
+          box-shadow: 0 0 15px rgba(250, 204, 21, 0.2);
+        }
 
         .metric-value-primary {
           font-size: 1.3rem;
@@ -2968,6 +3116,170 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               </li>
             </ul>
           </div>
+        </div>
+      </div>
+
+
+      {/* 🧬 AI SALES RECOMMENDER & PROJECTION SIMULATOR */}
+      <div 
+        className="dashboard-section-card" 
+        style={{ 
+          marginTop: '20px', 
+          marginBottom: '20px', 
+          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.7) 100%)',
+          border: '1px solid rgba(56, 189, 248, 0.15)',
+          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)'
+        }}
+      >
+        <div className="section-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Atom size={18} style={{ color: '#38bdf8', filter: 'drop-shadow(0 0 8px rgba(56, 189, 248, 0.5))' }} />
+            <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc' }}>🧬 AI Peptide Sales Recommender & Projection Simulator</span>
+          </div>
+          <span style={{ 
+            fontSize: '0.65rem', 
+            fontWeight: 'bold', 
+            background: 'rgba(56, 189, 248, 0.12)', 
+            border: '1px solid rgba(56, 189, 248, 0.25)', 
+            color: '#38bdf8', 
+            padding: '3px 8px', 
+            borderRadius: '20px',
+            letterSpacing: '0.5px'
+          }}>
+            REAL-TIME DATA-BINDING
+          </span>
+        </div>
+
+        <p style={{ margin: '0 0 16px 0', fontSize: '0.8rem', color: '#94a3b8' }}>
+          Select any peptide to simulate traffic increases and view highly-converting, AI-suggested sales check-in blueprints tailored for that compound.
+        </p>
+
+        <div className="geo-cities-grid" style={{ alignItems: 'start' }}>
+          
+          {/* SIMULATOR CONTROLS & STATS */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'row', 
+              gap: '12px',
+              flexWrap: 'wrap'
+            }}>
+              {/* Select Product */}
+              <div style={{ flex: '1', minWidth: '180px' }}>
+                <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: 'bold', textTransform: 'uppercase' }}>Select Peptide</label>
+                <select 
+                  value={selectedSimPeptide} 
+                  onChange={(e) => setSelectedSimPeptide(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(15, 23, 42, 0.8)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    fontSize: '0.8rem',
+                    color: '#f8fafc',
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  {productMetrics.map(p => (
+                    <option key={p.name} value={p.name}>{p.name} ({p.views} views)</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Views Multiplier slider */}
+              <div style={{ flex: '1', minWidth: '180px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 'bold', textTransform: 'uppercase' }}>Traffic Projection</label>
+                  <span style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 'bold' }}>{projectedViewsMultiplier}x Views</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="1.0" 
+                  max="5.0" 
+                  step="0.5"
+                  value={projectedViewsMultiplier}
+                  onChange={(e) => setProjectedViewsMultiplier(parseFloat(e.target.value))}
+                  style={{
+                    width: '100%',
+                    accentColor: '#38bdf8',
+                    cursor: 'pointer',
+                    height: '6px',
+                    borderRadius: '3px',
+                    background: 'rgba(15, 23, 42, 0.8)'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* SIMULATED KPI SPLIT ROWS */}
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', 
+              gap: '10px'
+            }}>
+              {/* Box 1: Views Lift */}
+              <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Views</span>
+                <strong style={{ fontSize: '1.25rem', color: '#38bdf8', display: 'block', margin: '4px 0' }}>{simulatedViews}</strong>
+                <span style={{ fontSize: '0.65rem', color: '#64748b' }}>Current: {currentViews}</span>
+              </div>
+
+              {/* Box 2: Orders Lift */}
+              <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Orders</span>
+                <strong style={{ fontSize: '1.25rem', color: '#34d399', display: 'block', margin: '4px 0' }}>{simulatedPurchases}</strong>
+                <span style={{ fontSize: '0.65rem', color: '#64748b' }}>Rate: {currentConversion.toFixed(1)}%</span>
+              </div>
+
+              {/* Box 3: Projected Revenue */}
+              <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Revenue</span>
+                <strong style={{ fontSize: '1.25rem', color: '#facc15', display: 'block', margin: '4px 0' }}>${projectedRevenue.toLocaleString()}</strong>
+                <span style={{ fontSize: '0.65rem', color: '#64748b' }}>Lift: +${netLift}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* AI OUTREACH BLUEPRINT CARDS */}
+          <div style={{ 
+            background: 'rgba(15, 23, 42, 0.5)', 
+            border: `1px solid rgba(255,255,255,0.03)`,
+            padding: '16px', 
+            borderRadius: '16px',
+            position: 'relative'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#fff' }}>🎯 Technical Advisory Blueprint</span>
+              <span style={{ 
+                fontSize: '0.6rem', 
+                background: 'rgba(167, 139, 250, 0.12)', 
+                border: '1px solid rgba(167, 139, 250, 0.25)', 
+                color: '#a78bfa', 
+                padding: '2px 8px', 
+                borderRadius: '10px',
+                fontWeight: 'bold'
+              }}>
+                {simHook.badge}
+              </span>
+            </div>
+            <h5 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', color: '#f8fafc', fontWeight: 'bold' }}>{simHook.title}</h5>
+            <p style={{ margin: '0 0 12px 0', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>{simHook.desc}</p>
+            <div style={{ 
+              background: 'rgba(167, 139, 250, 0.06)', 
+              border: '1px solid rgba(167, 139, 250, 0.15)', 
+              padding: '10px 12px', 
+              borderRadius: '8px',
+              fontSize: '0.75rem',
+              color: '#c084fc',
+              lineHeight: '1.4',
+              fontStyle: 'italic'
+            }}>
+              {simHook.hookText}
+            </div>
+          </div>
+
         </div>
       </div>
 

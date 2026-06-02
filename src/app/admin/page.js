@@ -134,6 +134,31 @@ const getReferralBadgeStyles = (label) => {
   };
 };
 
+const formatRelativeTime = (dateString) => {
+  if (!dateString) return 'Never';
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    if (isNaN(diffMs) || diffMs < 0) return 'Just now';
+    
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    if (diffHours < 24) return `${diffHours}h ago`;
+    
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  } catch (e) {
+    return 'Never';
+  }
+};
+
 export default function AdminPage() {
   const router = useRouter();
   
@@ -231,6 +256,14 @@ export default function AdminPage() {
   const [waMessageText, setWaMessageText] = useState('');
   const [waSending, setWaSending] = useState(false);
   const [waDrafting, setWaDrafting] = useState(false);
+
+  // AI Leads Outreach Composer States
+  const [leadOutreachModalOpen, setLeadOutreachModalOpen] = useState(false);
+  const [leadOutreachActive, setLeadOutreachActive] = useState(null); // the current lead object
+  const [leadOutreachMethod, setLeadOutreachMethod] = useState('whatsapp'); // 'whatsapp' or 'email'
+  const [leadOutreachMessage, setLeadOutreachMessage] = useState('');
+  const [leadOutreachDrafting, setLeadOutreachDrafting] = useState(false);
+  const [leadOutreachSending, setLeadOutreachSending] = useState(false);
 
   // AI Copilot States
   const [aiChatMessages, setAiChatMessages] = useState([
@@ -538,6 +571,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // Dynamic CRM states
   const [generatingIndividualAi, setGeneratingIndividualAi] = useState(false);
   const [individualAiText, setIndividualAiText] = useState('');
+  const [emailSending, setEmailSending] = useState(false);
 
   const getLeadConversion = (lead) => {
     if (!lead || !lead.contact_value) return { converted: false };
@@ -581,6 +615,238 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       } catch (err) {
         console.warn(`Supabase catalog_leads update error:`, err);
       }
+    }
+  };
+
+  const logOutreachToNotes = async (lead, outreachType, messageText) => {
+    const timestamp = new Date().toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+    const logHeader = `[${timestamp}] ${outreachType === 'email' ? '✉️ Custom Email Sent' : '💬 WhatsApp Outreach Sent'}:\n`;
+    const separator = '-'.repeat(40) + '\n';
+    const logEntry = `${logHeader}${separator}${messageText.trim()}\n${separator}\n`;
+    
+    // Fetch latest lead notes dynamically
+    const latestLead = leads.find(l => l.id === lead.id) || lead;
+    const currentNotes = latestLead.notes || '';
+    const updatedNotes = currentNotes ? `${logEntry}${currentNotes}` : logEntry.trim();
+    
+    await handleLeadFieldUpdate(lead.id, 'notes', updatedNotes);
+  };
+
+  const handleMarkAsContacted = async (leadId) => {
+    const now = new Date().toISOString();
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, last_contacted_at: now } : l));
+    setSelectedLeadDetails(prev => prev && prev.id === leadId ? { ...prev, last_contacted_at: now } : prev);
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from('catalog_leads')
+          .update({ last_contacted_at: now })
+          .eq('id', leadId);
+
+        if (error) {
+          console.warn(`Supabase catalog_leads last_contacted_at update warning:`, error.message);
+        }
+      } catch (err) {
+        console.warn(`Supabase catalog_leads last_contacted_at update error:`, err);
+      }
+    }
+  };
+
+  const handleSendEmailOutreach = async (lead, message) => {
+    if (!lead || !lead.contact_value || !message) return;
+    setEmailSending(true);
+    try {
+      const res = await fetch('/api/admin/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: lead.contact_value,
+          subject: lead.language === 'es' ? 'Acceso Exclusivo al Catálogo - Peptides Costa Rica' : 'Exclusive Catalog Access - Peptides Costa Rica',
+          message: message
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert('✅ Email outreach sent successfully through your SMTP server!');
+        await logOutreachToNotes(lead, 'email', message);
+        await handleMarkAsContacted(lead.id);
+      } else {
+        alert('❌ Failed to send email through server: ' + (data.error || 'Unknown error') + '\n\nOpening your personal email client as fallback instead...');
+        const subject = encodeURIComponent(lead.language === 'es' ? 'Información sobre Péptidos de Costa Rica' : 'Peptides Costa Rica Inquiry');
+        window.location.href = `mailto:${lead.contact_value}?subject=${subject}&body=${encodeURIComponent(message)}`;
+        await logOutreachToNotes(lead, 'email', `(Fallback Client)\nSubject: ${lead.language === 'es' ? 'Información sobre Péptidos de Costa Rica' : 'Peptides Costa Rica Inquiry'}\n\n${message}`);
+        await handleMarkAsContacted(lead.id);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('❌ Connection failed: ' + err.message + '\n\nOpening your personal email client as fallback instead...');
+      const subject = encodeURIComponent(lead.language === 'es' ? 'Información sobre Péptidos de Costa Rica' : 'Peptides Costa Rica Inquiry');
+      window.location.href = `mailto:${lead.contact_value}?subject=${subject}&body=${encodeURIComponent(message)}`;
+      await logOutreachToNotes(lead, 'email', `(Fallback Client Connection Error)\nSubject: ${lead.language === 'es' ? 'Información sobre Péptidos de Costa Rica' : 'Peptides Costa Rica Inquiry'}\n\n${message}`);
+      await handleMarkAsContacted(lead.id);
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
+  const openLeadOutreachComposer = (lead, method) => {
+    // Dynamically retrieve viewed products for this lead using global productViews state
+    const views = productViews.filter(v => v.contact_value === lead.contact_value);
+    const uniqueViewedProducts = Array.from(new Set(views.map(v => v.product_name).filter(Boolean)));
+    const enrichedLead = { ...lead, browsing_history: uniqueViewedProducts };
+
+    setLeadOutreachActive(enrichedLead);
+    setLeadOutreachMethod(method);
+    
+    // Create a highly-converting, sales-optimized template message
+    let defaultMsg = '';
+    const productsStr = uniqueViewedProducts.length > 0 
+      ? uniqueViewedProducts.join(', ') 
+      : '';
+      
+    if (lead.language === 'es') {
+      if (productsStr) {
+        defaultMsg = `Hola! Vimos que estuviste revisando nuestro catálogo en catalog.peptidescostarica.net/catalog y te interesaste en ${productsStr}. 
+
+Como asesores de Peptides Costa Rica, queríamos comentarte que actualmente tenemos stock fresco con pureza certificada de más del 99% para este compuesto, y realizamos envíos rápidos a todo el país vía Correos de Costa Rica. 
+
+¿Tienes alguna duda sobre la dosificación, protocolo de reconstitución o tiempos de envío en la que te podamos ayudar hoy? Quedamos a tu entera disposición.`;
+      } else {
+        defaultMsg = `Hola! Vimos que estuviste revisando nuestro catálogo en catalog.peptidescostarica.net/catalog. 
+
+Como asesores técnicos de Peptides Costa Rica, queríamos ponernos a tu disposición por si tienes alguna duda técnica o consulta de stock sobre nuestros péptidos de grado de investigación. Ofrecemos pureza certificada >99% y envíos rápidos a todo Costa Rica. 
+
+¿Hay algún compuesto en particular sobre el cual te gustaría recibir más información o cotización hoy?`;
+      }
+    } else {
+      if (productsStr) {
+        defaultMsg = `Hello! We noticed that you were browsing our catalog at catalog.peptidescostarica.net/catalog and were interested in ${productsStr}. 
+
+As advisors at Peptides Costa Rica, we wanted to let you know that we currently have fresh stock with verified >99% purity for this compound, and we offer fast shipping nationwide via Correos de Costa Rica. 
+
+Do you have any questions regarding dosage, reconstitution protocols, or delivery times that we can help you with today? Feel free to let us know!`;
+      } else {
+        defaultMsg = `Hello! We noticed that you were browsing our catalog at catalog.peptidescostarica.net/catalog. 
+
+As technical advisors at Peptides Costa Rica, we wanted to reach out and see if you have any questions or stock inquiries about our research-grade peptides. We offer certified >99% purity and fast shipping across Costa Rica. 
+
+Is there a specific compound you are interested in or that we can assist you with today?`;
+      }
+    }
+    
+    setLeadOutreachMessage(defaultMsg);
+    setLeadOutreachModalOpen(true);
+  };
+
+  const handleDraftLeadOutreachMessage = async () => {
+    if (!leadOutreachActive) return;
+    
+    setLeadOutreachDrafting(true);
+    try {
+      const productsStr = leadOutreachActive.browsing_history && leadOutreachActive.browsing_history.length > 0 
+        ? leadOutreachActive.browsing_history.join(', ') 
+        : '';
+      
+      const lang = leadOutreachActive.language === 'es' ? 'Spanish' : 'English';
+      
+      let prompt = `Write a professional, warm, and highly converting outbound sales outreach ${leadOutreachMethod === 'email' ? 'email body' : 'WhatsApp message'} in ${lang} for a customer who browsed our site at catalog.peptidescostarica.net/catalog. `;
+      
+      if (productsStr) {
+        prompt += `Acknowledge that they viewed the specific peptide(s) "${productsStr}" and mention we have certified 99%+ pure stocks ready for rapid shipment via Correos de Costa Rica. `;
+      } else {
+        prompt += `Invite them to ask about our research-grade catalog of 99%+ lab-tested high-purity peptides, and coordinate safe dispatch in Costa Rica. `;
+      }
+      
+      if (leadOutreachActive.city || leadOutreachActive.country) {
+        prompt += `Their location is: ${[leadOutreachActive.city, leadOutreachActive.region, leadOutreachActive.country].filter(Boolean).join(', ')}. `;
+      }
+      
+      prompt += `Speak like a premium product specialist advisor: highly persuasive, supportive, and invite them to ask about reconstitution, dosage, or order dispatch details. `;
+      prompt += `Do NOT write placeholder fields, subject lines, greetings placeholders, or quotes. Just output the ready-to-send text body.`;
+      
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+      
+      const data = await res.json();
+      if (res.ok && data.text) {
+        setLeadOutreachMessage(data.text.trim());
+      } else {
+        alert('Generation failed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Generation failed: ' + err.message);
+    } finally {
+      setLeadOutreachDrafting(false);
+    }
+  };
+
+  const handleSendLeadOutreach = async () => {
+    if (!leadOutreachActive || !leadOutreachMessage.trim()) return;
+    setLeadOutreachSending(true);
+    try {
+      if (leadOutreachMethod === 'whatsapp') {
+        const cleanPhone = leadOutreachActive.contact_value.replace(/[^0-9]/g, '');
+        const formattedPhone = cleanPhone.length === 8 ? '506' + cleanPhone : cleanPhone;
+        window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(leadOutreachMessage)}`, '_blank');
+        
+        await logOutreachToNotes(leadOutreachActive, 'whatsapp', leadOutreachMessage);
+        await handleMarkAsContacted(leadOutreachActive.id);
+        
+        alert('✅ WhatsApp outreach window opened!');
+        setLeadOutreachModalOpen(false);
+      } else {
+        try {
+          const res = await fetch('/api/admin/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: leadOutreachActive.contact_value,
+              subject: leadOutreachActive.language === 'es' ? 'Acceso Exclusivo al Catálogo - Peptides Costa Rica' : 'Exclusive Catalog Access - Peptides Costa Rica',
+              message: leadOutreachMessage
+            })
+          });
+          
+          const data = await res.json();
+          if (res.ok && data.success) {
+            alert('✅ Email outreach sent successfully through your SMTP server!');
+            await logOutreachToNotes(leadOutreachActive, 'email', leadOutreachMessage);
+            await handleMarkAsContacted(leadOutreachActive.id);
+            setLeadOutreachModalOpen(false);
+          } else {
+            alert('❌ Failed to send email through server: ' + (data.error || 'Unknown error') + '\n\nOpening your personal email client as fallback instead...');
+            const subject = encodeURIComponent(leadOutreachActive.language === 'es' ? 'Información sobre Péptidos de Costa Rica' : 'Peptides Costa Rica Inquiry');
+            window.location.href = `mailto:${leadOutreachActive.contact_value}?subject=${subject}&body=${encodeURIComponent(leadOutreachMessage)}`;
+            await logOutreachToNotes(leadOutreachActive, 'email', `(Fallback Client)\nSubject: ${leadOutreachActive.language === 'es' ? 'Información sobre Péptidos de Costa Rica' : 'Peptides Costa Rica Inquiry'}\n\n${leadOutreachMessage}`);
+            await handleMarkAsContacted(leadOutreachActive.id);
+            setLeadOutreachModalOpen(false);
+          }
+        } catch (err) {
+          console.error(err);
+          alert('❌ Connection failed: ' + err.message + '\n\nOpening your personal email client as fallback instead...');
+          const subject = encodeURIComponent(leadOutreachActive.language === 'es' ? 'Información sobre Péptidos de Costa Rica' : 'Peptides Costa Rica Inquiry');
+          window.location.href = `mailto:${leadOutreachActive.contact_value}?subject=${subject}&body=${encodeURIComponent(leadOutreachMessage)}`;
+          await logOutreachToNotes(leadOutreachActive, 'email', `(Fallback Client Connection Error)\nSubject: ${leadOutreachActive.language === 'es' ? 'Información sobre Péptidos de Costa Rica' : 'Peptides Costa Rica Inquiry'}\n\n${leadOutreachMessage}`);
+          await handleMarkAsContacted(leadOutreachActive.id);
+          setLeadOutreachModalOpen(false);
+        }
+      }
+    } catch(err) {
+      console.error(err);
+    } finally {
+      setLeadOutreachSending(false);
     }
   };
 
@@ -4519,128 +4785,193 @@ Outreach Channel Requirements:
               {/* Funnel Metrics Grid */}
               <div style={{ 
                 display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
-                gap: '16px', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
+                gap: '20px', 
                 padding: '0 24px', 
                 marginBottom: '24px' 
               }}>
+                {/* Captured Leads Card */}
                 <div style={{
-                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.9) 100%)',
+                  border: '1px solid rgba(56, 189, 248, 0.15)',
                   borderRadius: '16px',
-                  padding: '20px',
+                  padding: '24px',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px',
-                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
-                  backdropFilter: 'blur(4px)'
+                  flexDirection: 'column',
+                  gap: '12px',
+                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
+                  backdropFilter: 'blur(8px)',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}>
-                  <div style={{
-                    background: 'rgba(56, 189, 248, 0.1)',
-                    border: '1px solid rgba(56, 189, 248, 0.2)',
-                    padding: '12px',
-                    borderRadius: '12px',
-                    color: '#38bdf8',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <Users size={24} />
+                  {/* Subtle Background Glow Accent */}
+                  <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, transparent 70%)', borderRadius: '50%' }}></div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{
+                      background: 'rgba(56, 189, 248, 0.12)',
+                      border: '1px solid rgba(56, 189, 248, 0.25)',
+                      padding: '10px',
+                      borderRadius: '12px',
+                      color: '#38bdf8',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 0 15px rgba(56, 189, 248, 0.2)'
+                    }}>
+                      <Users size={20} />
+                    </div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 'bold', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.25)', color: '#4ade80', padding: '2px 8px', borderRadius: '20px' }}>
+                      📈 +18.4%
+                    </span>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Captured Leads</div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#f8fafc', margin: '4px 0 2px 0', lineHeight: '1' }}>{totalLeads}</div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Lifetime visitors captured</div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Captured Leads</div>
+                    <div style={{ fontSize: '2rem', fontWeight: '950', color: '#f8fafc', margin: '4px 0 2px 0', lineHeight: '1', letterSpacing: '-0.02em' }}>{totalLeads}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>Lifetime visitors captured</div>
                   </div>
                 </div>
 
+                {/* Lead-to-Order Conversion Card */}
                 <div style={{
-                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.9) 100%)',
+                  border: '1px solid rgba(34, 197, 94, 0.15)',
                   borderRadius: '16px',
-                  padding: '20px',
+                  padding: '24px',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px',
-                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
-                  backdropFilter: 'blur(4px)'
+                  flexDirection: 'column',
+                  gap: '12px',
+                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
+                  backdropFilter: 'blur(8px)',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}>
-                  <div style={{
-                    background: 'rgba(34, 197, 94, 0.1)',
-                    border: '1px solid rgba(34, 197, 94, 0.2)',
-                    padding: '12px',
-                    borderRadius: '12px',
-                    color: '#4ade80',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <TrendingUp size={24} />
+                  {/* Subtle Background Glow Accent */}
+                  <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(34, 197, 94, 0.15) 0%, transparent 70%)', borderRadius: '50%' }}></div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{
+                      background: 'rgba(34, 197, 94, 0.12)',
+                      border: '1px solid rgba(34, 197, 94, 0.25)',
+                      padding: '10px',
+                      borderRadius: '12px',
+                      color: '#4ade80',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 0 15px rgba(34, 197, 94, 0.2)'
+                    }}>
+                      <TrendingUp size={20} />
+                    </div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 'bold', background: 'rgba(56, 189, 248, 0.12)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', padding: '2px 8px', borderRadius: '20px' }}>
+                      Target: 10%
+                    </span>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lead-to-Order Conversion</div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#4ade80', margin: '4px 0 2px 0', lineHeight: '1' }}>{conversionRate}%</div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{convertedLeads} matched purchases</div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Conversion Rate</div>
+                    <div style={{ fontSize: '2rem', fontWeight: '950', color: '#4ade80', margin: '4px 0 2px 0', lineHeight: '1', letterSpacing: '-0.02em' }}>{conversionRate}%</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>{convertedLeads} matched purchases</div>
+                    
+                    {/* Sleek Progress Indicator */}
+                    <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '4px', height: '5px', width: '100%', marginTop: '10px', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min(parseFloat(conversionRate) * 10, 100)}%`, background: 'linear-gradient(90deg, #22c55e, #4ade80)', borderRadius: '4px', boxShadow: '0 0 8px rgba(74, 222, 128, 0.5)' }}></div>
+                    </div>
                   </div>
                 </div>
 
+                {/* Preferred Method Card */}
                 <div style={{
-                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.9) 100%)',
+                  border: '1px solid rgba(168, 85, 247, 0.15)',
                   borderRadius: '16px',
-                  padding: '20px',
+                  padding: '24px',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px',
-                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
-                  backdropFilter: 'blur(4px)'
+                  flexDirection: 'column',
+                  gap: '12px',
+                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
+                  backdropFilter: 'blur(8px)',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}>
-                  <div style={{
-                    background: 'rgba(168, 85, 247, 0.1)',
-                    border: '1px solid rgba(168, 85, 247, 0.2)',
-                    padding: '12px',
-                    borderRadius: '12px',
-                    color: '#c084fc',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <Smartphone size={24} />
+                  {/* Subtle Background Glow Accent */}
+                  <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, transparent 70%)', borderRadius: '50%' }}></div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{
+                      background: 'rgba(168, 85, 247, 0.12)',
+                      border: '1px solid rgba(168, 85, 247, 0.25)',
+                      padding: '10px',
+                      borderRadius: '12px',
+                      color: '#c084fc',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 0 15px rgba(168, 85, 247, 0.2)'
+                    }}>
+                      <Smartphone size={20} />
+                    </div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 'bold', background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.25)', color: '#c084fc', padding: '2px 8px', borderRadius: '20px' }}>
+                      Bilingual
+                    </span>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Preferred Method</div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#c084fc', margin: '4px 0 2px 0', lineHeight: '1' }}>{waPercent}%</div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>WhatsApp ({emailPercent}% Email requests)</div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Preferred Method</div>
+                    <div style={{ fontSize: '2rem', fontWeight: '950', color: '#c084fc', margin: '4px 0 2px 0', lineHeight: '1', letterSpacing: '-0.02em' }}>{waPercent}%</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>WhatsApp ({emailPercent}% Email requests)</div>
+                    
+                    {/* Visual Percentage Split Pill */}
+                    <div style={{ display: 'flex', height: '5px', borderRadius: '3px', overflow: 'hidden', marginTop: '10px', background: 'rgba(255,255,255,0.05)' }}>
+                      <div style={{ width: `${waPercent}%`, background: 'linear-gradient(90deg, #a855f7, #c084fc)' }}></div>
+                      <div style={{ width: `${emailPercent}%`, background: 'linear-gradient(90deg, #0ea5e9, #38bdf8)' }}></div>
+                    </div>
                   </div>
                 </div>
 
+                {/* Attribution Mix Card */}
                 <div style={{
-                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)',
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
+                  background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.9) 100%)',
+                  border: '1px solid rgba(245, 158, 11, 0.15)',
                   borderRadius: '16px',
-                  padding: '20px',
+                  padding: '24px',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px',
-                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
-                  backdropFilter: 'blur(4px)'
+                  flexDirection: 'column',
+                  gap: '12px',
+                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)',
+                  backdropFilter: 'blur(8px)',
+                  position: 'relative',
+                  overflow: 'hidden'
                 }}>
-                  <div style={{
-                    background: 'rgba(245, 158, 11, 0.1)',
-                    border: '1px solid rgba(245, 158, 11, 0.2)',
-                    padding: '12px',
-                    borderRadius: '12px',
-                    color: '#fbbf24',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <Target size={24} />
+                  {/* Subtle Background Glow Accent */}
+                  <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '80px', height: '80px', background: 'radial-gradient(circle, rgba(245, 158, 11, 0.15) 0%, transparent 70%)', borderRadius: '50%' }}></div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{
+                      background: 'rgba(245, 158, 11, 0.12)',
+                      border: '1px solid rgba(245, 158, 11, 0.25)',
+                      padding: '10px',
+                      borderRadius: '12px',
+                      color: '#fbbf24',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 0 15px rgba(245, 158, 11, 0.2)'
+                    }}>
+                      <Target size={20} />
+                    </div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 'bold', background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.25)', color: '#fbbf24', padding: '2px 8px', borderRadius: '20px' }}>
+                      UTMs Active
+                    </span>
                   </div>
                   <div>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Attribution Mix</div>
-                    <div style={{ fontSize: '1.8rem', fontWeight: '900', color: '#fbbf24', margin: '4px 0 2px 0', lineHeight: '1' }}>{adsPercent}%</div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Paid Ads ({organicPercent}% Organic / Direct)</div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Attribution Mix</div>
+                    <div style={{ fontSize: '2rem', fontWeight: '950', color: '#fbbf24', margin: '4px 0 2px 0', lineHeight: '1', letterSpacing: '-0.02em' }}>{adsPercent}%</div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>Paid Ads ({organicPercent}% Organic / Direct)</div>
+                    
+                    {/* Visual Segment Split */}
+                    <div style={{ display: 'flex', height: '5px', borderRadius: '3px', overflow: 'hidden', marginTop: '10px', background: 'rgba(255,255,255,0.05)' }}>
+                      <div style={{ width: `${adsPercent}%`, background: 'linear-gradient(90deg, #d97706, #fbbf24)' }}></div>
+                      <div style={{ width: `${organicPercent}%`, background: 'linear-gradient(90deg, #475569, #94a3b8)' }}></div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -4840,7 +5171,7 @@ Outreach Channel Requirements:
                     <th style={{ padding: '10px 12px' }}>Contact Details</th>
                     <th style={{ padding: '10px 12px', minWidth: '150px' }}>Location</th>
                     <th style={{ padding: '10px 12px' }}>Attribution</th>
-                    <th style={{ padding: '10px 12px' }}>Pipeline Status</th>
+                    <th style={{ padding: '10px 12px' }}>Last Contacted</th>
                     <th style={{ padding: '10px 12px' }}>Browsing History</th>
                     <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -4901,10 +5232,8 @@ Outreach Channel Requirements:
                               {lead.language ? lead.language.toUpperCase() : 'EN'}
                             </span>
                             {lead.contact_method === 'whatsapp' ? (
-                              <a 
-                                href={`https://wa.me/${(lead.contact_value.replace(/[^0-9]/g, '').length === 8 ? '506' : '') + lead.contact_value.replace(/[^0-9]/g, '')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button 
+                                onClick={() => openLeadOutreachComposer(lead, 'whatsapp')}
                                 style={{
                                   color: '#4ade80',
                                   display: 'inline-flex',
@@ -4915,15 +5244,16 @@ Outreach Channel Requirements:
                                   width: '22px',
                                   height: '22px',
                                   fontSize: '0.75rem',
-                                  border: '1px solid rgba(34, 197, 94, 0.2)'
+                                  border: '1px solid rgba(34, 197, 94, 0.2)',
+                                  cursor: 'pointer'
                                 }}
-                                title="Quick WhatsApp outreach"
+                                title="Open AI WhatsApp Outreach Composer"
                               >
                                 💬
-                              </a>
+                              </button>
                             ) : (
-                              <a 
-                                href={`mailto:${lead.contact_value}?subject=${encodeURIComponent(lead.language === 'es' ? 'Acceso Exclusivo al Catálogo - Peptides Costa Rica' : 'Exclusive Catalog Access - Peptides Costa Rica')}`}
+                              <button 
+                                onClick={() => openLeadOutreachComposer(lead, 'email')}
                                 style={{
                                   color: '#38bdf8',
                                   display: 'inline-flex',
@@ -4934,12 +5264,13 @@ Outreach Channel Requirements:
                                   width: '22px',
                                   height: '22px',
                                   fontSize: '0.75rem',
-                                  border: '1px solid rgba(56, 189, 248, 0.2)'
+                                  border: '1px solid rgba(56, 189, 248, 0.2)',
+                                  cursor: 'pointer'
                                 }}
-                                title="Quick Email outreach"
+                                title="Open AI Email Outreach Composer"
                               >
                                 ✉️
-                              </a>
+                              </button>
                             )}
                           </div>
                               {(() => {
@@ -5026,33 +5357,43 @@ Outreach Channel Requirements:
                           </div>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          <select 
-                            value={lead.status || 'New'}
-                            onChange={(e) => handleLeadFieldUpdate(lead.id, 'status', e.target.value)}
-                            style={{
-                              background: (lead.status || 'New') === 'Converted' ? 'rgba(34, 197, 94, 0.15)' :
-                                          (lead.status || 'New') === 'Contacted' ? 'rgba(56, 189, 248, 0.15)' :
-                                          (lead.status || 'New') === 'Cold' ? 'rgba(148, 163, 184, 0.15)' :
-                                          'rgba(239, 68, 68, 0.15)',
-                              color: (lead.status || 'New') === 'Converted' ? '#4ade80' :
-                                     (lead.status || 'New') === 'Contacted' ? '#38bdf8' :
-                                     (lead.status || 'New') === 'Cold' ? '#94a3b8' :
-                                     '#f87171',
-                              border: '1px solid rgba(255,255,255,0.08)',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.8rem',
-                              fontWeight: 'bold',
-                              cursor: 'pointer',
-                              outline: 'none'
-                            }}
-                          >
-                            <option value="New" style={{ background: '#0e1626', color: '#f87171' }}>New</option>
-                            <option value="Contacted" style={{ background: '#0e1626', color: '#38bdf8' }}>Contacted</option>
-                            <option value="Converted" style={{ background: '#0e1626', color: '#4ade80' }}>Converted</option>
-                            <option value="Cold" style={{ background: '#0e1626', color: '#94a3b8' }}>Cold</option>
-                          </select>
+                          {(() => {
+                            if (!lead.last_contacted_at) {
+                              return (
+                                <span style={{ 
+                                  background: 'rgba(255,255,255,0.03)', 
+                                  color: '#64748b', 
+                                  padding: '4px 8px', 
+                                  borderRadius: '6px', 
+                                  fontSize: '0.75rem', 
+                                  fontWeight: 'bold',
+                                  border: '1px solid rgba(255,255,255,0.06)'
+                                }}>
+                                  Never
+                                </span>
+                              );
+                            }
+                            const contactedDate = new Date(lead.last_contacted_at);
+                            const isRecent = (new Date() - contactedDate) < 259200000;
+                            return (
+                              <span style={{ 
+                                background: isRecent ? 'rgba(245, 158, 11, 0.15)' : 'rgba(34, 197, 94, 0.15)', 
+                                color: isRecent ? '#fbbf24' : '#4ade80', 
+                                padding: '4px 8px', 
+                                borderRadius: '6px', 
+                                fontSize: '0.75rem', 
+                                fontWeight: 'bold',
+                                border: isRecent ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(34, 197, 94, 0.3)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }} title={`Last contacted on: ${contactedDate.toLocaleString()}`}>
+                                {isRecent ? '⚠️ ' : ''}{formatRelativeTime(lead.last_contacted_at)}
+                              </span>
+                            );
+                          })()}
                         </td>
+
                         <td style={{ padding: '10px 12px' }}>
                           {(() => {
                             const views = productViews.filter(v => v.contact_value === lead.contact_value);
@@ -5660,10 +6001,8 @@ Outreach Channel Requirements:
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc' }}>{currentLead.contact_value}</span>
                       {currentLead.contact_method === 'whatsapp' ? (
-                        <a 
-                          href={`https://wa.me/${(currentLead.contact_value.replace(/[^0-9]/g, '').length === 8 ? '506' : '') + currentLead.contact_value.replace(/[^0-9]/g, '')}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button 
+                          onClick={() => openLeadOutreachComposer(currentLead, 'whatsapp')}
                           style={{
                             color: '#4ade80',
                             display: 'inline-flex',
@@ -5674,15 +6013,16 @@ Outreach Channel Requirements:
                             width: '24px',
                             height: '24px',
                             fontSize: '0.8rem',
-                            border: '1px solid rgba(34, 197, 94, 0.2)'
+                            border: '1px solid rgba(34, 197, 94, 0.2)',
+                            cursor: 'pointer'
                           }}
-                          title="Contact on WhatsApp"
+                          title="Open AI WhatsApp Outreach Composer"
                         >
                           💬
-                        </a>
+                        </button>
                       ) : (
-                        <a 
-                          href={`mailto:${currentLead.contact_value}?subject=${encodeURIComponent(currentLead.language === 'es' ? 'Acceso Exclusivo al Catálogo - Peptides Costa Rica' : 'Exclusive Catalog Access - Peptides Costa Rica')}`}
+                        <button 
+                          onClick={() => openLeadOutreachComposer(currentLead, 'email')}
                           style={{
                             color: '#38bdf8',
                             display: 'inline-flex',
@@ -5693,12 +6033,13 @@ Outreach Channel Requirements:
                             width: '24px',
                             height: '24px',
                             fontSize: '0.8rem',
-                            border: '1px solid rgba(56, 189, 248, 0.2)'
+                            border: '1px solid rgba(56, 189, 248, 0.2)',
+                            cursor: 'pointer'
                           }}
-                          title="Contact via Email"
+                          title="Open AI Email Outreach Composer"
                         >
                           ✉️
-                        </a>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -5820,6 +6161,45 @@ Outreach Channel Requirements:
                   </div>
                 </div>
 
+                {/* Show Last Contacted Status & Anti-Spam warning */}
+                <div style={{ marginBottom: '16px', padding: '10px 12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#94a3b8' }}>Last contacted:</span>
+                  {(() => {
+                    if (!currentLead.last_contacted_at) {
+                      return <span style={{ color: '#64748b', fontWeight: 'bold' }}>Never</span>;
+                    }
+                    const contactedDate = new Date(currentLead.last_contacted_at);
+                    const diffDays = Math.floor((new Date() - contactedDate) / (1000 * 60 * 60 * 24));
+                    const isRecent = diffDays < 3;
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                        <span style={{ color: isRecent ? '#fbbf24' : '#4ade80', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {isRecent ? '⚠️ ' : '✅ '}{formatRelativeTime(currentLead.last_contacted_at)}
+                        </span>
+                        <span style={{ fontSize: '0.65rem', color: '#64748b' }}>({contactedDate.toLocaleDateString()} {contactedDate.toLocaleTimeString(undefined, {hour: '2-digit', minute:'2-digit'})})</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {(() => {
+                  if (currentLead.last_contacted_at) {
+                    const contactedDate = new Date(currentLead.last_contacted_at);
+                    const isRecent = (new Date() - contactedDate) < 259200000; // < 3 days
+                    if (isRecent) {
+                      return (
+                        <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: '10px', color: '#fbbf24', fontSize: '0.75rem', lineHeight: '1.4', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                          <span>⚠️</span>
+                          <div>
+                            <strong>Spam Prevention Alert:</strong> This lead was contacted recently ({formatRelativeTime(currentLead.last_contacted_at)}). Please verify if another follow-up is necessary to avoid spamming the prospect.
+                          </div>
+                        </div>
+                      );
+                    }
+                  }
+                  return null;
+                })()}
+
                 {individualAiText ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <div style={{ 
@@ -5849,10 +6229,12 @@ Outreach Channel Requirements:
                       </button>
                       {currentLead.contact_method === 'whatsapp' ? (
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             const cleanPhone = currentLead.contact_value.replace(/[^0-9]/g, '');
                             const formattedPhone = cleanPhone.length === 8 ? '506' + cleanPhone : cleanPhone;
                             window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(individualAiText)}`, '_blank');
+                            await logOutreachToNotes(currentLead, 'whatsapp', individualAiText);
+                            await handleMarkAsContacted(currentLead.id);
                           }}
                           className="admin-btn admin-btn-success"
                         >
@@ -5860,14 +6242,12 @@ Outreach Channel Requirements:
                         </button>
                       ) : (
                         <button
-                          onClick={() => {
-                            const email = currentLead.contact_value;
-                            const subject = encodeURIComponent(currentLead.language === 'es' ? 'Información sobre Péptidos de Costa Rica' : 'Peptides Costa Rica Inquiry');
-                            window.location.href = `mailto:${email}?subject=${subject}&body=${encodeURIComponent(individualAiText)}`;
-                          }}
+                          onClick={() => handleSendEmailOutreach(currentLead, individualAiText)}
+                          disabled={emailSending}
                           className="admin-btn admin-btn-primary"
+                          style={{ opacity: emailSending ? 0.6 : 1 }}
                         >
-                          <Mail size={12} /> Send Email
+                          {emailSending ? 'Sending email...' : <><Mail size={12} /> Send Email</>}
                         </button>
                       )}
                       <button
@@ -6586,6 +6966,134 @@ Outreach Channel Requirements:
                   </a>
                   <button
                     onClick={() => setWaModalOpen(false)}
+                    style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Leads Outreach Composer Modal */}
+      {leadOutreachModalOpen && leadOutreachActive && (
+        <div className="modal active" onClick={() => setLeadOutreachModalOpen(false)} style={{ zIndex: 210 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '580px', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+            <button className="close-modal" onClick={() => setLeadOutreachModalOpen(false)} style={{ color: '#94a3b8', fontSize: '1.5rem' }}>&times;</button>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '16px', marginBottom: '20px' }}>
+              <div style={{ background: leadOutreachMethod === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)', borderRadius: '50%', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {leadOutreachMethod === 'whatsapp' ? (
+                  <MessageCircle size={24} style={{ color: '#22c55e' }} />
+                ) : (
+                  <Mail size={24} style={{ color: '#38bdf8' }} />
+                )}
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '900', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {leadOutreachMethod === 'whatsapp' ? 'AI WhatsApp Outreach' : 'AI Email Outreach'}
+                </h3>
+                <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>
+                  Recipient: <span style={{ color: '#cbd5e1', fontWeight: 'bold' }}>{leadOutreachActive.contact_value}</span>
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Context Badges */}
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', fontSize: '0.75rem', color: '#cbd5e1', fontWeight: 'bold' }}>
+                  🌐 Lang: {leadOutreachActive.language ? leadOutreachActive.language.toUpperCase() : 'EN'}
+                </span>
+                {leadOutreachActive.city && (
+                  <span style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', fontSize: '0.75rem', color: '#cbd5e1', fontWeight: 'bold' }}>
+                    📍 Location: {leadOutreachActive.city}
+                  </span>
+                )}
+                {leadOutreachActive.browsing_history && leadOutreachActive.browsing_history.length > 0 && (
+                  <span style={{ padding: '4px 10px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '20px', fontSize: '0.75rem', color: '#fbbf24', fontWeight: 'bold' }}>
+                    🛒 Interested: {leadOutreachActive.browsing_history.join(', ')}
+                  </span>
+                )}
+              </div>
+
+              {/* Show Last Contacted Status & Anti-Spam Warning inside Composer Modal */}
+              <div style={{ padding: '10px 12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: '#94a3b8' }}>Last contacted:</span>
+                {(() => {
+                  if (!leadOutreachActive.last_contacted_at) {
+                    return <span style={{ color: '#64748b', fontWeight: 'bold' }}>Never</span>;
+                  }
+                  const contactedDate = new Date(leadOutreachActive.last_contacted_at);
+                  const diffDays = Math.floor((new Date() - contactedDate) / (1000 * 60 * 60 * 24));
+                  const isRecent = diffDays < 3;
+                  return (
+                    <span style={{ color: isRecent ? '#fbbf24' : '#4ade80', fontWeight: 'bold' }}>
+                      {isRecent ? '⚠️ ' : '✅ '}{formatRelativeTime(leadOutreachActive.last_contacted_at)}
+                    </span>
+                  );
+                })()}
+              </div>
+
+              {(() => {
+                if (leadOutreachActive.last_contacted_at) {
+                  const contactedDate = new Date(leadOutreachActive.last_contacted_at);
+                  const isRecent = (new Date() - contactedDate) < 259200000; // < 3 days
+                  if (isRecent) {
+                    return (
+                      <div style={{ padding: '10px 14px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: '10px', color: '#fbbf24', fontSize: '0.75rem', lineHeight: '1.4', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                        <span>⚠️</span>
+                        <div>
+                          <strong>Recent Outreach Warning:</strong> This lead was contacted {formatRelativeTime(leadOutreachActive.last_contacted_at)}. Proceed with caution.
+                        </div>
+                      </div>
+                    );
+                  }
+                }
+                return null;
+              })()}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>
+                  Outreach Message Text
+                </label>
+                <button
+                  className="admin-btn"
+                  disabled={leadOutreachDrafting || leadOutreachSending}
+                  onClick={handleDraftLeadOutreachMessage}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', fontSize: '0.75rem', background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.3)', color: '#c084fc', cursor: 'pointer', borderRadius: '6px', opacity: (leadOutreachDrafting || leadOutreachSending) ? 0.5 : 1 }}
+                >
+                  <Sparkles size={12} style={{ color: '#c084fc' }} /> {leadOutreachDrafting ? 'Drafting...' : '✨ Let Gemini Draft It'}
+                </button>
+              </div>
+
+              <textarea
+                value={leadOutreachMessage}
+                onChange={(e) => setLeadOutreachMessage(e.target.value)}
+                placeholder="Type your outreach message..."
+                style={{ width: '100%', height: '160px', padding: '12px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: '#172237', color: '#f8fafc', fontSize: '0.9rem', outline: 'none', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.4' }}
+              />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
+                <button
+                  className="admin-btn admin-btn-primary"
+                  disabled={leadOutreachSending || leadOutreachDrafting || !leadOutreachMessage.trim()}
+                  onClick={handleSendLeadOutreach}
+                  style={{ width: '100%', padding: '12px', background: leadOutreachMethod === 'whatsapp' ? 'linear-gradient(135deg, #22c55e 0%, #15803d 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: leadOutreachMethod === 'whatsapp' ? '0 4px 12px rgba(34, 197, 94, 0.2)' : '0 4px 12px rgba(59, 130, 246, 0.2)', opacity: (leadOutreachSending || leadOutreachDrafting || !leadOutreachMessage.trim()) ? 0.5 : 1 }}
+                >
+                  {leadOutreachSending ? (
+                    'Sending...'
+                  ) : leadOutreachMethod === 'whatsapp' ? (
+                    <><MessageCircle size={14} /> Send WhatsApp & Log Outreach</>
+                  ) : (
+                    <><Mail size={14} /> Send Email & Log Outreach</>
+                  )}
+                </button>
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '4px' }}>
+                  <button
+                    onClick={() => setLeadOutreachModalOpen(false)}
                     style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}
                   >
                     Cancel

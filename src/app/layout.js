@@ -38,6 +38,30 @@ export default function RootLayout({ children }) {
   return (
     <html lang="es" className={`${montserrat.variable} ${inter.variable}`} suppressHydrationWarning>
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                if (typeof window !== 'undefined') {
+                  const nativeRemoveChild = Node.prototype.removeChild;
+                  Node.prototype.removeChild = function(child) {
+                    if (child.parentNode !== this) {
+                      return child;
+                    }
+                    return nativeRemoveChild.apply(this, arguments);
+                  };
+                  const nativeInsertBefore = Node.prototype.insertBefore;
+                  Node.prototype.insertBefore = function(newNode, referenceNode) {
+                    if (referenceNode && referenceNode.parentNode !== this) {
+                      return newNode;
+                    }
+                    return nativeInsertBefore.apply(this, arguments);
+                  };
+                }
+              })();
+            `
+          }}
+        />
       </head>
       <body suppressHydrationWarning>
         {children}
