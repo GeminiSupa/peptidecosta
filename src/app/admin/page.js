@@ -256,6 +256,8 @@ export default function AdminPage() {
   const [waMessageText, setWaMessageText] = useState('');
   const [waSending, setWaSending] = useState(false);
   const [waDrafting, setWaDrafting] = useState(false);
+  const [waSelectedAgent, setWaSelectedAgent] = useState('');
+  const [waSelectedTemplate, setWaSelectedTemplate] = useState('standard');
 
   // AI Leads Outreach Composer States
   const [leadOutreachModalOpen, setLeadOutreachModalOpen] = useState(false);
@@ -2165,11 +2167,11 @@ Core Rules:
     }
   };
 
-  // 3. Open Custom WhatsApp Composer Modal
-  const openWhatsAppComposer = (recipient) => {
-    setWaRecipient(recipient);
+  // WhatsApp Template Generator Spanish
+  const generateWhatsAppTemplateText = (recipient, templateType, agentName) => {
+    if (!recipient) return '';
     
-    // Sanitize recipient name to prevent literal 'null', 'undefined', 'n/a', etc.
+    // Sanitize recipient name
     let cleanName = 'Cliente';
     if (recipient.name && typeof recipient.name === 'string') {
       const trimmed = recipient.name.trim();
@@ -2179,16 +2181,107 @@ Core Rules:
       }
     }
 
-    // Draft a basic template based on recipient context
-    let defaultMsg = `Hola ${cleanName}, `;
-    if (recipient.prefilledText) {
-      defaultMsg = recipient.prefilledText;
-    } else if (recipient.orderNumber) {
-      defaultMsg = `Hola ${cleanName}, te contactamos de Péptidos Costa Rica respecto a tu orden ${recipient.orderNumber}. ¿Todo bien?`;
-    } else if (recipient.cartItems) {
-      defaultMsg = `Hola ${cleanName}, vimos que dejaste algunos artículos en tu carrito de Péptidos Costa Rica. ¿Tienes alguna pregunta o necesitas ayuda para completar tu compra?`;
+    const agentSig = agentName ? agentName : 'asesor';
+    
+    // Format cart items
+    let itemsStr = 'tus artículos';
+    if (recipient.cartItems && recipient.cartItems.length > 0) {
+      itemsStr = recipient.cartItems.map(i => `${i.product || i.name || 'Péptido'} (x${i.qty || i.quantity || 1})`).join(', ');
     }
-    setWaMessageText(defaultMsg);
+
+    const recoveryLink = recipient.session_id 
+      ? `https://catalog.peptidescostarica.net/catalog?recover_session=${recipient.session_id}${agentName ? `&sales_agent=${encodeURIComponent(agentName)}` : ''}`
+      : 'https://catalog.peptidescostarica.net/catalog';
+
+    // 1. Check if recovering abandoned cart
+    if (recipient.cartItems) {
+      switch (templateType) {
+        case 'purity':
+          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷 
+
+Te contacto porque notamos tu interés en ${itemsStr}. Quería recordarte que todos nuestros péptidos cuentan con pureza certificada de laboratorio ≥98% HPLC para garantizar la máxima seguridad en tu investigación.
+
+Realizamos envíos rápidos a todo el país vía Correos de CR y coordinamos pagos seguros vía SINPE Móvil o tarjeta. ¿Te gustaría que te ayude a coordinar tu envío hoy?`;
+
+        case 'discount':
+          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+
+Queremos apoyarte en tus metas de salud y rendimiento. Por eso, si completas tu orden de ${itemsStr} hoy, puedes aplicar un 10% de descuento adicional utilizando el cupón especial COSTA10.
+
+Puedes recuperar tu carrito y aplicar tu cupón directamente ingresando aquí:
+👉 ${recoveryLink}
+
+Avísame si deseas que agilice tu orden directamente por este chat. ¡Quedo a tu total disposición!`;
+
+        case 'dosing':
+          return `¡Hola ${cleanName}! Te habla ${agentSig} de Peptides Costa Rica. 🇨🇷
+
+Vimos que estabas consultando por ${itemsStr}. Al adquirir péptidos en polvo, sabemos que la matemática de la reconstitución con agua bacteriostática y la dosificación correcta con jeringas de insulina puede ser confusa.
+
+Te ofrezco asesoría gratuita y directa sobre cómo prepararlos y administrarlos de forma segura. ¿Tienes alguna pregunta o te gustaría que preparemos tu envío hoy?`;
+
+        case 'standard':
+        default:
+          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+
+Notamos que dejaste algunos artículos en tu carrito (${itemsStr}). Quería ponerme a tu entera disposición por si tienes alguna consulta sobre la calidad del laboratorio, las formas de pago en Costa Rica, o si gustas que te coordine la entrega vía Correos de CR.
+
+Puedes finalizar tu orden de forma segura en este link:
+👉 ${recoveryLink}
+
+¡Quedo atento a tus mensajes!`;
+      }
+    } 
+    // 2. Order follow up
+    else if (recipient.orderNumber) {
+      switch (templateType) {
+        case 'purity':
+          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+
+Muchas gracias por tu compra de ${itemsStr} (Orden #${recipient.orderNumber}). Quería compartirte de forma directa nuestra guía digital de reconstitución, almacenamiento y uso seguro para que comiences tu protocolo de la mejor manera.
+
+¿Hay algo más en lo que te pueda asesorar o apoyar en este momento? ¡Un gusto atenderte!`;
+
+        case 'discount':
+          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+
+Te escribo para confirmarte que estamos preparando tu orden #${recipient.orderNumber} conteniendo ${itemsStr}. En las próximas horas te estaremos compartiendo el número de guía de Correos de Costa Rica para que puedas rastrear tu paquete.
+
+¡Muchas gracias por tu confianza en nosotros para tu investigación!`;
+
+        case 'standard':
+        default:
+          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+
+Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Queríamos verificar si todo marcha bien y si tienes alguna duda respecto al envío, las instrucciones de almacenamiento de los viales, o la dosificación.
+
+¡Quedo a tus órdenes para lo que necesites!`;
+      }
+    }
+
+    return `Hola ${cleanName}, te saluda ${agentSig} de Peptides Costa Rica. ¿Cómo te podemos ayudar hoy?`;
+  };
+
+  // 3. Open Custom WhatsApp Composer Modal
+  const openWhatsAppComposer = (recipient) => {
+    setWaRecipient(recipient);
+    
+    // Default Dynamic templates states
+    setWaSelectedTemplate('standard');
+    
+    let defaultAgent = '';
+    if (agents && agents.length > 0) {
+      const firstAgent = agents[0];
+      if (firstAgent && !firstAgent.includes('@')) {
+        defaultAgent = firstAgent;
+      }
+    }
+    setWaSelectedAgent(defaultAgent);
+
+    // Initial message based on standard template and default agent signature
+    const initialMsg = generateWhatsAppTemplateText(recipient, 'standard', defaultAgent);
+    setWaMessageText(initialMsg);
+    
     setWaModalOpen(true);
   };
 
@@ -6987,6 +7080,49 @@ Core Rules:
                   <strong style={{ color: '#fbbf24' }}>🛒 Cart/Order Items:</strong> {waRecipient.cartItems.map(item => `${item.product} (x${item.qty || item.quantity || 1})`).join(', ')}
                 </div>
               )}
+
+              {/* Dynamic Agent & Template Selectors */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '12px', borderRadius: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '0.65rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>
+                    Asignar Asesor (Firma y Comisión)
+                  </label>
+                  <select
+                    value={waSelectedAgent}
+                    onChange={(e) => {
+                      const agent = e.target.value;
+                      setWaSelectedAgent(agent);
+                      setWaMessageText(generateWhatsAppTemplateText(waRecipient, waSelectedTemplate, agent));
+                    }}
+                    style={{ background: '#172237', border: '1px solid rgba(255, 255, 255, 0.1)', color: 'white', borderRadius: '6px', padding: '6px', fontSize: '0.75rem', outline: 'none', cursor: 'pointer' }}
+                  >
+                    <option value="">Ninguno / Firma genérica</option>
+                    {agents && agents.map(aName => (
+                      <option key={aName} value={aName}>{aName}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '0.65rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>
+                    Plantilla de Conversión
+                  </label>
+                  <select
+                    value={waSelectedTemplate}
+                    onChange={(e) => {
+                      const template = e.target.value;
+                      setWaSelectedTemplate(template);
+                      setWaMessageText(generateWhatsAppTemplateText(waRecipient, template, waSelectedAgent));
+                    }}
+                    style={{ background: '#172237', border: '1px solid rgba(255, 255, 255, 0.1)', color: 'white', borderRadius: '6px', padding: '6px', fontSize: '0.75rem', outline: 'none', cursor: 'pointer' }}
+                  >
+                    <option value="standard">Standard Pitch (Ayuda y Link)</option>
+                    <option value="purity">Purity Guarantee (Calidad ≥98%)</option>
+                    <option value="discount">Discount Offer (10% Cupón COSTA10)</option>
+                    <option value="dosing">Dosing & Reconstitution Support</option>
+                  </select>
+                </div>
+              </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>

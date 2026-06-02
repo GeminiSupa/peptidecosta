@@ -434,6 +434,75 @@ export default function CatalogPage() {
       localStorage.setItem('catalog_access_granted', 'true');
     }
 
+    // Parse sales_agent query parameter and save to localStorage
+    const agentParam = urlParams.get('sales_agent');
+    if (agentParam) {
+      localStorage.setItem('checkout_sales_agent', agentParam);
+    }
+
+    // Parse recover_session query parameter and load abandoned cart details
+    const recoverSession = urlParams.get('recover_session');
+    if (recoverSession && isSupabaseConfigured && supabase) {
+      const loadRecoveredCart = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('abandoned_carts')
+            .select('*')
+            .eq('session_id', recoverSession)
+            .single();
+          
+          if (!error && data) {
+            if (data.cart_data && Array.isArray(data.cart_data) && data.cart_data.length > 0) {
+              setCart(data.cart_data);
+              localStorage.setItem('cart', JSON.stringify(data.cart_data));
+            }
+            
+            if (data.customer_name) {
+              setCustomerName(data.customer_name);
+              localStorage.setItem('checkout_customer_name', data.customer_name);
+            }
+            if (data.customer_phone) {
+              setCustomerPhone(data.customer_phone);
+              localStorage.setItem('checkout_customer_phone', data.customer_phone);
+              localStorage.setItem('catalog_lead_contact', data.customer_phone);
+            }
+            if (data.customer_email) {
+              setCustomerEmail(data.customer_email);
+              localStorage.setItem('checkout_customer_email', data.customer_email);
+              localStorage.setItem('catalog_lead_contact', data.customer_email);
+            }
+            
+            // Grant catalog access automatically
+            setGateAccessGranted(true);
+            localStorage.setItem('catalog_access_granted', 'true');
+            
+            // Save the session_id so future changes update this same record
+            setSessionId(recoverSession);
+            localStorage.setItem('cart_session_id', recoverSession);
+            
+            console.log("Successfully recovered cart session:", recoverSession);
+          }
+        } catch (err) {
+          console.error("Failed to recover cart:", err);
+        }
+      };
+      loadRecoveredCart();
+    }
+
+    // Clean up URL parameters if present to keep the address bar clean
+    if (agentParam || recoverSession) {
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          const cleanUrl = window.location.pathname + window.location.search
+            .replace(/&?recover_session=[^&]+/, '')
+            .replace(/&?sales_agent=[^&]+/, '')
+            .replace(/\?$/, '')
+            .replace(/\?&/, '?');
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
+      }, 1200);
+    }
+
 
     // Check for Tilopay redirect params
     const paymentParam = urlParams.get('payment');
@@ -1170,6 +1239,7 @@ export default function CatalogPage() {
           ip_address: customerMetadata?.ip_address || null,
           location_data: customerMetadata?.location_data || null,
           device_info: customerMetadata?.device_info || null,
+          sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
         });
       } catch (err) {
         console.error('Order pre-log failed:', err);
@@ -1508,6 +1578,7 @@ export default function CatalogPage() {
                   location_data: customerMetadata?.location_data || null,
                   device_info: customerMetadata?.device_info || null,
                   whatsapp_source: ppWaSource || null,
+                  sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
                 });
 
                 if (sid) {

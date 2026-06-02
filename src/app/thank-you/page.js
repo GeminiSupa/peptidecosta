@@ -8,6 +8,8 @@ import { safeLocalStorage as localStorage } from '@/lib/storage';
 function ThankYouContent() {
   const [lang, setLang] = useState('es');
   const [mounted, setMounted] = useState(false);
+  const [reviewClicked, setReviewClicked] = useState(false);
+  const [copiedReferral, setCopiedReferral] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -34,7 +36,16 @@ function ThankYouContent() {
       body1: "Your order has been received, thank you. We will be contacting you soon. Please expect slower response times on weekends or non working hours.",
       body2: "THANK YOU FOR YOUR BUSINESS, WE APPRECIATE IT!!!!!",
       button: "Return to Catalog",
-      notice: "Conversion goal tracked successfully"
+      notice: "Conversion goal tracked successfully",
+      reviewTitle: "⭐ Support Our Research, Get 15% Off!",
+      reviewBody: "Share your experience with Peptides Costa Rica. Leave us a 5-star Google Review and instantly unlock a 15% discount code for your next order.",
+      reviewButton: "Write Google Review",
+      reviewReveal: "🎉 Thank you! Use coupon code COSTA15 on your next order.",
+      referralTitle: "🧬 Ambassador Referral Program",
+      referralBody: "Share Peptides Costa Rica with a research colleague. If they buy, you both get a free Bacteriostatic Water added to your next package!",
+      referralCopy: "Copy Referral Link",
+      referralCopied: "Copied!",
+      referralWhatsapp: "Share on WhatsApp"
     },
     es: {
       title: "Orden Recibida",
@@ -42,7 +53,16 @@ function ThankYouContent() {
       body1: "Su pedido ha sido recibido, gracias. Nos pondremos en contacto con usted pronto. Por favor, espere tiempos de respuesta más lentos los fines de semana u horas no laborables.",
       body2: "¡¡¡¡¡MUCHAS GRACIAS POR SU COMPRA, APRECIAMOS ENORMEMENTE SU PREFERENCIA!!!!!",
       button: "Volver al Catálogo",
-      notice: "Meta de conversión registrada exitosamente"
+      notice: "Meta de conversión registrada exitosamente",
+      reviewTitle: "⭐ Apoye Nuestra Investigación, ¡Reciba 15% Off!",
+      reviewBody: "Comparta su experiencia con Péptidos Costa Rica. Déjenos una reseña de 5 estrellas en Google Maps e inmediatamente desbloqueará un código de 15% de descuento para su próxima orden.",
+      reviewButton: "Escribir Reseña en Google",
+      reviewReveal: "🎉 ¡Muchas gracias! Utilice el cupón COSTA15 en su próxima orden.",
+      referralTitle: "🧬 Programa de Embajadores",
+      referralBody: "Comparta Péptidos Costa Rica con un colega de investigación. Si realiza su compra, ¡ambos recibirán un Agua Bacteriostática gratis en su próximo pedido!",
+      referralCopy: "Copiar Enlace de Referido",
+      referralCopied: "¡Copiado!",
+      referralWhatsapp: "Compartir por WhatsApp"
     }
   };
 
@@ -255,7 +275,7 @@ function ThankYouContent() {
           border: '1px solid rgba(168, 85, 247, 0.25)',
           borderRadius: '16px',
           padding: '20px',
-          marginBottom: '36px',
+          marginBottom: '28px',
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)'
         }}>
           <p style={{
@@ -270,6 +290,154 @@ function ThankYouContent() {
             {t.body2}
           </p>
         </div>
+
+        {/* GROWTH LOOPS SECTION */}
+        {(() => {
+          const handleCopyLink = () => {
+            const refLink = `https://catalog.peptidescostarica.net/catalog?lang=${lang}&utm_source=referral`;
+            if (typeof navigator !== 'undefined' && navigator.clipboard) {
+              navigator.clipboard.writeText(refLink);
+            }
+            setCopiedReferral(true);
+            setTimeout(() => setCopiedReferral(false), 2000);
+          };
+
+          const getReferralWhatsappLink = () => {
+            const text = lang === 'en' 
+              ? `Hi! I highly recommend Peptides Costa Rica for certified research peptides (≥98% HPLC purity) and fast shipping. Check out their catalog: https://catalog.peptidescostarica.net/catalog?lang=en&utm_source=referral`
+              : `¡Hola! Te recomiendo este proveedor de péptidos en Costa Rica. Cuentan con pureza certificada de laboratorio (≥98% HPLC) y entrega local rápida. Puedes ver su catálogo aquí: https://catalog.peptidescostarica.net/catalog?lang=es&utm_source=referral`;
+            return `https://wa.me/?text=${encodeURIComponent(text)}`;
+          };
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '32px', textAlign: 'left' }}>
+              {/* Card 1: Google Reviews */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                borderRadius: '16px',
+                padding: '20px',
+                boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)',
+                backdropFilter: 'blur(5px)',
+                WebkitBackdropFilter: 'blur(5px)'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {t.reviewTitle}
+                </h4>
+                <p style={{ margin: '0 0 16px 0', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+                  {t.reviewBody}
+                </p>
+                
+                {!reviewClicked ? (
+                  <a 
+                    href="https://maps.app.goo.gl/RtDYM6HJz1Qwdkip7" 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    onClick={() => setReviewClicked(true)}
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <button style={{
+                      width: '100%',
+                      padding: '10px 16px',
+                      background: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)',
+                      border: 'none',
+                      borderRadius: '10px',
+                      color: '#070a13',
+                      fontWeight: 'bold',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      boxShadow: '0 4px 15px rgba(251, 191, 36, 0.2)'
+                    }}>
+                      {t.reviewButton}
+                    </button>
+                  </a>
+                ) : (
+                  <div style={{
+                    background: 'rgba(34, 197, 94, 0.06)',
+                    border: '1px solid rgba(34, 197, 94, 0.2)',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    fontSize: '0.8rem',
+                    color: '#4ade80',
+                    fontWeight: 'bold',
+                    textAlign: 'center'
+                  }}>
+                    {t.reviewReveal}
+                  </div>
+                )}
+              </div>
+
+              {/* Card 2: Ambassador Referrals */}
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.01) 100%)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                borderRadius: '16px',
+                padding: '20px',
+                boxShadow: '0 4px 30px rgba(0, 0, 0, 0.2)',
+                backdropFilter: 'blur(5px)',
+                WebkitBackdropFilter: 'blur(5px)'
+              }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {t.referralTitle}
+                </h4>
+                <p style={{ margin: '0 0 16px 0', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>
+                  {t.referralBody}
+                </p>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <button 
+                    onClick={handleCopyLink}
+                    style={{
+                      padding: '10px 16px',
+                      background: 'rgba(56, 189, 248, 0.06)',
+                      border: '1px solid rgba(56, 189, 248, 0.2)',
+                      borderRadius: '10px',
+                      color: '#38bdf8',
+                      fontWeight: 'bold',
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    {copiedReferral ? t.referralCopied : t.referralCopy}
+                  </button>
+                  
+                  <a 
+                    href={getReferralWhatsappLink()}
+                    target="_blank" 
+                    rel="noreferrer"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <button style={{
+                      width: '100%',
+                      padding: '10px 16px',
+                      background: 'rgba(34, 197, 94, 0.06)',
+                      border: '1px solid rgba(34, 197, 94, 0.2)',
+                      borderRadius: '10px',
+                      color: '#4ade80',
+                      fontWeight: 'bold',
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}>
+                      <Send size={12} /> {t.referralWhatsapp}
+                    </button>
+                  </a>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Button & Notice */}
         <div style={{
