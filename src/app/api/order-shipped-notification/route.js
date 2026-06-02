@@ -124,12 +124,8 @@ const buildCustomerShippedHtml = (order, totalPrimary, totalUsd, totalCrc, lang)
         <div style="background:linear-gradient(135deg, rgba(5,150,105,0.06), rgba(16,185,129,0.02));border:1px dashed rgba(5,150,105,0.25);border-radius:16px;padding:20px;text-align:center;">
           <h4 style="margin:0 0 6px;color:#047857;font-size:16px;font-weight:bold;">🔬 ${strings.supportTitle}</h4>
           <p style="margin:0 0 16px;color:#475569;font-size:13px;line-height:1.45;">${strings.supportText}</p>
-          <a href="https://wa.me/50684046973" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:bold;font-size:14px;box-shadow:0 2px 4px rgba(37,211,102,0.2);transition:transform 0.15s ease;">
-            <!-- Simple inline green bubble SVG for WhatsApp -->
-            <svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:middle;margin-right:6px;display:inline-block;fill:#ffffff;">
-              <path d="M12.031 2a9.967 9.967 0 00-9.953 9.953c0 1.93.55 3.73 1.5 5.27L2 22l4.91-1.28A9.917 9.917 0 0012.03 22c5.492 0 9.97-4.478 9.97-9.97C22 6.54 17.52 2.03 12.03 2.03zm5.72 13.06c-.24.68-1.2 1.25-1.63 1.29-.42.04-.84.22-2.73-.52a10.025 10.025 0 01-4.88-4.29c-.58-.8-1.03-1.77-1.03-2.78 0-2.02 1.05-3.02 1.43-3.41.3-.3.79-.47 1.23-.47.14 0 .28.01.39.01.33.02.5.04.72.56.28.66.95 2.31 1.03 2.48.08.17.14.37.02.6-.12.23-.18.37-.36.58-.18.2-.38.46-.54.62-.18.18-.37.38-.16.74.21.36.95 1.57 2.04 2.54 1.4 1.25 2.58 1.63 2.94 1.81.36.18.57.16.78-.08.21-.24.91-1.06 1.16-1.42.25-.36.5-.3.84-.18.34.12 2.16 1.02 2.53 1.21.37.19.62.29.7.43.09.15.09.84-.15 1.52z"/>
-            </svg>
-            ${strings.whatsappBtn}
+          <a href="https://api.whatsapp.com/send?phone=50684046973" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:bold;font-size:14px;box-shadow:0 2px 4px rgba(37,211,102,0.2);">
+            💬 ${strings.whatsappBtn}
           </a>
         </div>
 
@@ -173,6 +169,9 @@ export async function POST(request) {
         user: SMTP_USER,
         pass: SMTP_PASS,
       },
+      tls: {
+        rejectUnauthorized: false
+      }
     });
 
     const customerSubject = orderLang === 'en'

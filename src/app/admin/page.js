@@ -3635,6 +3635,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   >
                     <option value="All">All Statuses</option>
                     <option value="Pending">Pending</option>
+                    <option value="Payment Pending">Payment Pending</option>
                     <option value="Processing">Processing</option>
                     <option value="Order Complete">Order Complete</option>
                     <option value="Cancelled">Cancelled</option>
@@ -3737,15 +3738,16 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                                   borderRadius: '6px',
                                   fontSize: '0.75rem',
                                   width: '120px',
-                                  background: order.status === 'Order Complete' ? 'rgba(34, 197, 94, 0.15)' : order.status === 'Processing' ? 'rgba(56, 189, 248, 0.15)' : order.status === 'Cancelled' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                                  color: order.status === 'Order Complete' ? '#4ade80' : order.status === 'Processing' ? '#38bdf8' : order.status === 'Cancelled' ? '#f87171' : '#f59e0b',
+                                  background: order.status === 'Order Complete' ? 'rgba(34, 197, 94, 0.15)' : order.status === 'Processing' ? 'rgba(56, 189, 248, 0.15)' : order.status === 'Cancelled' ? 'rgba(239, 68, 68, 0.15)' : order.status === 'Payment Pending' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                  color: order.status === 'Order Complete' ? '#4ade80' : order.status === 'Processing' ? '#38bdf8' : order.status === 'Cancelled' ? '#f87171' : order.status === 'Payment Pending' ? '#fb7185' : '#f59e0b',
                                   fontWeight: 'bold',
-                                  border: order.status === 'Order Complete' ? '1px solid rgba(34, 197, 94, 0.3)' : order.status === 'Processing' ? '1px solid rgba(56, 189, 248, 0.3)' : order.status === 'Cancelled' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                                  border: order.status === 'Order Complete' ? '1px solid rgba(34, 197, 94, 0.3)' : order.status === 'Processing' ? '1px solid rgba(56, 189, 248, 0.3)' : order.status === 'Cancelled' ? '1px solid rgba(239, 68, 68, 0.3)' : order.status === 'Payment Pending' ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
                                   textAlign: 'center',
                                   cursor: 'pointer'
                                 }}
                               >
                                 <option value="Pending">Pending</option>
+                                <option value="Payment Pending">Payment Pending</option>
                                 <option value="Processing">Processing</option>
                                 <option value="Order Complete">Order Complete</option>
                                 <option value="Cancelled">Cancelled</option>
@@ -6527,8 +6529,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   <div>
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Order Status</label>
                     <span style={{ 
-                      background: (selectedOrderDetails.status === 'Completed' || selectedOrderDetails.status === 'Order Complete') ? 'rgba(34, 197, 94, 0.15)' : selectedOrderDetails.status === 'Paid' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                      color: (selectedOrderDetails.status === 'Completed' || selectedOrderDetails.status === 'Order Complete') ? '#4ade80' : selectedOrderDetails.status === 'Paid' ? '#38bdf8' : '#f59e0b',
+                      background: (selectedOrderDetails.status === 'Completed' || selectedOrderDetails.status === 'Order Complete') ? 'rgba(34, 197, 94, 0.15)' : (selectedOrderDetails.status === 'Paid' || selectedOrderDetails.status === 'Processing') ? 'rgba(56, 189, 248, 0.15)' : selectedOrderDetails.status === 'Cancelled' ? 'rgba(239, 68, 68, 0.15)' : selectedOrderDetails.status === 'Payment Pending' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                      color: (selectedOrderDetails.status === 'Completed' || selectedOrderDetails.status === 'Order Complete') ? '#4ade80' : (selectedOrderDetails.status === 'Paid' || selectedOrderDetails.status === 'Processing') ? '#38bdf8' : selectedOrderDetails.status === 'Cancelled' ? '#f87171' : selectedOrderDetails.status === 'Payment Pending' ? '#fb7185' : '#f59e0b',
                       padding: '4px 10px',
                       borderRadius: '20px',
                       fontSize: '0.75rem',

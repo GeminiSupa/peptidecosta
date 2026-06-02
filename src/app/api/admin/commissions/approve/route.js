@@ -75,6 +75,9 @@ export async function POST(request) {
           user: SMTP_USER,
           pass: SMTP_PASS,
         },
+        tls: {
+          rejectUnauthorized: false
+        }
       }) : null;
 
       if (transporter) {

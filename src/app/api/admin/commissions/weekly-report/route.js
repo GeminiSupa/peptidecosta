@@ -94,6 +94,9 @@ export async function GET(request) {
         user: SMTP_USER,
         pass: SMTP_PASS,
       },
+      tls: {
+        rejectUnauthorized: false
+      }
     }) : null;
 
     // 5. Calculate weekly gross sales and commissions for each agent
