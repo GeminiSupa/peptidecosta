@@ -45,7 +45,7 @@ export async function POST(request) {
     }
 
     // Dynamic checkout URL to allow recovery
-    const origin = request.headers.get('origin') || 'https://peptidecosta.vercel.app';
+    const origin = request.headers.get('origin') || 'https://catalog.peptidescostarica.net';
     const checkoutUrl = `${origin}/catalog?session_id=${session_id}&recovered=true`;
 
     // Sanitize customer name to prevent literal 'null', 'undefined', 'n/a', etc.

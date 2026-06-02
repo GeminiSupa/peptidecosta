@@ -4,7 +4,7 @@ const TILOPAY_BASE = process.env.TILOPAY_BASE_URL || 'https://app.tilopay.com';
 const TILOPAY_API_USER = process.env.TILOPAY_API_USER;
 const TILOPAY_API_PASS = process.env.TILOPAY_API_PASS;
 const TILOPAY_API_KEY = process.env.TILOPAY_API_KEY;
-const TILOPAY_REDIRECT_URL = process.env.TILOPAY_REDIRECT_URL || 'https://peptidecosta.vercel.app/catalog';
+const TILOPAY_REDIRECT_URL = process.env.TILOPAY_REDIRECT_URL || 'https://catalog.peptidescostarica.net/catalog';
 
 const SUPPORTED_METHODS = ['tilopay', 'sinpe', 'sinpemovil'];
 

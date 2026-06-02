@@ -42,7 +42,7 @@ export async function GET() {
     type: 1, // One-time use
     description: 'Costa Peptides Order ' + uniqueOrder,
     client: 'Test User',
-    callback_url: 'https://peptidecosta.vercel.app/catalog',
+    callback_url: 'https://catalog.peptidescostarica.net/catalog',
   };
 
   const results = {};

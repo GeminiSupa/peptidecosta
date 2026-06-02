@@ -102,7 +102,7 @@ const buildRecoveryHtml = (cartData, customerName, checkoutUrl, currency, lang) 
       
       <!-- Premium Science Theme Header Banner -->
       <div style="background:linear-gradient(135deg, #0f172a, #022c22);padding:32px 24px;text-align:center;">
-        <img src="https://peptidecosta.vercel.app/logo.png" alt="Peptides Costa Rica" style="max-height:48px;border-radius:8px;margin-bottom:16px;background:rgba(255,255,255,0.08);padding:4px;">
+        <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height:48px;border-radius:8px;margin-bottom:16px;background:rgba(255,255,255,0.08);padding:4px;">
         <h1 style="color:#ffffff;font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-0.5px;">${strings.title}</h1>
       </div>
 
@@ -195,7 +195,7 @@ export async function POST(request) {
       : `¿Olvidaste algo? 🧪 ¡Tu carrito de Péptidos Costa Rica te espera!`;
 
     // Dynamic checkout URL
-    const origin = request.headers.get('origin') || 'https://peptidecosta.vercel.app';
+    const origin = request.headers.get('origin') || 'https://catalog.peptidescostarica.net';
     const checkoutUrl = `${origin}/catalog?session_id=${session_id}&recovered=true`;
 
     // Sanitize customer name to prevent literal 'null', 'undefined', 'n/a', etc.
@@ -214,8 +214,8 @@ export async function POST(request) {
       isEn ? 'We saved your cart for you!' : '¡Guardamos tu carrito para ti!',
       '',
       isEn 
-        ? `Hi ${cleanCustomerName || 'there'}, we noticed you left some items in your cart. You can complete your purchase using the following link:` 
-        : `Hola ${cleanCustomerName || 'Hola'}, notamos que dejaste algunos artículos en tu carrito. Puedes completar tu compra usando el siguiente enlace:`,
+      ? `Hi ${cleanCustomerName || 'there'}, we noticed you left some items in your cart. You can complete your purchase using the following link:` 
+      : `Hola ${cleanCustomerName || 'Hola'}, notamos que dejaste algunos artículos en tu carrito. Puedes completar tu compra usando el siguiente enlace:`,
       checkoutUrl,
       '',
       isEn ? 'Items in your cart:' : 'Artículos en tu carrito:',
@@ -227,7 +227,8 @@ export async function POST(request) {
     ].join('\n');
 
     const mailInfo = await transporter.sendMail({
-      from: NOTIFICATION_FROM,
+      from: `Peptides Costa Rica <info@peptidescostarica.net>`,
+      replyTo: 'info@peptidescostarica.net',
       to: customer_email.trim(),
       subject: customerSubject,
       html: recoveryHtml,

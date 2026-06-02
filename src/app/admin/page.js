@@ -571,6 +571,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // Dynamic CRM states
   const [generatingIndividualAi, setGeneratingIndividualAi] = useState(false);
   const [individualAiText, setIndividualAiText] = useState('');
+  const [isLocalAiDraft, setIsLocalAiDraft] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
 
   const getLeadConversion = (lead) => {
@@ -715,31 +716,15 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       
     if (lead.language === 'es') {
       if (productsStr) {
-        defaultMsg = `Hola! Vimos que estuviste revisando nuestro catálogo en catalog.peptidescostarica.net/catalog y te interesaste en ${productsStr}. 
-
-Como asesores de Peptides Costa Rica, queríamos comentarte que actualmente tenemos stock fresco con pureza certificada de más del 99% para este compuesto, y realizamos envíos rápidos a todo el país vía Correos de Costa Rica. 
-
-¿Tienes alguna duda sobre la dosificación, protocolo de reconstitución o tiempos de envío en la que te podamos ayudar hoy? Quedamos a tu entera disposición.`;
+        defaultMsg = `¡Hola! 👋 Vimos que estuviste revisando nuestro catálogo de péptidos y te interesaste en *${productsStr}*. 🧪\n\n¿Tienes alguna duda sobre la reconstitución, dosis o envíos express en Costa Rica? \n\nPuedes volver al catálogo en catalog.peptidescostarica.net/catalog o respondernos aquí mismo para coordinar por WhatsApp. ¡Usa el cupón *COSTA10* para un 10% de descuento!`;
       } else {
-        defaultMsg = `Hola! Vimos que estuviste revisando nuestro catálogo en catalog.peptidescostarica.net/catalog. 
-
-Como asesores técnicos de Peptides Costa Rica, queríamos ponernos a tu disposición por si tienes alguna duda técnica o consulta de stock sobre nuestros péptidos de grado de investigación. Ofrecemos pureza certificada >99% y envíos rápidos a todo Costa Rica. 
-
-¿Hay algún compuesto en particular sobre el cual te gustaría recibir más información o cotización hoy?`;
+        defaultMsg = `¡Hola! 👋 Vimos que estuviste revisando nuestro catálogo de péptidos en catalog.peptidescostarica.net/catalog. 🧪\n\n¿Tienes alguna consulta técnica o sobre stock en la que te podamos ayudar hoy?\n\nPuedes respondernos aquí mismo para coordinar por WhatsApp o volver al catálogo para completar tu orden con un 10% de descuento usando el cupón: *COSTA10*.`;
       }
     } else {
       if (productsStr) {
-        defaultMsg = `Hello! We noticed that you were browsing our catalog at catalog.peptidescostarica.net/catalog and were interested in ${productsStr}. 
-
-As advisors at Peptides Costa Rica, we wanted to let you know that we currently have fresh stock with verified >99% purity for this compound, and we offer fast shipping nationwide via Correos de Costa Rica. 
-
-Do you have any questions regarding dosage, reconstitution protocols, or delivery times that we can help you with today? Feel free to let us know!`;
+        defaultMsg = `Hi there! 👋 We noticed you were browsing our peptide catalog and were interested in *${productsStr}*. 🧪\n\nDo you have any research questions regarding reconstitution, dosages, or express shipping in Costa Rica?\n\nYou can return to catalog.peptidescostarica.net/catalog to complete your order or simply reply here to coordinate via WhatsApp. Use coupon *COSTA10* for 10% off!`;
       } else {
-        defaultMsg = `Hello! We noticed that you were browsing our catalog at catalog.peptidescostarica.net/catalog. 
-
-As technical advisors at Peptides Costa Rica, we wanted to reach out and see if you have any questions or stock inquiries about our research-grade peptides. We offer certified >99% purity and fast shipping across Costa Rica. 
-
-Is there a specific compound you are interested in or that we can assist you with today?`;
+        defaultMsg = `Hi there! 👋 We noticed you were browsing our peptide catalog at catalog.peptidescostarica.net/catalog. 🧪\n\nDo you have any research questions or stock inquiries we can help you with today?\n\nFeel free to reply directly to this message to coordinate via WhatsApp, or return to our catalog to complete your purchase with 10% off using coupon: *COSTA10*.`;
       }
     }
     
@@ -758,20 +743,24 @@ Is there a specific compound you are interested in or that we can assist you wit
       
       const lang = leadOutreachActive.language === 'es' ? 'Spanish' : 'English';
       
-      let prompt = `Write a professional, warm, and highly converting outbound sales outreach ${leadOutreachMethod === 'email' ? 'email body' : 'WhatsApp message'} in ${lang} for a customer who browsed our site at catalog.peptidescostarica.net/catalog. `;
+      let prompt = `Write an extremely short, simple, warm, and highly converting outbound sales outreach ${leadOutreachMethod === 'email' ? 'email body' : 'WhatsApp message'} in ${lang} for a customer who browsed our site at catalog.peptidescostarica.net/catalog. 
+
+Core Rules:
+1. Keep the message extremely short and sweet (MAX 3-4 sentences total).
+2. The primary call-to-action is to get them to return to the catalog catalog.peptidescostarica.net/catalog or chat with us on WhatsApp at +506 8404 6973.
+3. Be professional and friendly. Avoid lengthy chemical explanations or overly dense medical details. Keep it focused on helping them finalize their research compounds.`;
       
       if (productsStr) {
-        prompt += `Acknowledge that they viewed the specific peptide(s) "${productsStr}" and mention we have certified 99%+ pure stocks ready for rapid shipment via Correos de Costa Rica. `;
+        prompt += `\n- The user was interested in: "${productsStr}". Mention we have certified 99%+ pure stocks ready for rapid shipment via Correos de Costa Rica.`;
       } else {
-        prompt += `Invite them to ask about our research-grade catalog of 99%+ lab-tested high-purity peptides, and coordinate safe dispatch in Costa Rica. `;
+        prompt += `\n- Invite them to ask about our research-grade catalog of 99%+ lab-tested high-purity peptides, and coordinate safe dispatch in Costa Rica.`;
       }
       
       if (leadOutreachActive.city || leadOutreachActive.country) {
-        prompt += `Their location is: ${[leadOutreachActive.city, leadOutreachActive.region, leadOutreachActive.country].filter(Boolean).join(', ')}. `;
+        prompt += `\n- Their location is: ${[leadOutreachActive.city, leadOutreachActive.region, leadOutreachActive.country].filter(Boolean).join(', ')}.`;
       }
       
-      prompt += `Speak like a premium product specialist advisor: highly persuasive, supportive, and invite them to ask about reconstitution, dosage, or order dispatch details. `;
-      prompt += `Do NOT write placeholder fields, subject lines, greetings placeholders, or quotes. Just output the ready-to-send text body.`;
+      prompt += `\n\nDo NOT write placeholder fields, subject lines, greetings placeholders, or quotes. Just output the ready-to-send text body.`;
       
       const res = await fetch('/api/ai', {
         method: 'POST',
@@ -850,34 +839,84 @@ Is there a specific compound you are interested in or that we can assist you wit
     }
   };
 
+  const generateLocalFallbackDraft = (lead, viewedProducts, location) => {
+    const isEs = lead.language === 'es';
+    const isWhatsApp = lead.contact_method === 'whatsapp';
+    const hasSpecificProducts = viewedProducts && !viewedProducts.includes('our scientific peptide catalog');
+    const firstProduct = hasSpecificProducts ? viewedProducts.split(',')[0].trim() : '';
+
+    if (isWhatsApp) {
+      if (isEs) {
+        return `¡Hola! 👋 Vimos que estuviste revisando nuestro catálogo de péptidos y te interesaste en *${firstProduct || 'nuestros compuestos'}*. 🧪
+
+¿Tienes alguna duda sobre la reconstitución, dosis o envíos express en Costa Rica? 
+
+Puedes volver al catálogo en catalog.peptidescostarica.net/catalog o respondernos directamente aquí para coordinar por WhatsApp. ¡Usa el cupón *COSTA10* para un 10% de descuento!`;
+      } else {
+        return `Hi there! 👋 We noticed you were browsing our peptide catalog and were interested in *${firstProduct || 'our compounds'}*. 🧪
+
+Do you have any research questions regarding reconstitution, dosages, or express shipping in Costa Rica?
+
+You can return to our catalog at catalog.peptidescostarica.net/catalog or reply directly here to coordinate via WhatsApp. Use coupon *COSTA10* for 10% off!`;
+      }
+    } else {
+      if (isEs) {
+        return `¡Hola! 👋
+
+Vimos que estuviste consultando información sobre *${viewedProducts}* en nuestro catálogo catalog.peptidescostarica.net/catalog. 🧪
+
+Queríamos ponernos a tu disposición por si tienes alguna duda técnica o consulta sobre stock. Realizamos envíos rápidos a todo el país vía Correos de Costa Rica.
+
+Puedes completar tu pedido en el catálogo o chatear directamente con nosotros por WhatsApp al +506 8404 6973. ¡Aprovecha un 10% de descuento usando el cupón **COSTA10**!
+
+Quedamos a tu entera disposición,
+
+Soporte - Peptides Costa Rica`;
+      } else {
+        return `Hi there! 👋
+
+We noticed you were browsing *${viewedProducts}* in our research catalog at catalog.peptidescostarica.net/catalog. 🧪
+
+We wanted to reach out in case you have any technical questions or stock inquiries. We offer certified purity >99% and fast shipping across Costa Rica.
+
+You can complete your purchase directly on our site or chat with us on WhatsApp at +506 8404 6973. Use coupon **COSTA10** for a 10% discount on your order!
+
+Best regards,
+
+Support - Peptides Costa Rica`;
+      }
+    }
+  };
+
   const handleGenerateIndividualAi = async (lead) => {
     if (!lead || !lead.contact_value) return;
     setGeneratingIndividualAi(true);
     setIndividualAiText('');
+    setIsLocalAiDraft(false);
+
+    let cleanPhoneOrEmail = lead.contact_value;
+    let location = [lead.city, lead.region, lead.country].filter(Boolean).join(', ') || 'Unknown';
+    let langLabel = lead.language === 'es' ? 'Spanish' : 'English';
+    let viewedProducts = 'our scientific peptide catalog';
 
     try {
       const views = productViews.filter(v => v.contact_value === lead.contact_value);
-      const viewedProducts = views.map(v => v.product_name).join(', ') || 'our scientific peptide catalog';
-      const cleanPhoneOrEmail = lead.contact_value;
-      const location = [lead.city, lead.region, lead.country].filter(Boolean).join(', ') || 'Unknown';
-      const langLabel = lead.language === 'es' ? 'Spanish' : 'English';
+      viewedProducts = views.map(v => v.product_name).join(', ') || 'our scientific peptide catalog';
 
-      const prompt = `You are an elite, highly professional scientific sales representative at Peptides Costa Rica.
-Draft a hyper-personalized outbound outreach message to a prospect who just requested catalog access but hasn't completed checkout yet.
+      const prompt = `You are a professional, warm product specialist advisor at Peptides Costa Rica.
+Draft a very short, sweet, and highly converting outbound outreach message to a prospect who browsed our site but hasn't completed checkout yet.
 
 Prospect Details:
 - Contact Method: ${lead.contact_method} (${cleanPhoneOrEmail})
-- Location: ${location}
-- Attribution: ${lead.utm_source ? `Source: ${lead.utm_source}, Campaign: ${lead.utm_campaign || 'N/A'}` : 'Organic/Direct'}
 - Preferred Language: ${langLabel}
-- Exact Catalog Browsing History: Viewed products: [${viewedProducts}]
+- Catalog Browsing History: Viewed products: [${viewedProducts}]
 
-Outreach Channel Requirements:
-- This is for ${lead.contact_method === 'whatsapp' ? 'WhatsApp (highly conversational, friendly yet professional, uses bullet points, concise, with direct call-to-actions)' : 'Email (includes a compelling subject line, structured, educational, research-focused, professional sign-off)'}.
-- Keep the tone exceptionally professional, consultative, and scientifically precise (acknowledging their interest in ${viewedProducts} without being creepy).
-- Provide a value hook: Answer scientific or metabolic benefits of the specific peptides they viewed (e.g. tissue repair for BPC-157, fat loss/appetite regulation for Semaglutide, collagen repair for skin peptides).
-- Provide a clear, polite closing offering them a direct consultation link or a custom 10% coupon code (COSTA10) to finalize their checkout on WhatsApp.
-- Write the response ENTIRELY in ${langLabel} and format it clearly. Do not write any preambles, greetings, or placeholders. Just output the final outreach text.`;
+Core Rules:
+1. Keep the message extremely short and simple (MAX 3-4 sentences total). No verbose fluff.
+2. Direct them to return to the catalog at catalog.peptidescostarica.net/catalog or chat with us on WhatsApp at +506 8404 6973.
+3. Offer a 10% coupon code: COSTA10 to finalize their purchase.
+4. Keep the tone warm, consultative, and supportive.
+5. Write the response ENTIRELY in ${langLabel}. Do NOT write subject lines, placeholders, or preambles. Just output the final outreach text.`;
 
       const res = await fetch('/api/ai', {
         method: 'POST',
@@ -890,13 +929,19 @@ Outreach Channel Requirements:
 
       const data = await res.json();
       if (res.ok && data.success) {
+        setIsLocalAiDraft(false);
         setIndividualAiText(data.text);
       } else {
-        alert('Failed to generate individual outreach: ' + (data.error || 'Unknown error'));
+        console.warn("Gemini API returned error. Triggering local backup engine.");
+        setIsLocalAiDraft(true);
+        const fallback = generateLocalFallbackDraft(lead, viewedProducts, location);
+        setIndividualAiText(fallback);
       }
     } catch (err) {
-      console.error(err);
-      alert('Failed to generate outreach: ' + err.message);
+      console.error("Gemini API call failed, generating local draft:", err);
+      setIsLocalAiDraft(true);
+      const fallback = generateLocalFallbackDraft(lead, viewedProducts, location);
+      setIndividualAiText(fallback);
     } finally {
       setGeneratingIndividualAi(false);
     }
@@ -6199,6 +6244,25 @@ Outreach Channel Requirements:
                   }
                   return null;
                 })()}
+
+                {isLocalAiDraft && individualAiText && (
+                  <div style={{ 
+                    marginBottom: '12px', 
+                    padding: '10px 12px', 
+                    background: 'rgba(56, 189, 248, 0.1)', 
+                    border: '1px solid rgba(56, 189, 248, 0.25)', 
+                    borderRadius: '8px', 
+                    color: '#38bdf8', 
+                    fontSize: '0.75rem', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px',
+                    lineHeight: '1.3'
+                  }}>
+                    <span>✨</span>
+                    <span><strong>Local Failover Engine Active:</strong> Gemini is currently busy. A target-aware, highly-converting research sales copy was generated locally to avoid interrupting your outreach.</span>
+                  </div>
+                )}
 
                 {individualAiText ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

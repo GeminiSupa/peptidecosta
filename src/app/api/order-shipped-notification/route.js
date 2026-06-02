@@ -66,7 +66,7 @@ const buildCustomerShippedHtml = (order, totalPrimary, totalUsd, totalCrc, lang)
       
       <!-- Premium Science Theme Header Banner -->
       <div style="background:linear-gradient(135deg, #0f172a, #022c22);padding:32px 24px;text-align:center;">
-        <img src="https://peptidecosta.vercel.app/logo.png" alt="Peptides Costa Rica" style="max-height:48px;border-radius:8px;margin-bottom:16px;background:rgba(255,255,255,0.08);padding:4px;">
+        <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height:48px;border-radius:8px;margin-bottom:16px;background:rgba(255,255,255,0.08);padding:4px;">
         <h1 style="color:#ffffff;font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-0.5px;">${strings.title}</h1>
         <p style="color:#a7f3d0;font-size:14px;margin:0;max-width:440px;margin:0 auto;line-height:1.4;">${strings.subtitle}</p>
       </div>

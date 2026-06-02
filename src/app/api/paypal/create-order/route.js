@@ -52,8 +52,8 @@ export async function POST(request) {
         brand_name: 'Peptides Costa Rica',
         landing_page: 'NO_PREFERENCE',
         user_action: 'PAY_NOW',
-        return_url: 'https://peptidecosta.vercel.app/catalog',
-        cancel_url: 'https://peptidecosta.vercel.app/catalog',
+        return_url: 'https://catalog.peptidescostarica.net/catalog',
+        cancel_url: 'https://catalog.peptidescostarica.net/catalog',
       },
     };
 
