@@ -717,16 +717,78 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       : '';
       
     if (lead.language === 'es') {
-      if (productsStr) {
-        defaultMsg = `¡Hola! 👋 Vimos que estuviste revisando nuestro catálogo de péptidos y te interesaste en *${productsStr}*. 🧪\n\n¿Tienes alguna duda sobre la reconstitución, dosis o envíos express en Costa Rica? \n\nPuedes volver al catálogo en catalog.peptidescostarica.net/catalog o respondernos aquí mismo para coordinar por WhatsApp. ¡Usa el cupón *COSTA10* para un 10% de descuento!`;
+      if (method === 'email') {
+        if (productsStr) {
+          defaultMsg = `¡Hola! 👋
+
+Vimos que estuviste revisando nuestro catálogo de péptidos y te interesaste en ${productsStr}. 🧪
+
+¿Tienes alguna duda sobre la reconstitución, dosis o envíos express en Costa Rica? 
+
+Puedes volver al catálogo para completar tu orden en https://catalog.peptidescostarica.net/catalog (¡usa el cupón *COSTA10* para un 10% de descuento!). 
+
+Si prefieres coordinar o realizar tus consultas por WhatsApp, puedes escribirnos directamente a nuestro WhatsApp de la compañía +506 8404-6973 haciendo clic en este enlace: https://wa.me/50684046973
+
+¡Pura vida!
+Peptides Costa Rica`;
+        } else {
+          defaultMsg = `¡Hola! 👋
+
+Vimos que estuviste revisando nuestro catálogo de péptidos en https://catalog.peptidescostarica.net/catalog. 🧪
+
+¿Tienes alguna consulta técnica o sobre stock en la que te podamos ayudar hoy?
+
+Puedes volver al catálogo para completar tu orden en https://catalog.peptidescostarica.net/catalog (¡usa el cupón *COSTA10* para un 10% de descuento!).
+
+Si prefieres coordinar o realizar tus consultas por WhatsApp, puedes escribirnos directamente a nuestro WhatsApp de la compañía +506 8404-6973 haciendo clic en este enlace: https://wa.me/50684046973
+
+¡Pura vida!
+Peptides Costa Rica`;
+        }
       } else {
-        defaultMsg = `¡Hola! 👋 Vimos que estuviste revisando nuestro catálogo de péptidos en catalog.peptidescostarica.net/catalog. 🧪\n\n¿Tienes alguna consulta técnica o sobre stock en la que te podamos ayudar hoy?\n\nPuedes respondernos aquí mismo para coordinar por WhatsApp o volver al catálogo para completar tu orden con un 10% de descuento usando el cupón: *COSTA10*.`;
+        // WhatsApp method
+        if (productsStr) {
+          defaultMsg = `¡Hola! 👋 Vimos que estuviste revisando nuestro catálogo de péptidos y te interesaste en *${productsStr}*. 🧪\n\n¿Tienes alguna duda sobre la reconstitución, dosis o envíos express en Costa Rica? \n\nPuedes volver al catálogo en catalog.peptidescostarica.net/catalog (usa el cupón *COSTA10* para un 10% de descuento) o responder a este WhatsApp de la compañía al +506 8404-6973 para coordinar de inmediato.`;
+        } else {
+          defaultMsg = `¡Hola! 👋 Vimos que estuviste revisando nuestro catálogo de péptidos en catalog.peptidescostarica.net/catalog. 🧪\n\n¿Tienes alguna consulta técnica o sobre stock en la que te podamos ayudar hoy?\n\nPuedes volver al catálogo para completar tu orden con un 10% de descuento usando el cupón: *COSTA10* o responder directamente a este WhatsApp de la compañía al +506 8404-6973.`;
+        }
       }
     } else {
-      if (productsStr) {
-        defaultMsg = `Hi there! 👋 We noticed you were browsing our peptide catalog and were interested in *${productsStr}*. 🧪\n\nDo you have any research questions regarding reconstitution, dosages, or express shipping in Costa Rica?\n\nYou can return to catalog.peptidescostarica.net/catalog to complete your order or simply reply here to coordinate via WhatsApp. Use coupon *COSTA10* for 10% off!`;
+      if (method === 'email') {
+        if (productsStr) {
+          defaultMsg = `Hi there! 👋
+
+We noticed you were browsing our peptide catalog and were interested in ${productsStr}. 🧪
+
+Do you have any research questions regarding reconstitution, dosages, or express shipping in Costa Rica?
+
+You can return to our catalog to complete your order at https://catalog.peptidescostarica.net/catalog (use coupon *COSTA10* for 10% off!).
+
+If you prefer to coordinate or ask questions via WhatsApp, you can chat with us directly at our company WhatsApp number +506 8404-6973 by clicking here: https://wa.me/50684046973
+
+Best regards,
+Peptides Costa Rica`;
+        } else {
+          defaultMsg = `Hi there! 👋
+
+We noticed you were browsing our peptide catalog at https://catalog.peptidescostarica.net/catalog. 🧪
+
+Do you have any research questions or stock inquiries we can help you with today?
+
+You can return to our catalog to complete your purchase at https://catalog.peptidescostarica.net/catalog (use coupon *COSTA10* for 10% off!).
+
+If you prefer to coordinate or ask questions via WhatsApp, you can chat with us directly at our company WhatsApp number +506 8404-6973 by clicking here: https://wa.me/50684046973
+
+Best regards,
+Peptides Costa Rica`;
+        }
       } else {
-        defaultMsg = `Hi there! 👋 We noticed you were browsing our peptide catalog at catalog.peptidescostarica.net/catalog. 🧪\n\nDo you have any research questions or stock inquiries we can help you with today?\n\nFeel free to reply directly to this message to coordinate via WhatsApp, or return to our catalog to complete your purchase with 10% off using coupon: *COSTA10*.`;
+        // WhatsApp method
+        if (productsStr) {
+          defaultMsg = `Hi there! 👋 We noticed you were browsing our peptide catalog and were interested in *${productsStr}*. 🧪\n\nDo you have any research questions regarding reconstitution, dosages, or express shipping in Costa Rica?\n\nYou can return to catalog.peptidescostarica.net/catalog (use coupon *COSTA10* for 10% off) or reply directly to this company WhatsApp number (+506 8404-6973) to coordinate.`;
+        } else {
+          defaultMsg = `Hi there! 👋 We noticed you were browsing our peptide catalog at catalog.peptidescostarica.net/catalog. 🧪\n\nDo you have any research questions or stock inquiries we can help you with today?\n\nYou can return to our catalog to complete your purchase with 10% off using coupon: *COSTA10* or reply directly to this company WhatsApp number (+506 8404-6973).`;
+        }
       }
     }
     
@@ -745,12 +807,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       
       const lang = leadOutreachActive.language === 'es' ? 'Spanish' : 'English';
       
-      let prompt = `Write an extremely short, simple, warm, and highly converting outbound sales outreach ${leadOutreachMethod === 'email' ? 'email body' : 'WhatsApp message'} in ${lang} for a customer who browsed our site at catalog.peptidescostarica.net/catalog. 
+      let prompt = `Write an extremely short, simple, warm, and highly converting outbound sales outreach ${leadOutreachMethod === 'email' ? 'email body' : 'WhatsApp message'} in ${lang} for a customer who browsed our site. 
 
 Core Rules:
 1. Keep the message extremely short and sweet (MAX 3-4 sentences total).
-2. The primary call-to-action is to get them to return to the catalog catalog.peptidescostarica.net/catalog or chat with us on WhatsApp at +506 8404 6973.
-3. Be professional and friendly. Avoid lengthy chemical explanations or overly dense medical details. Keep it focused on helping them finalize their research compounds.`;
+2. For WhatsApp outreach, include the catalog link (catalog.peptidescostarica.net/catalog) and mention the company WhatsApp number +506 8404-6973.
+3. For Email outreach, you MUST explicitly include both the catalog link (https://catalog.peptidescostarica.net/catalog) and a clickable direct link to WhatsApp (https://wa.me/50684046973) along with the company WhatsApp number (+506 8404-6973).
+4. Be professional and friendly. Avoid lengthy chemical explanations or overly dense medical details. Keep it focused on helping them finalize their research compounds.`;
       
       if (productsStr) {
         prompt += `\n- The user was interested in: "${productsStr}". Mention we have certified 99%+ pure stocks ready for rapid shipment via Correos de Costa Rica.`;
