@@ -1749,6 +1749,18 @@ export default function CatalogPage() {
         'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
         })(window,document,'script','dataLayer','GTM-M2GVDQ44');`}
       </Script>
+      {/* Global Promo Banner */}
+      <div className="promo-banner-global">
+        <div className="container promo-banner-content">
+          <Sparkles size={14} className="promo-icon" />
+          <span>
+            {lang === 'en' 
+              ? "Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed." 
+              : "Descuento por Volumen: ¡Compra 5+ viales obtén 15% de desc, compra 10+ viales obtén 20%! Permite combinar."
+            }
+          </span>
+        </div>
+      </div>
       {/* Static Top Header Section */}
       <header className="header-top-section">
         <div className="header-top container">
@@ -2042,7 +2054,6 @@ export default function CatalogPage() {
                       )}
                       {pSub && <span className="price-sub">{pSub}</span>}
                     </div>
-                    {p.discount && <div className="discount-badge">{translateDiscount(p.discount, lang)}</div>}
                     <div className="product-actions" style={{ marginTop: '10px', position: 'relative' }}>
                       {inStock ? (
                         <button 

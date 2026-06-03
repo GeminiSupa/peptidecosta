@@ -4832,3 +4832,43 @@ body {
     background: rgba(5, 11, 24, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.05);
 }
+
+/* Premium Global Promo Banner */
+.promo-banner-global {
+    background: linear-gradient(90deg, #002766 0%, #0040a8 50%, #002766 100%);
+    color: #ffffff;
+    text-align: center;
+    padding: 8px 16px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 39, 102, 0.15);
+    z-index: 999;
+    position: relative;
+}
+
+[data-theme="dark"] .promo-banner-global {
+    background: linear-gradient(90deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.promo-banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.promo-icon {
+    color: #38bdf8;
+    animation: promoPulse 2s infinite ease-in-out;
+}
+
+@keyframes promoPulse {
+    0%, 100% { opacity: 0.8; transform: scale(0.95); }
+    50% { opacity: 1; transform: scale(1.08); }
+}
