@@ -1213,6 +1213,24 @@ Core Rules:
 
   // Fetch admin products and orders
   const loadAdminData = async () => {
+    // Helper to bypass Supabase 1000 row limit
+    const fetchAllRows = async (table, orderCol, ascending = false, matchEq = null) => {
+      let allData = [];
+      let from = 0;
+      const step = 1000;
+      while (true) {
+        let q = supabase.from(table).select('*').order(orderCol, { ascending }).range(from, from + step - 1);
+        if (matchEq) q = q.eq(matchEq.col, matchEq.val);
+        const { data, error } = await q;
+        if (error) { console.error(`Error fetching ${table}:`, error); break; }
+        if (!data || data.length === 0) break;
+        allData = [...allData, ...data];
+        if (data.length < step) break;
+        from += step;
+      }
+      return allData;
+    };
+
     setLoadingProducts(true);
     setLoadingOrders(true);
     let loadedProducts = [];
@@ -1332,13 +1350,9 @@ Core Rules:
     // 2. Fetch Orders
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(25000);
+        const data = await fetchAllRows('orders', 'created_at', false);
 
-        if (!error && data) {
+        if (data) {
           setOrders(data);
         }
       } catch (err) {
@@ -1351,14 +1365,9 @@ Core Rules:
     setLoadingAbandonedCarts(true);
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('abandoned_carts')
-          .select('*')
-          .eq('status', 'active')
-          .order('last_updated', { ascending: false })
-          .limit(25000);
+        const data = await fetchAllRows('abandoned_carts', 'last_updated', false, { col: 'status', val: 'active' });
 
-        if (!error && data) {
+        if (data) {
           setAbandonedCarts(data);
         }
       } catch (err) {
@@ -1371,13 +1380,9 @@ Core Rules:
     setLoadingReviews(true);
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('product_reviews')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(25000);
+        const data = await fetchAllRows('product_reviews', 'created_at', false);
 
-        if (!error && data) {
+        if (data) {
           setReviews(data);
         }
       } catch (err) {
@@ -1390,13 +1395,9 @@ Core Rules:
     setLoadingLeads(true);
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('catalog_leads')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(25000);
+        const data = await fetchAllRows('catalog_leads', 'created_at', false);
 
-        if (!error && data) {
+        if (data) {
           // Enrich leads with local storage fallbacks if status/notes are absent or null
           const enriched = data.map(l => ({
             ...l,
@@ -1415,8 +1416,8 @@ Core Rules:
     setLoadingBlogs(true);
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase.from('blogs').select('*').order('created_at', { ascending: false });
-        if (!error && data) setBlogs(data);
+        const data = await fetchAllRows('blogs', 'created_at', false);
+        if (data) setBlogs(data);
       } catch (err) { console.error("Failed to load blogs:", err); }
     }
     setLoadingBlogs(false);
@@ -1458,8 +1459,8 @@ Core Rules:
     // 7. Fetch Product Views
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase.from('product_views').select('*').order('created_at', { ascending: false }).limit(25000);
-        if (!error && data) setProductViews(data);
+        const data = await fetchAllRows('product_views', 'created_at', false);
+        if (data) setProductViews(data);
       } catch (err) { console.error("Failed to load product views:", err); }
     }
 
@@ -1467,12 +1468,8 @@ Core Rules:
     setLoadingFbNotifications(true);
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('facebook_notifications')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(25000);
-        if (!error && data) {
+        const data = await fetchAllRows('facebook_notifications', 'created_at', false);
+        if (data) {
           setFacebookNotifications(data);
         }
       } catch (err) {
@@ -1485,12 +1482,8 @@ Core Rules:
     setLoadingWhatsappMessages(true);
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('whatsapp_messages')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(25000);
-        if (!error && data) {
+        const data = await fetchAllRows('whatsapp_messages', 'created_at', false);
+        if (data) {
           setWhatsappMessages(data);
         }
       } catch (err) {
