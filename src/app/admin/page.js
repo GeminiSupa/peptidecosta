@@ -1335,7 +1335,8 @@ Core Rules:
         const { data, error } = await supabase
           .from('orders')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(25000);
 
         if (!error && data) {
           setOrders(data);
@@ -1354,7 +1355,8 @@ Core Rules:
           .from('abandoned_carts')
           .select('*')
           .eq('status', 'active')
-          .order('last_updated', { ascending: false });
+          .order('last_updated', { ascending: false })
+          .limit(25000);
 
         if (!error && data) {
           setAbandonedCarts(data);
@@ -1372,7 +1374,8 @@ Core Rules:
         const { data, error } = await supabase
           .from('product_reviews')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(25000);
 
         if (!error && data) {
           setReviews(data);
@@ -1390,7 +1393,8 @@ Core Rules:
         const { data, error } = await supabase
           .from('catalog_leads')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(25000);
 
         if (!error && data) {
           // Enrich leads with local storage fallbacks if status/notes are absent or null
@@ -1454,7 +1458,7 @@ Core Rules:
     // 7. Fetch Product Views
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase.from('product_views').select('*').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('product_views').select('*').order('created_at', { ascending: false }).limit(25000);
         if (!error && data) setProductViews(data);
       } catch (err) { console.error("Failed to load product views:", err); }
     }
@@ -1466,7 +1470,8 @@ Core Rules:
         const { data, error } = await supabase
           .from('facebook_notifications')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(25000);
         if (!error && data) {
           setFacebookNotifications(data);
         }
@@ -1483,7 +1488,8 @@ Core Rules:
         const { data, error } = await supabase
           .from('whatsapp_messages')
           .select('*')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(25000);
         if (!error && data) {
           setWhatsappMessages(data);
         }
