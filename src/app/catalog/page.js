@@ -1751,14 +1751,27 @@ export default function CatalogPage() {
       </Script>
       {/* Global Promo Banner */}
       <div className="promo-banner-global">
-        <div className="container promo-banner-content">
-          <Sparkles size={14} className="promo-icon" />
-          <span>
-            {lang === 'en' 
-              ? "Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed." 
-              : "Descuento por Volumen: ¡Compra 5+ viales obtén 15% de desc, compra 10+ viales obtén 20%! Permite combinar."
-            }
-          </span>
+        <div className="promo-banner-ticker">
+          <div className="promo-banner-track">
+            <div className="promo-banner-text">
+              <Sparkles size={14} className="promo-icon" />
+              <span>
+                {lang === 'en'
+                  ? "Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed. • 🚚 FREE SHIPPING ON ORDERS OVER $200!"
+                  : "Descuento por Volumen: ¡Compra 5+ viales obtén 15% de desc, compra 10+ viales obtén 20%! Permite combinar. • 🚚 ¡ENVÍO GRATIS EN PEDIDOS SUPERIORES A $200!"
+                }
+              </span>
+            </div>
+            <div className="promo-banner-text">
+              <Sparkles size={14} className="promo-icon" />
+              <span>
+                {lang === 'en'
+                  ? "Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed. • 🚚 FREE SHIPPING ON ORDERS OVER $200!"
+                  : "Descuento por Volumen: ¡Compra 5+ viales obtén 15% de desc, compra 10+ viales obtén 20%! Permite combinar. • 🚚 ¡ENVÍO GRATIS EN PEDIDOS SUPERIORES A $200!"
+                }
+              </span>
+            </div>
+          </div>
         </div>
       </div>
       {/* Static Top Header Section */}

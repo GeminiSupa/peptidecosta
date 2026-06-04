@@ -4837,8 +4837,7 @@ body {
 .promo-banner-global {
     background: linear-gradient(90deg, #002766 0%, #0040a8 50%, #002766 100%);
     color: #ffffff;
-    text-align: center;
-    padding: 8px 16px;
+    padding: 8px 0;
     font-size: 0.82rem;
     font-weight: 700;
     letter-spacing: 0.3px;
@@ -4846,6 +4845,7 @@ body {
     box-shadow: 0 2px 8px rgba(0, 39, 102, 0.15);
     z-index: 999;
     position: relative;
+    overflow: hidden;
 }
 
 [data-theme="dark"] .promo-banner-global {
@@ -4853,14 +4853,24 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.promo-banner-content {
+.promo-banner-ticker {
+    overflow: hidden;
+    width: 100%;
+    display: flex;
+}
+
+.promo-banner-track {
+    display: flex;
+    white-space: nowrap;
+    animation: marqueeTicker 25s linear infinite;
+}
+
+.promo-banner-text {
     display: flex;
     align-items: center;
-    justify-content: center;
     gap: 8px;
-    flex-wrap: wrap;
-    max-width: 1200px;
-    margin: 0 auto;
+    padding-right: 80px;
+    flex-shrink: 0;
 }
 
 .promo-icon {
@@ -4871,4 +4881,13 @@ body {
 @keyframes promoPulse {
     0%, 100% { opacity: 0.8; transform: scale(0.95); }
     50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes marqueeTicker {
+    0% {
+        transform: translate3d(0, 0, 0);
+    }
+    100% {
+        transform: translate3d(-50%, 0, 0);
+    }
 }
