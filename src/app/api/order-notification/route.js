@@ -75,6 +75,15 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
     <h2 style="font-size:15px;font-weight:700;color:#0f172a;margin:0 0 8px;text-transform:uppercase;letter-spacing:0.5px;">Customer Profile</h2>
     <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
       <p style="margin:0 0 6px;font-size:14px;"><strong>Name:</strong> ${escapeHtml(order.customerName)}</p>
+      ${order.customerIdNumber ? `
+        <p style="margin:0 0 6px;font-size:14px;"><strong>ID:</strong> ${escapeHtml(order.customerIdNumber)} (${escapeHtml(
+          order.customerIdType === '1' ? 'National ID' :
+          order.customerIdType === '6' ? 'DIMEX' :
+          order.customerIdType === '5' ? 'Passport' :
+          order.customerIdType === '2' ? 'Corporate ID' :
+          order.customerIdType || 'N/A'
+        )})</p>
+      ` : ''}
       <p style="margin:0 0 6px;font-size:14px;"><strong>WhatsApp:</strong> <a href="https://wa.me/${(order.customerPhone || '').replace(/[^0-9]/g, '')}" style="color:#059669;text-decoration:none;font-weight:bold;">${escapeHtml(order.customerPhone || 'N/A')}</a></p>
       <p style="margin:0;font-size:14px;"><strong>Email:</strong> ${escapeHtml(order.customerEmail || 'N/A')}</p>
     </div>

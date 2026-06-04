@@ -122,6 +122,7 @@ export async function POST(req) {
     const billCountry  = 'CR';
 
     // ─── Step 2: Get Hosted Payment Form URL ──────────────────────────────────
+    const methodFields = buildTilopayMethodFields({ paymentMethod, customerIdType, customerIdNumber, shippingAddress });
     const paymentPayload = {
       key:          TILOPAY_API_KEY,
       amount:       currency === 'CRC' ? String(Math.round(amount)) : String(Number(amount).toFixed(2)),
@@ -131,6 +132,7 @@ export async function POST(req) {
       description:  `Costa Peptides Order ${orderNumber} (${paymentMethod})`,
       client:       `${firstName} ${lastName}`.trim(),
       callback_url: TILOPAY_REDIRECT_URL,
+      ...methodFields,
     };
 
     const paymentRes = await fetch(`${TILOPAY_BASE}/api/v1/createLinkPayment`, {

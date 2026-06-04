@@ -6570,6 +6570,20 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Ordered On</label>
                     <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{new Date(selectedOrderDetails.created_at).toLocaleString()}</span>
                   </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>ID Type</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+                      {selectedOrderDetails.customer_id_type === '1' ? 'National ID (Cédula física)' :
+                       selectedOrderDetails.customer_id_type === '6' ? 'DIMEX' :
+                       selectedOrderDetails.customer_id_type === '5' ? 'Passport' :
+                       selectedOrderDetails.customer_id_type === '2' ? 'Corporate ID (Cédula jurídica)' :
+                       selectedOrderDetails.customer_id_type || 'Not provided'}
+                    </span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>ID Number</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>{selectedOrderDetails.customer_id_number || 'Not provided'}</span>
+                  </div>
                 </div>
                 {selectedOrderDetails.shipping_address && (
                   <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>

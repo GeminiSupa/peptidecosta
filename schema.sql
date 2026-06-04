@@ -336,3 +336,8 @@ ON public.whatsapp_messages FOR DELETE TO authenticated USING (true);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_wa_id ON public.whatsapp_messages (wa_id);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_matched_order ON public.whatsapp_messages (matched_order_id);
 CREATE INDEX IF NOT EXISTS idx_orders_whatsapp_wa_id ON public.orders (whatsapp_wa_id);
+
+-- Add customer identification type and number to orders
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_id_type TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_id_number TEXT;
+

@@ -1,6 +1,7 @@
 "use client";
 
 import { safeLocalStorage as localStorage } from '@/lib/storage';
+import costaricaData from '@/lib/costarica.json';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
@@ -447,6 +448,8 @@ export default function CatalogPage() {
     const savedEmail = localStorage.getItem('checkout_customer_email') || '';
     const savedAddress = localStorage.getItem('checkout_shipping_address') || '';
     const leadContact = localStorage.getItem('catalog_lead_contact') || '';
+    const savedIdType = localStorage.getItem('checkout_customer_id_type') || '1';
+    const savedIdNumber = localStorage.getItem('checkout_customer_id_number') || '';
 
     // Load structured address fields
     const savedProvince = localStorage.getItem('checkout_shipping_province') || '';
@@ -456,6 +459,8 @@ export default function CatalogPage() {
     const savedZip = localStorage.getItem('checkout_shipping_zip') || '';
 
     if (savedName) setCustomerName(savedName);
+    if (savedIdType) setCustomerIdType(savedIdType);
+    if (savedIdNumber) setCustomerIdNumber(savedIdNumber);
     if (savedAddress) setShippingAddress(savedAddress);
 
     // Fallback: If savedAddress exists but savedProvince is empty, treat the whole savedAddress as detailed address
@@ -612,17 +617,24 @@ export default function CatalogPage() {
 
   // Synchronize flat shippingAddress string with structured input fields
   useEffect(() => {
-    if (shippingProvince || shippingCanton || shippingDistrict || shippingDetailedAddress || shippingZip) {
-      const parts = [];
-      if (shippingDetailedAddress) parts.push(shippingDetailedAddress.trim());
-      
-      const locationLine = [shippingDistrict, shippingCanton, shippingProvince].map(s => s.trim()).filter(Boolean).join(', ');
-      if (locationLine) parts.push(locationLine);
-      
-      if (shippingZip) parts.push(shippingZip.trim());
-      
-      setShippingAddress(parts.join('\n'));
+    const parts = [];
+    if (shippingDetailedAddress && shippingDetailedAddress.trim()) {
+      parts.push(shippingDetailedAddress.trim());
     }
+    
+    const locationLine = [shippingDistrict, shippingCanton, shippingProvince]
+      .map(s => (s || '').trim())
+      .filter(Boolean)
+      .join(', ');
+    if (locationLine) {
+      parts.push(locationLine);
+    }
+    
+    if (shippingZip && shippingZip.trim()) {
+      parts.push(shippingZip.trim());
+    }
+    
+    setShippingAddress(parts.join('\n'));
   }, [shippingProvince, shippingCanton, shippingDistrict, shippingDetailedAddress, shippingZip]);
 
   // Persist checkout details to localStorage as they type, to auto-prefill on future visits
@@ -645,8 +657,12 @@ export default function CatalogPage() {
       if (shippingDistrict) localStorage.setItem('checkout_shipping_district', shippingDistrict);
       if (shippingDetailedAddress) localStorage.setItem('checkout_shipping_detailed', shippingDetailedAddress);
       if (shippingZip) localStorage.setItem('checkout_shipping_zip', shippingZip);
+
+      // Save ID details
+      if (customerIdType) localStorage.setItem('checkout_customer_id_type', customerIdType);
+      if (customerIdNumber) localStorage.setItem('checkout_customer_id_number', customerIdNumber);
     }
-  }, [customerName, customerPhone, customerEmail, shippingAddress, shippingProvince, shippingCanton, shippingDistrict, shippingDetailedAddress, shippingZip]);
+  }, [customerName, customerPhone, customerEmail, shippingAddress, shippingProvince, shippingCanton, shippingDistrict, shippingDetailedAddress, shippingZip, customerIdType, customerIdNumber]);
 
   // Telemetry: Sync visitor session details to Supabase when session and metadata are ready
   useEffect(() => {
@@ -1279,8 +1295,7 @@ export default function CatalogPage() {
   const startTilopayCheckout = async (method) => {
     if (tilopaySubmitting || cart.length === 0) return;
 
-    const requiresSinpeId = method === 'sinpe';
-    if (!customerName || !customerEmail || !customerPhone || !shippingAddress || (requiresSinpeId && !customerIdNumber)) {
+    if (!customerName || !customerEmail || !customerPhone || !shippingAddress || !customerIdNumber) {
       return;
     }
 
@@ -1308,6 +1323,8 @@ export default function CatalogPage() {
           customer_phone: customerPhone,
           customer_email: customerEmail || null,
           shipping_address: shippingAddress,
+          customer_id_type: customerIdType,
+          customer_id_number: customerIdNumber,
           items: orderItems,
           total_usd: currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate),
           total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
@@ -1330,6 +1347,8 @@ export default function CatalogPage() {
       customerPhone,
       customerEmail,
       shippingAddress,
+      customerIdType,
+      customerIdNumber,
       items: orderItems,
       total: totalVal,
       totalUsd,
@@ -1385,7 +1404,7 @@ export default function CatalogPage() {
       // Tilopay is handled by its own button below — should not reach here
       return;
     }
-    if (!customerName || !customerPhone || !shippingAddress || cart.length === 0) return;
+    if (!customerName || !customerPhone || !shippingAddress || !customerIdNumber || cart.length === 0) return;
 
     setOrderSubmitting(true);
 
@@ -1417,6 +1436,8 @@ export default function CatalogPage() {
             customer_phone: customerPhone,
             customer_email: customerEmail || null,
             shipping_address: shippingAddress,
+            customer_id_type: customerIdType,
+            customer_id_number: customerIdNumber,
             items: orderItems,
             total_usd: currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate),
             total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
@@ -1449,6 +1470,8 @@ export default function CatalogPage() {
       customerPhone,
       customerEmail,
       shippingAddress,
+      customerIdType,
+      customerIdNumber,
       items: orderItems,
       total: totalVal,
       totalUsd,
@@ -1464,9 +1487,11 @@ export default function CatalogPage() {
       ? `*PEPTIDES COSTA RICA — NEW ORDER*`
       : `*PÉPTIDOS COSTA RICA — NUEVA ORDEN*`;
       
+    const idTypeName = customerIdType === '1' ? 'National ID' : customerIdType === '6' ? 'DIMEX' : customerIdType === '5' ? 'Passport' : customerIdType === '2' ? 'Corporate ID' : customerIdType;
+    const idTypeNameEs = customerIdType === '1' ? 'Cédula física' : customerIdType === '6' ? 'DIMEX' : customerIdType === '5' ? 'Pasaporte' : customerIdType === '2' ? 'Cédula jurídica' : customerIdType;
     const receiptDetails = lang === 'en'
-      ? `\n\n*Customer Details:*\n• Name: ${customerName}\n• Phone: ${customerPhone}\n• Address: ${shippingAddress}\n\n*Ordered Items:*`
-      : `\n\n*Detalles del Cliente:*\n• Nombre: ${customerName}\n• Teléfono: ${customerPhone}\n• Dirección: ${shippingAddress}\n\n*Artículos Pedidos:*`;
+      ? `\n\n*Customer Details:*\n• Name: ${customerName}\n• ID: ${customerIdNumber} (${idTypeName})\n• Phone: ${customerPhone}\n• Address: ${shippingAddress}\n\n*Ordered Items:*`
+      : `\n\n*Detalles del Cliente:*\n• Nombre: ${customerName}\n• Identificación: ${customerIdNumber} (${idTypeNameEs})\n• Teléfono: ${customerPhone}\n• Dirección: ${shippingAddress}\n\n*Artículos Pedidos:*`;
 
     const itemReceipts = cart.map(item => {
       const p = getPriceAsNumber(item, currency);
@@ -1661,6 +1686,8 @@ export default function CatalogPage() {
                   customer_name: cName || 'PayPal Customer',
                   customer_phone: cPhone || '',
                   shipping_address: sAddress || '',
+                  customer_id_type: customerIdType,
+                  customer_id_number: customerIdNumber,
                   items: orderItems,
                   total_usd: usdTotal,
                   total_crc: Math.round(usdTotal * rate),
@@ -1692,6 +1719,8 @@ export default function CatalogPage() {
               customerPhone: cPhone || '',
               customerEmail: cEmail || '',
               shippingAddress: sAddress || '',
+              customerIdType,
+              customerIdNumber,
               items: orderItems,
               total: usdTotal,
               totalUsd: usdTotal,
@@ -1724,6 +1753,8 @@ export default function CatalogPage() {
               localStorage.removeItem('checkout_shipping_district');
               localStorage.removeItem('checkout_shipping_detailed');
               localStorage.removeItem('checkout_shipping_zip');
+              localStorage.removeItem('checkout_customer_id_type');
+              localStorage.removeItem('checkout_customer_id_number');
             }
             
             // Redirect to the thank-you conversion page
@@ -2547,6 +2578,35 @@ export default function CatalogPage() {
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
               />
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', width: '100%', marginBottom: '12px' }}>
+                <div>
+                  <select
+                    className="checkout-input"
+                    value={customerIdType}
+                    onChange={(e) => setCustomerIdType(e.target.value)}
+                    style={{ appearance: 'auto', width: '100%' }}
+                    aria-label={lang === 'en' ? 'Identification type' : 'Tipo de identificación'}
+                  >
+                    <option value="1">{lang === 'en' ? 'National ID' : 'Cédula física'}</option>
+                    <option value="6">DIMEX</option>
+                    <option value="5">{lang === 'en' ? 'Passport' : 'Pasaporte'}</option>
+                    <option value="2">{lang === 'en' ? 'Corporate ID' : 'Cédula jurídica'}</option>
+                  </select>
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    className="checkout-input"
+                    placeholder={lang === 'en' ? 'ID Number' : 'Número de Identificación'}
+                    required
+                    value={customerIdNumber}
+                    onChange={(e) => setCustomerIdNumber(e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
               {/* Structured Address Builder for Costa Rica */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
@@ -2560,13 +2620,14 @@ export default function CatalogPage() {
                       onChange={(e) => {
                         setShippingProvince(e.target.value);
                         setShippingCanton('');
+                        setShippingDistrict('');
                       }}
                       required
                       style={{ cursor: 'pointer' }}
                     >
                       <option value="">-- {lang === 'en' ? 'Select Province' : 'Seleccionar Provincia'} --</option>
-                      {Object.keys(COSTA_RICA_TERRITORY).map((prov) => (
-                        <option key={prov} value={prov}>{prov}</option>
+                      {Object.values(costaricaData.provincias).map((prov) => (
+                        <option key={prov.nombre} value={prov.nombre}>{prov.nombre}</option>
                       ))}
                     </select>
                   </div>
@@ -2578,14 +2639,19 @@ export default function CatalogPage() {
                     <select
                       className="checkout-input"
                       value={shippingCanton}
-                      onChange={(e) => setShippingCanton(e.target.value)}
+                      onChange={(e) => {
+                        setShippingCanton(e.target.value);
+                        setShippingDistrict('');
+                      }}
                       disabled={!shippingProvince}
                       required
                       style={{ cursor: 'pointer' }}
                     >
                       <option value="">-- {lang === 'en' ? 'Select Canton' : 'Seleccionar Cantón'} --</option>
-                      {shippingProvince && COSTA_RICA_TERRITORY[shippingProvince]?.map((cant) => (
-                        <option key={cant} value={cant}>{cant}</option>
+                      {shippingProvince && Object.values(
+                        Object.values(costaricaData.provincias).find(p => p.nombre === shippingProvince)?.cantones || {}
+                      ).map((cant) => (
+                        <option key={cant.nombre} value={cant.nombre}>{cant.nombre}</option>
                       ))}
                     </select>
                   </div>
@@ -2596,14 +2662,23 @@ export default function CatalogPage() {
                     <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
                       {lang === 'en' ? 'District' : 'Distrito'} *
                     </label>
-                    <input
-                      type="text"
+                    <select
                       className="checkout-input"
-                      placeholder={lang === 'en' ? 'e.g. San Rafael' : 'ej. San Rafael'}
                       value={shippingDistrict}
                       onChange={(e) => setShippingDistrict(e.target.value)}
+                      disabled={!shippingCanton}
                       required
-                    />
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <option value="">-- {lang === 'en' ? 'Select District' : 'Seleccionar Distrito'} --</option>
+                      {shippingCanton && Object.values(
+                        Object.values(
+                          Object.values(costaricaData.provincias).find(p => p.nombre === shippingProvince)?.cantones || {}
+                        ).find(c => c.nombre === shippingCanton)?.distritos || {}
+                      ).map((dist) => (
+                        <option key={dist} value={dist}>{dist}</option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -2689,35 +2764,11 @@ export default function CatalogPage() {
                   </button>
                 ))}
               </div>
-              {paymentMethod === 'sinpe' && (
-                <div className="sinpe-id-grid">
-                  <select
-                    className="checkout-input"
-                    value={customerIdType}
-                    onChange={(e) => setCustomerIdType(e.target.value)}
-                    style={{ appearance: 'auto' }}
-                    aria-label={lang === 'en' ? 'Identification type' : 'Tipo de identificación'}
-                  >
-                    <option value="1">{lang === 'en' ? 'Costa Rican ID' : 'Cédula física'}</option>
-                    <option value="6">DIMEX</option>
-                    <option value="5">{lang === 'en' ? 'Passport / Foreign ID' : 'Pasaporte / extranjero'}</option>
-                    <option value="2">{lang === 'en' ? 'Company ID' : 'Cédula jurídica'}</option>
-                  </select>
-                  <input
-                    type="text"
-                    className="checkout-input"
-                    placeholder={lang === 'en' ? 'ID number for SINPE' : 'Identificación para SINPE'}
-                    required={paymentMethod === 'sinpe'}
-                    value={customerIdNumber}
-                    onChange={(e) => setCustomerIdNumber(e.target.value)}
-                  />
-                </div>
-              )}
               {paymentMethod === 'paypal' ? (
                 <div style={{ marginTop: '16px' }}>
-                  {(!customerName || !customerPhone || !shippingAddress) ? (
+                  {(!customerName || !customerPhone || !shippingAddress || !customerIdNumber) ? (
                     <div style={{ padding: '12px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.9rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-                      {lang === 'en' ? 'Please enter your name, phone number, and shipping address above to enable PayPal checkout.' : 'Por favor ingrese su nombre, teléfono y dirección de envío arriba para habilitar el pago con PayPal.'}
+                      {lang === 'en' ? 'Please enter your name, phone, shipping address, and ID number above to enable PayPal checkout.' : 'Por favor ingrese su nombre, teléfono, dirección de envío y número de identificación arriba para habilitar el pago con PayPal.'}
                     </div>
                   ) : (
                     <div ref={paypalButtonRef} style={{ minHeight: '45px' }}></div>
@@ -2731,11 +2782,9 @@ export default function CatalogPage() {
                 </div>
               ) : paymentMethod === 'tilopay' || paymentMethod === 'sinpe' ? (
                 <div className="tilopay-payment-panel">
-                  {(!customerName || !customerEmail || !customerPhone || !shippingAddress || (paymentMethod === 'sinpe' && !customerIdNumber)) ? (
+                  {(!customerName || !customerEmail || !customerPhone || !shippingAddress || !customerIdNumber) ? (
                     <div style={{ padding: '12px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.9rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-                      {paymentMethod === 'sinpe'
-                        ? (lang === 'en' ? 'Please enter your contact, shipping, and ID details to continue with SINPE Móvil.' : 'Ingrese sus datos de contacto, envío e identificación para continuar con SINPE Móvil.')
-                        : (lang === 'en' ? 'Please enter your full name, email, phone, and shipping address above to pay by card.' : 'Ingrese su nombre, correo, teléfono y dirección de envío para pagar con tarjeta.')}
+                      {lang === 'en' ? 'Please enter your contact, shipping, and ID details to proceed.' : 'Ingrese sus datos de contacto, envío y número de identificación para continuar.'}
                     </div>
                   ) : (
                     <button
