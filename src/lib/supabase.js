@@ -17,9 +17,24 @@ export const supabase = isSupabaseConfigured
 
 // Auto-clear stale tokens so the console error doesn't repeat every page load
 if (supabase && typeof window !== 'undefined') {
-  supabase.auth.onAuthStateChange((event) => {
+  // Check if session has a failed/stale refresh token
+  supabase.auth.getSession().then(({ error }) => {
+    if (error && (
+      error.message.includes('Refresh Token Not Found') || 
+      error.message.includes('invalid_grant') || 
+      error.message.includes('Invalid Refresh Token')
+    )) {
+      console.warn("Supabase: Stale refresh token detected. Clearing auth storage.");
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('sb-'))
+        .forEach(k => localStorage.removeItem(k));
+      supabase.auth.signOut().catch(() => {});
+    }
+  });
+
+  supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'TOKEN_REFRESHED') return;
-    if (event === 'SIGNED_OUT') {
+    if (event === 'SIGNED_OUT' || !session) {
       // Wipe any stale sb- keys from localStorage
       Object.keys(localStorage)
         .filter(k => k.startsWith('sb-'))
