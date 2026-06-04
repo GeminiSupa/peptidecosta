@@ -1167,7 +1167,7 @@ export default function CatalogPage() {
     if (cart.length === 0) return 0;
     const itemsTotal = getDiscountedTotal();
     const itemsTotalUsd = currency === 'USD' ? itemsTotal : (itemsTotal / exchangeRate);
-    if (itemsTotalUsd < 500) {
+    if (itemsTotalUsd < 200) {
       if (currency === 'CRC') {
         return 3500;
       } else {
@@ -1478,7 +1478,7 @@ export default function CatalogPage() {
         const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
         
         let shippingFee = 0;
-        if (itemsTotalUsd < 500) {
+        if (itemsTotalUsd < 200) {
           shippingFee = cur === 'USD' ? parseFloat((3500 / rate).toFixed(2)) : 3500;
         }
         const totalVal = itemsTotal + shippingFee;
@@ -1530,7 +1530,7 @@ export default function CatalogPage() {
         const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
         
         let shippingFee = 0;
-        if (itemsTotalUsd < 500) {
+        if (itemsTotalUsd < 200) {
           shippingFee = cur === 'USD' ? parseFloat((3500 / rate).toFixed(2)) : 3500;
         }
         const totalVal = itemsTotal + shippingFee;
