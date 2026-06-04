@@ -142,6 +142,39 @@ const getProductFallbackImage = (productName, category) => {
   }
 };
 
+// Costa Rica Provinces and Cantons dataset
+const COSTA_RICA_TERRITORY = {
+  'San José': [
+    'San José', 'Escazú', 'Desamparados', 'Puriscal', 'Tarrazú', 'Aserrí', 'Mora', 
+    'Goicoechea', 'Santa Ana', 'Alajuelita', 'Vázquez de Coronado', 'Acosta', 
+    'Tibás', 'Moravia', 'Montes de Oca', 'Turrubares', 'Dota', 'Curridabat', 
+    'Pérez Zeledón', 'León Cortés Castro'
+  ],
+  'Alajuela': [
+    'Alajuela', 'San Ramón', 'Grecia', 'San Mateo', 'Atenas', 'Naranjo', 'Palmares', 
+    'Poás', 'Orotina', 'San Carlos', 'Zarcero', 'Sarchí', 'Upala', 'Los Chiles', 
+    'Guatuso', 'Río Cuarto'
+  ],
+  'Cartago': [
+    'Cartago', 'Paraíso', 'La Unión', 'Jiménez', 'Turrialba', 'Alvarado', 'Oreamuno', 'El Guarco'
+  ],
+  'Heredia': [
+    'Heredia', 'Barva', 'Santo Domingo', 'Santa Bárbara', 'San Rafael', 'San Isidro', 
+    'Belén', 'Flores', 'San Pablo', 'Sarapiquí'
+  ],
+  'Guanacaste': [
+    'Liberia', 'Nicoya', 'Santa Cruz', 'Bagaces', 'Carrillo', 'Cañas', 'Abangares', 
+    'Tilarán', 'Nandayure', 'La Cruz', 'Hojancha'
+  ],
+  'Puntarenas': [
+    'Puntarenas', 'Esparza', 'Buenos Aires', 'Montes de Oro', 'Osa', 'Quepos', 
+    'Golfito', 'Coto Brus', 'Parrita', 'Corredores', 'Garabito', 'Monteverde', 'Puerto Jiménez'
+  ],
+  'Limón': [
+    'Limón', 'Pococí', 'Siquirres', 'Talamanca', 'Matina', 'Guácimo'
+  ]
+};
+
 export default function CatalogPage() {
   const router = useRouter();
   
@@ -178,6 +211,11 @@ export default function CatalogPage() {
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerMetadata, setCustomerMetadata] = useState(null);
   const [shippingAddress, setShippingAddress] = useState('');
+  const [shippingProvince, setShippingProvince] = useState('');
+  const [shippingCanton, setShippingCanton] = useState('');
+  const [shippingDistrict, setShippingDistrict] = useState('');
+  const [shippingDetailedAddress, setShippingDetailedAddress] = useState('');
+  const [shippingZip, setShippingZip] = useState('');
   const [customerIdType, setCustomerIdType] = useState('1');
   const [customerIdNumber, setCustomerIdNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('whatsapp');
@@ -410,8 +448,26 @@ export default function CatalogPage() {
     const savedAddress = localStorage.getItem('checkout_shipping_address') || '';
     const leadContact = localStorage.getItem('catalog_lead_contact') || '';
 
+    // Load structured address fields
+    const savedProvince = localStorage.getItem('checkout_shipping_province') || '';
+    const savedCanton = localStorage.getItem('checkout_shipping_canton') || '';
+    const savedDistrict = localStorage.getItem('checkout_shipping_district') || '';
+    const savedDetailed = localStorage.getItem('checkout_shipping_detailed') || '';
+    const savedZip = localStorage.getItem('checkout_shipping_zip') || '';
+
     if (savedName) setCustomerName(savedName);
     if (savedAddress) setShippingAddress(savedAddress);
+
+    // Fallback: If savedAddress exists but savedProvince is empty, treat the whole savedAddress as detailed address
+    if (savedProvince) {
+      setShippingProvince(savedProvince);
+      setShippingCanton(savedCanton);
+      setShippingDistrict(savedDistrict);
+      setShippingDetailedAddress(savedDetailed);
+      setShippingZip(savedZip);
+    } else if (savedAddress) {
+      setShippingDetailedAddress(savedAddress);
+    }
 
     // Pre-fill phone and email dynamically from either saved checkout info or gate input
     if (savedPhone) {
@@ -554,6 +610,21 @@ export default function CatalogPage() {
     fetchLiveExchangeRate();
   }, []);
 
+  // Synchronize flat shippingAddress string with structured input fields
+  useEffect(() => {
+    if (shippingProvince || shippingCanton || shippingDistrict || shippingDetailedAddress || shippingZip) {
+      const parts = [];
+      if (shippingDetailedAddress) parts.push(shippingDetailedAddress.trim());
+      
+      const locationLine = [shippingDistrict, shippingCanton, shippingProvince].map(s => s.trim()).filter(Boolean).join(', ');
+      if (locationLine) parts.push(locationLine);
+      
+      if (shippingZip) parts.push(shippingZip.trim());
+      
+      setShippingAddress(parts.join('\n'));
+    }
+  }, [shippingProvince, shippingCanton, shippingDistrict, shippingDetailedAddress, shippingZip]);
+
   // Persist checkout details to localStorage as they type, to auto-prefill on future visits
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -567,8 +638,15 @@ export default function CatalogPage() {
         localStorage.setItem('catalog_access_granted', 'true');
       }
       if (shippingAddress) localStorage.setItem('checkout_shipping_address', shippingAddress);
+      
+      // Save structured address fields
+      if (shippingProvince) localStorage.setItem('checkout_shipping_province', shippingProvince);
+      if (shippingCanton) localStorage.setItem('checkout_shipping_canton', shippingCanton);
+      if (shippingDistrict) localStorage.setItem('checkout_shipping_district', shippingDistrict);
+      if (shippingDetailedAddress) localStorage.setItem('checkout_shipping_detailed', shippingDetailedAddress);
+      if (shippingZip) localStorage.setItem('checkout_shipping_zip', shippingZip);
     }
-  }, [customerName, customerPhone, customerEmail, shippingAddress]);
+  }, [customerName, customerPhone, customerEmail, shippingAddress, shippingProvince, shippingCanton, shippingDistrict, shippingDetailedAddress, shippingZip]);
 
   // Telemetry: Sync visitor session details to Supabase when session and metadata are ready
   useEffect(() => {
@@ -1444,6 +1522,22 @@ export default function CatalogPage() {
     setCustomerEmail('');
     setShippingAddress('');
     setCustomerIdNumber('');
+    setShippingProvince('');
+    setShippingCanton('');
+    setShippingDistrict('');
+    setShippingDetailedAddress('');
+    setShippingZip('');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('checkout_customer_name');
+      localStorage.removeItem('checkout_customer_phone');
+      localStorage.removeItem('checkout_customer_email');
+      localStorage.removeItem('checkout_shipping_address');
+      localStorage.removeItem('checkout_shipping_province');
+      localStorage.removeItem('checkout_shipping_canton');
+      localStorage.removeItem('checkout_shipping_district');
+      localStorage.removeItem('checkout_shipping_detailed');
+      localStorage.removeItem('checkout_shipping_zip');
+    }
 
     // Redirect to the thank-you conversion page
     router.push(`/thank-you?lang=${lang}`);
@@ -1615,6 +1709,22 @@ export default function CatalogPage() {
             setCustomerEmail('');
             setShippingAddress('');
             setCustomerIdNumber('');
+            setShippingProvince('');
+            setShippingCanton('');
+            setShippingDistrict('');
+            setShippingDetailedAddress('');
+            setShippingZip('');
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('checkout_customer_name');
+              localStorage.removeItem('checkout_customer_phone');
+              localStorage.removeItem('checkout_customer_email');
+              localStorage.removeItem('checkout_shipping_address');
+              localStorage.removeItem('checkout_shipping_province');
+              localStorage.removeItem('checkout_shipping_canton');
+              localStorage.removeItem('checkout_shipping_district');
+              localStorage.removeItem('checkout_shipping_detailed');
+              localStorage.removeItem('checkout_shipping_zip');
+            }
             
             // Redirect to the thank-you conversion page
             router.push(`/thank-you?lang=${cLang}`);
@@ -2437,15 +2547,94 @@ export default function CatalogPage() {
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
               />
-              <textarea 
-                className="checkout-input" 
-                placeholder={lang === 'en' ? "Full shipping address:\n\nName\nID / Passport\nProvince, Canton, District\nAddress\nZip code\nPhone" : "Dirección completa de envio:\n\nNombre\nCédula\nProvincia, Cantón, Distrito\nDirección\nCódigo postal\nTeléfono"}
-                required
-                rows={8}
-                style={{ resize: 'vertical' }}
-                value={shippingAddress}
-                onChange={(e) => setShippingAddress(e.target.value)}
-              />
+              {/* Structured Address Builder for Costa Rica */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                      {lang === 'en' ? 'Province' : 'Provincia'} *
+                    </label>
+                    <select
+                      className="checkout-input"
+                      value={shippingProvince}
+                      onChange={(e) => {
+                        setShippingProvince(e.target.value);
+                        setShippingCanton('');
+                      }}
+                      required
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <option value="">-- {lang === 'en' ? 'Select Province' : 'Seleccionar Provincia'} --</option>
+                      {Object.keys(COSTA_RICA_TERRITORY).map((prov) => (
+                        <option key={prov} value={prov}>{prov}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                      {lang === 'en' ? 'Canton' : 'Cantón'} *
+                    </label>
+                    <select
+                      className="checkout-input"
+                      value={shippingCanton}
+                      onChange={(e) => setShippingCanton(e.target.value)}
+                      disabled={!shippingProvince}
+                      required
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <option value="">-- {lang === 'en' ? 'Select Canton' : 'Seleccionar Cantón'} --</option>
+                      {shippingProvince && COSTA_RICA_TERRITORY[shippingProvince]?.map((cant) => (
+                        <option key={cant} value={cant}>{cant}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                      {lang === 'en' ? 'District' : 'Distrito'} *
+                    </label>
+                    <input
+                      type="text"
+                      className="checkout-input"
+                      placeholder={lang === 'en' ? 'e.g. San Rafael' : 'ej. San Rafael'}
+                      value={shippingDistrict}
+                      onChange={(e) => setShippingDistrict(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                      {lang === 'en' ? 'Postal Code (Optional)' : 'Código Postal (Opcional)'}
+                    </label>
+                    <input
+                      type="text"
+                      className="checkout-input"
+                      placeholder="e.g. 10201"
+                      value={shippingZip}
+                      onChange={(e) => setShippingZip(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
+                    {lang === 'en' ? 'Detailed Address (landmarks, street details, etc.)' : 'Dirección detallada (señas exactas, calle, casa)'} *
+                  </label>
+                  <textarea
+                    className="checkout-input"
+                    rows={4}
+                    style={{ resize: 'vertical' }}
+                    placeholder={lang === 'en' ? 'e.g. 200m North of the catholic church, white house with black gate' : 'ej. 200m Norte de la iglesia católica, casa blanca con portón negro'}
+                    value={shippingDetailedAddress}
+                    onChange={(e) => setShippingDetailedAddress(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
 
               <div className="checkout-step-header" style={{ marginTop: '24px' }}>
                 <span className="checkout-step-number">2</span>
