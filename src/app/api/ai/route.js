@@ -74,6 +74,36 @@ Guidelines:
 
 Administrator Query:
 ${prompt}`;
+    } else if (mode === 'customer_chat') {
+      if (!prompt) {
+        return NextResponse.json({ error: 'Missing prompt parameter for customer chat' }, { status: 400 });
+      }
+
+      const productsContext = context.products 
+        ? `Active Catalog:\n${context.products.map(p => `- ${p.product} (Category: ${p.category}, Price: ${p.priceUsd || p.priceCrc}, Status: ${p.status})`).join('\n')}`
+        : '';
+        
+      const memoryContext = context.history
+        ? `\nRecent Conversation History:\n${context.history.map(m => `${m.role === 'user' ? 'Customer' : 'Assistant'}: ${m.text}`).join('\n')}`
+        : '';
+
+      finalPrompt = `You are "Peptides Costa Rica Assistant", a warm, professional customer support agent for Peptides Costa Rica.
+You speak Spanish and English fluently (always reply in the language the customer addresses you in, but default to Spanish if unsure).
+You have access to the active catalog to answer queries:
+
+${productsContext}
+${memoryContext}
+
+Guidelines:
+- Answer customer questions about peptides scientifically yet clearly. 
+- Mention shipping in Costa Rica is via Correos de Costa Rica (takes 1-3 days, free for orders over 30,000 CRC or $200). 
+- Always refer to catalog prices in Costa Rican Colones or US Dollars based on their preference.
+- Always be polite, using terms like 'con gusto' or 'Pura vida' if appropriate but remain professional.
+- CRITICAL: Never invent products or prices. If a product is not in the active catalog context above, say we don't currently carry it.
+- Keep answers concise and readable. Use short paragraphs and bullet points. Do not output raw JSON or internal code.
+
+Customer Query:
+${prompt}`;
     } else if (mode === 'cross_sell') {
       const { customerName = 'Investigador', purchasedProducts = [], recommendation = '' } = context;
       const purchasedStr = purchasedProducts.length > 0 

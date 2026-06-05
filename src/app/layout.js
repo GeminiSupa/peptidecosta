@@ -1,6 +1,7 @@
 import { Montserrat, Inter } from "next/font/google";
 import "./globals.css";
 import ExitIntentPopup from "@/components/ExitIntentPopup";
+import ChatWidget from "@/components/ChatWidget";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
@@ -66,6 +67,7 @@ export default function RootLayout({ children }) {
       <body suppressHydrationWarning>
         {children}
         <ExitIntentPopup />
+        <ChatWidget />
       </body>
     </html>
   );
