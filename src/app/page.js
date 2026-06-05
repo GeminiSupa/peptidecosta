@@ -415,6 +415,11 @@ const handleWhatsAppClick = (src) => {
               <div className="lp-products-grid">
                 {featuredProducts.map((p, i) => (
                   <div key={i} className="lp-product-card">
+                    {p.original_price_usd && p.original_price_usd !== p.price_usd && (
+                      <div className="sale-badge">
+                        {lang === 'en' ? 'SALE' : 'OFERTA'}
+                      </div>
+                    )}
                     {p.image_url ? (
                       <img src={p.image_url} alt={p.product} className="lp-product-img" />
                     ) : (
@@ -423,11 +428,6 @@ const handleWhatsAppClick = (src) => {
                       </div>
                     )}
                     <div className="lp-product-body">
-                      {p.original_price_usd && p.original_price_usd !== p.price_usd && (
-                        <div className="sale-badge">
-                          {lang === 'en' ? 'SALE' : 'OFERTA'}
-                        </div>
-                      )}
                       <span className={`lp-stock-badge${p.status?.toLowerCase() === 'in stock' ? ' in-stock' : ' out-stock'}`}>
                         {p.status?.toLowerCase() === 'in stock' ? t.in_stock : t.out_stock}
                       </span>

@@ -1354,14 +1354,14 @@ body {
 .product-grid.compact-view .product-category {
     font-size: 0.75rem !important;
     margin-bottom: 4px !important;
-    padding-right: 0px !important;
+    padding-right: 95px !important;
 }
 
 .product-grid.compact-view .product-name {
     font-size: 1.25rem !important;
     font-weight: 700 !important;
     margin-bottom: 6px !important;
-    padding-right: 0px !important;
+    padding-right: 95px !important;
     -webkit-line-clamp: 2 !important;
 }
 
@@ -2529,7 +2529,7 @@ body {
         font-weight: 700 !important;
         color: var(--text-muted) !important;
         margin-bottom: 2px !important;
-        padding-right: 65px !important;
+        padding-right: 95px !important;
         text-transform: uppercase !important;
         letter-spacing: 0.5px !important;
     }
@@ -2540,7 +2540,7 @@ body {
         color: var(--text-main) !important;
         margin-bottom: 4px !important;
         line-height: 1.25 !important;
-        padding-right: 65px !important;
+        padding-right: 95px !important;
         display: -webkit-box !important;
         -webkit-line-clamp: 2 !important;
         -webkit-box-orient: vertical !important;
@@ -3751,6 +3751,9 @@ body {
 .lp-about-section {
     background: var(--bg-main);
     padding: 100px 20px;
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
 }
 
 .lp-about-intro {
@@ -3819,6 +3822,7 @@ body {
 .lp-about-card--image {
     min-height: 350px;
     display: flex;
+    overflow: hidden;
 }
 
 .lp-about-card-img {
@@ -3917,6 +3921,8 @@ body {
 /* ── Shared Section Layout ───────────────────────────────── */
 .lp-section {
     padding: 60px 20px;
+    overflow: hidden;
+    position: relative;
 }
 
 .lp-section-header {
@@ -4092,6 +4098,9 @@ body {
 /* ── Featured Products ───────────────────────────────────── */
 .lp-featured-section {
     background: var(--bg-secondary);
+    overflow: hidden;
+    position: relative;
+    z-index: 1;
 }
 
 .lp-products-grid {
@@ -4112,6 +4121,7 @@ body {
     transition: transform 0.3s, box-shadow 0.3s;
     display: flex;
     flex-direction: column;
+    isolation: isolate;
 }
 
 [data-theme="dark"] .lp-product-card {
@@ -4166,7 +4176,7 @@ body {
 
 .sale-badge {
     position: absolute;
-    top: -210px;
+    top: 10px;
     left: 15px;
     background: #dc2626;
     color: white;
@@ -4779,9 +4789,44 @@ body {
     }
     .lp-about-card-overlay {
         padding: 20px;
+        position: relative;
+        background: linear-gradient(to top, rgba(0, 39, 102, 0.95) 0%, rgba(0, 39, 102, 0.85) 100%);
+    }
+    .lp-about-card--image {
+        flex-direction: column;
     }
     .lp-about-card-content {
         padding: 24px;
+    }
+    .lp-section {
+        padding: 40px 16px;
+    }
+    .lp-about-section {
+        padding: 60px 16px;
+    }
+    .lp-product-card {
+        border-radius: 20px;
+    }
+    .lp-product-img {
+        height: 160px;
+        animation: none;
+    }
+    .lp-product-body {
+        padding: 16px;
+    }
+    .lp-product-body h4 {
+        font-size: 0.88rem;
+        height: auto;
+        -webkit-line-clamp: 2;
+    }
+    .lp-product-price {
+        font-size: 1rem;
+    }
+    .sale-badge {
+        top: 8px;
+        left: 10px;
+        font-size: 0.65rem;
+        padding: 3px 8px;
     }
     .lp-faq-help-card {
         padding: 24px;
