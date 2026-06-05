@@ -217,6 +217,12 @@ export default function CatalogPage() {
   const [shippingDistrict, setShippingDistrict] = useState('');
   const [shippingDetailedAddress, setShippingDetailedAddress] = useState('');
   const [shippingZip, setShippingZip] = useState('');
+
+  // Promo Code State
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [promoData, setPromoData] = useState(null);
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState('');
   const [customerIdType, setCustomerIdType] = useState('1');
   const [customerIdNumber, setCustomerIdNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('whatsapp');
@@ -250,11 +256,11 @@ export default function CatalogPage() {
   const [tilopaySubmitting, setTilopaySubmitting] = useState(false);
   
   // Ref to hold latest checkout data for PayPal callbacks without re-rendering
-  const checkoutDataRef = useRef({ cart, currency: 'CRC', exchangeRate: FALLBACK_EXCHANGE_RATE, customerName, customerPhone, customerEmail, shippingAddress, lang: 'en', sessionId, customerMetadata });
+  const checkoutDataRef = useRef({ cart, currency: 'CRC', exchangeRate: FALLBACK_EXCHANGE_RATE, customerName, customerPhone, customerEmail, shippingAddress, lang: 'en', sessionId, customerMetadata, promoData });
 
   useEffect(() => {
-    checkoutDataRef.current = { cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata };
-  }, [cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata]);
+    checkoutDataRef.current = { cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata, promoData };
+  }, [cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata, promoData]);
 
   // Check Access Gate Status
   useEffect(() => {
@@ -1276,8 +1282,40 @@ export default function CatalogPage() {
     return 0;
   };
 
+  const getPromoDiscountAmount = () => {
+    if (!promoData || !promoData.valid) return 0;
+    const itemsTotal = getDiscountedTotal();
+    return currency === 'USD' ? parseFloat((itemsTotal * promoData.discount_pct).toFixed(2)) : Math.round(itemsTotal * promoData.discount_pct);
+  };
+
   const getFinalTotal = () => {
-    return getDiscountedTotal() + getShippingFee();
+    const items = getDiscountedTotal();
+    const promo = getPromoDiscountAmount();
+    return (items - promo) + getShippingFee();
+  };
+
+  const handleApplyPromo = async () => {
+    if (!promoCodeInput) return;
+    setPromoLoading(true);
+    setPromoError('');
+    try {
+      const res = await fetch('/api/promo/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: promoCodeInput }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setPromoData(data);
+        setPromoError('');
+      } else {
+        setPromoData(null);
+        setPromoError(data.error || (lang === 'en' ? 'Invalid code' : 'Código inválido'));
+      }
+    } catch (err) {
+      setPromoError(lang === 'en' ? 'Validation error' : 'Error de validación');
+    }
+    setPromoLoading(false);
   };
 
   const sendOrderNotification = async (orderPayload) => {
@@ -1340,6 +1378,12 @@ export default function CatalogPage() {
           location_data: customerMetadata?.location_data || null,
           device_info: customerMetadata?.device_info || null,
           sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
+          promo_code: promoData?.valid ? promoData.code : null,
+          discount_amount_usd: promoData?.valid ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
+          discount_amount_crc: promoData?.valid ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
+          affiliate_id: promoData?.valid ? promoData.affiliate_id : null,
+          affiliate_commission_usd: promoData?.valid ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * promoData.commission_rate).toFixed(2)) : 0,
+          affiliate_commission_crc: promoData?.valid ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * promoData.commission_rate) : 0,
         });
       } catch (err) {
         console.error('Order pre-log failed:', err);
@@ -1453,6 +1497,13 @@ export default function CatalogPage() {
             location_data: customerMetadata?.location_data || null,
             device_info: customerMetadata?.device_info || null,
             whatsapp_source: whatsappSource || null,
+            sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
+            promo_code: promoData?.valid ? promoData.code : null,
+            discount_amount_usd: promoData?.valid ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
+            discount_amount_crc: promoData?.valid ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
+            affiliate_id: promoData?.valid ? promoData.affiliate_id : null,
+            affiliate_commission_usd: promoData?.valid ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * promoData.commission_rate).toFixed(2)) : 0,
+            affiliate_commission_crc: promoData?.valid ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * promoData.commission_rate) : 0,
           });
 
         if (!error) {
@@ -1651,13 +1702,16 @@ export default function CatalogPage() {
         const vials = getCartVialCount(currentCart);
         const pct = getVolumeDiscountPct(vials);
         const itemsTotal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
-        const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
         
+        const pData = checkoutDataRef.current.promoData;
+        const promoDiscount = pData?.valid ? (cur === 'USD' ? parseFloat((itemsTotal * pData.discount_pct).toFixed(2)) : Math.round(itemsTotal * pData.discount_pct)) : 0;
+
+        const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
         let shippingFee = 0;
         if (itemsTotalUsd < 200) {
           shippingFee = cur === 'USD' ? parseFloat((3500 / rate).toFixed(2)) : 3500;
         }
-        const totalVal = itemsTotal + shippingFee;
+        const totalVal = (itemsTotal - promoDiscount) + shippingFee;
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
         const orderItems = currentCart.map(item => {
           let p = item.priceCrc;
@@ -1705,6 +1759,12 @@ export default function CatalogPage() {
                   device_info: customerMetadata?.device_info || null,
                   whatsapp_source: ppWaSource || null,
                   sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
+                  promo_code: pData?.valid ? pData.code : null,
+                  discount_amount_usd: pData?.valid ? (cur === 'USD' ? promoDiscount : parseFloat((promoDiscount / rate).toFixed(2))) : 0,
+                  discount_amount_crc: pData?.valid ? (cur === 'CRC' ? promoDiscount : Math.round(promoDiscount * rate)) : 0,
+                  affiliate_id: pData?.valid ? pData.affiliate_id : null,
+                  affiliate_commission_usd: pData?.valid ? parseFloat(((usdTotal - (cur === 'USD' ? shippingFee : shippingFee/rate)) * pData.commission_rate).toFixed(2)) : 0,
+                  affiliate_commission_crc: pData?.valid ? Math.round(((cur === 'CRC' ? (totalVal - shippingFee) : (totalVal - shippingFee) * rate)) * pData.commission_rate) : 0,
                 });
 
                 if (sid) {
@@ -2545,6 +2605,80 @@ export default function CatalogPage() {
                 {lang === 'en'
                   ? `🔥 Add ${10 - getCartVialCount()} more vial${10 - getCartVialCount() > 1 ? 's' : ''} to unlock 20% OFF!`
                   : `🔥 ¡Añade ${10 - getCartVialCount()} vial${10 - getCartVialCount() > 1 ? 'es' : ''} más para desbloquear 20% DESC.!`}
+              </div>
+            )}
+
+            {/* Promo Code UI */}
+            <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  className="checkout-input"
+                  placeholder={lang === 'en' ? 'Promo Code' : 'Código Promocional'}
+                  value={promoCodeInput}
+                  onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                  style={{ flex: 1, textTransform: 'uppercase', marginBottom: 0 }}
+                  disabled={promoData?.valid}
+                />
+                {!promoData?.valid ? (
+                  <button
+                    type="button"
+                    onClick={handleApplyPromo}
+                    disabled={promoLoading || !promoCodeInput}
+                    style={{
+                      background: promoCodeInput && !promoLoading ? '#38bdf8' : '#334155',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '0 16px',
+                      fontWeight: '600',
+                      cursor: promoCodeInput && !promoLoading ? 'pointer' : 'not-allowed',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    {promoLoading ? (
+                      <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
+                    ) : (lang === 'en' ? 'Apply' : 'Aplicar')}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setPromoData(null); setPromoCodeInput(''); }}
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      color: '#ef4444',
+                      border: '1px solid rgba(239, 68, 68, 0.2)',
+                      borderRadius: '12px',
+                      padding: '0 16px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    {lang === 'en' ? 'Remove' : 'Quitar'}
+                  </button>
+                )}
+              </div>
+              {promoError && (
+                <div style={{ color: '#ef4444', fontSize: '0.8rem', paddingLeft: '4px' }}>{promoError}</div>
+              )}
+              {promoData?.valid && (
+                <div style={{ color: '#4ade80', fontSize: '0.8rem', paddingLeft: '4px', fontWeight: '600' }}>
+                  {lang === 'en' ? `Code applied: ${promoData.discount_pct * 100}% off` : `Código aplicado: ${promoData.discount_pct * 100}% de descuento`}
+                </div>
+              )}
+            </div>
+
+            {/* Promo Discount row */}
+            {promoData?.valid && (
+              <div className="cart-total-row" style={{ marginBottom: '4px' }}>
+                <span className="cart-total-label" style={{ color: '#38bdf8' }}>{lang === 'en' ? 'PROMO DISCOUNT' : 'DESCUENTO PROMO'}</span>
+                <span className="cart-total-val" style={{ color: '#38bdf8' }}>
+                  -{formatPriceVal(getPromoDiscountAmount(), currency)}
+                </span>
               </div>
             )}
 
