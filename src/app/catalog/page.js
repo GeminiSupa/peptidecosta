@@ -1026,6 +1026,11 @@ export default function CatalogPage() {
     if (c.includes('supply') || c.includes('suministro') || c.includes('reconstitution')) return <FlaskConical {...props} />;
     return <FlaskConical {...props} />;
   };
+  const isBacWater = (name) => {
+    if (!name) return false;
+    const nameLower = name.toLowerCase();
+    return nameLower.includes('bac water') || nameLower.includes('bacteriostatic') || nameLower.includes('agua bacteriostática');
+  };
 
   // Helper stock check
   const isInStock = (statusText) => {
@@ -1840,7 +1845,7 @@ export default function CatalogPage() {
     if (activeCategory !== 'all' && p.category !== activeCategory) return false;
 
     // 3. Stock Toggle
-    if (inStockOnly && !isInStock(p.status)) return false;
+    if (inStockOnly && !isInStock(p.status) && !isBacWater(p.product)) return false;
 
     // 4. Price range filters
     if (priceFilter !== 'all') {
@@ -2159,8 +2164,9 @@ export default function CatalogPage() {
         ) : (
           <div className={`product-grid ${viewMode}-view`}>
             {filteredProducts.map((p, idx) => {
-              const inStock = isInStock(p.status);
-              const comingSoon = isComingSoon(p.status);
+              const isBac = isBacWater(p.product);
+              const inStock = isBac || isInStock(p.status);
+              const comingSoon = isComingSoon(p.status) && !isBac;
               const cardClass = inStock ? 'product-card' : 'product-card card-out-of-stock';
               
               const pMain = currency === 'USD' ? p.priceUsd : p.priceCrc;
@@ -2209,7 +2215,13 @@ export default function CatalogPage() {
                       {pSub && <span className="price-sub">{pSub}</span>}
                     </div>
                     <div className="product-actions" style={{ marginTop: '10px', position: 'relative' }}>
-                      {inStock ? (
+                      {isBac ? (
+                        <div style={{ padding: '8px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.2)', fontSize: '0.75rem', color: '#38bdf8', textAlign: 'center', lineHeight: '1.4', fontWeight: '500' }}>
+                          {lang === 'en' 
+                            ? '🎁 We provide complimentary with every order.' 
+                            : '🎁 Proporcionamos de cortesía con cada pedido.'}
+                        </div>
+                      ) : inStock ? (
                         <button 
                           className={`add-to-cart-btn ${addedProductId === p.product ? 'added' : ''}`}
                           onClick={(e) => addToCartWithAnimation(e, p)}
@@ -2231,8 +2243,10 @@ export default function CatalogPage() {
                         </button>
                       )}
                     </div>
-                    <div className={`stock-badge ${inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`}>
-                      <span>{translateStatus(p.status)}</span>
+                    <div className={`stock-badge ${isBac ? 'stock-in' : inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`}>
+                      <span>
+                        {isBac ? (lang === 'en' ? 'In Stock (Free)' : 'Disponible (Gratis)') : translateStatus(p.status)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -2904,8 +2918,8 @@ export default function CatalogPage() {
               <span style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                 {lang === 'en' ? 'Status' : 'Estado'}
               </span>
-              <div className={`stock-badge ${isInStock(selectedProduct.status) ? 'stock-in' : isComingSoon(selectedProduct.status) ? 'stock-soon' : 'stock-out'}`} style={{ position: 'static' }}>
-                {translateStatus(selectedProduct.status)}
+              <div className={`stock-badge ${isBacWater(selectedProduct.product) || isInStock(selectedProduct.status) ? 'stock-in' : isComingSoon(selectedProduct.status) ? 'stock-soon' : 'stock-out'}`} style={{ position: 'static' }}>
+                {isBacWater(selectedProduct.product) ? (lang === 'en' ? 'In Stock (Free)' : 'Disponible (Gratis)') : translateStatus(selectedProduct.status)}
               </div>
             </div>
 
@@ -2921,7 +2935,17 @@ export default function CatalogPage() {
               </a>
             )}
 
-            {isInStock(selectedProduct.status) && (
+            {isBacWater(selectedProduct.product) ? (
+              <div style={{ marginBottom: '24px', padding: '16px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)', fontSize: '0.85rem', color: '#38bdf8', textAlign: 'center', lineHeight: '1.5' }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🎁</div>
+                <strong style={{ display: 'block', marginBottom: '4px', fontSize: '0.95rem' }}>{lang === 'en' ? 'Complimentary With Every Order' : 'De Cortesía con Cada Pedido'}</strong>
+                <p style={{ margin: 0, color: '#e0f2fe' }}>
+                  {lang === 'en' 
+                    ? 'We provide complimentary BAC water with every order as our gift to you. No need to add it to your cart!' 
+                    : 'Proporcionamos agua BAC de cortesía con cada pedido como nuestro regalo. ¡No es necesario añadirla al carrito!'}
+                </p>
+              </div>
+            ) : isInStock(selectedProduct.status) && (
               <button 
                 className="whatsapp-btn" 
                 style={{ border: 'none', cursor: 'pointer' }}
