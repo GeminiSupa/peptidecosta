@@ -20,6 +20,7 @@ import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
 import ExportModal from '@/components/admin/ExportModal';
 import TeamManagement from '@/components/admin/TeamManagement';
+import AffiliatesManager from '@/components/admin/AffiliatesManager';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
 
@@ -3252,6 +3253,15 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <span className="tab-label">Team</span>
             </button>
           )}
+          {(!adminProfile || adminProfile.is_superadmin) && (
+            <button 
+              className={`admin-tab-btn ${activeTab === 'affiliates' ? 'active' : ''}`}
+              onClick={() => setActiveTab('affiliates')}
+            >
+              <Users size={14} />
+              <span className="tab-label">Affiliates</span>
+            </button>
+          )}
         </div>
       </nav>
 
@@ -5755,6 +5765,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'team' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
             <TeamManagement currentUserProfile={adminProfile} currentUserEmail={loggedInEmail.current} onTeamChanged={fetchAgents} />
+          </div>
+        )}
+
+        {/* TAB: AFFILIATES */}
+        {activeTab === 'affiliates' && (
+          <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
+            <AffiliatesManager />
           </div>
         )}
 
