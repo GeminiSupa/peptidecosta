@@ -4080,6 +4080,22 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
                 <div style={{ background: 'rgba(0, 212, 255, 0.05)', border: '1px solid rgba(0, 212, 255, 0.1)', padding: '16px', borderRadius: '8px', fontSize: '0.8rem', color: '#cbd5e1', lineHeight: '1.5', marginTop: '16px' }}>
                   💡 **Sharing Pro-Tip:** Placing `lang=en` inside links will automatically translate all category names, buttons, and stock badges to English, and toggle the catalog to prioritize USD pricing immediately for international clients!
+                  
+                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(0, 212, 255, 0.1)' }}>
+                    <p style={{ margin: '0 0 8px 0', color: '#38bdf8', fontWeight: 'bold' }}>🧪 Live Testing Links (No analytics logged):</p>
+                    <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <li>
+                        <a href="https://catalog.peptidescostarica.net/catalog?admin_preview=true" target="_blank" rel="noopener noreferrer" style={{ color: '#34d399', textDecoration: 'none' }}>
+                          https://catalog.peptidescostarica.net/catalog?admin_preview=true
+                        </a>
+                      </li>
+                      <li>
+                        <a href="https://peptidecosta.vercel.app/catalog?admin_preview=true" target="_blank" rel="noopener noreferrer" style={{ color: '#34d399', textDecoration: 'none' }}>
+                          https://peptidecosta.vercel.app/catalog?admin_preview=true
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4966,14 +4982,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   <p>Users who provided their contact info to view the catalog.</p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                  {selectedLeads.length > 0 && (
-                    <button 
-                      className="admin-btn admin-btn-danger"
-                      onClick={handleBulkDeleteLeads}
-                    >
-                      <Trash2 size={16} /> Delete Selected ({selectedLeads.length})
-                    </button>
-                  )}
+                  <button 
+                    className={`admin-btn admin-btn-danger ${selectedLeads.length === 0 ? 'disabled' : ''}`}
+                    onClick={handleBulkDeleteLeads}
+                    disabled={selectedLeads.length === 0}
+                    style={{ opacity: selectedLeads.length === 0 ? 0.5 : 1, cursor: selectedLeads.length === 0 ? 'not-allowed' : 'pointer' }}
+                  >
+                    <Trash2 size={16} /> Delete Selected {selectedLeads.length > 0 ? `(${selectedLeads.length})` : ''}
+                  </button>
                   <button 
                     className="admin-btn admin-btn-secondary"
                     onClick={() => setExportModalType('leads')}

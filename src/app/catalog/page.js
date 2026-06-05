@@ -2520,14 +2520,14 @@ export default function CatalogPage() {
 
             {/* Next tier hint */}
             {getCartVialCount() >= 1 && getCartVialCount() < 5 && (
-              <div style={{ background: 'rgba(234, 179, 8, 0.08)', border: '1px solid rgba(234, 179, 8, 0.15)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: '#fbbf24' }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: '700' }}>
                 {lang === 'en'
                   ? `🔥 Add ${5 - getCartVialCount()} more vial${5 - getCartVialCount() > 1 ? 's' : ''} for 15% OFF!`
                   : `🔥 ¡Añade ${5 - getCartVialCount()} vial${5 - getCartVialCount() > 1 ? 'es' : ''} más para 15% DESC.!`}
               </div>
             )}
             {getCartVialCount() >= 5 && getCartVialCount() < 10 && (
-              <div style={{ background: 'rgba(234, 179, 8, 0.08)', border: '1px solid rgba(234, 179, 8, 0.15)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: '#fbbf24' }}>
+              <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: '700' }}>
                 {lang === 'en'
                   ? `🔥 Add ${10 - getCartVialCount()} more vial${10 - getCartVialCount() > 1 ? 's' : ''} to unlock 20% OFF!`
                   : `🔥 ¡Añade ${10 - getCartVialCount()} vial${10 - getCartVialCount() > 1 ? 'es' : ''} más para desbloquear 20% DESC.!`}
@@ -2888,7 +2888,7 @@ export default function CatalogPage() {
                 </span>
               </div>
               {selectedProduct.discount && (
-                <div style={{ color: 'var(--accent)', fontWeight: '800', fontSize: '0.85rem', textAlign: 'right', marginTop: '6px' }}>
+                <div style={{ color: 'var(--text-main)', fontWeight: '800', fontSize: '0.85rem', textAlign: 'right', marginTop: '6px' }}>
                   ✨ {translateDiscount(selectedProduct.discount, lang)}
                 </div>
               )}
