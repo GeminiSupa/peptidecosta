@@ -224,8 +224,9 @@ const handleWhatsAppClick = (src) => {
 
           <nav className="lp-nav">
             <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Catalog' : 'Catálogo'}</Link>
+            <Link href={`/about?lang=${lang}`}>{lang === 'en' ? 'About Us' : 'Sobre Nosotros'}</Link>
             <Link href={`/blog?lang=${lang}`}>{lang === 'en' ? 'Blog' : 'Blog'}</Link>
-            <a href="#contacto">{lang === 'en' ? 'Contact' : 'Contacto'}</a>
+            <Link href={`/contact?lang=${lang}`}>{lang === 'en' ? 'Contact' : 'Contacto'}</Link>
           </nav>
 
           <div className="lp-header-actions">
@@ -332,6 +333,18 @@ const handleWhatsAppClick = (src) => {
                 {lang === 'en' ? 'Welcome to Peptides Costa Rica your trusted source for premium-quality, ' : 'Bienvenidos a Peptides Costa Rica su fuente de confianza para péptidos de calidad premium y '}
                 <span className="lp-highlight">{lang === 'en' ? 'lab-tested peptides.' : 'pureza certificada.'}</span>
               </h2>
+              <div style={{ maxWidth: '800px', margin: '24px auto', fontSize: '1.1rem', lineHeight: '1.7', color: 'var(--text-muted)' }}>
+                <p style={{ marginBottom: '16px' }}>
+                  {lang === 'en'
+                    ? 'More people are interested in peptides for performance, recovery, metabolism, weight management, and longevity. Getting them from international suppliers often leads to delays, uncertainty, and unnecessary customs hassles.'
+                    : 'Más personas están interesadas en los péptidos para el rendimiento, la recuperación, el metabolismo y la longevidad. Obtenerlos de proveedores internacionales a menudo conlleva demoras, incertidumbre y problemas aduanales.'}
+                </p>
+                <p>
+                  <strong style={{ color: 'var(--text-main)' }}>{lang === 'en' ? 'We do things differently.' : 'Hacemos las cosas diferente.'}</strong> {lang === 'en'
+                    ? 'At Peptides Costa Rica, we serve customers exclusively within Costa Rica. We offer clear pricing, bulk discounts, direct communication, and reliable local service.'
+                    : 'En Peptides Costa Rica, servimos exclusivamente a clientes dentro de Costa Rica. Ofrecemos precios claros, descuentos por volumen y un servicio local confiable.'}
+                </p>
+              </div>
             </div>
 
             <div className="lp-about-cards-grid">
