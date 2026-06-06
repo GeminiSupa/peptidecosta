@@ -9,11 +9,11 @@ import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { 
   Lock, LayoutDashboard, ListFilter, Plus, Trash2, Mail, MessageCircle,
-  Save, Upload, Share2, Clipboard, LogOut, Check, 
+  Save, Upload, Download, Share2, Clipboard, LogOut, Check, 
   AlertCircle, ChevronRight, ChevronUp, ChevronDown, MessageSquare, Database,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
-  KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, Send,
+  KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send,
   Bell, X, TrendingUp, Target, Smartphone
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
@@ -3105,7 +3105,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       <nav className="admin-navbar">
         <div className="admin-nav-top-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '12px' }}>
           <div className="admin-nav-logo" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <img src="/logo.png" alt="Logo" style={{ maxHeight: '38px', width: 'auto', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 1px 8px rgba(0,0,0,0.2)' }} />
+            <img src="/logo.png" alt="Peptides Costa Rica Admin Logo" style={{ maxHeight: '38px', width: 'auto', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 1px 8px rgba(0,0,0,0.2)' }} />
             <span className="db-status-badge" style={{ background: '#1e293b', color: '#94a3b8', fontSize: '0.65rem', padding: '4px 8px', borderRadius: '4px' }}>
               {isDbConnected ? 'Live DB' : 'Simulation'}
             </span>
@@ -3118,7 +3118,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               title="Change Password"
             >
               <KeyRound size={14} style={{ display: 'inline', marginRight: '4px' }} />
-              Password
+              Change PW
             </button>
             <button className="admin-logout-btn" onClick={handleLogout} style={{ flexShrink: 0 }}>
               <LogOut size={14} style={{ display: 'inline', marginRight: '4px' }} />
@@ -3160,7 +3160,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               className={`admin-tab-btn ${activeTab === 'leads' ? 'active' : ''}`}
               onClick={() => setActiveTab('leads')}
             >
-              <Check size={14} />
+              <Target size={14} />
               <span className="tab-label">Leads</span>
               {leads.length > 0 && <span className="tab-count" style={{ background: '#10b981' }}>{leads.length}</span>}
             </button>
@@ -3231,18 +3231,16 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <button 
             className={`admin-tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
             onClick={() => setActiveTab('ai')}
-            style={{ borderLeft: activeTab === 'ai' ? '3px solid #38bdf8' : 'none', background: activeTab === 'ai' ? 'rgba(56, 189, 248, 0.08)' : 'transparent' }}
           >
-            <Brain size={14} style={{ color: '#38bdf8' }} />
-            <span className="tab-label" style={{ color: '#38bdf8', fontWeight: 'bold' }}>AI Copilot</span>
+            <Brain size={14} style={{ color: activeTab === 'ai' ? 'inherit' : '#38bdf8' }} />
+            <span className="tab-label" style={{ color: activeTab === 'ai' ? 'inherit' : '#38bdf8', fontWeight: 'bold' }}>AI Copilot</span>
           </button>
           <button 
             className={`admin-tab-btn ${activeTab === 'whatsapp_ai' ? 'active' : ''}`}
             onClick={() => setActiveTab('whatsapp_ai')}
-            style={{ borderLeft: activeTab === 'whatsapp_ai' ? '3px solid #10b981' : 'none', background: activeTab === 'whatsapp_ai' ? 'rgba(16, 185, 129, 0.08)' : 'transparent' }}
           >
-            <MessageSquare size={14} style={{ color: '#10b981' }} />
-            <span className="tab-label" style={{ color: '#10b981', fontWeight: 'bold' }}>WhatsApp AI</span>
+            <MessageSquare size={14} style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981' }} />
+            <span className="tab-label" style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981', fontWeight: 'bold' }}>WhatsApp AI</span>
           </button>
           {(!adminProfile || adminProfile.is_superadmin) && (
             <button 
@@ -3258,7 +3256,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               className={`admin-tab-btn ${activeTab === 'affiliates' ? 'active' : ''}`}
               onClick={() => setActiveTab('affiliates')}
             >
-              <Users size={14} />
+              <UserPlus size={14} />
               <span className="tab-label">Affiliates</span>
             </button>
           )}
@@ -3275,7 +3273,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <div>
                 <h3>Master Inventory Products</h3>
                 <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
-                  Edit details in place exactly like Excel. Changes will sync live to customers once you click **Save Changes**.
+                  Edit details in place exactly like Excel. Changes will sync live to customers once you click <strong>Save Changes</strong>.
                 </p>
               </div>
               <div className="admin-actions-row">
@@ -3297,7 +3295,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     onClick={() => setExportModalType('products')}
                     style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)' }}
                   >
-                    <Upload size={14} />
+                    <Download size={14} />
                     Export Data
                   </button>
                 )}
@@ -3688,6 +3686,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 </p>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <input 
+                    className="admin-input"
                     type="text" 
                     placeholder="Search by name, phone, email, or tracking..." 
                     value={orderSearch}
@@ -3695,15 +3694,15 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       setOrderSearch(e.target.value);
                       setOrdersCurrentPage(1);
                     }}
-                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', fontSize: '0.85rem', minWidth: '250px' }}
+                    style={{ minWidth: '280px', flexGrow: 1 }}
                   />
                   <select
+                    className="admin-select"
                     value={orderStatusFilter}
                     onChange={(e) => {
                       setOrderStatusFilter(e.target.value);
                       setOrdersCurrentPage(1);
                     }}
-                    style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: 'white', fontSize: '0.85rem' }}
                   >
                     <option value="All">All Statuses</option>
                     <option value="Pending">Pending</option>
@@ -3720,8 +3719,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   onClick={() => setExportModalType('orders')}
                   style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, alignSelf: 'flex-start' }}
                 >
-                  <Upload size={14} />
-                  Export Data
+                  <Download size={14} />
+                  Export Orders
                 </button>
               )}
             </div>
@@ -3854,7 +3853,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                               </select>
                             </td>
                             <td data-label="Actions" style={{ padding: '10px 12px' }}>
-                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', minWidth: '240px', whiteSpace: 'nowrap' }}>
+                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'nowrap' }}>
                                 <button 
                                   className="admin-btn" 
                                   onClick={() => setSelectedOrderDetails(order)}
@@ -5005,7 +5004,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     onClick={() => setExportModalType('leads')}
                     disabled={leads.length === 0}
                   >
-                    <Upload size={16} /> Export Data
+                    <Download size={16} /> Export Data
                   </button>
                 </div>
               </div>
@@ -5275,6 +5274,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <div style={{ padding: '0 24px', marginBottom: '16px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ position: 'relative', flex: '1 1 auto', minWidth: '220px' }}>
                   <input 
+                    className="admin-input"
                     type="text" 
                     placeholder="Search by email, phone, city, campaign..." 
                     value={leadsSearch}
@@ -5282,16 +5282,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       setLeadsSearch(e.target.value);
                       setLeadsCurrentPage(1);
                     }}
-                    style={{ 
-                      padding: '8px 12px 8px 36px', 
-                      borderRadius: '8px', 
-                      border: '1px solid rgba(255,255,255,0.1)', 
-                      background: 'rgba(0,0,0,0.2)', 
-                      color: 'white', 
-                      fontSize: '0.85rem', 
-                      width: '100%',
-                      outline: 'none'
-                    }}
+                    style={{ paddingLeft: '36px', width: '100%' }}
                   />
                   <span style={{ position: 'absolute', left: '12px', top: '52%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.9rem' }}>🔍</span>
                 </div>
@@ -5299,20 +5290,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   {/* Source Filter */}
                   <select
+                    className="admin-select"
                     value={leadsSourceFilter}
                     onChange={(e) => {
                       setLeadsSourceFilter(e.target.value);
                       setLeadsCurrentPage(1);
-                    }}
-                    style={{ 
-                      padding: '8px 12px', 
-                      borderRadius: '8px', 
-                      border: '1px solid rgba(255,255,255,0.1)', 
-                      background: 'rgba(0,0,0,0.2)', 
-                      color: 'white', 
-                      fontSize: '0.85rem',
-                      outline: 'none',
-                      cursor: 'pointer'
                     }}
                   >
                     <option value="All">📢 All Attribution Sources</option>
@@ -5328,20 +5310,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
                   {/* Area/Region Filter */}
                   <select
+                    className="admin-select"
                     value={leadsAreaFilter}
                     onChange={(e) => {
                       setLeadsAreaFilter(e.target.value);
                       setLeadsCurrentPage(1);
-                    }}
-                    style={{ 
-                      padding: '8px 12px', 
-                      borderRadius: '8px', 
-                      border: '1px solid rgba(255,255,255,0.1)', 
-                      background: 'rgba(0,0,0,0.2)', 
-                      color: 'white', 
-                      fontSize: '0.85rem',
-                      outline: 'none',
-                      cursor: 'pointer'
                     }}
                   >
                     <option value="All">📍 All Areas / Locations</option>
@@ -5424,7 +5397,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           <select 
                             value={editLeadMethod} 
                             onChange={(e) => setEditLeadMethod(e.target.value)}
-                            className="admin-input"
+                            className="admin-select"
                             style={{ width: '90px', padding: '4px 8px', height: 'auto', fontSize: '0.8rem' }}
                           >
                             <option value="whatsapp">whatsapp</option>
@@ -5649,7 +5622,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           })()}
                         </td>
                         <td data-label="Actions" style={{ padding: '10px 12px' }}>
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', minWidth: '220px', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'nowrap' }}>
                             {editingLeadId === lead.id ? (
                               <button 
                                 className="admin-btn admin-btn-success" 
