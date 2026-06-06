@@ -192,6 +192,8 @@ export default function CatalogPage() {
 
   // Search & Filtering States
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchRef = useRef(null);
   const [activeCategory, setActiveCategory] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [priceFilter, setPriceFilter] = useState('all');
@@ -269,6 +271,19 @@ export default function CatalogPage() {
       setGateAccessGranted(hasAccess);
       setGateLoading(false);
     }
+  }, []);
+
+  // Handle click outside to close search autocomplete dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setSearchFocused(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   // Handle 'product' URL parameter linking
@@ -1105,6 +1120,31 @@ export default function CatalogPage() {
         <span>({prodReviews.length})</span>
       </div>
     );
+  };
+
+  const popularTerms = [
+    { en: 'Retatrutide', es: 'Retatrutide' },
+    { en: 'Tirzepatide', es: 'Tirzepatide' },
+    { en: 'Semaglutide', es: 'Semaglutide' },
+    { en: 'Weight Loss', es: 'Pérdida de Peso' },
+    { en: 'Recovery', es: 'Recuperación' }
+  ];
+
+  const getSearchSuggestions = () => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) {
+      return products.slice(0, 3);
+    }
+    return products.filter(p => 
+      p.product.toLowerCase().includes(query) ||
+      (p.category && p.category.toLowerCase().includes(query))
+    ).slice(0, 5);
+  };
+
+  const handlePopularTermClick = (term) => {
+    setSearchQuery(term);
+    setSearchFocused(true);
+    document.getElementById('searchInput')?.focus();
   };
 
   // Active toggles
@@ -2064,7 +2104,7 @@ export default function CatalogPage() {
       <div className="header-sticky-section">
         <div className="search-bar container">
           <div className="search-row">
-            <div className="search-input-wrapper">
+            <div className="search-input-wrapper" ref={searchRef}>
               <span className="search-icon"><Search size={18} /></span>
               <input 
                 type="text" 
@@ -2072,7 +2112,99 @@ export default function CatalogPage() {
                 placeholder={lang === 'en' ? "Search products..." : "Buscar productos..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
               />
+              {searchFocused && (
+                <div className="search-suggestions-dropdown" onClick={(e) => e.stopPropagation()}>
+                  <div className="suggestions-section">
+                    <span className="section-title">
+                      {lang === 'en' ? 'Popular Searches' : 'Búsquedas Populares'}
+                    </span>
+                    <div className="popular-tags">
+                      {popularTerms.map((term, idx) => {
+                        const label = lang === 'en' ? term.en : term.es;
+                        return (
+                          <button 
+                            key={idx} 
+                            type="button" 
+                            className="popular-tag"
+                            onClick={() => handlePopularTermClick(label)}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="suggestions-section">
+                    <span className="section-title">
+                      {searchQuery.trim() 
+                        ? (lang === 'en' ? 'Products Matches' : 'Productos Coincidentes') 
+                        : (lang === 'en' ? 'Suggested Peptides' : 'Péptidos Sugeridos')
+                      }
+                    </span>
+                    <div className="suggested-products">
+                      {getSearchSuggestions().length === 0 ? (
+                        <div className="no-matches-msg">
+                          {lang === 'en' ? 'No products found.' : 'No se encontraron productos.'}
+                        </div>
+                      ) : (
+                        getSearchSuggestions().map((match, idx) => {
+                          const pMain = currency === 'USD' ? match.priceUsd : match.priceCrc;
+                          const formattedPrice = currency === 'USD' ? `$${pMain}` : `₡${pMain.toLocaleString()}`;
+                          const isBac = isBacWater(match.product);
+                          const inStock = isBac || isInStock(match.status);
+                          const cartItem = cart.find(item => item.product === match.product);
+
+                          return (
+                            <div 
+                              key={idx} 
+                              className="suggested-product-row"
+                              onClick={() => {
+                                handleProductClick(match);
+                                setSearchFocused(false);
+                              }}
+                            >
+                              <div className="suggested-product-img">
+                                {match.imageUrl ? (
+                                  <img src={match.imageUrl} alt={match.product} />
+                                ) : (
+                                  getCategoryIcon(match.category, 20)
+                                )}
+                              </div>
+                              <div className="suggested-product-info">
+                                <span className="suggested-product-name">{match.product}</span>
+                                <span className="suggested-product-cat">{translateCategory(match.category)}</span>
+                              </div>
+                              <div className="suggested-product-price">
+                                {formattedPrice}
+                              </div>
+                              {inStock && (
+                                <button
+                                  type="button"
+                                  className={`suggested-quick-add-btn ${cartItem ? 'added' : ''}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (cartItem) {
+                                      setIsCartOpen(true);
+                                    } else {
+                                      addToCart(match);
+                                    }
+                                  }}
+                                  title={cartItem ? (lang === 'en' ? 'In Cart' : 'En el Carrito') : (lang === 'en' ? 'Add' : 'Agregar')}
+                                >
+                                  {cartItem ? <Check size={14} /> : <Plus size={14} />}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <button onClick={handleViewToggle} className="filter-btn" title="Toggle Layout">
               {viewMode === 'list' && <Grid size={18} />}
@@ -2279,21 +2411,53 @@ export default function CatalogPage() {
                             : '🎁 Proporcionamos de cortesía con cada pedido.'}
                         </div>
                       ) : inStock ? (
-                        <button 
-                          className={`add-to-cart-btn ${addedProductId === p.product ? 'added' : ''}`}
-                          onClick={(e) => addToCartWithAnimation(e, p)}
-                        >
-                          {addedProductId === p.product 
-                            ? <Check size={16} /> 
-                            : <Plus size={16} />
+                        (() => {
+                          const cartItem = cart.find(item => item.product === p.product);
+                          if (cartItem) {
+                            return (
+                              <div className="inline-qty-selector" onClick={(e) => e.stopPropagation()}>
+                                <button 
+                                  className="qty-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateCartQty(p.product, -1);
+                                  }}
+                                  title="Decrease quantity"
+                                >
+                                  <Minus size={16} />
+                                </button>
+                                <span className="qty-val">{cartItem.qty}</span>
+                                <button 
+                                  className="qty-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateCartQty(p.product, 1);
+                                  }}
+                                  title="Increase quantity"
+                                >
+                                  <Plus size={16} />
+                                </button>
+                              </div>
+                            );
                           }
-                          <span>
-                            {addedProductId === p.product 
-                              ? (lang === 'en' ? 'Added' : 'Añadido') 
-                              : (lang === 'en' ? 'Add To Cart' : 'Agregar al Carrito')
-                            }
-                          </span>
-                        </button>
+                          return (
+                            <button 
+                              className={`add-to-cart-btn ${addedProductId === p.product ? 'added' : ''}`}
+                              onClick={(e) => addToCartWithAnimation(e, p)}
+                            >
+                              {addedProductId === p.product 
+                                ? <Check size={16} /> 
+                                : <Plus size={16} />
+                              }
+                              <span>
+                                {addedProductId === p.product 
+                                  ? (lang === 'en' ? 'Added' : 'Añadido') 
+                                  : (lang === 'en' ? 'Add To Cart' : 'Agregar al Carrito')
+                                }
+                              </span>
+                            </button>
+                          );
+                        })()
                       ) : (
                         <button className="add-to-cart-btn out-of-stock-btn" disabled>
                           <span>{lang === 'en' ? 'Out of Stock' : 'Agotado'}</span>
