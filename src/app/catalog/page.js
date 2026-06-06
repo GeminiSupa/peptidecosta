@@ -2328,6 +2328,16 @@ export default function CatalogPage() {
 
       {/* Main Catalog View */}
       <main className="main container" style={{ position: 'relative', minHeight: '60vh' }}>
+        <div className="catalog-seo-header">
+          <h1 className="catalog-seo-title">
+            {lang === 'en' ? 'Peptide Catalog Costa Rica' : 'Catálogo de Péptidos en Costa Rica'}
+          </h1>
+          <p className="catalog-seo-sub">
+            {lang === 'en' 
+              ? 'Browse available peptides, prices, and real-time availability.' 
+              : 'Explora péptidos disponibles, precios y disponibilidad en tiempo real.'}
+          </p>
+        </div>
         {gateLoading ? (
           <div className="loader">
             <div className="sync-spinner" style={{ marginBottom: '16px' }}></div>
@@ -2784,19 +2794,19 @@ export default function CatalogPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '1.1rem' }}>🏷️</span>
                   <div>
-                    <div style={{ color: '#4ade80', fontWeight: '800', fontSize: '0.8rem' }}>
+                    <div style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: '700', fontSize: '0.8rem' }}>
                       {lang === 'en'
                         ? `Volume Discount: ${getVolumeDiscountPct(getCartVialCount())}% OFF`
                         : `Desc. por Volumen: ${getVolumeDiscountPct(getCartVialCount())}% DESC.`}
                     </div>
-                    <div style={{ color: '#86efac', fontSize: '0.7rem', marginTop: '2px' }}>
+                    <div style={{ color: theme === 'dark' ? '#86efac' : '#166534', fontSize: '0.7rem', marginTop: '2px' }}>
                       {lang === 'en'
                         ? `${getCartVialCount()} vials in cart`
                         : `${getCartVialCount()} viales en carrito`}
                     </div>
                   </div>
                 </div>
-                <span style={{ color: '#4ade80', fontWeight: '900', fontSize: '0.85rem' }}>-{formatPriceVal(getCartTotal() - getDiscountedTotal(), currency)}</span>
+                <span style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: '700', fontSize: '0.85rem' }}>-{formatPriceVal(getCartTotal() - getDiscountedTotal(), currency)}</span>
               </div>
             )}
 
@@ -2893,15 +2903,15 @@ export default function CatalogPage() {
             {/* Shipping row */}
             <div className="cart-total-row" style={{ marginBottom: '4px' }}>
               <span className="cart-total-label">{lang === 'en' ? 'SHIPPING' : 'ENVÍO'}</span>
-              <span className="cart-total-val" style={{ color: getShippingFee() > 0 ? undefined : '#4ade80', fontWeight: getShippingFee() > 0 ? 'normal' : '800' }}>
+              <span className="cart-total-val" style={{ color: getShippingFee() > 0 ? undefined : (theme === 'dark' ? '#4ade80' : '#15803d'), fontWeight: getShippingFee() > 0 ? 'normal' : '700' }}>
                 {getShippingFee() > 0 ? formatPriceVal(getShippingFee(), currency) : (lang === 'en' ? 'FREE' : 'GRATIS')}
               </span>
             </div>
 
             {/* Final total row */}
             <div className="cart-total-row" style={{ marginBottom: '4px' }}>
-              <span className="cart-total-label" style={{ fontWeight: '900' }}>{lang === 'en' ? 'TOTAL DUE' : 'TOTAL A PAGAR'}</span>
-              <span className="cart-total-val" style={{ color: '#4ade80', fontWeight: '900' }}>{formatPriceVal(getFinalTotal(), currency)}</span>
+              <span className="cart-total-label" style={{ fontWeight: '800' }}>{lang === 'en' ? 'TOTAL DUE' : 'TOTAL A PAGAR'}</span>
+              <span className="cart-total-val" style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: '800' }}>{formatPriceVal(getFinalTotal(), currency)}</span>
             </div>
 
             <form id="checkout-form-main" onSubmit={handleCheckoutSubmit} className="checkout-form" style={{ paddingBottom: '80px' }}>
@@ -3239,7 +3249,7 @@ export default function CatalogPage() {
                 <span style={{ fontWeight: '700', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                   {lang === 'en' ? 'PRICE' : 'PRECIO'}
                 </span>
-                <span style={{ fontSize: '1.4rem', fontValue: '900', color: 'var(--text-primary)', fontWeight: '900' }}>
+                <span style={{ fontSize: '1.4rem', color: 'var(--text-primary)', fontWeight: '700' }}>
                   {currency === 'USD' ? selectedProduct.priceUsd : selectedProduct.priceCrc}
                 </span>
               </div>

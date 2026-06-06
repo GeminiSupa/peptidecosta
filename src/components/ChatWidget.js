@@ -13,6 +13,7 @@ export default function ChatWidget() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [catalog, setCatalog] = useState([]);
+  const [lang, setLang] = useState('es');
   
   const messagesEndRef = useRef(null);
 
@@ -20,6 +21,33 @@ export default function ChatWidget() {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  // Sync language from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storedLang = localStorage.getItem('lang') || 'es';
+      setLang(storedLang);
+
+      const interval = setInterval(() => {
+        const currentLang = localStorage.getItem('lang') || 'es';
+        if (currentLang !== lang) {
+          setLang(currentLang);
+        }
+      }, 500);
+
+      return () => clearInterval(interval);
+    }
+  }, [lang]);
+
+  // Update greeting when language changes if no user messages exist
+  useEffect(() => {
+    if (messages.length === 1 && messages[0].role === 'assistant') {
+      const greeting = lang === 'en'
+        ? 'Hello! I am the Peptides Costa Rica virtual assistant. How can I help you with your research today?'
+        : '¡Hola! Soy el asistente virtual de Peptides Costa Rica. ¿En qué puedo ayudarte hoy con tu investigación?';
+      setMessages([{ role: 'assistant', text: greeting }]);
+    }
+  }, [lang]);
 
   useEffect(() => {
     if (isOpen && !isMinimized) {
@@ -78,7 +106,9 @@ export default function ChatWidget() {
       console.error('Chat error:', err);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        text: 'Lo siento, estoy teniendo problemas de conexión. Por favor, contáctanos por WhatsApp al +506 8404-6973.' 
+        text: lang === 'en'
+          ? 'Sorry, I am having connection issues. Please contact us via WhatsApp at +506 8404-6973.'
+          : 'Lo siento, estoy teniendo problemas de conexión. Por favor, contáctanos por WhatsApp al +506 8404-6973.' 
       }]);
     } finally {
       setIsLoading(false);
@@ -125,7 +155,7 @@ export default function ChatWidget() {
           e.currentTarget.style.transform = 'scale(1)';
           e.currentTarget.style.boxShadow = '0 8px 32px rgba(37, 99, 235, 0.4)';
         }}
-        aria-label="Open AI Assistant"
+        aria-label={lang === 'en' ? "Open AI Assistant" : "Abrir Asistente de IA"}
       >
         <Sparkles size={28} />
       </button>
@@ -176,7 +206,7 @@ export default function ChatWidget() {
           </div>
           <div>
             <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '700', color: '#f8fafc' }}>Peptides AI</h3>
-            <p style={{ margin: 0, fontSize: '0.7rem', color: '#38bdf8', fontWeight: '500' }}>En línea</p>
+            <p style={{ margin: 0, fontSize: '0.7rem', color: '#38bdf8', fontWeight: '500' }}>{lang === 'en' ? 'Online' : 'En línea'}</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -234,7 +264,7 @@ export default function ChatWidget() {
               gap: '8px',
               fontSize: '0.85rem'
             }}>
-              <Loader2 size={16} className="animate-spin" /> Escribiendo...
+              <Loader2 size={16} className="animate-spin" /> {lang === 'en' ? 'Thinking...' : 'Escribiendo...'}
             </div>
           )}
           <div ref={messagesEndRef} />
@@ -255,7 +285,7 @@ export default function ChatWidget() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Pregunta sobre péptidos..."
+            placeholder={lang === 'en' ? "Ask about peptides..." : "Pregunta sobre péptidos..."}
             rows={1}
             style={{
               flex: 1,
