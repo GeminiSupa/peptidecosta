@@ -302,7 +302,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
           <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading team members...</div>
         ) : (
           <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <table className="spreadsheet-table">
+            <table className="spreadsheet-table responsive-table">
               <thead>
                 <tr>
                   <th style={{ padding: '16px' }}>Name</th>
@@ -316,9 +316,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
               <tbody>
                 {users.map(u => (
                   <tr key={u.id}>
-                    <td style={{ padding: '16px', fontWeight: 'bold' }}>{u.name || 'N/A'}</td>
-                    <td style={{ padding: '16px' }}>{u.email}</td>
-                    <td style={{ padding: '16px' }}>
+                    <td data-label="Name" style={{ padding: '16px', fontWeight: 'bold' }}>{u.name || 'N/A'}</td>
+                    <td data-label="Email" style={{ padding: '16px' }}>{u.email}</td>
+                    <td data-label="Role" style={{ padding: '16px' }}>
                       {u.is_superadmin ? (
                         <span className="status-badge" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
                           <Shield size={12} /> Superadmin
@@ -329,13 +329,13 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>
+                    <td data-label="Commission" style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>
                       {u.commission_rate !== undefined ? `${u.commission_rate}%` : '0%'}
                     </td>
-                    <td style={{ padding: '16px', fontSize: '0.8rem', color: '#94a3b8', maxWidth: '200px' }}>
+                    <td data-label="Access" style={{ padding: '16px', fontSize: '0.8rem', color: '#94a3b8', maxWidth: '200px' }}>
                       {u.is_superadmin ? 'Full Access' : (u.permissions && u.permissions.length > 0 ? u.permissions.join(', ') : 'No Access')}
                     </td>
-                    <td style={{ padding: '16px', textAlign: 'right' }}>
+                    <td data-label="Actions" style={{ padding: '16px', textAlign: 'right' }}>
                       <button className="admin-btn" onClick={() => handleOpenModal(u)} style={{ marginRight: '8px', padding: '6px 10px' }}>
                         <Edit2 size={14} />
                       </button>
@@ -360,7 +360,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
           </div>
         ) : (
           <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <table className="spreadsheet-table">
+            <table className="spreadsheet-table responsive-table">
               <thead>
                 <tr>
                   <th style={{ padding: '16px' }}>Agent</th>
@@ -377,21 +377,21 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   const formattedPeriod = `${new Date(p.start_date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})} - ${new Date(p.end_date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}`;
                   return (
                     <tr key={p.id}>
-                      <td style={{ padding: '16px', fontWeight: 'bold' }}>
+                      <td data-label="Agent" style={{ padding: '16px', fontWeight: 'bold' }}>
                         <div style={{ color: '#f8fafc' }}>{p.agent_name || 'N/A'}</div>
                         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.agent_email}</div>
                       </td>
-                      <td style={{ padding: '16px', color: '#cbd5e1', fontSize: '0.85rem' }}>{formattedPeriod}</td>
-                      <td style={{ padding: '16px', fontSize: '0.85rem' }}>
+                      <td data-label="Period" style={{ padding: '16px', color: '#cbd5e1', fontSize: '0.85rem' }}>{formattedPeriod}</td>
+                      <td data-label="Gross Sales" style={{ padding: '16px', fontSize: '0.85rem' }}>
                         <div style={{ color: '#cbd5e1' }}>USD: <span style={{ fontWeight: 'bold', color: '#f8fafc' }}>{formatMoneyUI(p.usd_sales, 'USD')}</span></div>
                         <div style={{ color: '#cbd5e1' }}>CRC: <span style={{ fontWeight: 'bold', color: '#f8fafc' }}>{formatMoneyUI(p.crc_sales, 'CRC')}</span></div>
                       </td>
-                      <td style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>{p.commission_rate}%</td>
-                      <td style={{ padding: '16px', fontSize: '0.85rem' }}>
+                      <td data-label="Rate" style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>{p.commission_rate}%</td>
+                      <td data-label="Commission" style={{ padding: '16px', fontSize: '0.85rem' }}>
                         <div style={{ color: '#c084fc', fontWeight: 'bold' }}>USD: {formatMoneyUI(p.usd_commission, 'USD')}</div>
                         <div style={{ color: '#c084fc', fontWeight: 'bold' }}>CRC: {formatMoneyUI(p.crc_commission, 'CRC')}</div>
                       </td>
-                      <td style={{ padding: '16px' }}>
+                      <td data-label="Status" style={{ padding: '16px' }}>
                         {p.status === 'Pending' ? (
                           <span className="status-badge" style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#eab308', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
                             Pending Approval
@@ -406,7 +406,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                           </span>
                         )}
                       </td>
-                      <td style={{ padding: '16px', textAlign: 'right' }}>
+                      <td data-label="Actions" style={{ padding: '16px', textAlign: 'right' }}>
                         {p.status === 'Pending' ? (
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                             <button 

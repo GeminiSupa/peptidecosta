@@ -3357,7 +3357,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             ) : (
               <div className="spreadsheet-container">
-                <table className="spreadsheet-table">
+                <table className="spreadsheet-table responsive-table">
                   <thead>
                     <tr>
                       <th style={{ width: '40px' }}>#</th>
@@ -3738,7 +3738,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             ) : (
               <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <table className="spreadsheet-table">
+                <table className="spreadsheet-table responsive-table">
                   <thead>
                     <tr>
                       <th style={{ padding: '10px 12px' }}>Date</th>
@@ -3759,10 +3759,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         
                         return (
                           <tr key={order.id}>
-                            <td style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                            <td data-label="Date" style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
                               {orderDate}
                             </td>
-                            <td style={{ padding: '10px 12px' }}>
+                            <td data-label="Order Info" style={{ padding: '10px 12px' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                 <span style={{ fontWeight: 'bold', color: '#fbbf24', fontSize: '0.85rem' }}>
                                   #{order.order_number || order.id.slice(0, 8)}
@@ -3772,7 +3772,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                                 </span>
                               </div>
                             </td>
-                            <td style={{ padding: '10px 12px' }}>
+                            <td data-label="Customer Details" style={{ padding: '10px 12px' }}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                 <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem' }}>
                                   {order.customer_name}
@@ -3782,13 +3782,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                                 </span>
                               </div>
                             </td>
-                            <td style={{ padding: '10px 12px', fontWeight: 'bold', color: '#38bdf8', fontSize: '0.9rem' }}>
+                            <td data-label="Total Amount" style={{ padding: '10px 12px', fontWeight: 'bold', color: '#38bdf8', fontSize: '0.9rem' }}>
                               {order.currency === 'USD' 
                                 ? `$${order.total_usd}` 
                                 : `₡${order.total_crc.toLocaleString('en-US')}`
                               }
                             </td>
-                            <td style={{ padding: '10px 12px' }}>
+                            <td data-label="Payment" style={{ padding: '10px 12px' }}>
                               <span style={{ 
                                 padding: '4px 8px', 
                                 borderRadius: '6px', 
@@ -3800,7 +3800,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                                 {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE' : order.payment_method === 'tilopay' ? '💳 Card' : '💬 WA'}
                               </span>
                             </td>
-                            <td style={{ padding: '10px 12px' }}>
+                            <td data-label="Status" style={{ padding: '10px 12px' }}>
                               <select 
                                 className="cell-select"
                                 value={order.status || 'Pending'}
@@ -3825,7 +3825,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                                 <option value="Cancelled">Cancelled</option>
                               </select>
                             </td>
-                            <td style={{ padding: '10px 12px' }}>
+                            <td data-label="Agent" style={{ padding: '10px 12px' }}>
                               <select 
                                 className="cell-select"
                                 value={order.sales_agent || ''}
@@ -3853,7 +3853,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                                 <option value="ADD_CUSTOM_AGENT">✍️ Add Custom...</option>
                               </select>
                             </td>
-                            <td style={{ padding: '10px 12px' }}>
+                            <td data-label="Actions" style={{ padding: '10px 12px' }}>
                               <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', minWidth: '240px', whiteSpace: 'nowrap' }}>
                                 <button 
                                   className="admin-btn" 
@@ -4278,7 +4278,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             ) : (
               <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <table className="spreadsheet-table">
+                <table className="spreadsheet-table responsive-table">
                   <thead>
                     <tr>
                       <th style={{ padding: '10px 12px', width: '40px', textAlign: 'center' }}>
@@ -4308,7 +4308,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       
                       return (
                         <tr key={acart.session_id}>
-                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                          <td data-label="Select" style={{ padding: '10px 12px', textAlign: 'center' }}>
                             <input 
                               type="checkbox" 
                               checked={selectedCartIds.includes(acart.session_id)} 
@@ -4322,10 +4322,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                               style={{ cursor: 'pointer', transform: 'scale(1.1)' }}
                             />
                           </td>
-                          <td style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                          <td data-label="Last Updated" style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
                             {new Date(acart.last_updated).toLocaleString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
                           </td>
-                          <td style={{ padding: '10px 12px' }}>
+                          <td data-label="Customer" style={{ padding: '10px 12px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                               <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem' }}>
                                 {acart.customer_name || 'Anonymous User'}
@@ -4341,7 +4341,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                               ) : null}
                             </div>
                           </td>
-                          <td style={{ padding: '10px 12px' }}>
+                          <td data-label="Cart Details" style={{ padding: '10px 12px' }}>
                             <button 
                               onClick={() => setSelectedCartDetails(acart)}
                               style={{ 
@@ -4361,7 +4361,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                               🛒 {totalQty} {totalQty === 1 ? 'Item' : 'Items'}
                             </button>
                           </td>
-                          <td style={{ padding: '10px 12px' }}>
+                          <td data-label="Recovery Status" style={{ padding: '10px 12px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
                               {acart.customer_email && (
                                 <span style={{ 
@@ -4408,7 +4408,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                               )}
                             </div>
                           </td>
-                          <td style={{ padding: '10px 12px' }}>
+                          <td data-label="Actions" style={{ padding: '10px 12px' }}>
                             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', minWidth: '240px', whiteSpace: 'nowrap' }}>
                               <button 
                                 className="admin-btn" 
@@ -5384,7 +5384,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No leads match your active filters.</div>
           ) : (
             <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
-              <table className="spreadsheet-table">
+              <table className="spreadsheet-table responsive-table">
                 <thead>
                   <tr>
                     <th style={{ padding: '10px 12px', width: '40px' }}>
@@ -5407,7 +5407,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 <tbody>
                   {paginatedLeads.map(lead => (
                   <tr key={lead.id}>
-                    <td style={{ padding: '10px 12px' }}>
+                    <td data-label="Select" style={{ padding: '10px 12px' }}>
                       <input 
                         type="checkbox" 
                         checked={selectedLeads.includes(lead.id)}
@@ -5415,10 +5415,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         style={{ cursor: 'pointer' }}
                       />
                     </td>
-                    <td style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                    <td data-label="Date" style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
                       {new Date(lead.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
                     </td>
-                    <td style={{ padding: '10px 12px' }}>
+                    <td data-label="Contact Details" style={{ padding: '10px 12px' }}>
                       {editingLeadId === lead.id ? (
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                           <select 
@@ -5533,7 +5533,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             </div>
                           )}
                         </td>
-                        <td style={{ padding: '10px 12px', minWidth: '150px', whiteSpace: 'nowrap' }}>
+                        <td data-label="Location" style={{ padding: '10px 12px', minWidth: '150px', whiteSpace: 'nowrap' }}>
                           {lead.city || lead.country ? (
                             <span style={{ color: '#f8fafc', fontSize: '0.85rem' }}>
                               {[lead.city, lead.country].filter(Boolean).join(', ')}
@@ -5542,7 +5542,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             <span style={{ color: '#64748b', fontSize: '0.85rem' }}>—</span>
                           )}
                         </td>
-                        <td style={{ padding: '10px 12px' }}>
+                        <td data-label="Attribution" style={{ padding: '10px 12px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
                             <span style={{ 
                               ...getReferralBadgeStyles(getReferralLabel(lead)),
@@ -5584,7 +5584,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             )}
                           </div>
                         </td>
-                        <td style={{ padding: '10px 12px' }}>
+                        <td data-label="Last Contacted" style={{ padding: '10px 12px' }}>
                           {(() => {
                             if (!lead.last_contacted_at) {
                               return (
@@ -5622,7 +5622,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           })()}
                         </td>
 
-                        <td style={{ padding: '10px 12px' }}>
+                        <td data-label="Browsing History" style={{ padding: '10px 12px' }}>
                           {(() => {
                             const views = productViews.filter(v => v.contact_value === lead.contact_value);
                             if (views.length === 0) return <span style={{ color: '#64748b', fontSize: '0.8rem' }}>No views</span>;
@@ -5648,7 +5648,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             );
                           })()}
                         </td>
-                        <td style={{ padding: '10px 12px' }}>
+                        <td data-label="Actions" style={{ padding: '10px 12px' }}>
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', minWidth: '220px', whiteSpace: 'nowrap' }}>
                             {editingLeadId === lead.id ? (
                               <button 

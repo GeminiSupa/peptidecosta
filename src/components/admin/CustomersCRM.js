@@ -602,7 +602,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
         </div>
       ) : (
         <div className="crm-table-wrapper">
-          <table className="crm-table">
+          <table className="crm-table responsive-table">
             <thead>
               <tr>
                 <th>Customer / Lead</th>
@@ -621,7 +621,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                 return (
                   <tr key={cust.id}>
                     {/* Customer Profile Column */}
-                    <td>
+                    <td data-label="Customer / Lead">
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div className="cust-avatar-mini" style={{ background: cust.isLead ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)' }}>
                           {cust.name.charAt(0).toUpperCase()}
@@ -643,7 +643,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                     </td>
 
                     {/* Contact Info Column */}
-                    <td>
+                    <td data-label="Contact Details">
                       <div className="crm-cell-contact">
                         {cust.email && (
                           <a href={`mailto:${cust.email}`} title="Send Email">
@@ -666,7 +666,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                     </td>
 
                     {/* Location Column */}
-                    <td>
+                    <td data-label="Location">
                       {cust.location ? (
                         <span className="crm-cell-location">
                           <MapPin size={12} style={{ color: '#64748b' }} />
@@ -678,7 +678,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                     </td>
 
                     {/* Orders Count Column */}
-                    <td style={{ textAlign: 'center' }}>
+                    <td data-label="Orders" style={{ textAlign: 'center' }}>
                       <span className="crm-cell-val">
                         <ShoppingBag size={12} style={{ color: '#64748b' }} />
                         {cust.orderCount}
@@ -686,7 +686,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                     </td>
 
                     {/* Lifetime Value Column */}
-                    <td style={{ textAlign: 'center' }}>
+                    <td data-label="Lifetime Value" style={{ textAlign: 'center' }}>
                       <span className="crm-cell-val green">
                         <DollarSign size={12} />
                         {cust.totalSpentUsd.toFixed(0)}
@@ -694,7 +694,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                     </td>
 
                     {/* Last Active Column */}
-                    <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                    <td data-label="Last Active" style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Calendar size={12} />
                         <span>{new Date(cust.lastOrderDate).toLocaleDateString()}</span>
@@ -702,7 +702,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                     </td>
 
                     {/* AI Recommendation Column */}
-                    <td>
+                    <td data-label="AI Cross-Sell">
                       {(() => {
                         const rec = resolveRecommendation(cust);
                         const isGenerating = generatingPitchId === cust.id;
@@ -768,7 +768,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                     </td>
 
                     {/* Actions Column */}
-                    <td>
+                    <td data-label="Actions">
                       <div className="crm-compact-actions">
                         <button className="crm-icon-btn edit" onClick={() => openEditModal(cust)} title="Edit Profile">
                           <Edit2 size={13} />

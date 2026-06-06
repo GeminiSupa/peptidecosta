@@ -5298,3 +5298,91 @@ body {
     margin: 0;
     line-height: 1.4;
 }
+
+/* --- Admin Dashboard Mobile UI Overhaul --- */
+@media (max-width: 768px) {
+    /* Responsive Table to Cards */
+    .responsive-table {
+        display: block;
+        width: 100%;
+    }
+    
+    .responsive-table thead {
+        display: none; /* Hide table headers on mobile */
+    }
+    
+    .responsive-table tbody {
+        display: block;
+        width: 100%;
+    }
+    
+    .responsive-table tr {
+        display: flex;
+        flex-direction: column;
+        background: rgba(14, 26, 51, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        margin-bottom: 16px;
+        padding: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .responsive-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 4px !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
+        font-size: 0.85rem;
+        text-align: right;
+    }
+    
+    .responsive-table td:last-child {
+        border-bottom: none !important;
+    }
+    
+    .responsive-table td::before {
+        content: attr(data-label);
+        font-weight: 800;
+        text-transform: uppercase;
+        font-size: 0.7rem;
+        color: #94a3b8;
+        margin-right: 12px;
+        text-align: left;
+    }
+    
+    /* Fix complex contents inside td */
+    .responsive-table td > div {
+        text-align: right;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+    
+    /* Touch Target Enhancements */
+    .admin-btn {
+        min-height: 44px;
+        padding: 8px 20px;
+    }
+    
+    .admin-tab-btn {
+        min-height: 44px;
+    }
+    
+    .admin-icon-btn, .crm-icon-btn {
+        min-height: 40px;
+        min-width: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    /* Navbar styling adjustments */
+    .admin-navbar {
+        padding: 16px 12px;
+    }
+    
+    .admin-nav-actions {
+        padding-bottom: 8px; /* Room for scrollbar/touch */
+    }
+}
