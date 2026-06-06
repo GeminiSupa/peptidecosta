@@ -207,6 +207,8 @@ export default function CatalogPage() {
   const [addedProductId, setAddedProductId] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [howToOrderOpen, setHowToOrderOpen] = useState(false);
+  const [flyingItems, setFlyingItems] = useState([]);
+  const [toasts, setToasts] = useState([]);
 
   // Checkout inputs
   const [customerName, setCustomerName] = useState('');
@@ -1237,6 +1239,51 @@ export default function CatalogPage() {
     addToCart(productData);
     setAddedProductId(productData.product);
     setTimeout(() => setAddedProductId(null), 600); // Reset animation state
+
+    // 1. Calculate Coordinates for Flying Vial
+    const button = e.currentTarget;
+    let startRect = button.getBoundingClientRect(); // fallback to button pos
+    
+    const card = button.closest('.product-card') || button.closest('.suggested-product-row');
+    if (card) {
+      const img = card.querySelector('img');
+      if (img) {
+        startRect = img.getBoundingClientRect();
+      }
+    }
+
+    const cartBtn = document.getElementById('floating-cart-btn') || document.querySelector('.nav-cart-btn');
+    let endRect = { left: window.innerWidth - 60, top: window.innerHeight - 60, width: 50, height: 50 };
+    if (cartBtn) {
+      endRect = cartBtn.getBoundingClientRect();
+    }
+
+    const startX = startRect.left + startRect.width / 2;
+    const startY = startRect.top + startRect.height / 2;
+    const endX = endRect.left + endRect.width / 2;
+    const endY = endRect.top + endRect.height / 2;
+
+    const id = Date.now() + Math.random();
+    setFlyingItems(prev => [...prev, {
+      id,
+      imageSrc: productData.imageUrl || '/catalog/peptides_2.png', // Fallback to default vial
+      startX,
+      startY,
+      endX,
+      endY
+    }]);
+
+    // Remove flying item after animation (800ms)
+    setTimeout(() => {
+      setFlyingItems(prev => prev.filter(item => item.id !== id));
+    }, 800);
+
+    // 2. Add Premium Toast Notification
+    const toastId = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id: toastId, productName: productData.product }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== toastId));
+    }, 3000);
   };
 
   // Get product suggestions based on cart items (Amazon-style)
@@ -3408,6 +3455,35 @@ export default function CatalogPage() {
           </div>
         </div>
       </footer>
+
+      {/* Animation Overlays */}
+      {flyingItems.map(item => (
+        <img 
+          key={item.id}
+          src={item.imageSrc}
+          className="flying-vial"
+          style={{
+            '--start-x': `${item.startX}px`,
+            '--start-y': `${item.startY}px`,
+            '--end-x': `${item.endX}px`,
+            '--end-y': `${item.endY}px`
+          }}
+          alt=""
+        />
+      ))}
+
+      <div className="toast-container">
+        {toasts.map(t => (
+          <div key={t.id} className="premium-toast">
+            <Check size={16} />
+            <span>
+              {lang === 'en' ? `Added ` : `Añadido `}
+              <strong>{t.productName}</strong>
+              {lang === 'en' ? ` to cart.` : ` al carrito.`}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

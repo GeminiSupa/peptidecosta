@@ -259,27 +259,40 @@ const handleWhatsAppClick = (src) => {
               <p className="lp-hero-sub">{t.hero_sub}</p>
               <p className="hero-text">{t.hero_text}</p>
 
-              <div className="hero-actions">
-                <Link href={`/catalog?lang=${lang}`} className="btn-hero-primary">
+              <div className="hero-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center' }}>
+                <Link href={`/catalog?lang=${lang}`} className="btn-hero-primary" style={{ flex: '1 1 auto', minWidth: 'max-content', textAlign: 'center', justifyContent: 'center' }}>
                   {t.hero_cta} <ArrowUpRight size={18} />
                 </Link>
                 <a 
-          className="lp-hero-btn-secondary lp-wa-btn-main"
-          href="https://wa.me/50684046973"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => {
-            e.preventDefault();
-            handleWhatsAppClick('homepage');
-            window.open(buildWhatsAppLink('50684046973'), '_blank');
-          }}
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" style={{ flexShrink: 0 }}>
-            <circle cx="12" cy="12" r="12" fill="#25D366" />
-            <path fillRule="evenodd" clipRule="evenodd" d="M12.022 17.502c1.025 0 2.02-.276 2.894-.799l2.072.544-.553-2.021a5.459 5.459 0 0 0 .848-2.909c0-3.023-2.46-5.483-5.483-5.483-3.024 0-5.484 2.46-5.484 5.483 0 1.293.45 2.507 1.22 3.477l-.547 2.003 2.051-.537a5.46 5.46 0 0 0 2.482.642Z" fill="white" />
-          </svg>
-          {t.hero_cta2}
-        </a>
+                  className="lp-hero-btn-secondary lp-wa-btn-main"
+                  href="https://wa.me/50684046973"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleWhatsAppClick('homepage');
+                    window.open(buildWhatsAppLink('50684046973'), '_blank');
+                  }}
+                  style={{
+                    backgroundColor: '#25D366',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '25px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '12px 24px',
+                    fontWeight: 'bold',
+                    textDecoration: 'none',
+                    boxShadow: '0 4px 14px rgba(37, 211, 102, 0.4)',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" width="22" height="22" style={{ flexShrink: 0 }}>
+                    <path fillRule="evenodd" clipRule="evenodd" d="M12.022 17.502c1.025 0 2.02-.276 2.894-.799l2.072.544-.553-2.021a5.459 5.459 0 0 0 .848-2.909c0-3.023-2.46-5.483-5.483-5.483-3.024 0-5.484 2.46-5.484 5.483 0 1.293.45 2.507 1.22 3.477l-.547 2.003 2.051-.537a5.46 5.46 0 0 0 2.482.642Zm12-5.5c0 6.627-5.373 12-12 12-2.115 0-4.103-.547-5.836-1.505L0 24l2.583-6.027A11.956 11.956 0 0 1 1.022 12C1.022 5.373 6.395 0 13.022 0c6.627 0 12 5.373 12 12Z" fill="white" />
+                  </svg>
+                  {t.hero_cta2}
+                </a>
                   
 
 
@@ -295,7 +308,7 @@ const handleWhatsAppClick = (src) => {
 
             <div className="lp-hero-visual-block">
               <div className="lp-hero-image-glow" />
-              <img src="/vial_costarica_hero.png" alt="Peptides Costa Rica Vial" className="lp-hero-main-img" style={{ mixBlendMode: 'multiply' }} />
+              <img src="https://peptidescostarica.net/wp-content/uploads/2026/04/Untitled-design-5-1.png" alt="Peptides Costa Rica Hero" className="lp-hero-main-img" style={{ width: '100%', height: 'auto', objectFit: 'contain', position: 'relative', zIndex: 10, borderRadius: '16px' }} />
 
               <div className="lp-floating-badge" style={{ backdropFilter: 'blur(12px)', background: 'rgba(255, 255, 255, 0.1)' }}>
                 <div className="lp-badge-icon">
@@ -324,7 +337,7 @@ const handleWhatsAppClick = (src) => {
             <div className="lp-about-cards-grid">
               {/* Card 1: Scientist/Lab Image */}
               <div className="lp-about-card lp-about-card--image">
-                <img src="/vials_group_costarica.png" alt="Peptides Costa Rica Group" className="lp-about-card-img" style={{ mixBlendMode: 'multiply', width: '100%', height: 'auto' }} />
+                <img src="https://peptidescostarica.net/wp-content/uploads/2026/04/3-13-1-2048x1529.png" alt="Peptides Costa Rica Group" className="lp-about-card-img" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 <div className="lp-about-card-overlay glassmorphism-overlay">
                   <h3>{lang === 'en' ? 'Trust, Transparency, Results' : 'Confianza, Transparencia, Resultados'}</h3>
                   <p>{lang === 'en' ? 'Rigorous verification of every single batch we supply.' : 'Verificación rigurosa de cada lote que distribuimos.'}</p>
@@ -460,6 +473,57 @@ const handleWhatsAppClick = (src) => {
           </section>
         )}
 
+        {/* ── CUSTOMER TRANSFORMATION ──────────────────────── */}
+        <section className="lp-section lp-transformation-section" style={{ background: 'var(--primary)', color: 'white', padding: '60px 0' }}>
+          <div className="container" style={{ maxWidth: '1000px', margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+              <span style={{ color: '#C8530C', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.85rem', display: 'block', marginBottom: '8px' }}>
+                CUSTOMER TRANSFORMATION
+              </span>
+              <h2 style={{ fontSize: '2.5rem', fontWeight: '900', marginBottom: '12px' }}>
+                Real People. Real Results.
+              </h2>
+              <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '1.05rem' }}>
+                This customer shared his before & after after using our product consistently.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '32px', alignItems: 'stretch' }}>
+              {/* Before & After Image Block */}
+              <div style={{ flex: '1 1 350px', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', display: 'flex' }}>
+                <img src="/customer_transformation.png" alt="Before and After Transformation" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              </div>
+
+              {/* Bullet Points Block */}
+              <div style={{ flex: '1 1 350px', background: 'white', borderRadius: '16px', padding: '40px', color: 'var(--text-main)', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '32px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ background: '#F0F4F8', color: '#002766', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Star size={20} fill="currentColor" />
+                    </div>
+                    <span style={{ fontWeight: '700', fontSize: '1.1rem', color: '#002766', lineHeight: '1.3' }}>Real customer-submitted result</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ background: '#F0F4F8', color: '#002766', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Star size={20} fill="currentColor" />
+                    </div>
+                    <span style={{ fontWeight: '700', fontSize: '1.1rem', color: '#002766', lineHeight: '1.3' }}>Face blurred for privacy</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ background: '#F0F4F8', color: '#002766', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Star size={20} fill="currentColor" />
+                    </div>
+                    <span style={{ fontWeight: '700', fontSize: '1.1rem', color: '#002766', lineHeight: '1.3' }}>Results may vary from person to person</span>
+                  </div>
+                </div>
+                <Link href={`/catalog?lang=${lang}`} style={{ display: 'inline-block', background: '#002766', color: 'white', padding: '14px 28px', borderRadius: '8px', fontWeight: 'bold', textDecoration: 'none', transition: 'background 0.2s' }}>
+                  View Products
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ── TESTIMONIALS ─────────────────────────────────── */}
         <section className="lp-section lp-testimonials-section">
           <div className="container">
@@ -576,13 +640,24 @@ const handleWhatsAppClick = (src) => {
         <div className="container">
           <img src="/logo.png" alt="Logo" style={{ height: '36px', marginBottom: '16px', opacity: 0.95, borderRadius: '8px' }} />
           <p>{t.footer_desc}</p>
-          <div className="footer-links" style={{ marginBottom: '24px' }}>
+          <div className="footer-links" style={{ marginBottom: '24px', display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'center' }}>
             <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Shop Catalog' : 'Catálogo'}</Link>
-            <a href="mailto:info@peptidescostarica.net">info@peptidescostarica.net</a>
-            <a href="tel:+50684046973">CR: +506 8404-6973</a>
+            <Link href="/about">{lang === 'en' ? 'About Us' : 'Nosotros'}</Link>
+            <Link href="/faq">{lang === 'en' ? 'FAQ' : 'Preguntas'}</Link>
+            <Link href="/contact">{lang === 'en' ? 'Contact' : 'Contacto'}</Link>
+            <Link href="/bulk-discounts">{lang === 'en' ? 'Bulk Discounts' : 'Descuentos Mayoristas'}</Link>
+            <Link href="/coa-database">{lang === 'en' ? 'COA Database' : 'Base de Datos COA'}</Link>
+            <Link href="/our-service-locations">{lang === 'en' ? 'Service Locations' : 'Ubicaciones'}</Link>
+            <Link href="/shipping-policy">{lang === 'en' ? 'Shipping Policy' : 'Envíos'}</Link>
+            <Link href="/return-refund-policy">{lang === 'en' ? 'Returns' : 'Devoluciones'}</Link>
+            <Link href="/customer-feedback">{lang === 'en' ? 'Testimonials' : 'Testimonios'}</Link>
+            <Link href="/privacy-policy">{lang === 'en' ? 'Privacy Policy' : 'Privacidad'}</Link>
             <Link href="/admin" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: '500' }}>
               {lang === 'en' ? 'Admin Portal' : 'Portal de Admin'}
             </Link>
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginBottom: '16px', textAlign: 'left', lineHeight: '1.5' }}>
+            <strong>Legal Notice:</strong> Products offered by Peptides Costa Rica are intended strictly for laboratory research use only. They are not approved or licensed by the FDA for the prevention, diagnosis, treatment, or cure of any disease. Information on this website is for educational purposes only and should not be considered medical or legal advice. Not for human or veterinary use.
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
             © {new Date().getFullYear()} Peptides Costa Rica. {t.footer_copy}

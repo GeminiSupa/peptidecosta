@@ -5209,3 +5209,82 @@ body {
     text-align: center;
     padding: 12px 0;
 }
+
+/* --- Premium Toast & Flying Vial Animations --- */
+
+.flying-vial {
+    position: fixed;
+    z-index: 10000;
+    width: 60px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 8px;
+    pointer-events: none;
+    transform-origin: center center;
+    /* Use keyframes for flight path */
+    animation: flyToCart 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes flyToCart {
+    0% {
+        transform: translate(calc(var(--start-x) - 30px), calc(var(--start-y) - 40px)) scale(1);
+        opacity: 1;
+    }
+    40% {
+        /* Slight pop upwards to create a satisfying arc */
+        transform: translate(calc(var(--start-x) + (var(--end-x) - var(--start-x)) * 0.4 - 30px), calc(var(--start-y) - 80px)) scale(0.8);
+        opacity: 0.9;
+    }
+    100% {
+        transform: translate(calc(var(--end-x) - 30px), calc(var(--end-y) - 40px)) scale(0.1);
+        opacity: 0;
+    }
+}
+
+.toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.premium-toast {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(16, 185, 129, 0.95); /* Success Emerald */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    animation: slideInRightToast 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards, fadeOutToast 0.3s 2.7s forwards;
+}
+
+@keyframes slideInRightToast {
+    from {
+        transform: translateX(120%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOutToast {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+}
