@@ -197,7 +197,7 @@ export default function CatalogPage() {
   const [priceFilter, setPriceFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState('pop');
   const [inStockOnly, setInStockOnly] = useState(true);
-  const [viewMode, setViewMode] = useState('list'); // 'list', 'compact', 'grid'
+  const [viewMode, setViewMode] = useState('list'); // 'list', 'grid'
 
   // Cart & Modals States
   const [cart, setCart] = useState([]);
@@ -432,7 +432,7 @@ export default function CatalogPage() {
 
     // Viewmode loaded from localStorage
     const savedView = localStorage.getItem('viewMode') || 'list';
-    setViewMode(savedView);
+    setViewMode(savedView === 'compact' ? 'list' : savedView);
 
     // Cart loaded from localStorage
     const savedCart = localStorage.getItem('cart');
@@ -1121,9 +1121,7 @@ export default function CatalogPage() {
   };
 
   const handleViewToggle = () => {
-    let nextView = 'list';
-    if (viewMode === 'list') nextView = 'compact';
-    else if (viewMode === 'compact') nextView = 'grid';
+    const nextView = viewMode === 'list' ? 'grid' : 'list';
     setViewMode(nextView);
     localStorage.setItem('viewMode', nextView);
   };
@@ -2077,9 +2075,8 @@ export default function CatalogPage() {
               />
             </div>
             <button onClick={handleViewToggle} className="filter-btn" title="Toggle Layout">
-              {viewMode === 'list' && <List size={18} />}
-              {viewMode === 'compact' && <Grid size={18} />}
-              {viewMode === 'grid' && <Sparkles size={18} />}
+              {viewMode === 'list' && <Grid size={18} />}
+              {viewMode === 'grid' && <List size={18} />}
             </button>
             <button 
               onClick={() => setShowFilters(!showFilters)} 

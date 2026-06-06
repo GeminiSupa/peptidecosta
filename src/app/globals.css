@@ -168,20 +168,19 @@ body {
 
 .header-content {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    justify-content: center;
-    padding: 8px 0 16px;
+    justify-content: space-between;
+    padding: 8px 20px;
     position: relative;
+    gap: 16px;
 }
 
 /* Brand Logo Style */
 .logo {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    text-align: center;
+    justify-content: flex-start;
     cursor: pointer;
     text-decoration: none;
     filter: drop-shadow(0 2px 8px rgba(0, 212, 255, 0.4));
@@ -193,7 +192,7 @@ body {
     padding: 4px;
     border-radius: 12px;
     box-shadow: 0 2px 16px rgba(0, 0, 0, 0.12);
-    max-height: 70px;
+    max-height: 50px;
     width: auto;
     object-fit: contain;
 }
@@ -508,8 +507,8 @@ body {
 }
 
 .product-image {
-    width: 155px;
-    height: 195px;
+    width: 140px;
+    height: 180px;
     background: #ffffff;
     border-radius: 12px;
     display: flex;
@@ -532,8 +531,11 @@ body {
 }
 
 .product-info {
+    display: flex;
+    flex-direction: column;
     flex-grow: 1;
     min-width: 0;
+    align-self: stretch;
 }
 
 .product-category {
@@ -544,7 +546,7 @@ body {
     margin-bottom: 6px; /* Improved vertical spacing */
     letter-spacing: 0.5px;
     opacity: 0.85;
-    padding-right: 110px;
+    padding-right: 95px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -556,12 +558,17 @@ body {
     color: var(--text-main);
     margin-bottom: 8px; /* Better breathing room between elements */
     line-height: 1.3; /* Improved line height to prevent blending/density on mobile */
-    padding-right: 100px;
+    padding-right: 0;
+    height: 2.73rem;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.product-actions {
+    margin-top: auto;
 }
 
 .product-pricing {
@@ -1354,14 +1361,16 @@ body {
 .product-grid.compact-view .product-category {
     font-size: 0.75rem !important;
     margin-bottom: 4px !important;
-    padding-right: 95px !important;
+    padding-right: 0 !important;
 }
 
 .product-grid.compact-view .product-name {
-    font-size: 1.25rem !important;
+    font-size: 1.05rem !important;
     font-weight: 700 !important;
     margin-bottom: 6px !important;
-    padding-right: 95px !important;
+    padding-right: 0 !important;
+    height: 2.73rem !important;
+    display: -webkit-box !important;
     -webkit-line-clamp: 2 !important;
 }
 
@@ -1392,10 +1401,13 @@ body {
 }
 
 .product-grid.compact-view .stock-badge {
-    top: 8px;
-    right: 8px;
-    padding: 3px 6px;
-    font-size: 0.55rem;
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    margin-top: 8px !important;
+    padding: 3px 6px !important;
+    font-size: 0.55rem !important;
+    width: fit-content !important;
 }
 
 /* Premium Desktop Split Layout for Wide Screen List Cards */
@@ -1425,6 +1437,8 @@ body {
         font-weight: 700 !important;
         margin: 0 !important;
         padding: 0 !important;
+        height: 4.16rem !important;
+        display: -webkit-box !important;
         -webkit-line-clamp: 2 !important;
     }
 
@@ -1531,7 +1545,12 @@ body {
     padding-right: 0;
     font-size: 0.85rem;
     margin-bottom: 6px;
+    height: 2.21rem;
+    display: -webkit-box;
     -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
     text-align: center;
 }
 
@@ -2387,9 +2406,10 @@ body {
 /* Trust Badges in Header */
 .trust-badges-container {
     display: flex;
-    justify-content: center;
+    justify-content: flex-end;
+    align-items: center;
     gap: 12px;
-    margin-top: 10px;
+    margin-top: 0;
     flex-wrap: wrap;
 }
 
@@ -2450,6 +2470,7 @@ body {
     .header-content {
         display: flex !important;
         flex-direction: row !important;
+        flex-wrap: wrap !important;
         justify-content: space-between !important;
         align-items: center !important;
         padding: 8px 16px !important;
@@ -2495,8 +2516,8 @@ body {
     
     /* Tall, uncropped, high-contrast mobile image container */
     .product-grid:not(.compact-view):not(.grid-view) .product-image {
-        width: 155px !important;
-        height: 195px !important;
+        width: 140px !important;
+        height: 180px !important;
         background: #ffffff !important;
         border: none !important;
         border-radius: 12px !important;
@@ -2529,7 +2550,7 @@ body {
         font-weight: 700 !important;
         color: var(--text-muted) !important;
         margin-bottom: 2px !important;
-        padding-right: 95px !important;
+        padding-right: 0 !important;
         text-transform: uppercase !important;
         letter-spacing: 0.5px !important;
     }
@@ -2540,7 +2561,8 @@ body {
         color: var(--text-main) !important;
         margin-bottom: 4px !important;
         line-height: 1.25 !important;
-        padding-right: 95px !important;
+        padding-right: 0 !important;
+        height: 2.63rem !important;
         display: -webkit-box !important;
         -webkit-line-clamp: 2 !important;
         -webkit-box-orient: vertical !important;
@@ -2616,15 +2638,17 @@ body {
         max-width: 100% !important;
     }
     
-    /* Keep stock badge positioned absolutely at the top right of the card */
+    /* Position stock badge relatively below information to free up name space on mobile */
     .product-grid:not(.compact-view):not(.grid-view) .stock-badge {
-        position: absolute !important;
-        top: 12px !important;
-        right: 12px !important;
+        position: relative !important;
+        top: auto !important;
+        right: auto !important;
+        margin-top: 8px !important;
         padding: 3px 6px !important;
         font-size: 0.58rem !important;
         font-weight: 800 !important;
         border-radius: 6px !important;
+        width: fit-content !important;
     }
 }
 
@@ -4222,10 +4246,10 @@ body {
     color: var(--text-main);
     line-height: 1.35;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    height: 2.7rem;
+    height: 4.05rem;
     font-family: var(--font-montserrat), sans-serif;
 }
 
@@ -4817,7 +4841,7 @@ body {
     .lp-product-body h4 {
         font-size: 0.88rem;
         height: auto;
-        -webkit-line-clamp: 2;
+        -webkit-line-clamp: 3;
     }
     .lp-product-price {
         font-size: 1rem;
@@ -4934,5 +4958,25 @@ body {
     }
     100% {
         transform: translate3d(-50%, 0, 0);
+    }
+}
+
+/* Extra small mobile header stacking to prevent overlap */
+@media (max-width: 480px) {
+    .header-content {
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 12px !important;
+        padding: 12px 16px !important;
+    }
+    .logo {
+        justify-content: center !important;
+        width: 100% !important;
+        margin-bottom: 4px;
+    }
+    .trust-badges-container {
+        justify-content: center !important;
+        width: 100% !important;
     }
 }
