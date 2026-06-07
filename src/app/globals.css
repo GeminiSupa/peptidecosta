@@ -1300,6 +1300,28 @@ body {
     margin-bottom: 24px;
 }
 
+.footer-links {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 16px 24px;
+    margin-bottom: 16px;
+}
+
+.footer-links a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: color 0.2s;
+}
+
+.footer-links a:hover {
+    color: var(--text-main);
+}
+
 .footer-col-link {
     color: var(--text-muted);
     text-decoration: none;
@@ -1314,6 +1336,11 @@ body {
 }
 
 @media (max-width: 480px) {
+    .footer-links {
+        flex-direction: column;
+        gap: 16px;
+    }
+    
     .footer-links-grid {
         grid-template-columns: 1fr !important;
         text-align: center !important;

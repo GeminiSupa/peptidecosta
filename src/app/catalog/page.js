@@ -258,6 +258,16 @@ export default function CatalogPage() {
 
   // Tilopay State
   const [tilopaySubmitting, setTilopaySubmitting] = useState(false);
+
+  // Contact Modal States
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [contactFormName, setContactFormName] = useState('');
+  const [contactFormEmail, setContactFormEmail] = useState('');
+  const [contactFormSubject, setContactFormSubject] = useState('');
+  const [contactFormMessage, setContactFormMessage] = useState('');
+  const [contactFormLoading, setContactFormLoading] = useState(false);
+  const [contactFormSuccess, setContactFormSuccess] = useState(false);
+  const [contactFormError, setContactFormError] = useState('');
   
   // Ref to hold latest checkout data for PayPal callbacks without re-rendering
   const checkoutDataRef = useRef({ cart, currency: 'CRC', exchangeRate: FALLBACK_EXCHANGE_RATE, customerName, customerPhone, customerEmail, shippingAddress, lang: 'en', sessionId, customerMetadata, promoData });
@@ -307,6 +317,45 @@ export default function CatalogPage() {
       }
     }
   }, [products]);
+
+  const handleContactSubmit = async (e) => {
+    e.preventDefault();
+    setContactFormError('');
+    if (!contactFormName.trim() || !contactFormEmail.trim() || !contactFormMessage.trim()) {
+      setContactFormError(lang === 'en' ? 'Please fill in all required fields.' : 'Por favor completa todos los campos requeridos.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(contactFormEmail.trim())) {
+      setContactFormError(lang === 'en' ? 'Please enter a valid email address.' : 'Por favor ingresa un correo electrónico válido.');
+      return;
+    }
+
+    setContactFormLoading(true);
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          name: contactFormName.trim(), 
+          email: contactFormEmail.trim(), 
+          subject: contactFormSubject.trim() || null, 
+          message: contactFormMessage.trim() 
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setContactFormSuccess(true);
+        setContactFormName(''); setContactFormEmail(''); setContactFormSubject(''); setContactFormMessage('');
+      } else {
+        setContactFormError(data.error || (lang === 'en' ? 'Failed to send message.' : 'Error al enviar mensaje.'));
+      }
+    } catch(err) {
+      setContactFormError(lang === 'en' ? 'Connection error.' : 'Error de conexión.');
+    } finally {
+      setContactFormLoading(false);
+    }
+  };
 
   const handleGateSubmit = async (e) => {
     e.preventDefault();
@@ -3456,6 +3505,9 @@ export default function CatalogPage() {
             <a href="#" onClick={(e) => { e.preventDefault(); setHowToOrderOpen(true); }}>
               {lang === 'en' ? 'How to Order' : 'Cómo Ordenar'}
             </a>
+            <a href="#" onClick={(e) => { e.preventDefault(); setContactModalOpen(true); setContactFormSuccess(false); }}>
+              {lang === 'en' ? 'Contact Us' : 'Contáctanos'}
+            </a>
             <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer" onClick={(e) => {
               e.preventDefault();
               window.open(buildWhatsAppLink(WHATSAPP_NUMBER, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
@@ -3468,6 +3520,89 @@ export default function CatalogPage() {
           </div>
         </div>
       </footer>
+
+      {/* Contact Modal */}
+      {contactModalOpen && (
+        <div className="modal active" onClick={() => setContactModalOpen(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <button className="close-modal" onClick={() => setContactModalOpen(false)}>
+              &times;
+            </button>
+            <div className="modal-header">
+              <h2 className="modal-title" style={{ marginBottom: '20px', color: 'var(--text-primary)', fontSize: '1.5rem', fontWeight: '900' }}>
+                {lang === 'en' ? 'Contact Us' : 'Contáctanos'}
+              </h2>
+            </div>
+            <div className="modal-body">
+              {contactFormSuccess ? (
+                <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                  <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                    <CheckCircle size={32} />
+                  </div>
+                  <h3 style={{ fontSize: '1.25rem', marginBottom: '12px' }}>
+                    {lang === 'en' ? 'Message Sent!' : '¡Mensaje Enviado!'}
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)' }}>
+                    {lang === 'en' ? 'Our team will review your inquiry and reply to your email shortly.' : 'Nuestro equipo revisará tu consulta y responderá a tu correo pronto.'}
+                  </p>
+                  <button className="btn-hero-primary" style={{ marginTop: '24px', width: '100%' }} onClick={() => setContactModalOpen(false)}>
+                    {lang === 'en' ? 'Close' : 'Cerrar'}
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleContactSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>
+                      {lang === 'en' ? 'Full Name' : 'Nombre Completo'} *
+                    </label>
+                    <input 
+                      type="text" value={contactFormName} onChange={(e) => setContactFormName(e.target.value)} required
+                      style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-main)', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>
+                      {lang === 'en' ? 'Email Address' : 'Correo Electrónico'} *
+                    </label>
+                    <input 
+                      type="email" value={contactFormEmail} onChange={(e) => setContactFormEmail(e.target.value)} required
+                      style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-main)', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>
+                      {lang === 'en' ? 'Subject (Optional)' : 'Asunto (Opcional)'}
+                    </label>
+                    <input 
+                      type="text" value={contactFormSubject} onChange={(e) => setContactFormSubject(e.target.value)}
+                      style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-main)', fontSize: '14px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>
+                      {lang === 'en' ? 'Your Message' : 'Tu Mensaje'} *
+                    </label>
+                    <textarea 
+                      value={contactFormMessage} onChange={(e) => setContactFormMessage(e.target.value)} required rows={4}
+                      style={{ width: '100%', padding: '12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-main)', fontSize: '14px', resize: 'vertical' }}
+                    />
+                  </div>
+                  
+                  {contactFormError && (
+                    <div style={{ color: '#ef4444', fontSize: '13px', fontWeight: '500' }}>{contactFormError}</div>
+                  )}
+
+                  <button type="submit" disabled={contactFormLoading} className="btn-hero-primary" style={{ width: '100%', marginTop: '8px' }}>
+                    {contactFormLoading 
+                      ? (lang === 'en' ? 'Sending...' : 'Enviando...') 
+                      : (lang === 'en' ? 'Send Message' : 'Enviar Mensaje')}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Animation Overlays */}
       {flyingItems.map(item => (
