@@ -2403,11 +2403,33 @@ export default function CatalogPage() {
             padding: '20px'
           }}>
             <div className="access-gate-card" style={{
-              background: 'var(--bg-card)', padding: '32px 24px', borderRadius: '24px',
+              background: 'var(--bg-card)', padding: '0', borderRadius: '24px',
               boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)',
-              maxWidth: '400px', width: '100%', textAlign: 'center'
+              maxWidth: '480px', width: '100%', textAlign: 'center', overflow: 'hidden'
             }}>
-              <img src="/logo.png" alt="Peptides Costa Rica Logo" style={{ height: '48px', margin: '0 auto 20px auto', display: 'block', borderRadius: '8px' }} />
+              {/* Customer Transformation Social Proof Image */}
+              <div style={{ position: 'relative', width: '100%', overflow: 'hidden', borderRadius: '24px 24px 0 0' }}>
+                <img 
+                  src="/customer_transformation.png" 
+                  alt="Real customer transformation results with peptides" 
+                  style={{ width: '100%', height: '200px', objectFit: 'cover', objectPosition: 'center top', display: 'block' }} 
+                />
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0, height: '60px',
+                  background: 'linear-gradient(to top, var(--bg-card), transparent)'
+                }} />
+                <div style={{
+                  position: 'absolute', top: '12px', left: '12px',
+                  background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                  color: '#fff', fontSize: '0.7rem', fontWeight: '800', padding: '4px 10px',
+                  borderRadius: '20px', letterSpacing: '0.04em', textTransform: 'uppercase',
+                  boxShadow: '0 2px 8px rgba(34,197,94,0.4)'
+                }}>
+                  {lang === 'en' ? '✓ Real Results' : '✓ Resultados Reales'}
+                </div>
+              </div>
+              <div style={{ padding: '24px 24px 32px 24px' }}>
+              <img src="/logo.png" alt="Peptides Costa Rica Logo" style={{ height: '40px', margin: '0 auto 16px auto', display: 'block', borderRadius: '8px' }} />
               <h2 style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px' }}>
                 {lang === 'en' ? 'Exclusive Catalog Access' : 'Acceso Exclusivo al Catálogo'}
               </h2>
@@ -2443,6 +2465,7 @@ export default function CatalogPage() {
                   )}
                 </button>
               </form>
+              </div>
             </div>
           </div>
         ) : null}
@@ -2459,6 +2482,28 @@ export default function CatalogPage() {
             {lang === 'en' ? 'No products matching filters.' : 'No se encontraron productos.'}
           </div>
         ) : (
+          <>
+          {/* Catalog Promotional Banner */}
+          <div style={{
+            width: '100%', marginBottom: '24px', borderRadius: '16px', overflow: 'hidden',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.12)', cursor: 'pointer', position: 'relative'
+          }}
+            onClick={() => window.open('https://peptidescostarica.net', '_blank')}
+          >
+            <img
+              src="https://peptidescostarica.net/wp-content/uploads/2026/04/Untitled-design-5-1.png"
+              alt={lang === 'en' ? 'Peptides Costa Rica – Premium Peptide Research Supplies' : 'Péptidos Costa Rica – Suministros de Investigación Premium'}
+              style={{
+                width: '100%',
+                display: 'block',
+                height: 'auto',
+                maxHeight: '220px',
+                objectFit: 'cover',
+                objectPosition: 'center'
+              }}
+              onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.style.display = 'none'; }}
+            />
+          </div>
           <div className={`product-grid ${viewMode}-view`}>
             {filteredProducts.map((p, idx) => {
               const isBac = isBacWater(p.product);
@@ -2583,6 +2628,7 @@ export default function CatalogPage() {
               );
             })}
           </div>
+          </>
         )}
         </div>
       )}
