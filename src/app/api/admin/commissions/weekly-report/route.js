@@ -26,33 +26,41 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const period = searchParams.get('period') || 'previous';
 
-    // 3. Calculate Monday-to-Sunday boundaries
-    const now = new Date();
-    const day = now.getDay();
+    // 3. Calculate Monday-to-Sunday boundaries in Costa Rica Time (UTC-6)
+    const CR_OFFSET = -6; // Costa Rica is UTC-6 all year
+    const nowUTC = new Date();
+    
+    // Shift current time to Costa Rica timezone to correctly determine current "day"
+    const nowCR = new Date(nowUTC.getTime() + (CR_OFFSET * 60 * 60 * 1000));
+    const day = nowCR.getUTCDay();
     const dayOffset = day === 0 ? 7 : day; // Normalize so Monday is 1, Sunday is 7
 
-    // Get current week's Monday at 00:00:00.000 local time
-    const currentMonday = new Date(now);
-    currentMonday.setDate(now.getDate() - dayOffset + 1);
-    currentMonday.setHours(0, 0, 0, 0);
+    // Get current week's Monday at 00:00:00.000 in CR Time
+    const currentMondayCR = new Date(nowCR);
+    currentMondayCR.setUTCDate(nowCR.getUTCDate() - dayOffset + 1);
+    currentMondayCR.setUTCHours(0, 0, 0, 0);
 
-    let startDate, endDate;
+    let startDateCR, endDateCR;
 
     if (period === 'current') {
-      startDate = currentMonday;
-      endDate = new Date(); // Up to the current moment
+      startDateCR = currentMondayCR;
+      endDateCR = nowCR; // Up to the current moment in CR
     } else {
       // previous complete week
-      const prevMonday = new Date(currentMonday);
-      prevMonday.setDate(currentMonday.getDate() - 7);
+      const prevMondayCR = new Date(currentMondayCR);
+      prevMondayCR.setUTCDate(currentMondayCR.getUTCDate() - 7);
 
-      const prevSunday = new Date(prevMonday);
-      prevSunday.setDate(prevMonday.getDate() + 6);
-      prevSunday.setHours(23, 59, 59, 999);
+      const prevSundayCR = new Date(prevMondayCR);
+      prevSundayCR.setUTCDate(prevMondayCR.getUTCDate() + 6);
+      prevSundayCR.setUTCHours(23, 59, 59, 999);
 
-      startDate = prevMonday;
-      endDate = prevSunday;
+      startDateCR = prevMondayCR;
+      endDateCR = prevSundayCR;
     }
+
+    // Convert back to true UTC for accurate database querying
+    const startDate = new Date(startDateCR.getTime() - (CR_OFFSET * 60 * 60 * 1000));
+    const endDate = new Date(endDateCR.getTime() - (CR_OFFSET * 60 * 60 * 1000));
 
     const startDateStr = startDate.toISOString();
     const endDateStr = endDate.toISOString();
