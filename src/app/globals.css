@@ -2724,35 +2724,38 @@ body {
 
 /* Mobile Header and CTA Enhancements */
 @media (max-width: 768px) {
-    /* Side-by-Side Mobile Header Alignment */
+    /* Stacked Mobile Header Alignment for 3 Badges */
     .header-content {
         display: flex !important;
-        flex-direction: row !important;
-        justify-content: space-between !important;
+        flex-direction: column !important;
+        justify-content: center !important;
         align-items: center !important;
-        padding-top: 10px !important;
-        padding-bottom: 10px !important;
-        gap: 8px !important;
+        padding-top: 14px !important;
+        padding-bottom: 14px !important;
+        gap: 12px !important;
     }
     
     .logo {
         flex-shrink: 0 !important;
         display: flex !important;
         align-items: center !important;
-        justify-content: flex-start !important;
+        justify-content: center !important;
     }
     
     .logo-img-custom {
-        max-height: 44px !important;
+        max-height: 48px !important;
         width: auto !important;
     }
     
     .trust-badges-container {
         flex-shrink: 0 !important;
         display: flex !important;
+        flex-wrap: wrap !important;
         align-items: center !important;
         justify-content: center !important;
+        gap: 8px !important;
         margin-top: 0 !important;
+        width: 100% !important;
     }
     
     .trust-badge {
