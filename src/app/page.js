@@ -8,21 +8,21 @@ import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import {
   ArrowRight, ArrowUpRight, ShieldCheck, Truck, CreditCard, MessageCircle,
   Sun, Moon, ChevronDown, ChevronUp, Star, FlaskConical, Lock,
-  Dna, Atom, Zap, Brain, Sparkles, CheckCircle, ExternalLink
+  Dna, Atom, Zap, Brain, Sparkles, CheckCircle, ExternalLink, MapPin
 } from 'lucide-react';
 
 const T = {
   en: {
-    nav_shop: 'Shop Now',
+    nav_shop: 'View Catalog',
     badge: 'Verified Local Supplier · Costa Rica',
-    hero_title: 'Buy Peptides in Costa Rica',
-    hero_sub: 'Lab-Tested. High Purity. Fast Local Delivery.',
-    hero_text: 'Your trusted local source for premium, research grade peptides. Verified quality, transparent pricing, and secure checkout.',
+    hero_title: 'Research Grade Peptides in Costa Rica',
+    hero_sub: '≥98% Purity. COA Verified. Fast Local Delivery.',
+    hero_text: 'Your trusted local source for premium, research-use-only peptides. Verified laboratory quality, transparent pricing, and secure checkout.',
     hero_cta: 'Browse All Products',
     hero_cta2: 'WhatsApp Us',
-    trust1: 'Verified Quality',
-    trust2: 'Transparent Pricing',
-    trust3: 'Local Reliability',
+    trust1: 'COA Verified',
+    trust2: 'Purity ≥98%',
+    trust3: 'Local Delivery 24-48h',
     features_title: 'Why Choose Peptides Costa Rica?',
     features_sub: 'We combine scientific rigor with local reliability to give you the best peptide purchasing experience.',
     f1_title: 'Lab-Tested & Certified',
@@ -32,48 +32,48 @@ const T = {
     f3_title: 'Secure Payments',
     f3_desc: 'Pay securely via SINPE Móvil, card, or PayPal. All transactions are encrypted and PCI compliant.',
     f4_title: 'Expert Support',
-    f4_desc: 'Our team is available on WhatsApp to answer questions about peptides, dosing, and reconstitution.',
-    cats_title: 'Our Product Categories',
-    cats_sub: 'Research-grade peptides across a wide range of therapeutic applications.',
+    f4_desc: 'Our team is available on WhatsApp to provide product information and support.',
+    cats_title: 'Our Research Categories',
+    cats_sub: 'Research-grade peptides for a wide range of laboratory applications.',
     featured_title: 'Featured Products',
-    featured_sub: 'Top-selling peptides with verified purity and competitive pricing.',
+    featured_sub: 'Top-requested peptides with verified purity and competitive pricing.',
     featured_btn: 'View Details',
     in_stock: 'In Stock',
     out_stock: 'Out of Stock',
-    test_title: 'What Our Customers Say',
-    test_sub: 'Trusted by researchers and health professionals across Costa Rica.',
+    test_title: 'Quality & Transparency',
+    test_sub: 'We adhere to the highest standards of peptide verification and batch testing.',
     faq_title: 'Frequently Asked Questions',
-    faq_sub: 'Everything you need to know before placing your order.',
+    faq_sub: 'Everything you need to know about our research products.',
     faq_q1: 'Are your peptides research grade?',
     faq_a1: 'Yes. All peptides are HPLC-tested and come with a Certificate of Analysis (COA) from independent labs, guaranteeing ≥98% purity.',
     faq_q2: 'How do I pay?',
     faq_a2: 'We accept SINPE Móvil (CRC), credit/debit cards (Visa, Mastercard) and PayPal (USD). All payments are handled securely through our encrypted checkout.',
     faq_q3: 'How fast is delivery?',
     faq_a3: 'We ship within 24–48 hours of payment confirmation. Delivery to most areas of Costa Rica takes 1–3 business days.',
-    faq_q4: 'Do you include reconstitution supplies?',
-    faq_a4: 'Yes! We provide complimentary bacteriostatic water with every order — no need to add it to your cart. You can also find syringes in the Reconstitution Supply category.',
+    faq_q4: 'Do you include laboratory supplies?',
+    faq_a4: 'Yes! We provide complimentary bacteriostatic water with every order. You can also find syringes in the Laboratory Supplies category.',
     faq_q5: 'Can I order via WhatsApp?',
-    faq_a5: 'Absolutely. Message us on WhatsApp (+506 8404-6973) and we will walk you through your order.',
+    faq_a5: 'Absolutely. Message us on WhatsApp (+506 8404-6973) and we will assist with your order.',
     cta_title: 'Ready to Order?',
-    cta_sub: 'Browse our full catalog of premium peptides and place your order securely today.',
-    cta_btn: 'Shop the Catalog',
-    cta_wa: 'Chat on WhatsApp',
-    footer_desc: 'Peptides Costa Rica offers premium, research backed peptides with trusted quality and bulk savings.',
-    footer_copy: 'All rights reserved. For research purposes only.',
+    cta_sub: 'Browse our full catalog of premium research peptides and place your order securely today.',
+    cta_btn: 'View Catalog',
+    cta_wa: 'Order via WhatsApp',
+    footer_desc: 'Peptides Costa Rica offers premium, research-backed peptides with trusted quality and transparent documentation.',
+    footer_copy: 'All rights reserved. For research purposes only. Not for human consumption.',
   },
   es: {
-    nav_shop: 'Comprar',
+    nav_shop: 'Ver Catálogo',
     badge: 'Proveedor Local Verificado · Costa Rica',
-    hero_title: 'Compra Péptidos en Costa Rica',
-    hero_sub: 'Testados en Laboratorio. Alta Pureza. Entrega Local Rápida.',
-    hero_text: 'Tu fuente local de confianza para péptidos premium de grado investigación. Calidad verificada, precios transparentes y pago seguro.',
-    hero_cta: 'Ver Todos los Productos',
-    hero_cta2: 'Escríbenos por WhatsApp',
-    trust1: 'Calidad Verificada',
-    trust2: 'Precios Transparentes',
-    trust3: 'Confiabilidad Local',
+    hero_title: 'Péptidos de Grado Investigación en Costa Rica',
+    hero_sub: 'Pureza ≥98%. Verificado por COA. Entrega Local Rápida.',
+    hero_text: 'Tu fuente local de confianza para péptidos premium de uso exclusivo en investigación. Calidad de laboratorio verificada, precios transparentes y pago seguro.',
+    hero_cta: 'Ver Catálogo',
+    hero_cta2: 'Ordenar por WhatsApp',
+    trust1: 'COA Verificado',
+    trust2: 'Pureza ≥98%',
+    trust3: 'Entrega Local 24-48h',
     features_title: '¿Por qué elegir Peptides Costa Rica?',
-    features_sub: 'Combinamos rigor científico con confiabilidad local para darte la mejor experiencia de compra de péptidos.',
+    features_sub: 'Combinamos rigor científico con confiabilidad local para darte la mejor experiencia.',
     f1_title: 'Certificados de Laboratorio',
     f1_desc: 'Cada producto incluye un Certificado de Análisis (COA) de laboratorios independientes.',
     f2_title: 'Entrega Local Rápida',
@@ -81,44 +81,44 @@ const T = {
     f3_title: 'Pagos Seguros',
     f3_desc: 'Paga con SINPE Móvil, tarjeta o PayPal. Todas las transacciones son seguras y cifradas.',
     f4_title: 'Soporte Experto',
-    f4_desc: 'Nuestro equipo está disponible en WhatsApp para responder dudas sobre péptidos, dosis y reconstitución.',
-    cats_title: 'Nuestras Categorías',
-    cats_sub: 'Péptidos de grado investigación para una amplia gama de aplicaciones terapéuticas.',
+    f4_desc: 'Nuestro equipo está disponible en WhatsApp para brindar información de los productos y soporte.',
+    cats_title: 'Nuestras Categorías de Investigación',
+    cats_sub: 'Péptidos de grado investigación para una amplia gama de aplicaciones de laboratorio.',
     featured_title: 'Productos Destacados',
-    featured_sub: 'Los péptidos más vendidos con pureza verificada y precios competitivos.',
+    featured_sub: 'Los péptidos más solicitados con pureza verificada y precios competitivos.',
     featured_btn: 'Ver Detalles',
     in_stock: 'Disponible',
     out_stock: 'Agotado',
-    test_title: 'Lo que dicen nuestros clientes',
-    test_sub: 'La confianza de investigadores y profesionales de la salud en toda Costa Rica.',
+    test_title: 'Calidad y Transparencia',
+    test_sub: 'Nos adherimos a los más altos estándares de verificación de péptidos y pruebas de lotes.',
     faq_title: 'Preguntas Frecuentes',
-    faq_sub: 'Todo lo que necesitas saber antes de hacer tu pedido.',
+    faq_sub: 'Todo lo que necesitas saber sobre nuestros productos de investigación.',
     faq_q1: '¿Sus péptidos son de grado investigación?',
     faq_a1: 'Sí. Todos los péptidos son probados por HPLC y vienen con un Certificado de Análisis (COA) de laboratorios independientes, garantizando ≥98% de pureza.',
     faq_q2: '¿Cómo puedo pagar?',
     faq_a2: 'Aceptamos SINPE Móvil (CRC), tarjetas de crédito/débito (Visa, Mastercard) y PayPal (USD). Todos los pagos son procesados de forma segura.',
     faq_q3: '¿Qué tan rápido es el envío?',
     faq_a3: 'Enviamos en 24–48 horas tras la confirmación del pago. La entrega en la mayoría de provincias tarda 1–3 días hábiles.',
-    faq_q4: '¿Incluyen suministros de reconstitución?',
-    faq_a4: 'Sí. Proporcionamos agua bacteriostática de cortesía con cada pedido — no es necesario agregarla al carrito. También puede encontrar jeringas en la categoría Suministros de Reconstitución.',
+    faq_q4: '¿Incluyen insumos de laboratorio?',
+    faq_a4: 'Sí. Proporcionamos agua bacteriostática de cortesía con cada pedido. También puede encontrar jeringas en la categoría Insumos de Laboratorio.',
     faq_q5: '¿Puedo pedir por WhatsApp?',
-    faq_a5: 'Por supuesto. Escríbenos al WhatsApp (+506 8404-6973) y te guiamos con tu pedido.',
+    faq_a5: 'Por supuesto. Escríbenos al WhatsApp (+506 8404-6973) y te asistiremos con tu pedido.',
     cta_title: '¿Listo para Ordenar?',
-    cta_sub: 'Explora nuestro catálogo completo de péptidos premium y haz tu pedido de forma segura hoy.',
-    cta_btn: 'Ver el Catálogo',
-    cta_wa: 'Chatear en WhatsApp',
-    footer_desc: 'Peptides Costa Rica ofrece péptidos premium respaldados por ciencia, con calidad garantizada y descuentos por volumen.',
-    footer_copy: 'Todos los derechos reservados. Solo para fines de investigación.',
+    cta_sub: 'Explora nuestro catálogo completo de péptidos de investigación y haz tu pedido hoy.',
+    cta_btn: 'Ver Catálogo',
+    cta_wa: 'Ordenar por WhatsApp',
+    footer_desc: 'Peptides Costa Rica ofrece péptidos premium para investigación, con calidad garantizada y documentación transparente.',
+    footer_copy: 'Todos los derechos reservados. Uso exclusivo de investigación. No apto para consumo humano.',
   }
 };
 
 const CATEGORIES = [
-  { icon: <Atom size={28} strokeWidth={1.8} />, en: 'Weight Loss & Metabolism', es: 'Pérdida de Peso y Metabolismo' },
-  { icon: <Dna size={28} strokeWidth={1.8} />, en: 'Recovery & Healing', es: 'Recuperación y Curación' },
-  { icon: <Brain size={28} strokeWidth={1.8} />, en: 'Cognitive & Mood', es: 'Cognitivo y Estado de Ánimo' },
-  { icon: <Zap size={28} strokeWidth={1.8} />, en: 'Performance & Hormones', es: 'Rendimiento y Hormonas' },
-  { icon: <Sparkles size={28} strokeWidth={1.8} />, en: 'Anti-Aging & Longevity', es: 'Antienvejecimiento y Longevidad' },
-  { icon: <FlaskConical size={28} strokeWidth={1.8} />, en: 'Reconstitution Supply', es: 'Suministros de Reconstitución' },
+  { icon: <Atom size={28} strokeWidth={1.8} />, en: 'Metabolic Research', es: 'Investigación Metabólica' },
+  { icon: <Dna size={28} strokeWidth={1.8} />, en: 'Tissue Repair', es: 'Reparación de Tejidos' },
+  { icon: <Brain size={28} strokeWidth={1.8} />, en: 'Cognitive Research', es: 'Investigación Cognitiva' },
+  { icon: <Zap size={28} strokeWidth={1.8} />, en: 'Hormonal Profiling', es: 'Perfil Hormonal' },
+  { icon: <Sparkles size={28} strokeWidth={1.8} />, en: 'Cellular Longevity', es: 'Longevidad Celular' },
+  { icon: <FlaskConical size={28} strokeWidth={1.8} />, en: 'Laboratory Supplies', es: 'Insumos de Laboratorio' },
 ];
 
 const TESTIMONIALS = [
@@ -227,6 +227,9 @@ const handleWhatsAppClick = (src) => {
             <Link href={`/about?lang=${lang}`}>{lang === 'en' ? 'About Us' : 'Sobre Nosotros'}</Link>
             <Link href={`/blog?lang=${lang}`}>{lang === 'en' ? 'Blog' : 'Blog'}</Link>
             <Link href={`/contact?lang=${lang}`}>{lang === 'en' ? 'Contact' : 'Contacto'}</Link>
+            <Link href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: 0.45, fontSize: '0.8rem', fontWeight: '600', letterSpacing: '0.03em', color: 'var(--text-muted)' }} title="Admin Dashboard">
+              <Lock size={12} /> Admin
+            </Link>
           </nav>
 
           <div className="lp-header-actions">
@@ -336,8 +339,8 @@ const handleWhatsAppClick = (src) => {
               <div style={{ maxWidth: '800px', margin: '24px auto', fontSize: '1.1rem', lineHeight: '1.7', color: 'var(--text-muted)' }}>
                 <p style={{ marginBottom: '16px' }}>
                   {lang === 'en'
-                    ? 'More people are interested in peptides for performance, recovery, metabolism, weight management, and longevity. Getting them from international suppliers often leads to delays, uncertainty, and unnecessary customs hassles.'
-                    : 'Más personas están interesadas en los péptidos para el rendimiento, la recuperación, el metabolismo y la longevidad. Obtenerlos de proveedores internacionales a menudo conlleva demoras, incertidumbre y problemas aduanales.'}
+                    ? 'Researchers and laboratories require absolute precision. Sourcing peptides from international suppliers often leads to delays, unverified purity, and unnecessary customs hassles.'
+                    : 'Los investigadores y laboratorios requieren precisión absoluta. Obtener péptidos de proveedores internacionales a menudo conlleva demoras, pureza no verificada y problemas aduanales.'}
                 </p>
                 <p>
                   <strong style={{ color: 'var(--text-main)' }}>{lang === 'en' ? 'We do things differently.' : 'Hacemos las cosas diferente.'}</strong> {lang === 'en'
@@ -364,16 +367,16 @@ const handleWhatsAppClick = (src) => {
                   <p>{lang === 'en' ? 'Discover our specialized peptides categorized by research target.' : 'Descubra nuestros péptidos especializados clasificados por objetivo de investigación.'}</p>
 
                   <div className="lp-about-quick-links">
-                    <Link href={`/catalog?category=Weight+Loss+%26+Metabolism&lang=${lang}`} className="lp-about-link-item">
-                      <span>{lang === 'en' ? 'Weight Loss & Metabolism' : 'Pérdida de Peso y Metabolismo'}</span>
+                    <Link href={`/catalog?category=Metabolic+Research&lang=${lang}`} className="lp-about-link-item">
+                      <span>{lang === 'en' ? 'Metabolic Research' : 'Investigación Metabólica'}</span>
                       <ArrowRight size={16} />
                     </Link>
-                    <Link href={`/catalog?category=Recovery+%26+Healing&lang=${lang}`} className="lp-about-link-item">
-                      <span>{lang === 'en' ? 'Recovery & Healing' : 'Recuperación y Curación'}</span>
+                    <Link href={`/catalog?category=Tissue+Repair&lang=${lang}`} className="lp-about-link-item">
+                      <span>{lang === 'en' ? 'Tissue Repair' : 'Reparación de Tejidos'}</span>
                       <ArrowRight size={16} />
                     </Link>
-                    <Link href={`/catalog?category=Anti-Aging+%26+Longevity&lang=${lang}`} className="lp-about-link-item">
-                      <span>{lang === 'en' ? 'Anti-Aging & Longevity' : 'Antienvejecimiento y Longevidad'}</span>
+                    <Link href={`/catalog?category=Cellular+Longevity&lang=${lang}`} className="lp-about-link-item">
+                      <span>{lang === 'en' ? 'Cellular Longevity' : 'Longevidad Celular'}</span>
                       <ArrowRight size={16} />
                     </Link>
                   </div>
@@ -486,53 +489,29 @@ const handleWhatsAppClick = (src) => {
           </section>
         )}
 
-        {/* ── CUSTOMER TRANSFORMATION ──────────────────────── */}
-        <section className="lp-section lp-transformation-section" style={{ background: 'var(--primary)', color: 'white', padding: '60px 0' }}>
+        {/* ── CÓMO ORDENAR (HOW TO ORDER) ──────────────────── */}
+        <section className="lp-section" style={{ background: 'var(--bg-secondary)', padding: '60px 0' }}>
           <div className="container" style={{ maxWidth: '1000px', margin: '0 auto' }}>
-            <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-              <span style={{ color: '#C8530C', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.85rem', display: 'block', marginBottom: '8px' }}>
-                CUSTOMER TRANSFORMATION
-              </span>
-              <h2 style={{ fontSize: '2.5rem', fontWeight: '900', marginBottom: '12px' }}>
-                Real People. Real Results.
-              </h2>
-              <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '1.05rem' }}>
-                This customer shared his before & after after using our product consistently.
-              </p>
+            <div className="lp-section-header">
+              <h2>{lang === 'en' ? 'How to Order' : 'Cómo Ordenar'}</h2>
+              <p>{lang === 'en' ? 'A simple, secure process to get your research supplies.' : 'Un proceso simple y seguro para obtener sus suministros de investigación.'}</p>
             </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '32px', alignItems: 'stretch' }}>
-              {/* Before & After Image Block */}
-              <div style={{ flex: '1 1 350px', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.3)', display: 'flex' }}>
-                <img src="/customer_transformation.png" alt="Before and After Transformation" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-              </div>
-
-              {/* Bullet Points Block */}
-              <div style={{ flex: '1 1 350px', background: 'white', borderRadius: '16px', padding: '40px', color: 'var(--text-main)', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '32px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ background: '#F0F4F8', color: '#002766', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Star size={20} fill="currentColor" />
-                    </div>
-                    <span style={{ fontWeight: '700', fontSize: '1.1rem', color: '#002766', lineHeight: '1.3' }}>Real customer-submitted result</span>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '24px', marginTop: '40px' }}>
+              {[
+                { step: '1', title: lang === 'en' ? 'Explore Catalog' : 'Explora el catálogo', desc: lang === 'en' ? 'Browse our verified research peptides.' : 'Navega por nuestros péptidos de investigación.' },
+                { step: '2', title: lang === 'en' ? 'Add to Cart' : 'Añade productos', desc: lang === 'en' ? 'Select your products and review your cart.' : 'Selecciona los productos y revisa tu carrito.' },
+                { step: '3', title: lang === 'en' ? 'Confirm via WhatsApp' : 'Confirma por WhatsApp', desc: lang === 'en' ? 'Send us your order for secure payment details.' : 'Envíanos tu pedido para procesar el pago seguro.' },
+                { step: '4', title: lang === 'en' ? 'Local Delivery' : 'Recibe entrega local', desc: lang === 'en' ? 'Fast 24-48h delivery anywhere in Costa Rica.' : 'Entrega rápida de 24-48h en toda Costa Rica.' }
+              ].map((s, i) => (
+                <div key={i} style={{ background: 'var(--bg-card)', padding: '30px 20px', borderRadius: '16px', border: '1px solid var(--border)', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', position: 'relative' }}>
+                  <div style={{ width: '40px', height: '40px', background: 'var(--accent)', color: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 'bold', margin: '0 auto 16px auto' }}>
+                    {s.step}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ background: '#F0F4F8', color: '#002766', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Star size={20} fill="currentColor" />
-                    </div>
-                    <span style={{ fontWeight: '700', fontSize: '1.1rem', color: '#002766', lineHeight: '1.3' }}>Face blurred for privacy</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ background: '#F0F4F8', color: '#002766', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Star size={20} fill="currentColor" />
-                    </div>
-                    <span style={{ fontWeight: '700', fontSize: '1.1rem', color: '#002766', lineHeight: '1.3' }}>Results may vary from person to person</span>
-                  </div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: '800', marginBottom: '8px', color: 'var(--text-main)' }}>{s.title}</h3>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>{s.desc}</p>
                 </div>
-                <Link href={`/catalog?lang=${lang}`} style={{ display: 'inline-block', background: '#002766', color: 'white', padding: '14px 28px', borderRadius: '8px', fontWeight: 'bold', textDecoration: 'none', transition: 'background 0.2s' }}>
-                  View Products
-                </Link>
-              </div>
+              ))}
             </div>
           </div>
         </section>
@@ -617,6 +596,75 @@ const handleWhatsAppClick = (src) => {
           </div>
         </section>
 
+        {/* ── LOCATION / MAP ─────────────────────────────────── */}
+        <section className="lp-section" style={{ background: 'var(--bg-secondary)', padding: '60px 0', borderTop: '1px solid var(--border)' }}>
+          <div className="container">
+            <div className="lp-section-header">
+              <h2>{lang === 'en' ? 'Our Location' : 'Nuestra Ubicación'}</h2>
+              <p>{lang === 'en' ? 'Serving all of Costa Rica from our central hub.' : 'Sirviendo a toda Costa Rica desde nuestro centro de operaciones.'}</p>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '32px', marginTop: '40px', alignItems: 'stretch' }}>
+              <div style={{ background: 'var(--bg-card)', padding: '32px', borderRadius: '20px', border: '1px solid var(--border)', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <MapPin size={24} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: '800', margin: 0, color: 'var(--text-main)' }}>
+                      Peptides Costa Rica
+                    </h3>
+                    <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.95rem', marginTop: '4px' }}>
+                      {lang === 'en' ? 'Fast dispatch to all provinces' : 'Despacho rápido a todas las provincias'}
+                    </p>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                    <MapPin size={18} style={{ color: 'var(--text-muted)', marginTop: '2px', flexShrink: 0 }} />
+                    <span style={{ color: 'var(--text-main)', fontSize: '0.95rem', lineHeight: '1.5' }}>
+                      Puntarenas Province, Herradura<br/>
+                      Costa Rica
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <Truck size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                    <span style={{ color: 'var(--text-main)', fontSize: '0.95rem' }}>
+                      {lang === 'en' ? '24-48h Delivery Nationwide' : 'Entrega 24-48h a nivel nacional'}
+                    </span>
+                  </div>
+                </div>
+                
+                <a 
+                  href="https://www.google.com/maps/@9.621205,-84.633131,1668m/data=!3m1!1e3!5m1!1e1?hl=en" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', padding: '14px', background: 'var(--text-main)', color: 'var(--bg-main)', borderRadius: '12px', fontWeight: 'bold', textDecoration: 'none', transition: 'opacity 0.2s' }}
+                  onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
+                  onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                >
+                  {lang === 'en' ? 'Open in Google Maps' : 'Abrir en Google Maps'}
+                  <ExternalLink size={16} />
+                </a>
+              </div>
+              
+              <div style={{ borderRadius: '20px', overflow: 'hidden', height: '100%', minHeight: '350px', border: '1px solid var(--border)', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+                <iframe 
+                  src="https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d15729.094593417758!2d-84.633131!3d9.621205!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2scr!4v1717751936440!5m2!1sen!2scr" 
+                  width="100%" 
+                  height="100%" 
+                  style={{ border: 0 }} 
+                  allowFullScreen="" 
+                  loading="lazy" 
+                  referrerPolicy="no-referrer-when-downgrade"
+                  title="Peptides Costa Rica Location"
+                ></iframe>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ── CTA BANNER ───────────────────────────────────── */}
         <section className="lp-cta-section">
           <div className="lp-cta-glow" />
@@ -653,27 +701,47 @@ const handleWhatsAppClick = (src) => {
         <div className="container">
           <img src="/logo.png" alt="Logo" style={{ height: '36px', marginBottom: '16px', opacity: 0.95, borderRadius: '8px' }} />
           <p>{t.footer_desc}</p>
-          <div className="footer-links" style={{ marginBottom: '24px', display: 'flex', flexWrap: 'wrap', gap: '16px', justifyContent: 'center' }}>
-            <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Shop Catalog' : 'Catálogo'}</Link>
-            <Link href="/about">{lang === 'en' ? 'About Us' : 'Nosotros'}</Link>
-            <Link href="/faq">{lang === 'en' ? 'FAQ' : 'Preguntas'}</Link>
-            <Link href="/contact">{lang === 'en' ? 'Contact' : 'Contacto'}</Link>
-            <Link href="/bulk-discounts">{lang === 'en' ? 'Bulk Discounts' : 'Descuentos Mayoristas'}</Link>
-            <Link href="/coa-database">{lang === 'en' ? 'COA Database' : 'Base de Datos COA'}</Link>
-            <Link href="/our-service-locations">{lang === 'en' ? 'Service Locations' : 'Ubicaciones'}</Link>
-            <Link href="/shipping-policy">{lang === 'en' ? 'Shipping Policy' : 'Envíos'}</Link>
-            <Link href="/return-refund-policy">{lang === 'en' ? 'Returns' : 'Devoluciones'}</Link>
-            <Link href="/customer-feedback">{lang === 'en' ? 'Testimonials' : 'Testimonios'}</Link>
-            <Link href="/privacy-policy">{lang === 'en' ? 'Privacy Policy' : 'Privacidad'}</Link>
-            <Link href="/admin" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: '500' }}>
-              {lang === 'en' ? 'Admin Portal' : 'Portal de Admin'}
-            </Link>
+          <div className="footer-links-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '32px', textAlign: 'left', margin: '40px 0' }}>
+            <div>
+              <h4 style={{ color: 'var(--text-main)', marginBottom: '16px', fontSize: '1.05rem' }}>{lang === 'en' ? 'Shop' : 'Comprar'}</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <Link href={`/catalog?lang=${lang}`} className="footer-col-link">{lang === 'en' ? 'Shop Catalog' : 'Catálogo'}</Link>
+                <Link href="/bulk-discounts" className="footer-col-link">{lang === 'en' ? 'Bulk Discounts' : 'Descuentos Mayoristas'}</Link>
+              </div>
+            </div>
+            <div>
+              <h4 style={{ color: 'var(--text-main)', marginBottom: '16px', fontSize: '1.05rem' }}>{lang === 'en' ? 'Information' : 'Información'}</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <Link href="/about" className="footer-col-link">{lang === 'en' ? 'About Us' : 'Nosotros'}</Link>
+                <Link href="/faq" className="footer-col-link">{lang === 'en' ? 'FAQ' : 'Preguntas Frecuentes'}</Link>
+                <Link href="/coa-database" className="footer-col-link">{lang === 'en' ? 'COA Database' : 'Base de Datos COA'}</Link>
+                <Link href="/customer-feedback" className="footer-col-link">{lang === 'en' ? 'Testimonials' : 'Testimonios'}</Link>
+              </div>
+            </div>
+            <div>
+              <h4 style={{ color: 'var(--text-main)', marginBottom: '16px', fontSize: '1.05rem' }}>{lang === 'en' ? 'Support' : 'Soporte'}</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <Link href="/contact" className="footer-col-link">{lang === 'en' ? 'Contact' : 'Contacto'}</Link>
+                <Link href="/our-service-locations" className="footer-col-link">{lang === 'en' ? 'Service Locations' : 'Ubicaciones'}</Link>
+              </div>
+            </div>
+            <div>
+              <h4 style={{ color: 'var(--text-main)', marginBottom: '16px', fontSize: '1.05rem' }}>{lang === 'en' ? 'Legal' : 'Legal'}</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <Link href="/shipping-policy" className="footer-col-link">{lang === 'en' ? 'Shipping Policy' : 'Políticas de Envío'}</Link>
+                <Link href="/return-refund-policy" className="footer-col-link">{lang === 'en' ? 'Returns' : 'Devoluciones'}</Link>
+                <Link href="/privacy-policy" className="footer-col-link">{lang === 'en' ? 'Privacy Policy' : 'Privacidad'}</Link>
+              </div>
+            </div>
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: '16px', marginBottom: '16px', textAlign: 'left', lineHeight: '1.5' }}>
             <strong>Legal Notice:</strong> Products offered by Peptides Costa Rica are intended strictly for laboratory research use only. They are not approved or licensed by the FDA for the prevention, diagnosis, treatment, or cure of any disease. Information on this website is for educational purposes only and should not be considered medical or legal advice. Not for human or veterinary use.
           </div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            © {new Date().getFullYear()} Peptides Costa Rica. {t.footer_copy}
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <span>© {new Date().getFullYear()} Peptides Costa Rica. {t.footer_copy}</span>
+            <Link href="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', opacity: 0.4, fontSize: '0.7rem', fontWeight: '700', textDecoration: 'none', letterSpacing: '0.05em' }} title="Admin Dashboard">
+              <Lock size={10} /> ADMIN
+            </Link>
           </div>
         </div>
       </footer>

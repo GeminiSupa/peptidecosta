@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, User, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save, Phone, BadgeCheck, Upload, Sparkles, Brain } from 'lucide-react';
+import { Search, User, Users, Crown, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save, Phone, BadgeCheck, Upload, Sparkles, Brain } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -75,6 +75,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [generatingPitchId, setGeneratingPitchId] = useState(null);
+  const [filterTab, setFilterTab] = useState('all');
 
   // Derived customer data from order history and abandoned carts
   const customers = useMemo(() => {
@@ -192,12 +193,29 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
     });
   }, [orders, abandonedCarts]);
 
-  // Filter based on search
-  const filteredCustomers = customers.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.phone.includes(searchTerm)
-  );
+  const crmStats = useMemo(() => {
+    let totalContacts = customers.length;
+    let activeCustomers = customers.filter(c => !c.isLead).length;
+    let totalLtv = customers.reduce((sum, c) => sum + (c.totalSpentUsd || 0), 0);
+    return { totalContacts, activeCustomers, totalLtv };
+  }, [customers]);
+
+  // Filter based on search and selected tab
+  const filteredCustomers = useMemo(() => {
+    return customers.filter(c => {
+      // Search term filter
+      const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            c.phone.includes(searchTerm);
+      if (!matchesSearch) return false;
+      
+      // Tab filter
+      if (filterTab === 'customers') return !c.isLead;
+      if (filterTab === 'leads') return c.isLead;
+      return true;
+    });
+  }, [customers, searchTerm, filterTab]);
+
 
   const totalCustomersPages = Math.ceil(filteredCustomers.length / customersPerPage);
   const paginatedCustomers = filteredCustomers.slice(
@@ -559,11 +577,197 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           border-color: rgba(56, 189, 248, 0.3);
           color: #38bdf8;
         }
+
+        /* KPI Cards Row */
+        .crm-kpi-row {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+          padding: 20px;
+          background: rgba(15, 23, 42, 0.15);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .crm-kpi-card {
+          background: rgba(30, 41, 59, 0.25);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 12px;
+          padding: 16px;
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .crm-kpi-card:hover {
+          background: rgba(30, 41, 59, 0.35);
+          border-color: rgba(14, 165, 233, 0.3);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        .crm-kpi-icon {
+          width: 44px;
+          height: 44px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+        .crm-kpi-icon.blue {
+          background: rgba(14, 165, 233, 0.1);
+          color: #38bdf8;
+          border: 1px solid rgba(14, 165, 233, 0.2);
+        }
+        .crm-kpi-icon.green {
+          background: rgba(16, 185, 129, 0.1);
+          color: #34d399;
+          border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+        .crm-kpi-icon.purple {
+          background: rgba(168, 85, 247, 0.1);
+          color: #c084fc;
+          border: 1px solid rgba(168, 85, 247, 0.2);
+        }
+        .crm-kpi-info {
+          display: flex;
+          flex-direction: column;
+        }
+        .crm-kpi-label {
+          font-size: 0.68rem;
+          color: #64748b;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .crm-kpi-value {
+          font-size: 1.4rem;
+          font-weight: 800;
+          color: #f8fafc;
+          line-height: 1.2;
+          margin-top: 2px;
+        }
+
+        /* Filter Tabs Row */
+        .crm-tabs-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 20px;
+          background: rgba(15, 23, 42, 0.25);
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          overflow-x: auto;
+          scrollbar-width: none;
+        }
+        .crm-tabs-row::-webkit-scrollbar {
+          display: none;
+        }
+        .crm-tab {
+          background: transparent;
+          border: 1px solid transparent;
+          color: #94a3b8;
+          padding: 6px 12px;
+          border-radius: 6px;
+          font-size: 0.8rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .crm-tab:hover {
+          color: #e2e8f0;
+          background: rgba(255, 255, 255, 0.03);
+        }
+        .crm-tab.active {
+          background: rgba(14, 165, 233, 0.1);
+          border-color: rgba(14, 165, 233, 0.2);
+          color: #38bdf8;
+        }
+        .crm-tab-badge {
+          font-size: 0.65rem;
+          padding: 1px 6px;
+          border-radius: 4px;
+          font-weight: 800;
+          background: rgba(255, 255, 255, 0.06);
+          color: #94a3b8;
+        }
+        .crm-tab.active .crm-tab-badge {
+          background: rgba(14, 165, 233, 0.2);
+          color: #38bdf8;
+        }
+
+        /* VIP Tag */
+        .cust-row-name-container {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+        .cust-vip-badge {
+          background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%) !important;
+          color: #050b14 !important;
+          font-size: 0.6rem !important;
+          font-weight: 900 !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.04em !important;
+          padding: 1px 6px !important;
+          border-radius: 4px !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 2px !important;
+          box-shadow: 0 0 8px rgba(245, 158, 11, 0.3) !important;
+        }
+
+        /* LTV green pill */
+        .crm-cell-ltv-pill {
+          background: rgba(16, 185, 129, 0.12) !important;
+          border: 1px solid rgba(16, 185, 129, 0.25) !important;
+          color: #34d399 !important;
+          padding: 4px 10px !important;
+          border-radius: 6px !important;
+          font-weight: 800 !important;
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 4px !important;
+          box-shadow: 0 0 10px rgba(16, 185, 129, 0.05) !important;
+        }
+
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
       `}} />
+
+      {/* KPI stats summary cards */}
+      <div className="crm-kpi-row">
+        <div className="crm-kpi-card">
+          <div className="crm-kpi-icon blue">
+            <Users size={18} />
+          </div>
+          <div className="crm-kpi-info">
+            <span className="crm-kpi-label">Total Contacts</span>
+            <span className="crm-kpi-value">{crmStats.totalContacts}</span>
+          </div>
+        </div>
+        <div className="crm-kpi-card">
+          <div className="crm-kpi-icon green">
+            <BadgeCheck size={18} />
+          </div>
+          <div className="crm-kpi-info">
+            <span className="crm-kpi-label">Active Customers</span>
+            <span className="crm-kpi-value">{crmStats.activeCustomers}</span>
+          </div>
+        </div>
+        <div className="crm-kpi-card">
+          <div className="crm-kpi-icon purple">
+            <DollarSign size={18} />
+          </div>
+          <div className="crm-kpi-info">
+            <span className="crm-kpi-label">Pipeline LTV Value</span>
+            <span className="crm-kpi-value">${crmStats.totalLtv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+      </div>
 
       <div className="crm-header">
         <div className="crm-title">
@@ -594,6 +798,31 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
             </button>
           )}
         </div>
+      </div>
+
+      {/* Tab Filter Row */}
+      <div className="crm-tabs-row">
+        <button 
+          className={`crm-tab ${filterTab === 'all' ? 'active' : ''}`}
+          onClick={() => { setFilterTab('all'); setCurrentPage(1); }}
+        >
+          All Contacts
+          <span className="crm-tab-badge">{customers.length}</span>
+        </button>
+        <button 
+          className={`crm-tab ${filterTab === 'customers' ? 'active' : ''}`}
+          onClick={() => { setFilterTab('customers'); setCurrentPage(1); }}
+        >
+          Customers
+          <span className="crm-tab-badge">{customers.filter(c => !c.isLead).length}</span>
+        </button>
+        <button 
+          className={`crm-tab ${filterTab === 'leads' ? 'active' : ''}`}
+          onClick={() => { setFilterTab('leads'); setCurrentPage(1); }}
+        >
+          Cart Leads
+          <span className="crm-tab-badge">{customers.filter(c => c.isLead).length}</span>
+        </button>
       </div>
 
       {filteredCustomers.length === 0 ? (
@@ -627,8 +856,13 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                           {cust.name.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div className="cust-row-name">
-                            {cust.name}
+                          <div className="cust-row-name-container">
+                            <span className="cust-row-name">{cust.name}</span>
+                            {!cust.isLead && cust.totalSpentUsd >= 500 && (
+                              <span className="cust-vip-badge" title="VIP Customer (Spent >= $500)">
+                                <Crown size={9} /> VIP
+                              </span>
+                            )}
                             <span className={`cust-row-badge ${cust.isLead ? 'cust-badge-lead' : 'cust-badge-customer'}`}>
                               {cust.isLead ? 'Cart Lead' : 'Customer'}
                             </span>
@@ -687,9 +921,9 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
 
                     {/* Lifetime Value Column */}
                     <td data-label="Lifetime Value" style={{ textAlign: 'center' }}>
-                      <span className="crm-cell-val green">
+                      <span className="crm-cell-ltv-pill">
                         <DollarSign size={12} />
-                        {cust.totalSpentUsd.toFixed(0)}
+                        {cust.totalSpentUsd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                       </span>
                     </td>
 
@@ -731,20 +965,21 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                                 onClick={() => handleGeneratePitch(cust, rec.product)}
                                 disabled={generatingPitchId !== null}
                                 style={{
-                                  background: 'rgba(56, 189, 248, 0.08)',
-                                  border: '1px solid rgba(56, 189, 248, 0.15)',
+                                  background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(56, 189, 248, 0.04) 100%)',
+                                  border: '1px solid rgba(56, 189, 248, 0.25)',
                                   color: '#38bdf8',
-                                  padding: '3px 8px',
-                                  borderRadius: '4px',
-                                  fontSize: '0.7rem',
-                                  fontWeight: '700',
+                                  padding: '4px 10px',
+                                  borderRadius: '6px',
+                                  fontSize: '0.72rem',
+                                  fontWeight: '800',
                                   cursor: (generatingPitchId !== null) ? 'not-allowed' : 'pointer',
                                   display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: '4px',
-                                  marginTop: '2px',
+                                  gap: '5px',
+                                  marginTop: '4px',
                                   opacity: (generatingPitchId !== null && !isGenerating) ? 0.4 : 1,
-                                  transition: 'all 0.2s'
+                                  transition: 'all 0.2s',
+                                  boxShadow: '0 2px 6px rgba(56, 189, 248, 0.05)'
                                 }}
                               >
                                 {isGenerating ? (

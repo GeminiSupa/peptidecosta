@@ -17,14 +17,26 @@ export const supabase = isSupabaseConfigured
 
 // Auto-clear stale tokens so the console error doesn't repeat every page load
 if (supabase && typeof window !== 'undefined') {
-  // Check if session has a failed/stale refresh token
+  // Suppress only the specific "Refresh Token Not Found" console error from Supabase internals
+  const _originalConsoleError = console.error.bind(console);
+  console.error = (...args) => {
+    const msg = args[0]?.message || args[0] || '';
+    if (
+      typeof msg === 'string' &&
+      (msg.includes('Invalid Refresh Token') || msg.includes('Refresh Token Not Found'))
+    ) {
+      return; // Silently swallow this specific error
+    }
+    _originalConsoleError(...args);
+  };
+
+  // First-load check: clear any stale tokens immediately
   supabase.auth.getSession().then(({ error }) => {
     if (error && (
-      error.message.includes('Refresh Token Not Found') || 
-      error.message.includes('invalid_grant') || 
+      error.message.includes('Refresh Token Not Found') ||
+      error.message.includes('invalid_grant') ||
       error.message.includes('Invalid Refresh Token')
     )) {
-      console.warn("Supabase: Stale refresh token detected. Clearing auth storage.");
       Object.keys(localStorage)
         .filter(k => k.startsWith('sb-'))
         .forEach(k => localStorage.removeItem(k));
@@ -32,13 +44,18 @@ if (supabase && typeof window !== 'undefined') {
     }
   });
 
+  // Runtime listener: handle background token refresh failures
   supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'TOKEN_REFRESHED') return;
-    if (event === 'SIGNED_OUT' || !session) {
-      // Wipe any stale sb- keys from localStorage
+    if (
+      event === 'TOKEN_REFRESH_FAILED' ||
+      event === 'SIGNED_OUT' ||
+      !session
+    ) {
       Object.keys(localStorage)
         .filter(k => k.startsWith('sb-'))
         .forEach(k => localStorage.removeItem(k));
     }
   });
 }
+

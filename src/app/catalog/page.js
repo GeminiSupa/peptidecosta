@@ -11,7 +11,7 @@ import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { 
-  ShoppingBag, X, Search, Settings, 
+  ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
   Plus, Minus, Trash2, Check, AlertCircle, ArrowLeft,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
@@ -2049,7 +2049,7 @@ export default function CatalogPage() {
               <span>
                 {lang === 'en'
                   ? "Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed. • 🚚 FREE SHIPPING ON ORDERS OVER $200!"
-                  : "Descuento por Volumen: ¡Compra 5+ viales obtén 15% de desc, compra 10+ viales obtén 20%! Permite combinar. • 🚚 ¡ENVÍO GRATIS EN PEDIDOS SUPERIORES A $200!"
+                  : "Descuento por Volumen: ¡Compra 5+ viales y recibe 15% de descuento, compra 10+ viales y recibe 20%! Puedes combinar diferentes productos. • 🚚 ¡ENVÍO GRATIS EN PEDIDOS SUPERIORES A $200!"
                 }
               </span>
             </div>
@@ -2058,7 +2058,7 @@ export default function CatalogPage() {
               <span>
                 {lang === 'en'
                   ? "Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed. • 🚚 FREE SHIPPING ON ORDERS OVER $200!"
-                  : "Descuento por Volumen: ¡Compra 5+ viales obtén 15% de desc, compra 10+ viales obtén 20%! Permite combinar. • 🚚 ¡ENVÍO GRATIS EN PEDIDOS SUPERIORES A $200!"
+                  : "Descuento por Volumen: ¡Compra 5+ viales y recibe 15% de descuento, compra 10+ viales y recibe 20%! Puedes combinar diferentes productos. • 🚚 ¡ENVÍO GRATIS EN PEDIDOS SUPERIORES A $200!"
                 }
               </span>
             </div>
@@ -2071,6 +2071,9 @@ export default function CatalogPage() {
           <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)', textDecoration: 'none', fontWeight: 'bold', marginRight: 'auto' }}>
             <ArrowLeft size={16} />
             {lang === 'en' ? 'Back' : 'Volver'}
+          </Link>
+          <Link href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', textDecoration: 'none', fontWeight: '700', fontSize: '0.72rem', opacity: 0.4, letterSpacing: '0.05em', marginRight: '8px' }} title="Admin Dashboard">
+            <Lock size={11} /> ADMIN
           </Link>
           <div className="theme-toggle">
             <button 
@@ -2253,16 +2256,15 @@ export default function CatalogPage() {
                 </div>
               )}
             </div>
-            <button onClick={handleViewToggle} className="filter-btn" title="Toggle Layout">
-              {viewMode === 'list' && <Grid size={18} />}
-              {viewMode === 'grid' && <List size={18} />}
+            <button onClick={handleViewToggle} className="filter-btn" title={viewMode === 'list' ? (lang === 'en' ? 'Grid View' : 'Vista Cuadrícula') : (lang === 'en' ? 'List View' : 'Vista Lista')}>
+              {viewMode === 'list' ? <Grid size={18} /> : <List size={18} />}
             </button>
             <button 
               onClick={() => setShowFilters(!showFilters)} 
               className={`filter-btn ${showFilters ? 'active' : ''}`} 
-              title="Filters"
+              title={lang === 'en' ? 'Filters' : 'Filtros'}
             >
-              <Settings size={18} />
+              <SlidersHorizontal size={18} />
             </button>
             <button 
               onClick={() => setIsCartOpen(true)}
@@ -2460,6 +2462,7 @@ export default function CatalogPage() {
                       )}
                       {pSub && <span className="price-sub">{pSub}</span>}
                     </div>
+
                     <div className="product-actions" style={{ marginTop: '10px', position: 'relative' }}>
                       {isBac ? (
                         <div style={{ padding: '8px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.2)', fontSize: '0.75rem', color: '#38bdf8', textAlign: 'center', lineHeight: '1.4', fontWeight: '500' }}>

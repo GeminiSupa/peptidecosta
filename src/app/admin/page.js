@@ -14,13 +14,14 @@ import {
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send,
-  Bell, X, TrendingUp, Target, Smartphone
+  Bell, X, TrendingUp, Target, Smartphone, Inbox
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
 import ExportModal from '@/components/admin/ExportModal';
 import TeamManagement from '@/components/admin/TeamManagement';
 import AffiliatesManager from '@/components/admin/AffiliatesManager';
+import InquiriesManager from '@/components/admin/InquiriesManager';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
 
@@ -3103,163 +3104,215 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       )}
       {/* Navbar Header */}
       <nav className="admin-navbar">
-        <div className="admin-nav-top-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '12px' }}>
-          <div className="admin-nav-logo" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <img src="/logo.png" alt="Peptides Costa Rica Admin Logo" style={{ maxHeight: '38px', width: 'auto', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 1px 8px rgba(0,0,0,0.2)' }} />
-            <span className="db-status-badge" style={{ background: '#1e293b', color: '#94a3b8', fontSize: '0.65rem', padding: '4px 8px', borderRadius: '4px' }}>
-              {isDbConnected ? 'Live DB' : 'Simulation'}
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button 
-              className="admin-logout-btn" 
-              onClick={() => setShowPasswordModal(true)} 
-              style={{ flexShrink: 0, background: 'rgba(56, 189, 248, 0.1)', borderColor: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8' }}
-              title="Change Password"
-            >
-              <KeyRound size={14} style={{ display: 'inline', marginRight: '4px' }} />
-              Change PW
-            </button>
-            <button className="admin-logout-btn" onClick={handleLogout} style={{ flexShrink: 0 }}>
-              <LogOut size={14} style={{ display: 'inline', marginRight: '4px' }} />
-              Logout
-            </button>
+        <div className="admin-nav-top-row">
+          <div className="admin-nav-logo-container">
+            <img src="/logo.png" alt="Peptides Costa Rica Admin Logo" className="admin-logo-img" />
+            <div className="db-status-indicator">
+              <span className={`status-dot ${isDbConnected ? 'connected' : 'simulation'}`}></span>
+              <span className="status-text">{isDbConnected ? 'Live Connection' : 'Simulation Mode'}</span>
+            </div>
           </div>
         </div>
-        <div className="admin-nav-actions">
-          {hasAccess('spreadsheet') && (
-            <button 
-              className={`admin-tab-btn ${activeTab === 'spreadsheet' ? 'active' : ''}`}
-              onClick={() => setActiveTab('spreadsheet')}
-            >
-              <Table size={14} />
-              <span className="tab-label">Products</span>
-            </button>
-          )}
-          {hasAccess('orders') && (
-            <button 
-              className={`admin-tab-btn ${activeTab === 'orders' ? 'active' : ''}`}
-              onClick={() => setActiveTab('orders')}
-            >
-              <ClipboardList size={14} />
-              <span className="tab-label">Orders</span>
-              {orders.filter(o => (o.status || 'Pending') === 'Pending').length > 0 && <span className="tab-count" style={{ background: '#ef4444' }}>{orders.filter(o => (o.status || 'Pending') === 'Pending').length}</span>}
-            </button>
-          )}
-          {hasAccess('customers') && (
-            <button 
-              className={`admin-tab-btn ${activeTab === 'customers' ? 'active' : ''}`}
-              onClick={() => setActiveTab('customers')}
-            >
-              <Users size={14} />
-              <span className="tab-label">Customers</span>
-            </button>
-          )}
-          {hasAccess('leads') && (
-            <button 
-              className={`admin-tab-btn ${activeTab === 'leads' ? 'active' : ''}`}
-              onClick={() => setActiveTab('leads')}
-            >
-              <Target size={14} />
-              <span className="tab-label">Leads</span>
-              {leads.length > 0 && <span className="tab-count" style={{ background: '#10b981' }}>{leads.length}</span>}
-            </button>
-          )}
-          {hasAccess('analytics') && (
-            <button 
-              className={`admin-tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
-              onClick={() => setActiveTab('analytics')}
-            >
-              <BarChart2 size={14} />
-              <span className="tab-label">Analytics</span>
-            </button>
-          )}
-          {hasAccess('share') && (
-            <button 
-              className={`admin-tab-btn ${activeTab === 'share' ? 'active' : ''}`}
-              onClick={() => setActiveTab('share')}
-            >
-              <Link2 size={14} />
-              <span className="tab-label">Share</span>
-            </button>
-          )}
-          {hasAccess('carts') && (
-            <button 
-              className={`admin-tab-btn ${activeTab === 'carts' ? 'active' : ''}`}
-              onClick={() => setActiveTab('carts')}
-            >
-              <ShoppingCart size={14} />
-              <span className="tab-label">Carts</span>
-              {abandonedCarts.length > 0 && <span className="tab-count" style={{ background: '#f59e0b' }}>{abandonedCarts.length}</span>}
-            </button>
-          )}
-          {hasAccess('reviews') && (
-            <button 
-              className={`admin-tab-btn ${activeTab === 'reviews' ? 'active' : ''}`}
-              onClick={() => setActiveTab('reviews')}
-            >
-              <Star size={14} />
-              <span className="tab-label">Reviews</span>
-              {reviews.filter(r => r.status === 'Pending').length > 0 && <span className="tab-count" style={{ background: '#3b82f6' }}>{reviews.filter(r => r.status === 'Pending').length}</span>}
-            </button>
-          )}
-          {hasAccess('cms') && (
-            <button 
-              className={`admin-tab-btn ${activeTab === 'cms' ? 'active' : ''}`}
-              onClick={() => setActiveTab('cms')}
-            >
-              <FileText size={14} />
-              <span className="tab-label">Content (CMS)</span>
-            </button>
-          )}
-          {/* Facebook Alerts temporarily hidden until integration is active */}
-          {hasAccess('facebook') && false && (
-            <button 
-              className={`admin-tab-btn ${activeTab === 'facebook' ? 'active' : ''}`}
-              onClick={() => setActiveTab('facebook')}
-              style={{ position: 'relative' }}
-            >
-              <MessageCircle size={14} />
-              <span className="tab-label">Facebook Alerts</span>
-              {facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
-                <span className="tab-count" style={{ background: '#0284c7' }}>
-                  {facebookNotifications.filter(n => n.status === 'unread').length}
-                </span>
+
+        <div className="admin-nav-sections">
+          <div className="admin-nav-section">
+            <div className="admin-nav-section-title">Core Operations</div>
+            <div className="admin-nav-section-items">
+              {hasAccess('spreadsheet') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'spreadsheet' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('spreadsheet')}
+                >
+                  <Table size={14} />
+                  <span className="tab-label">Products</span>
+                </button>
               )}
-            </button>
-          )}
-          <button 
-            className={`admin-tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
-            onClick={() => setActiveTab('ai')}
-          >
-            <Brain size={14} style={{ color: activeTab === 'ai' ? 'inherit' : '#38bdf8' }} />
-            <span className="tab-label" style={{ color: activeTab === 'ai' ? 'inherit' : '#38bdf8', fontWeight: 'bold' }}>AI Copilot</span>
-          </button>
-          <button 
-            className={`admin-tab-btn ${activeTab === 'whatsapp_ai' ? 'active' : ''}`}
-            onClick={() => setActiveTab('whatsapp_ai')}
-          >
-            <MessageSquare size={14} style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981' }} />
-            <span className="tab-label" style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981', fontWeight: 'bold' }}>WhatsApp AI</span>
-          </button>
-          {(!adminProfile || adminProfile.is_superadmin) && (
+              {hasAccess('orders') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'orders' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('orders')}
+                >
+                  <ClipboardList size={14} />
+                  <span className="tab-label">Orders</span>
+                  {orders.filter(o => (o.status || 'Pending') === 'Pending').length > 0 && (
+                    <span className="tab-count badge-danger">
+                      {orders.filter(o => (o.status || 'Pending') === 'Pending').length}
+                    </span>
+                  )}
+                </button>
+              )}
+              {hasAccess('customers') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'customers' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('customers')}
+                >
+                  <Users size={14} />
+                  <span className="tab-label">Customers</span>
+                </button>
+              )}
+              {hasAccess('inquiries') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'inquiries' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('inquiries')}
+                >
+                  <Inbox size={14} />
+                  <span className="tab-label">Inquiries</span>
+                </button>
+              )}
+              {hasAccess('leads') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'leads' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('leads')}
+                >
+                  <Target size={14} />
+                  <span className="tab-label">Leads</span>
+                  {leads.length > 0 && (
+                    <span className="tab-count badge-success">
+                      {leads.length}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="admin-nav-section">
+            <div className="admin-nav-section-title">Sales & Marketing</div>
+            <div className="admin-nav-section-items">
+              {hasAccess('carts') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'carts' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('carts')}
+                >
+                  <ShoppingCart size={14} />
+                  <span className="tab-label">Carts</span>
+                  {abandonedCarts.length > 0 && (
+                    <span className="tab-count badge-warning">
+                      {abandonedCarts.length}
+                    </span>
+                  )}
+                </button>
+              )}
+              {hasAccess('share') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'share' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('share')}
+                >
+                  <Link2 size={14} />
+                  <span className="tab-label">Share</span>
+                </button>
+              )}
+              {hasAccess('reviews') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'reviews' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('reviews')}
+                >
+                  <Star size={14} />
+                  <span className="tab-label">Reviews</span>
+                  {reviews.filter(r => r.status === 'Pending').length > 0 && (
+                    <span className="tab-count badge-info">
+                      {reviews.filter(r => r.status === 'Pending').length}
+                    </span>
+                  )}
+                </button>
+              )}
+              {(!adminProfile || adminProfile.is_superadmin) && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'affiliates' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('affiliates')}
+                >
+                  <UserPlus size={14} />
+                  <span className="tab-label">Affiliates</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="admin-nav-section">
+            <div className="admin-nav-section-title">Analytics & Content</div>
+            <div className="admin-nav-section-items">
+              {hasAccess('analytics') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('analytics')}
+                >
+                  <BarChart2 size={14} />
+                  <span className="tab-label">Analytics</span>
+                </button>
+              )}
+              {hasAccess('cms') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'cms' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('cms')}
+                >
+                  <FileText size={14} />
+                  <span className="tab-label">Content (CMS)</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="admin-nav-section">
+            <div className="admin-nav-section-title">System & AI</div>
+            <div className="admin-nav-section-items">
+              <button 
+                className={`admin-tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
+                onClick={() => setActiveTab('ai')}
+              >
+                <Brain size={14} style={{ color: activeTab === 'ai' ? 'inherit' : '#38bdf8' }} />
+                <span className="tab-label" style={{ color: activeTab === 'ai' ? 'inherit' : '#38bdf8', fontWeight: 'bold' }}>AI Copilot</span>
+              </button>
+              <button 
+                className={`admin-tab-btn ${activeTab === 'whatsapp_ai' ? 'active' : ''}`}
+                onClick={() => setActiveTab('whatsapp_ai')}
+              >
+                <MessageSquare size={14} style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981' }} />
+                <span className="tab-label" style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981', fontWeight: 'bold' }}>WhatsApp AI</span>
+              </button>
+              {(!adminProfile || adminProfile.is_superadmin) && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'team' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('team')}
+                >
+                  <Shield size={14} />
+                  <span className="tab-label">Team</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Pinned Admin Session Card */}
+        <div className="admin-sidebar-footer">
+          <div className="admin-user-info">
+            <div className="admin-user-avatar">
+              {adminProfile?.email?.charAt(0).toUpperCase() || 'A'}
+            </div>
+            <div className="admin-user-details">
+              <span className="admin-user-name" title={adminProfile?.email || 'Administrator'}>
+                {adminProfile?.email ? adminProfile.email.split('@')[0] : 'Admin'}
+              </span>
+              <span className="admin-user-role">
+                {adminProfile?.is_superadmin ? 'Super Admin' : 'Staff Agent'}
+              </span>
+            </div>
+          </div>
+          <div className="admin-session-actions">
             <button 
-              className={`admin-tab-btn ${activeTab === 'team' ? 'active' : ''}`}
-              onClick={() => setActiveTab('team')}
+              className="admin-footer-btn" 
+              onClick={() => setShowPasswordModal(true)} 
+              title="Change Password"
             >
-              <Shield size={14} />
-              <span className="tab-label">Team</span>
+              <KeyRound size={14} />
             </button>
-          )}
-          {(!adminProfile || adminProfile.is_superadmin) && (
             <button 
-              className={`admin-tab-btn ${activeTab === 'affiliates' ? 'active' : ''}`}
-              onClick={() => setActiveTab('affiliates')}
+              className="admin-footer-btn logout" 
+              onClick={handleLogout} 
+              title="Logout"
             >
-              <UserPlus size={14} />
-              <span className="tab-label">Affiliates</span>
+              <LogOut size={14} />
             </button>
-          )}
+          </div>
         </div>
       </nav>
 
@@ -5745,6 +5798,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'affiliates' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
             <AffiliatesManager />
+          </div>
+        )}
+
+        {/* TAB: CUSTOMER INQUIRIES */}
+        {activeTab === 'inquiries' && (
+          <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
+            <InquiriesManager adminEmail={loggedInEmail.current} />
           </div>
         )}
 

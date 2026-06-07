@@ -3,13 +3,22 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
-import { Sun, Moon, ArrowRight, MessageCircle, Mail, MapPin } from 'lucide-react';
+import { Sun, Moon, ArrowRight, MessageCircle, Mail, MapPin, Send, CheckCircle, User, AtSign, FileText, Loader2 } from 'lucide-react';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
 
 export default function ContactPage() {
   const [theme, setTheme] = useState('light');
   const [lang, setLang] = useState('es');
   const [scrolled, setScrolled] = useState(false);
+
+  // Form states
+  const [formName, setFormName] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formSubject, setFormSubject] = useState('');
+  const [formMessage, setFormMessage] = useState('');
+  const [formLoading, setFormLoading] = useState(false);
+  const [formSuccess, setFormSuccess] = useState(false);
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -32,6 +41,66 @@ export default function ContactPage() {
   const handleLang = (l) => {
     setLang(l);
     localStorage.setItem('lang', l);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    
+    if (!formName.trim() || !formEmail.trim() || !formMessage.trim()) {
+      setFormError(lang === 'en' ? 'Please fill in all required fields.' : 'Por favor completa todos los campos requeridos.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formEmail.trim())) {
+      setFormError(lang === 'en' ? 'Please enter a valid email address.' : 'Por favor ingresa un correo electrónico válido.');
+      return;
+    }
+
+    setFormLoading(true);
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formName.trim(),
+          email: formEmail.trim(),
+          subject: formSubject.trim() || null,
+          message: formMessage.trim()
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setFormSuccess(true);
+        setFormName(''); setFormEmail(''); setFormSubject(''); setFormMessage('');
+      } else {
+        setFormError(data.error || (lang === 'en' ? 'Something went wrong. Please try again.' : 'Algo salió mal. Inténtalo de nuevo.'));
+      }
+    } catch (err) {
+      setFormError(lang === 'en' ? 'Connection error. Please try again.' : 'Error de conexión. Inténtalo de nuevo.');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const inputStyle = {
+    width: '100%', padding: '14px 16px', paddingLeft: '44px',
+    background: 'var(--card-bg)', border: '1px solid var(--border-color)',
+    borderRadius: '12px', color: 'var(--text-main)', fontSize: '14px',
+    outline: 'none', transition: 'border-color 0.2s, box-shadow 0.2s',
+    fontFamily: 'inherit', boxSizing: 'border-box'
+  };
+
+  const inputIconStyle = {
+    position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)',
+    color: 'var(--text-muted)', pointerEvents: 'none'
+  };
+
+  const labelStyle = {
+    display: 'block', fontSize: '13px', fontWeight: '600',
+    color: 'var(--text-main)', marginBottom: '6px', textAlign: 'left'
   };
 
   return (
@@ -68,15 +137,162 @@ export default function ContactPage() {
       </header>
 
       <main style={{ paddingTop: '120px', paddingBottom: '80px' }}>
-        <div className="container" style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
-          <h1 style={{ fontSize: '3rem', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>
-            {lang === 'en' ? 'Contact Us' : 'Contáctanos'}
-          </h1>
-          <p style={{ fontSize: '1.2rem', color: 'var(--text-muted)', marginBottom: '48px' }}>
-            {lang === 'en' 
-              ? 'Have questions about our peptides or need help with your order? Reach out directly.' 
-              : '¿Tienes preguntas sobre nuestros péptidos o necesitas ayuda con tu pedido? Escríbenos.'}
-          </p>
+        <div className="container" style={{ maxWidth: '800px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+            <h1 style={{ fontSize: '3rem', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>
+              {lang === 'en' ? 'Contact Us' : 'Contáctanos'}
+            </h1>
+            <p style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>
+              {lang === 'en' 
+                ? 'Have questions about our peptides or need help with your order? Send us a message below.' 
+                : '¿Tienes preguntas sobre nuestros péptidos o necesitas ayuda con tu pedido? Envíanos un mensaje.'}
+            </p>
+          </div>
+
+          {/* ── CONTACT FORM ────────────────────────────────── */}
+          <div style={{
+            background: 'var(--card-bg)', borderRadius: '20px',
+            border: '1px solid var(--border-color)', padding: '40px 32px',
+            marginBottom: '40px', boxShadow: '0 8px 32px rgba(0,0,0,0.06)'
+          }}>
+            {formSuccess ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                <div style={{
+                  width: '72px', height: '72px', borderRadius: '50%',
+                  background: 'rgba(16, 185, 129, 0.12)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px',
+                  animation: 'fadeInUp 0.5s ease'
+                }}>
+                  <CheckCircle size={36} color="#10b981" />
+                </div>
+                <h2 style={{ fontSize: '1.75rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '12px' }}>
+                  {lang === 'en' ? 'Message Sent!' : '¡Mensaje Enviado!'}
+                </h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '15px', maxWidth: '400px', margin: '0 auto 28px', lineHeight: '1.6' }}>
+                  {lang === 'en' 
+                    ? 'Thank you for reaching out. Our team will review your message and reply to your email shortly.' 
+                    : 'Gracias por comunicarte. Nuestro equipo revisará tu mensaje y responderá a tu correo pronto.'}
+                </p>
+                <button 
+                  onClick={() => setFormSuccess(false)}
+                  className="btn-hero-primary"
+                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+                >
+                  {lang === 'en' ? 'Send Another Message' : 'Enviar Otro Mensaje'}
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '20px' }}>
+                  {/* Name Field */}
+                  <div>
+                    <label style={labelStyle}>
+                      {lang === 'en' ? 'Full Name' : 'Nombre Completo'} <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={inputIconStyle}><User size={16} /></span>
+                      <input
+                        type="text" value={formName} onChange={(e) => setFormName(e.target.value)}
+                        placeholder={lang === 'en' ? 'John Doe' : 'Juan Pérez'}
+                        style={inputStyle} required
+                        onFocus={(e) => { e.target.style.borderColor = '#10b981'; e.target.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1)'; }}
+                        onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Email Field */}
+                  <div>
+                    <label style={labelStyle}>
+                      {lang === 'en' ? 'Email Address' : 'Correo Electrónico'} <span style={{ color: '#ef4444' }}>*</span>
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={inputIconStyle}><AtSign size={16} /></span>
+                      <input
+                        type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)}
+                        placeholder={lang === 'en' ? 'you@example.com' : 'tu@correo.com'}
+                        style={inputStyle} required
+                        onFocus={(e) => { e.target.style.borderColor = '#10b981'; e.target.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1)'; }}
+                        onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Subject Field */}
+                <div>
+                  <label style={labelStyle}>
+                    {lang === 'en' ? 'Subject (Optional)' : 'Asunto (Opcional)'}
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={inputIconStyle}><FileText size={16} /></span>
+                    <input
+                      type="text" value={formSubject} onChange={(e) => setFormSubject(e.target.value)}
+                      placeholder={lang === 'en' ? 'e.g. Question about BPC-157' : 'ej. Pregunta sobre BPC-157'}
+                      style={inputStyle}
+                      onFocus={(e) => { e.target.style.borderColor = '#10b981'; e.target.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1)'; }}
+                      onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
+                    />
+                  </div>
+                </div>
+
+                {/* Message Field */}
+                <div>
+                  <label style={labelStyle}>
+                    {lang === 'en' ? 'Your Message' : 'Tu Mensaje'} <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <textarea
+                    value={formMessage} onChange={(e) => setFormMessage(e.target.value)}
+                    placeholder={lang === 'en' 
+                      ? 'Tell us how we can help you...' 
+                      : 'Cuéntanos cómo podemos ayudarte...'}
+                    required rows={5}
+                    style={{
+                      ...inputStyle, paddingLeft: '16px', minHeight: '140px', resize: 'vertical', lineHeight: '1.6'
+                    }}
+                    onFocus={(e) => { e.target.style.borderColor = '#10b981'; e.target.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1)'; }}
+                    onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
+                  />
+                </div>
+
+                {/* Error */}
+                {formError && (
+                  <div style={{
+                    background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)',
+                    borderRadius: '10px', padding: '12px 16px', color: '#f87171', fontSize: '13px', fontWeight: '600'
+                  }}>
+                    {formError}
+                  </div>
+                )}
+
+                {/* Submit Button */}
+                <button
+                  type="submit" disabled={formLoading}
+                  className="btn-hero-primary"
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    width: '100%', padding: '16px', fontSize: '15px', fontWeight: '700',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    borderRadius: '12px', border: 'none', color: '#fff', cursor: formLoading ? 'wait' : 'pointer',
+                    opacity: formLoading ? 0.7 : 1, transition: 'all 0.2s'
+                  }}
+                >
+                  {formLoading ? (
+                    <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> {lang === 'en' ? 'Sending...' : 'Enviando...'}</>
+                  ) : (
+                    <><Send size={18} /> {lang === 'en' ? 'Send Message' : 'Enviar Mensaje'}</>
+                  )}
+                </button>
+              </form>
+            )}
+          </div>
+
+          {/* ── ALTERNATIVE CONTACT METHODS ────────────────── */}
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>
+              {lang === 'en' ? 'Or reach us directly' : 'O contáctanos directamente'}
+            </p>
+          </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
             
