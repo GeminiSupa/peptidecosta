@@ -15,6 +15,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [scanPeriod, setScanPeriod] = useState('previous'); // 'previous', 'current', 'all-time', or 'custom'
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [targetAgent, setTargetAgent] = useState('all'); // 'all' or an agent email
 
   // Form states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -100,6 +101,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
         }
         url += `&start=${customStartDate}&end=${customEndDate}`;
       }
+      if (targetAgent && targetAgent !== 'all') {
+        url += `&agentEmail=${encodeURIComponent(targetAgent)}`;
+      }
 
       const response = await fetch(url);
       const data = await response.json();
@@ -122,9 +126,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   };
 
   useEffect(() => {
-    if (activeSubTab === 'members') {
-      fetchUsers();
-    } else {
+    fetchUsers(); // Always load users (needed for agent dropdown on payouts tab)
+    if (activeSubTab === 'payouts') {
       fetchPayouts();
     }
   }, [activeSubTab]);
@@ -247,7 +250,31 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             <Plus size={16} /> Add User
           </button>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <select
+              value={targetAgent}
+              onChange={(e) => setTargetAgent(e.target.value)}
+              disabled={syncingCommissions}
+              style={{
+                background: 'rgba(15, 23, 42, 0.8)',
+                color: '#38bdf8',
+                border: '1px solid rgba(56, 189, 248, 0.2)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                outline: 'none',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                fontWeight: 'bold'
+              }}
+            >
+              <option value="all">All Agents</option>
+              {users.map(u => (
+                <option key={u.user_id} value={u.email}>{u.name || u.email}</option>
+              ))}
+            </select>
+
             <select
               value={scanPeriod}
               onChange={(e) => setScanPeriod(e.target.value)}

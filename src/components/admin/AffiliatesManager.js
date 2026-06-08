@@ -1,11 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag } from 'lucide-react';
+import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check } from 'lucide-react';
 
 export default function AffiliatesManager() {
   const [affiliates, setAffiliates] = useState([]);
   const [promoCodes, setPromoCodes] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Sub-tabs & Payout states
+  const [activeSubTab, setActiveSubTab] = useState('partners');
+  const [payouts, setPayouts] = useState([]);
+  const [loadingPayouts, setLoadingPayouts] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [syncingCommissions, setSyncingCommissions] = useState(false);
+  const [scanPeriod, setScanPeriod] = useState('previous');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [targetAffiliate, setTargetAffiliate] = useState('all');
 
   // Forms State
   const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
@@ -29,9 +40,50 @@ export default function AffiliatesManager() {
     }
   };
 
+  const fetchPayouts = async () => {
+    setLoadingPayouts(true);
+    try {
+      const { data } = await supabase.from('affiliate_payouts').select('*').order('created_at', { ascending: false });
+      if (data) setPayouts(data);
+    } catch (err) { console.error(err); }
+    setLoadingPayouts(false);
+  };
+
+  const handlePayoutAction = async (payoutId, action) => {
+    setActionLoadingId(payoutId);
+    try {
+      const res = await fetch('/api/admin/affiliates/payouts/approve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payoutId, action })
+      });
+      const data = await res.json();
+      if (data.success) { alert(`Payout ${action}!`); fetchPayouts(); }
+      else alert(`Failed: ${data.error}`);
+    } catch (err) { alert('Network error.'); }
+    setActionLoadingId(null);
+  };
+
+  const handleSyncAffiliateCommissions = async () => {
+    setSyncingCommissions(true);
+    try {
+      let url = `/api/admin/affiliates/payouts/report?period=${scanPeriod}`;
+      if (scanPeriod === 'custom') {
+        if (!customStartDate || !customEndDate) { alert('Select both dates.'); setSyncingCommissions(false); return; }
+        url += `&start=${customStartDate}&end=${customEndDate}`;
+      }
+      if (targetAffiliate && targetAffiliate !== 'all') url += `&affiliateId=${targetAffiliate}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.success) { alert('Affiliate commissions synced!'); fetchPayouts(); }
+      else alert(`Failed: ${data.error}`);
+    } catch (err) { alert('Error syncing.'); }
+    setSyncingCommissions(false);
+  };
+
   useEffect(() => {
     loadData();
-  }, []);
+    if (activeSubTab === 'payouts') fetchPayouts();
+  }, [activeSubTab]);
 
   const handleCreateAffiliate = async (e) => {
     e.preventDefault();
@@ -125,7 +177,40 @@ export default function AffiliatesManager() {
           <RefreshCw size={14} /> Refresh Data
         </button>
       </div>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
+        <button 
+          onClick={() => setActiveSubTab('partners')}
+          className="admin-btn"
+          style={{ 
+            background: activeSubTab === 'partners' ? '#38bdf8' : 'rgba(255,255,255,0.02)', 
+            color: activeSubTab === 'partners' ? '#0e1626' : '#94a3b8',
+            border: '1px solid rgba(255,255,255,0.05)',
+            fontWeight: 'bold',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          👥 Partners & Codes
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('payouts')}
+          className="admin-btn"
+          style={{ 
+            background: activeSubTab === 'payouts' ? '#38bdf8' : 'rgba(255,255,255,0.02)', 
+            color: activeSubTab === 'payouts' ? '#0e1626' : '#94a3b8',
+            border: '1px solid rgba(255,255,255,0.05)',
+            fontWeight: 'bold',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          💰 Commission Payouts
+        </button>
+      </div>
 
+      {activeSubTab === 'partners' ? (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '24px' }}>
         
         {/* AFFILIATES SECTION */}
@@ -218,6 +303,117 @@ export default function AffiliatesManager() {
         </div>
 
       </div>
+      ) : (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+            <select
+              value={targetAffiliate}
+              onChange={(e) => setTargetAffiliate(e.target.value)}
+              disabled={syncingCommissions}
+              style={{
+                background: 'rgba(15, 23, 42, 0.8)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)',
+                borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem', cursor: 'pointer', outline: 'none',
+                fontWeight: 'bold'
+              }}
+            >
+              <option value="all">All Affiliates</option>
+              {affiliates.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+
+            <select
+              value={scanPeriod}
+              onChange={(e) => setScanPeriod(e.target.value)}
+              disabled={syncingCommissions}
+              style={{
+                background: 'rgba(15, 23, 42, 0.8)', color: '#e2e8f0', border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem', cursor: 'pointer', outline: 'none'
+              }}
+            >
+              <option value="previous">Previous Week (Mon-Sun)</option>
+              <option value="current">Current Week (Mon-Now)</option>
+              <option value="all-time">All-Time (All Pending)</option>
+              <option value="custom">Custom Date Range</option>
+            </select>
+
+            {scanPeriod === 'custom' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} style={inputStyle} />
+                <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>to</span>
+                <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} style={inputStyle} />
+              </div>
+            )}
+
+            <button 
+              className="admin-btn admin-btn-primary" onClick={handleSyncAffiliateCommissions} disabled={syncingCommissions}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#a855f7', borderColor: '#a855f7', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', color: 'white', fontWeight: 'bold' }}
+            >
+              {syncingCommissions ? 'Calculating...' : '🔄 Run Commission Scan'}
+            </button>
+          </div>
+
+          {loadingPayouts ? (
+            <p style={{ color: '#94a3b8', textAlign: 'center', padding: '40px' }}>Loading payouts...</p>
+          ) : payouts.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8' }}>
+              No affiliate payouts found. Click <strong>Run Commission Scan</strong> to calculate!
+            </div>
+          ) : (
+            <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <table className="spreadsheet-table responsive-table">
+                <thead>
+                  <tr>
+                    <th style={{ padding: '16px', textAlign: 'left' }}>Affiliate</th>
+                    <th style={{ padding: '16px', textAlign: 'left' }}>Period</th>
+                    <th style={{ padding: '16px', textAlign: 'left' }}>Rate</th>
+                    <th style={{ padding: '16px', textAlign: 'left' }}>Commission</th>
+                    <th style={{ padding: '16px', textAlign: 'left' }}>Status</th>
+                    <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payouts.map(p => (
+                    <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <td style={{ padding: '16px', fontWeight: 'bold' }}>
+                        <div style={{ color: '#f8fafc' }}>{p.affiliate_name}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.affiliate_email}</div>
+                      </td>
+                      <td style={{ padding: '16px', color: '#cbd5e1', fontSize: '0.85rem' }}>
+                        {new Date(p.start_date).toLocaleDateString()} - {new Date(p.end_date).toLocaleDateString()}
+                      </td>
+                      <td style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>{p.commission_rate}%</td>
+                      <td style={{ padding: '16px', fontSize: '0.85rem' }}>
+                        <div style={{ color: '#c084fc', fontWeight: 'bold' }}>USD: ${Number(p.usd_commission).toFixed(2)}</div>
+                        <div style={{ color: '#c084fc', fontWeight: 'bold' }}>CRC: ₡{Math.round(p.crc_commission).toLocaleString()}</div>
+                      </td>
+                      <td style={{ padding: '16px' }}>
+                        <span style={{ 
+                          padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
+                          background: p.status === 'Pending' ? 'rgba(234, 179, 8, 0.15)' : p.status === 'Approved' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                          color: p.status === 'Pending' ? '#eab308' : p.status === 'Approved' ? '#22c55e' : '#ef4444'
+                        }}>
+                          {p.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'right' }}>
+                        {p.status === 'Pending' && (
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button onClick={() => handlePayoutAction(p.id, 'Approved')} disabled={actionLoadingId !== null} style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.2)', padding: '6px 12px', fontSize: '0.75rem', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              {actionLoadingId === p.id ? '...' : <Check size={12} />} Approve & Send
+                            </button>
+                            <button onClick={() => handlePayoutAction(p.id, 'Rejected')} disabled={actionLoadingId !== null} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 12px', fontSize: '0.75rem', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer' }}>
+                              Reject
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

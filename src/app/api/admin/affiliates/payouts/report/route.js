@@ -19,24 +19,20 @@ const formatMoney = (value, currency) => {
 
 export async function GET(request) {
   try {
-    // 1. Initialize Supabase Admin Client
     const supabaseAdmin = getSupabaseAdmin();
 
-    // 2. Parse query parameters to support period selection
+    // Parse query parameters
     const { searchParams } = new URL(request.url);
     const period = searchParams.get('period') || 'previous';
-    const targetAgentEmail = searchParams.get('agentEmail');
+    const targetAffiliateId = searchParams.get('affiliateId');
 
-    // 3. Calculate Monday-to-Sunday boundaries in Costa Rica Time (UTC-6)
-    const CR_OFFSET = -6; // Costa Rica is UTC-6 all year
+    // Calculate dates in Costa Rica Time (UTC-6)
+    const CR_OFFSET = -6;
     const nowUTC = new Date();
-    
-    // Shift current time to Costa Rica timezone to correctly determine current "day"
     const nowCR = new Date(nowUTC.getTime() + (CR_OFFSET * 60 * 60 * 1000));
     const day = nowCR.getUTCDay();
-    const dayOffset = day === 0 ? 7 : day; // Normalize so Monday is 1, Sunday is 7
+    const dayOffset = day === 0 ? 7 : day;
 
-    // Get current week's Monday at 00:00:00.000 in CR Time
     const currentMondayCR = new Date(nowCR);
     currentMondayCR.setUTCDate(nowCR.getUTCDate() - dayOffset + 1);
     currentMondayCR.setUTCHours(0, 0, 0, 0);
@@ -45,10 +41,10 @@ export async function GET(request) {
 
     if (period === 'current') {
       startDateCR = currentMondayCR;
-      endDateCR = nowCR; // Up to the current moment in CR
+      endDateCR = nowCR;
     } else if (period === 'all-time') {
       startDateCR = new Date('2020-01-01T00:00:00.000Z');
-      endDateCR = nowCR; // All time until now
+      endDateCR = nowCR;
     } else if (period === 'custom') {
       const customStart = searchParams.get('start');
       const customEnd = searchParams.get('end');
@@ -58,7 +54,7 @@ export async function GET(request) {
       startDateCR = new Date(`${customStart}T00:00:00.000Z`);
       endDateCR = new Date(`${customEnd}T23:59:59.999Z`);
     } else {
-      // previous complete week
+      // previous week
       const prevMondayCR = new Date(currentMondayCR);
       prevMondayCR.setUTCDate(currentMondayCR.getUTCDate() - 7);
 
@@ -70,59 +66,47 @@ export async function GET(request) {
       endDateCR = prevSundayCR;
     }
 
-    // Convert back to true UTC for accurate database querying
     const startDate = new Date(startDateCR.getTime() - (CR_OFFSET * 60 * 60 * 1000));
     const endDate = new Date(endDateCR.getTime() - (CR_OFFSET * 60 * 60 * 1000));
 
     const startDateStr = startDate.toISOString();
     const endDateStr = endDate.toISOString();
 
-    // 4. Fetch all non-cancelled orders completed in the scanned period
-    const { data: orders, error: ordersError } = await supabaseAdmin
+    // Fetch all non-cancelled orders with an affiliate ID in the scanned period
+    let query = supabaseAdmin
       .from('orders')
       .select('*')
       .gte('created_at', startDateStr)
       .lte('created_at', endDateStr)
-      .not('status', 'eq', 'Cancelled');
+      .not('status', 'eq', 'Cancelled')
+      .not('affiliate_id', 'is', null);
+
+    if (targetAffiliateId) {
+      query = query.eq('affiliate_id', targetAffiliateId);
+    }
+
+    const { data: orders, error: ordersError } = await query;
 
     if (ordersError) {
-      console.error('Error fetching orders for weekly commissions:', ordersError);
+      console.error('Error fetching affiliate orders:', ordersError);
       return NextResponse.json({ error: 'Failed to fetch weekly orders' }, { status: 500 });
     }
 
-    // 4. Fetch all admin profiles with their commission rates
-    const { data: profiles, error: profilesError } = await supabaseAdmin
-      .from('admin_profiles')
-      .select('*');
+    // Fetch affiliates
+    let affiliateQuery = supabaseAdmin.from('affiliates').select('*');
+    if (targetAffiliateId) {
+      affiliateQuery = affiliateQuery.eq('id', targetAffiliateId);
+    }
+    const { data: affiliates, error: affiliatesError } = await affiliateQuery;
 
-    if (profilesError) {
-      console.error('Error fetching admin profiles:', profilesError);
-      return NextResponse.json({ error: 'Failed to fetch agent profiles' }, { status: 500 });
+    if (affiliatesError) {
+      console.error('Error fetching affiliates:', affiliatesError);
+      return NextResponse.json({ error: 'Failed to fetch affiliates list' }, { status: 500 });
     }
 
-    const reportResults = [];
-
-    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-      console.warn('[Weekly Commissions] SMTP credentials missing. Skipping email dispatch.');
-    }
-
-    const transporter = (SMTP_HOST && SMTP_USER && SMTP_PASS) ? nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    }) : null;
-
-    // 5. Calculate weekly gross sales and commissions for each agent
-    // First, get all already approved payout orders so we don't double count
+    // Fetch already approved payouts to exclude paid orders
     const { data: approvedPayouts } = await supabaseAdmin
-      .from('commission_payouts')
+      .from('affiliate_payouts')
       .select('orders_data')
       .eq('status', 'Approved');
 
@@ -139,47 +123,44 @@ export async function GET(request) {
       }
     }
 
-    for (const agent of profiles) {
-      // If a specific agent is targeted, skip other agents
-      if (targetAgentEmail && agent.email?.trim().toLowerCase() !== targetAgentEmail.trim().toLowerCase()) {
-        continue;
-      }
-      const rate = Number(agent.commission_rate || 0);
-      
-      // Filter orders assigned to this agent (comparing against name or email dynamically)
-      const agentOrders = (orders || []).filter(order => {
-        // Skip orders that have already been paid out
-        if (paidOrderIds.has(order.id)) return false;
+    const reportResults = [];
+    const transporter = (SMTP_HOST && SMTP_USER && SMTP_PASS) ? nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+      tls: { rejectUnauthorized: false }
+    }) : null;
 
-        const orderAgent = String(order.sales_agent || '').trim().toLowerCase();
-        const agentName = String(agent.name || '').trim().toLowerCase();
-        const agentEmail = String(agent.email || '').trim().toLowerCase();
-        
-        return orderAgent && (orderAgent === agentName || orderAgent === agentEmail);
+    for (const aff of affiliates) {
+      const rate = Number(aff.commission_rate || 0.10);
+
+      // Filter orders for this affiliate
+      const affOrders = (orders || []).filter(order => {
+        if (paidOrderIds.has(order.id)) return false;
+        return order.affiliate_id === aff.id;
       });
 
-      // Skip agents with zero closed orders this week
-      if (agentOrders.length === 0) continue;
+      if (affOrders.length === 0) continue;
 
-      // Group totals by currency
       let usdSales = 0;
       let crcSales = 0;
+      let usdCommission = 0;
+      let crcCommission = 0;
 
-      for (const order of agentOrders) {
+      for (const order of affOrders) {
         const totalAmount = Number(order.total || 0);
         if (order.currency === 'USD') {
           usdSales += totalAmount;
         } else {
           crcSales += totalAmount;
         }
+        usdCommission += Number(order.affiliate_commission_usd || 0);
+        crcCommission += Number(order.affiliate_commission_crc || 0);
       }
 
-      // Calculate commissions
-      const usdCommission = usdSales * (rate / 100);
-      const crcCommission = crcSales * (rate / 100);
-
-      // Build items table in HTML for this agent's invoice
-      const ordersTableRows = agentOrders.map(order => {
+      // Build HTML invoice
+      const ordersTableRows = affOrders.map(order => {
         const date = new Date(order.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
         return `
           <tr>
@@ -190,7 +171,7 @@ export async function GET(request) {
               ${date}
             </td>
             <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px;color:#cbd5e1;font-weight:bold;">
-              ${order.customer_name || 'N/A'}
+              ${order.promo_code || 'N/A'}
             </td>
             <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px;text-align:right;color:#f8fafc;font-weight:bold;">
               ${formatMoney(order.total, order.currency)}
@@ -199,57 +180,52 @@ export async function GET(request) {
         `;
       }).join('');
 
-      // Build premium HTML Email template with science design aesthetics
       const emailHtml = `
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#e2e8f0;background:#0b0f19;max-width:640px;margin:0 auto;padding:32px 24px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;">
-          <!-- Header Logo/Branding -->
           <div style="text-align:center;margin-bottom:24px;">
             <div style="display:inline-block;padding:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;margin-bottom:12px;">
               <span style="font-size:24px;font-weight:bold;color:#f8fafc;letter-spacing:1px;">🧬 PEPTIDES COSTA RICA</span>
             </div>
-            <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:-0.5px;">Weekly Sales Commission Invoice</h1>
+            <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:-0.5px;">Weekly Affiliate Commission Invoice</h1>
             <p style="color:#94a3b8;font-size:13px;margin:0;">Invoice Period: ${new Date(startDateStr).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})} to ${new Date(endDateStr).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}</p>
           </div>
 
-          <!-- Greeting Card -->
           <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:12px;padding:20px;margin-bottom:24px;text-align:center;">
-            <p style="margin:0 0 4px;font-size:14px;color:#94a3b8;">Sales Representative</p>
-            <p style="margin:0 0 16px;font-size:18px;font-weight:800;color:#c084fc;">${agent.name || agent.email}</p>
+            <p style="margin:0 0 4px;font-size:14px;color:#94a3b8;">Affiliate Partner</p>
+            <p style="margin:0 0 16px;font-size:18px;font-weight:800;color:#38bdf8;">${aff.name}</p>
             <div style="border-top:1px dashed rgba(255,255,255,0.08);margin-bottom:16px;"></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center;">
               <div>
-                <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;text-transform:uppercase;">Gross USD Sales</p>
+                <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;text-transform:uppercase;">Gross USD Referrals</p>
                 <p style="margin:0;font-size:20px;font-weight:900;color:#f8fafc;">${formatMoney(usdSales, 'USD')}</p>
               </div>
               <div>
-                <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;text-transform:uppercase;">Gross CRC Sales</p>
+                <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;text-transform:uppercase;">Gross CRC Referrals</p>
                 <p style="margin:0;font-size:20px;font-weight:900;color:#f8fafc;">${formatMoney(crcSales, 'CRC')}</p>
               </div>
             </div>
           </div>
 
-          <!-- Commission Highlight Summary -->
-          <div style="background:linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(56, 189, 248, 0.05) 100%);border:1px solid rgba(168, 85, 247, 0.3);border-radius:12px;padding:20px;margin-bottom:24px;text-align:center;">
-            <span style="font-size:12px;font-weight:bold;color:#c084fc;text-transform:uppercase;letter-spacing:1px;background:rgba(168, 85, 247, 0.1);padding:4px 10px;border-radius:12px;">Commission Rate: ${rate}%</span>
-            <h2 style="font-size:15px;color:#e2e8f0;margin:16px 0 8px;font-weight:600;">Total Payout Owed This Week</h2>
+          <div style="background:linear-gradient(135deg, rgba(56, 189, 248, 0.15) 0%, rgba(168, 85, 247, 0.05) 100%);border:1px solid rgba(56, 189, 248, 0.3);border-radius:12px;padding:20px;margin-bottom:24px;text-align:center;">
+            <span style="font-size:12px;font-weight:bold;color:#38bdf8;text-transform:uppercase;letter-spacing:1px;background:rgba(56, 189, 248, 0.1);padding:4px 10px;border-radius:12px;">Commission Rate: ${(rate * 100).toFixed(0)}%</span>
+            <h2 style="font-size:15px;color:#e2e8f0;margin:16px 0 8px;font-weight:600;">Total Affiliate Commission Owed</h2>
             <div style="font-size:26px;font-weight:950;color:#ffffff;line-height:1.2;margin:0 0 4px 0;">
               ${usdCommission > 0 ? `${formatMoney(usdCommission, 'USD')}` : ''}
               ${usdCommission > 0 && crcCommission > 0 ? ' + ' : ''}
               ${crcCommission > 0 ? `${formatMoney(crcCommission, 'CRC')}` : ''}
               ${usdCommission === 0 && crcCommission === 0 ? '$0.00' : ''}
             </div>
-            <p style="margin:0;font-size:12px;color:#64748b;">Commission is calculated automatically based on total successful USD and CRC orders closed.</p>
+            <p style="margin:0;font-size:12px;color:#64748b;">This payout will be sent via your registered method shortly.</p>
           </div>
 
-          <!-- Closed Orders Table -->
-          <h3 style="font-size:13px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px 0;">Closed Orders History</h3>
+          <h3 style="font-size:13px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px 0;">Referral Orders History</h3>
           <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);border-radius:12px;overflow:hidden;margin-bottom:24px;">
             <table style="width:100%;border-collapse:collapse;">
               <thead>
                 <tr style="background:rgba(255,255,255,0.02);border-bottom:1px solid rgba(255,255,255,0.05);">
                   <th style="padding:12px;font-size:11px;font-weight:bold;text-align:left;color:#94a3b8;text-transform:uppercase;">Order #</th>
                   <th style="padding:12px;font-size:11px;font-weight:bold;text-align:left;color:#94a3b8;text-transform:uppercase;">Date</th>
-                  <th style="padding:12px;font-size:11px;font-weight:bold;text-align:left;color:#94a3b8;text-transform:uppercase;">Customer</th>
+                  <th style="padding:12px;font-size:11px;font-weight:bold;text-align:left;color:#94a3b8;text-transform:uppercase;">Promo Code</th>
                   <th style="padding:12px;font-size:11px;font-weight:bold;text-align:right;color:#94a3b8;text-transform:uppercase;">Total Amount</th>
                 </tr>
               </thead>
@@ -259,67 +235,66 @@ export async function GET(request) {
             </table>
           </div>
 
-          <!-- Footer/Support -->
           <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:16px;text-align:center;font-size:11px;color:#64748b;">
-            Peptides Costa Rica Administrative Automated CRM · Sales and Invoicing Ledger
+            Peptides Costa Rica Affiliate Partners System
           </div>
         </div>
       `;
 
-      // 6. Save or update Pending payout in database
+      // Save to affiliate_payouts
       const { data: existingPayout } = await supabaseAdmin
-        .from('commission_payouts')
+        .from('affiliate_payouts')
         .select('*')
-        .eq('agent_email', agent.email)
+        .eq('affiliate_id', aff.id)
         .eq('status', 'Pending')
         .maybeSingle();
 
       let saveError = null;
       if (existingPayout) {
         const { error } = await supabaseAdmin
-          .from('commission_payouts')
+          .from('affiliate_payouts')
           .update({
-            agent_id: agent.user_id || null,
-            agent_name: agent.name || null,
+            affiliate_name: aff.name,
+            affiliate_email: aff.email,
             start_date: startDateStr,
             end_date: endDateStr,
             usd_sales: usdSales,
             crc_sales: crcSales,
-            commission_rate: rate,
+            commission_rate: rate * 100, // format like agent (as integer percentage, e.g. 10)
             usd_commission: usdCommission,
             crc_commission: crcCommission,
-            orders_data: agentOrders,
+            orders_data: affOrders,
             email_html: emailHtml
           })
           .eq('id', existingPayout.id);
         saveError = error;
       } else {
         const { error } = await supabaseAdmin
-          .from('commission_payouts')
+          .from('affiliate_payouts')
           .insert([{
-            agent_id: agent.user_id || null,
-            agent_email: agent.email,
-            agent_name: agent.name || null,
+            affiliate_id: aff.id,
+            affiliate_email: aff.email,
+            affiliate_name: aff.name,
             start_date: startDateStr,
             end_date: endDateStr,
             usd_sales: usdSales,
             crc_sales: crcSales,
-            commission_rate: rate,
+            commission_rate: rate * 100,
             usd_commission: usdCommission,
             crc_commission: crcCommission,
             status: 'Pending',
-            orders_data: agentOrders,
+            orders_data: affOrders,
             email_html: emailHtml
           }]);
         saveError = error;
       }
 
       reportResults.push({
-        agentId: agent.id,
-        name: agent.name,
-        email: agent.email,
-        rate: `${rate}%`,
-        closedOrdersCount: agentOrders.length,
+        affiliateId: aff.id,
+        name: aff.name,
+        email: aff.email,
+        rate: `${(rate * 100).toFixed(0)}%`,
+        closedOrdersCount: affOrders.length,
         usdSales: formatMoney(usdSales, 'USD'),
         crcSales: formatMoney(crcSales, 'CRC'),
         usdCommission: formatMoney(usdCommission, 'USD'),
@@ -332,7 +307,6 @@ export async function GET(request) {
     let adminEmailSent = false;
     let adminEmailError = null;
 
-    // 7. Send notification email to admins
     if (transporter && reportResults.length > 0) {
       try {
         const adminEmailHtml = `
@@ -341,16 +315,16 @@ export async function GET(request) {
               <div style="display:inline-block;padding:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;margin-bottom:12px;">
                 <span style="font-size:24px;font-weight:bold;color:#f8fafc;letter-spacing:1px;">🧬 PEPTIDES COSTA RICA</span>
               </div>
-              <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:-0.5px;">Pending Commissions Action Required</h1>
-              <p style="color:#94a3b8;font-size:13px;margin:0;">Weekly commission calculations are complete and awaiting admin approval.</p>
+              <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:-0.5px;">Pending Affiliate Payouts Action Required</h1>
+              <p style="color:#94a3b8;font-size:13px;margin:0;">Weekly affiliate commission calculations are complete and awaiting admin approval.</p>
             </div>
 
             <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:12px;padding:20px;margin-bottom:24px;">
               <table style="width:100%;border-collapse:collapse;">
                 <thead>
                   <tr style="border-bottom:1px solid rgba(255,255,255,0.08);text-align:left;">
-                    <th style="padding:10px;font-size:11px;font-weight:bold;color:#94a3b8;text-transform:uppercase;">Representative</th>
-                    <th style="padding:10px;font-size:11px;font-weight:bold;text-align:center;color:#94a3b8;text-transform:uppercase;">Closed Orders</th>
+                    <th style="padding:10px;font-size:11px;font-weight:bold;color:#94a3b8;text-transform:uppercase;">Affiliate Partner</th>
+                    <th style="padding:10px;font-size:11px;font-weight:bold;text-align:center;color:#94a3b8;text-transform:uppercase;">Referrals</th>
                     <th style="padding:10px;font-size:11px;font-weight:bold;text-align:right;color:#94a3b8;text-transform:uppercase;">Pending Payout</th>
                   </tr>
                 </thead>
@@ -359,7 +333,7 @@ export async function GET(request) {
                     <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
                       <td style="padding:12px 10px;font-size:13px;font-weight:bold;color:#f8fafc;">${r.name || r.email}</td>
                       <td style="padding:12px 10px;font-size:13px;text-align:center;color:#cbd5e1;">${r.closedOrdersCount}</td>
-                      <td style="padding:12px 10px;font-size:13px;text-align:right;font-weight:bold;color:#c084fc;">
+                      <td style="padding:12px 10px;font-size:13px;text-align:right;font-weight:bold;color:#38bdf8;">
                         ${r.usdCommission !== '$0.00' ? r.usdCommission : ''}
                         ${r.usdCommission !== '$0.00' && r.crcCommission !== '₡0' ? ' + ' : ''}
                         ${r.crcCommission !== '₡0' ? r.crcCommission : ''}
@@ -371,13 +345,13 @@ export async function GET(request) {
             </div>
 
             <div style="text-align:center;margin-bottom:24px;">
-              <a href="https://peptidescostarica.net/admin?tab=team" style="display:inline-block;background:#38bdf8;color:#0b0f19;font-weight:bold;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:13px;">
-                Review & Approve Payouts
+              <a href="https://peptidescostarica.net/admin?tab=affiliates" style="display:inline-block;background:#38bdf8;color:#0b0f19;font-weight:bold;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:13px;">
+                Review & Approve Affiliate Payouts
               </a>
             </div>
 
             <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:16px;text-align:center;font-size:11px;color:#64748b;">
-              Peptides Costa Rica Administrative Automated CRM · Sales and Invoicing Ledger
+              Peptides Costa Rica Administrative Automated CRM · Affiliate Partners Ledger
             </div>
           </div>
         `;
@@ -385,32 +359,26 @@ export async function GET(request) {
         await transporter.sendMail({
           from: NOTIFICATION_FROM,
           to: ADMIN_CC_EMAILS,
-          subject: `🧬 [Action Required] Weekly Commissions Pending Approval (${reportResults.length} Agents)`,
+          subject: `🧬 [Action Required] Weekly Affiliate Payouts Pending Approval (${reportResults.length} Partners)`,
           html: adminEmailHtml,
-          text: `Weekly commission reports are generated and pending approval for: ${reportResults.map(r => `${r.name || r.email} (Payout: ${r.usdCommission} + ${r.crcCommission})`).join(', ')}`
+          text: `Weekly affiliate reports are generated and pending approval for: ${reportResults.map(r => `${r.name || r.email} (Payout: ${r.usdCommission} + ${r.crcCommission})`).join(', ')}`
         });
         adminEmailSent = true;
       } catch (mailErr) {
-        console.error('[Weekly Commissions] Failed to notify admins:', mailErr);
+        console.error('[Affiliate Weekly Commissions] Failed to notify admins:', mailErr);
         adminEmailError = mailErr.message;
       }
     }
 
     return NextResponse.json({
       success: true,
-      period: {
-        start: startDateStr,
-        end: endDateStr
-      },
+      period: { start: startDateStr, end: endDateStr },
       payoutReport: reportResults,
-      adminNotification: {
-        emailSent: adminEmailSent,
-        error: adminEmailError
-      }
+      adminNotification: { emailSent: adminEmailSent, error: adminEmailError }
     });
 
   } catch (err) {
-    console.error('[Weekly Commissions] Critical script crash:', err);
+    console.error('[Affiliate Weekly Commissions] Critical script crash:', err);
     return NextResponse.json({ error: 'Internal server error', details: err.message }, { status: 500 });
   }
 }
