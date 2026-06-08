@@ -12,7 +12,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [loadingPayouts, setLoadingPayouts] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [syncingCommissions, setSyncingCommissions] = useState(false);
-  const [scanPeriod, setScanPeriod] = useState('previous'); // 'previous' or 'current'
+  const [scanPeriod, setScanPeriod] = useState('previous'); // 'previous', 'current', 'all-time', or 'custom'
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   // Form states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -89,10 +91,25 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const handleSyncCommissions = async () => {
     setSyncingCommissions(true);
     try {
-      const response = await fetch(`/api/admin/commissions/weekly-report?period=${scanPeriod}`);
+      let url = `/api/admin/commissions/weekly-report?period=${scanPeriod}`;
+      if (scanPeriod === 'custom') {
+        if (!customStartDate || !customEndDate) {
+          alert('Please select both a start date and an end date.');
+          setSyncingCommissions(false);
+          return;
+        }
+        url += `&start=${customStartDate}&end=${customEndDate}`;
+      }
+
+      const response = await fetch(url);
       const data = await response.json();
       if (data.success) {
-        alert(`Successfully synced weekly commissions for the ${scanPeriod === 'previous' ? 'previous completed week (Mon-Sun)' : 'current week-to-date (Mon-Now)'} and generated pending payouts!`);
+        const periodMsg = scanPeriod === 'previous' 
+          ? 'previous completed week (Mon-Sun)' 
+          : scanPeriod === 'all-time' ? 'all-time historical orders' 
+          : scanPeriod === 'custom' ? `custom range (${customStartDate} to ${customEndDate})`
+          : 'current week-to-date (Mon-Now)';
+        alert(`Successfully synced commissions for ${periodMsg} and generated pending payouts!`);
         fetchPayouts();
       } else {
         alert(`Failed to sync commissions: ${data.error}`);
@@ -250,7 +267,28 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             >
               <option value="previous">Previous Week (Mon-Sun)</option>
               <option value="current">Current Week (Mon-Now)</option>
+              <option value="all-time">All-Time (All Pending)</option>
+              <option value="custom">Custom Date Range</option>
             </select>
+            
+            {scanPeriod === 'custom' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <input 
+                  type="date" 
+                  value={customStartDate} 
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  style={{ background: 'rgba(15, 23, 42, 0.8)', color: '#e2e8f0', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '6px 10px', fontSize: '0.8rem' }}
+                />
+                <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>to</span>
+                <input 
+                  type="date" 
+                  value={customEndDate} 
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  style={{ background: 'rgba(15, 23, 42, 0.8)', color: '#e2e8f0', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', padding: '6px 10px', fontSize: '0.8rem' }}
+                />
+              </div>
+            )}
+
             <button 
               className="admin-btn admin-btn-primary" 
               onClick={handleSyncCommissions} 

@@ -45,6 +45,17 @@ export async function GET(request) {
     if (period === 'current') {
       startDateCR = currentMondayCR;
       endDateCR = nowCR; // Up to the current moment in CR
+    } else if (period === 'all-time') {
+      startDateCR = new Date('2020-01-01T00:00:00.000Z');
+      endDateCR = nowCR; // All time until now
+    } else if (period === 'custom') {
+      const customStart = searchParams.get('start');
+      const customEnd = searchParams.get('end');
+      if (!customStart || !customEnd) {
+        return NextResponse.json({ error: 'Start and end dates are required for custom period' }, { status: 400 });
+      }
+      startDateCR = new Date(`${customStart}T00:00:00.000Z`);
+      endDateCR = new Date(`${customEnd}T23:59:59.999Z`);
     } else {
       // previous complete week
       const prevMondayCR = new Date(currentMondayCR);
@@ -108,11 +119,33 @@ export async function GET(request) {
     }) : null;
 
     // 5. Calculate weekly gross sales and commissions for each agent
+    // First, get all already approved payout orders so we don't double count
+    const { data: approvedPayouts } = await supabaseAdmin
+      .from('commission_payouts')
+      .select('orders_data')
+      .eq('status', 'Approved');
+
+    const paidOrderIds = new Set();
+    if (approvedPayouts) {
+      for (const p of approvedPayouts) {
+        if (p.orders_data && Array.isArray(p.orders_data)) {
+          for (const order of p.orders_data) {
+            if (order && order.id) {
+              paidOrderIds.add(order.id);
+            }
+          }
+        }
+      }
+    }
+
     for (const agent of profiles) {
       const rate = Number(agent.commission_rate || 0);
       
       // Filter orders assigned to this agent (comparing against name or email dynamically)
       const agentOrders = (orders || []).filter(order => {
+        // Skip orders that have already been paid out
+        if (paidOrderIds.has(order.id)) return false;
+
         const orderAgent = String(order.sales_agent || '').trim().toLowerCase();
         const agentName = String(agent.name || '').trim().toLowerCase();
         const agentEmail = String(agent.email || '').trim().toLowerCase();

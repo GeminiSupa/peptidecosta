@@ -107,7 +107,7 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
           background: 'rgba(56, 189, 248, 0.12)',
           border: '1px solid rgba(56, 189, 248, 0.3)',
           color: '#38bdf8',
-          fontSize: '0.65rem',
+          fontSize: '0.75rem',
           fontWeight: 'bold',
           cursor: 'pointer',
           zIndex: 10,
@@ -1972,7 +1972,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       <div className="analytics-header-banner">
         <div>
           <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>Analytics & Market Research Dashboard</h3>
-          <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
+          <p style={{ margin: '4px 0 0 0', fontSize: '0.875rem', color: '#94a3b8' }}>
             Real-time insight on visitor telemetry, page heartbeat open times, and sales performance.
           </p>
         </div>
@@ -1999,25 +1999,21 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           </div>
 
           <button 
-            className="admin-btn" 
-            style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+            className="admin-btn admin-btn-secondary" 
             onClick={() => setRefreshKey(k => k + 1)}
             title="Refresh database data"
           >
-            <RefreshCw size={12} className={loading ? 'sync-spinner' : ''} />
+            <RefreshCw size={14} className={loading ? 'sync-spinner' : ''} />
             <span>Sync</span>
-            {renderExplainerTrigger('sync')}
           </button>
 
           <button
-            className="admin-btn"
-            style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)' }}
+            className="admin-btn admin-btn-secondary"
             onClick={() => setShowExportModal(true)}
             title="Export analytics report"
           >
-            <Upload size={12} />
+            <Upload size={14} />
             <span className="hide-on-mobile">Export</span>
-            {renderExplainerTrigger('export')}
           </button>
 
           <div className="time-filter-bar">
@@ -2061,12 +2057,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          fontSize: '0.82rem',
+          fontSize: '0.875rem',
           color: '#38bdf8',
           boxShadow: '0 4px 15px rgba(56, 189, 248, 0.03)'
         }}
       >
-        <span style={{ fontSize: '1.2rem', animation: 'activePulse 1.5s infinite alternate ease-in-out' }}>💡</span>
+        <span style={{ fontSize: '1.25rem', animation: 'activePulse 1.5s infinite alternate ease-in-out' }}>💡</span>
         <div>
           <span style={{ fontWeight: 600, color: '#f8fafc' }}>Guía para Principiantes Activa / Layman Guide Mode Active: </span>
           ¿No estás seguro de qué significan algunos de estos gráficos o datos? Simplemente haz click en el ícono de la bombilla 💡 al lado de **cualquier tarjeta, título o sección** para abrir una explicación súper sencilla y amigable.
@@ -2080,8 +2076,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <div className="sync-spinner" style={{ color: '#38bdf8' }}><Brain size={32} /></div>
               <div>
-                <h4 style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0' }}>🧬 AI Copilot is auditing store transactions and metrics...</h4>
-                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>Performing real-time revenue leakage audits, conversion rate calculations, customer engagement audits, and hot/cold products mapping...</p>
+                <h4 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0' }}>🧬 AI Copilot is auditing store transactions and metrics...</h4>
+                <p style={{ fontSize: '0.875rem', color: '#94a3b8', margin: 0 }}>Performing real-time revenue leakage audits, conversion rate calculations, customer engagement audits, and hot/cold products mapping...</p>
               </div>
             </div>
           </div>
@@ -2098,13 +2094,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 <Sparkles size={20} />
               </div>
               <div>
-                <h4 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#f8fafc', margin: 0 }}>🧬 Real-Time AI Business Analysis & Forecast</h4>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Generated instantly by Gemini • Context-Aware store audit</span>
+                <h4 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#f8fafc', margin: 0 }}>🧬 Real-Time AI Business Analysis & Forecast</h4>
+                <span style={{ fontSize: '0.875rem', color: '#64748b' }}>Generated instantly by Gemini • Context-Aware store audit</span>
               </div>
             </div>
             
             <div 
-              style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}
+              style={{ fontSize: '1rem', color: '#cbd5e1', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}
               dangerouslySetInnerHTML={{
                 __html: aiInsightText
                   .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #38bdf8">$1</strong>')
@@ -2122,19 +2118,18 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 <Brain size={20} />
               </div>
               <div>
-                <h4 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 2px 0' }}>✨ Generate Real-Time AI Business Analysis & Market Insights</h4>
-                <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>Let Gemini Copilot automatically audit your sales funnel, conversion bottlenecks, and potential revenue leakages.</p>
+                <h4 style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 2px 0' }}>✨ Generate Real-Time AI Business Analysis & Market Insights</h4>
+                <p style={{ fontSize: '0.875rem', color: '#94a3b8', margin: 0 }}>Let Gemini Copilot automatically audit your sales funnel, conversion bottlenecks, and potential revenue leakages.</p>
               </div>
             </div>
             <button 
               className="admin-btn admin-btn-primary" 
-              style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer' }}
               onClick={(e) => {
                 e.stopPropagation();
                 generateAiInsights();
               }}
             >
-              <Sparkles size={13} /> Audit Store
+              <Sparkles size={14} /> Audit Store
             </button>
           </div>
         )}
@@ -2167,7 +2162,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           {expandedMetric === 'revenue' && (
             <div className="metric-card-detail">
               {successfulOrders.length === 0
-                ? <span style={{ fontSize: '0.75rem', color: '#64748b' }}>No paid orders yet.</span>
+                ? <span style={{ fontSize: '0.875rem', color: '#64748b' }}>No paid orders yet.</span>
                 : successfulOrders.slice(0, 5).map(o => (
                   <div className="metric-detail-row" key={o.id}>
                     <span className="metric-detail-name">{o.customer_name || 'Customer'}</span>
@@ -2176,7 +2171,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 ))
               }
               {successfulOrders.length > 5 && (
-                <span style={{ fontSize: '0.7rem', color: '#475569' }}>+{successfulOrders.length - 5} more orders</span>
+                <span style={{ fontSize: '0.75rem', color: '#475569' }}>+{successfulOrders.length - 5} more orders</span>
               )}
             </div>
           )}
@@ -2206,7 +2201,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           {expandedMetric === 'aov' && (
             <div className="metric-card-detail">
               {successfulOrders.length === 0
-                ? <span style={{ fontSize: '0.75rem', color: '#64748b' }}>No orders to show.</span>
+                ? <span style={{ fontSize: '0.875rem', color: '#64748b' }}>No orders to show.</span>
                 : [...successfulOrders]
                     .sort((a, b) => parseFloat(b.total_usd) - parseFloat(a.total_usd))
                     .slice(0, 5)
@@ -2256,7 +2251,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           {expandedMetric === 'carts' && (
             <div className="metric-card-detail">
               {activeAbandonedCarts.length === 0
-                ? <span style={{ fontSize: '0.75rem', color: '#64748b' }}>No open abandoned carts.</span>
+                ? <span style={{ fontSize: '0.875rem', color: '#64748b' }}>No open abandoned carts.</span>
                 : activeAbandonedCarts.slice(0, 5).map(c => {
                     const val = calculateCartValue(c.cart_data);
                     const product = Array.isArray(c.cart_data) && c.cart_data[0]?.product;
@@ -2269,7 +2264,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   })
               }
               {activeAbandonedCarts.length > 5 && (
-                <span style={{ fontSize: '0.7rem', color: '#475569' }}>+{activeAbandonedCarts.length - 5} more carts</span>
+                <span style={{ fontSize: '0.75rem', color: '#475569' }}>+{activeAbandonedCarts.length - 5} more carts</span>
               )}
             </div>
           )}
@@ -2336,11 +2331,11 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           <div className="geo-cities-grid">
             {/* Visitors Traffic Cities */}
             <div>
-              <p style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '16px', fontWeight: 600 }}>
+              <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '16px', fontWeight: 600 }}>
                 Top Cities by Traffic
               </p>
               {sortedVisitorCities.length === 0 ? (
-                <div style={{ color: '#64748b', fontSize: '0.8rem', padding: '10px 0' }}>No geolocation traffic logged yet.</div>
+                <div style={{ color: '#64748b', fontSize: '0.875rem', padding: '10px 0' }}>No geolocation traffic logged yet.</div>
               ) : (
                 <div className="bar-chart-list">
                   {sortedVisitorCities.map(([city, count]) => {
@@ -2363,11 +2358,11 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
             {/* Placed Orders Cities */}
             <div>
-              <p style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '16px', fontWeight: 600 }}>
+              <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '16px', fontWeight: 600 }}>
                 Top Cities by Orders
               </p>
               {sortedOrderCities.length === 0 ? (
-                <div style={{ color: '#64748b', fontSize: '0.8rem', padding: '10px 0' }}>No customer orders placed yet.</div>
+                <div style={{ color: '#64748b', fontSize: '0.875rem', padding: '10px 0' }}>No customer orders placed yet.</div>
               ) : (
                 <div className="bar-chart-list">
                   {sortedOrderCities.map(([city, count]) => {
@@ -2403,7 +2398,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               <div className="behavior-box-value" style={{ color: '#a78bfa' }}>
                 {formatDuration(averageDurationSeconds)}
               </div>
-              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '4px' }}>Average browsing time</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>Average browsing time</div>
             </div>
 
             <div className="behavior-box">
@@ -2411,7 +2406,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               <div className="behavior-box-value" style={{ color: '#f59e0b' }}>
                 {cartAbandonmentRate.toFixed(0)}%
               </div>
-              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '4px' }}>Active abandoned carts</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>Active abandoned carts</div>
             </div>
 
             <div className="behavior-box">
@@ -2419,7 +2414,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               <div className="behavior-box-value" style={{ color: '#10b981' }}>
                 {cartRecoveryRate.toFixed(0)}%
               </div>
-              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '4px' }}>Converted back from carts</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>Converted back from carts</div>
             </div>
 
             <div className="behavior-box">
@@ -2427,12 +2422,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               <div className="behavior-box-value" style={{ color: '#38bdf8' }}>
                 ₡{pipelineCrc.toLocaleString('en-US')}
               </div>
-              <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '4px' }}>{pendingOrders.length} orders Pending</div>
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>{pendingOrders.length} orders Pending</div>
             </div>
           </div>
 
           {/* Device & OS statistics */}
-          <p style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', fontWeight: 600 }}>
+          <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', fontWeight: 600 }}>
             Traffic Device Segment {renderExplainerTrigger('device_breakdown')}
           </p>
           <div className="device-indicator-container">
@@ -2473,7 +2468,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   opacity: clicks.length === 0 ? 0.5 : 1,
                   cursor: clicks.length === 0 ? 'not-allowed' : 'pointer',
                   border: 'none',
-                  fontSize: '0.75rem',
+                  fontSize: '0.875rem',
                   padding: '4px 8px',
                   borderRadius: '4px',
                   fontWeight: 500,
@@ -2502,7 +2497,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   color: heatmapViewMode === 'simulation' ? '#1e293b' : '#64748b',
                   cursor: 'pointer',
                   border: 'none',
-                  fontSize: '0.75rem',
+                  fontSize: '0.875rem',
                   padding: '4px 8px',
                   borderRadius: '4px',
                   fontWeight: 500,
@@ -2514,7 +2509,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             </div>
           </div>
 
-          <p style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '16px', marginTop: '-10px' }}>
+          <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '16px', marginTop: '-10px' }}>
             {heatmapViewMode === 'live' 
               ? `There are currently ${activeLiveUsers} active visitor sessions on your storefront catalog (heartbeats tracked in the last 45 seconds). Displaying cumulative mobile click telemetry.` 
               : "Displaying simulated research-grade hotspots across key catalog components."
@@ -2522,7 +2517,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           </p>
 
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            <span style={{ fontSize: '0.72rem', color: '#64748b', alignSelf: 'center', fontWeight: 500 }}>Filter Clicks:</span>
+            <span style={{ fontSize: '0.75rem', color: '#64748b', alignSelf: 'center', fontWeight: 500 }}>Filter Clicks:</span>
             <button 
               type="button"
               className={`heatmap-filter-btn ${heatmapIntentFilter === 'all' ? 'active' : ''}`}
@@ -2531,7 +2526,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 background: heatmapIntentFilter === 'all' ? 'rgba(255,255,255,0.08)' : 'transparent',
                 color: heatmapIntentFilter === 'all' ? '#fff' : '#64748b',
                 border: '1px solid rgba(255,255,255,0.05)',
-                fontSize: '0.7rem',
+                fontSize: '0.75rem',
                 padding: '3px 8px',
                 borderRadius: '4px',
                 cursor: 'pointer'
@@ -2547,7 +2542,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 background: heatmapIntentFilter === 'intent' ? 'rgba(52,211,153,0.1)' : 'transparent',
                 color: heatmapIntentFilter === 'intent' ? '#34d399' : '#64748b',
                 border: '1px solid rgba(52,211,153,0.2)',
-                fontSize: '0.7rem',
+                fontSize: '0.75rem',
                 padding: '3px 8px',
                 borderRadius: '4px',
                 cursor: 'pointer',
@@ -2567,7 +2562,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 background: heatmapIntentFilter === 'active' ? 'rgba(56, 189, 248, 0.1)' : 'transparent',
                 color: heatmapIntentFilter === 'active' ? '#38bdf8' : '#64748b',
                 border: '1px solid rgba(56, 189, 248, 0.2)',
-                fontSize: '0.7rem',
+                fontSize: '0.75rem',
                 padding: '3px 8px',
                 borderRadius: '4px',
                 cursor: 'pointer',
@@ -2605,7 +2600,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderBottom: '1px solid rgba(255,255,255,0.08)',
-                fontSize: '0.65rem',
+                fontSize: '0.75rem',
                 color: '#94a3b8',
                 gap: '6px',
                 zIndex: 48,
@@ -2615,7 +2610,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 left: 0,
                 right: 0
               }}>
-                <span style={{ fontSize: '0.6rem', color: '#10b981' }}>🔒</span>
+                <span style={{ fontSize: '0.75rem', color: '#10b981' }}>🔒</span>
                 <span style={{ fontWeight: 500, letterSpacing: '0.3px', color: '#cbd5e1' }}>peptidescostarica.net/catalog</span>
               </div>
               
@@ -2657,12 +2652,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
           {/* Targets List */}
           <div className="top-targets-container">
-            <h4 style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 600, letterSpacing: '0.5px' }}>
+            <h4 style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 600, letterSpacing: '0.5px' }}>
               Ranking by Target Density
             </h4>
             
             {getRankedTargets().length === 0 ? (
-              <div style={{ color: '#64748b', fontSize: '0.8rem', padding: '10px 0' }}>No telemetry click data found in selected time range.</div>
+              <div style={{ color: '#64748b', fontSize: '0.875rem', padding: '10px 0' }}>No telemetry click data found in selected time range.</div>
             ) : (
               <div className="bar-chart-list">
                 {getRankedTargets().map((target, idx) => {
@@ -2671,11 +2666,11 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   return (
                     <div className="bar-chart-row" key={target.name}>
                       <div className="bar-row-label-row">
-                        <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>
+                        <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>
                           <span style={{ color: '#64748b', marginRight: '6px' }}>#{idx+1}</span>
                           {target.name}
                         </span>
-                        <span className="bar-row-value" style={{ color: '#38bdf8', fontSize: '0.8rem' }}>{target.count} clicks</span>
+                        <span className="bar-row-value" style={{ color: '#38bdf8', fontSize: '0.875rem' }}>{target.count} clicks</span>
                       </div>
                       <div className="bar-track" style={{ background: 'rgba(255,255,255,0.05)', height: '6px', borderRadius: '3px' }}>
                         <div className="bar-fill fill-sky" style={{ width: `${pct}%`, background: '#38bdf8', height: '100%', borderRadius: '3px' }}></div>
@@ -2689,8 +2684,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
           {/* Micro stats banner */}
           <div className="micro-stats-banner" style={{ marginTop: '20px', padding: '14px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
-            <h4 style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 600, marginBottom: '8px' }}>🚀 Heatmap Telemetry Insights</h4>
-            <ul style={{ paddingLeft: '16px', margin: 0, fontSize: '0.75rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <h4 style={{ fontSize: '0.875rem', color: '#cbd5e1', fontWeight: 600, marginBottom: '8px' }}>🚀 Heatmap Telemetry Insights</h4>
+            <ul style={{ paddingLeft: '16px', margin: 0, fontSize: '0.875rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <li>
                 <strong style={{ color: '#34d399' }}>Purchase Friction Alert:</strong> Add to Cart actions make up <strong style={{ color: '#fff' }}>{getAddCartShare()}%</strong> of all mobile storefront clicks. This indicates incredibly high conversion intent.
               </li>
@@ -2702,12 +2697,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
           {/* Live stream ticker */}
           <div className="live-stream-ticker" style={{ marginTop: '20px' }}>
-            <h4 style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 600, letterSpacing: '0.5px' }}>
+            <h4 style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 600, letterSpacing: '0.5px' }}>
               Live Telemetry Clicks Feed {renderExplainerTrigger('clicks_feed')}
             </h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {getLatestClicks().map((c, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(30,41,59,0.3)', border: '1px solid rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.75rem' }}>
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(30,41,59,0.3)', border: '1px solid rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.875rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34d399', display: 'inline-block' }}></span>
                     <span style={{ color: '#f1f5f9', fontWeight: 500 }}>{c.element_name}</span>
@@ -2716,7 +2711,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 </div>
               ))}
               {getLatestClicks().length === 0 && (
-                <div style={{ color: '#64748b', fontSize: '0.75rem', fontStyle: 'italic' }}>Waiting for storefront mobile interactions...</div>
+                <div style={{ color: '#64748b', fontSize: '0.875rem', fontStyle: 'italic' }}>Waiting for storefront mobile interactions...</div>
               )}
             </div>
           </div>
@@ -2735,7 +2730,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           </div>
 
           {productMetrics.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '0.85rem' }}>
+            <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '1rem' }}>
               No product clicks logged.
             </div>
           ) : (
@@ -2761,7 +2756,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                       </div>
                       <div className="interest-item-footer">
                         <span>Conv: {p.conversion.toFixed(0)}%</span>
-                        <span style={{ color: '#64748b', fontSize: '0.65rem' }}>Status: High Demand</span>
+                        <span style={{ color: '#64748b', fontSize: '0.75rem' }}>Status: High Demand</span>
                       </div>
                     </div>
                   );
@@ -2788,7 +2783,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                       </div>
                       <div className="interest-item-footer">
                         <span>Conv: {p.conversion.toFixed(0)}%</span>
-                        <span style={{ color: '#fb923c', fontSize: '0.65rem' }}>Needs Promo</span>
+                        <span style={{ color: '#fb923c', fontSize: '0.75rem' }}>Needs Promo</span>
                       </div>
                     </div>
                   );
@@ -2810,7 +2805,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             
             {/* Sales Conversion Funnel */}
             <div>
-              <p style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
+              <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
                 E-Commerce Funnel
               </p>
               
@@ -2848,12 +2843,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
             {/* Payment Method Channels */}
             <div>
-              <p style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
+              <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
                 Orders Payment Channels
               </p>
 
               {Object.keys(paymentBreakdown).length === 0 ? (
-                <div style={{ color: '#64748b', fontSize: '0.8rem', padding: '10px 0' }}>No payment distribution data.</div>
+                <div style={{ color: '#64748b', fontSize: '0.875rem', padding: '10px 0' }}>No payment distribution data.</div>
               ) : (
                 <div className="bar-chart-list">
                   {Object.entries(paymentBreakdown).map(([method, data]) => {
@@ -2900,12 +2895,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
             {/* WhatsApp Source Channels */}
             <div>
-              <p style={{ fontSize: '0.78rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
+              <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
                 WhatsApp Attribution Sources
               </p>
 
               {Object.keys(whatsappSourceBreakdown).length === 0 ? (
-                <div style={{ color: '#64748b', fontSize: '0.8rem', padding: '10px 0' }}>No source attribution data.</div>
+                <div style={{ color: '#64748b', fontSize: '0.875rem', padding: '10px 0' }}>No source attribution data.</div>
               ) : (
                 <div className="bar-chart-list">
                   {Object.entries(whatsappSourceBreakdown)
@@ -2953,7 +2948,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         >
           <Award size={16} style={{ color: '#facc15' }} />
           <span>Product Performance &amp; View-to-Purchase Funnel</span>
-          <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: '#475569', fontWeight: 400, whiteSpace: 'nowrap' }}>
+          <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#475569', fontWeight: 400, whiteSpace: 'nowrap' }}>
             {productMetrics.length} peptides
           </span>
           <svg
@@ -2969,7 +2964,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         {/* Collapsible body */}
         {showProductFunnel && (
           productMetrics.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '0.85rem' }}>
+            <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '1rem' }}>
               No product views or orders logged in this time range.
             </div>
           ) : (
@@ -2997,7 +2992,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                           {p.views > 0 ? `${p.views} clicks` : 'No views'}
                         </span>
                         {p.purchases > 0 && (
-                          <span className="badge-conversion" style={{ fontSize: '0.7rem', padding: '2px 6px' }}>
+                          <span className="badge-conversion" style={{ fontSize: '0.75rem', padding: '2px 6px' }}>
                             {p.conversion.toFixed(0)}%
                           </span>
                         )}
@@ -3015,7 +3010,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                     {isOpen && (
                       <div className="product-accordion-body">
                         <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#64748b', marginBottom: '5px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b', marginBottom: '5px' }}>
                             <span>Interest level</span>
                             <span>{p.views} / {maxProductViews} max clicks</span>
                           </div>
@@ -3060,10 +3055,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             <BarChart2 size={20} />
           </div>
           <div>
-            <h4 style={{ margin: '0 0 6px 0', fontSize: '0.95rem', fontWeight: 600, color: '#38bdf8' }}>
+            <h4 style={{ margin: '0 0 6px 0', fontSize: '1.125rem', fontWeight: 600, color: '#38bdf8' }}>
               Management Insights & Dynamic Product Retargeting Suggestions
             </h4>
-            <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.8rem', color: '#cbd5e1', lineHeight: '1.6' }}>
+            <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.875rem', color: '#cbd5e1', lineHeight: '1.6' }}>
               
               {/* Dynamic suggestion 1: Cart re-engagement */}
               <li style={{ marginBottom: '8px' }}>
@@ -3134,10 +3129,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         <div className="section-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Atom size={18} style={{ color: '#38bdf8', filter: 'drop-shadow(0 0 8px rgba(56, 189, 248, 0.5))' }} />
-            <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc' }}>🧬 AI Peptide Sales Recommender & Projection Simulator</span>
+            <span style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#f8fafc' }}>🧬 AI Peptide Sales Recommender & Projection Simulator</span>
           </div>
           <span style={{ 
-            fontSize: '0.65rem', 
+            fontSize: '0.75rem', 
             fontWeight: 'bold', 
             background: 'rgba(56, 189, 248, 0.12)', 
             border: '1px solid rgba(56, 189, 248, 0.25)', 
@@ -3150,7 +3145,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           </span>
         </div>
 
-        <p style={{ margin: '0 0 16px 0', fontSize: '0.8rem', color: '#94a3b8' }}>
+        <p style={{ margin: '0 0 16px 0', fontSize: '0.875rem', color: '#94a3b8' }}>
           Select any peptide to simulate traffic increases and view highly-converting, AI-suggested sales check-in blueprints tailored for that compound.
         </p>
 
@@ -3166,7 +3161,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             }}>
               {/* Select Product */}
               <div style={{ flex: '1', minWidth: '180px' }}>
-                <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: 'bold', textTransform: 'uppercase' }}>Select Peptide</label>
+                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: 'bold', textTransform: 'uppercase' }}>Select Peptide</label>
                 <select 
                   value={selectedSimPeptide} 
                   onChange={(e) => setSelectedSimPeptide(e.target.value)}
@@ -3176,7 +3171,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                     border: '1px solid rgba(255,255,255,0.08)',
                     borderRadius: '8px',
                     padding: '8px 12px',
-                    fontSize: '0.8rem',
+                    fontSize: '0.875rem',
                     color: '#f8fafc',
                     cursor: 'pointer',
                     outline: 'none'
@@ -3191,8 +3186,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               {/* Views Multiplier slider */}
               <div style={{ flex: '1', minWidth: '180px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <label style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 'bold', textTransform: 'uppercase' }}>Traffic Projection</label>
-                  <span style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 'bold' }}>{projectedViewsMultiplier}x Views</span>
+                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold', textTransform: 'uppercase' }}>Traffic Projection</label>
+                  <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 'bold' }}>{projectedViewsMultiplier}x Views</span>
                 </div>
                 <input 
                   type="range" 
@@ -3221,23 +3216,23 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             }}>
               {/* Box 1: Views Lift */}
               <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Views</span>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Views</span>
                 <strong style={{ fontSize: '1.25rem', color: '#38bdf8', display: 'block', margin: '4px 0' }}>{simulatedViews}</strong>
-                <span style={{ fontSize: '0.65rem', color: '#64748b' }}>Current: {currentViews}</span>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Current: {currentViews}</span>
               </div>
 
               {/* Box 2: Orders Lift */}
               <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Orders</span>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Orders</span>
                 <strong style={{ fontSize: '1.25rem', color: '#34d399', display: 'block', margin: '4px 0' }}>{simulatedPurchases}</strong>
-                <span style={{ fontSize: '0.65rem', color: '#64748b' }}>Rate: {currentConversion.toFixed(1)}%</span>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Rate: {currentConversion.toFixed(1)}%</span>
               </div>
 
               {/* Box 3: Projected Revenue */}
               <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Revenue</span>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Revenue</span>
                 <strong style={{ fontSize: '1.25rem', color: '#facc15', display: 'block', margin: '4px 0' }}>${projectedRevenue.toLocaleString()}</strong>
-                <span style={{ fontSize: '0.65rem', color: '#64748b' }}>Lift: +${netLift}</span>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Lift: +${netLift}</span>
               </div>
             </div>
           </div>
@@ -3251,9 +3246,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             position: 'relative'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#fff' }}>🎯 Technical Advisory Blueprint</span>
+              <span style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#fff' }}>🎯 Technical Advisory Blueprint</span>
               <span style={{ 
-                fontSize: '0.6rem', 
+                fontSize: '0.75rem', 
                 background: 'rgba(167, 139, 250, 0.12)', 
                 border: '1px solid rgba(167, 139, 250, 0.25)', 
                 color: '#a78bfa', 
@@ -3264,14 +3259,14 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 {simHook.badge}
               </span>
             </div>
-            <h5 style={{ margin: '0 0 6px 0', fontSize: '0.85rem', color: '#f8fafc', fontWeight: 'bold' }}>{simHook.title}</h5>
-            <p style={{ margin: '0 0 12px 0', fontSize: '0.78rem', color: '#94a3b8', lineHeight: '1.4' }}>{simHook.desc}</p>
+            <h5 style={{ margin: '0 0 6px 0', fontSize: '1rem', color: '#f8fafc', fontWeight: 'bold' }}>{simHook.title}</h5>
+            <p style={{ margin: '0 0 12px 0', fontSize: '0.875rem', color: '#94a3b8', lineHeight: '1.4' }}>{simHook.desc}</p>
             <div style={{ 
               background: 'rgba(167, 139, 250, 0.06)', 
               border: '1px solid rgba(167, 139, 250, 0.15)', 
               padding: '10px 12px', 
               borderRadius: '8px',
-              fontSize: '0.75rem',
+              fontSize: '0.875rem',
               color: '#c084fc',
               lineHeight: '1.4',
               fontStyle: 'italic'
@@ -3334,10 +3329,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             {/* Explainer Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: '#f8fafc' }}>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#f8fafc' }}>
                   {EXPLAINER_DATA[explainerTopic].title}
                 </h3>
-                <span style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   {EXPLAINER_DATA[explainerTopic].concept}
                 </span>
               </div>
@@ -3354,7 +3349,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  fontSize: '1rem',
+                  fontSize: '1.125rem',
                   fontWeight: 'bold',
                   transition: 'all 0.2s'
                 }}
@@ -3369,20 +3364,20 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', lineHeight: 1.6 }}>
               {/* English Explanation */}
               <div style={{ background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
                   🇬🇧 English Explanation
                 </div>
-                <p style={{ margin: 0, fontSize: '0.82rem', color: '#cbd5e1' }}>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: '#cbd5e1' }}>
                   {EXPLAINER_DATA[explainerTopic].description}
                 </p>
               </div>
 
               {/* Spanish Explanation */}
               <div style={{ background: 'rgba(56, 189, 248, 0.02)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.05)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.68rem', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#38bdf8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
                   🇨🇷 Explicación Sencilla (Español)
                 </div>
-                <p style={{ margin: 0, fontSize: '0.82rem', color: '#e2e8f0' }}>
+                <p style={{ margin: 0, fontSize: '0.875rem', color: '#e2e8f0' }}>
                   {EXPLAINER_DATA[explainerTopic].spanish}
                 </p>
               </div>
@@ -3398,7 +3393,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   border: 'none',
                   padding: '8px 16px',
                   borderRadius: '8px',
-                  fontSize: '0.8rem',
+                  fontSize: '0.875rem',
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'opacity 0.2s'

@@ -637,7 +637,7 @@ const handleWhatsAppClick = (src) => {
                 </div>
                 
                 <a 
-                  href="https://www.google.com/maps/@9.621205,-84.633131,1668m/data=!3m1!1e3!5m1!1e1?hl=en" 
+                  href="https://maps.app.goo.gl/WsSr1vtxkmkSdrHT9" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', width: '100%', padding: '14px', background: 'var(--text-main)', color: 'var(--bg-main)', borderRadius: '12px', fontWeight: 'bold', textDecoration: 'none', transition: 'opacity 0.2s' }}
@@ -651,7 +651,7 @@ const handleWhatsAppClick = (src) => {
               
               <div style={{ borderRadius: '20px', overflow: 'hidden', height: '100%', minHeight: '350px', border: '1px solid var(--border)', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
                 <iframe 
-                  src="https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d15729.094593417758!2d-84.633131!3d9.621205!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e0!3m2!1sen!2scr!4v1717751936440!5m2!1sen!2scr" 
+                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3929.5843468574164!2d-84.0110381!3d9.6330525!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x666b2dd19a4b2acd%3A0x1b58a33455b7dad3!2sPeptides%20Costa%20Rica!5e0!3m2!1sen!2scr!4v1717751936440!5m2!1sen!2scr" 
                   width="100%" 
                   height="100%" 
                   style={{ border: 0 }} 

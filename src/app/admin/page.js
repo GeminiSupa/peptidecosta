@@ -3256,13 +3256,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <div className="admin-nav-section-title">System & AI</div>
             <div className="admin-nav-section-items">
               <button 
-                className={`admin-tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
-                onClick={() => setActiveTab('ai')}
-              >
-                <Brain size={14} style={{ color: activeTab === 'ai' ? 'inherit' : '#38bdf8' }} />
-                <span className="tab-label" style={{ color: activeTab === 'ai' ? 'inherit' : '#38bdf8', fontWeight: 'bold' }}>AI Copilot</span>
-              </button>
-              <button 
                 className={`admin-tab-btn ${activeTab === 'whatsapp_ai' ? 'active' : ''}`}
                 onClick={() => setActiveTab('whatsapp_ai')}
               >

@@ -2431,27 +2431,6 @@ export default function CatalogPage() {
               boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)',
               maxWidth: '480px', width: '100%', textAlign: 'center', overflow: 'hidden'
             }}>
-              {/* Customer Transformation Social Proof Image */}
-              <div style={{ position: 'relative', width: '100%', overflow: 'hidden', borderRadius: '24px 24px 0 0' }}>
-                <img 
-                  src="/customer_transformation.png" 
-                  alt="Real customer transformation results with peptides" 
-                  style={{ width: '100%', height: '200px', objectFit: 'cover', objectPosition: 'center top', display: 'block' }} 
-                />
-                <div style={{
-                  position: 'absolute', bottom: 0, left: 0, right: 0, height: '60px',
-                  background: 'linear-gradient(to top, var(--bg-card), transparent)'
-                }} />
-                <div style={{
-                  position: 'absolute', top: '12px', left: '12px',
-                  background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-                  color: '#fff', fontSize: '0.7rem', fontWeight: '800', padding: '4px 10px',
-                  borderRadius: '20px', letterSpacing: '0.04em', textTransform: 'uppercase',
-                  boxShadow: '0 2px 8px rgba(34,197,94,0.4)'
-                }}>
-                  {lang === 'en' ? '✓ Real Results' : '✓ Resultados Reales'}
-                </div>
-              </div>
               <div style={{ padding: '24px 24px 32px 24px' }}>
               <img src="/logo.png" alt="Peptides Costa Rica Logo" style={{ height: '40px', margin: '0 auto 16px auto', display: 'block', borderRadius: '8px' }} />
               <h2 style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px' }}>
@@ -2507,6 +2486,35 @@ export default function CatalogPage() {
           </div>
         ) : (
           <>
+          {/* Customer Transformation Social Proof Banner */}
+          <div style={{
+            width: '100%', marginBottom: '20px', borderRadius: '16px', overflow: 'hidden',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.12)', position: 'relative'
+          }}>
+            <img
+              src="/customer_transformation.png"
+              alt={lang === 'en' ? 'Real customer transformation results with Peptides Costa Rica' : 'Resultados reales de transformación con Péptidos Costa Rica'}
+              style={{
+                width: '100%',
+                display: 'block',
+                height: 'auto',
+                maxHeight: '260px',
+                objectFit: 'cover',
+                objectPosition: 'center top'
+              }}
+              onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.style.display = 'none'; }}
+            />
+            <div style={{
+              position: 'absolute', top: '12px', left: '12px',
+              background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+              color: '#fff', fontSize: '0.75rem', fontWeight: '800', padding: '5px 12px',
+              borderRadius: '20px', letterSpacing: '0.04em', textTransform: 'uppercase',
+              boxShadow: '0 2px 10px rgba(34,197,94,0.5)'
+            }}>
+              {lang === 'en' ? '✓ Real Customer Results' : '✓ Resultados Reales de Clientes'}
+            </div>
+          </div>
+
           {/* Catalog Promotional Banner */}
           <div style={{
             width: '100%', marginBottom: '24px', borderRadius: '16px', overflow: 'hidden',
