@@ -2486,35 +2486,6 @@ export default function CatalogPage() {
           </div>
         ) : (
           <>
-          {/* Customer Transformation Social Proof Banner */}
-          <div style={{
-            width: '100%', marginBottom: '20px', borderRadius: '16px', overflow: 'hidden',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.12)', position: 'relative'
-          }}>
-            <img
-              src="/customer_transformation.png"
-              alt={lang === 'en' ? 'Real customer transformation results with Peptides Costa Rica' : 'Resultados reales de transformación con Péptidos Costa Rica'}
-              style={{
-                width: '100%',
-                display: 'block',
-                height: 'auto',
-                maxHeight: '260px',
-                objectFit: 'cover',
-                objectPosition: 'center top'
-              }}
-              onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.style.display = 'none'; }}
-            />
-            <div style={{
-              position: 'absolute', top: '12px', left: '12px',
-              background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-              color: '#fff', fontSize: '0.75rem', fontWeight: '800', padding: '5px 12px',
-              borderRadius: '20px', letterSpacing: '0.04em', textTransform: 'uppercase',
-              boxShadow: '0 2px 10px rgba(34,197,94,0.5)'
-            }}>
-              {lang === 'en' ? '✓ Real Customer Results' : '✓ Resultados Reales de Clientes'}
-            </div>
-          </div>
-
           {/* Catalog Promotional Banner */}
           <div style={{
             width: '100%', marginBottom: '24px', borderRadius: '16px', overflow: 'hidden',

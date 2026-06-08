@@ -386,26 +386,40 @@ const handleWhatsAppClick = (src) => {
           </div>
         </section>
 
-        {/* ── FEATURES ─────────────────────────────────────── */}
+        {/* ── CUSTOMER RESULTS SOCIAL PROOF ─────────────────── */}
         <section className="lp-section lp-features-section">
-          <div className="container">
+          <div className="container" style={{ maxWidth: '900px', margin: '0 auto' }}>
             <div className="lp-section-header">
-              <h2>{t.features_title}</h2>
-              <p>{t.features_sub}</p>
+              <h2>{lang === 'en' ? 'Real Customer Results' : 'Resultados Reales de Clientes'}</h2>
+              <p>{lang === 'en' ? 'See the transformations our customers have achieved with our premium research peptides.' : 'Vea las transformaciones que nuestros clientes han logrado con nuestros péptidos de investigación premium.'}</p>
             </div>
-            <div className="lp-features-grid">
-              {[
-                { icon: <ShieldCheck size={30} />, title: t.f1_title, desc: t.f1_desc, color: '#C8530C' },
-                { icon: <Truck size={30} />, title: t.f2_title, desc: t.f2_desc, color: '#002766' },
-                { icon: <Lock size={30} />, title: t.f3_title, desc: t.f3_desc, color: '#002766' },
-                { icon: <MessageCircle size={30} />, title: t.f4_title, desc: t.f4_desc, color: '#C8530C' },
-              ].map((f, i) => (
-                <div key={i} className="lp-feature-card">
-                  <div className="lp-feature-icon" style={{ color: f.color }}>{f.icon}</div>
-                  <h3>{f.title}</h3>
-                  <p>{f.desc}</p>
-                </div>
-              ))}
+            <div style={{
+              width: '100%', borderRadius: '20px', overflow: 'hidden',
+              boxShadow: '0 8px 40px rgba(0,0,0,0.12)', position: 'relative',
+              marginTop: '32px'
+            }}>
+              <img
+                src="/customer_transformation.png"
+                alt={lang === 'en' ? 'Real customer transformation results with Peptides Costa Rica' : 'Resultados reales de transformación con Péptidos Costa Rica'}
+                style={{
+                  width: '100%',
+                  display: 'block',
+                  height: 'auto',
+                  maxHeight: '400px',
+                  objectFit: 'cover',
+                  objectPosition: 'center top'
+                }}
+                onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.style.display = 'none'; e.target.parentElement.parentElement.parentElement.style.display = 'none'; }}
+              />
+              <div style={{
+                position: 'absolute', top: '16px', left: '16px',
+                background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                color: '#fff', fontSize: '0.8rem', fontWeight: '800', padding: '6px 16px',
+                borderRadius: '24px', letterSpacing: '0.04em', textTransform: 'uppercase',
+                boxShadow: '0 4px 14px rgba(34,197,94,0.45)'
+              }}>
+                {lang === 'en' ? '✓ Verified Results' : '✓ Resultados Verificados'}
+              </div>
             </div>
           </div>
         </section>
@@ -488,6 +502,8 @@ const handleWhatsAppClick = (src) => {
             </div>
           </section>
         )}
+
+
 
         {/* ── CÓMO ORDENAR (HOW TO ORDER) ──────────────────── */}
         <section className="lp-section" style={{ background: 'var(--bg-secondary)', padding: '60px 0' }}>
