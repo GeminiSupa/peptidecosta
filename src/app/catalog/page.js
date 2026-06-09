@@ -3212,7 +3212,7 @@ export default function CatalogPage() {
                     icon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797H9.603c-.536 0-.99.394-1.073.926L7.076 21.337Z" fill="#253B80"/><path d="M20.16 7.035c-.01.058-.02.117-.032.177-1.071 5.497-4.74 7.398-9.426 7.398H8.847a1.16 1.16 0 0 0-1.146.98l-.94 5.967-.266 1.69a.61.61 0 0 0 .603.707h4.24c.468 0 .866-.34.94-.802l.038-.198.745-4.724.048-.26a.948.948 0 0 1 .937-.803h.59c3.827 0 6.822-1.554 7.7-6.05.367-1.878.177-3.446-.793-4.548a3.78 3.78 0 0 0-1.083-.834Z" fill="#179BD7"/><path d="M19.064 6.59a8.321 8.321 0 0 0-1.024-.227 12.99 12.99 0 0 0-2.063-.15h-6.25a.94.94 0 0 0-.932.795L7.684 14.01l-.033.21a1.16 1.16 0 0 1 1.146-.98h1.855c4.686 0 8.355-1.902 9.426-7.399.032-.163.06-.322.083-.477a5.58 5.58 0 0 0-1.097-.473Z" fill="#222D65"/></svg>,
                     iconColor: undefined,
                     title: 'PayPal',
-                    detail: '',
+                    detail: lang === 'en' ? 'PayPal or Credit/Debit Card' : 'PayPal o Tarjeta Débito/Crédito',
                   },
                 ].map(method => (
                   <button
@@ -3233,27 +3233,38 @@ export default function CatalogPage() {
               </div>
               {paymentMethod === 'paypal' ? (
                 <div style={{ marginTop: '16px' }}>
+                  {/* Helper note above PayPal buttons, shown immediately */}
+                  <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '12px', padding: '12px 14px', marginBottom: '12px', fontSize: '0.8rem', color: theme === 'dark' ? '#93c5fd' : '#1d4ed8', lineHeight: '1.5' }}>
+                    <div style={{ fontWeight: '700', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      💳 {lang === 'en' ? 'Payment Options' : 'Opciones de Pago'}
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <li>
+                        {lang === 'en' ? (
+                          <span>Pay with your <strong>PayPal account</strong>, or</span>
+                        ) : (
+                          <span>Pague con su <strong>cuenta de PayPal</strong>, o</span>
+                        )}
+                      </li>
+                      <li>
+                        {lang === 'en' ? (
+                          <span>Pay with <strong>any credit or debit card</strong> (Visa, Mastercard, AMEX, Discover) — <strong style={{ color: theme === 'dark' ? '#60a5fa' : '#2563eb' }}>no PayPal account needed!</strong></span>
+                        ) : (
+                          <span>Pague con <strong>cualquier tarjeta de crédito o débito</strong> (Visa, Mastercard, AMEX, Discover) — <strong>¡sin necesidad de tener cuenta PayPal!</strong></span>
+                        )}
+                      </li>
+                    </ul>
+                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(59, 130, 246, 0.15)', fontSize: '0.75rem', opacity: 0.85 }}>
+                      ℹ️ {lang === 'en' ? '"C. P." in the card form means Postal Code (zip code).' : '"C. P." en el formulario de la tarjeta significa Código Postal.'}
+                    </div>
+                  </div>
+
                   {(!customerName || !customerPhone || !shippingAddress || !customerIdNumber) ? (
                     <div style={{ padding: '12px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.9rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-                      {lang === 'en' ? 'Please enter your name, phone, shipping address, and ID number above to enable PayPal checkout.' : 'Por favor ingrese su nombre, teléfono, dirección de envío y número de identificación arriba para habilitar el pago con PayPal.'}
+                      {lang === 'en' ? 'Please enter your name, phone, shipping address, and ID number above to enable PayPal / Card payment.' : 'Por favor ingrese su nombre, teléfono, dirección de envío y número de identificación arriba para habilitar el pago con PayPal / Tarjeta.'}
                     </div>
                   ) : (
-                    <>
-                      {/* Helper note above PayPal buttons */}
-                      <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '12px', padding: '12px 14px', marginBottom: '12px', fontSize: '0.8rem', color: theme === 'dark' ? '#93c5fd' : '#1d4ed8', lineHeight: '1.5' }}>
-                        <div style={{ fontWeight: '700', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          💳 {lang === 'en' ? 'Payment Options' : 'Opciones de Pago'}
-                        </div>
-                        <ul style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <li>{lang === 'en' ? 'Pay with your PayPal account, or' : 'Paga con tu cuenta de PayPal, o'}</li>
-                          <li>{lang === 'en' ? 'Pay with any credit or debit card — no PayPal account needed.' : 'Paga con cualquier tarjeta de crédito o débito — sin necesidad de cuenta PayPal.'}</li>
-                        </ul>
-                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(59, 130, 246, 0.15)', fontSize: '0.75rem', opacity: 0.85 }}>
-                          ℹ️ {lang === 'en' ? '"C. P." in the card form means Postal Code (zip code).' : '"C. P." en el formulario de tarjeta significa Código Postal.'}
-                        </div>
-                      </div>
-                      <div ref={paypalButtonRef} style={{ minHeight: '45px' }}></div>
-                    </>
+                    <div ref={paypalButtonRef} style={{ minHeight: '45px' }}></div>
                   )}
                   {orderSubmitting && (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '12px', color: '#94a3b8' }}>
