@@ -46,15 +46,11 @@ export async function POST(request) {
             value: totalUsd.toFixed(2),
           },
           custom_id: JSON.stringify({ customerName, customerPhone, customerEmail }).substring(0, 127),
-          shipping: {
-            address: {
-              country_code: 'CR',
-            },
-          },
         },
       ],
       application_context: {
         brand_name: 'Peptides Costa Rica',
+        shipping_preference: 'NO_SHIPPING',
         landing_page: 'NO_PREFERENCE',
         user_action: 'PAY_NOW',
         return_url: 'https://catalog.peptidescostarica.net/catalog',

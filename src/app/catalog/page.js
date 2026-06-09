@@ -906,7 +906,7 @@ export default function CatalogPage() {
     }
     const script = document.createElement('script');
     script.id = 'paypal-sdk';
-    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`;
+    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&locale=${lang === 'en' ? 'en' : 'es'}_CR`;
     script.async = true;
     script.onload = () => setPaypalReady(true);
     script.onerror = () => console.error('Failed to load PayPal SDK');
@@ -3209,8 +3209,8 @@ export default function CatalogPage() {
                   },
                   {
                     value: 'paypal',
-                    icon: <CreditCard size={18} />,
-                    iconColor: '#3b82f6', // Blue for PayPal
+                    icon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797H9.603c-.536 0-.99.394-1.073.926L7.076 21.337Z" fill="#253B80"/><path d="M20.16 7.035c-.01.058-.02.117-.032.177-1.071 5.497-4.74 7.398-9.426 7.398H8.847a1.16 1.16 0 0 0-1.146.98l-.94 5.967-.266 1.69a.61.61 0 0 0 .603.707h4.24c.468 0 .866-.34.94-.802l.038-.198.745-4.724.048-.26a.948.948 0 0 1 .937-.803h.59c3.827 0 6.822-1.554 7.7-6.05.367-1.878.177-3.446-.793-4.548a3.78 3.78 0 0 0-1.083-.834Z" fill="#179BD7"/><path d="M19.064 6.59a8.321 8.321 0 0 0-1.024-.227 12.99 12.99 0 0 0-2.063-.15h-6.25a.94.94 0 0 0-.932.795L7.684 14.01l-.033.21a1.16 1.16 0 0 1 1.146-.98h1.855c4.686 0 8.355-1.902 9.426-7.399.032-.163.06-.322.083-.477a5.58 5.58 0 0 0-1.097-.473Z" fill="#222D65"/></svg>,
+                    iconColor: undefined,
                     title: 'PayPal',
                     detail: '',
                   },
