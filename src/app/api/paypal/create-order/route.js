@@ -46,6 +46,11 @@ export async function POST(request) {
             value: totalUsd.toFixed(2),
           },
           custom_id: JSON.stringify({ customerName, customerPhone, customerEmail }).substring(0, 127),
+          shipping: {
+            address: {
+              country_code: 'CR',
+            },
+          },
         },
       ],
       application_context: {

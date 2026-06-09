@@ -3212,7 +3212,7 @@ export default function CatalogPage() {
                     icon: <CreditCard size={18} />,
                     iconColor: '#3b82f6', // Blue for PayPal
                     title: 'PayPal',
-                    detail: lang === 'en' ? 'Pay in USD' : 'Pagar en USD',
+                    detail: lang === 'en' ? 'Credit or Debit Card' : 'Tarjeta de crédito o débito',
                   },
                 ].map(method => (
                   <button
