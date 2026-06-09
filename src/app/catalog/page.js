@@ -3238,7 +3238,22 @@ export default function CatalogPage() {
                       {lang === 'en' ? 'Please enter your name, phone, shipping address, and ID number above to enable PayPal checkout.' : 'Por favor ingrese su nombre, teléfono, dirección de envío y número de identificación arriba para habilitar el pago con PayPal.'}
                     </div>
                   ) : (
-                    <div ref={paypalButtonRef} style={{ minHeight: '45px' }}></div>
+                    <>
+                      {/* Helper note above PayPal buttons */}
+                      <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '12px', padding: '12px 14px', marginBottom: '12px', fontSize: '0.8rem', color: theme === 'dark' ? '#93c5fd' : '#1d4ed8', lineHeight: '1.5' }}>
+                        <div style={{ fontWeight: '700', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          💳 {lang === 'en' ? 'Payment Options' : 'Opciones de Pago'}
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <li>{lang === 'en' ? 'Pay with your PayPal account, or' : 'Paga con tu cuenta de PayPal, o'}</li>
+                          <li>{lang === 'en' ? 'Pay with any credit or debit card — no PayPal account needed.' : 'Paga con cualquier tarjeta de crédito o débito — sin necesidad de cuenta PayPal.'}</li>
+                        </ul>
+                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(59, 130, 246, 0.15)', fontSize: '0.75rem', opacity: 0.85 }}>
+                          ℹ️ {lang === 'en' ? '"C. P." in the card form means Postal Code (zip code).' : '"C. P." en el formulario de tarjeta significa Código Postal.'}
+                        </div>
+                      </div>
+                      <div ref={paypalButtonRef} style={{ minHeight: '45px' }}></div>
+                    </>
                   )}
                   {orderSubmitting && (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '12px', color: '#94a3b8' }}>
