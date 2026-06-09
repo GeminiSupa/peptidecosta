@@ -190,11 +190,13 @@ export default function AdminPage() {
   const [sendingRecoveryEmail, setSendingRecoveryEmail] = useState({});
   const [sendingRecoveryWhatsApp, setSendingRecoveryWhatsApp] = useState({});
   const [selectedCartIds, setSelectedCartIds] = useState([]);
+  const [lastSelectedCartIndex, setLastSelectedCartIndex] = useState(null);
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkProgressText, setBulkProgressText] = useState('');
   const [reviews, setReviews] = useState([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
   const [leads, setLeads] = useState([]);
+  const [lastSelectedLeadIndex, setLastSelectedLeadIndex] = useState(null);
   const [expandedLeadViews, setExpandedLeadViews] = useState({});
   const [selectedLeadDetails, setSelectedLeadDetails] = useState(null);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
@@ -2645,11 +2647,57 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     }
   };
 
-  const handleSelectLead = (id, checked) => {
-    setSelectedLeads(prev => 
-      checked ? [...prev, id] : prev.filter(leadId => leadId !== id)
-    );
+  const handleSelectLead = (id, checked, shiftKey, index) => {
+    if (shiftKey && lastSelectedLeadIndex !== null) {
+      const start = Math.min(lastSelectedLeadIndex, index);
+      const end = Math.max(lastSelectedLeadIndex, index);
+      const idsInRange = paginatedLeads.slice(start, end + 1).map(l => l.id);
+      
+      setSelectedLeads(prev => {
+        if (checked) {
+          const newSelection = new Set([...prev, ...idsInRange]);
+          return Array.from(newSelection);
+        } else {
+          return prev.filter(leadId => !idsInRange.includes(leadId));
+        }
+      });
+    } else {
+      setSelectedLeads(prev =>
+        checked ? [...prev, id] : prev.filter(leadId => leadId !== id)
+      );
+    }
+    setLastSelectedLeadIndex(index);
   };
+
+  const handleSelectCart = (id, checked, shiftKey, index) => {
+    if (shiftKey && lastSelectedCartIndex !== null) {
+      const start = Math.min(lastSelectedCartIndex, index);
+      const end = Math.max(lastSelectedCartIndex, index);
+      const idsInRange = abandonedCarts.slice(start, end + 1).map(c => c.session_id);
+      
+      setSelectedCartIds(prev => {
+        if (checked) {
+          const newSelection = new Set([...prev, ...idsInRange]);
+          return Array.from(newSelection);
+        } else {
+          return prev.filter(cartId => !idsInRange.includes(cartId));
+        }
+      });
+    } else {
+      setSelectedCartIds(prev =>
+        checked ? [...prev, id] : prev.filter(cartId => cartId !== id)
+      );
+    }
+    setLastSelectedCartIndex(index);
+  };
+
+  useEffect(() => {
+    setLastSelectedLeadIndex(null);
+  }, [leadsCurrentPage, leadsSearch, leadsSourceFilter, leadsAreaFilter]);
+
+  useEffect(() => {
+    setLastSelectedCartIndex(null);
+  }, [abandonedCarts]);
 
   const filteredLeads = leads.filter(lead => {
     // 1. Search Query
@@ -4348,7 +4396,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     </tr>
                   </thead>
                   <tbody>
-                    {abandonedCarts.map(acart => {
+                    {abandonedCarts.map((acart, index) => {
                       const totalQty = acart.cart_data ? acart.cart_data.reduce((acc, item) => acc + (item.qty || 0), 0) : 0;
                       
                       return (
@@ -4357,13 +4405,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             <input 
                               type="checkbox" 
                               checked={selectedCartIds.includes(acart.session_id)} 
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedCartIds(prev => [...prev, acart.session_id]);
-                                } else {
-                                  setSelectedCartIds(prev => prev.filter(id => id !== acart.session_id));
-                                }
+                              onClick={(e) => {
+                                const checked = e.target.checked;
+                                const shiftKey = e.shiftKey;
+                                handleSelectCart(acart.session_id, checked, shiftKey, index);
                               }}
+                              onChange={() => {}}
                               style={{ cursor: 'pointer', transform: 'scale(1.1)' }}
                             />
                           </td>
@@ -5424,13 +5471,18 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedLeads.map(lead => (
+                  {paginatedLeads.map((lead, index) => (
                   <tr key={lead.id}>
                     <td data-label="Select" style={{ padding: '10px 12px' }}>
                       <input 
                         type="checkbox" 
                         checked={selectedLeads.includes(lead.id)}
-                        onChange={(e) => handleSelectLead(lead.id, e.target.checked)}
+                        onClick={(e) => {
+                          const checked = e.target.checked;
+                          const shiftKey = e.shiftKey;
+                          handleSelectLead(lead.id, checked, shiftKey, index);
+                        }}
+                        onChange={() => {}}
                         style={{ cursor: 'pointer' }}
                       />
                     </td>
