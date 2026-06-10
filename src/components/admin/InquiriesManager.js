@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { adminFetch } from '@/lib/adminApi';
 import { 
   Mail, Search, Filter, Trash2, Send, Eye, Clock, CheckCircle, 
   XCircle, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Inbox,
@@ -44,7 +45,7 @@ export default function InquiriesManager({ adminEmail }) {
     if (showRefresh) setRefreshing(true);
     else setLoading(true);
     try {
-      const res = await fetch('/api/admin/inquiries');
+      const res = await adminFetch('/api/admin/inquiries');
       const data = await res.json();
       if (res.ok && data.success) {
         setInquiries(data.inquiries || []);
@@ -62,9 +63,8 @@ export default function InquiriesManager({ adminEmail }) {
   const handleMarkAsRead = async (inquiry) => {
     if (inquiry.status !== 'New') return;
     try {
-      await fetch('/api/admin/inquiries/update', {
+      await adminFetch('/api/admin/inquiries/update', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inquiryId: inquiry.id, status: 'Read' })
       });
       setInquiries(prev => prev.map(i => i.id === inquiry.id ? { ...i, status: 'Read' } : i));
@@ -74,9 +74,8 @@ export default function InquiriesManager({ adminEmail }) {
 
   const handleClose = async (inquiryId) => {
     try {
-      await fetch('/api/admin/inquiries/update', {
+      await adminFetch('/api/admin/inquiries/update', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inquiryId, status: 'Closed' })
       });
       setInquiries(prev => prev.map(i => i.id === inquiryId ? { ...i, status: 'Closed' } : i));
@@ -87,7 +86,7 @@ export default function InquiriesManager({ adminEmail }) {
   const handleDelete = async (inquiryId) => {
     if (!confirm('Delete this inquiry permanently?')) return;
     try {
-      await fetch(`/api/admin/inquiries/update?id=${inquiryId}`, { method: 'DELETE' });
+      await adminFetch(`/api/admin/inquiries/update?id=${inquiryId}`, { method: 'DELETE' });
       setInquiries(prev => prev.filter(i => i.id !== inquiryId));
       if (selectedInquiry?.id === inquiryId) setSelectedInquiry(null);
     } catch (err) { console.error(err); }
@@ -97,9 +96,8 @@ export default function InquiriesManager({ adminEmail }) {
     if (!replyText.trim() || !selectedInquiry) return;
     setSending(true);
     try {
-      const res = await fetch('/api/admin/inquiries/reply', {
+      const res = await adminFetch('/api/admin/inquiries/reply', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           inquiryId: selectedInquiry.id,
           replyMessage: replyText.trim(),

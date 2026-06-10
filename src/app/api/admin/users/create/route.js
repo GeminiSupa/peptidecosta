@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 export async function POST(request) {
+  const auth = await verifyAdminSession(request, { requireSuperadmin: true });
+  if (auth.error) return auth.error;
+
   try {
     const body = await request.json();
     const { email, password, name, permissions, is_superadmin, commission_rate } = body;

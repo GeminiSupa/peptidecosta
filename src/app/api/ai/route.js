@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { verifyAdminSession, PUBLIC_AI_MODES } from '@/lib/adminAuth';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -11,6 +12,11 @@ export async function POST(request) {
 
     const body = await request.json();
     const { mode, prompt, text, sourceLang = 'en', targetLang = 'es', context = {} } = body;
+
+    if (!PUBLIC_AI_MODES.has(mode)) {
+      const auth = await verifyAdminSession(request);
+      if (auth.error) return auth.error;
+    }
 
     let finalPrompt = '';
 

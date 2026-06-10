@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { adminFetch } from '@/lib/adminApi';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check } from 'lucide-react';
 
 export default function AffiliatesManager() {
@@ -52,8 +53,8 @@ export default function AffiliatesManager() {
   const handlePayoutAction = async (payoutId, action) => {
     setActionLoadingId(payoutId);
     try {
-      const res = await fetch('/api/admin/affiliates/payouts/approve', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await adminFetch('/api/admin/affiliates/payouts/approve', {
+        method: 'POST',
         body: JSON.stringify({ payoutId, action })
       });
       const data = await res.json();
@@ -72,7 +73,7 @@ export default function AffiliatesManager() {
         url += `&start=${customStartDate}&end=${customEndDate}`;
       }
       if (targetAffiliate && targetAffiliate !== 'all') url += `&affiliateId=${targetAffiliate}`;
-      const res = await fetch(url);
+      const res = await adminFetch(url);
       const data = await res.json();
       if (data.success) { alert('Affiliate commissions synced!'); fetchPayouts(); }
       else alert(`Failed: ${data.error}`);

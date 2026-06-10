@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { adminFetch } from '@/lib/adminApi';
 import { 
   Lock, LayoutDashboard, ListFilter, Plus, Trash2, Mail, MessageCircle,
   Save, Upload, Download, Share2, Clipboard, LogOut, Check, 
@@ -24,6 +25,27 @@ import AffiliatesManager from '@/components/admin/AffiliatesManager';
 import InquiriesManager from '@/components/admin/InquiriesManager';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
+
+const ADMIN_TABS = new Set([
+  'spreadsheet', 'orders', 'customers', 'inquiries', 'leads',
+  'carts', 'share', 'reviews', 'affiliates', 'analytics', 'cms',
+  'whatsapp_ai', 'team',
+]);
+
+const SUPERADMIN_ONLY_TABS = new Set(['affiliates', 'team']);
+
+function resolveTabAccess(tabId, profile) {
+  if (!profile || !ADMIN_TABS.has(tabId)) return false;
+  if (SUPERADMIN_ONLY_TABS.has(tabId)) return profile.is_superadmin;
+  if (profile.is_superadmin) return true;
+  return profile.permissions?.includes(tabId) ?? false;
+}
+
+function getDefaultTab(profile) {
+  if (!profile) return 'spreadsheet';
+  if (profile.is_superadmin) return 'spreadsheet';
+  return profile.permissions?.[0] || 'spreadsheet';
+}
 
 const CATEGORY_TRANSLATIONS = {
   'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
@@ -344,7 +366,7 @@ Customer's Latest Message:
 Please draft a perfect next response to this customer. Write only the reply body ready to send. Keep it natural, polite, and scientific yet friendly. Return ONLY the reply text, no headers or meta-notes.
 `;
 
-      const res = await fetch('/api/ai', {
+      const res = await adminFetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -389,7 +411,7 @@ Please draft a perfect next response to this customer. Write only the reply body
     setWhatsappMessages(prev => [optimisticMessage, ...prev]);
 
     try {
-      const res = await fetch('/api/whatsapp/send', {
+      const res = await adminFetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -461,7 +483,7 @@ For each language section, include:
 
 Keep your tone highly professional, precise, data-driven, and empowering. Format with clean Markdown (bold text, bullet points). Do not write any greetings or preambles, just start directly with the English header.`;
 
-      const res = await fetch('/api/ai', {
+      const res = await adminFetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -523,7 +545,7 @@ For each language section, include:
 
 Keep your tone highly professional, precise, data-driven, and empowering. Format with clean Markdown (bold text, bullet points). Do not write any greetings or preambles, just start directly with the English header.`;
 
-      const res = await fetch('/api/ai', {
+      const res = await adminFetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -671,9 +693,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     if (!lead || !lead.contact_value || !message) return;
     setEmailSending(true);
     try {
-      const res = await fetch('/api/admin/send-email', {
+      const res = await adminFetch('/api/admin/send-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: lead.contact_value,
           subject: lead.language === 'es' ? 'Acceso Exclusivo al Catálogo - Peptides Costa Rica' : 'Exclusive Catalog Access - Peptides Costa Rica',
@@ -831,7 +852,7 @@ Core Rules:
       
       prompt += `\n\nDo NOT write placeholder fields, subject lines, greetings placeholders, or quotes. Just output the ready-to-send text body.`;
       
-      const res = await fetch('/api/ai', {
+      const res = await adminFetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt })
@@ -867,9 +888,8 @@ Core Rules:
         setLeadOutreachModalOpen(false);
       } else {
         try {
-          const res = await fetch('/api/admin/send-email', {
+          const res = await adminFetch('/api/admin/send-email', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               to: leadOutreachActive.contact_value,
               subject: leadOutreachActive.language === 'es' ? 'Acceso Exclusivo al Catálogo - Peptides Costa Rica' : 'Exclusive Catalog Access - Peptides Costa Rica',
@@ -987,7 +1007,7 @@ Core Rules:
 4. Keep the tone warm, consultative, and supportive.
 5. Write the response ENTIRELY in ${langLabel}. Do NOT write subject lines, placeholders, or preambles. Just output the final outreach text.`;
 
-      const res = await fetch('/api/ai', {
+      const res = await adminFetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1018,34 +1038,67 @@ Core Rules:
 
   // RBAC Profile State
   const [adminProfile, setAdminProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   const fetchAdminProfile = async (userId) => {
     if (!isSupabaseConfigured || !supabase) return;
+    setProfileLoading(true);
     try {
       const { data, error } = await supabase.from('admin_profiles').select('*').eq('user_id', userId).single();
       if (!error && data) {
         setAdminProfile(data);
-        // Automatically switch tab if current one is not permitted
-        if (!data.is_superadmin && data.permissions && !data.permissions.includes(activeTab)) {
-          if (data.permissions.length > 0) setActiveTab(data.permissions[0]);
-        }
       }
     } catch(e) {
       console.error("Failed to load admin profile", e);
+    } finally {
+      setProfileLoading(false);
     }
   };
 
   const hasAccess = (tabId) => {
-    // Hardcoded fallback to prevent locking out the main founders
-    const currentUserEmail = loggedInEmail.current;
-    if (currentUserEmail === 'joe@peptides.com' || currentUserEmail === 'info@peptidescostarica.net') {
-      return true;
+    if (profileLoading || !adminProfile) return false;
+    return resolveTabAccess(tabId, adminProfile);
+  };
+
+  const navigateToTab = useCallback((tabId) => {
+    if (!ADMIN_TABS.has(tabId)) return;
+    setActiveTab(tabId);
+    router.replace(`/admin?tab=${encodeURIComponent(tabId)}`, { scroll: false });
+  }, [router]);
+
+  // Resolve ?tab= from URL once admin profile is loaded
+  useEffect(() => {
+    if (!mounted || !adminProfile || profileLoading) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    let targetTab = tabParam && ADMIN_TABS.has(tabParam) ? tabParam : getDefaultTab(adminProfile);
+
+    if (!resolveTabAccess(targetTab, adminProfile)) {
+      targetTab = getDefaultTab(adminProfile);
     }
 
-    if (!adminProfile) return true; // Default allow if not loaded or failed
-    if (adminProfile.is_superadmin) return true;
-    return adminProfile.permissions && adminProfile.permissions.includes(tabId);
-  };
+    setActiveTab(targetTab);
+
+    if (tabParam !== targetTab) {
+      router.replace(`/admin?tab=${encodeURIComponent(targetTab)}`, { scroll: false });
+    }
+  }, [mounted, adminProfile, profileLoading, router]);
+
+  // Support browser back/forward for tab changes
+  useEffect(() => {
+    if (!adminProfile || profileLoading) return;
+
+    const onPopState = () => {
+      const tabParam = new URLSearchParams(window.location.search).get('tab');
+      if (tabParam && ADMIN_TABS.has(tabParam) && resolveTabAccess(tabParam, adminProfile)) {
+        setActiveTab(tabParam);
+      }
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [adminProfile, profileLoading]);
 
   // Auth session check on mount
   useEffect(() => {
@@ -1059,6 +1112,7 @@ Core Rules:
         if (session) {
           loggedInEmail.current = session.user.email || savedEmail;
           setIsAuthenticated(true);
+          setProfileLoading(true);
           loadAdminData();
           fetchAdminProfile(session.user.id);
         }
@@ -1067,11 +1121,13 @@ Core Rules:
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session) {
           setIsAuthenticated(true);
+          setProfileLoading(true);
           loadAdminData();
           fetchAdminProfile(session.user.id);
         } else {
           setIsAuthenticated(false);
           setAdminProfile(null);
+          setProfileLoading(false);
         }
       });
 
@@ -1519,9 +1575,7 @@ Core Rules:
         });
 
         if (!error) {
-          // Success via Supabase — also update local cache so offline fallback stays in sync
-          localStorage.setItem('admin_custom_password', password);
-          loggedInEmail.current = email.trim(); // remember which email logged in
+          loggedInEmail.current = email.trim();
           setIsAuthenticated(true);
           setLoginError('');
           setLoginLoading(false);
@@ -1534,20 +1588,13 @@ Core Rules:
         }
       } catch (err) {
         console.error('Supabase login error:', err);
-        // Network error — try local cache as last resort
+        setLoginError('Unable to reach authentication server. Please try again.');
+        setLoginLoading(false);
+        return;
       }
     }
 
-    // Offline / no Supabase fallback only
-    const storedPassword = localStorage.getItem('admin_custom_password') || 'CostaPeptides2026!';
-    if (email.trim() === 'info@peptidescostarica.net' && password === storedPassword) {
-      loggedInEmail.current = email.trim();
-      setIsAuthenticated(true);
-      setLoginError('');
-    } else {
-      setLoginError('Invalid admin credentials.');
-    }
-
+    setLoginError('Authentication is not configured. Contact your administrator.');
     setLoginLoading(false);
   };
 
@@ -1577,18 +1624,8 @@ Core Rules:
     }
 
     if (!isSupabaseConfigured || !supabase) {
-      // Offline-only fallback
-      const storedPassword = localStorage.getItem('admin_custom_password') || 'CostaPeptides2026!';
-      if (currentPassword !== storedPassword) {
-        setPasswordStatus('error:Current password is incorrect.');
-        setPasswordLoading(false);
-        return;
-      }
-      localStorage.setItem('admin_custom_password', newPassword);
-      setPasswordStatus('success:Password updated locally.');
+      setPasswordStatus('error:Authentication is not configured.');
       setPasswordLoading(false);
-      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
-      setTimeout(() => { setPasswordStatus(''); setShowPasswordModal(false); }, 2000);
       return;
     }
 
@@ -1616,8 +1653,6 @@ Core Rules:
         return;
       }
 
-      // Step 3: Success — sync localStorage
-      localStorage.setItem('admin_custom_password', newPassword);
       localStorage.setItem('admin_email', adminEmail);
       setPasswordStatus('success:Password updated! Please log in again with your new password.');
       setPasswordLoading(false);
@@ -2162,7 +2197,7 @@ Core Rules:
       const sourceLang = direction === 'en-to-es' ? 'en' : 'es';
       const targetLang = direction === 'en-to-es' ? 'es' : 'en';
       
-      const res = await fetch('/api/ai', {
+      const res = await adminFetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2200,7 +2235,7 @@ Core Rules:
 
     setLoadingAiDesc(true);
     try {
-      const res = await fetch('/api/ai', {
+      const res = await adminFetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2368,7 +2403,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       
       prompt += ` Keep it brief, conversational, and split with natural line breaks. Write the message in Spanish, as that is our primary language. Do not include subject lines, greetings placeholders, or quotes. Just give the exact chat body ready to send.`;
 
-      const res = await fetch('/api/ai', {
+      const res = await adminFetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2397,7 +2432,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
     setWaSending(true);
     try {
-      const res = await fetch('/api/whatsapp/send', {
+      const res = await adminFetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2474,7 +2509,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         }
       };
 
-      const res = await fetch('/api/ai', {
+      const res = await adminFetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3113,9 +3148,33 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 )}
               </button>
             </form>
-            <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '20px', lineHeight: '1.4' }}>
-              ✨ Local Bypass Support: Log in instantly with credentials listed in your approved implementation plan.
-            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (profileLoading) {
+    return (
+      <div className="admin-layout" suppressHydrationWarning>
+        <div className="admin-login-container">
+          <div className="sync-spinner" style={{ width: '32px', height: '32px', marginBottom: '16px' }}></div>
+          <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Loading admin permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isSupabaseConfigured && !adminProfile) {
+    return (
+      <div className="admin-layout" suppressHydrationWarning>
+        <div className="admin-login-container">
+          <div className="admin-login-card">
+            <p>Access Denied</p>
+            <div className="error-msg">Your account is not authorized for the admin dashboard.</div>
+            <button type="button" onClick={handleLogout} style={{ marginTop: '16px' }}>
+              Sign Out
+            </button>
           </div>
         </div>
       </div>
@@ -3169,7 +3228,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {hasAccess('spreadsheet') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'spreadsheet' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('spreadsheet')}
+                  onClick={() => navigateToTab('spreadsheet')}
                 >
                   <Table size={14} />
                   <span className="tab-label">Products</span>
@@ -3178,7 +3237,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {hasAccess('orders') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'orders' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('orders')}
+                  onClick={() => navigateToTab('orders')}
                 >
                   <ClipboardList size={14} />
                   <span className="tab-label">Orders</span>
@@ -3192,7 +3251,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {hasAccess('customers') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'customers' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('customers')}
+                  onClick={() => navigateToTab('customers')}
                 >
                   <Users size={14} />
                   <span className="tab-label">Customers</span>
@@ -3201,7 +3260,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {hasAccess('inquiries') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'inquiries' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('inquiries')}
+                  onClick={() => navigateToTab('inquiries')}
                 >
                   <Inbox size={14} />
                   <span className="tab-label">Inquiries</span>
@@ -3210,7 +3269,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {hasAccess('leads') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'leads' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('leads')}
+                  onClick={() => navigateToTab('leads')}
                 >
                   <Target size={14} />
                   <span className="tab-label">Leads</span>
@@ -3230,7 +3289,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {hasAccess('carts') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'carts' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('carts')}
+                  onClick={() => navigateToTab('carts')}
                 >
                   <ShoppingCart size={14} />
                   <span className="tab-label">Carts</span>
@@ -3244,7 +3303,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {hasAccess('share') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'share' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('share')}
+                  onClick={() => navigateToTab('share')}
                 >
                   <Link2 size={14} />
                   <span className="tab-label">Share</span>
@@ -3253,7 +3312,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {hasAccess('reviews') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'reviews' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('reviews')}
+                  onClick={() => navigateToTab('reviews')}
                 >
                   <Star size={14} />
                   <span className="tab-label">Reviews</span>
@@ -3264,10 +3323,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   )}
                 </button>
               )}
-              {(!adminProfile || adminProfile.is_superadmin) && (
+              {adminProfile?.is_superadmin && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'affiliates' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('affiliates')}
+                  onClick={() => navigateToTab('affiliates')}
                 >
                   <UserPlus size={14} />
                   <span className="tab-label">Affiliates</span>
@@ -3282,7 +3341,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {hasAccess('analytics') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('analytics')}
+                  onClick={() => navigateToTab('analytics')}
                 >
                   <BarChart2 size={14} />
                   <span className="tab-label">Analytics</span>
@@ -3291,7 +3350,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {hasAccess('cms') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'cms' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('cms')}
+                  onClick={() => navigateToTab('cms')}
                 >
                   <FileText size={14} />
                   <span className="tab-label">Content (CMS)</span>
@@ -3303,17 +3362,19 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <div className="admin-nav-section">
             <div className="admin-nav-section-title">System & AI</div>
             <div className="admin-nav-section-items">
+              {hasAccess('whatsapp_ai') && (
               <button 
                 className={`admin-tab-btn ${activeTab === 'whatsapp_ai' ? 'active' : ''}`}
-                onClick={() => setActiveTab('whatsapp_ai')}
+                onClick={() => navigateToTab('whatsapp_ai')}
               >
                 <MessageSquare size={14} style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981' }} />
                 <span className="tab-label" style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981', fontWeight: 'bold' }}>WhatsApp AI</span>
               </button>
-              {(!adminProfile || adminProfile.is_superadmin) && (
+              )}
+              {adminProfile?.is_superadmin && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'team' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('team')}
+                  onClick={() => navigateToTab('team')}
                 >
                   <Shield size={14} />
                   <span className="tab-label">Team</span>

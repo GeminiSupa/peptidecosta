@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -13,6 +14,9 @@ const supabase = supabaseUrl && (supabaseServiceKey || supabaseAnonKey)
   : null;
 
 export async function POST(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   try {
     const payload = await request.json();
     const { to, message, customerName, orderId, sessionId } = payload;

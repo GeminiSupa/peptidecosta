@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-export async function GET() {
+export async function GET(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   try {
     if (!supabaseUrl || !supabaseServiceKey) {
       return NextResponse.json({ error: 'Database not configured' }, { status: 500 });

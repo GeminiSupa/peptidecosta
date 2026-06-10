@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { adminFetch } from '@/lib/adminApi';
 import { Plus, Trash2, Edit2, Shield, Check } from 'lucide-react';
 
 export default function TeamManagement({ currentUserProfile, currentUserEmail, onTeamChanged }) {
@@ -33,11 +34,14 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     { id: 'spreadsheet', label: 'Products' },
     { id: 'orders', label: 'Orders' },
     { id: 'customers', label: 'Customers' },
+    { id: 'inquiries', label: 'Inquiries' },
     { id: 'leads', label: 'Leads' },
     { id: 'carts', label: 'Abandoned Carts' },
+    { id: 'share', label: 'Share Links' },
     { id: 'reviews', label: 'Reviews' },
     { id: 'analytics', label: 'Analytics' },
-    { id: 'cms', label: 'Content (CMS)' }
+    { id: 'cms', label: 'Content (CMS)' },
+    { id: 'whatsapp_ai', label: 'WhatsApp AI' },
   ];
 
   const fetchUsers = async () => {
@@ -68,11 +72,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const handlePayoutAction = async (payoutId, action) => {
     setActionLoadingId(payoutId);
     try {
-      const response = await fetch('/api/admin/commissions/approve', {
+      const response = await adminFetch('/api/admin/commissions/approve', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify({ payoutId, action })
       });
       const data = await response.json();
@@ -105,7 +106,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
         url += `&agentEmail=${encodeURIComponent(targetAgent)}`;
       }
 
-      const response = await fetch(url);
+      const response = await adminFetch(url);
       const data = await response.json();
       if (data.success) {
         const periodMsg = scanPeriod === 'previous' 
@@ -168,9 +169,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     try {
       if (editingUserId) {
         // Update user
-        const res = await fetch('/api/admin/users/update', {
+        const res = await adminFetch('/api/admin/users/update', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userId: editingUserId,
             password: formPassword || undefined,
@@ -185,9 +185,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       } else {
         // Create user
         if (!formPassword) throw new Error('Password is required for new users');
-        const res = await fetch('/api/admin/users/create', {
+        const res = await adminFetch('/api/admin/users/create', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email: formEmail,
             password: formPassword,
@@ -214,7 +213,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     if (!window.confirm("Are you sure you want to completely delete this user? This cannot be undone.")) return;
     
     try {
-      const res = await fetch(`/api/admin/users/delete?userId=${userId}`, { method: 'DELETE' });
+      const res = await adminFetch(`/api/admin/users/delete?userId=${userId}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error);

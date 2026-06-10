@@ -11,6 +11,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
+import { adminFetch } from '@/lib/adminApi';
 
 export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [] }) {
   const [explainerTopic, setExplainerTopic] = useState(null);
@@ -174,9 +175,8 @@ For each language section, include:
 
 Keep your tone highly professional, precise, data-driven, and empowering. Format with clean Markdown (bold text, bullet points). Do not write any greetings or preambles, just start directly with the English header.`;
 
-      const res = await fetch('/api/ai', {
+      const res = await adminFetch('/api/ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: 'chat',
           prompt

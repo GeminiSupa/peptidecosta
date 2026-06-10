@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
@@ -9,6 +10,9 @@ const SMTP_PASS = process.env.SMTP_PASS;
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
 
 export async function POST(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   try {
     const { to, subject, message } = await request.json();
 

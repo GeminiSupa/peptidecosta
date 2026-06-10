@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 // Email Configuration from Environment variables
 const SMTP_HOST = process.env.SMTP_HOST;
@@ -18,6 +19,9 @@ const formatMoney = (value, currency) => {
 };
 
 export async function GET(request) {
+  const auth = await verifyAdminSession(request, { requireSuperadmin: true });
+  if (auth.error) return auth.error;
+
   try {
     // 1. Initialize Supabase Admin Client
     const supabaseAdmin = getSupabaseAdmin();

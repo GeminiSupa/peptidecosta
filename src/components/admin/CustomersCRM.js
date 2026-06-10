@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
+import { adminFetch } from '@/lib/adminApi';
 
 const resolveRecommendation = (cust) => {
   // Combine past purchases and cart items to search for keywords
@@ -355,9 +356,8 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
         ? (cust.cartItems || []).map(i => i.product)
         : (cust.purchasedItems || []);
 
-      const response = await fetch('/api/ai', {
+      const response = await adminFetch('/api/ai', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mode: 'cross_sell',
           context: {
