@@ -21,6 +21,8 @@ import {
 
 const WHATSAPP_NUMBER = '50684046973';
 const FALLBACK_EXCHANGE_RATE = 454.48;
+const FREE_SHIPPING_USD_THRESHOLD = 200;
+const FLAT_SHIPPING_CRC = 3500;
 
 const CATEGORY_TRANSLATIONS = {
   'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
@@ -1406,14 +1408,38 @@ export default function CatalogPage() {
     if (cart.length === 0) return 0;
     const itemsTotal = getDiscountedTotal();
     const itemsTotalUsd = currency === 'USD' ? itemsTotal : (itemsTotal / exchangeRate);
-    if (itemsTotalUsd < 200) {
+    if (itemsTotalUsd < FREE_SHIPPING_USD_THRESHOLD) {
       if (currency === 'CRC') {
-        return 3500;
-      } else {
-        return parseFloat((3500 / exchangeRate).toFixed(2));
+        return FLAT_SHIPPING_CRC;
       }
+      return parseFloat((FLAT_SHIPPING_CRC / exchangeRate).toFixed(2));
     }
     return 0;
+  };
+
+  const getItemsTotalBeforeShipping = () => getDiscountedTotal() - getPromoDiscountAmount();
+
+  const qualifiesForFreeShipping = () => {
+    if (cart.length === 0) return false;
+    const itemsTotalUsd = currency === 'USD'
+      ? getDiscountedTotal()
+      : (getDiscountedTotal() / exchangeRate);
+    return itemsTotalUsd >= FREE_SHIPPING_USD_THRESHOLD;
+  };
+
+  const getAmountToFreeShipping = () => {
+    const itemsTotalUsd = currency === 'USD'
+      ? getDiscountedTotal()
+      : (getDiscountedTotal() / exchangeRate);
+    const remainingUsd = FREE_SHIPPING_USD_THRESHOLD - itemsTotalUsd;
+    return currency === 'USD'
+      ? parseFloat(remainingUsd.toFixed(2))
+      : Math.ceil(remainingUsd * exchangeRate);
+  };
+
+  const getFreeShippingThresholdLabel = () => {
+    if (currency === 'USD') return '$200';
+    return formatPriceVal(Math.round(FREE_SHIPPING_USD_THRESHOLD * exchangeRate), 'CRC');
   };
 
   const getPromoDiscountAmount = () => {
@@ -1700,8 +1726,8 @@ export default function CatalogPage() {
         ? `\n\n🚚 *SHIPPING:* *${formatPriceVal(shipFee, currency)}*`
         : `\n\n🚚 *ENVÍO:* *${formatPriceVal(shipFee, currency)}*`)
       : (lang === 'en'
-        ? `\n\n🚚 *SHIPPING:* *FREE*`
-        : `\n\n🚚 *ENVÍO:* *GRATIS*`);
+        ? `\n\n🚚 *SHIPPING:* *FREE* — We've got shipping covered on orders over ${getFreeShippingThresholdLabel()}!`
+        : `\n\n🚚 *ENVÍO:* *GRATIS* — ¡Nosotros cubrimos el envío en pedidos superiores a ${getFreeShippingThresholdLabel()}!`);
 
     const totalReceipt = lang === 'en'
       ? `\n\n*TOTAL DUE:* *${formatPriceVal(totalVal, currency)}*`
@@ -2079,6 +2105,108 @@ export default function CatalogPage() {
       return sortOrder === 'lowToHigh' ? priceA - priceB : priceB - priceA;
     });
   }
+
+  const renderOrderSummary = ({ showHeading = false, compact = false } = {}) => {
+    const shipFee = getShippingFee();
+    const isFreeShip = qualifiesForFreeShipping();
+    const hasVolumeDiscount = getVolumeDiscountPct(getCartVialCount()) > 0;
+    const hasPromoDiscount = promoData?.valid;
+    const itemsBeforeShipping = getItemsTotalBeforeShipping();
+
+    return (
+      <div className={`cart-order-summary${compact ? ' cart-order-summary--compact' : ''}`}>
+        {showHeading && (
+          <h4 className="cart-order-summary-title">
+            {lang === 'en' ? 'Order Summary' : 'Resumen del Pedido'}
+          </h4>
+        )}
+
+        <div className="cart-total-row" style={{ opacity: hasVolumeDiscount ? 0.6 : 1, marginBottom: compact ? '8px' : undefined }}>
+          <span className="cart-total-label">{lang === 'en' ? 'SUBTOTAL' : 'SUBTOTAL'}</span>
+          <span
+            className="cart-total-val"
+            style={hasVolumeDiscount ? { textDecoration: 'line-through', fontSize: '0.9rem' } : { fontSize: compact ? '1rem' : undefined }}
+          >
+            {formatPriceVal(getCartTotal(), currency)}
+          </span>
+        </div>
+
+        {hasVolumeDiscount && (
+          <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
+            <span className="cart-total-label" style={{ color: theme === 'dark' ? '#4ade80' : '#15803d' }}>
+              {lang === 'en' ? 'VOLUME DISCOUNT' : 'DESC. VOLUMEN'}
+            </span>
+            <span className="cart-total-val" style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontSize: compact ? '1rem' : undefined }}>
+              -{formatPriceVal(getCartTotal() - getDiscountedTotal(), currency)}
+            </span>
+          </div>
+        )}
+
+        {hasPromoDiscount && (
+          <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
+            <span className="cart-total-label" style={{ color: '#38bdf8' }}>
+              {lang === 'en' ? 'PROMO DISCOUNT' : 'DESCUENTO PROMO'}
+            </span>
+            <span className="cart-total-val" style={{ color: '#38bdf8', fontSize: compact ? '1rem' : undefined }}>
+              -{formatPriceVal(getPromoDiscountAmount(), currency)}
+            </span>
+          </div>
+        )}
+
+        {(hasVolumeDiscount || hasPromoDiscount) && (
+          <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
+            <span className="cart-total-label">{lang === 'en' ? 'ITEMS TOTAL' : 'TOTAL ARTÍCULOS'}</span>
+            <span className="cart-total-val" style={{ fontSize: compact ? '1rem' : undefined }}>
+              {formatPriceVal(itemsBeforeShipping, currency)}
+            </span>
+          </div>
+        )}
+
+        {isFreeShip ? (
+          <div className="cart-free-shipping-banner">
+            <span className="cart-free-shipping-icon">🚚</span>
+            <div>
+              <div className="cart-free-shipping-title">
+                {lang === 'en' ? 'Free Shipping' : 'Envío Gratis'}
+              </div>
+              <div className="cart-free-shipping-detail">
+                {lang === 'en'
+                  ? `We've got shipping covered on orders over ${getFreeShippingThresholdLabel()}!`
+                  : `¡Nosotros cubrimos el envío en pedidos superiores a ${getFreeShippingThresholdLabel()}!`}
+              </div>
+            </div>
+            <span className="cart-free-shipping-badge">{lang === 'en' ? 'FREE' : 'GRATIS'}</span>
+          </div>
+        ) : (
+          <>
+            <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
+              <span className="cart-total-label">{lang === 'en' ? 'SHIPPING' : 'ENVÍO'}</span>
+              <span className="cart-total-val" style={{ fontSize: compact ? '1rem' : undefined }}>
+                {formatPriceVal(shipFee, currency)}
+              </span>
+            </div>
+            <div className="cart-shipping-hint">
+              {lang === 'en'
+                ? `Add ${formatPriceVal(getAmountToFreeShipping(), currency)} more for free shipping (orders over ${getFreeShippingThresholdLabel()})`
+                : `Añade ${formatPriceVal(getAmountToFreeShipping(), currency)} más para envío gratis (pedidos superiores a ${getFreeShippingThresholdLabel()})`}
+            </div>
+          </>
+        )}
+
+        <div className="cart-total-row cart-order-summary-total">
+          <span className="cart-total-label" style={{ fontWeight: '800' }}>
+            {lang === 'en' ? 'TOTAL DUE' : 'TOTAL A PAGAR'}
+          </span>
+          <span
+            className="cart-total-val"
+            style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: '800' }}
+          >
+            {formatPriceVal(getFinalTotal(), currency)}
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div id="app" className="min-h-screen" suppressHydrationWarning>
@@ -2853,9 +2981,18 @@ export default function CatalogPage() {
                   {cart.reduce((s, i) => s + i.qty, 0)} {lang === 'en' ? (cart.reduce((s, i) => s + i.qty, 0) === 1 ? 'item' : 'items') : (cart.reduce((s, i) => s + i.qty, 0) === 1 ? 'artículo' : 'artículos')}
                 </span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.85rem', opacity: 0.9, fontWeight: 600 }}>{lang === 'en' ? 'View Cart' : 'Ver Carrito'}</span>
-                <span>{formatPriceVal(getFinalTotal(), currency)}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.85rem', opacity: 0.9, fontWeight: 600 }}>{lang === 'en' ? 'View Cart' : 'Ver Carrito'}</span>
+                  <span>{formatPriceVal(getFinalTotal(), currency)}</span>
+                </div>
+                {!qualifiesForFreeShipping() && (
+                  <span style={{ fontSize: '0.68rem', opacity: 0.85, fontWeight: 600 }}>
+                    {lang === 'en'
+                      ? `incl. ${formatPriceVal(getShippingFee(), currency)} shipping`
+                      : `incl. ${formatPriceVal(getShippingFee(), currency)} de envío`}
+                  </span>
+                )}
               </div>
             </button>
           ) : (
@@ -2964,12 +3101,6 @@ export default function CatalogPage() {
 
         {cart.length > 0 && !orderSuccess && (
           <div className="cart-footer">
-            {/* Subtotal row */}
-            <div className="cart-total-row" style={{ opacity: getVolumeDiscountPct(getCartVialCount()) > 0 ? 0.6 : 1 }}>
-              <span className="cart-total-label">{lang === 'en' ? 'SUBTOTAL' : 'SUBTOTAL'}</span>
-              <span className="cart-total-val" style={getVolumeDiscountPct(getCartVialCount()) > 0 ? { textDecoration: 'line-through', fontSize: '0.9rem' } : {}}>{formatPriceVal(getCartTotal(), currency)}</span>
-            </div>
-
             {/* Volume discount banner */}
             {getVolumeDiscountPct(getCartVialCount()) > 0 && (
               <div style={{ background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1))', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '12px', padding: '10px 14px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3072,29 +3203,7 @@ export default function CatalogPage() {
               )}
             </div>
 
-            {/* Promo Discount row */}
-            {promoData?.valid && (
-              <div className="cart-total-row" style={{ marginBottom: '4px' }}>
-                <span className="cart-total-label" style={{ color: '#38bdf8' }}>{lang === 'en' ? 'PROMO DISCOUNT' : 'DESCUENTO PROMO'}</span>
-                <span className="cart-total-val" style={{ color: '#38bdf8' }}>
-                  -{formatPriceVal(getPromoDiscountAmount(), currency)}
-                </span>
-              </div>
-            )}
-
-            {/* Shipping row */}
-            <div className="cart-total-row" style={{ marginBottom: '4px' }}>
-              <span className="cart-total-label">{lang === 'en' ? 'SHIPPING' : 'ENVÍO'}</span>
-              <span className="cart-total-val" style={{ color: getShippingFee() > 0 ? undefined : (theme === 'dark' ? '#4ade80' : '#15803d'), fontWeight: getShippingFee() > 0 ? 'normal' : '700' }}>
-                {getShippingFee() > 0 ? formatPriceVal(getShippingFee(), currency) : (lang === 'en' ? 'FREE' : 'GRATIS')}
-              </span>
-            </div>
-
-            {/* Final total row */}
-            <div className="cart-total-row" style={{ marginBottom: '4px' }}>
-              <span className="cart-total-label" style={{ fontWeight: '800' }}>{lang === 'en' ? 'TOTAL DUE' : 'TOTAL A PAGAR'}</span>
-              <span className="cart-total-val" style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: '800' }}>{formatPriceVal(getFinalTotal(), currency)}</span>
-            </div>
+            {renderOrderSummary()}
 
             <form id="checkout-form-main" onSubmit={handleCheckoutSubmit} className="checkout-form" style={{ paddingBottom: '80px' }}>
               
@@ -3258,6 +3367,8 @@ export default function CatalogPage() {
                   />
                 </div>
               </div>
+
+              {renderOrderSummary({ showHeading: true, compact: true })}
 
               <div className="checkout-step-header" style={{ marginTop: '24px' }}>
                 <span className="checkout-step-number">2</span>

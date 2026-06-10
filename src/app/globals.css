@@ -1145,6 +1145,98 @@ body {
     color: var(--text-primary);
 }
 
+.cart-order-summary {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.cart-order-summary--compact {
+    margin-top: 8px;
+    margin-bottom: 20px;
+    padding: 14px;
+}
+
+.cart-order-summary-title {
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    margin: 0 0 12px 0;
+}
+
+.cart-order-summary-total {
+    margin-top: 10px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+    margin-bottom: 0 !important;
+}
+
+.cart-free-shipping-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.14), rgba(16, 185, 129, 0.08));
+    border: 1px solid rgba(34, 197, 94, 0.28);
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+}
+
+.cart-free-shipping-icon {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+.cart-free-shipping-title {
+    color: #15803d;
+    font-weight: 800;
+    font-size: 0.82rem;
+    line-height: 1.2;
+}
+
+[data-theme="dark"] .cart-free-shipping-title {
+    color: #4ade80;
+}
+
+.cart-free-shipping-detail {
+    color: #166534;
+    font-size: 0.72rem;
+    margin-top: 2px;
+    line-height: 1.35;
+}
+
+[data-theme="dark"] .cart-free-shipping-detail {
+    color: #86efac;
+}
+
+.cart-free-shipping-badge {
+    margin-left: auto;
+    flex-shrink: 0;
+    background: rgba(34, 197, 94, 0.18);
+    color: #15803d;
+    font-weight: 800;
+    font-size: 0.72rem;
+    padding: 4px 8px;
+    border-radius: 999px;
+    letter-spacing: 0.4px;
+}
+
+[data-theme="dark"] .cart-free-shipping-badge {
+    color: #4ade80;
+}
+
+.cart-shipping-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+    margin: -4px 0 10px 0;
+    padding: 0 2px;
+}
+
 .checkout-form {
     display: flex;
     flex-direction: column;
