@@ -2637,6 +2637,87 @@ export default function CatalogPage() {
       )}
       </main>
 
+      {/* Customer Transformation Footer Banner */}
+      {gateAccessGranted && (
+        <section style={{
+          background: 'var(--bg-secondary)',
+          borderTop: '1px solid var(--border)',
+          padding: '64px 20px'
+        }}>
+          <div className="container" style={{ maxWidth: '900px', margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+              <span style={{
+                display: 'inline-block',
+                background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                color: 'white',
+                fontSize: '0.75rem',
+                fontWeight: '800',
+                padding: '5px 14px',
+                borderRadius: '24px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                marginBottom: '14px',
+                boxShadow: '0 2px 10px rgba(34,197,94,0.25)'
+              }}>
+                {lang === 'en' ? '✓ Verified Results' : '✓ Resultados Verificados'}
+              </span>
+              <h2 style={{
+                fontSize: '1.7rem',
+                fontWeight: '900',
+                color: 'var(--text-main)',
+                margin: '0 0 10px 0',
+                lineHeight: '1.25'
+              }}>
+                {lang === 'en' ? 'Customer Experience Highlights' : 'Experiencias de Clientes'}
+              </h2>
+              <p style={{
+                fontSize: '0.92rem',
+                color: 'var(--text-muted)',
+                lineHeight: '1.6',
+                maxWidth: '560px',
+                margin: '0 auto'
+              }}>
+                {lang === 'en'
+                  ? 'Feedback shared by our research community in Costa Rica.'
+                  : 'Comentarios compartidos por nuestra comunidad de investigación en Costa Rica.'}
+              </p>
+            </div>
+
+            <div style={{ borderRadius: '20px', overflow: 'hidden', boxShadow: '0 8px 40px rgba(0,0,0,0.12)', position: 'relative' }}>
+              <img
+                src="/customer_transformation.png"
+                alt={lang === 'en' ? 'Customer experience with Peptides Costa Rica' : 'Experiencias de clientes con Péptidos Costa Rica'}
+                style={{ width: '100%', display: 'block', height: 'auto', maxHeight: '440px', objectFit: 'cover', objectPosition: 'center top' }}
+                onError={(e) => { e.target.parentElement.parentElement.parentElement.style.display = 'none'; }}
+              />
+              <div style={{
+                position: 'absolute', top: '16px', left: '16px',
+                background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                color: '#fff', fontSize: '0.78rem', fontWeight: '800',
+                padding: '6px 16px', borderRadius: '24px',
+                letterSpacing: '0.04em', textTransform: 'uppercase',
+                boxShadow: '0 4px 14px rgba(34,197,94,0.4)'
+              }}>
+                {lang === 'en' ? '✓ Verified Results' : '✓ Resultados Verificados'}
+              </div>
+            </div>
+
+            <p style={{
+              marginTop: '20px',
+              fontSize: '0.78rem',
+              color: 'var(--text-muted)',
+              lineHeight: '1.6',
+              textAlign: 'center',
+              fontStyle: 'italic'
+            }}>
+              {lang === 'en'
+                ? 'Results may vary. Products are intended strictly for research use only and are not intended to diagnose, treat, cure, or prevent any disease.'
+                : 'Los resultados pueden variar. Los productos son estrictamente para uso de investigación y no están destinados a diagnosticar, tratar o prevenir enfermedades.'}
+            </p>
+          </div>
+        </section>
+      )}
+
 
       {/* Floating Cart FAB & Mobile Bottom Bar */}
       <style>{`
