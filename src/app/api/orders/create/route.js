@@ -49,6 +49,17 @@ export async function POST(request) {
 
     if (error) {
       console.error('[orders/create] Insert failed:', error.message, { order_number: order.order_number });
+      try {
+        await supabase.from('admin_notifications').insert({
+          type: 'order_save_failed',
+          title: `Order save failed: ${order.order_number}`,
+          body: `${order.customer_name} — ${error.message}`.slice(0, 500),
+          link_tab: 'orders',
+          link_ref: order.order_number,
+        });
+      } catch {
+        // notification table may not exist yet
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

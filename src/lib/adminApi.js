@@ -23,7 +23,8 @@ export async function getAdminAuthHeaders(extraHeaders = {}) {
 export async function adminFetch(url, options = {}) {
   const headers = await getAdminAuthHeaders(options.headers || {});
   const hasBody = options.body !== undefined && options.body !== null;
-  if (hasBody && !headers['Content-Type'] && !headers['content-type']) {
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  if (hasBody && !isFormData && !headers['Content-Type'] && !headers['content-type']) {
     headers['Content-Type'] = 'application/json';
   }
 

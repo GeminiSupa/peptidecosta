@@ -15,7 +15,7 @@ import {
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send,
-  Bell, X, TrendingUp, Target, Smartphone, Inbox
+  Bell, X, TrendingUp, Target, Smartphone, Inbox, Search
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
@@ -23,11 +23,16 @@ import ExportModal from '@/components/admin/ExportModal';
 import TeamManagement from '@/components/admin/TeamManagement';
 import AffiliatesManager from '@/components/admin/AffiliatesManager';
 import InquiriesManager from '@/components/admin/InquiriesManager';
+import DashboardHome from '@/components/admin/DashboardHome';
+import GlobalSearch from '@/components/admin/GlobalSearch';
+import NotificationCenter from '@/components/admin/NotificationCenter';
+import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
+import ManualOrderModal from '@/components/admin/ManualOrderModal';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
 
 const ADMIN_TABS = new Set([
-  'spreadsheet', 'orders', 'customers', 'inquiries', 'leads',
+  'home', 'spreadsheet', 'orders', 'customers', 'inquiries', 'leads',
   'carts', 'share', 'reviews', 'affiliates', 'analytics', 'cms',
   'whatsapp_ai', 'team',
 ]);
@@ -36,15 +41,17 @@ const SUPERADMIN_ONLY_TABS = new Set(['affiliates', 'team']);
 
 function resolveTabAccess(tabId, profile) {
   if (!profile || !ADMIN_TABS.has(tabId)) return false;
+  if (tabId === 'home') return true;
   if (SUPERADMIN_ONLY_TABS.has(tabId)) return profile.is_superadmin;
   if (profile.is_superadmin) return true;
   return profile.permissions?.includes(tabId) ?? false;
 }
 
 function getDefaultTab(profile) {
-  if (!profile) return 'spreadsheet';
-  if (profile.is_superadmin) return 'spreadsheet';
-  return profile.permissions?.[0] || 'spreadsheet';
+  if (!profile) return 'home';
+  if (profile.is_superadmin) return 'home';
+  if (profile.permissions?.includes('home')) return 'home';
+  return profile.permissions?.[0] || 'home';
 }
 
 const CATEGORY_TRANSLATIONS = {
@@ -222,6 +229,10 @@ export default function AdminPage() {
   const [expandedLeadViews, setExpandedLeadViews] = useState({});
   const [selectedLeadDetails, setSelectedLeadDetails] = useState(null);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [manualOrderOpen, setManualOrderOpen] = useState(false);
+  const [inquiryCount, setInquiryCount] = useState(0);
+  const [notifRefreshKey, setNotifRefreshKey] = useState(0);
   const [selectedCartDetails, setSelectedCartDetails] = useState(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
   
@@ -1100,6 +1111,43 @@ Core Rules:
     return () => window.removeEventListener('popstate', onPopState);
   }, [adminProfile, profileLoading]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setGlobalSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isAuthenticated]);
+
+  const handleGlobalSearchSelect = (result) => {
+    if (result.type === 'order') {
+      setSelectedOrderDetails(result.payload);
+      navigateToTab('orders');
+    } else if (result.type === 'product') {
+      navigateToTab('spreadsheet');
+    } else if (result.type === 'lead') {
+      navigateToTab('leads');
+    } else if (result.type === 'customer') {
+      navigateToTab('customers');
+    }
+  };
+
+  const handleOrderUpdated = (updated) => {
+    setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+    setSelectedOrderDetails(updated);
+  };
+
+  const handleManualOrderCreated = (order) => {
+    setOrders((prev) => [order, ...prev]);
+    setSelectedOrderDetails(order);
+    setNotifRefreshKey((k) => k + 1);
+    navigateToTab('orders');
+  };
+
   // Auth session check on mount
   useEffect(() => {
     setMounted(true);
@@ -1471,6 +1519,18 @@ Core Rules:
       }
     }
     setLoadingLeads(false);
+
+    if (isAuthenticated) {
+      try {
+        const res = await adminFetch('/api/admin/inquiries');
+        if (res.ok) {
+          const d = await res.json();
+          setInquiryCount((d.inquiries || []).filter((i) => (i.status || '').toLowerCase() === 'new').length);
+        }
+      } catch {
+        // inquiries API requires auth
+      }
+    }
 
     // 5. Fetch Blogs
     setLoadingBlogs(true);
@@ -1908,17 +1968,36 @@ Core Rules:
 
   // Order status update
   const handleOrderStatusUpdate = async (orderId, newStatus) => {
+    const prevOrder = orders.find((o) => o.id === orderId);
     setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    if (selectedOrderDetails?.id === orderId) {
+      setSelectedOrderDetails({ ...selectedOrderDetails, status: newStatus });
+    }
+
+    try {
+      const res = await adminFetch('/api/admin/orders/update', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          orderId,
+          updates: { status: newStatus },
+          activity: {
+            type: 'status_change',
+            message: `Status changed to ${newStatus}`,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.order) {
+        handleOrderUpdated(data.order);
+      }
+    } catch (err) {
+      console.error('Order status update error:', err);
+    }
 
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase
-          .from('orders')
-          .update({ status: newStatus })
-          .eq('id', orderId);
-
         if (newStatus === 'Completed' || newStatus === 'Order Complete') {
-          const updatedOrder = orders.find(o => o.id === orderId);
+          const updatedOrder = prevOrder || orders.find(o => o.id === orderId);
           if (updatedOrder && updatedOrder.customer_email) {
             fetch('/api/order-shipped-notification', {
               method: 'POST',
@@ -1932,7 +2011,7 @@ Core Rules:
           }
         }
       } catch(err) {
-        console.error("Order status update error:", err);
+        console.error("Order shipped email error:", err);
       }
     }
   };
@@ -3219,9 +3298,36 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <span className="status-text">{isDbConnected ? 'Live Connection' : 'Simulation Mode'}</span>
             </div>
           </div>
+          <div className="admin-nav-tools">
+            <button type="button" className="admin-search-trigger" onClick={() => setGlobalSearchOpen(true)}>
+              <Search size={14} />
+              <span className="admin-search-label">Search</span>
+              <kbd>⌘K</kbd>
+            </button>
+            <NotificationCenter
+              onNavigate={navigateToTab}
+              refreshKey={notifRefreshKey}
+              adminUserId={adminProfile?.user_id}
+            />
+          </div>
         </div>
 
         <div className="admin-nav-sections">
+          <div className="admin-nav-section">
+            <div className="admin-nav-section-title">Overview</div>
+            <div className="admin-nav-section-items">
+              {hasAccess('home') && (
+                <button
+                  className={`admin-tab-btn ${activeTab === 'home' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('home')}
+                >
+                  <LayoutDashboard size={14} />
+                  <span className="tab-label">Today</span>
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="admin-nav-section">
             <div className="admin-nav-section-title">Core Operations</div>
             <div className="admin-nav-section-items">
@@ -3422,6 +3528,19 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       <div className="admin-container">
         
         {/* TAB 1: SPREADSHEET EDITOR */}
+        {activeTab === 'home' && (
+          <DashboardHome
+            orders={orders}
+            abandonedCarts={abandonedCarts}
+            leads={leads}
+            products={products}
+            inquiryCount={inquiryCount}
+            onNavigate={navigateToTab}
+            onOpenOrder={setSelectedOrderDetails}
+            onCreateOrder={() => setManualOrderOpen(true)}
+          />
+        )}
+
         {activeTab === 'spreadsheet' && (
           <div>
             <div className="admin-toolbar">
@@ -3819,6 +3938,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 o.customer_phone?.toLowerCase().includes(s) ||
                 o.customer_email?.toLowerCase().includes(s) ||
                 o.id?.toLowerCase().includes(s) ||
+                o.order_number?.toLowerCase().includes(s) ||
                 o.tracking_number?.toLowerCase().includes(s)
               );
             }
@@ -3868,16 +3988,27 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   </select>
                 </div>
               </div>
-              {orders.length > 0 && (
+              <div style={{ display: 'flex', gap: '10px', flexShrink: 0, alignSelf: 'flex-start', flexWrap: 'wrap' }}>
                 <button
-                  className="admin-btn admin-btn-primary"
-                  onClick={() => setExportModalType('orders')}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, alignSelf: 'flex-start' }}
+                  type="button"
+                  className="admin-btn admin-btn-secondary"
+                  onClick={() => setManualOrderOpen(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
-                  <Download size={14} />
-                  Export Orders
+                  <Plus size={14} />
+                  Manual Order
                 </button>
-              )}
+                {orders.length > 0 && (
+                  <button
+                    className="admin-btn admin-btn-primary"
+                    onClick={() => setExportModalType('orders')}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <Download size={14} />
+                    Export Orders
+                  </button>
+                )}
+              </div>
             </div>
 
             {loadingOrders ? (
@@ -5202,9 +5333,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     }}>
                       <Users size={20} />
                     </div>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 'bold', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.25)', color: '#4ade80', padding: '2px 8px', borderRadius: '20px' }}>
-                      📈 +18.4%
-                    </span>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Captured Leads</div>
@@ -6704,169 +6832,31 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       );
       })()}
 
-      {/* Order Details Modal */}
       {selectedOrderDetails && (
-        <div className="modal active" onClick={() => setSelectedOrderDetails(null)} style={{ zIndex: 210 }}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '650px', width: '90%', maxHeight: '90vh', overflowY: 'auto', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', padding: '30px', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <button className="close-modal" onClick={() => setSelectedOrderDetails(null)} style={{ color: '#94a3b8', fontSize: '1.5rem', top: '20px', right: '20px', background: 'none', border: 'none', cursor: 'pointer' }}>&times;</button>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-              <div style={{ padding: '10px', background: 'rgba(251, 191, 36, 0.1)', borderRadius: '12px', color: '#fbbf24', fontSize: '1.5rem' }}>📦</div>
-              <div>
-                <h2 style={{ fontSize: '1.3rem', fontWeight: '900', color: '#f8fafc', margin: 0 }}>Order Details</h2>
-                <span style={{ fontSize: '0.75rem', color: '#fbbf24', fontWeight: 'bold' }}>Order ID: #{selectedOrderDetails.order_number || selectedOrderDetails.id}</span>
-              </div>
-            </div>
-
-            {/* Profile Grid */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
-              {/* SECTION: CUSTOMER INFO */}
-              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Customer Profile</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Name</label>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc' }}>{selectedOrderDetails.customer_name}</span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>WhatsApp / Phone</label>
-                    <span style={{ fontSize: '0.9rem', color: '#4ade80', fontWeight: 'bold' }}>💬 {selectedOrderDetails.customer_phone}</span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Email</label>
-                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{selectedOrderDetails.customer_email || 'Not provided'}</span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Ordered On</label>
-                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{new Date(selectedOrderDetails.created_at).toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>ID Type</label>
-                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
-                      {selectedOrderDetails.customer_id_type === '1' ? 'National ID (Cédula física)' :
-                       selectedOrderDetails.customer_id_type === '6' ? 'DIMEX' :
-                       selectedOrderDetails.customer_id_type === '5' ? 'Passport' :
-                       selectedOrderDetails.customer_id_type === '2' ? 'Corporate ID (Cédula jurídica)' :
-                       selectedOrderDetails.customer_id_type || 'Not provided'}
-                    </span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>ID Number</label>
-                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>{selectedOrderDetails.customer_id_number || 'Not provided'}</span>
-                  </div>
-                </div>
-                {selectedOrderDetails.shipping_address && (
-                  <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Shipping Address</label>
-                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.4' }}>📍 {selectedOrderDetails.shipping_address}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* SECTION: TRANSACTION & STATUS */}
-              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Transaction & Status</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Payment Method</label>
-                    <span style={{ fontSize: '0.85rem', color: '#f8fafc', fontWeight: 'bold' }}>
-                      {selectedOrderDetails.payment_method === 'paypal' ? '💳 PayPal' : selectedOrderDetails.payment_method === 'sinpe' ? '📱 SINPE · Tilopay' : selectedOrderDetails.payment_method === 'tilopay' ? '💳 Credit Card' : '💬 WhatsApp Coordinate'}
-                    </span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Order Status</label>
-                    <span style={{ 
-                      background: (selectedOrderDetails.status === 'Completed' || selectedOrderDetails.status === 'Order Complete') ? 'rgba(34, 197, 94, 0.15)' : (selectedOrderDetails.status === 'Paid' || selectedOrderDetails.status === 'Processing') ? 'rgba(56, 189, 248, 0.15)' : selectedOrderDetails.status === 'Cancelled' ? 'rgba(239, 68, 68, 0.15)' : selectedOrderDetails.status === 'Payment Pending' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                      color: (selectedOrderDetails.status === 'Completed' || selectedOrderDetails.status === 'Order Complete') ? '#4ade80' : (selectedOrderDetails.status === 'Paid' || selectedOrderDetails.status === 'Processing') ? '#38bdf8' : selectedOrderDetails.status === 'Cancelled' ? '#f87171' : selectedOrderDetails.status === 'Payment Pending' ? '#fb7185' : '#f59e0b',
-                      padding: '4px 10px',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: 'bold',
-                      display: 'inline-block'
-                    }}>{selectedOrderDetails.status || 'Pending'}</span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Tracking Number</label>
-                    <input 
-                      type="text" 
-                      placeholder="Add tracking number..." 
-                      defaultValue={selectedOrderDetails.tracking_number || ''}
-                      onBlur={(e) => handleOrderTrackingUpdate(selectedOrderDetails.id, e.target.value)}
-                      style={{ background: '#172237', border: '1px solid rgba(255,255,255,0.1)', color: 'white', fontSize: '0.8rem', padding: '6px 10px', borderRadius: '6px', outline: 'none', width: '100%' }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Currency Preferred</label>
-                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>{selectedOrderDetails.currency || 'USD'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION: GEOGRAPHICAL DETAILS */}
-              {(selectedOrderDetails.ip_address || selectedOrderDetails.location_data) && (
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Geographic Insights</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    {selectedOrderDetails.ip_address && (
-                      <div>
-                        <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>IP Address</label>
-                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontFamily: 'monospace' }}>🌐 {selectedOrderDetails.ip_address}</span>
-                      </div>
-                    )}
-                    {selectedOrderDetails.location_data && (
-                      <div>
-                        <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Location (IP resolved)</label>
-                        <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
-                          📍 {[selectedOrderDetails.location_data.city, selectedOrderDetails.location_data.region, selectedOrderDetails.location_data.country].filter(Boolean).join(', ')}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* SECTION: ORDER INVOICE ITEMS */}
-              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Items Purchased</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {(() => {
-                    const items = Array.isArray(selectedOrderDetails.items) ? selectedOrderDetails.items : [];
-                    return items.map((item, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#f8fafc' }}>{item.product}</span>
-                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                            Unit Price: {selectedOrderDetails.currency === 'USD' ? `$${item.price}` : `₡${item.price.toLocaleString('en-US')}`}
-                          </span>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <span style={{ fontSize: '0.85rem', color: '#cbd5e1', marginRight: '16px' }}>x{item.qty}</span>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#38bdf8' }}>
-                            {selectedOrderDetails.currency === 'USD' ? `$${item.price * item.qty}` : `₡${(item.price * item.qty).toLocaleString('en-US')}`}
-                          </span>
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                  
-                  {/* Total summary info */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px', marginTop: '8px' }}>
-                    <span style={{ fontSize: '0.9rem', fontWeight: '900', color: '#f8fafc' }}>Total Invoice:</span>
-                    <span style={{ fontSize: '1.1rem', fontWeight: '900', color: '#38bdf8' }}>
-                      {selectedOrderDetails.currency === 'USD' 
-                        ? `$${selectedOrderDetails.total_usd}` 
-                        : `₡${selectedOrderDetails.total_crc.toLocaleString('en-US')}`
-                      }
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
+        <OrderDetailPanel
+          order={selectedOrderDetails}
+          onClose={() => setSelectedOrderDetails(null)}
+          onUpdated={handleOrderUpdated}
+          onStatusChange={handleOrderStatusUpdate}
+          onTrackingChange={handleOrderTrackingUpdate}
+        />
       )}
+
+      <GlobalSearch
+        open={globalSearchOpen}
+        onClose={() => setGlobalSearchOpen(false)}
+        orders={orders}
+        products={products}
+        leads={leads}
+        onSelect={handleGlobalSearchSelect}
+      />
+
+      <ManualOrderModal
+        open={manualOrderOpen}
+        onClose={() => setManualOrderOpen(false)}
+        products={products}
+        onCreated={handleManualOrderCreated}
+      />
 
       {/* Cart Details Modal */}
       {selectedCartDetails && (

@@ -205,7 +205,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [dbClickEvents, setDbClickEvents] = useState([]);
 
   // Heatmap UI States
-  const [heatmapViewMode, setHeatmapViewMode] = useState('simulation'); // 'live' | 'simulation'
+  const heatmapViewMode = 'live';
   const [heatmapIntentFilter, setHeatmapIntentFilter] = useState('all'); // 'all' | 'intent'
   
   // Real-time counter of updates
@@ -260,10 +260,6 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           if (!cErr && cData) setDbCarts(cData);
           if (!clErr && clicks) {
             setDbClickEvents(clicks);
-            // If we actually have live clicks, default our heatmap to show live data!
-            if (clicks.length > 0) {
-              setHeatmapViewMode('live');
-            }
           }
 
           // If we successfully fetched at least some data, set as live database mode
@@ -273,7 +269,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             liveConnected = true; // Orders are populated
           }
         } catch (err) {
-          console.error("Database analytics fetch failed, using simulation mode fallback:", err);
+          console.error("Database analytics fetch failed:", err);
         }
       }
 
@@ -284,123 +280,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     fetchDbAnalytics();
   }, [refreshKey]);
 
-  // Fallback Simulation Data (when DB is empty or during local run)
-  const getSimulatedData = () => {
-    // Generate realistic analytics logs based on current date
-    const now = new Date();
-    
-    // Simulate orders
-    const simOrders = [
-      { id: '1', customer_name: 'Mateo Vargas', total_usd: 145, total_crc: 65900, status: 'Completed', payment_method: 'tilopay', location_data: { city: 'Escazú' }, created_at: new Date(now - 3 * 3600000).toISOString(), items: [{ product: 'Tirzepatide 10mg', qty: 1 }] },
-      { id: '2', customer_name: 'Elena Rojas', total_usd: 250, total_crc: 113500, status: 'Paid', payment_method: 'sinpe', location_data: { city: 'San José' }, created_at: new Date(now - 12 * 3600000).toISOString(), items: [{ product: 'Semaglutide 5mg', qty: 2 }] },
-      { id: '3', customer_name: 'John Doe', total_usd: 95, total_crc: 43100, status: 'Completed', payment_method: 'paypal', location_data: { city: 'Santa Ana' }, created_at: new Date(now - 28 * 3600000).toISOString(), items: [{ product: 'BPC-157 5mg', qty: 1 }] },
-      { id: '4', customer_name: 'Sofía Castro', total_usd: 380, total_crc: 172700, status: 'Pending', payment_method: 'whatsapp', location_data: { city: 'Heredia' }, created_at: new Date(now - 36 * 3600000).toISOString(), items: [{ product: 'Tirzepatide 10mg', qty: 2 }, { product: 'TB-500 5mg', qty: 1 }] },
-      { id: '5', customer_name: 'Andrés Mora', total_usd: 120, total_crc: 54500, status: 'Completed', payment_method: 'whatsapp', location_data: { city: 'Alajuela' }, created_at: new Date(now - 55 * 3600000).toISOString(), items: [{ product: 'Retatrutide 10mg', qty: 1 }] },
-      { id: '6', customer_name: 'Lucía Méndez', total_usd: 190, total_crc: 86300, status: 'Cancelled', payment_method: 'tilopay', location_data: { city: 'Cartago' }, created_at: new Date(now - 90 * 3600000).toISOString(), items: [{ product: 'Semaglutide 5mg', qty: 1 }] },
-      { id: '7', customer_name: 'William Smith', total_usd: 280, total_crc: 127200, status: 'Completed', payment_method: 'paypal', location_data: { city: 'Liberia' }, created_at: new Date(now - 120 * 3600000).toISOString(), items: [{ product: 'Tirzepatide 10mg', qty: 2 }] },
-      { id: '8', customer_name: 'Daniel Jiménez', total_usd: 145, total_crc: 65900, status: 'Paid', payment_method: 'sinpe', location_data: { city: 'San José' }, created_at: new Date(now - 145 * 3600000).toISOString(), items: [{ product: 'Tirzepatide 10mg', qty: 1 }] }
-    ];
-
-    // Simulate carts
-    const simCarts = [
-      { id: 'c1', customer_name: 'Alejandro G.', status: 'active', cart_data: [{ product: 'Semaglutide 5mg', qty: 1, price_usd: '95' }], location_data: { city: 'San José' }, created_at: new Date(now - 2 * 3600000).toISOString() },
-      { id: 'c2', customer_name: 'Gabriela S.', status: 'active', cart_data: [{ product: 'Tirzepatide 10mg', qty: 2, price_usd: '145' }], location_data: { city: 'Escazú' }, created_at: new Date(now - 5 * 3600000).toISOString() },
-      { id: 'c3', customer_name: 'Roberto D.', status: 'converted', cart_data: [{ product: 'Retatrutide 10mg', qty: 1, price_usd: '120' }], location_data: { city: 'Santa Ana' }, created_at: new Date(now - 10 * 3600000).toISOString() },
-      { id: 'c4', customer_name: 'Mariana K.', status: 'active', cart_data: [{ product: 'BPC-157 5mg', qty: 1, price_usd: '95' }], location_data: { city: 'Heredia' }, created_at: new Date(now - 25 * 3600000).toISOString() },
-      { id: 'c5', customer_name: 'Thomas P.', status: 'converted', cart_data: [{ product: 'Tirzepatide 10mg', qty: 1, price_usd: '145' }], location_data: { city: 'Liberia' }, created_at: new Date(now - 48 * 3600000).toISOString() },
-      { id: 'c6', customer_name: 'Valeria R.', status: 'active', cart_data: [{ product: 'Semaglutide 5mg', qty: 1, price_usd: '95' }], location_data: { city: 'Alajuela' }, created_at: new Date(now - 72 * 3600000).toISOString() }
-    ];
-
-    // Simulate visitor sessions
-    const simSessions = [
-      { session_id: 's1', city: 'San José', region: 'San José', country: 'Costa Rica', catalog_duration: 380, device_info: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', created_at: new Date(now - 1 * 3600000).toISOString() },
-      { session_id: 's2', city: 'Escazú', region: 'San José', country: 'Costa Rica', catalog_duration: 180, device_info: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', created_at: new Date(now - 2 * 3600000).toISOString() },
-      { session_id: 's3', city: 'Santa Ana', region: 'San José', country: 'Costa Rica', catalog_duration: 490, device_info: 'Mozilla/5.0 (Linux; Android 10; K)', created_at: new Date(now - 5 * 3600000).toISOString() },
-      { session_id: 's4', city: 'San José', region: 'San José', country: 'Costa Rica', catalog_duration: 90, device_info: 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)', created_at: new Date(now - 8 * 3600000).toISOString() },
-      { session_id: 's5', city: 'Heredia', region: 'Heredia', country: 'Costa Rica', catalog_duration: 250, device_info: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)', created_at: new Date(now - 12 * 3600000).toISOString() },
-      { session_id: 's6', city: 'Alajuela', region: 'Alajuela', country: 'Costa Rica', catalog_duration: 120, device_info: 'Mozilla/5.0 (Linux; Android 13; SM-A536B)', created_at: new Date(now - 18 * 3600000).toISOString() },
-      { session_id: 's7', city: 'Cartago', region: 'Cartago', country: 'Costa Rica', catalog_duration: 200, device_info: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', created_at: new Date(now - 30 * 3600000).toISOString() },
-      { session_id: 's8', city: 'Liberia', region: 'Guanacaste', country: 'Costa Rica', catalog_duration: 610, device_info: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', created_at: new Date(now - 45 * 3600000).toISOString() },
-      { session_id: 's9', city: 'San José', region: 'San José', country: 'Costa Rica', catalog_duration: 220, device_info: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X)', created_at: new Date(now - 60 * 3600000).toISOString() },
-      { session_id: 's10', city: 'Escazú', region: 'San José', country: 'Costa Rica', catalog_duration: 410, device_info: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', created_at: new Date(now - 80 * 3600000).toISOString() }
-    ];
-
-    // Simulate product views
-    const simViews = [
-      { product_name: 'Tirzepatide 10mg', created_at: new Date(now - 1 * 3600000).toISOString() },
-      { product_name: 'Semaglutide 5mg', created_at: new Date(now - 2 * 3600000).toISOString() },
-      { product_name: 'Tirzepatide 10mg', created_at: new Date(now - 3 * 3600000).toISOString() },
-      { product_name: 'BPC-157 5mg', created_at: new Date(now - 4 * 3600000).toISOString() },
-      { product_name: 'Retatrutide 10mg', created_at: new Date(now - 5 * 3600000).toISOString() },
-      { product_name: 'Tirzepatide 10mg', created_at: new Date(now - 6 * 3600000).toISOString() },
-      { product_name: 'TB-500 5mg', created_at: new Date(now - 8 * 3600000).toISOString() },
-      { product_name: 'Semaglutide 5mg', created_at: new Date(now - 10 * 3600000).toISOString() },
-      { product_name: 'Tirzepatide 10mg', created_at: new Date(now - 12 * 3600000).toISOString() },
-      { product_name: 'Semaglutide 5mg', created_at: new Date(now - 15 * 3600000).toISOString() },
-      { product_name: 'BPC-157 5mg', created_at: new Date(now - 20 * 3600000).toISOString() },
-      { product_name: 'Retatrutide 10mg', created_at: new Date(now - 25 * 3600000).toISOString() },
-      { product_name: 'Tirzepatide 10mg', created_at: new Date(now - 30 * 3600000).toISOString() },
-      { product_name: 'TB-500 5mg', created_at: new Date(now - 35 * 3600000).toISOString() },
-      { product_name: 'BPC-157 5mg', created_at: new Date(now - 40 * 3600000).toISOString() }
-    ];
-
-    // Simulate mobile click events
-    const simClicks = [
-      { element_name: 'WhatsApp Floating Icon', x_pct: 86, y_pct: 91, path: '/catalog', is_mobile: true, created_at: new Date(now - 1 * 3600000).toISOString() },
-      { element_name: 'WhatsApp Floating Icon', x_pct: 85, y_pct: 92, path: '/catalog', is_mobile: true, created_at: new Date(now - 3 * 3600000).toISOString() },
-      { element_name: 'WhatsApp Floating Icon', x_pct: 88, y_pct: 90, path: '/catalog', is_mobile: true, created_at: new Date(now - 6 * 3600000).toISOString() },
-      { element_name: 'WhatsApp Floating Icon', x_pct: 86, y_pct: 93, path: '/catalog', is_mobile: true, created_at: new Date(now - 12 * 3600000).toISOString() },
-      
-      { element_name: 'Añadir al Carrito (BPC-157 5mg)', x_pct: 50, y_pct: 61, path: '/catalog', is_mobile: true, created_at: new Date(now - 2 * 3600000).toISOString() },
-      { element_name: 'Añadir al Carrito (BPC-157 5mg)', x_pct: 48, y_pct: 62, path: '/catalog', is_mobile: true, created_at: new Date(now - 4 * 3600000).toISOString() },
-      { element_name: 'Añadir al Carrito (BPC-157 5mg)', x_pct: 52, y_pct: 60, path: '/catalog', is_mobile: true, created_at: new Date(now - 7 * 3600000).toISOString() },
-      { element_name: 'Añadir al Carrito (BPC-157 5mg)', x_pct: 50, y_pct: 62, path: '/catalog', is_mobile: true, created_at: new Date(now - 9 * 3600000).toISOString() },
-      { element_name: 'Añadir al Carrito (BPC-157 5mg)', x_pct: 51, y_pct: 63, path: '/catalog', is_mobile: true, created_at: new Date(now - 18 * 3600000).toISOString() },
-
-      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', x_pct: 49, y_pct: 85, path: '/catalog', is_mobile: true, created_at: new Date(now - 3 * 3600000).toISOString() },
-      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', x_pct: 53, y_pct: 86, path: '/catalog', is_mobile: true, created_at: new Date(now - 8 * 3600000).toISOString() },
-      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', x_pct: 50, y_pct: 87, path: '/catalog', is_mobile: true, created_at: new Date(now - 11 * 3600000).toISOString() },
-      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', x_pct: 51, y_pct: 85, path: '/catalog', is_mobile: true, created_at: new Date(now - 22 * 3600000).toISOString() },
-
-      { element_name: '#search-input', x_pct: 35, y_pct: 8, path: '/catalog', is_mobile: true, created_at: new Date(now - 2 * 3600000).toISOString() },
-      { element_name: '#search-input', x_pct: 45, y_pct: 9, path: '/catalog', is_mobile: true, created_at: new Date(now - 5 * 3600000).toISOString() },
-      { element_name: '#search-input', x_pct: 20, y_pct: 8, path: '/catalog', is_mobile: true, created_at: new Date(now - 10 * 3600000).toISOString() },
-
-      { element_name: 'Tab: Recuperación', x_pct: 25, y_pct: 35, path: '/catalog', is_mobile: true, created_at: new Date(now - 1 * 3600000).toISOString() },
-      { element_name: 'Tab: Pérdida de Peso', x_pct: 65, y_pct: 35, path: '/catalog', is_mobile: true, created_at: new Date(now - 4 * 3600000).toISOString() },
-      
-      { element_name: 'Cart Icon (Header)', x_pct: 88, y_pct: 8, path: '/catalog', is_mobile: true, created_at: new Date(now - 3 * 3600000).toISOString() },
-      { element_name: 'Cart Icon (Header)', x_pct: 89, y_pct: 9, path: '/catalog', is_mobile: true, created_at: new Date(now - 15 * 3600000).toISOString() }
-    ];
-
-    return { simOrders, simCarts, simSessions, simViews, simClicks };
-  };
-
-  // Compile active data source based on whether we are in Live or Simulated mode
   const getProcessedData = () => {
-    let rawOrders = [];
-    let rawCarts = [];
-    let rawSessions = [];
-    let rawViews = [];
-    let rawClicks = [];
-
-    const useLive = isLive || isSupabaseConfigured;
-
-    if (useLive) {
-      rawOrders = parentOrders.length > 0 ? parentOrders : dbOrders;
-      rawCarts = parentCarts.length > 0 ? parentCarts : dbCarts;
-      rawSessions = dbSessions;
-      rawViews = dbProductViews;
-      rawClicks = dbClickEvents;
-    } else {
-      const sim = getSimulatedData();
-      // Supplement with whatever parent state has if it is non-empty
-      rawOrders = parentOrders.length > 0 ? parentOrders : sim.simOrders;
-      rawCarts = parentCarts.length > 0 ? parentCarts : sim.simCarts;
-      rawSessions = dbSessions.length > 0 ? dbSessions : sim.simSessions;
-      rawViews = dbProductViews.length > 0 ? dbProductViews : sim.simViews;
-      rawClicks = dbClickEvents.length > 0 ? dbClickEvents : sim.simClicks;
-    }
+    const rawOrders = parentOrders.length > 0 ? parentOrders : dbOrders;
+    const rawCarts = parentCarts.length > 0 ? parentCarts : dbCarts;
+    const rawSessions = dbSessions;
+    const rawViews = dbProductViews;
+    const rawClicks = dbClickEvents;
 
     // Filter by Time Range
     const now = new Date();
@@ -428,17 +313,6 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   // Calculate currently active live users (heartbeat within last 45 seconds)
   const getActiveLiveUsers = () => {
-    if (!isLive && !isSupabaseConfigured) {
-      // Sandbox mode: deterministic simulation of active users
-      const hour = new Date().getHours();
-      let base = 2;
-      if (hour >= 9 && hour <= 21) base = 4;
-      const seconds = new Date().getSeconds();
-      const fluctuation = (seconds % 3); 
-      return base + fluctuation;
-    }
-    
-    // Live mode: filter dbSessions by last_active within 45s of present time
     const threshold = new Date(Date.now() - 45000);
     return dbSessions.filter(s => s.last_active && new Date(s.last_active) >= threshold).length;
   };
@@ -830,40 +704,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     return null;
   };
 
-  const getHeatmapSource = () => {
-    const now = new Date();
-    if (heatmapViewMode === 'live') {
-      return clicks;
-    }
-    
-    return [
-      { element_name: 'WhatsApp Floating Icon', created_at: new Date(now - 1000 * 60 * 5).toISOString() },
-      { element_name: 'WhatsApp Floating Icon', created_at: new Date(now - 1000 * 60 * 15).toISOString() },
-      { element_name: 'WhatsApp Floating Icon', created_at: new Date(now - 1000 * 60 * 35).toISOString() },
-      { element_name: 'WhatsApp Floating Icon', created_at: new Date(now - 1000 * 60 * 70).toISOString() },
-      
-      { element_name: 'Añadir al Carrito (BPC-157 5mg)', created_at: new Date(now - 1000 * 60 * 2).toISOString() },
-      { element_name: 'Añadir al Carrito (BPC-157 5mg)', created_at: new Date(now - 1000 * 60 * 8).toISOString() },
-      { element_name: 'Añadir al Carrito (BPC-157 5mg)', created_at: new Date(now - 1000 * 60 * 18).toISOString() },
-      { element_name: 'Añadir al Carrito (BPC-157 5mg)', created_at: new Date(now - 1000 * 60 * 22).toISOString() },
-      { element_name: 'Añadir al Carrito (BPC-157 5mg)', created_at: new Date(now - 1000 * 60 * 45).toISOString() },
-
-      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', created_at: new Date(now - 1000 * 60 * 12).toISOString() },
-      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', created_at: new Date(now - 1000 * 60 * 20).toISOString() },
-      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', created_at: new Date(now - 1000 * 60 * 42).toISOString() },
-      { element_name: 'Añadir al Carrito (Semaglutide 5mg)', created_at: new Date(now - 1000 * 60 * 65).toISOString() },
-
-      { element_name: '#search-input', created_at: new Date(now - 1000 * 60 * 3).toISOString() },
-      { element_name: '#search-input', created_at: new Date(now - 1000 * 60 * 11).toISOString() },
-      { element_name: '#search-input', created_at: new Date(now - 1000 * 60 * 55).toISOString() },
-
-      { element_name: 'Tab: Recuperación', created_at: new Date(now - 1000 * 60 * 6).toISOString() },
-      { element_name: 'Tab: Pérdida de Peso', created_at: new Date(now - 1000 * 60 * 19).toISOString() },
-      
-      { element_name: 'Cart Icon (Header)', created_at: new Date(now - 1000 * 60 * 4).toISOString() },
-      { element_name: 'Cart Icon (Header)', created_at: new Date(now - 1000 * 60 * 30).toISOString() }
-    ];
-  };
+  const getHeatmapSource = () => clicks;
 
   const getRankedTargets = () => {
     const raw = getHeatmapSource();
@@ -1979,9 +1820,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {/* Live vs Simulation indicator */}
-          <div className={`mode-status-indicator ${isSupabaseConfigured || isLive ? 'mode-live' : 'mode-simulated'}`}>
+          <div className="mode-status-indicator mode-live">
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'currentColor', boxShadow: '0 0 8px currentColor' }}></div>
-            <span>{isSupabaseConfigured || isLive ? 'Live Supabase Data' : 'Sandbox Simulation Mode'}</span>
+            <span>Real Data Only</span>
           </div>
 
           {/* Currently Active Live Users Counter */}
@@ -2457,16 +2298,11 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             
             {/* Toggles */}
             <div className="heatmap-control-pills">
-              <button 
-                type="button"
-                className={`heatmap-pill-btn ${heatmapViewMode === 'live' ? 'active' : ''}`}
-                onClick={() => setHeatmapViewMode('live')}
-                disabled={clicks.length === 0}
+              <div
+                className="heatmap-pill-btn active"
                 style={{
-                  background: heatmapViewMode === 'live' ? '#10b981' : 'transparent',
-                  color: heatmapViewMode === 'live' ? '#fff' : '#64748b',
-                  opacity: clicks.length === 0 ? 0.5 : 1,
-                  cursor: clicks.length === 0 ? 'not-allowed' : 'pointer',
+                  background: '#10b981',
+                  color: '#fff',
                   border: 'none',
                   fontSize: '0.875rem',
                   padding: '4px 8px',
@@ -2474,9 +2310,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   fontWeight: 500,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px'
+                  gap: '6px',
                 }}
-                title={clicks.length === 0 ? "No recorded telemetry clicks in database yet" : "Show live storefront click heatmap"}
               >
                 <span style={{
                   width: '6px',
@@ -2484,36 +2319,17 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   borderRadius: '50%',
                   background: clicks.length === 0 ? '#64748b' : '#34d399',
                   boxShadow: clicks.length === 0 ? 'none' : '0 0 6px #34d399',
-                  display: 'inline-block'
+                  display: 'inline-block',
                 }}></span>
-                Live: {activeLiveUsers} Active Users
-              </button>
-              <button 
-                type="button"
-                className={`heatmap-pill-btn ${heatmapViewMode === 'simulation' ? 'active' : ''}`}
-                onClick={() => setHeatmapViewMode('simulation')}
-                style={{
-                  background: heatmapViewMode === 'simulation' ? '#fbbf24' : 'transparent',
-                  color: heatmapViewMode === 'simulation' ? '#1e293b' : '#64748b',
-                  cursor: 'pointer',
-                  border: 'none',
-                  fontSize: '0.875rem',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontWeight: 500,
-                  marginLeft: '4px'
-                }}
-              >
-                Simulation
-              </button>
+                Live: {activeLiveUsers} Active · {clicks.length} clicks
+              </div>
             </div>
           </div>
 
           <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '16px', marginTop: '-10px' }}>
-            {heatmapViewMode === 'live' 
-              ? `There are currently ${activeLiveUsers} active visitor sessions on your storefront catalog (heartbeats tracked in the last 45 seconds). Displaying cumulative mobile click telemetry.` 
-              : "Displaying simulated research-grade hotspots across key catalog components."
-            }
+            {clicks.length === 0
+              ? 'No mobile click telemetry recorded yet for this period. Data appears here as visitors interact with the catalog.'
+              : `${activeLiveUsers} active visitor session(s) in the last 45 seconds. Showing ${clicks.length} recorded mobile click(s).`}
           </p>
 
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>

@@ -31,6 +31,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [formError, setFormError] = useState('');
 
   const AVAILABLE_TABS = [
+    { id: 'home', label: 'Today (Home)' },
     { id: 'spreadsheet', label: 'Products' },
     { id: 'orders', label: 'Orders' },
     { id: 'customers', label: 'Customers' },
