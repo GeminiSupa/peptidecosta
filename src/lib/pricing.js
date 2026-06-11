@@ -8,11 +8,11 @@
 // Reference implementation: src/app/catalog/page.js
 //   - parsePrice / getPriceAsNumber
 //   - getVolumeDiscountPct (5+ vials = 15%, 10+ = 20%)
-//   - getShippingFee (free over $200 USD-equivalent, else ₡3500 / USD equiv)
+//   - getShippingFee (free over $200 USD-equivalent, else ₡2500 / USD equiv)
 
 export const FALLBACK_EXCHANGE_RATE = 454.48; // USD -> CRC, matches catalog fallback
 export const FREE_SHIPPING_USD_THRESHOLD = 200;
-export const FLAT_SHIPPING_CRC = 3500;
+export const FLAT_SHIPPING_CRC = 2500;
 
 /** Strip currency symbols / separators from a DB price string -> Number. */
 export function parsePrice(priceStr) {

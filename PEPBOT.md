@@ -215,7 +215,7 @@ Both can be used in the same request. Names are case-insensitive.
     "subtotal": 231000,
     "discountPct": 0,
     "discountAmount": 0,
-    "shipping": 3500,
+    "shipping": 2500,
     "vialCount": 3
   }
 }

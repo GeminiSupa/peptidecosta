@@ -22,7 +22,7 @@ import {
 const WHATSAPP_NUMBER = '50684046973';
 const FALLBACK_EXCHANGE_RATE = 454.48;
 const FREE_SHIPPING_USD_THRESHOLD = 200;
-const FLAT_SHIPPING_CRC = 3500;
+const FLAT_SHIPPING_CRC = 2500;
 
 const CATEGORY_TRANSLATIONS = {
   'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
@@ -1478,6 +1478,30 @@ export default function CatalogPage() {
     setPromoLoading(false);
   };
 
+  const saveOrderToDatabase = async (orderRow) => {
+    try {
+      const res = await fetch('/api/orders/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: orderRow, sessionId: sessionId || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error('Order save failed:', data.error || res.statusText);
+        return { ok: false, error: data.error || res.statusText };
+      }
+      if (data.ok && sessionId) {
+        const newSid = 'session_' + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('cart_session_id', newSid);
+        setSessionId(newSid);
+      }
+      return { ok: true, id: data.id };
+    } catch (err) {
+      console.error('Order save request failed:', err);
+      return { ok: false, error: err.message || 'Network error' };
+    }
+  };
+
   const sendOrderNotification = async (orderPayload) => {
     try {
       const res = await fetch('/api/order-notification', {
@@ -1518,36 +1542,38 @@ export default function CatalogPage() {
       price: getPriceAsNumber(item, currency),
     }));
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('orders').insert({
-          order_number: orderNum,
-          customer_name: customerName,
-          customer_phone: customerPhone,
-          customer_email: customerEmail || null,
-          shipping_address: shippingAddress,
-          customer_id_type: customerIdType,
-          customer_id_number: customerIdNumber,
-          items: orderItems,
-          total_usd: currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate),
-          total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
-          currency,
-          payment_method: method === 'sinpe' ? 'sinpe' : 'tilopay',
-          status: method === 'sinpe' ? 'Pending - SINPE Tilopay' : 'Pending - Card',
-          ip_address: customerMetadata?.ip_address || null,
-          location_data: customerMetadata?.location_data || null,
-          device_info: customerMetadata?.device_info || null,
-          sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
-          promo_code: promoData?.valid ? promoData.code : null,
-          discount_amount_usd: promoData?.valid ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
-          discount_amount_crc: promoData?.valid ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
-          affiliate_id: promoData?.valid ? promoData.affiliate_id : null,
-          affiliate_commission_usd: promoData?.valid ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * promoData.commission_rate).toFixed(2)) : 0,
-          affiliate_commission_crc: promoData?.valid ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * promoData.commission_rate) : 0,
-        });
-      } catch (err) {
-        console.error('Order pre-log failed:', err);
-      }
+    const tilopaySave = await saveOrderToDatabase({
+      order_number: orderNum,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_email: customerEmail || null,
+      shipping_address: shippingAddress,
+      customer_id_type: customerIdType,
+      customer_id_number: customerIdNumber,
+      items: orderItems,
+      total_usd: currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate),
+      total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
+      currency,
+      payment_method: method === 'sinpe' ? 'sinpe' : 'tilopay',
+      status: method === 'sinpe' ? 'Pending - SINPE Tilopay' : 'Pending - Card',
+      ip_address: customerMetadata?.ip_address || null,
+      location_data: customerMetadata?.location_data || null,
+      device_info: customerMetadata?.device_info || null,
+      sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
+      promo_code: promoData?.valid ? promoData.code : null,
+      discount_amount_usd: promoData?.valid ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
+      discount_amount_crc: promoData?.valid ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
+      affiliate_id: promoData?.valid ? promoData.affiliate_id : null,
+      affiliate_commission_usd: promoData?.valid ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * promoData.commission_rate).toFixed(2)) : 0,
+      affiliate_commission_crc: promoData?.valid ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * promoData.commission_rate) : 0,
+    });
+
+    if (!tilopaySave.ok) {
+      setTilopaySubmitting(false);
+      alert(lang === 'en'
+        ? 'Could not save your order. Please try again or contact us on WhatsApp.'
+        : 'No se pudo guardar su pedido. Por favor intente de nuevo o contáctenos por WhatsApp.');
+      return;
     }
 
     await sendOrderNotification({
@@ -1631,53 +1657,41 @@ export default function CatalogPage() {
     const totalUsd = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
     const totalCrc = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
 
-    let dbSuccess = false;
-
-    // 1. Submit to Supabase if connected
     const whatsappSource = typeof window !== 'undefined' ? localStorage.getItem('whatsapp_source') : null;
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { error } = await supabase
-          .from('orders')
-          .insert({
-            order_number: orderNum,
-            customer_name: customerName,
-            customer_phone: customerPhone,
-            customer_email: customerEmail || null,
-            shipping_address: shippingAddress,
-            customer_id_type: customerIdType,
-            customer_id_number: customerIdNumber,
-            items: orderItems,
-            total_usd: currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate),
-            total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
-            currency: currency,
-            payment_method: paymentMethod,
-            status: 'Pending',
-            ip_address: customerMetadata?.ip_address || null,
-            location_data: customerMetadata?.location_data || null,
-            device_info: customerMetadata?.device_info || null,
-            whatsapp_source: whatsappSource || null,
-            sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
-            promo_code: promoData?.valid ? promoData.code : null,
-            discount_amount_usd: promoData?.valid ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
-            discount_amount_crc: promoData?.valid ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
-            affiliate_id: promoData?.valid ? promoData.affiliate_id : null,
-            affiliate_commission_usd: promoData?.valid ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * promoData.commission_rate).toFixed(2)) : 0,
-            affiliate_commission_crc: promoData?.valid ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * promoData.commission_rate) : 0,
-          });
 
-        if (!error) {
-          dbSuccess = true;
-          if (sessionId) {
-            await supabase.from('abandoned_carts').update({ status: 'converted' }).eq('session_id', sessionId);
-            const newSid = 'session_' + Math.random().toString(36).substring(2, 15);
-            localStorage.setItem('cart_session_id', newSid);
-            setSessionId(newSid);
-          }
-        }
-      } catch (err) {
-        console.error("Order logging failed to Supabase:", err);
-      }
+    const saveResult = await saveOrderToDatabase({
+      order_number: orderNum,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_email: customerEmail || null,
+      shipping_address: shippingAddress,
+      customer_id_type: customerIdType,
+      customer_id_number: customerIdNumber,
+      items: orderItems,
+      total_usd: currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate),
+      total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
+      currency: currency,
+      payment_method: paymentMethod,
+      status: 'Pending',
+      ip_address: customerMetadata?.ip_address || null,
+      location_data: customerMetadata?.location_data || null,
+      device_info: customerMetadata?.device_info || null,
+      whatsapp_source: whatsappSource || null,
+      sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
+      promo_code: promoData?.valid ? promoData.code : null,
+      discount_amount_usd: promoData?.valid ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
+      discount_amount_crc: promoData?.valid ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
+      affiliate_id: promoData?.valid ? promoData.affiliate_id : null,
+      affiliate_commission_usd: promoData?.valid ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * promoData.commission_rate).toFixed(2)) : 0,
+      affiliate_commission_crc: promoData?.valid ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * promoData.commission_rate) : 0,
+    });
+
+    if (!saveResult.ok) {
+      setOrderSubmitting(false);
+      alert(lang === 'en'
+        ? 'Could not save your order. Please try again or contact us on WhatsApp.'
+        : 'No se pudo guardar su pedido. Por favor intente de nuevo o contáctenos por WhatsApp.');
+      return;
     }
 
     await sendOrderNotification({
@@ -1814,7 +1828,7 @@ export default function CatalogPage() {
         
         let shippingFee = 0;
         if (itemsTotalUsd < 200) {
-          shippingFee = cur === 'USD' ? parseFloat((3500 / rate).toFixed(2)) : 3500;
+          shippingFee = cur === 'USD' ? parseFloat((FLAT_SHIPPING_CRC / rate).toFixed(2)) : FLAT_SHIPPING_CRC;
         }
         const totalVal = itemsTotal + shippingFee;
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
@@ -1869,7 +1883,7 @@ export default function CatalogPage() {
         const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
         let shippingFee = 0;
         if (itemsTotalUsd < 200) {
-          shippingFee = cur === 'USD' ? parseFloat((3500 / rate).toFixed(2)) : 3500;
+          shippingFee = cur === 'USD' ? parseFloat((FLAT_SHIPPING_CRC / rate).toFixed(2)) : FLAT_SHIPPING_CRC;
         }
         const totalVal = (itemsTotal - promoDiscount) + shippingFee;
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
@@ -1896,11 +1910,12 @@ export default function CatalogPage() {
           if (captureData.status === 'COMPLETED') {
             const paypalOrderNum = `PPCR-${data.orderID || captureData.id || Date.now().toString(36).toUpperCase()}`;
 
-            // Save order to Supabase as Paid
             const ppWaSource = typeof window !== 'undefined' ? localStorage.getItem('whatsapp_source') : null;
-            if (isSupabaseConfigured && supabase) {
-              try {
-                await supabase.from('orders').insert({
+            const paypalSave = await fetch('/api/orders/create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                order: {
                   order_number: paypalOrderNum,
                   customer_name: cName || 'PayPal Customer',
                   customer_phone: cPhone || '',
@@ -1925,17 +1940,17 @@ export default function CatalogPage() {
                   affiliate_id: pData?.valid ? pData.affiliate_id : null,
                   affiliate_commission_usd: pData?.valid ? parseFloat(((usdTotal - (cur === 'USD' ? shippingFee : shippingFee/rate)) * pData.commission_rate).toFixed(2)) : 0,
                   affiliate_commission_crc: pData?.valid ? Math.round(((cur === 'CRC' ? (totalVal - shippingFee) : (totalVal - shippingFee) * rate)) * pData.commission_rate) : 0,
-                });
-
-                if (sid) {
-                  await supabase.from('abandoned_carts').update({ status: 'converted' }).eq('session_id', sid);
-                  const newSid = 'session_' + Math.random().toString(36).substring(2, 15);
-                  localStorage.setItem('cart_session_id', newSid);
-                  setSessionId(newSid);
-                }
-              } catch (err) {
-                console.error('Failed to log PayPal order to Supabase:', err);
-              }
+                },
+                sessionId: sid || null,
+              }),
+            });
+            const paypalSaveData = await paypalSave.json().catch(() => ({}));
+            if (!paypalSave.ok) {
+              console.error('Failed to log PayPal order:', paypalSaveData.error);
+            } else if (sid) {
+              const newSid = 'session_' + Math.random().toString(36).substring(2, 15);
+              localStorage.setItem('cart_session_id', newSid);
+              setSessionId(newSid);
             }
 
             await sendOrderNotification({

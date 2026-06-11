@@ -1,0 +1,71 @@
+import { NextResponse } from 'next/server';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+
+export const runtime = 'nodejs';
+
+const REQUIRED_FIELDS = ['order_number', 'customer_name', 'customer_phone', 'items'];
+
+function isFkViolation(error) {
+  const msg = error?.message || '';
+  return msg.includes('foreign key constraint') || error?.code === '23503';
+}
+
+export async function POST(request) {
+  try {
+    const body = await request.json();
+    const order = body?.order;
+
+    if (!order || typeof order !== 'object') {
+      return NextResponse.json({ error: 'Missing order payload' }, { status: 400 });
+    }
+
+    for (const field of REQUIRED_FIELDS) {
+      if (!order[field]) {
+        return NextResponse.json({ error: `Missing required field: ${field}` }, { status: 400 });
+      }
+    }
+
+    if (!Array.isArray(order.items) || order.items.length === 0) {
+      return NextResponse.json({ error: 'Order must include at least one item' }, { status: 400 });
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    let { data, error } = await supabase
+      .from('orders')
+      .insert(order)
+      .select('id, order_number')
+      .single();
+
+    if (error && isFkViolation(error) && order.affiliate_id) {
+      console.warn('[orders/create] Affiliate FK failed, retrying without affiliate fields:', error.message);
+      const { affiliate_id, affiliate_commission_usd, affiliate_commission_crc, ...withoutAffiliate } = order;
+      ({ data, error } = await supabase
+        .from('orders')
+        .insert(withoutAffiliate)
+        .select('id, order_number')
+        .single());
+    }
+
+    if (error) {
+      console.error('[orders/create] Insert failed:', error.message, { order_number: order.order_number });
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (body.sessionId) {
+      const { error: cartErr } = await supabase
+        .from('abandoned_carts')
+        .update({ status: 'converted' })
+        .eq('session_id', body.sessionId);
+
+      if (cartErr) {
+        console.warn('[orders/create] Abandoned cart update failed:', cartErr.message);
+      }
+    }
+
+    return NextResponse.json({ ok: true, id: data.id, orderNumber: data.order_number });
+  } catch (err) {
+    console.error('[orders/create] Unexpected error:', err);
+    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+  }
+}
