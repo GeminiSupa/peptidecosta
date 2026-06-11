@@ -31,6 +31,17 @@ import ManualOrderModal from '@/components/admin/ManualOrderModal';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
 
+const formatCustomerIdType = (idType) => {
+  if (!idType) return '';
+  const types = {
+    '1': 'Cédula',
+    '2': 'Cédula jurídica',
+    '5': 'Passport',
+    '6': 'DIMEX',
+  };
+  return types[String(idType)] || idType;
+};
+
 const ADMIN_TABS = new Set([
   'home', 'spreadsheet', 'orders', 'customers', 'inquiries', 'leads',
   'carts', 'share', 'reviews', 'affiliates', 'analytics', 'cms',
@@ -1138,7 +1149,8 @@ Core Rules:
 
   const handleOrderUpdated = (updated) => {
     setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
-    setSelectedOrderDetails(updated);
+    // Only refresh the open detail panel — don't auto-open it on list status changes
+    setSelectedOrderDetails((prev) => (prev?.id === updated.id ? updated : prev));
   };
 
   const handleManualOrderCreated = (order) => {
@@ -2641,12 +2653,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         let title = 'Export';
 
         if (exportModalType === 'orders') {
-          headers = [ 'Order ID', 'Order Number', 'Date', 'Customer Name', 'Phone', 'Shipping Address', 'Status', 'Payment Method', 'Items', 'Total (CRC)', 'Total (USD)' ];
+          headers = [ 'Order ID', 'Order Number', 'Date', 'Customer Name', 'ID Number', 'ID Type', 'Phone', 'Shipping Address', 'Status', 'Payment Method', 'Items', 'Total (CRC)', 'Total (USD)' ];
           dataRows = orders.map(order => {
              const items = Array.isArray(order.items) ? order.items : [];
              const itemsSummary = items.map(i => `${i.product} x${i.qty}`).join(' | ');
              const orderDate = new Date(order.created_at).toLocaleString('es-CR', { timeZone: 'America/Costa_Rica' });
-             return [ order.id, order.order_number || 'N/A', orderDate, order.customer_name || 'N/A', order.customer_phone || '', order.shipping_address || 'N/A', order.status || 'Pending', order.payment_method || 'whatsapp', itemsSummary, order.total_crc || '', order.total_usd || '' ];
+             return [ order.id, order.order_number || 'N/A', orderDate, order.customer_name || 'N/A', order.customer_id_number || '', formatCustomerIdType(order.customer_id_type) || '', order.customer_phone || '', order.shipping_address || 'N/A', order.status || 'Pending', order.payment_method || 'whatsapp', itemsSummary, order.total_crc || '', order.total_usd || '' ];
           });
           filename = `peptidescr-orders-${new Date().toISOString().slice(0, 10)}`;
           title = 'Costa Rica Peptides - Orders Export';
@@ -3944,6 +3956,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 o.customer_email?.toLowerCase().includes(s) ||
                 o.id?.toLowerCase().includes(s) ||
                 o.order_number?.toLowerCase().includes(s) ||
+                o.customer_id_number?.toLowerCase().includes(s) ||
                 o.tracking_number?.toLowerCase().includes(s)
               );
             }
@@ -4070,6 +4083,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                                 <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
                                   💬 {order.customer_phone}
                                 </span>
+                                {order.customer_id_number && (
+                                  <span style={{ fontSize: '0.75rem', color: '#cbd5e1', fontFamily: 'monospace' }}>
+                                    🪪 {order.customer_id_number}
+                                    {order.customer_id_type ? ` (${formatCustomerIdType(order.customer_id_type)})` : ''}
+                                  </span>
+                                )}
                               </div>
                             </td>
                             <td data-label="Total Amount" style={{ padding: '10px 12px', fontWeight: 'bold', color: '#38bdf8', fontSize: '0.9rem' }}>
@@ -4094,7 +4113,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                               <select 
                                 className="cell-select"
                                 value={order.status || 'Pending'}
-                                onChange={(e) => handleOrderStatusUpdate(order.id, e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  handleOrderStatusUpdate(order.id, e.target.value);
+                                }}
                                 style={{
                                   padding: '4px 8px',
                                   borderRadius: '6px',

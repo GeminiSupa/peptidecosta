@@ -4,6 +4,17 @@ import React, { useState } from 'react';
 import { formatActivityType } from '@/lib/orderActivity';
 import { adminFetch } from '@/lib/adminApi';
 
+const formatCustomerIdType = (idType) => {
+  if (!idType) return '';
+  const types = {
+    '1': 'Cédula',
+    '2': 'Cédula jurídica',
+    '5': 'Passport',
+    '6': 'DIMEX',
+  };
+  return types[String(idType)] || idType;
+};
+
 export default function OrderDetailPanel({
   order,
   onClose,
@@ -98,6 +109,14 @@ export default function OrderDetailPanel({
             <div><label>Name</label><span>{order.customer_name}</span></div>
             <div><label>Phone</label><span style={{ color: '#4ade80' }}>{order.customer_phone}</span></div>
             <div><label>Email</label><span>{order.customer_email || '—'}</span></div>
+            <div>
+              <label>ID Number</label>
+              <span style={{ fontFamily: 'monospace' }}>
+                {order.customer_id_number
+                  ? `${order.customer_id_number}${order.customer_id_type ? ` (${formatCustomerIdType(order.customer_id_type)})` : ''}`
+                  : '—'}
+              </span>
+            </div>
             <div><label>Ordered</label><span>{new Date(order.created_at).toLocaleString()}</span></div>
           </div>
           {order.shipping_address && (

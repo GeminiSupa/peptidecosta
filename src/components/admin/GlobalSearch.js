@@ -53,7 +53,8 @@ export default function GlobalSearch({
 
     for (const o of orders) {
       const hay = [
-        o.order_number, o.customer_name, o.customer_phone, o.customer_email, o.id,
+        o.order_number, o.customer_name, o.customer_phone, o.customer_email,
+        o.customer_id_number, o.id,
       ].filter(Boolean).join(' ').toLowerCase();
       if (hay.includes(q)) {
         out.push({
