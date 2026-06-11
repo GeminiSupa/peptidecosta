@@ -211,6 +211,7 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const loggedInEmail = React.useRef(''); // persists the email used to sign in
+  const loadedProfileUserIdRef = React.useRef(null);
   
   // Mounted state for hydration fix
   const [mounted, setMounted] = useState(false);
@@ -1062,18 +1063,21 @@ Core Rules:
   const [adminProfile, setAdminProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
 
-  const fetchAdminProfile = async (userId) => {
+  const fetchAdminProfile = async (userId, { showLoading = false, force = false } = {}) => {
     if (!isSupabaseConfigured || !supabase) return;
-    setProfileLoading(true);
+    if (!force && loadedProfileUserIdRef.current === userId) return;
+
+    if (showLoading) setProfileLoading(true);
     try {
       const { data, error } = await supabase.from('admin_profiles').select('*').eq('user_id', userId).single();
       if (!error && data) {
         setAdminProfile(data);
+        loadedProfileUserIdRef.current = userId;
       }
-    } catch(e) {
-      console.error("Failed to load admin profile", e);
+    } catch (e) {
+      console.error('Failed to load admin profile', e);
     } finally {
-      setProfileLoading(false);
+      if (showLoading) setProfileLoading(false);
     }
   };
 
@@ -1160,47 +1164,50 @@ Core Rules:
     navigateToTab('orders');
   };
 
-  // Auth session check on mount
+  // Auth session — bootstrap once per login, not on every token refresh
   useEffect(() => {
     setMounted(true);
-    // Restore last used email
     const savedEmail = localStorage.getItem('admin_email') || 'info@peptidescostarica.net';
     loggedInEmail.current = savedEmail;
 
-    if (isSupabaseConfigured && supabase) {
-      supabase.auth
-        .getSession()
-        .then(({ data: { session } }) => {
-          if (session) {
-            loggedInEmail.current = session.user.email || savedEmail;
-            setIsAuthenticated(true);
-            setProfileLoading(true);
-            loadAdminData();
-            fetchAdminProfile(session.user.id);
-          }
-        })
-        .catch(() => {
-          // Supabase auth unreachable — login form still works when network returns
-        });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session) {
-          setIsAuthenticated(true);
-          setProfileLoading(true);
-          loadAdminData();
-          fetchAdminProfile(session.user.id);
-        } else {
-          setIsAuthenticated(false);
-          setAdminProfile(null);
-          setProfileLoading(false);
-        }
-      });
-
-      return () => subscription.unsubscribe();
-    } else {
-      // If Supabase is not configured, we allow full frontend simulation
-      console.log("Supabase not fully configured. Running in Local Simulation Mode.");
+    if (!isSupabaseConfigured || !supabase) {
+      console.log('Supabase not fully configured. Running in Local Simulation Mode.');
+      return;
     }
+
+    const bootstrapAdminSession = (session) => {
+      if (!session?.user?.id) return;
+      loggedInEmail.current = session.user.email || loggedInEmail.current;
+      setIsAuthenticated(true);
+
+      const userId = session.user.id;
+      const isFirstLoadForUser = loadedProfileUserIdRef.current !== userId;
+      if (isFirstLoadForUser) {
+        fetchAdminProfile(userId, { showLoading: true });
+        loadAdminData();
+      }
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED') {
+        if (session) setIsAuthenticated(true);
+        return;
+      }
+
+      if (session) {
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+          bootstrapAdminSession(session);
+        }
+        return;
+      }
+
+      setIsAuthenticated(false);
+      setAdminProfile(null);
+      loadedProfileUserIdRef.current = null;
+      setProfileLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   // Fetch live exchange rate
@@ -1630,13 +1637,6 @@ Core Rules:
     setLoadingWhatsappMessages(false);
   };
 
-  // Trigger loading when authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadAdminData();
-    }
-  }, [isAuthenticated]);
-
   // Auth Handlers
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -1676,6 +1676,7 @@ Core Rules:
   };
 
   const handleLogout = async () => {
+    loadedProfileUserIdRef.current = null;
     if (isSupabaseConfigured && supabase) {
       await supabase.auth.signOut();
     }
@@ -1740,6 +1741,7 @@ Core Rules:
       setTimeout(async () => {
         setPasswordStatus('');
         setShowPasswordModal(false);
+        loadedProfileUserIdRef.current = null;
         await supabase.auth.signOut();
         setIsAuthenticated(false);
       }, 2500);
