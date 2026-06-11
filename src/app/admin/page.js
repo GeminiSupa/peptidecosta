@@ -1156,15 +1156,20 @@ Core Rules:
     loggedInEmail.current = savedEmail;
 
     if (isSupabaseConfigured && supabase) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          loggedInEmail.current = session.user.email || savedEmail;
-          setIsAuthenticated(true);
-          setProfileLoading(true);
-          loadAdminData();
-          fetchAdminProfile(session.user.id);
-        }
-      });
+      supabase.auth
+        .getSession()
+        .then(({ data: { session } }) => {
+          if (session) {
+            loggedInEmail.current = session.user.email || savedEmail;
+            setIsAuthenticated(true);
+            setProfileLoading(true);
+            loadAdminData();
+            fetchAdminProfile(session.user.id);
+          }
+        })
+        .catch(() => {
+          // Supabase auth unreachable — login form still works when network returns
+        });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session) {
