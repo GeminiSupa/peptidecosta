@@ -1,8 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { MessageCircle, Plus, Send, Trash2 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
+import {
+  buildCartRecoveryLink,
+  buildCartRecoveryWhatsAppMessage,
+  buildWhatsAppDeepLink,
+  formatPhoneForWhatsApp,
+} from '@/lib/whatsappRecovery';
 
 const productToCartItem = (product) => ({
   product: product.product,
@@ -21,6 +27,8 @@ export default function AbandonedCartEditPanel({ cart, products = [], onClose, o
   const [items, setItems] = useState([]);
   const [addProduct, setAddProduct] = useState('');
   const [saving, setSaving] = useState(false);
+  const [sendingBusinessWa, setSendingBusinessWa] = useState(false);
+  const [waSuccess, setWaSuccess] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -57,39 +65,154 @@ export default function AbandonedCartEditPanel({ cart, products = [], onClose, o
     setError('');
   };
 
+  const persistCart = async () => {
+    const res = await adminFetch('/api/admin/abandoned-carts/update', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        sessionId: cart.session_id,
+        updates: {
+          customer_name: name.trim() || null,
+          customer_phone: phone.trim() || null,
+          customer_email: email.trim() || null,
+          cart_data: items,
+        },
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Save failed');
+
+    if (data.deleted) {
+      onDeleted?.(cart.session_id);
+      onClose();
+      return null;
+    }
+
+    onSaved?.(data.cart);
+    return data.cart;
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError('');
+    setWaSuccess('');
     try {
-      const res = await adminFetch('/api/admin/abandoned-carts/update', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          sessionId: cart.session_id,
-          updates: {
-            customer_name: name.trim() || null,
-            customer_phone: phone.trim() || null,
-            customer_email: email.trim() || null,
-            cart_data: items,
-          },
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Save failed');
-
-      if (data.deleted) {
-        onDeleted?.(cart.session_id);
-        onClose();
-        return;
-      }
-
-      onSaved?.(data.cart);
+      await persistCart();
     } catch (err) {
       setError(err.message);
     }
     setSaving(false);
   };
 
-  const recoveryLink = `https://catalog.peptidescostarica.net/catalog?recover_session=${cart.session_id}`;
+  const recoveryLink = buildCartRecoveryLink(cart.session_id);
+
+  const markRecoverySent = () => {
+    const updated = {
+      ...cart,
+      customer_name: name.trim() || null,
+      customer_phone: phone.trim() || null,
+      customer_email: email.trim() || null,
+      cart_data: items,
+      recovery_whatsapp_sent: true,
+      recovery_whatsapp_sent_at: new Date().toISOString(),
+    };
+    onSaved?.(updated);
+  };
+
+  const handleSendBusinessWhatsApp = async () => {
+    const waPhone = formatPhoneForWhatsApp(phone);
+    if (!waPhone || waPhone.length < 8) {
+      setError('Add a valid customer phone number before sending via Business WhatsApp.');
+      return;
+    }
+    if (items.length === 0) {
+      setError('Add at least one cart item before sending recovery WhatsApp.');
+      return;
+    }
+
+    setSendingBusinessWa(true);
+    setError('');
+    setWaSuccess('');
+
+    try {
+      const saved = await persistCart();
+      if (!saved) return;
+
+      const message = buildCartRecoveryWhatsAppMessage({
+        name,
+        items,
+        recoveryLink,
+        updated: true,
+      });
+
+      // Try free-form message first (works within Meta's 24h customer service window)
+      const customRes = await adminFetch('/api/whatsapp/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          to: phone.trim(),
+          message,
+          customerName: name.trim() || 'Cliente',
+          sessionId: cart.session_id,
+        }),
+      });
+      const customData = await customRes.json();
+
+      if (customRes.ok && customData.success) {
+        markRecoverySent();
+        setWaSuccess('Custom recovery message sent from your business WhatsApp number.');
+        return;
+      }
+
+      // Outside 24h window — fall back to approved template (same as bulk Send WA)
+      const templateRes = await fetch('/api/abandoned-cart-whatsapp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: cart.session_id,
+          customer_name: name.trim() || cart.customer_name,
+          customer_phone: phone.trim(),
+          lang: cart.lang || 'es',
+        }),
+      });
+      const templateData = await templateRes.json();
+
+      if (templateRes.ok && templateData.success) {
+        markRecoverySent();
+        setWaSuccess('Recovery template sent from your business WhatsApp number.');
+        return;
+      }
+
+      throw new Error(
+        templateData.error ||
+          customData.error ||
+          'Business WhatsApp delivery failed. Try personal WhatsApp below.'
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSendingBusinessWa(false);
+    }
+  };
+
+  const openWhatsAppRecovery = () => {
+    const waPhone = formatPhoneForWhatsApp(phone);
+    if (!waPhone || waPhone.length < 8) {
+      setError('Add a valid customer phone number before opening WhatsApp.');
+      return;
+    }
+    const message = buildCartRecoveryWhatsAppMessage({
+      name,
+      items,
+      recoveryLink,
+      updated: true,
+    });
+    const link = buildWhatsAppDeepLink(phone, message);
+    if (!link) {
+      setError('Could not build WhatsApp link — check the phone number.');
+      return;
+    }
+    setError('');
+    window.open(link, '_blank', 'noopener,noreferrer');
+  };
 
   return (
     <div className="modal active" onClick={onClose} style={{ zIndex: 210 }}>
@@ -169,12 +292,85 @@ export default function AbandonedCartEditPanel({ cart, products = [], onClose, o
           <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 8px' }}>
             Send this after edits so the customer sees the updated cart at checkout.
           </p>
-          <input className="admin-input" readOnly value={recoveryLink} onFocus={(e) => e.target.select()} />
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <input
+              className="admin-input"
+              readOnly
+              value={recoveryLink}
+              onFocus={(e) => e.target.select()}
+              style={{ flex: 1, minWidth: '200px' }}
+            />
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary"
+              onClick={() => navigator.clipboard?.writeText(recoveryLink)}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Copy link
+            </button>
+          </div>
+          <button
+            type="button"
+            className="admin-btn admin-btn-primary"
+            onClick={handleSendBusinessWhatsApp}
+            disabled={sendingBusinessWa || !phone.trim() || items.length === 0}
+            style={{
+              width: '100%',
+              marginTop: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+            }}
+          >
+            <Send size={16} />
+            {sendingBusinessWa ? 'Sending via Business WhatsApp…' : 'Send via Business WhatsApp'}
+          </button>
+          <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '8px 0 0' }}>
+            Saves your edits first, then sends from your business number. Uses a custom message when the customer is in the 24h chat window; otherwise sends the approved recovery template (same as bulk Send WA).
+          </p>
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary"
+            onClick={openWhatsAppRecovery}
+            disabled={!phone.trim() || items.length === 0}
+            style={{
+              width: '100%',
+              marginTop: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+            }}
+          >
+            <MessageCircle size={16} />
+            Open personal WhatsApp (fallback)
+          </button>
+          {(!phone.trim() || items.length === 0) && (
+            <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '8px 0 0' }}>
+              Add a phone number and at least one cart item to enable WhatsApp.
+            </p>
+          )}
+          {cart.recovery_whatsapp_sent && (
+            <p style={{ fontSize: '0.72rem', color: '#4ade80', margin: '8px 0 0' }}>
+              Recovery WhatsApp previously sent
+              {cart.recovery_whatsapp_sent_at
+                ? ` (${new Date(cart.recovery_whatsapp_sent_at).toLocaleString()})`
+                : ''}.
+            </p>
+          )}
         </div>
 
+        {waSuccess && <p style={{ color: '#4ade80', fontSize: '0.85rem' }}>{waSuccess}</p>}
         {error && <p style={{ color: '#f87171', fontSize: '0.85rem' }}>{error}</p>}
 
-        <button type="button" className="admin-btn admin-btn-primary" onClick={handleSave} disabled={saving} style={{ width: '100%' }}>
+        <button
+          type="button"
+          className="admin-btn admin-btn-secondary"
+          onClick={handleSave}
+          disabled={saving || sendingBusinessWa}
+          style={{ width: '100%' }}
+        >
           {saving ? 'Saving…' : 'Save Changes'}
         </button>
       </div>

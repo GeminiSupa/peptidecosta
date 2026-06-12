@@ -46,7 +46,7 @@ export async function POST(request) {
 
     // Dynamic checkout URL to allow recovery
     const origin = request.headers.get('origin') || 'https://catalog.peptidescostarica.net';
-    const checkoutUrl = `${origin}/catalog?session_id=${session_id}&recovered=true`;
+    const checkoutUrl = `${origin}/catalog?recover_session=${encodeURIComponent(session_id)}`;
 
     // Sanitize customer name to prevent literal 'null', 'undefined', 'n/a', etc.
     let customerDisplayName = 'Cliente';

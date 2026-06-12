@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
+import { buildWhatsAppCustomerContext } from '@/lib/whatsappAiContext';
 
 // ─── Supabase client (server-side with service role for writes) ───
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -154,7 +156,7 @@ export async function POST(request) {
           if (ACCESS_TOKEN && PHONE_NUMBER_ID) {
             try {
               let aiAutoReply = !!process.env.GEMINI_API_KEY;
-              let aiSystemPrompt = "You are 'Costa Peptides Support Copilot', a warm, professional customer support agent for Peptides Costa Rica. Answer customer questions about peptides (like BPC-157, TB-500, CJC-1295, Semaglutide, etc.) scientifically yet clearly. Mention shipping in Costa Rica is via Correos de Costa Rica (takes 1-3 days, free for orders over 30,000 CRC). Always refer to catalog prices in Costa Rican Colones or US Dollars. Speak fluently in Costa Rican Spanish (use polite terms, 'con gusto', 'Pura vida' if appropriate but remain professional).";
+              let aiSystemPrompt = DEFAULT_WHATSAPP_AI_PROMPT;
               
               // 1. Fetch settings from Supabase
               if (supabase) {
@@ -194,20 +196,29 @@ export async function POST(request) {
                 }
               }
 
-              // 3. Fetch Conversation Memory (last 8 messages)
-              let memoryContext = "";
+              // 3. Customer CRM context (orders + active abandoned carts)
+              let customerContext = '';
+              if (supabase && aiAutoReply) {
+                customerContext = await buildWhatsAppCustomerContext(supabase, waId);
+              }
+
+              // 4. Fetch Conversation Memory (last 8 messages, excluding current inbound)
+              let memoryContext = '';
               if (supabase && aiAutoReply) {
                 try {
                   const { data: pastMessages } = await supabase
                     .from('whatsapp_messages')
-                    .select('direction, message_text, display_name')
+                    .select('direction, message_text, display_name, created_at')
                     .eq('wa_id', waId)
                     .order('created_at', { ascending: false })
-                    .limit(8);
-                  if (pastMessages && pastMessages.length > 0) {
-                    const chronological = [...pastMessages].reverse();
-                    memoryContext = "Recent Conversation History:\n" + chronological.map(m => 
-                      `${m.direction === 'inbound' ? 'Customer' : 'Store Assistant (' + (m.display_name || 'AI') + ')'}: "${m.message_text}"`
+                    .limit(10);
+                  const filtered = (pastMessages || []).filter(
+                    (m) => !(m.direction === 'inbound' && m.message_text === messageText)
+                  ).slice(0, 8);
+                  if (filtered.length > 0) {
+                    const chronological = [...filtered].reverse();
+                    memoryContext = 'Recent Conversation History:\n' + chronological.map((m) =>
+                      `${m.direction === 'inbound' ? 'Customer' : `Store Assistant (${m.display_name || 'AI'})`}: "${m.message_text}"`
                     ).join('\n');
                   }
                 } catch (err) {
@@ -215,7 +226,7 @@ export async function POST(request) {
                 }
               }
 
-              // 4. Generate AI Reply or fallback
+              // 5. Generate AI Reply or fallback
               let replyText = "";
               let isAiGenerated = false;
 
@@ -227,6 +238,8 @@ ${aiSystemPrompt}
 
 ${catalogContext}
 
+${customerContext}
+
 ${memoryContext}
 
 Customer Information:
@@ -237,7 +250,7 @@ ${matchedOrderId ? `- Matched Order ID: ${matchedOrderId}` : ''}
 New Inbound Customer Message:
 "${messageText}"
 
-Please reply naturally, keeping the tone warm, professional, helpful, and highly scientific yet accessible. Output ONLY the response text to send back. Do not include any JSON wrapping or markdown preamble. Keep under 1000 characters if possible.
+Reply in the same language the customer used (Spanish or English). If they have an active abandoned cart in context, you may share their recovery link when helpful. Please reply naturally, keeping the tone warm, professional, helpful, and highly scientific yet accessible. Output ONLY the response text to send back. Do not include any JSON wrapping or markdown preamble. Keep under 1000 characters if possible.
 `;
 
                   const response = await fetch(

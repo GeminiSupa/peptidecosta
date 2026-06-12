@@ -29,6 +29,7 @@ import NotificationCenter from '@/components/admin/NotificationCenter';
 import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
 import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
+import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
 
@@ -332,7 +333,7 @@ export default function AdminPage() {
   const [activeChatWaId, setActiveChatWaId] = useState(null);
   const [whatsappSettings, setWhatsappSettings] = useState({
     ai_auto_reply: true,
-    ai_system_prompt: "You are 'Costa Peptides Support Copilot', a warm, professional customer support agent for Peptides Costa Rica. Answer customer questions about peptides (like BPC-157, TB-500, CJC-1295, Semaglutide, etc.) scientifically yet clearly. Mention shipping in Costa Rica is via Correos de Costa Rica (takes 1-3 days, free for orders over 30,000 CRC). Always refer to catalog prices in Costa Rican Colones or US Dollars. Speak fluently in Costa Rican Spanish (use polite terms, 'con gusto', 'Pura vida' if appropriate but remain professional)."
+    ai_system_prompt: DEFAULT_WHATSAPP_AI_PROMPT,
   });
   const [savingWaSettings, setSavingWaSettings] = useState(false);
   const [chatInputText, setChatInputText] = useState('');
@@ -376,6 +377,26 @@ export default function AdminPage() {
 
       const latestMsg = activeThread[activeThread.length - 1]?.message_text || '';
 
+      const waTail = waId.replace(/\D/g, '').slice(-8);
+      const matchedOrders = orders
+        .filter((o) => (o.customer_phone || '').replace(/\D/g, '').includes(waTail))
+        .slice(0, 2);
+      const matchedCarts = abandonedCarts
+        .filter((c) => (c.customer_phone || '').replace(/\D/g, '').includes(waTail) && Array.isArray(c.cart_data) && c.cart_data.length > 0)
+        .slice(0, 2);
+
+      let crmContext = '';
+      if (matchedOrders.length) {
+        crmContext += 'Customer orders:\n' + matchedOrders.map((o) =>
+          `- #${o.order_number || o.id.slice(0, 8)} (${o.status}): ${(o.items || []).map((i) => `${i.product} x${i.qty}`).join(', ')}`
+        ).join('\n') + '\n\n';
+      }
+      if (matchedCarts.length) {
+        crmContext += 'Active abandoned carts:\n' + matchedCarts.map((c) =>
+          `- ${c.cart_data.map((i) => `${i.product} x${i.qty}`).join(', ')} | https://catalog.peptidescostarica.net/catalog?recover_session=${c.session_id}`
+        ).join('\n');
+      }
+
       const promptText = `
 System Instructions:
 ${whatsappSettings.ai_system_prompt}
@@ -383,13 +404,14 @@ ${whatsappSettings.ai_system_prompt}
 Active Products in Catalog:
 ${products.map(p => `- ${p.product} (Category: ${p.category}, Price: ${p.priceUsd} USD / ${p.priceCrc || 'N/A'} CRC, Status: ${p.status})`).join('\n')}
 
+${crmContext ? `Customer CRM Context:\n${crmContext}\n` : ''}
 Recent Conversation Thread:
 ${threadContext}
 
 Customer's Latest Message:
 "${latestMsg}"
 
-Please draft a perfect next response to this customer. Write only the reply body ready to send. Keep it natural, polite, and scientific yet friendly. Return ONLY the reply text, no headers or meta-notes.
+Please draft a perfect next response to this customer. Match their language (Spanish or English). Write only the reply body ready to send. Keep it natural, polite, and scientific yet friendly. Return ONLY the reply text, no headers or meta-notes.
 `;
 
       const res = await adminFetch('/api/ai', {
@@ -2406,8 +2428,8 @@ Core Rules:
       itemsStr = recipient.cartItems.map(i => `${i.product || i.name || 'Péptido'} (x${i.qty || i.quantity || 1})`).join(', ');
     }
 
-    const recoveryLink = recipient.session_id 
-      ? `https://catalog.peptidescostarica.net/catalog?recover_session=${recipient.session_id}${agentName ? `&sales_agent=${encodeURIComponent(agentName)}` : ''}`
+    const recoveryLink = recipient.session_id
+      ? `https://catalog.peptidescostarica.net/catalog?recover_session=${encodeURIComponent(recipient.session_id)}${agentName ? `&sales_agent=${encodeURIComponent(agentName)}` : ''}`
       : 'https://catalog.peptidescostarica.net/catalog';
 
     // 1. Check if recovering abandoned cart
@@ -6334,7 +6356,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     ) : (
                       chatsList.map(chat => {
                         const isActive = activeChatWaId === chat.waId;
-                        const isAiLast = chat.direction === 'outbound' && whatsappMessages.find(m => m.wa_id === chat.waId)?.display_name === 'AI Copilot';
+                        const lastThreadMsg = whatsappMessages
+                          .filter((m) => m.wa_id === chat.waId)
+                          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+                          .at(-1);
+                        const isAiLast = lastThreadMsg?.direction === 'outbound' && lastThreadMsg?.display_name === 'AI Copilot';
                         
                         return (
                           <div
