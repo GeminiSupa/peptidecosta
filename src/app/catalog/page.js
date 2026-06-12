@@ -287,18 +287,33 @@ export default function CatalogPage() {
     }
   }, []);
 
-  // Handle click outside to close search autocomplete dropdown
+  const closeSearch = useCallback(() => {
+    setSearchFocused(false);
+    document.getElementById('searchInput')?.blur();
+  }, []);
+
+  // Close search on outside tap/click, Escape, or scroll (mobile-friendly)
   useEffect(() => {
+    if (!searchFocused) return;
+
     const handleClickOutside = (event) => {
       if (searchRef.current && !searchRef.current.contains(event.target)) {
-        setSearchFocused(false);
+        closeSearch();
       }
     };
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') closeSearch();
+    };
+
     document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside, { passive: true });
+    document.addEventListener('keydown', handleEscape);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
     };
-  }, []);
+  }, [searchFocused, closeSearch]);
 
   // Handle 'product' URL parameter linking
   useEffect(() => {
@@ -915,42 +930,46 @@ export default function CatalogPage() {
     document.head.appendChild(script);
   }, []);
 
-  // Sync cart to localStorage and Supabase
+  // Sync cart to localStorage and Supabase abandoned_carts (only while cart has items)
   useEffect(() => {
     localStorage.setItem('cart', JSON.stringify(cart));
-    
+
     if (sessionId && isSupabaseConfigured && supabase) {
       const timeoutId = setTimeout(async () => {
-        if (cart.length > 0 || localStorage.getItem('had_items')) {
-          if (cart.length > 0) localStorage.setItem('had_items', 'true');
-          try {
-            const leadContact = localStorage.getItem('catalog_lead_contact');
-            const isEmail = leadContact && leadContact.includes('@');
-            const resolvedEmail = customerEmail || (isEmail ? leadContact : null);
-            const resolvedPhone = customerPhone || (leadContact && !isEmail ? leadContact : null);
-
-            // ONLY sync to abandoned_carts database if we have at least one way of contacting/identifying them
-            if (!customerName && !resolvedPhone && !resolvedEmail) {
-              return;
-            }
-
-            await supabase.from('abandoned_carts').upsert({
-              session_id: sessionId,
-              cart_data: cart,
-              customer_name: customerName || null,
-              customer_phone: resolvedPhone || null,
-              customer_email: resolvedEmail || null,
-              ip_address: customerMetadata?.ip_address || null,
-              location_data: customerMetadata?.location_data || null,
-              device_info: customerMetadata?.device_info || null,
-              last_updated: new Date().toISOString(),
-              status: 'active',
-              lang: lang || 'es',
-              currency: currency || 'CRC'
-            }, { onConflict: 'session_id' });
-          } catch (err) {
-            console.error('Failed to sync abandoned cart:', err);
+        try {
+          if (cart.length === 0) {
+            localStorage.removeItem('had_items');
+            await supabase.from('abandoned_carts').delete().eq('session_id', sessionId);
+            return;
           }
+
+          localStorage.setItem('had_items', 'true');
+          const leadContact = localStorage.getItem('catalog_lead_contact');
+          const isEmail = leadContact && leadContact.includes('@');
+          const resolvedEmail = customerEmail || (isEmail ? leadContact : null);
+          const resolvedPhone = customerPhone || (leadContact && !isEmail ? leadContact : null);
+
+          // Only track abandoned carts when we can identify/contact the shopper
+          if (!customerName && !resolvedPhone && !resolvedEmail) {
+            return;
+          }
+
+          await supabase.from('abandoned_carts').upsert({
+            session_id: sessionId,
+            cart_data: cart,
+            customer_name: customerName || null,
+            customer_phone: resolvedPhone || null,
+            customer_email: resolvedEmail || null,
+            ip_address: customerMetadata?.ip_address || null,
+            location_data: customerMetadata?.location_data || null,
+            device_info: customerMetadata?.device_info || null,
+            last_updated: new Date().toISOString(),
+            status: 'active',
+            lang: lang || 'es',
+            currency: currency || 'CRC'
+          }, { onConflict: 'session_id' });
+        } catch (err) {
+          console.error('Failed to sync abandoned cart:', err);
         }
       }, 1000);
       return () => clearTimeout(timeoutId);
@@ -2381,7 +2400,27 @@ export default function CatalogPage() {
                 onFocus={() => setSearchFocused(true)}
               />
               {searchFocused && (
+                <>
+                <div
+                  className="search-overlay-backdrop"
+                  onClick={closeSearch}
+                  onTouchEnd={(e) => { e.preventDefault(); closeSearch(); }}
+                  aria-hidden="true"
+                />
                 <div className="search-suggestions-dropdown" onClick={(e) => e.stopPropagation()}>
+                  <div className="search-dropdown-header">
+                    <span className="search-dropdown-title">
+                      {lang === 'en' ? 'Search' : 'Buscar'}
+                    </span>
+                    <button
+                      type="button"
+                      className="search-close-btn"
+                      onClick={closeSearch}
+                      aria-label={lang === 'en' ? 'Close search' : 'Cerrar búsqueda'}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
                   <div className="suggestions-section">
                     <span className="section-title">
                       {lang === 'en' ? 'Popular Searches' : 'Búsquedas Populares'}
@@ -2417,8 +2456,7 @@ export default function CatalogPage() {
                         </div>
                       ) : (
                         getSearchSuggestions().map((match, idx) => {
-                          const pMain = currency === 'USD' ? match.priceUsd : match.priceCrc;
-                          const formattedPrice = currency === 'USD' ? `$${pMain}` : `₡${pMain.toLocaleString()}`;
+                          const formattedPrice = formatPriceVal(getPriceAsNumber(match, currency), currency);
                           const isBac = isBacWater(match.product);
                           const inStock = isBac || isInStock(match.status);
                           const cartItem = cart.find(item => item.product === match.product);
@@ -2429,7 +2467,7 @@ export default function CatalogPage() {
                               className="suggested-product-row"
                               onClick={() => {
                                 handleProductClick(match);
-                                setSearchFocused(false);
+                                closeSearch();
                               }}
                             >
                               <div className="suggested-product-img">
@@ -2470,6 +2508,7 @@ export default function CatalogPage() {
                     </div>
                   </div>
                 </div>
+                </>
               )}
             </div>
             <button onClick={handleViewToggle} className="filter-btn" title={viewMode === 'list' ? (lang === 'en' ? 'Grid View' : 'Vista Cuadrícula') : (lang === 'en' ? 'List View' : 'Vista Lista')}>

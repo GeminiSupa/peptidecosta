@@ -17,6 +17,8 @@ export function formatActivityType(type) {
     payment_proof: 'Payment proof uploaded',
     manual_entry: 'Manual order entry',
     shipping_cost: 'Shipping cost updated',
+    contact_updated: 'Customer contact updated',
+    items_updated: 'Order items updated',
   };
   return labels[type] || type;
 }

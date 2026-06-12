@@ -20,6 +20,8 @@ export async function PATCH(request) {
     const allowed = [
       'status', 'tracking_number', 'sales_agent', 'internal_notes',
       'payment_proof_url', 'shipping_cost_crc', 'shipping_cost_usd',
+      'customer_name', 'customer_phone', 'customer_email', 'customer_id_number',
+      'shipping_address', 'items', 'total_usd', 'total_crc',
     ];
     const patch = {};
     for (const key of allowed) {

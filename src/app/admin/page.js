@@ -27,9 +27,12 @@ import DashboardHome from '@/components/admin/DashboardHome';
 import GlobalSearch from '@/components/admin/GlobalSearch';
 import NotificationCenter from '@/components/admin/NotificationCenter';
 import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
+import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
+
+const cartHasItems = (cartData) => Array.isArray(cartData) && cartData.length > 0;
 
 const formatCustomerIdType = (idType) => {
   if (!idType) return '';
@@ -1500,7 +1503,22 @@ Core Rules:
         const data = await fetchAllRows('abandoned_carts', 'last_updated', false, { col: 'status', val: 'active' });
 
         if (data) {
-          setAbandonedCarts(data);
+          const withItems = data.filter((c) => cartHasItems(c.cart_data));
+          const emptySessionIds = data
+            .filter((c) => !cartHasItems(c.cart_data))
+            .map((c) => c.session_id);
+
+          setAbandonedCarts(withItems);
+
+          if (emptySessionIds.length > 0) {
+            supabase
+              .from('abandoned_carts')
+              .delete()
+              .in('session_id', emptySessionIds)
+              .then(({ error }) => {
+                if (error) console.warn('Empty abandoned cart cleanup failed:', error.message);
+              });
+          }
         }
       } catch (err) {
         console.error("Failed to load abandoned carts:", err);
@@ -6865,6 +6883,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       {selectedOrderDetails && (
         <OrderDetailPanel
           order={selectedOrderDetails}
+          products={products}
           onClose={() => setSelectedOrderDetails(null)}
           onUpdated={handleOrderUpdated}
           onStatusChange={handleOrderStatusUpdate}
@@ -6888,124 +6907,20 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         onCreated={handleManualOrderCreated}
       />
 
-      {/* Cart Details Modal */}
       {selectedCartDetails && (
-        <div className="modal active" onClick={() => setSelectedCartDetails(null)} style={{ zIndex: 210 }}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', padding: '30px', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <button className="close-modal" onClick={() => setSelectedCartDetails(null)} style={{ color: '#94a3b8', fontSize: '1.5rem', top: '20px', right: '20px', background: 'none', border: 'none', cursor: 'pointer' }}>&times;</button>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-              <div style={{ padding: '10px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '12px', color: '#38bdf8', fontSize: '1.5rem' }}>🛒</div>
-              <div>
-                <h2 style={{ fontSize: '1.3rem', fontWeight: '900', color: '#f8fafc', margin: 0 }}>Abandoned Cart Detail</h2>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Session: {selectedCartDetails.session_id.slice(0, 12)}...</span>
-              </div>
-            </div>
-
-            {/* Profile Grid */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
-              {/* SECTION: CUSTOMER CONTACT */}
-              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Customer Profile</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Name</label>
-                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc' }}>{selectedCartDetails.customer_name || 'Anonymous User'}</span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Phone</label>
-                    <span style={{ fontSize: '0.9rem', color: '#4ade80', fontWeight: 'bold' }}>💬 {selectedCartDetails.customer_phone || 'Not provided'}</span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Email</label>
-                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{selectedCartDetails.customer_email || 'Not provided'}</span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Language Preferences</label>
-                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>{selectedCartDetails.lang ? selectedCartDetails.lang.toUpperCase() : 'EN'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION: DATES & TELEMETRY */}
-              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Cart Telemetry</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Last Updated</label>
-                    <span style={{ fontSize: '0.85rem', color: '#f8fafc' }}>{new Date(selectedCartDetails.last_updated).toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Recovery Email Status</label>
-                    <span style={{ 
-                      background: selectedCartDetails.recovery_email_sent ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)',
-                      color: selectedCartDetails.recovery_email_sent ? '#34d399' : '#94a3b8',
-                      padding: '4px 10px',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: 'bold',
-                      display: 'inline-block'
-                    }}>
-                      {selectedCartDetails.recovery_email_sent 
-                        ? `✉️ Sent (${new Date(selectedCartDetails.recovery_email_sent_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})})` 
-                        : '✉️ Not Sent'}
-                    </span>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Recovery WhatsApp Status</label>
-                    <span style={{ 
-                      background: selectedCartDetails.recovery_whatsapp_sent ? 'rgba(34, 197, 94, 0.15)' : 'rgba(148, 163, 184, 0.15)',
-                      color: selectedCartDetails.recovery_whatsapp_sent ? '#4ade80' : '#94a3b8',
-                      padding: '4px 10px',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: 'bold',
-                      display: 'inline-block'
-                    }}>
-                      {selectedCartDetails.recovery_whatsapp_sent 
-                        ? `💬 Sent (${new Date(selectedCartDetails.recovery_whatsapp_sent_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})})` 
-                        : '💬 Not Sent'}
-                    </span>
-                  </div>
-                  {selectedCartDetails.ip_address && (
-                    <div>
-                      <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>IP Address</label>
-                      <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontFamily: 'monospace' }}>🌐 {selectedCartDetails.ip_address}</span>
-                    </div>
-                  )}
-                  {selectedCartDetails.location_data && (
-                    <div>
-                      <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Location (IP resolved)</label>
-                      <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
-                        📍 {[selectedCartDetails.location_data.city, selectedCartDetails.location_data.region, selectedCartDetails.location_data.country].filter(Boolean).join(', ')}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* SECTION: ITEMS IN CART */}
-              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Cart Items</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {selectedCartDetails.cart_data && selectedCartDetails.cart_data.map((item, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#f8fafc' }}>{item.product}</span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#38bdf8' }}>x{item.qty}</span>
-                    </div>
-                  ))}
-                  {(!selectedCartDetails.cart_data || selectedCartDetails.cart_data.length === 0) && (
-                    <div style={{ padding: '14px', textAlign: 'center', color: '#64748b', fontSize: '0.85rem', background: 'rgba(255,255,255,0.01)', borderRadius: '8px', border: '1px dashed rgba(255,255,255,0.05)' }}>
-                      No items currently in this cart.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
+        <AbandonedCartEditPanel
+          cart={selectedCartDetails}
+          products={products}
+          onClose={() => setSelectedCartDetails(null)}
+          onSaved={(updated) => {
+            setAbandonedCarts((prev) => prev.map((c) => (c.session_id === updated.session_id ? updated : c)));
+            setSelectedCartDetails(updated);
+          }}
+          onDeleted={(sessionId) => {
+            setAbandonedCarts((prev) => prev.filter((c) => c.session_id !== sessionId));
+            setSelectedCartDetails(null);
+          }}
+        />
       )}
 
       {/* Blog Editor Modal */}
