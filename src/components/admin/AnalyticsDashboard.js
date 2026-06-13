@@ -4,7 +4,7 @@ import {
   TrendingUp, Users, ShoppingCart, Clock, 
   MapPin, Eye, DollarSign, Award, Target,
   RefreshCw, BarChart2, Calendar, ShieldAlert,
-  Smartphone, Monitor, ChevronRight, Zap, AlertTriangle, Play, HelpCircle, CreditCard, MessageCircle, Upload, Sparkles, Brain,
+  Smartphone, Monitor, ChevronRight, ChevronDown, Zap, AlertTriangle, Play, HelpCircle, CreditCard, MessageCircle, Upload, Sparkles, Brain,
   Dna, Atom, Phone
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -134,8 +134,13 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState(null);
-  const [showProductFunnel, setShowProductFunnel] = useState(true);
+  const [showProductFunnel, setShowProductFunnel] = useState(false);
   const [expandedMetric, setExpandedMetric] = useState(null); // 'revenue'|'aov'|'carts'|'conversion'
+
+  const [showGuideTip, setShowGuideTip] = useState(false);
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(false);
+  const [showSimulator, setShowSimulator] = useState(false);
   
   // 🧬 AI Sales Recommender Simulator States
   const [selectedSimPeptide, setSelectedSimPeptide] = useState('Retatrutide 10mg');
@@ -144,6 +149,10 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   // AI Insights States
   const [aiInsightText, setAiInsightText] = useState('');
   const [generatingAiInsights, setGeneratingAiInsights] = useState(false);
+
+  useEffect(() => {
+    if (generatingAiInsights || aiInsightText) setShowAiPanel(true);
+  }, [generatingAiInsights, aiInsightText]);
 
   const generateAiInsights = async () => {
     setGeneratingAiInsights(true);
@@ -866,11 +875,19 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
         @media (min-width: 640px) {
           .analytics-header-banner {
+            gap: 14px;
+            margin-bottom: 24px;
+          }
+
+          .analytics-header-top {
+            align-items: center;
+          }
+
+          .analytics-header-controls {
             flex-direction: row;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
-            gap: 16px;
+            width: 100%;
           }
         }
         
@@ -942,6 +959,161 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           background: #0ea5e9;
           color: white;
           box-shadow: 0 4px 12px rgba(14, 165, 233, 0.25);
+        }
+
+        .analytics-title {
+          margin: 0;
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #f8fafc;
+        }
+
+        .analytics-subtitle {
+          margin: 4px 0 0;
+          font-size: 0.8rem;
+          color: #94a3b8;
+        }
+
+        .analytics-header-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          width: 100%;
+        }
+
+        .analytics-header-actions {
+          display: flex;
+          gap: 8px;
+          flex-shrink: 0;
+        }
+
+        .analytics-header-controls {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          width: 100%;
+        }
+
+        .analytics-time-filter-bar {
+          width: 100%;
+        }
+
+        .analytics-time-filter-bar .time-filter-bar {
+          display: flex;
+          width: 100%;
+        }
+
+        .analytics-time-filter-bar .time-filter-btn {
+          flex: 1;
+          text-align: center;
+          padding: 8px 6px;
+          min-height: 36px;
+        }
+
+        .analytics-header-status {
+          font-size: 0.78rem;
+          color: #64748b;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          align-items: center;
+          width: 100%;
+        }
+
+        .analytics-status-live {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          color: #34d399;
+          font-weight: 600;
+        }
+
+        @media (min-width: 640px) {
+          .analytics-header-controls {
+            flex-direction: row;
+            align-items: center;
+            justify-content: flex-end;
+            width: auto;
+          }
+
+          .analytics-time-filter-bar { width: auto; }
+
+          .analytics-time-filter-bar .time-filter-btn {
+            flex: none;
+            padding: 6px 12px;
+            min-height: auto;
+          }
+        }
+
+        .analytics-tools-section {
+          margin-top: 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .analytics-collapsible-card {
+          background: rgba(14, 22, 38, 0.6);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 12px;
+          overflow: hidden;
+        }
+
+        .analytics-collapsible-trigger {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          width: 100%;
+          padding: 14px 16px;
+          background: transparent;
+          border: none;
+          color: #f8fafc;
+          cursor: pointer;
+          text-align: left;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .analytics-collapsible-trigger:hover {
+          background: rgba(255, 255, 255, 0.03);
+        }
+
+        .analytics-collapsible-trigger-title {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 0.9rem;
+          font-weight: 700;
+        }
+
+        .analytics-collapsible-trigger-sub {
+          font-size: 0.72rem;
+          color: #64748b;
+          font-weight: 500;
+          margin-top: 2px;
+        }
+
+        .analytics-collapsible-chevron {
+          flex-shrink: 0;
+          color: #64748b;
+          transition: transform 0.2s ease;
+        }
+
+        .analytics-collapsible-chevron.open {
+          transform: rotate(180deg);
+        }
+
+        .analytics-collapsible-body {
+          padding: 0 16px 16px;
+          border-top: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .analytics-guide-tip {
+          font-size: 0.82rem;
+          color: #94a3b8;
+          line-height: 1.5;
+          margin: 12px 0 0;
         }
 
         /* ─── Mobile Click Heatmap CSS Mockup ───────────── */
@@ -1809,174 +1981,87 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         }
       `}</style>
 
-      {/* 1. Dashboard Controls & Header */}
+      {/* 1. Header */}
       <div className="analytics-header-banner">
-        <div>
-          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>Analytics & Market Research Dashboard</h3>
-          <p style={{ margin: '4px 0 0 0', fontSize: '0.875rem', color: '#94a3b8' }}>
-            Real-time insight on visitor telemetry, page heartbeat open times, and sales performance.
-          </p>
-        </div>
-        
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {/* Live vs Simulation indicator */}
-          <div className="mode-status-indicator mode-live">
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'currentColor', boxShadow: '0 0 8px currentColor' }}></div>
-            <span>Real Data Only</span>
+        <div className="analytics-header-top">
+          <div>
+            <h3 className="analytics-title">Analytics</h3>
+            <p className="analytics-subtitle">Sales, traffic, and catalog behavior</p>
           </div>
-
-          {/* Currently Active Live Users Counter */}
-          <div className="mode-status-indicator mode-live" style={{ 
-            background: 'rgba(16, 185, 129, 0.1)', 
-            border: '1px solid rgba(16, 185, 129, 0.2)', 
-            color: '#34d399',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}>
-            <div className="active-pulse-dot"></div>
-            <span style={{ fontWeight: 600 }}>{activeLiveUsers} Active on Catalog</span>
-            {renderExplainerTrigger('active_users')}
-          </div>
-
-          <button 
-            className="admin-btn admin-btn-secondary" 
-            onClick={() => setRefreshKey(k => k + 1)}
-            title="Refresh database data"
-          >
-            <RefreshCw size={14} className={loading ? 'sync-spinner' : ''} />
-            <span>Sync</span>
-          </button>
-
-          <button
-            className="admin-btn admin-btn-secondary"
-            onClick={() => setShowExportModal(true)}
-            title="Export analytics report"
-          >
-            <Upload size={14} />
-            <span className="hide-on-mobile">Export</span>
-          </button>
-
-          <div className="time-filter-bar">
-            <button 
-              className={`time-filter-btn ${timeRange === '24h' ? 'active' : ''}`}
-              onClick={() => setTimeRange('24h')}
+          <div className="analytics-header-actions">
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary"
+              onClick={() => setRefreshKey((k) => k + 1)}
+              title="Refresh analytics data"
             >
-              24H
+              <RefreshCw size={14} className={loading ? 'sync-spinner' : ''} />
+              <span>Refresh</span>
             </button>
-            <button 
-              className={`time-filter-btn ${timeRange === '7d' ? 'active' : ''}`}
-              onClick={() => setTimeRange('7d')}
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary"
+              onClick={() => setShowExportModal(true)}
+              title="Export analytics report"
             >
-              7D
-            </button>
-            <button 
-              className={`time-filter-btn ${timeRange === '30d' ? 'active' : ''}`}
-              onClick={() => setTimeRange('30d')}
-            >
-              30D
-            </button>
-            <button 
-              className={`time-filter-btn ${timeRange === 'all' ? 'active' : ''}`}
-              onClick={() => setTimeRange('all')}
-            >
-              All
+              <Upload size={14} />
+              <span>Export</span>
             </button>
           </div>
         </div>
-      </div>
 
-      {/* 💡 Layman Guide Mode Active Welcome Banner */}
-      <div 
-        className="layman-help-banner" 
-        style={{
-          background: 'rgba(56, 189, 248, 0.08)',
-          border: '1px dashed rgba(56, 189, 248, 0.25)',
-          padding: '12px 16px',
-          borderRadius: '12px',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          fontSize: '0.875rem',
-          color: '#38bdf8',
-          boxShadow: '0 4px 15px rgba(56, 189, 248, 0.03)'
-        }}
-      >
-        <span style={{ fontSize: '1.25rem', animation: 'activePulse 1.5s infinite alternate ease-in-out' }}>💡</span>
-        <div>
-          <span style={{ fontWeight: 600, color: '#f8fafc' }}>Guía para Principiantes Activa / Layman Guide Mode Active: </span>
-          ¿No estás seguro de qué significan algunos de estos gráficos o datos? Simplemente haz click en el ícono de la bombilla 💡 al lado de **cualquier tarjeta, título o sección** para abrir una explicación súper sencilla y amigable.
+        <div className="analytics-header-controls">
+          <div className="analytics-time-filter-bar">
+            <div className="time-filter-bar">
+              <button
+                type="button"
+                className={`time-filter-btn ${timeRange === '24h' ? 'active' : ''}`}
+                onClick={() => setTimeRange('24h')}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                className={`time-filter-btn ${timeRange === '7d' ? 'active' : ''}`}
+                onClick={() => setTimeRange('7d')}
+              >
+                7 days
+              </button>
+              <button
+                type="button"
+                className={`time-filter-btn ${timeRange === '30d' ? 'active' : ''}`}
+                onClick={() => setTimeRange('30d')}
+              >
+                30 days
+              </button>
+              <button
+                type="button"
+                className={`time-filter-btn ${timeRange === 'all' ? 'active' : ''}`}
+                onClick={() => setTimeRange('all')}
+              >
+                All time
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="analytics-header-status">
+          <span className="analytics-status-live">
+            <span className="active-pulse-dot" />
+            {activeLiveUsers} on catalog now
+          </span>
+          <span>·</span>
+          <span>Live data</span>
+          {loading && (
+            <>
+              <span>·</span>
+              <span>Refreshing…</span>
+            </>
+          )}
         </div>
       </div>
 
-      {/* AI COPILOT ANALYTICS INSIGHTS SYSTEM */}
-      <div style={{ marginBottom: '24px' }}>
-        {generatingAiInsights ? (
-          <div style={{ background: 'linear-gradient(135deg, rgba(14, 22, 38, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', padding: '24px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div className="sync-spinner" style={{ color: '#38bdf8' }}><Brain size={32} /></div>
-              <div>
-                <h4 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0' }}>🧬 AI Copilot is auditing store transactions and metrics...</h4>
-                <p style={{ fontSize: '0.875rem', color: '#94a3b8', margin: 0 }}>Performing real-time revenue leakage audits, conversion rate calculations, customer engagement audits, and hot/cold products mapping...</p>
-              </div>
-            </div>
-          </div>
-        ) : aiInsightText ? (
-          <div style={{ background: 'linear-gradient(135deg, rgba(14, 26, 51, 0.9) 0%, rgba(15, 23, 42, 0.9) 100%)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px -10px rgba(56, 189, 248, 0.15)', position: 'relative' }}>
-            <button 
-              onClick={() => setAiInsightText('')}
-              style={{ position: 'absolute', top: '16px', right: '16px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#94a3b8', borderRadius: '50%', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              &times;
-            </button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
-              <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '8px', borderRadius: '10px', color: '#38bdf8' }}>
-                <Sparkles size={20} />
-              </div>
-              <div>
-                <h4 style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#f8fafc', margin: 0 }}>🧬 Real-Time AI Business Analysis & Forecast</h4>
-                <span style={{ fontSize: '0.875rem', color: '#64748b' }}>Generated instantly by Gemini • Context-Aware store audit</span>
-              </div>
-            </div>
-            
-            <div 
-              style={{ fontSize: '1rem', color: '#cbd5e1', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}
-              dangerouslySetInnerHTML={{
-                __html: aiInsightText
-                  .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #38bdf8">$1</strong>')
-                  .replace(/^- (.*)$/gm, '<li style="margin-left: 12px; margin-bottom: 6px; list-style-type: square">$1</li>')
-              }}
-            />
-          </div>
-        ) : (
-          <div 
-            onClick={generateAiInsights}
-            style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.25) 0%, rgba(15, 23, 42, 0.45) 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.2s', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)' }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '10px', borderRadius: '12px', color: '#38bdf8' }}>
-                <Brain size={20} />
-              </div>
-              <div>
-                <h4 style={{ fontSize: '1rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 2px 0' }}>✨ Generate Real-Time AI Business Analysis & Market Insights</h4>
-                <p style={{ fontSize: '0.875rem', color: '#94a3b8', margin: 0 }}>Let Gemini Copilot automatically audit your sales funnel, conversion bottlenecks, and potential revenue leakages.</p>
-              </div>
-            </div>
-            <button 
-              className="admin-btn admin-btn-primary" 
-              onClick={(e) => {
-                e.stopPropagation();
-                generateAiInsights();
-              }}
-            >
-              <Sparkles size={14} /> Audit Store
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* 2. Top Metrics Section */}
+      {/* 2. Top Metrics */}
       <div className="metrics-grid-4">
 
         {/* Metric 1: Gross Revenue — drill-down: top paid orders */}
@@ -2158,6 +2243,223 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         </div>
 
       </div>
+
+      {/* 3. Leaks & funnel: product interest, conversion funnel, payments */}
+      <div className="analytics-double-panel">
+        
+        {/* PANEL A: Hot vs Cold Product Clicks */}
+        <div className="dashboard-section-card">
+          <div className="section-card-title">
+            <Zap size={16} style={{ color: '#fbbf24' }} />
+            <span>Product interest (hot vs. cold)</span>
+          </div>
+
+          {productMetrics.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '1rem' }}>
+              No product clicks logged.
+            </div>
+          ) : (
+            <div className="interest-split-container">
+              
+              {/* Hot Interest Box */}
+              <div className="interest-segment-box" style={{ borderLeft: '3px solid #10b981' }}>
+                <div className="interest-segment-header" style={{ color: '#34d399' }}>
+                  <TrendingUp size={14} />
+                  <span>Hot Demand (Most Clicks)</span>
+                </div>
+                
+                {hotPeptides.map(p => {
+                  const clickPct = maxProductViews > 0 ? (p.views / maxProductViews) * 100 : 0;
+                  return (
+                    <div className="interest-segment-item" key={p.name}>
+                      <div className="interest-item-header">
+                        <span style={{ color: '#e2e8f0' }}>{p.name}</span>
+                        <span style={{ color: '#34d399' }}>{p.views} clicks</span>
+                      </div>
+                      <div className="bar-track" style={{ height: '5px' }}>
+                        <div className="bar-fill fill-emerald" style={{ width: `${clickPct}%` }}></div>
+                      </div>
+                      <div className="interest-item-footer">
+                        <span>Conv: {p.conversion.toFixed(0)}%</span>
+                        <span style={{ color: '#64748b', fontSize: '0.75rem' }}>Status: High Demand</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Cold / Rare Interest Box */}
+              <div className="interest-segment-box" style={{ borderLeft: '3px solid #ef4444' }}>
+                <div className="interest-segment-header" style={{ color: '#f87171' }}>
+                  <AlertTriangle size={14} />
+                  <span>Rare Clicks (Low Interest)</span>
+                </div>
+                
+                {coldPeptides.map(p => {
+                  const clickPct = maxProductViews > 0 ? (p.views / maxProductViews) * 100 : 0;
+                  return (
+                    <div className="interest-segment-item" key={p.name}>
+                      <div className="interest-item-header">
+                        <span style={{ color: '#e2e8f0' }}>{p.name}</span>
+                        <span style={{ color: '#f87171' }}>{p.views} clicks</span>
+                      </div>
+                      <div className="bar-track" style={{ height: '5px' }}>
+                        <div className="bar-fill fill-red" style={{ width: `${Math.max(clickPct, 4)}%` }}></div>
+                      </div>
+                      <div className="interest-item-footer">
+                        <span>Conv: {p.conversion.toFixed(0)}%</span>
+                        <span style={{ color: '#fb923c', fontSize: '0.75rem' }}>Needs Promo</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+            </div>
+          )}
+        </div>
+
+        {/* PANEL B: Sales Conversion Funnel & Payment Preference */}
+        <div className="dashboard-section-card">
+          <div className="section-card-title">
+            <Target size={16} style={{ color: '#a78bfa' }} />
+            <span>Funnel & payments</span>
+          </div>
+
+          <div className="funnel-payment-grid">
+            
+            {/* Sales Conversion Funnel */}
+            <div>
+              <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
+                E-Commerce Funnel
+              </p>
+              
+              <div className="funnel-container">
+                <div className="funnel-stage">
+                  <div className="funnel-stage-progress" style={{ width: '100%' }}></div>
+                  <div className="funnel-stage-content">
+                    <span>1. Traffic (Sessions)</span>
+                    <strong>{uniqueVisitorCount}</strong>
+                  </div>
+                </div>
+                <div className="funnel-stage">
+                  <div className="funnel-stage-progress" style={{ width: `${Math.min((productViews.length / uniqueVisitorCount) * 100, 100)}%` }}></div>
+                  <div className="funnel-stage-content">
+                    <span>2. Product clicks</span>
+                    <strong>{productViews.length}</strong>
+                  </div>
+                </div>
+                <div className="funnel-stage">
+                  <div className="funnel-stage-progress" style={{ width: `${Math.min((carts.length / uniqueVisitorCount) * 100, 100)}%` }}></div>
+                  <div className="funnel-stage-content">
+                    <span>3. Carts Created</span>
+                    <strong>{carts.length}</strong>
+                  </div>
+                </div>
+                <div className="funnel-stage">
+                  <div className="funnel-stage-progress" style={{ width: `${orderConversionRate}%` }}></div>
+                  <div className="funnel-stage-content" style={{ color: '#34d399' }}>
+                    <span>4. Paid Orders</span>
+                    <strong>{successfulOrders.length}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Method Channels */}
+            <div>
+              <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
+                Orders Payment Channels
+              </p>
+
+              {Object.keys(paymentBreakdown).length === 0 ? (
+                <div style={{ color: '#64748b', fontSize: '0.875rem', padding: '10px 0' }}>No payment distribution data.</div>
+              ) : (
+                <div className="bar-chart-list">
+                  {Object.entries(paymentBreakdown).map(([method, data]) => {
+                    const pct = (data.count / maxPaymentCount) * 100;
+                    
+                    let cleanMethodName = method.toUpperCase();
+                    let icon = null;
+                    let color = '#a78bfa'; // default purple
+                    
+                    if (method === 'sinpe') {
+                      cleanMethodName = 'SINPE Móvil';
+                      icon = <Smartphone size={14} />;
+                      color = '#f97316'; // Orange
+                    } else if (method === 'tilopay') {
+                      cleanMethodName = 'Credit Card';
+                      icon = <CreditCard size={14} />;
+                      color = '#0ea5e9'; // Blue
+                    } else if (method === 'whatsapp') {
+                      cleanMethodName = 'WhatsApp';
+                      icon = <MessageCircle size={14} />;
+                      color = '#22c55e'; // Green
+                    }
+
+                    return (
+                      <div className="bar-chart-row" key={method}>
+                        <div className="bar-row-label-row">
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ color: color, display: 'flex', alignItems: 'center' }}>{icon}</span>
+                            {cleanMethodName}
+                          </span>
+                          <span className="bar-row-value" style={{ color: color }}>
+                            {data.count} orders (${Math.round(data.revenue)})
+                          </span>
+                        </div>
+                        <div className="bar-track">
+                          <div className="bar-fill" style={{ width: `${pct}%`, background: color }}></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* WhatsApp Source Channels */}
+            <div>
+              <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
+                WhatsApp Attribution Sources
+              </p>
+
+              {Object.keys(whatsappSourceBreakdown).length === 0 ? (
+                <div style={{ color: '#64748b', fontSize: '0.875rem', padding: '10px 0' }}>No source attribution data.</div>
+              ) : (
+                <div className="bar-chart-list">
+                  {Object.entries(whatsappSourceBreakdown)
+                    .sort((a, b) => b[1].count - a[1].count)
+                    .map(([source, data]) => {
+                    const pct = (data.count / maxSourceCount) * 100;
+                    const color = '#34d399'; // Green theme for WhatsApp
+                    
+                    return (
+                      <div className="bar-chart-row" key={source}>
+                        <div className="bar-row-label-row">
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ color: color, display: 'flex', alignItems: 'center' }}><MessageCircle size={14} /></span>
+                            <span style={{ textTransform: 'capitalize' }}>{source}</span>
+                          </span>
+                          <span className="bar-row-value" style={{ color: color }}>
+                            {data.count} orders (${Math.round(data.revenue)})
+                          </span>
+                        </div>
+                        <div className="bar-track">
+                          <div className="bar-fill" style={{ width: `${pct}%`, background: color }}></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
 
       {/* 3. Double Panel: Geographical Analytics vs Visitor Behavior */}
       <div className="analytics-double-panel">
@@ -2535,222 +2837,6 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
       </div>
 
-      {/* NEW SECTION 3.5: Hot vs Cold Product Engagement & Sales Funnel + Payment Methods */}
-      <div className="analytics-double-panel">
-        
-        {/* PANEL A: Hot vs Cold Product Clicks */}
-        <div className="dashboard-section-card">
-          <div className="section-card-title">
-            <Zap size={16} style={{ color: '#fbbf24' }} />
-            <span>Product Interest Mapping (High Clicks vs. Rare Clicks)</span>
-          </div>
-
-          {productMetrics.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px', color: '#64748b', fontSize: '1rem' }}>
-              No product clicks logged.
-            </div>
-          ) : (
-            <div className="interest-split-container">
-              
-              {/* Hot Interest Box */}
-              <div className="interest-segment-box" style={{ borderLeft: '3px solid #10b981' }}>
-                <div className="interest-segment-header" style={{ color: '#34d399' }}>
-                  <TrendingUp size={14} />
-                  <span>Hot Demand (Most Clicks)</span>
-                </div>
-                
-                {hotPeptides.map(p => {
-                  const clickPct = maxProductViews > 0 ? (p.views / maxProductViews) * 100 : 0;
-                  return (
-                    <div className="interest-segment-item" key={p.name}>
-                      <div className="interest-item-header">
-                        <span style={{ color: '#e2e8f0' }}>{p.name}</span>
-                        <span style={{ color: '#34d399' }}>{p.views} clicks</span>
-                      </div>
-                      <div className="bar-track" style={{ height: '5px' }}>
-                        <div className="bar-fill fill-emerald" style={{ width: `${clickPct}%` }}></div>
-                      </div>
-                      <div className="interest-item-footer">
-                        <span>Conv: {p.conversion.toFixed(0)}%</span>
-                        <span style={{ color: '#64748b', fontSize: '0.75rem' }}>Status: High Demand</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Cold / Rare Interest Box */}
-              <div className="interest-segment-box" style={{ borderLeft: '3px solid #ef4444' }}>
-                <div className="interest-segment-header" style={{ color: '#f87171' }}>
-                  <AlertTriangle size={14} />
-                  <span>Rare Clicks (Low Interest)</span>
-                </div>
-                
-                {coldPeptides.map(p => {
-                  const clickPct = maxProductViews > 0 ? (p.views / maxProductViews) * 100 : 0;
-                  return (
-                    <div className="interest-segment-item" key={p.name}>
-                      <div className="interest-item-header">
-                        <span style={{ color: '#e2e8f0' }}>{p.name}</span>
-                        <span style={{ color: '#f87171' }}>{p.views} clicks</span>
-                      </div>
-                      <div className="bar-track" style={{ height: '5px' }}>
-                        <div className="bar-fill fill-red" style={{ width: `${Math.max(clickPct, 4)}%` }}></div>
-                      </div>
-                      <div className="interest-item-footer">
-                        <span>Conv: {p.conversion.toFixed(0)}%</span>
-                        <span style={{ color: '#fb923c', fontSize: '0.75rem' }}>Needs Promo</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-            </div>
-          )}
-        </div>
-
-        {/* PANEL B: Sales Conversion Funnel & Payment Preference */}
-        <div className="dashboard-section-card">
-          <div className="section-card-title">
-            <Target size={16} style={{ color: '#a78bfa' }} />
-            <span>Interactive Funnel & Orders Payment Methods</span>
-          </div>
-
-          <div className="funnel-payment-grid">
-            
-            {/* Sales Conversion Funnel */}
-            <div>
-              <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
-                E-Commerce Funnel
-              </p>
-              
-              <div className="funnel-container">
-                <div className="funnel-stage">
-                  <div className="funnel-stage-progress" style={{ width: '100%' }}></div>
-                  <div className="funnel-stage-content">
-                    <span>1. Traffic (Sessions)</span>
-                    <strong>{uniqueVisitorCount}</strong>
-                  </div>
-                </div>
-                <div className="funnel-stage">
-                  <div className="funnel-stage-progress" style={{ width: `${Math.min((productViews.length / uniqueVisitorCount) * 100, 100)}%` }}></div>
-                  <div className="funnel-stage-content">
-                    <span>2. Views (Peptide Clicks)</span>
-                    <strong>{productViews.length}</strong>
-                  </div>
-                </div>
-                <div className="funnel-stage">
-                  <div className="funnel-stage-progress" style={{ width: `${Math.min((carts.length / uniqueVisitorCount) * 100, 100)}%` }}></div>
-                  <div className="funnel-stage-content">
-                    <span>3. Carts Created</span>
-                    <strong>{carts.length}</strong>
-                  </div>
-                </div>
-                <div className="funnel-stage">
-                  <div className="funnel-stage-progress" style={{ width: `${orderConversionRate}%` }}></div>
-                  <div className="funnel-stage-content" style={{ color: '#34d399' }}>
-                    <span>4. Paid Orders</span>
-                    <strong>{successfulOrders.length}</strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Method Channels */}
-            <div>
-              <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
-                Orders Payment Channels
-              </p>
-
-              {Object.keys(paymentBreakdown).length === 0 ? (
-                <div style={{ color: '#64748b', fontSize: '0.875rem', padding: '10px 0' }}>No payment distribution data.</div>
-              ) : (
-                <div className="bar-chart-list">
-                  {Object.entries(paymentBreakdown).map(([method, data]) => {
-                    const pct = (data.count / maxPaymentCount) * 100;
-                    
-                    let cleanMethodName = method.toUpperCase();
-                    let icon = null;
-                    let color = '#a78bfa'; // default purple
-                    
-                    if (method === 'sinpe') {
-                      cleanMethodName = 'SINPE Móvil';
-                      icon = <Smartphone size={14} />;
-                      color = '#f97316'; // Orange
-                    } else if (method === 'tilopay') {
-                      cleanMethodName = 'Credit Card';
-                      icon = <CreditCard size={14} />;
-                      color = '#0ea5e9'; // Blue
-                    } else if (method === 'whatsapp') {
-                      cleanMethodName = 'WhatsApp';
-                      icon = <MessageCircle size={14} />;
-                      color = '#22c55e'; // Green
-                    }
-
-                    return (
-                      <div className="bar-chart-row" key={method}>
-                        <div className="bar-row-label-row">
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ color: color, display: 'flex', alignItems: 'center' }}>{icon}</span>
-                            {cleanMethodName}
-                          </span>
-                          <span className="bar-row-value" style={{ color: color }}>
-                            {data.count} orders (${Math.round(data.revenue)})
-                          </span>
-                        </div>
-                        <div className="bar-track">
-                          <div className="bar-fill" style={{ width: `${pct}%`, background: color }}></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* WhatsApp Source Channels */}
-            <div>
-              <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
-                WhatsApp Attribution Sources
-              </p>
-
-              {Object.keys(whatsappSourceBreakdown).length === 0 ? (
-                <div style={{ color: '#64748b', fontSize: '0.875rem', padding: '10px 0' }}>No source attribution data.</div>
-              ) : (
-                <div className="bar-chart-list">
-                  {Object.entries(whatsappSourceBreakdown)
-                    .sort((a, b) => b[1].count - a[1].count)
-                    .map(([source, data]) => {
-                    const pct = (data.count / maxSourceCount) * 100;
-                    const color = '#34d399'; // Green theme for WhatsApp
-                    
-                    return (
-                      <div className="bar-chart-row" key={source}>
-                        <div className="bar-row-label-row">
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ color: color, display: 'flex', alignItems: 'center' }}><MessageCircle size={14} /></span>
-                            <span style={{ textTransform: 'capitalize' }}>{source}</span>
-                          </span>
-                          <span className="bar-row-value" style={{ color: color }}>
-                            {data.count} orders (${Math.round(data.revenue)})
-                          </span>
-                        </div>
-                        <div className="bar-track">
-                          <div className="bar-fill" style={{ width: `${pct}%`, background: color }}></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-          </div>
-        </div>
-
-      </div>
-
       {/* 4. Product Conversion & Funnel Panel — collapsible section */}
       <div className="dashboard-section-card" style={{ marginBottom: '16px' }}>
 
@@ -2763,7 +2849,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           aria-expanded={showProductFunnel}
         >
           <Award size={16} style={{ color: '#facc15' }} />
-          <span>Product Performance &amp; View-to-Purchase Funnel</span>
+          <span>All products</span>
           <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: '#475569', fontWeight: 400, whiteSpace: 'nowrap' }}>
             {productMetrics.length} peptides
           </span>
@@ -2864,234 +2950,244 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         )}
       </div>
       
-      {/* 5. Suggestions for Market Research and Management Statistics */}
-      <div className="dashboard-section-card" style={{ border: '1px solid rgba(14, 165, 233, 0.15)', background: 'rgba(14, 165, 233, 0.02)' }}>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-          <div style={{ background: 'rgba(14, 165, 233, 0.1)', color: '#38bdf8', padding: '10px', borderRadius: '10px', flexShrink: 0 }}>
-            <BarChart2 size={20} />
-          </div>
-          <div>
-            <h4 style={{ margin: '0 0 6px 0', fontSize: '1.125rem', fontWeight: 600, color: '#38bdf8' }}>
-              Management Insights & Dynamic Product Retargeting Suggestions
-            </h4>
-            <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.875rem', color: '#cbd5e1', lineHeight: '1.6' }}>
-              
-              {/* Dynamic suggestion 1: Cart re-engagement */}
-              <li style={{ marginBottom: '8px' }}>
-                <strong>Abandoned Cart Re-engagement</strong>: There are currently <strong style={{ color: '#f59e0b' }}>{activeAbandonedCarts.length} active abandoned carts</strong> representing a potential <strong style={{ color: '#fbbf24' }}>${potentialAbandonedRevenueUsd}</strong> in recoverable revenue. Since anonymous visitors don't leave a contact number, focus on <strong>on-site recovery tactics</strong>: activate an exit-intent popup offering a small discount (e.g. <em>"Still thinking? Get 5% off today"</em>), add a persistent sticky banner on the catalog, or run Instagram/Facebook retargeting ads at visitors who browsed without buying. For any <strong>named leads</strong> in the Carts tab who voluntarily submitted their info via WhatsApp checkout, those you <em>can</em> follow up with directly.
-              </li>
-              
-              {/* Dynamic suggestion 2: Hot clicked product */}
-              {hotPeptides.length > 0 && (
-                <li style={{ marginBottom: '8px' }}>
-                  <strong>Maximize Hot Product Traffic (🔥 High Clicks)</strong>: Your top performing interest peptide is <strong style={{ color: '#34d399' }}>{hotPeptides[0]?.name}</strong> with <strong style={{ color: '#0ea5e9' }}>{hotPeptides[0]?.views} clicks</strong>! Since this captures major customer attention, we advise offering a prominent volume deal (e.g. <i>"Buy 3 vials, get 1 free"</i>) or securing your official laboratory COA scan link right at the top of its detail description to eliminate shopping friction and push conversion beyond the current <strong style={{ color: '#34d399' }}>{hotPeptides[0]?.conversion.toFixed(0)}%</strong> level.
-                </li>
-              )}
-              
-              {/* Dynamic suggestion 3: Cold / Rare clicked product */}
-              {coldPeptides.length > 0 && (
-                <li style={{ marginBottom: '8px' }}>
-                  <strong>Boost Rare Click Products (❄️ Low Views)</strong>: Your peptide product <strong style={{ color: '#f87171' }}>{coldPeptides[0]?.name}</strong> is currently experiencing rare traction with only <strong style={{ color: '#f87171' }}>{coldPeptides[0]?.views} clicks</strong>. This indicates low storefront exposure. To revive sales, we suggest:
-                  <ul style={{ paddingLeft: '14px', marginTop: '4px', listStyleType: 'circle' }}>
-                    <li>Featuring it in a promotional banner on your homepage.</li>
-                    <li>Structuring a customized research package deal (e.g. <i>"Tissue Healing Pack: BPC-157 + {coldPeptides[0]?.name}"</i>) to inherit clicks from high-demand items.</li>
-                    <li>Polishing its Spanish description to answer local athlete concerns.</li>
-                  </ul>
-                </li>
-              )}
+      {/* Tools — collapsed by default */}
+      <div className="analytics-tools-section">
 
-              {/* Dynamic suggestion 4: Payment preferences */}
-              {Object.keys(paymentBreakdown).length > 0 && (
+        <div className="analytics-collapsible-card">
+          <button
+            type="button"
+            className="analytics-collapsible-trigger"
+            onClick={() => setShowRecommendations((v) => !v)}
+            aria-expanded={showRecommendations}
+          >
+            <div>
+              <div className="analytics-collapsible-trigger-title">
+                <BarChart2 size={16} style={{ color: '#38bdf8' }} />
+                Recommendations
+              </div>
+              <div className="analytics-collapsible-trigger-sub">Cart recovery, product promos, payment & geo tips</div>
+            </div>
+            <ChevronDown size={16} className={`analytics-collapsible-chevron${showRecommendations ? ' open' : ''}`} />
+          </button>
+          {showRecommendations && (
+            <div className="analytics-collapsible-body">
+              <ul style={{ margin: '12px 0 0', paddingLeft: '18px', fontSize: '0.875rem', color: '#cbd5e1', lineHeight: '1.6' }}>
                 <li style={{ marginBottom: '8px' }}>
-                  <strong>Optimize Checkout Payment Channels</strong>: {(() => {
-                    const topPayment = Object.entries(paymentBreakdown).sort((a,b) => b[1].count - a[1].count)[0];
-                    const topMethodName = topPayment[0] === 'sinpe' ? 'SINPE Móvil' : topPayment[0] === 'tilopay' ? 'Credit Card' : topPayment[0].toUpperCase();
-                    return (
-                      <span>
-                        Your customers highly prefer using <strong>{topMethodName}</strong> ({topPayment[1].count} orders). Keep this payment pathway completely friction-free! If manual WhatsApp ordering or SINPE verification load becomes too high, guide customers to use automated credit card processing to secure instant checkout.
-                      </span>
-                    );
-                  })()}
+                  <strong>Abandoned Cart Re-engagement</strong>: There are currently <strong style={{ color: '#f59e0b' }}>{activeAbandonedCarts.length} active abandoned carts</strong> representing a potential <strong style={{ color: '#fbbf24' }}>${potentialAbandonedRevenueUsd}</strong> in recoverable revenue. Since anonymous visitors don't leave a contact number, focus on <strong>on-site recovery tactics</strong>: activate an exit-intent popup offering a small discount (e.g. <em>"Still thinking? Get 5% off today"</em>), add a persistent sticky banner on the catalog, or run Instagram/Facebook retargeting ads at visitors who browsed without buying. For any <strong>named leads</strong> in the Carts tab who voluntarily submitted their info via WhatsApp checkout, those you <em>can</em> follow up with directly.
                 </li>
-              )}
-
-              {/* Dynamic suggestion 5: Geotargeting same day shipping */}
-              <li>
-                <strong>Geographical Targeting</strong>: {sortedVisitorCities.length > 0 ? (
-                  <span>
-                    Your traffic is heavily centered in <strong>{sortedVisitorCities[0]?.[0]}</strong>. Coordinating with local couriers (e.g., Mensajería) in this region allows you to advertise <strong>"Same-Day Delivery"</strong>, which is the #1 conversion catalyst in Costa Rica.
-                  </span>
-                ) : (
-                  "Identify where your traffic is coming from and run localized social ads (in Escazu, Santa Ana, or San Jose) with fast SINPE payment checkout to capture local demands."
+                {hotPeptides.length > 0 && (
+                  <li style={{ marginBottom: '8px' }}>
+                    <strong>Maximize Hot Product Traffic (🔥 High Clicks)</strong>: Your top performing interest peptide is <strong style={{ color: '#34d399' }}>{hotPeptides[0]?.name}</strong> with <strong style={{ color: '#0ea5e9' }}>{hotPeptides[0]?.views} clicks</strong>! Since this captures major customer attention, we advise offering a prominent volume deal (e.g. <i>"Buy 3 vials, get 1 free"</i>) or securing your official laboratory COA scan link right at the top of its detail description to eliminate shopping friction and push conversion beyond the current <strong style={{ color: '#34d399' }}>{hotPeptides[0]?.conversion.toFixed(0)}%</strong> level.
+                  </li>
                 )}
-              </li>
-            </ul>
-          </div>
+                {coldPeptides.length > 0 && (
+                  <li style={{ marginBottom: '8px' }}>
+                    <strong>Boost Rare Click Products (❄️ Low Views)</strong>: Your peptide product <strong style={{ color: '#f87171' }}>{coldPeptides[0]?.name}</strong> is currently experiencing rare traction with only <strong style={{ color: '#f87171' }}>{coldPeptides[0]?.views} clicks</strong>. This indicates low storefront exposure. To revive sales, we suggest:
+                    <ul style={{ paddingLeft: '14px', marginTop: '4px', listStyleType: 'circle' }}>
+                      <li>Featuring it in a promotional banner on your homepage.</li>
+                      <li>Structuring a customized research package deal (e.g. <i>"Tissue Healing Pack: BPC-157 + {coldPeptides[0]?.name}"</i>) to inherit clicks from high-demand items.</li>
+                      <li>Polishing its Spanish description to answer local athlete concerns.</li>
+                    </ul>
+                  </li>
+                )}
+                {Object.keys(paymentBreakdown).length > 0 && (
+                  <li style={{ marginBottom: '8px' }}>
+                    <strong>Optimize Checkout Payment Channels</strong>: {(() => {
+                      const topPayment = Object.entries(paymentBreakdown).sort((a,b) => b[1].count - a[1].count)[0];
+                      const topMethodName = topPayment[0] === 'sinpe' ? 'SINPE Móvil' : topPayment[0] === 'tilopay' ? 'Credit Card' : topPayment[0].toUpperCase();
+                      return (
+                        <span>
+                          Your customers highly prefer using <strong>{topMethodName}</strong> ({topPayment[1].count} orders). Keep this payment pathway completely friction-free! If manual WhatsApp ordering or SINPE verification load becomes too high, guide customers to use automated credit card processing to secure instant checkout.
+                        </span>
+                      );
+                    })()}
+                  </li>
+                )}
+                <li>
+                  <strong>Geographical Targeting</strong>: {sortedVisitorCities.length > 0 ? (
+                    <span>
+                      Your traffic is heavily centered in <strong>{sortedVisitorCities[0]?.[0]}</strong>. Coordinating with local couriers (e.g., Mensajería) in this region allows you to advertise <strong>"Same-Day Delivery"</strong>, which is the #1 conversion catalyst in Costa Rica.
+                    </span>
+                  ) : (
+                    "Identify where your traffic is coming from and run localized social ads (in Escazu, Santa Ana, or San Jose) with fast SINPE payment checkout to capture local demands."
+                  )}
+                </li>
+              </ul>
+            </div>
+          )}
         </div>
-      </div>
 
-
-      {/* 🧬 AI SALES RECOMMENDER & PROJECTION SIMULATOR */}
-      <div 
-        className="dashboard-section-card" 
-        style={{ 
-          marginTop: '20px', 
-          marginBottom: '20px', 
-          background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.7) 100%)',
-          border: '1px solid rgba(56, 189, 248, 0.15)',
-          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3)'
-        }}
-      >
-        <div className="section-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Atom size={18} style={{ color: '#38bdf8', filter: 'drop-shadow(0 0 8px rgba(56, 189, 248, 0.5))' }} />
-            <span style={{ fontSize: '1.125rem', fontWeight: 'bold', color: '#f8fafc' }}>🧬 AI Peptide Sales Recommender & Projection Simulator</span>
-          </div>
-          <span style={{ 
-            fontSize: '0.75rem', 
-            fontWeight: 'bold', 
-            background: 'rgba(56, 189, 248, 0.12)', 
-            border: '1px solid rgba(56, 189, 248, 0.25)', 
-            color: '#38bdf8', 
-            padding: '3px 8px', 
-            borderRadius: '20px',
-            letterSpacing: '0.5px'
-          }}>
-            REAL-TIME DATA-BINDING
-          </span>
-        </div>
-
-        <p style={{ margin: '0 0 16px 0', fontSize: '0.875rem', color: '#94a3b8' }}>
-          Select any peptide to simulate traffic increases and view highly-converting, AI-suggested sales check-in blueprints tailored for that compound.
-        </p>
-
-        <div className="geo-cities-grid" style={{ alignItems: 'start' }}>
-          
-          {/* SIMULATOR CONTROLS & STATS */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'row', 
-              gap: '12px',
-              flexWrap: 'wrap'
-            }}>
-              {/* Select Product */}
-              <div style={{ flex: '1', minWidth: '180px' }}>
-                <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: 'bold', textTransform: 'uppercase' }}>Select Peptide</label>
-                <select 
-                  value={selectedSimPeptide} 
-                  onChange={(e) => setSelectedSimPeptide(e.target.value)}
-                  style={{
-                    width: '100%',
-                    background: 'rgba(15, 23, 42, 0.8)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: '8px',
-                    padding: '8px 12px',
-                    fontSize: '0.875rem',
-                    color: '#f8fafc',
-                    cursor: 'pointer',
-                    outline: 'none'
-                  }}
-                >
-                  {productMetrics.map(p => (
-                    <option key={p.name} value={p.name}>{p.name} ({p.views} views)</option>
-                  ))}
-                </select>
+        <div className="analytics-collapsible-card">
+          <button
+            type="button"
+            className="analytics-collapsible-trigger"
+            onClick={() => setShowAiPanel((v) => !v)}
+            aria-expanded={showAiPanel}
+          >
+            <div>
+              <div className="analytics-collapsible-trigger-title">
+                <Brain size={16} style={{ color: '#38bdf8' }} />
+                AI summary
               </div>
-
-              {/* Views Multiplier slider */}
-              <div style={{ flex: '1', minWidth: '180px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                  <label style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold', textTransform: 'uppercase' }}>Traffic Projection</label>
-                  <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 'bold' }}>{projectedViewsMultiplier}x Views</span>
+              <div className="analytics-collapsible-trigger-sub">Run a store audit with Gemini</div>
+            </div>
+            <ChevronDown size={16} className={`analytics-collapsible-chevron${showAiPanel ? ' open' : ''}`} />
+          </button>
+          {showAiPanel && (
+            <div className="analytics-collapsible-body">
+              {generatingAiInsights ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingTop: '12px' }}>
+                  <div className="sync-spinner" style={{ color: '#38bdf8' }}><Brain size={24} /></div>
+                  <div>
+                    <div style={{ fontWeight: 700, color: '#f8fafc' }}>Analyzing store metrics…</div>
+                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Revenue, conversion, carts, and product performance</div>
+                  </div>
                 </div>
-                <input 
-                  type="range" 
-                  min="1.0" 
-                  max="5.0" 
-                  step="0.5"
-                  value={projectedViewsMultiplier}
-                  onChange={(e) => setProjectedViewsMultiplier(parseFloat(e.target.value))}
-                  style={{
-                    width: '100%',
-                    accentColor: '#38bdf8',
-                    cursor: 'pointer',
-                    height: '6px',
-                    borderRadius: '3px',
-                    background: 'rgba(15, 23, 42, 0.8)'
-                  }}
-                />
-              </div>
+              ) : aiInsightText ? (
+                <div style={{ paddingTop: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-secondary"
+                      onClick={() => setAiInsightText('')}
+                      style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div
+                    style={{ fontSize: '0.9rem', color: '#cbd5e1', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}
+                    dangerouslySetInnerHTML={{
+                      __html: aiInsightText
+                        .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #38bdf8">$1</strong>')
+                        .replace(/^- (.*)$/gm, '<li style="margin-left: 12px; margin-bottom: 6px; list-style-type: square">$1</li>')
+                    }}
+                  />
+                </div>
+              ) : (
+                <div style={{ paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>
+                    Get an executive summary of sales performance, bottlenecks, and recommended actions.
+                  </p>
+                  <button type="button" className="admin-btn admin-btn-primary" onClick={generateAiInsights} style={{ alignSelf: 'flex-start' }}>
+                    <Sparkles size={14} /> Analyze
+                  </button>
+                </div>
+              )}
             </div>
-
-            {/* SIMULATED KPI SPLIT ROWS */}
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', 
-              gap: '10px'
-            }}>
-              {/* Box 1: Views Lift */}
-              <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Views</span>
-                <strong style={{ fontSize: '1.25rem', color: '#38bdf8', display: 'block', margin: '4px 0' }}>{simulatedViews}</strong>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Current: {currentViews}</span>
-              </div>
-
-              {/* Box 2: Orders Lift */}
-              <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Orders</span>
-                <strong style={{ fontSize: '1.25rem', color: '#34d399', display: 'block', margin: '4px 0' }}>{simulatedPurchases}</strong>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Rate: {currentConversion.toFixed(1)}%</span>
-              </div>
-
-              {/* Box 3: Projected Revenue */}
-              <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projected Revenue</span>
-                <strong style={{ fontSize: '1.25rem', color: '#facc15', display: 'block', margin: '4px 0' }}>${projectedRevenue.toLocaleString()}</strong>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Lift: +${netLift}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* AI OUTREACH BLUEPRINT CARDS */}
-          <div style={{ 
-            background: 'rgba(15, 23, 42, 0.5)', 
-            border: `1px solid rgba(255,255,255,0.03)`,
-            padding: '16px', 
-            borderRadius: '16px',
-            position: 'relative'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-              <span style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#fff' }}>🎯 Technical Advisory Blueprint</span>
-              <span style={{ 
-                fontSize: '0.75rem', 
-                background: 'rgba(167, 139, 250, 0.12)', 
-                border: '1px solid rgba(167, 139, 250, 0.25)', 
-                color: '#a78bfa', 
-                padding: '2px 8px', 
-                borderRadius: '10px',
-                fontWeight: 'bold'
-              }}>
-                {simHook.badge}
-              </span>
-            </div>
-            <h5 style={{ margin: '0 0 6px 0', fontSize: '1rem', color: '#f8fafc', fontWeight: 'bold' }}>{simHook.title}</h5>
-            <p style={{ margin: '0 0 12px 0', fontSize: '0.875rem', color: '#94a3b8', lineHeight: '1.4' }}>{simHook.desc}</p>
-            <div style={{ 
-              background: 'rgba(167, 139, 250, 0.06)', 
-              border: '1px solid rgba(167, 139, 250, 0.15)', 
-              padding: '10px 12px', 
-              borderRadius: '8px',
-              fontSize: '0.875rem',
-              color: '#c084fc',
-              lineHeight: '1.4',
-              fontStyle: 'italic'
-            }}>
-              {simHook.hookText}
-            </div>
-          </div>
-
+          )}
         </div>
+
+        <div className="analytics-collapsible-card">
+          <button
+            type="button"
+            className="analytics-collapsible-trigger"
+            onClick={() => setShowSimulator((v) => !v)}
+            aria-expanded={showSimulator}
+          >
+            <div>
+              <div className="analytics-collapsible-trigger-title">
+                <Atom size={16} style={{ color: '#38bdf8' }} />
+                What-if planner
+              </div>
+              <div className="analytics-collapsible-trigger-sub">Estimates only — not live data</div>
+            </div>
+            <ChevronDown size={16} className={`analytics-collapsible-chevron${showSimulator ? ' open' : ''}`} />
+          </button>
+          {showSimulator && (
+            <div className="analytics-collapsible-body">
+              <p style={{ margin: '12px 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>
+                Select a peptide and adjust traffic to see projected orders and revenue.
+              </p>
+              <div className="geo-cities-grid" style={{ alignItems: 'start', marginTop: '14px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'row', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1', minWidth: '180px' }}>
+                      <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '6px', fontWeight: 'bold', textTransform: 'uppercase' }}>Select Peptide</label>
+                      <select
+                        value={selectedSimPeptide}
+                        onChange={(e) => setSelectedSimPeptide(e.target.value)}
+                        className="admin-select"
+                        style={{ width: '100%' }}
+                      >
+                        {productMetrics.map(p => (
+                          <option key={p.name} value={p.name}>{p.name} ({p.views} views)</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ flex: '1', minWidth: '180px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold', textTransform: 'uppercase' }}>Traffic projection</label>
+                        <span style={{ fontSize: '0.75rem', color: '#38bdf8', fontWeight: 'bold' }}>{projectedViewsMultiplier}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1.0"
+                        max="5.0"
+                        step="0.5"
+                        value={projectedViewsMultiplier}
+                        onChange={(e) => setProjectedViewsMultiplier(parseFloat(e.target.value))}
+                        style={{ width: '100%', accentColor: '#38bdf8', cursor: 'pointer' }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                    <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase' }}>Projected views</span>
+                      <strong style={{ fontSize: '1.25rem', color: '#38bdf8', display: 'block', margin: '4px 0' }}>{simulatedViews}</strong>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Current: {currentViews}</span>
+                    </div>
+                    <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase' }}>Projected orders</span>
+                      <strong style={{ fontSize: '1.25rem', color: '#34d399', display: 'block', margin: '4px 0' }}>{simulatedPurchases}</strong>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Rate: {currentConversion.toFixed(1)}%</span>
+                    </div>
+                    <div style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.02)', padding: '12px', borderRadius: '12px', textAlign: 'center' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', textTransform: 'uppercase' }}>Projected revenue</span>
+                      <strong style={{ fontSize: '1.25rem', color: '#facc15', display: 'block', margin: '4px 0' }}>${projectedRevenue.toLocaleString()}</strong>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Lift: +${netLift}</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ background: 'rgba(15, 23, 42, 0.5)', border: '1px solid rgba(255,255,255,0.03)', padding: '16px', borderRadius: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#fff' }}>Sales blueprint</span>
+                    <span style={{ fontSize: '0.75rem', background: 'rgba(167, 139, 250, 0.12)', border: '1px solid rgba(167, 139, 250, 0.25)', color: '#a78bfa', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>{simHook.badge}</span>
+                  </div>
+                  <h5 style={{ margin: '0 0 6px 0', fontSize: '1rem', color: '#f8fafc', fontWeight: 'bold' }}>{simHook.title}</h5>
+                  <p style={{ margin: '0 0 12px 0', fontSize: '0.875rem', color: '#94a3b8', lineHeight: '1.4' }}>{simHook.desc}</p>
+                  <div style={{ background: 'rgba(167, 139, 250, 0.06)', border: '1px solid rgba(167, 139, 250, 0.15)', padding: '10px 12px', borderRadius: '8px', fontSize: '0.875rem', color: '#c084fc', lineHeight: '1.4', fontStyle: 'italic' }}>{simHook.hookText}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="analytics-collapsible-card">
+          <button
+            type="button"
+            className="analytics-collapsible-trigger"
+            onClick={() => setShowGuideTip((v) => !v)}
+            aria-expanded={showGuideTip}
+          >
+            <div>
+              <div className="analytics-collapsible-trigger-title">
+                <HelpCircle size={16} style={{ color: '#38bdf8' }} />
+                Metric help
+              </div>
+              <div className="analytics-collapsible-trigger-sub">Tap 💡 icons on cards for explanations</div>
+            </div>
+            <ChevronDown size={16} className={`analytics-collapsible-chevron${showGuideTip ? ' open' : ''}`} />
+          </button>
+          {showGuideTip && (
+            <div className="analytics-collapsible-body">
+              <p className="analytics-guide-tip">
+                Not sure what a number means? Tap the 💡 icon next to any metric or section title for a plain-language explanation in English and Spanish.
+              </p>
+            </div>
+          )}
+        </div>
+
       </div>
 
 
