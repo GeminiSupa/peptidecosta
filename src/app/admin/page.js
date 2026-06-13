@@ -15,7 +15,7 @@ import {
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send,
-  Bell, X, TrendingUp, Target, Smartphone, Inbox, Search
+  Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
@@ -51,6 +51,62 @@ const ADMIN_TABS = new Set([
   'carts', 'share', 'reviews', 'affiliates', 'analytics', 'cms',
   'whatsapp_ai', 'team',
 ]);
+
+const TAB_TITLES = {
+  home: 'Today',
+  spreadsheet: 'Products',
+  orders: 'Orders',
+  customers: 'Customers',
+  inquiries: 'Inquiries',
+  leads: 'Leads',
+  carts: 'Abandoned Carts',
+  share: 'Share Links',
+  reviews: 'Reviews',
+  affiliates: 'Affiliates',
+  analytics: 'Analytics',
+  cms: 'CMS',
+  whatsapp_ai: 'WhatsApp AI',
+  team: 'Team',
+  ai: 'AI Copilot',
+  facebook: 'Facebook',
+};
+
+const ADMIN_NAV_GROUPS = [
+  { title: 'Overview', tabs: ['home'] },
+  { title: 'Core Operations', tabs: ['spreadsheet', 'orders', 'customers', 'inquiries', 'leads'] },
+  { title: 'Sales & Marketing', tabs: ['carts', 'share', 'reviews', 'affiliates'] },
+  { title: 'Analytics & Content', tabs: ['analytics', 'cms'] },
+  { title: 'System & AI', tabs: ['whatsapp_ai', 'team'] },
+];
+
+function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews }) {
+  const pendingOrders = orders.filter((o) => (o.status || 'Pending') === 'Pending').length;
+  const pendingReviews = reviews.filter((r) => r.status === 'Pending').length;
+  const newLeads = leads.filter((l) => (l.status || 'New') === 'New').length;
+
+  switch (tabId) {
+    case 'orders':
+      return pendingOrders
+        ? `${pendingOrders} pending · ${orders.length} total`
+        : `${orders.length} order${orders.length !== 1 ? 's' : ''}`;
+    case 'carts':
+      return abandonedCarts.length
+        ? `${abandonedCarts.length} cart${abandonedCarts.length !== 1 ? 's' : ''} to recover`
+        : 'No active abandoned carts';
+    case 'leads':
+      return newLeads
+        ? `${newLeads} new lead${newLeads !== 1 ? 's' : ''} · ${leads.length} total`
+        : `${leads.length} lead${leads.length !== 1 ? 's' : ''}`;
+    case 'reviews':
+      return pendingReviews
+        ? `${pendingReviews} awaiting approval`
+        : `${reviews.length} review${reviews.length !== 1 ? 's' : ''}`;
+    case 'whatsapp_ai':
+      return 'Reply to customers · AI autopilot available';
+    default:
+      return '';
+  }
+}
 
 const SUPERADMIN_ONLY_TABS = new Set(['affiliates', 'team']);
 
@@ -246,6 +302,7 @@ export default function AdminPage() {
   const [selectedLeadDetails, setSelectedLeadDetails] = useState(null);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [manualOrderOpen, setManualOrderOpen] = useState(false);
   const [inquiryCount, setInquiryCount] = useState(0);
   const [notifRefreshKey, setNotifRefreshKey] = useState(0);
@@ -1114,8 +1171,15 @@ Core Rules:
   const navigateToTab = useCallback((tabId) => {
     if (!ADMIN_TABS.has(tabId)) return;
     setActiveTab(tabId);
+    setMobileMoreOpen(false);
     router.replace(`/admin?tab=${encodeURIComponent(tabId)}`, { scroll: false });
   }, [router]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const activeBtn = document.querySelector('.admin-tab-btn.active');
+    activeBtn?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  }, [activeTab, mounted]);
 
   // Resolve ?tab= from URL once admin profile is loaded
   useEffect(() => {
@@ -3323,27 +3387,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     <div className="admin-layout min-h-screen" suppressHydrationWarning>
       {/* Toast Alert Notification */}
       {toastMessage && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          background: 'linear-gradient(135deg, #0ea5e9, #0284c7)',
-          color: 'white',
-          padding: '16px 24px',
-          borderRadius: '12px',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.4)',
-          zIndex: 999999,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          fontWeight: 'bold',
-          animation: 'slideInRight 0.3s ease-out forwards',
-          border: '1px solid rgba(255,255,255,0.2)'
-        }}>
+        <div className="admin-toast" role="status" aria-live="polite">
           <Bell className="animate-bounce" size={20} />
           <span>{toastMessage}</span>
-          <button onClick={() => setToastMessage('')} style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', marginLeft: '12px', opacity: 0.8 }} onMouseOver={(e) => e.target.style.opacity = '1'}>
-            <X size={16} />
+          <button type="button" className="admin-toast-close" onClick={() => setToastMessage('')} aria-label="Dismiss notification">
+            <X size={18} />
           </button>
         </div>
       )}
@@ -3371,6 +3419,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           </div>
         </div>
 
+        <div className="admin-nav-scroll-wrap">
         <div className="admin-nav-sections">
           <div className="admin-nav-section">
             <div className="admin-nav-section-title">Overview</div>
@@ -3548,6 +3597,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             </div>
           </div>
         </div>
+        </div>
 
         {/* Bottom Pinned Admin Session Card */}
         <div className="admin-sidebar-footer">
@@ -3585,7 +3635,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
       {/* Main Admin dashboard container */}
       <div className="admin-container">
-        
+        <header className="admin-page-header">
+          <h1 className="admin-page-title">{TAB_TITLES[activeTab] || 'Admin'}</h1>
+          {(() => {
+            const subtitle = getAdminPageSubtitle(activeTab, { orders, abandonedCarts, leads, reviews });
+            return subtitle ? <p className="admin-page-subtitle">{subtitle}</p> : null;
+          })()}
+        </header>
+
         {/* TAB 1: SPREADSHEET EDITOR */}
         {activeTab === 'home' && (
           <DashboardHome
@@ -4019,9 +4076,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 12px 0' }}>
                   A secure listing of all catalog order intents placed by customers. Double check entries here before coordinating dispatches on WhatsApp.
                 </p>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="admin-toolbar-filters">
                   <input 
-                    className="admin-input"
+                    className="admin-input admin-filter-input"
                     type="text" 
                     placeholder="Search by name, phone, email, or tracking..." 
                     value={orderSearch}
@@ -4029,7 +4086,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       setOrderSearch(e.target.value);
                       setOrdersCurrentPage(1);
                     }}
-                    style={{ minWidth: '280px', flexGrow: 1 }}
                   />
                   <select
                     className="admin-select"
@@ -4048,7 +4104,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   </select>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '10px', flexShrink: 0, alignSelf: 'flex-start', flexWrap: 'wrap' }}>
+              <div className="admin-toolbar-actions">
                 <button
                   type="button"
                   className="admin-btn admin-btn-secondary"
@@ -4082,7 +4138,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 No orders registered in the system yet.
               </div>
             ) : (
-              <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div className="table-responsive admin-table-wrap" style={{ background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <table className="spreadsheet-table responsive-table">
                   <thead>
                     <tr>
@@ -4209,7 +4265,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                               </select>
                             </td>
                             <td data-label="Actions" style={{ padding: '10px 12px' }}>
-                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'nowrap' }}>
+                              <div className="admin-card-actions">
                                 <button 
                                   className="admin-btn" 
                                   onClick={() => setSelectedOrderDetails(order)}
@@ -4469,9 +4525,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {activeTab === 'carts' && (
           <div className="admin-orders-tab">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-              <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0 }}>🛒 Active / Abandoned Carts</h2>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div className="admin-section-header">
+              <h2 className="admin-section-title">🛒 Active / Abandoned Carts</h2>
+              <div className="admin-toolbar-actions">
                 {abandonedCarts.length > 0 && (
                   <>
                     <button
@@ -4763,7 +4819,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             </div>
                           </td>
                           <td data-label="Actions" style={{ padding: '10px 12px' }}>
-                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center', minWidth: '240px', whiteSpace: 'nowrap' }}>
+                            <div className="admin-card-actions">
                               <button 
                                 className="admin-btn" 
                                 onClick={() => setSelectedCartDetails(acart)}
@@ -5708,7 +5764,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           ) : filteredLeads.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>No leads match your active filters.</div>
           ) : (
-            <div className="table-responsive" style={{ margin: '0 24px', background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="table-responsive admin-table-wrap" style={{ background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
               <table className="spreadsheet-table responsive-table">
                 <thead>
                   <tr>
@@ -5979,7 +6035,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           })()}
                         </td>
                         <td data-label="Actions" style={{ padding: '10px 12px' }}>
-                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'nowrap' }}>
+                          <div className="admin-card-actions">
                             {editingLeadId === lead.id ? (
                               <button 
                                 className="admin-btn admin-btn-success" 
@@ -6114,10 +6170,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {/* TAB: AI COPILOT */}
         {activeTab === 'ai' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '24px', padding: '20px 0', minHeight: '650px' }}>
+          <div className="admin-split-layout admin-copilot-layout">
             
             {/* Left Column: Preset Utilities & Quick Actions */}
-            <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="admin-split-sidebar" style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div>
                 <h3 style={{ fontSize: '0.9rem', fontWeight: '800', color: '#f8fafc', margin: '0 0 4px 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>🧬 Copilot Presets</h3>
                 <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>Click any preset to draft instant marketing or support copy.</p>
@@ -6166,10 +6222,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             </div>
 
             {/* Right Column: Premium AI Chat Console */}
-            <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div className="admin-split-main" style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               
               {/* Header */}
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Sparkles size={16} style={{ color: '#38bdf8' }} />
                   <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc' }}>Active E-Commerce Copilot Session</span>
@@ -6269,13 +6325,24 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '24px', padding: '10px 0', height: '680px' }}>
+            <div className={`admin-split-layout admin-whatsapp-inbox${activeChatWaId ? ' admin-wa-chat-open' : ''}`}>
               
               {/* Left Column: Chats List & Global Autopilot Settings */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', overflowY: 'hidden' }}>
+              <div className="admin-wa-list-pane" style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', overflowY: 'hidden' }}>
                 
                 {/* 1. Global AI Autopilot Settings Card */}
-                <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <details className="admin-wa-settings-collapse" open>
+                  <summary className="admin-wa-settings-summary">
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Brain size={16} style={{ color: '#10b981' }} />
+                      AI Autopilot
+                      {whatsappSettings.ai_auto_reply && (
+                        <span className="admin-wa-autopilot-pill">On</span>
+                      )}
+                    </span>
+                    <ChevronRight size={16} className="admin-wa-settings-chevron" />
+                  </summary>
+                <div className="admin-wa-settings-body" style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Brain size={16} style={{ color: '#10b981' }} />
@@ -6337,6 +6404,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     </div>
                   </details>
                 </div>
+                </details>
 
                 {/* 2. Conversations List Pane */}
                 <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
@@ -6407,7 +6475,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
 
               {/* Right Column: Active Conversation Console */}
-              <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+              <div className="admin-wa-chat-pane" style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '16px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
                 
                 {activeChatWaId ? (() => {
                   const currentChat = chatsList.find(c => c.waId === activeChatWaId);
@@ -6415,14 +6483,24 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   return (
                     <>
                       {/* Active Chat Header */}
-                      <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
+                      <div className="admin-wa-chat-header" style={{ padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div className="admin-wa-chat-header-meta" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                          <button
+                            type="button"
+                            className="admin-wa-back-btn"
+                            onClick={() => setActiveChatWaId(null)}
+                            aria-label="Back to conversations"
+                          >
+                            <ChevronLeft size={18} />
+                          </button>
+                          <div style={{ minWidth: 0 }}>
                           <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', display: 'block' }}>
                             💬 Chatting with {currentChat?.displayName || activeChatWaId}
                           </span>
                           <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
                             Phone: +{activeChatWaId}
                           </span>
+                          </div>
                         </div>
 
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -6482,17 +6560,17 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {/* Chat Input Bar & AI Drafting Panel */}
                       <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.01)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         
-                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <div className="admin-wa-composer-row">
                           <textarea
                             value={chatInputText}
                             onChange={(e) => setChatInputText(e.target.value)}
                             placeholder="Type a manual WhatsApp message or generate an AI draft..."
                             style={{
-                              flex: 1, height: '60px', background: '#172237', border: '1px solid rgba(255,255,255,0.1)',
+                              flex: 1, minHeight: '60px', background: '#172237', border: '1px solid rgba(255,255,255,0.1)',
                               color: 'white', borderRadius: '8px', padding: '10px 12px', fontSize: '0.8rem', outline: 'none', resize: 'none', fontFamily: 'inherit'
                             }}
                           />
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <div className="admin-wa-composer-actions">
                             <button
                               onClick={handleSendLiveWhatsappMessage}
                               disabled={!chatInputText.trim()}
@@ -6557,7 +6635,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {/* SECTION: CONTACT & BASICS */}
               <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Contact Details</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="admin-form-grid-2">
                   <div>
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Method</label>
                     <span style={{ 
@@ -7511,6 +7589,112 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile bottom quick navigation */}
+      <nav className="admin-mobile-quick-nav" aria-label="Quick navigation">
+        {hasAccess('home') && (
+          <button
+            type="button"
+            className={`admin-quick-nav-btn${activeTab === 'home' ? ' active' : ''}`}
+            onClick={() => navigateToTab('home')}
+          >
+            <LayoutDashboard size={18} />
+            <span>Today</span>
+          </button>
+        )}
+        {hasAccess('orders') && (
+          <button
+            type="button"
+            className={`admin-quick-nav-btn${activeTab === 'orders' ? ' active' : ''}`}
+            onClick={() => navigateToTab('orders')}
+          >
+            <ClipboardList size={18} />
+            <span>Orders</span>
+            {orders.filter((o) => (o.status || 'Pending') === 'Pending').length > 0 && (
+              <span className="admin-quick-nav-badge">
+                {orders.filter((o) => (o.status || 'Pending') === 'Pending').length}
+              </span>
+            )}
+          </button>
+        )}
+        {hasAccess('carts') && (
+          <button
+            type="button"
+            className={`admin-quick-nav-btn${activeTab === 'carts' ? ' active' : ''}`}
+            onClick={() => navigateToTab('carts')}
+          >
+            <ShoppingCart size={18} />
+            <span>Carts</span>
+            {abandonedCarts.length > 0 && (
+              <span className="admin-quick-nav-badge warning">{abandonedCarts.length}</span>
+            )}
+          </button>
+        )}
+        {hasAccess('whatsapp_ai') && (
+          <button
+            type="button"
+            className={`admin-quick-nav-btn${activeTab === 'whatsapp_ai' ? ' active' : ''}`}
+            onClick={() => navigateToTab('whatsapp_ai')}
+          >
+            <MessageSquare size={18} />
+            <span>Chat</span>
+          </button>
+        )}
+        <button
+          type="button"
+          className={`admin-quick-nav-btn${mobileMoreOpen ? ' active' : ''}`}
+          onClick={() => setMobileMoreOpen(true)}
+          aria-label="More admin sections"
+        >
+          <ListFilter size={18} />
+          <span>More</span>
+        </button>
+      </nav>
+
+      {mobileMoreOpen && (
+        <div className="admin-more-sheet-overlay" onClick={() => setMobileMoreOpen(false)}>
+          <div className="admin-more-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="All admin sections">
+            <div className="admin-more-sheet-header">
+              <h2>All sections</h2>
+              <button type="button" className="admin-more-sheet-close" onClick={() => setMobileMoreOpen(false)} aria-label="Close">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="admin-more-sheet-body">
+              {ADMIN_NAV_GROUPS.map((group) => {
+                const visibleTabs = group.tabs.filter((tabId) => hasAccess(tabId));
+                if (visibleTabs.length === 0) return null;
+                return (
+                  <div key={group.title} className="admin-more-group">
+                    <div className="admin-more-group-title">{group.title}</div>
+                    <div className="admin-more-group-items">
+                      {visibleTabs.map((tabId) => (
+                        <button
+                          key={tabId}
+                          type="button"
+                          className={`admin-more-tab-btn${activeTab === tabId ? ' active' : ''}`}
+                          onClick={() => navigateToTab(tabId)}
+                        >
+                          {TAB_TITLES[tabId] || tabId}
+                          {tabId === 'orders' && orders.filter((o) => (o.status || 'Pending') === 'Pending').length > 0 && (
+                            <span className="admin-more-tab-badge">{orders.filter((o) => (o.status || 'Pending') === 'Pending').length}</span>
+                          )}
+                          {tabId === 'carts' && abandonedCarts.length > 0 && (
+                            <span className="admin-more-tab-badge warning">{abandonedCarts.length}</span>
+                          )}
+                          {tabId === 'leads' && leads.length > 0 && (
+                            <span className="admin-more-tab-badge success">{leads.length}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

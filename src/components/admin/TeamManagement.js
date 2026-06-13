@@ -529,7 +529,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
               )}
               
               <form onSubmit={handleSubmit}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                <div className="admin-form-grid-2" style={{ marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Full Name</label>
                     <input type="text" value={formName} onChange={e => setFormName(e.target.value)} required className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder="John Doe" />
@@ -540,7 +540,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   </div>
                 </div>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                <div className="admin-form-grid-2" style={{ marginBottom: '24px' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Password</label>
                     <input type="password" value={formPassword} onChange={e => setFormPassword(e.target.value)} required={!editingUserId} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder={editingUserId ? "Leave blank to keep current" : "Enter temporary password"} />

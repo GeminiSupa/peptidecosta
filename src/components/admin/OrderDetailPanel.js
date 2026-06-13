@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Copy, Phone, Plus, Trash2 } from 'lucide-react';
 import { formatActivityType } from '@/lib/orderActivity';
 import { adminFetch } from '@/lib/adminApi';
 
@@ -47,6 +47,7 @@ export default function OrderDetailPanel({
   const [addProduct, setAddProduct] = useState('');
   const [savingOrder, setSavingOrder] = useState(false);
   const [orderError, setOrderError] = useState('');
+  const [phoneCopied, setPhoneCopied] = useState(false);
 
   useEffect(() => {
     setNotes(order.internal_notes || '');
@@ -58,6 +59,7 @@ export default function OrderDetailPanel({
     setShippingAddress(order.shipping_address || '');
     setEditItems(Array.isArray(order.items) ? order.items.map((i) => ({ ...i })) : []);
     setOrderError('');
+    setPhoneCopied(false);
   }, [order]);
 
   if (!order) return null;
@@ -240,6 +242,24 @@ export default function OrderDetailPanel({
             <div>
               <label>Phone</label>
               <input className="admin-input" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+              {customerPhone.trim() && (
+                <div className="order-detail-quick-actions">
+                  <a href={`tel:${customerPhone.replace(/\s/g, '')}`} className="admin-btn admin-btn-secondary order-detail-quick-btn">
+                    <Phone size={14} /> Call
+                  </a>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-secondary order-detail-quick-btn"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(customerPhone.trim());
+                      setPhoneCopied(true);
+                      setTimeout(() => setPhoneCopied(false), 2000);
+                    }}
+                  >
+                    <Copy size={14} /> {phoneCopied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label>Email</label>
