@@ -2538,6 +2538,13 @@ Puedes finalizar tu orden de forma segura en este link:
     // 2. Order follow up
     else if (recipient.orderNumber) {
       switch (templateType) {
+        case 'payment':
+          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+
+Recibimos tu orden #${recipient.orderNumber} por ${itemsStr}. Quería verificar si tuviste algún inconveniente al realizar tu pago SINPE Móvil o con Tarjeta.
+
+Quedamos atentos a la confirmación o comprobante de pago por este medio para procesar y despachar tus productos de inmediato. ¡Muchas gracias!`;
+
         case 'purity':
           return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
 
@@ -2566,11 +2573,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   };
 
   // 3. Open Custom WhatsApp Composer Modal
-  const openWhatsAppComposer = (recipient) => {
+  const openWhatsAppComposer = (recipient, defaultTemplate = 'standard') => {
     setWaRecipient(recipient);
     
     // Default Dynamic templates states
-    setWaSelectedTemplate('standard');
+    setWaSelectedTemplate(defaultTemplate);
     
     let defaultAgent = '';
     if (agents && agents.length > 0) {
@@ -2581,8 +2588,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     }
     setWaSelectedAgent(defaultAgent);
 
-    // Initial message based on standard template and default agent signature
-    const initialMsg = generateWhatsAppTemplateText(recipient, 'standard', defaultAgent);
+    // Initial message based on template and default agent signature
+    const initialMsg = generateWhatsAppTemplateText(recipient, defaultTemplate, defaultAgent);
     setWaMessageText(initialMsg);
     
     setWaModalOpen(true);
@@ -4273,6 +4280,58 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                                 >
                                   Details
                                 </button>
+                                
+                                {/* Quick CTAs based on status */}
+                                {(order.status || 'Pending') === 'Pending' && (
+                                  <>
+                                    <button 
+                                      className="admin-btn admin-cta-btn" 
+                                      onClick={() => handleOrderStatusUpdate(order.id, 'Processing')}
+                                      style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                                    >
+                                      🚚 Process
+                                    </button>
+                                    <button 
+                                      className="admin-btn admin-cta-btn" 
+                                      onClick={() => handleOrderStatusUpdate(order.id, 'Order Complete')}
+                                      style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                                    >
+                                      ✅ Complete
+                                    </button>
+                                  </>
+                                )}
+
+                                {(order.status || 'Pending') === 'Payment Pending' && (
+                                  <button 
+                                    className="admin-btn admin-cta-btn" 
+                                    onClick={() => openWhatsAppComposer({ 
+                                      name: order.customer_name, 
+                                      phone: order.customer_phone, 
+                                      orderNumber: order.order_number, 
+                                      orderDbId: order.id, 
+                                      cartItems: order.cart_data || [] 
+                                    }, 'payment')}
+                                    style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                  >
+                                    💬 Ask Payment
+                                  </button>
+                                )}
+
+                                {/* Quick Agent Claim CTA */}
+                                {!order.sales_agent && (
+                                  <button 
+                                    className="admin-btn admin-cta-btn" 
+                                    onClick={() => {
+                                      const claimEmail = loggedInEmail.current || localStorage.getItem('admin_email') || 'info@peptidescostarica.net';
+                                      handleOrderSalesAgentUpdate(order.id, claimEmail);
+                                    }}
+                                    style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#a855f7', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                                    title="Assign this order to yourself"
+                                  >
+                                    👤 Claim
+                                  </button>
+                                )}
+
                                  <button 
                                   onClick={() => openWhatsAppComposer({ 
                                     name: order.customer_name, 
@@ -4818,71 +4877,89 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                               )}
                             </div>
                           </td>
-                          <td data-label="Actions" style={{ padding: '10px 12px' }}>
-                            <div className="admin-card-actions">
-                              <button 
-                                className="admin-btn" 
-                                onClick={() => setSelectedCartDetails(acart)}
-                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
-                              >
-                                Details
-                              </button>
-                              
-                              {acart.customer_email && (
-                                <button
-                                  onClick={() => handleSendRecoveryEmail(acart)}
-                                  disabled={sendingRecoveryEmail[acart.session_id]}
-                                  className="admin-btn"
-                                  style={{ 
-                                    padding: '6px 12px', 
-                                    fontSize: '0.8rem', 
-                                    background: 'rgba(56, 189, 248, 0.1)', 
-                                    border: '1px solid rgba(56, 189, 248, 0.2)', 
-                                    color: '#38bdf8', 
-                                    borderRadius: '6px',
-                                    fontWeight: 'bold'
-                                  }}
+                            <td data-label="Actions" style={{ padding: '10px 12px' }}>
+                              <div className="admin-card-actions">
+                                <button 
+                                  className="admin-btn" 
+                                  onClick={() => setSelectedCartDetails(acart)}
+                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
                                 >
-                                  {sendingRecoveryEmail[acart.session_id] ? 'Sending...' : 'Email'}
+                                  Details
                                 </button>
-                              )}
-                              
-                              {acart.customer_phone && (
+                                
+                                {acart.customer_email && (
+                                  <button
+                                    onClick={() => handleSendRecoveryEmail(acart)}
+                                    disabled={sendingRecoveryEmail[acart.session_id]}
+                                    className="admin-btn admin-cta-btn"
+                                    style={{ 
+                                      padding: '6px 12px', 
+                                      fontSize: '0.8rem', 
+                                      background: '#0ea5e9', 
+                                      border: 'none', 
+                                      color: '#fff', 
+                                      borderRadius: '6px',
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    {sendingRecoveryEmail[acart.session_id] ? 'Sending...' : '✉️ Recover Email'}
+                                  </button>
+                                )}
+                                
+                                {acart.customer_phone && (
+                                  <button
+                                    onClick={() => openWhatsAppComposer({ 
+                                      name: acart.customer_name, 
+                                      phone: acart.customer_phone, 
+                                      cartItems: acart.cart_data || [], 
+                                      session_id: acart.session_id 
+                                    })}
+                                    className="admin-btn admin-cta-btn"
+                                    style={{ 
+                                      padding: '6px 12px', 
+                                      fontSize: '0.8rem', 
+                                      background: '#10b981', 
+                                      border: 'none', 
+                                      color: '#fff', 
+                                      borderRadius: '6px', 
+                                      display: 'inline-flex', 
+                                      alignItems: 'center', 
+                                      gap: '4px', 
+                                      fontWeight: 'bold',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    💬 Recover WA
+                                  </button>
+                                )}
+
+                                {!acart.customer_email && !acart.customer_phone && (
+                                  <button
+                                    onClick={() => setSelectedCartDetails(acart)}
+                                    className="admin-btn admin-cta-btn"
+                                    style={{ 
+                                      padding: '6px 12px', 
+                                      fontSize: '0.8rem', 
+                                      background: '#475569', 
+                                      border: 'none', 
+                                      color: '#fff', 
+                                      borderRadius: '6px',
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    ✏️ Add Info
+                                  </button>
+                                )}
+                                
                                 <button
-                                  onClick={() => openWhatsAppComposer({ 
-                                    name: acart.customer_name, 
-                                    phone: acart.customer_phone, 
-                                    cartItems: acart.cart_data || [], 
-                                    session_id: acart.session_id 
-                                  })}
+                                  onClick={() => handleDeleteCart(acart.session_id)}
                                   className="admin-btn"
-                                  style={{ 
-                                    padding: '6px 12px', 
-                                    fontSize: '0.8rem', 
-                                    background: 'rgba(34, 197, 94, 0.15)', 
-                                    border: '1px solid rgba(34, 197, 94, 0.3)', 
-                                    color: '#4ade80', 
-                                    borderRadius: '6px', 
-                                    display: 'inline-flex', 
-                                    alignItems: 'center', 
-                                    gap: '4px', 
-                                    fontWeight: 'bold',
-                                    cursor: 'pointer'
-                                  }}
+                                  style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', borderRadius: '6px' }}
                                 >
-                                  WhatsApp
+                                  Delete
                                 </button>
-                              )}
-                              
-                              <button
-                                onClick={() => handleDeleteCart(acart.session_id)}
-                                className="admin-btn"
-                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', borderRadius: '6px' }}
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </td>
+                              </div>
+                            </td>
                         </tr>
                       );
                     })}
@@ -7409,6 +7486,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     <option value="purity">Purity Guarantee (Calidad ≥98%)</option>
                     <option value="discount">Discount Offer (10% Cupón COSTA10)</option>
                     <option value="dosing">Dosing & Reconstitution Support</option>
+                    {waRecipient && waRecipient.orderNumber && (
+                      <option value="payment">💰 Payment Reminder (SINPE / Card)</option>
+                    )}
                   </select>
                 </div>
               </div>

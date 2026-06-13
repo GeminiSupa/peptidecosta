@@ -31,6 +31,17 @@ const formatDate = (dateString) => {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
+const extractPhone = (message) => {
+  if (!message) return null;
+  const match = message.match(/(?:\+?506)?\s?[23456789]\d{3}[-\s]?\d{4}/);
+  if (!match) return null;
+  const digits = match[0].replace(/[-\s]/g, '');
+  if (digits.startsWith('506') || digits.startsWith('+506')) {
+    return digits.startsWith('+') ? digits : `+${digits}`;
+  }
+  return `+506${digits}`;
+};
+
 export default function InquiriesManager({ adminEmail }) {
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +51,16 @@ export default function InquiriesManager({ adminEmail }) {
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const replyInputRef = React.useRef(null);
+
+  useEffect(() => {
+    if (selectedInquiry && selectedInquiry.status !== 'Closed') {
+      const timer = setTimeout(() => {
+        if (replyInputRef.current) replyInputRef.current.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedInquiry]);
 
   const fetchInquiries = async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true);
@@ -236,6 +257,19 @@ export default function InquiriesManager({ adminEmail }) {
                   <span style={styles.metaItem}><User size={14} /> {inq.customer_name}</span>
                   <span style={styles.metaItem}><Mail size={14} /> {inq.customer_email}</span>
                   <span style={styles.metaItem}><Calendar size={14} /> {new Date(inq.created_at).toLocaleString()}</span>
+                  {extractPhone(inq.message) && (
+                    <span 
+                      style={{ ...styles.metaItem, color: '#4ade80', cursor: 'pointer', fontWeight: 'bold' }}
+                      onClick={() => {
+                        const phone = extractPhone(inq.message);
+                        const waMsg = encodeURIComponent(`Hola ${inq.customer_name}, te saluda el equipo de Peptides Costa Rica sobre tu consulta: "${inq.subject || 'Contacto'}". ¿Cómo te podemos ayudar?`);
+                        window.open(`https://wa.me/${phone.replace('+', '')}?text=${waMsg}`, '_blank');
+                      }}
+                      title="WhatsApp Customer"
+                    >
+                      <MessageSquare size={14} /> WhatsApp ({extractPhone(inq.message)})
+                    </span>
+                  )}
                 </div>
               </div>
               <span style={styles.badge(inq.status)}>{inq.status}</span>
@@ -262,6 +296,7 @@ export default function InquiriesManager({ adminEmail }) {
                 <Send size={14} /> {inq.admin_reply ? 'Send Another Reply' : 'Reply to Customer'}
               </div>
               <textarea
+                ref={replyInputRef}
                 style={styles.replyTextarea}
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
@@ -367,6 +402,108 @@ export default function InquiriesManager({ adminEmail }) {
               </div>
               {inq.subject && <p style={styles.cardSubject}>{inq.subject}</p>}
               <p style={styles.cardPreview}>{inq.message}</p>
+
+              {/* Quick Actions CTA Row */}
+              <div 
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  marginTop: '12px',
+                  justifyContent: 'flex-start',
+                  flexWrap: 'wrap',
+                  borderTop: '1px solid rgba(255,255,255,0.04)',
+                  paddingTop: '10px'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {inq.status === 'New' && (
+                  <button
+                    onClick={() => handleMarkAsRead(inq)}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(59, 130, 246, 0.15)',
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                      color: '#60a5fa',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Eye size={12} /> Mark Read
+                  </button>
+                )}
+
+                {inq.status !== 'Closed' && (
+                  <button
+                    onClick={() => openInquiry(inq)}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      color: '#34d399',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Send size={12} /> Reply
+                  </button>
+                )}
+
+                {inq.status !== 'Closed' && (
+                  <button
+                    onClick={() => handleClose(inq.id)}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(107, 114, 128, 0.15)',
+                      border: '1px solid rgba(107, 114, 128, 0.3)',
+                      color: '#9ca3af',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <XCircle size={12} /> Close
+                  </button>
+                )}
+
+                {extractPhone(inq.message) && (
+                  <button
+                    onClick={() => {
+                      const phone = extractPhone(inq.message);
+                      const waMsg = encodeURIComponent(`Hola ${inq.customer_name}, te saluda el equipo de Peptides Costa Rica sobre tu consulta: "${inq.subject || 'Contacto'}". ¿Cómo te podemos ayudar?`);
+                      window.open(`https://wa.me/${phone.replace('+', '')}?text=${waMsg}`, '_blank');
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      background: 'rgba(34, 197, 94, 0.15)',
+                      border: '1px solid rgba(34, 197, 94, 0.3)',
+                      color: '#4ade80',
+                      fontSize: '11px',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <MessageSquare size={12} /> WhatsApp
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

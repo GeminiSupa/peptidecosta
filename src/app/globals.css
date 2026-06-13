@@ -7828,6 +7828,18 @@ body {
     background: rgba(0, 212, 255, 0.08);
 }
 
+.admin-quick-nav-btn.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 20%;
+    right: 20%;
+    height: 3px;
+    background: #00D4FF;
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 0 8px #00D4FF;
+}
+
 .admin-quick-nav-badge {
     position: absolute;
     top: 2px;
@@ -7867,11 +7879,12 @@ body {
         left: 0;
         right: 0;
         z-index: 200;
-        background: rgba(11, 19, 43, 0.96);
+        background: rgba(11, 19, 43, 0.82);
         border-top: 1px solid rgba(255, 255, 255, 0.08);
         padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        backdrop-filter: blur(16px) saturate(180%);
+        -webkit-backdrop-filter: blur(16px) saturate(180%);
+        box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.4);
     }
 
     .admin-more-sheet-overlay {
@@ -8035,4 +8048,21 @@ body {
     .admin-wa-settings-collapse .admin-wa-settings-body {
         display: flex;
     }
+}
+
+/* Quick Actions CTA Buttons */
+.admin-card-actions .admin-btn.admin-cta-btn {
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.admin-card-actions .admin-btn.admin-cta-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    filter: brightness(1.1);
+}
+
+.admin-card-actions .admin-btn.admin-cta-btn:active {
+    transform: translateY(0);
+    filter: brightness(0.95);
 }

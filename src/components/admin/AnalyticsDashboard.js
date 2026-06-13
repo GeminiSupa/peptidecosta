@@ -216,6 +216,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // Heatmap UI States
   const heatmapViewMode = 'live';
   const [heatmapIntentFilter, setHeatmapIntentFilter] = useState('all'); // 'all' | 'intent'
+  const [showHeatmapMock, setShowHeatmapMock] = useState(false);
   
   // Real-time counter of updates
   const [refreshKey, setRefreshKey] = useState(0);
@@ -2588,184 +2589,45 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       </div>
 
       {/* SECTION 3.2: Mobile Viewport Click Heatmap Visualizer */}
-      <div className="analytics-double-panel" style={{ marginTop: '20px' }}>
+      <div 
+        className="analytics-double-panel" 
+        style={{ 
+          marginTop: '20px', 
+          gridTemplateColumns: showHeatmapMock ? undefined : '1fr' 
+        }}
+      >
         
-        {/* PANEL A: Interactive Smartphone Heatmap */}
-        <div className="dashboard-section-card phone-heatmap-section">
-          <div className="section-card-title" style={{ justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Smartphone size={16} style={{ color: '#34d399' }} />
-              <span>Mobile Click Heatmap Overlay {renderExplainerTrigger('heatmap')}</span>
-            </div>
-            
-            {/* Toggles */}
-            <div className="heatmap-control-pills">
-              <div
-                className="heatmap-pill-btn active"
-                style={{
-                  background: '#10b981',
-                  color: '#fff',
-                  border: 'none',
-                  fontSize: '0.875rem',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontWeight: 500,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <span style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  background: clicks.length === 0 ? '#64748b' : '#34d399',
-                  boxShadow: clicks.length === 0 ? 'none' : '0 0 6px #34d399',
-                  display: 'inline-block',
-                }}></span>
-                Live: {activeLiveUsers} Active · {clicks.length} clicks
-              </div>
-            </div>
-          </div>
-
-          <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '16px', marginTop: '-10px' }}>
-            {clicks.length === 0
-              ? 'No mobile click telemetry recorded yet for this period. Data appears here as visitors interact with the catalog.'
-              : `${activeLiveUsers} active visitor session(s) in the last 45 seconds. Showing ${clicks.length} recorded mobile click(s).`}
-          </p>
-
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            <span style={{ fontSize: '0.75rem', color: '#64748b', alignSelf: 'center', fontWeight: 500 }}>Filter Clicks:</span>
-            <button 
-              type="button"
-              className={`heatmap-filter-btn ${heatmapIntentFilter === 'all' ? 'active' : ''}`}
-              onClick={() => setHeatmapIntentFilter('all')}
-              style={{
-                background: heatmapIntentFilter === 'all' ? 'rgba(255,255,255,0.08)' : 'transparent',
-                color: heatmapIntentFilter === 'all' ? '#fff' : '#64748b',
-                border: '1px solid rgba(255,255,255,0.05)',
-                fontSize: '0.75rem',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              All Clicks
-            </button>
-            <button 
-              type="button"
-              className={`heatmap-filter-btn ${heatmapIntentFilter === 'intent' ? 'active' : ''}`}
-              onClick={() => setHeatmapIntentFilter('intent')}
-              style={{
-                background: heatmapIntentFilter === 'intent' ? 'rgba(52,211,153,0.1)' : 'transparent',
-                color: heatmapIntentFilter === 'intent' ? '#34d399' : '#64748b',
-                border: '1px solid rgba(52,211,153,0.2)',
-                fontSize: '0.75rem',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px'
-              }}
-            >
-              <Sparkles size={10} />
-              High Intent
-            </button>
-            <button 
-              type="button"
-              className={`heatmap-filter-btn ${heatmapIntentFilter === 'active' ? 'active' : ''}`}
-              onClick={() => setHeatmapIntentFilter('active')}
-              style={{
-                background: heatmapIntentFilter === 'active' ? 'rgba(56, 189, 248, 0.1)' : 'transparent',
-                color: heatmapIntentFilter === 'active' ? '#38bdf8' : '#64748b',
-                border: '1px solid rgba(56, 189, 248, 0.2)',
-                fontSize: '0.75rem',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px',
-                marginLeft: '4px'
-              }}
-            >
-              <span style={{
-                width: '6px',
-                height: '6px',
-                borderRadius: '50%',
-                background: '#38bdf8',
-                boxShadow: '0 0 6px #38bdf8',
-                display: 'inline-block'
-              }}></span>
-              Active Clicks
-            </button>
-          </div>
-
-          {/* Smartphone bezel mockup */}
-          <div className="phone-mockup-frame">
-            <div className="phone-notch"></div>
-            <div className="phone-glare"></div>
-            
-            {/* Scrollable screen viewport */}
-            <div className="phone-screen-viewport" style={{ overflow: 'hidden', padding: 0 }}>
-              
-              {/* Mock Browser Address Bar */}
-              <div className="mock-browser-address-bar" style={{
-                background: '#1e293b',
-                padding: '6px 12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderBottom: '1px solid rgba(255,255,255,0.08)',
-                fontSize: '0.75rem',
-                color: '#94a3b8',
-                gap: '6px',
-                zIndex: 48,
-                userSelect: 'none',
-                position: 'absolute',
-                top: '14px', // Below notch
-                left: 0,
-                right: 0
-              }}>
-                <span style={{ fontSize: '0.75rem', color: '#10b981' }}>🔒</span>
-                <span style={{ fontWeight: 500, letterSpacing: '0.3px', color: '#cbd5e1' }}>peptidescostarica.net/catalog</span>
-              </div>
-              
-              {/* Actual Storefront Viewport using Iframe */}
-              <div style={{ 
-                position: 'absolute', 
-                top: '40px', // Below notch & address bar
-                left: 0, 
-                right: 0, 
-                bottom: 0, 
-                overflow: 'hidden'
-              }}>
-                <iframe 
-                  src="/catalog?admin_preview=true" 
-                  title="Live Catalog Telemetry Preview"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    border: 'none',
-                    pointerEvents: 'auto',
-                    background: '#020617'
-                  }}
-                />
-                
-                {/* Interactive Heatmap Dots Layer */}
-                {renderHeatmapDots()}
-              </div>
-
-            </div>
-          </div>
-        </div>
-
         {/* PANEL B: Top Click Targets & Analytics */}
         <div className="dashboard-section-card">
-          <div className="section-card-title">
-            <TrendingUp size={16} style={{ color: '#38bdf8' }} />
-            <span>Top Mobile Clicks & Analytics Feed</span>
+          <div className="section-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <TrendingUp size={16} style={{ color: '#38bdf8' }} />
+              <span>Top Mobile Clicks & Analytics Feed</span>
+            </div>
+
+            {/* Mock Toggle Button */}
+            <button
+              onClick={() => setShowHeatmapMock(prev => !prev)}
+              className="admin-btn"
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.75rem',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                border: '1px solid rgba(0, 212, 255, 0.3)',
+                background: showHeatmapMock ? 'rgba(0, 212, 255, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                color: showHeatmapMock ? '#00D4FF' : '#cbd5e1',
+                boxShadow: showHeatmapMock ? '0 0 8px rgba(0, 212, 255, 0.2)' : 'none',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <Smartphone size={14} />
+              {showHeatmapMock ? '🙈 Hide Device Visualizer' : '📱 Toggle Device Visualizer'}
+            </button>
           </div>
 
           {/* Targets List */}
@@ -2834,6 +2696,181 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             </div>
           </div>
         </div>
+
+        {/* PANEL A: Interactive Smartphone Heatmap */}
+        {showHeatmapMock && (
+          <div className="dashboard-section-card phone-heatmap-section">
+            <div className="section-card-title" style={{ justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Smartphone size={16} style={{ color: '#34d399' }} />
+                <span>Mobile Click Heatmap Overlay {renderExplainerTrigger('heatmap')}</span>
+              </div>
+              
+              {/* Toggles */}
+              <div className="heatmap-control-pills">
+                <div
+                  className="heatmap-pill-btn active"
+                  style={{
+                    background: '#10b981',
+                    color: '#fff',
+                    border: 'none',
+                    fontSize: '0.875rem',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    fontWeight: 500,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: clicks.length === 0 ? '#64748b' : '#34d399',
+                    boxShadow: clicks.length === 0 ? 'none' : '0 0 6px #34d399',
+                    display: 'inline-block',
+                  }}></span>
+                  Live: {activeLiveUsers} Active · {clicks.length} clicks
+                </div>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '16px', marginTop: '-10px' }}>
+              {clicks.length === 0
+                ? 'No mobile click telemetry recorded yet for this period. Data appears here as visitors interact with the catalog.'
+                : `${activeLiveUsers} active visitor session(s) in the last 45 seconds. Showing ${clicks.length} recorded mobile click(s).`}
+            </p>
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '0.75rem', color: '#64748b', alignSelf: 'center', fontWeight: 500 }}>Filter Clicks:</span>
+              <button 
+                type="button"
+                className={`heatmap-filter-btn ${heatmapIntentFilter === 'all' ? 'active' : ''}`}
+                onClick={() => setHeatmapIntentFilter('all')}
+                style={{
+                  background: heatmapIntentFilter === 'all' ? 'rgba(255,255,255,0.08)' : 'transparent',
+                  color: heatmapIntentFilter === 'all' ? '#fff' : '#64748b',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                  fontSize: '0.75rem',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                All Clicks
+              </button>
+              <button 
+                type="button"
+                className={`heatmap-filter-btn ${heatmapIntentFilter === 'intent' ? 'active' : ''}`}
+                onClick={() => setHeatmapIntentFilter('intent')}
+                style={{
+                  background: heatmapIntentFilter === 'intent' ? 'rgba(52,211,153,0.1)' : 'transparent',
+                  color: heatmapIntentFilter === 'intent' ? '#34d399' : '#64748b',
+                  border: '1px solid rgba(52,211,153,0.2)',
+                  fontSize: '0.75rem',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px'
+                }}
+              >
+                <Sparkles size={10} />
+                High Intent
+              </button>
+              <button 
+                type="button"
+                className={`heatmap-filter-btn ${heatmapIntentFilter === 'active' ? 'active' : ''}`}
+                onClick={() => setHeatmapIntentFilter('active')}
+                style={{
+                  background: heatmapIntentFilter === 'active' ? 'rgba(56, 189, 248, 0.1)' : 'transparent',
+                  color: heatmapIntentFilter === 'active' ? '#38bdf8' : '#64748b',
+                  border: '1px solid rgba(56, 189, 248, 0.2)',
+                  fontSize: '0.75rem',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  marginLeft: '4px'
+                }}
+              >
+                <span style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  background: '#38bdf8',
+                  boxShadow: '0 0 6px #38bdf8',
+                  display: 'inline-block'
+                }}></span>
+                Active Clicks
+              </button>
+            </div>
+
+            {/* Smartphone bezel mockup */}
+            <div className="phone-mockup-frame">
+              <div className="phone-notch"></div>
+              <div className="phone-glare"></div>
+              
+              {/* Scrollable screen viewport */}
+              <div className="phone-screen-viewport" style={{ overflow: 'hidden', padding: 0 }}>
+                
+                {/* Mock Browser Address Bar */}
+                <div className="mock-browser-address-bar" style={{
+                  background: '#1e293b',
+                  padding: '6px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  fontSize: '0.75rem',
+                  color: '#94a3b8',
+                  gap: '6px',
+                  zIndex: 48,
+                  userSelect: 'none',
+                  position: 'absolute',
+                  top: '14px', // Below notch
+                  left: 0,
+                  right: 0
+                }}>
+                  <span style={{ fontSize: '0.75rem', color: '#10b981' }}>🔒</span>
+                  <span style={{ fontWeight: 500, letterSpacing: '0.3px', color: '#cbd5e1' }}>peptidescostarica.net/catalog</span>
+                </div>
+                
+                {/* Actual Storefront Viewport using Iframe */}
+                <div style={{ 
+                  position: 'absolute', 
+                  top: '40px', // Below notch & address bar
+                  left: 0, 
+                  right: 0, 
+                  bottom: 0, 
+                  overflow: 'hidden'
+                }}>
+                  {showHeatmapMock && (
+                    <iframe 
+                      src="/catalog?admin_preview=true" 
+                      title="Live Catalog Telemetry Preview"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        border: 'none',
+                        pointerEvents: 'auto',
+                        background: '#020617'
+                      }}
+                    />
+                  )}
+                  
+                  {/* Interactive Heatmap Dots Layer */}
+                  {renderHeatmapDots()}
+                </div>
+
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
 
