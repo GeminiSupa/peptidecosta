@@ -1,6 +1,44 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getOrderSalesAmounts, orderBelongsToAgent } from '@/lib/agentOrders';
+
+const CR_OFFSET = -6;
+
+function nowCR() {
+  const nowUTC = new Date();
+  return new Date(nowUTC.getTime() + CR_OFFSET * 60 * 60 * 1000);
+}
+
+function startOfWeekCR(date = nowCR()) {
+  const d = new Date(date);
+  const day = d.getUTCDay();
+  const dayOffset = day === 0 ? 7 : day;
+  d.setUTCDate(d.getUTCDate() - dayOffset + 1);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+function startOfDayCR(date = nowCR()) {
+  const d = new Date(date);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+function crToUtc(crDate) {
+  return new Date(crDate.getTime() - CR_OFFSET * 60 * 60 * 1000);
+}
+
+function sumAgentOrders(agentOrders) {
+  let usd = 0;
+  let crc = 0;
+  for (const order of agentOrders) {
+    const amounts = getOrderSalesAmounts(order);
+    usd += amounts.usd;
+    crc += amounts.crc;
+  }
+  return { usd, crc, count: agentOrders.length };
+}
 
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
@@ -8,86 +46,78 @@ export async function GET(request) {
 
   try {
     const supabaseAdmin = getSupabaseAdmin();
-    const userEmail = auth.user.email;
+    const profile = auth.profile;
 
-    // Fetch the agent's profile to get salary and commission rate
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('admin_profiles')
-      .select('*')
-      .eq('email', userEmail)
-      .single();
+    const weekStartUtc = crToUtc(startOfWeekCR()).toISOString();
+    const weekEndUtc = crToUtc(nowCR()).toISOString();
+    const todayStartUtc = crToUtc(startOfDayCR()).toISOString();
 
-    if (profileError) {
-      console.error('Error fetching agent profile:', profileError);
-      return NextResponse.json({ error: 'Failed to fetch agent profile' }, { status: 500 });
-    }
-
-    // Calculate current week boundaries
-    const CR_OFFSET = -6; // Costa Rica is UTC-6 all year
-    const nowUTC = new Date();
-    const nowCR = new Date(nowUTC.getTime() + (CR_OFFSET * 60 * 60 * 1000));
-    const day = nowCR.getUTCDay();
-    const dayOffset = day === 0 ? 7 : day; 
-
-    const currentMondayCR = new Date(nowCR);
-    currentMondayCR.setUTCDate(nowCR.getUTCDate() - dayOffset + 1);
-    currentMondayCR.setUTCHours(0, 0, 0, 0);
-
-    const startDate = new Date(currentMondayCR.getTime() - (CR_OFFSET * 60 * 60 * 1000));
-    const endDate = new Date(nowCR.getTime() - (CR_OFFSET * 60 * 60 * 1000));
-
-    // Fetch orders for this week
     const { data: orders, error: ordersError } = await supabaseAdmin
       .from('orders')
-      .select('total, currency, sales_agent, created_at')
-      .gte('created_at', startDate.toISOString())
-      .lte('created_at', endDate.toISOString())
-      .not('status', 'eq', 'Cancelled');
+      .select('id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at')
+      .gte('created_at', weekStartUtc)
+      .lte('created_at', weekEndUtc)
+      .not('status', 'eq', 'Cancelled')
+      .order('created_at', { ascending: false });
 
-    let currentWeekSalesUSD = 0;
-    let currentWeekSalesCRC = 0;
-    let currentWeekOrdersCount = 0;
-
-    if (!ordersError && orders) {
-      const agentName = String(profile.name || '').trim().toLowerCase();
-      const agentEmailStr = String(profile.email || '').trim().toLowerCase();
-
-      for (const order of orders) {
-        const orderAgent = String(order.sales_agent || '').trim().toLowerCase();
-        if (orderAgent && (orderAgent === agentName || orderAgent === agentEmailStr)) {
-          currentWeekOrdersCount++;
-          const totalAmount = Number(order.total || 0);
-          if (order.currency === 'USD') {
-            currentWeekSalesUSD += totalAmount;
-          } else {
-            currentWeekSalesCRC += totalAmount;
-          }
-        }
-      }
+    if (ordersError) {
+      console.error('Error fetching agent orders:', ordersError);
+      return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 });
     }
 
-    // Fetch recent payouts
+    const agentOrders = (orders || []).filter((o) => orderBelongsToAgent(o, profile));
+    const todayOrders = agentOrders.filter((o) => o.created_at >= todayStartUtc);
+    const pendingOrders = agentOrders.filter((o) => (o.status || 'Pending') === 'Pending');
+
+    const weekSales = sumAgentOrders(agentOrders);
+    const todaySales = sumAgentOrders(todayOrders);
+
+    const rate = Number(profile.commission_rate || 0);
+    const weekCommissionUsd = weekSales.usd * (rate / 100);
+    const weekCommissionCrc = weekSales.crc * (rate / 100);
+
     const { data: recentPayouts, error: payoutsError } = await supabaseAdmin
       .from('commission_payouts')
       .select('id, start_date, end_date, usd_sales, crc_sales, usd_commission, crc_commission, weekly_salary_paid, salary_currency, total_payout_usd, total_payout_crc, status')
-      .eq('agent_email', userEmail)
+      .eq('agent_email', profile.email)
       .order('created_at', { ascending: false })
       .limit(10);
+
+    if (payoutsError) {
+      console.warn('Error fetching payouts:', payoutsError.message);
+    }
+
+    const { data: recentAll } = await supabaseAdmin
+      .from('orders')
+      .select('id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at')
+      .not('status', 'eq', 'Cancelled')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    const recentOrders = (recentAll || [])
+      .filter((o) => orderBelongsToAgent(o, profile))
+      .slice(0, 8);
 
     return NextResponse.json({
       success: true,
       stats: {
         weeklySalary: profile.weekly_salary || 0,
         salaryCurrency: profile.salary_currency || 'USD',
-        commissionRate: profile.commission_rate || 0,
+        commissionRate: rate,
         commissionStructure: profile.commission_structure || '',
-        currentWeekSalesUSD,
-        currentWeekSalesCRC,
-        currentWeekOrdersCount,
-        recentPayouts: recentPayouts || []
-      }
+        currentWeekOrdersCount: weekSales.count,
+        currentWeekSalesUSD: weekSales.usd,
+        currentWeekSalesCRC: weekSales.crc,
+        currentWeekCommissionUSD: weekCommissionUsd,
+        currentWeekCommissionCRC: weekCommissionCrc,
+        todayOrdersCount: todaySales.count,
+        todaySalesUSD: todaySales.usd,
+        todaySalesCRC: todaySales.crc,
+        pendingOrdersCount: pendingOrders.length,
+        recentOrders,
+        recentPayouts: recentPayouts || [],
+      },
     });
-
   } catch (error) {
     console.error('Agent API error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { isDynamicNotificationId } from '@/lib/adminNotifications';
+import { orderBelongsToAgent, orderVisibleToAgent } from '@/lib/agentOrders';
 
 export const runtime = 'nodejs';
 
@@ -41,7 +41,7 @@ async function dismissKeys(supabase, adminUserId, keys) {
   }
 }
 
-async function buildNotifications(supabase) {
+async function buildNotifications(supabase, profile = null) {
   const since = new Date(Date.now() - 7 * 24 * 3600000).toISOString();
 
   const [notifRes, ordersRes, inquiriesRes, waRes] = await Promise.all([
@@ -75,8 +75,9 @@ async function buildNotifications(supabase) {
   const persisted = notifRes.data || [];
   const dynamic = [];
 
-  for (const o of ordersRes.data || []) {
-    dynamic.push({
+    for (const o of ordersRes.data || []) {
+      if (profile && !profile.is_superadmin && !orderVisibleToAgent(o, profile)) continue;
+      dynamic.push({
       id: `order-pending-${o.id}`,
       type: 'pending_order',
       title: `Pending order #${o.order_number || o.id.slice(0, 8)}`,
@@ -129,7 +130,7 @@ export async function GET(request) {
     const supabase = getSupabaseAdmin();
     const adminUserId = auth.user.id;
     const dismissed = await getDismissedKeys(supabase, adminUserId);
-    const merged = await buildNotifications(supabase);
+    const merged = await buildNotifications(supabase, auth.profile);
 
     const visible = merged
       .filter((n) => !dismissed.has(n.id))
@@ -157,7 +158,7 @@ export async function PATCH(request) {
     const adminUserId = auth.user.id;
 
     if (markAllRead) {
-      const merged = await buildNotifications(supabase);
+      const merged = await buildNotifications(supabase, auth.profile);
       const dismissed = await getDismissedKeys(supabase, adminUserId);
       const visible = merged.filter((n) => !dismissed.has(n.id));
       const keys = visible.map((n) => n.id);

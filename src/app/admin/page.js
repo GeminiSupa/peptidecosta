@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -24,6 +24,8 @@ import TeamManagement from '@/components/admin/TeamManagement';
 import AffiliatesManager from '@/components/admin/AffiliatesManager';
 import InquiriesManager from '@/components/admin/InquiriesManager';
 import DashboardHome from '@/components/admin/DashboardHome';
+import AgentDashboard from '@/components/admin/AgentDashboard';
+import { filterOrdersVisibleToAgent } from '@/lib/agentOrders';
 import GlobalSearch from '@/components/admin/GlobalSearch';
 import NotificationCenter from '@/components/admin/NotificationCenter';
 import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
@@ -92,16 +94,24 @@ const ADMIN_NAV_GROUPS = [
   { title: 'System & AI', tabs: ['whatsapp_ai', 'team'] },
 ];
 
-function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews }) {
+function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, isStaffAgent = false }) {
   const pendingOrders = orders.filter((o) => (o.status || 'Pending') === 'Pending').length;
   const pendingReviews = reviews.filter((r) => r.status === 'Pending').length;
   const newLeads = leads.filter((l) => (l.status || 'New') === 'New').length;
 
   switch (tabId) {
+    case 'home':
+      return isStaffAgent
+        ? 'Your sales, commission, and payout history'
+        : 'Store overview · revenue, carts, and alerts';
     case 'orders':
-      return pendingOrders
-        ? `${pendingOrders} pending · ${orders.length} total`
-        : `${orders.length} order${orders.length !== 1 ? 's' : ''}`;
+      return isStaffAgent
+        ? (pendingOrders
+          ? `${pendingOrders} pending · ${orders.length} visible to you`
+          : `${orders.length} order${orders.length !== 1 ? 's' : ''} (yours + unassigned)`)
+        : (pendingOrders
+          ? `${pendingOrders} pending · ${orders.length} total`
+          : `${orders.length} order${orders.length !== 1 ? 's' : ''}`);
     case 'carts':
       return abandonedCarts.length
         ? `${abandonedCarts.length} cart${abandonedCarts.length !== 1 ? 's' : ''} to recover`
@@ -121,7 +131,7 @@ function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews })
   }
 }
 
-const SUPERADMIN_ONLY_TABS = new Set(['affiliates', 'team']);
+const SUPERADMIN_ONLY_TABS = new Set(['affiliates', 'team', 'analytics']);
 
 function resolveTabAccess(tabId, profile) {
   if (!profile || !ADMIN_TABS.has(tabId)) return false;
@@ -1213,6 +1223,13 @@ Core Rules:
     if (profileLoading || !adminProfile) return false;
     return resolveTabAccess(tabId, adminProfile);
   };
+
+  const isStaffAgent = adminProfile && !adminProfile.is_superadmin;
+
+  const visibleOrders = useMemo(
+    () => (isStaffAgent ? filterOrdersVisibleToAgent(orders, adminProfile) : orders),
+    [orders, adminProfile, isStaffAgent]
+  );
 
   const navigateToTab = useCallback((tabId) => {
     if (!ADMIN_TABS.has(tabId)) return;
@@ -3481,7 +3498,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   onClick={() => navigateToTab('home')}
                 >
                   <LayoutDashboard size={14} />
-                  <span className="tab-label">Today</span>
+                  <span className="tab-label">{isStaffAgent ? 'My Pay' : 'Today'}</span>
                 </button>
               )}
             </div>
@@ -3506,9 +3523,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 >
                   <ClipboardList size={14} />
                   <span className="tab-label">Orders</span>
-                  {orders.filter(o => (o.status || 'Pending') === 'Pending').length > 0 && (
+                  {visibleOrders.filter(o => (o.status || 'Pending') === 'Pending').length > 0 && (
                     <span className="tab-count badge-danger">
-                      {orders.filter(o => (o.status || 'Pending') === 'Pending').length}
+                      {visibleOrders.filter(o => (o.status || 'Pending') === 'Pending').length}
                     </span>
                   )}
                 </button>
@@ -3703,23 +3720,39 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         <header className="admin-page-header">
           <h1 className="admin-page-title">{TAB_TITLES[activeTab] || 'Admin'}</h1>
           {(() => {
-            const subtitle = getAdminPageSubtitle(activeTab, { orders, abandonedCarts, leads, reviews });
+            const subtitle = getAdminPageSubtitle(activeTab, {
+              orders: visibleOrders,
+              abandonedCarts,
+              leads,
+              reviews,
+              isStaffAgent,
+            });
             return subtitle ? <p className="admin-page-subtitle">{subtitle}</p> : null;
           })()}
         </header>
 
         {/* TAB 1: SPREADSHEET EDITOR */}
         {activeTab === 'home' && (
-          <DashboardHome
-            orders={orders}
-            abandonedCarts={abandonedCarts}
-            leads={leads}
-            products={products}
-            inquiryCount={inquiryCount}
-            onNavigate={navigateToTab}
-            onOpenOrder={setSelectedOrderDetails}
-            onCreateOrder={() => setManualOrderOpen(true)}
-          />
+          isStaffAgent ? (
+            <AgentDashboard
+              currentUserProfile={adminProfile}
+              currentUserEmail={adminProfile?.email}
+              title="My Pay"
+              onOpenOrder={setSelectedOrderDetails}
+              onNavigate={navigateToTab}
+            />
+          ) : (
+            <DashboardHome
+              orders={orders}
+              abandonedCarts={abandonedCarts}
+              leads={leads}
+              products={products}
+              inquiryCount={inquiryCount}
+              onNavigate={navigateToTab}
+              onOpenOrder={setSelectedOrderDetails}
+              onCreateOrder={() => setManualOrderOpen(true)}
+            />
+          )
         )}
 
         {activeTab === 'spreadsheet' && (
@@ -4110,7 +4143,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {/* TAB 2: ORDERS LEDGER HISTORY */}
         {activeTab === 'orders' && (() => {
-          const filteredOrders = orders.filter(o => {
+          const scopedOrders = visibleOrders;
+          const filteredOrders = scopedOrders.filter(o => {
             if (orderStatusFilter !== 'All' && o.status !== orderStatusFilter) return false;
             if (orderSearch) {
               const s = orderSearch.toLowerCase();
@@ -4137,9 +4171,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <div>
             <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: '16px' }}>
               <div style={{ flex: '1 1 auto', minWidth: '300px' }}>
-                <h3>Customer Orders Log Ledger</h3>
+                <h3>{isStaffAgent ? 'My Orders' : 'Customer Orders Log Ledger'}</h3>
                 <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 12px 0' }}>
-                  A secure listing of all catalog order intents placed by customers. Double check entries here before coordinating dispatches on WhatsApp.
+                  {isStaffAgent
+                    ? 'You see orders assigned to you and unassigned orders. Assign yourself on an order to claim it for commission.'
+                    : 'A secure listing of all catalog order intents placed by customers. Double check entries here before coordinating dispatches on WhatsApp.'}
                 </p>
                 <div className="admin-toolbar-filters">
                   <input 
@@ -7188,7 +7224,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       <GlobalSearch
         open={globalSearchOpen}
         onClose={() => setGlobalSearchOpen(false)}
-        orders={orders}
+        orders={visibleOrders}
         products={products}
         leads={leads}
         onSelect={handleGlobalSearchSelect}
@@ -7796,7 +7832,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             onClick={() => navigateToTab('home')}
           >
             <LayoutDashboard size={18} />
-            <span>Today</span>
+            <span>{isStaffAgent ? 'My Pay' : 'Today'}</span>
           </button>
         )}
         {hasAccess('orders') && (
@@ -7807,9 +7843,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           >
             <ClipboardList size={18} />
             <span>Orders</span>
-            {orders.filter((o) => (o.status || 'Pending') === 'Pending').length > 0 && (
+            {visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length > 0 && (
               <span className="admin-quick-nav-badge">
-                {orders.filter((o) => (o.status || 'Pending') === 'Pending').length}
+                {visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length}
               </span>
             )}
           </button>
@@ -7873,8 +7909,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           onClick={() => navigateToTab(tabId)}
                         >
                           {TAB_TITLES[tabId] || tabId}
-                          {tabId === 'orders' && orders.filter((o) => (o.status || 'Pending') === 'Pending').length > 0 && (
-                            <span className="admin-more-tab-badge">{orders.filter((o) => (o.status || 'Pending') === 'Pending').length}</span>
+                          {tabId === 'orders' && visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length > 0 && (
+                            <span className="admin-more-tab-badge">{visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length}</span>
                           )}
                           {tabId === 'carts' && abandonedCarts.length > 0 && (
                             <span className="admin-more-tab-badge warning">{abandonedCarts.length}</span>

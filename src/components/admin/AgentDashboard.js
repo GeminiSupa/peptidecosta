@@ -1,167 +1,261 @@
-import React, { useState, useEffect } from 'react';
-import { adminFetch } from '@/lib/adminApi';
-import { Briefcase, TrendingUp, DollarSign, Calendar, Target } from 'lucide-react';
+'use client';
 
-export default function AgentDashboard({ currentUserProfile, currentUserEmail }) {
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Briefcase, TrendingUp, DollarSign, Target, ClipboardList,
+  ChevronRight, Wallet,
+} from 'lucide-react';
+import { adminFetch } from '@/lib/adminApi';
+import { getOrderSalesAmounts } from '@/lib/agentOrders';
+
+function formatMoney(val, curr) {
+  const num = Number(val || 0);
+  if (curr === 'USD') {
+    return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return `₡${Math.round(num).toLocaleString('en-US')}`;
+}
+
+export default function AgentDashboard({
+  currentUserProfile,
+  currentUserEmail,
+  title = 'My Pay',
+  onOpenOrder,
+  onNavigate,
+}) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      setLoading(true);
-      try {
-        const response = await adminFetch('/api/agent/analytics');
-        const data = await response.json();
-        if (data.success) {
-          setStats(data.stats);
-        } else {
-          setError(data.error || 'Failed to fetch performance data');
-        }
-      } catch (err) {
-        console.error(err);
-        setError('Network error loading dashboard');
+  const fetchAnalytics = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await adminFetch('/api/agent/analytics');
+      const data = await response.json();
+      if (data.success) {
+        setStats(data.stats);
+      } else {
+        setError(data.error || 'Failed to load your dashboard');
       }
-      setLoading(false);
-    };
-
-    fetchAnalytics();
+    } catch (err) {
+      console.error(err);
+      setError('Could not load your earnings data');
+    }
+    setLoading(false);
   }, []);
 
-  const formatMoneyUI = (val, curr) => {
-    const num = Number(val || 0);
-    if (curr === 'USD') return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    return `₡${Math.round(num).toLocaleString('en-US')}`;
-  };
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
-  if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading your dashboard...</div>;
-  if (error) return <div style={{ padding: '40px', textAlign: 'center', color: '#ef4444' }}>{error}</div>;
+  if (loading) {
+    return <p className="dashboard-empty" style={{ padding: '32px 0' }}>Loading your dashboard…</p>;
+  }
+  if (error) {
+    return <p className="dashboard-empty" style={{ padding: '32px 0', color: '#f87171' }}>{error}</p>;
+  }
   if (!stats) return null;
 
+  const name = currentUserProfile?.name || currentUserEmail?.split('@')[0] || 'Agent';
+  const salaryCurr = stats.salaryCurrency || 'USD';
+  const estWeekPayUsd =
+    stats.currentWeekCommissionUSD + (salaryCurr === 'USD' ? Number(stats.weeklySalary || 0) : 0);
+  const estWeekPayCrc =
+    stats.currentWeekCommissionCRC + (salaryCurr === 'CRC' ? Number(stats.weeklySalary || 0) : 0);
+
   return (
-    <div style={{ padding: '24px' }}>
-      <div style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>My Performance & Earnings</h2>
-        <p style={{ color: '#94a3b8' }}>Welcome back, {currentUserProfile?.name || currentUserEmail}. Here is a snapshot of your sales performance.</p>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '32px' }}>
-        {/* Base Weekly Salary Card */}
-        <div style={{ background: 'linear-gradient(145deg, #0f172a 0%, #020617 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-            <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '10px', borderRadius: '10px' }}>
-              <Briefcase size={24} color="#38bdf8" />
-            </div>
-            <div>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 'bold' }}>Base Weekly Salary</p>
-            </div>
-          </div>
-          <h3 style={{ margin: '0 0 4px 0', fontSize: '2rem', fontWeight: '900', color: '#f8fafc' }}>
-            {formatMoneyUI(stats.weeklySalary, stats.salaryCurrency)}
-          </h3>
-          <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>Guaranteed per active week (Mon-Sun)</p>
-        </div>
-
-        {/* Commission Rate Card */}
-        <div style={{ background: 'linear-gradient(145deg, #0f172a 0%, #020617 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-            <div style={{ background: 'rgba(168, 85, 247, 0.1)', padding: '10px', borderRadius: '10px' }}>
-              <Target size={24} color="#c084fc" />
-            </div>
-            <div>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 'bold' }}>Commission Structure</p>
-            </div>
-          </div>
-          <h3 style={{ margin: '0 0 4px 0', fontSize: '1.5rem', fontWeight: '900', color: '#c084fc' }}>
-            {stats.commissionRate}%
-          </h3>
-          {stats.commissionStructure && (
-            <p style={{ margin: '8px 0 0 0', fontSize: '0.85rem', color: '#cbd5e1', fontStyle: 'italic' }}>
-              "{stats.commissionStructure}"
-            </p>
-          )}
-        </div>
-
-        {/* Current Week Orders Card */}
-        <div style={{ background: 'linear-gradient(145deg, #0f172a 0%, #020617 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-            <div style={{ background: 'rgba(34, 197, 94, 0.1)', padding: '10px', borderRadius: '10px' }}>
-              <TrendingUp size={24} color="#22c55e" />
-            </div>
-            <div>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 'bold' }}>Closed Orders This Week</p>
-            </div>
-          </div>
-          <h3 style={{ margin: '0 0 4px 0', fontSize: '2rem', fontWeight: '900', color: '#22c55e' }}>
-            {stats.currentWeekOrdersCount}
-          </h3>
-          <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
-            Total Sales: {formatMoneyUI(stats.currentWeekSalesUSD, 'USD')} | {formatMoneyUI(stats.currentWeekSalesCRC, 'CRC')}
+    <div className="dashboard-home agent-dashboard">
+      <div className="dashboard-home-header">
+        <div>
+          <h2 className="dashboard-home-title">{title}</h2>
+          <p className="dashboard-home-subtitle">
+            Welcome back, {name} · Week of {new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
           </p>
         </div>
+        <button type="button" className="admin-btn admin-btn-secondary" onClick={fetchAnalytics}>
+          Refresh
+        </button>
       </div>
 
-      <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>Recent Payouts</h3>
-      
-      {stats.recentPayouts.length === 0 ? (
-        <div style={{ padding: '30px', textAlign: 'center', background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8' }}>
-          No approved commission payouts recorded yet.
+      <div className="dashboard-kpi-grid">
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-icon" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80' }}>
+            <DollarSign size={20} />
+          </div>
+          <div>
+            <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>
+              {stats.todaySalesUSD > 0 ? formatMoney(stats.todaySalesUSD, 'USD') : formatMoney(stats.todaySalesCRC, 'CRC')}
+            </div>
+            <div className="dashboard-kpi-label">My sales today</div>
+            <div className="dashboard-mini-sub">{stats.todayOrdersCount} order{stats.todayOrdersCount !== 1 ? 's' : ''}</div>
+          </div>
         </div>
-      ) : (
-        <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <table className="spreadsheet-table responsive-table">
-            <thead>
-              <tr>
-                <th style={{ padding: '16px' }}>Period</th>
-                <th style={{ padding: '16px' }}>Gross Sales</th>
-                <th style={{ padding: '16px' }}>Base Salary Paid</th>
-                <th style={{ padding: '16px' }}>Commissions Earned</th>
-                <th style={{ padding: '16px', textAlign: 'right' }}>Total Payout</th>
-                <th style={{ padding: '16px', textAlign: 'center' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stats.recentPayouts.map(p => {
-                const formattedPeriod = `${new Date(p.start_date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})} - ${new Date(p.end_date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}`;
-                const salaryCurrency = p.salary_currency || 'USD';
+
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-icon" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
+            <TrendingUp size={20} />
+          </div>
+          <div>
+            <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>
+              {stats.currentWeekSalesUSD > 0
+                ? formatMoney(stats.currentWeekSalesUSD, 'USD')
+                : formatMoney(stats.currentWeekSalesCRC, 'CRC')}
+            </div>
+            <div className="dashboard-kpi-label">My sales this week</div>
+            <div className="dashboard-mini-sub">{stats.currentWeekOrdersCount} completed</div>
+          </div>
+        </div>
+
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-icon" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' }}>
+            <Wallet size={20} />
+          </div>
+          <div>
+            <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>
+              {estWeekPayUsd > 0 ? formatMoney(estWeekPayUsd, 'USD') : formatMoney(estWeekPayCrc, 'CRC')}
+            </div>
+            <div className="dashboard-kpi-label">Est. pay this week</div>
+            <div className="dashboard-mini-sub">{stats.commissionRate}% commission + salary</div>
+          </div>
+        </div>
+
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-icon" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
+            <ClipboardList size={20} />
+          </div>
+          <div>
+            <div className="dashboard-kpi-value">{stats.pendingOrdersCount}</div>
+            <div className="dashboard-kpi-label">My pending orders</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="dashboard-two-col">
+        <section className="dashboard-section">
+          <h3 className="dashboard-section-title">Pay structure</h3>
+          <div className="dashboard-mini-list">
+            <div className="dashboard-mini-row" style={{ cursor: 'default' }}>
+              <Briefcase size={16} style={{ color: '#38bdf8' }} />
+              <div style={{ flex: 1 }}>
+                <div className="dashboard-mini-title">Base weekly salary</div>
+                <div className="dashboard-mini-sub">Guaranteed Mon–Sun</div>
+              </div>
+              <div className="dashboard-mini-val">{formatMoney(stats.weeklySalary, salaryCurr)}</div>
+            </div>
+            <div className="dashboard-mini-row" style={{ cursor: 'default' }}>
+              <Target size={16} style={{ color: '#c084fc' }} />
+              <div style={{ flex: 1 }}>
+                <div className="dashboard-mini-title">Commission rate</div>
+                {stats.commissionStructure && (
+                  <div className="dashboard-mini-sub">{stats.commissionStructure}</div>
+                )}
+              </div>
+              <div className="dashboard-mini-val">{stats.commissionRate}%</div>
+            </div>
+            <div className="dashboard-mini-row" style={{ cursor: 'default' }}>
+              <DollarSign size={16} style={{ color: '#4ade80' }} />
+              <div style={{ flex: 1 }}>
+                <div className="dashboard-mini-title">Commission earned (this week)</div>
+                <div className="dashboard-mini-sub">On your assigned orders</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                {stats.currentWeekCommissionUSD > 0 && (
+                  <div className="dashboard-mini-val">{formatMoney(stats.currentWeekCommissionUSD, 'USD')}</div>
+                )}
+                {stats.currentWeekCommissionCRC > 0 && (
+                  <div className="dashboard-mini-val">{formatMoney(stats.currentWeekCommissionCRC, 'CRC')}</div>
+                )}
+                {stats.currentWeekCommissionUSD === 0 && stats.currentWeekCommissionCRC === 0 && (
+                  <div className="dashboard-mini-sub">$0</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="dashboard-section">
+          <h3 className="dashboard-section-title">My recent orders</h3>
+          {stats.recentOrders.length === 0 ? (
+            <p className="dashboard-empty">No orders assigned to you yet.</p>
+          ) : (
+            <div className="dashboard-mini-list">
+              {stats.recentOrders.map((o) => {
+                const { usd, crc } = getOrderSalesAmounts(o);
+                const display =
+                  o.currency === 'CRC' || (!usd && crc)
+                    ? `₡${crc.toLocaleString()}`
+                    : `$${usd}`;
                 return (
-                  <tr key={p.id}>
-                    <td data-label="Period" style={{ padding: '16px', fontWeight: 'bold' }}>{formattedPeriod}</td>
-                    <td data-label="Gross Sales" style={{ padding: '16px', fontSize: '0.85rem', color: '#cbd5e1' }}>
-                      USD: {formatMoneyUI(p.usd_sales, 'USD')}<br/>
-                      CRC: {formatMoneyUI(p.crc_sales, 'CRC')}
-                    </td>
-                    <td data-label="Base Salary" style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>
-                      {formatMoneyUI(p.weekly_salary_paid, salaryCurrency)}
-                    </td>
-                    <td data-label="Commissions Earned" style={{ padding: '16px', fontSize: '0.85rem' }}>
-                      USD: <span style={{ color: '#c084fc', fontWeight: 'bold' }}>{formatMoneyUI(p.usd_commission, 'USD')}</span><br/>
-                      CRC: <span style={{ color: '#c084fc', fontWeight: 'bold' }}>{formatMoneyUI(p.crc_commission, 'CRC')}</span>
-                    </td>
-                    <td data-label="Total Payout" style={{ padding: '16px', textAlign: 'right', fontWeight: '900', color: '#22c55e', fontSize: '1.1rem' }}>
-                      {p.total_payout_usd > 0 ? formatMoneyUI(p.total_payout_usd, 'USD') : ''}
-                      {p.total_payout_usd > 0 && p.total_payout_crc > 0 ? ' + ' : ''}
-                      {p.total_payout_crc > 0 ? formatMoneyUI(p.total_payout_crc, 'CRC') : ''}
-                      {p.total_payout_usd === 0 && p.total_payout_crc === 0 ? '$0.00' : ''}
-                    </td>
-                    <td data-label="Status" style={{ padding: '16px', textAlign: 'center' }}>
-                      {p.status === 'Approved' ? (
-                        <span className="status-badge" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                          Paid
-                        </span>
-                      ) : (
-                        <span className="status-badge" style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#eab308', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                          Pending
-                        </span>
-                      )}
-                    </td>
-                  </tr>
+                  <button
+                    key={o.id}
+                    type="button"
+                    className="dashboard-mini-row"
+                    onClick={() => onOpenOrder?.(o)}
+                  >
+                    <div>
+                      <div className="dashboard-mini-title">#{o.order_number || o.id.slice(0, 8)}</div>
+                      <div className="dashboard-mini-sub">{o.customer_name || 'Customer'}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div className="dashboard-mini-val">{display}</div>
+                      <div className="dashboard-mini-sub">{o.status || 'Pending'}</div>
+                    </div>
+                  </button>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </div>
+          )}
+          {onNavigate && stats.pendingOrdersCount > 0 && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary"
+              style={{ marginTop: '10px', width: '100%' }}
+              onClick={() => onNavigate('orders')}
+            >
+              View my pending orders
+            </button>
+          )}
+        </section>
+      </div>
+
+      <section className="dashboard-section">
+        <h3 className="dashboard-section-title">Payout history</h3>
+        {stats.recentPayouts.length === 0 ? (
+          <p className="dashboard-empty">No payout records yet.</p>
+        ) : (
+          <div className="dashboard-mini-list">
+            {stats.recentPayouts.map((p) => {
+              const period = `${new Date(p.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${new Date(p.end_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+              const total =
+                p.total_payout_usd > 0
+                  ? formatMoney(p.total_payout_usd, 'USD')
+                  : p.total_payout_crc > 0
+                    ? formatMoney(p.total_payout_crc, 'CRC')
+                    : '$0.00';
+              return (
+                <div key={p.id} className="dashboard-mini-row" style={{ cursor: 'default' }}>
+                  <div style={{ flex: 1 }}>
+                    <div className="dashboard-mini-title">{period}</div>
+                    <div className="dashboard-mini-sub">
+                      Sales {formatMoney(p.usd_sales, 'USD')}
+                      {p.crc_sales > 0 ? ` · ${formatMoney(p.crc_sales, 'CRC')}` : ''}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div className="dashboard-mini-val">{total}</div>
+                    <div className="dashboard-mini-sub">{p.status === 'Approved' ? 'Paid' : 'Pending'}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <p className="dashboard-mini-sub" style={{ marginTop: '8px' }}>
+        Only orders assigned to you as sales agent count toward your pay. Store-wide totals are not shown here.
+      </p>
     </div>
   );
 }
