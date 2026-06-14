@@ -5,7 +5,7 @@ import { safeLocalStorage as localStorage } from '@/lib/storage';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { ArrowLeft, BookOpen, Calendar, Share2, Facebook, Twitter, Link as LinkIcon, ShoppingCart, ArrowRight } from 'lucide-react';
+import { ArrowLeft, BookOpen, Calendar, Share2, Link as LinkIcon, ShoppingCart, ArrowRight } from 'lucide-react';
 
 export default function BlogPostPage() {
   const params = useParams();

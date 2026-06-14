@@ -1607,6 +1607,10 @@ export default function CatalogPage() {
       total: totalVal,
       totalUsd,
       totalCrc,
+      subtotal: getCartTotal(),
+      volumeDiscount: getCartTotal() - getDiscountedTotal(),
+      promoDiscount: getPromoDiscountAmount(),
+      shipping: getShippingFee(),
       currency,
       paymentMethod: method === 'sinpe' ? 'sinpe' : 'tilopay',
       status: method === 'sinpe' ? 'Pending - SINPE Tilopay' : 'Pending - Card',
@@ -1725,6 +1729,10 @@ export default function CatalogPage() {
       total: totalVal,
       totalUsd,
       totalCrc,
+      subtotal: getCartTotal(),
+      volumeDiscount: getCartTotal() - getDiscountedTotal(),
+      promoDiscount: getPromoDiscountAmount(),
+      shipping: getShippingFee(),
       currency,
       paymentMethod,
       status: 'Pending',
@@ -1984,6 +1992,10 @@ export default function CatalogPage() {
               total: usdTotal,
               totalUsd: usdTotal,
               totalCrc: Math.round(usdTotal * rate),
+              subtotal: cur === 'USD' ? itemsBeforeShip : itemsBeforeShip / rate,
+              volumeDiscount: cur === 'USD' ? volDiscount : volDiscount / rate,
+              promoDiscount: cur === 'USD' ? promoDiscount : promoDiscount / rate,
+              shipping: cur === 'USD' ? shippingFee : shippingFee / rate,
               currency: 'USD',
               paymentMethod: 'paypal',
               status: 'Paid',
@@ -3751,7 +3763,7 @@ export default function CatalogPage() {
                     <div key={r.id} className="review-card">
                       <div className="review-header">
                         <span className="review-author">{r.customer_name}</span>
-                        <span className="review-date">{new Date(r.created_at).toLocaleDateString()}</span>
+                        <span className="review-date" data-nosnippet>{new Date(r.created_at).toLocaleDateString()}</span>
                       </div>
                       <div className="review-rating">
                         {[1, 2, 3, 4, 5].map(star => (

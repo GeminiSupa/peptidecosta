@@ -8,7 +8,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const { email, password, name, permissions, is_superadmin, commission_rate } = body;
+    const { email, password, name, permissions, is_superadmin, commission_rate, weekly_salary, salary_currency, commission_structure } = body;
 
     if (!email || !password || !name) {
       return NextResponse.json({ error: 'Email, password, and name are required' }, { status: 400 });
@@ -41,7 +41,10 @@ export async function POST(request) {
           name: name,
           permissions: permissions || [],
           is_superadmin: is_superadmin || false,
-          commission_rate: commission_rate !== undefined ? parseFloat(commission_rate) : 0
+          commission_rate: commission_rate !== undefined ? parseFloat(commission_rate) : 0,
+          weekly_salary: weekly_salary !== undefined ? parseFloat(weekly_salary) : 0,
+          salary_currency: salary_currency || 'USD',
+          commission_structure: commission_structure || null
         }
       ])
       .select()

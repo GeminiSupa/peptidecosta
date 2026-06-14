@@ -149,6 +149,8 @@ export async function GET(request) {
         continue;
       }
       const rate = Number(agent.commission_rate || 0);
+      const weeklySalary = Number(agent.weekly_salary || 0);
+      const salaryCurrency = agent.salary_currency || 'USD';
       
       // Filter orders assigned to this agent (comparing against name or email dynamically)
       const agentOrders = (orders || []).filter(order => {
@@ -181,6 +183,15 @@ export async function GET(request) {
       // Calculate commissions
       const usdCommission = usdSales * (rate / 100);
       const crcCommission = crcSales * (rate / 100);
+      
+      // Calculate Total Payout
+      let totalPayoutUsd = usdCommission;
+      let totalPayoutCrc = crcCommission;
+      if (salaryCurrency === 'USD') {
+        totalPayoutUsd += weeklySalary;
+      } else {
+        totalPayoutCrc += weeklySalary;
+      }
 
       // Build items table in HTML for this agent's invoice
       const ordersTableRows = agentOrders.map(order => {
@@ -234,15 +245,33 @@ export async function GET(request) {
 
           <!-- Commission Highlight Summary -->
           <div style="background:linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(56, 189, 248, 0.05) 100%);border:1px solid rgba(168, 85, 247, 0.3);border-radius:12px;padding:20px;margin-bottom:24px;text-align:center;">
-            <span style="font-size:12px;font-weight:bold;color:#c084fc;text-transform:uppercase;letter-spacing:1px;background:rgba(168, 85, 247, 0.1);padding:4px 10px;border-radius:12px;">Commission Rate: ${rate}%</span>
-            <h2 style="font-size:15px;color:#e2e8f0;margin:16px 0 8px;font-weight:600;">Total Payout Owed This Week</h2>
-            <div style="font-size:26px;font-weight:950;color:#ffffff;line-height:1.2;margin:0 0 4px 0;">
-              ${usdCommission > 0 ? `${formatMoney(usdCommission, 'USD')}` : ''}
-              ${usdCommission > 0 && crcCommission > 0 ? ' + ' : ''}
-              ${crcCommission > 0 ? `${formatMoney(crcCommission, 'CRC')}` : ''}
-              ${usdCommission === 0 && crcCommission === 0 ? '$0.00' : ''}
+            
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center;margin-bottom:16px;">
+              <div>
+                <span style="font-size:11px;font-weight:bold;color:#38bdf8;text-transform:uppercase;letter-spacing:1px;background:rgba(56, 189, 248, 0.1);padding:4px 10px;border-radius:12px;">Base Salary</span>
+                <div style="margin-top:8px;font-size:18px;font-weight:900;color:#f8fafc;">${formatMoney(weeklySalary, salaryCurrency)}</div>
+              </div>
+              <div>
+                <span style="font-size:11px;font-weight:bold;color:#c084fc;text-transform:uppercase;letter-spacing:1px;background:rgba(168, 85, 247, 0.1);padding:4px 10px;border-radius:12px;">Commission (${rate}%)</span>
+                <div style="margin-top:8px;font-size:18px;font-weight:900;color:#f8fafc;">
+                  ${usdCommission > 0 ? formatMoney(usdCommission, 'USD') : ''}
+                  ${usdCommission > 0 && crcCommission > 0 ? ' + ' : ''}
+                  ${crcCommission > 0 ? formatMoney(crcCommission, 'CRC') : ''}
+                  ${usdCommission === 0 && crcCommission === 0 ? '$0.00' : ''}
+                </div>
+              </div>
             </div>
-            <p style="margin:0;font-size:12px;color:#64748b;">Commission is calculated automatically based on total successful USD and CRC orders closed.</p>
+
+            <div style="border-top:1px dashed rgba(255,255,255,0.1);margin:16px 0;"></div>
+
+            <h2 style="font-size:15px;color:#e2e8f0;margin:0 0 8px;font-weight:600;">Total Payout Owed This Week</h2>
+            <div style="font-size:26px;font-weight:950;color:#ffffff;line-height:1.2;margin:0 0 4px 0;">
+              ${totalPayoutUsd > 0 ? formatMoney(totalPayoutUsd, 'USD') : ''}
+              ${totalPayoutUsd > 0 && totalPayoutCrc > 0 ? ' + ' : ''}
+              ${totalPayoutCrc > 0 ? formatMoney(totalPayoutCrc, 'CRC') : ''}
+              ${totalPayoutUsd === 0 && totalPayoutCrc === 0 ? '$0.00' : ''}
+            </div>
+            <p style="margin:0;font-size:12px;color:#64748b;">Includes guaranteed base salary plus commissions on successful USD and CRC orders.</p>
           </div>
 
           <!-- Closed Orders Table -->
@@ -292,6 +321,10 @@ export async function GET(request) {
             commission_rate: rate,
             usd_commission: usdCommission,
             crc_commission: crcCommission,
+            weekly_salary_paid: weeklySalary,
+            salary_currency: salaryCurrency,
+            total_payout_usd: totalPayoutUsd,
+            total_payout_crc: totalPayoutCrc,
             orders_data: agentOrders,
             email_html: emailHtml
           })
@@ -311,6 +344,10 @@ export async function GET(request) {
             commission_rate: rate,
             usd_commission: usdCommission,
             crc_commission: crcCommission,
+            weekly_salary_paid: weeklySalary,
+            salary_currency: salaryCurrency,
+            total_payout_usd: totalPayoutUsd,
+            total_payout_crc: totalPayoutCrc,
             status: 'Pending',
             orders_data: agentOrders,
             email_html: emailHtml

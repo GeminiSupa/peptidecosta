@@ -31,6 +31,19 @@ import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 
+const FacebookIcon = ({ size = 14, style, ...props }) => (
+  <svg 
+    viewBox="0 0 24 24" 
+    width={size} 
+    height={size} 
+    fill="currentColor" 
+    style={style}
+    {...props}
+  >
+    <path d="M22 12c0-5.52-4.48-10-10-10S2 6.48 2 12c0 4.84 3.44 8.87 8 9.8V15H8v-3h2V9.5C10 7.57 11.57 6 13.5 6H16v3h-2c-.55 0-1 .45-1 1v2h3v3h-3v6.95c4.56-.93 8-4.96 8-9.75z" />
+  </svg>
+);
+
 const FALLBACK_EXCHANGE_RATE = 454.48;
 
 const cartHasItems = (cartData) => Array.isArray(cartData) && cartData.length > 0;
@@ -49,7 +62,7 @@ const formatCustomerIdType = (idType) => {
 const ADMIN_TABS = new Set([
   'home', 'spreadsheet', 'orders', 'customers', 'inquiries', 'leads',
   'carts', 'share', 'reviews', 'affiliates', 'analytics', 'cms',
-  'whatsapp_ai', 'team',
+  'whatsapp_ai', 'team', 'facebook',
 ]);
 
 const TAB_TITLES = {
@@ -74,7 +87,7 @@ const TAB_TITLES = {
 const ADMIN_NAV_GROUPS = [
   { title: 'Overview', tabs: ['home'] },
   { title: 'Core Operations', tabs: ['spreadsheet', 'orders', 'customers', 'inquiries', 'leads'] },
-  { title: 'Sales & Marketing', tabs: ['carts', 'share', 'reviews', 'affiliates'] },
+  { title: 'Sales & Marketing', tabs: ['carts', 'share', 'reviews', 'affiliates', 'facebook'] },
   { title: 'Analytics & Content', tabs: ['analytics', 'cms'] },
   { title: 'System & AI', tabs: ['whatsapp_ai', 'team'] },
 ];
@@ -317,6 +330,9 @@ export default function AdminPage() {
   const [leadsSearch, setLeadsSearch] = useState('');
   const [leadsSourceFilter, setLeadsSourceFilter] = useState('All');
   const [leadsAreaFilter, setLeadsAreaFilter] = useState('All');
+  const [fbReplyId, setFbReplyId] = useState(null);
+  const [fbReplyText, setFbReplyText] = useState('');
+  const [fbReplyLoading, setFbReplyLoading] = useState(false);
   
   // Pagination States
   const [leadsCurrentPage, setLeadsCurrentPage] = useState(1);
@@ -539,6 +555,36 @@ Please draft a perfect next response to this customer. Match their language (Spa
       alert('❌ Failed to send WhatsApp: ' + err.message);
       setWhatsappMessages(prev => prev.filter(m => m.id !== tempId));
       setChatInputText(textToSend);
+    }
+  };
+
+  const handleSendFbReply = async (notification) => {
+    if (!fbReplyText.trim()) return;
+    setFbReplyLoading(true);
+    try {
+      const res = await adminFetch('/api/facebook/reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipientId: notification.sender_id,
+          messageText: fbReplyText.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setToastMessage('Reply sent successfully!');
+        setFbReplyText('');
+        setFbReplyId(null);
+        handleMarkNotificationRead(notification.id);
+      } else {
+        alert('Failed to send reply: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error sending reply: ' + err.message);
+    } finally {
+      setFbReplyLoading(false);
+      setTimeout(() => setToastMessage(''), 3000);
     }
   };
 
@@ -1345,7 +1391,6 @@ Core Rules:
       .on('postgres_changes', { event: '*', schema: 'public', table: 'catalog_leads' }, () => {
         loadAdminData();
       })
-      /* Facebook notifications temporarily disabled
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'facebook_notifications' }, (payload) => {
         // Trigger live audio alert
         try {
@@ -1366,7 +1411,6 @@ Core Rules:
       .on('postgres_changes', { event: '*', schema: 'public', table: 'facebook_notifications' }, () => {
         loadAdminData();
       })
-      */
       .subscribe();
 
     return () => {
@@ -3544,6 +3588,20 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   )}
                 </button>
               )}
+              {hasAccess('facebook') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'facebook' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('facebook')}
+                >
+                  <FacebookIcon size={14} style={{ color: activeTab === 'facebook' ? 'inherit' : '#1877f2' }} />
+                  <span className="tab-label">Facebook</span>
+                  {facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
+                    <span className="tab-count badge-info">
+                      {facebookNotifications.filter(n => n.status === 'unread').length}
+                    </span>
+                  )}
+                </button>
+              )}
               {adminProfile?.is_superadmin && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'affiliates' ? 'active' : ''}`}
@@ -5298,6 +5356,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                               Mark Read
                             </button>
                           )}
+                          {item.type === 'message' && (
+                            <button 
+                              onClick={() => setFbReplyId(fbReplyId === item.id ? null : item.id)} 
+                              style={{ padding: '6px 12px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' }}
+                            >
+                              {fbReplyId === item.id ? 'Cancel' : 'Reply'}
+                            </button>
+                          )}
                           <button 
                             onClick={() => handleDeleteNotification(item.id)} 
                             style={{ 
@@ -5316,6 +5382,53 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             <Trash2 size={14} />
                           </button>
                         </div>
+                        
+                        {/* Inline Reply Box */}
+                        {fbReplyId === item.id && (
+                          <div style={{ width: '100%', marginTop: '12px', display: 'flex', gap: '8px' }}>
+                            <input
+                              type="text"
+                              value={fbReplyText}
+                              onChange={(e) => setFbReplyText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSendFbReply(item);
+                              }}
+                              placeholder="Type your reply here..."
+                              style={{ 
+                                flex: '1', 
+                                padding: '10px 14px', 
+                                borderRadius: '8px', 
+                                border: '1px solid rgba(255,255,255,0.1)', 
+                                background: '#1e293b', 
+                                color: '#f8fafc',
+                                fontSize: '0.9rem'
+                              }}
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleSendFbReply(item)}
+                              disabled={fbReplyLoading || !fbReplyText.trim()}
+                              style={{
+                                padding: '10px 20px',
+                                borderRadius: '8px',
+                                background: fbReplyLoading || !fbReplyText.trim() ? '#475569' : '#3b82f6',
+                                color: '#fff',
+                                fontWeight: 'bold',
+                                border: 'none',
+                                cursor: fbReplyLoading || !fbReplyText.trim() ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}
+                            >
+                              {fbReplyLoading ? 'Sending...' : (
+                                <>
+                                  <Send size={16} /> Send
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -7768,6 +7881,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           )}
                           {tabId === 'leads' && leads.length > 0 && (
                             <span className="admin-more-tab-badge success">{leads.length}</span>
+                          )}
+                          {tabId === 'facebook' && facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
+                            <span className="admin-more-tab-badge">{facebookNotifications.filter(n => n.status === 'unread').length}</span>
                           )}
                         </button>
                       ))}

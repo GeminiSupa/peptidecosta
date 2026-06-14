@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import { Plus, Trash2, Edit2, Shield, Check } from 'lucide-react';
+import AgentDashboard from './AgentDashboard';
 
 export default function TeamManagement({ currentUserProfile, currentUserEmail, onTeamChanged }) {
   const [users, setUsers] = useState([]);
@@ -27,6 +28,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [formPermissions, setFormPermissions] = useState([]);
   const [formIsSuperadmin, setFormIsSuperadmin] = useState(false);
   const [formCommissionRate, setFormCommissionRate] = useState(0);
+  const [formWeeklySalary, setFormWeeklySalary] = useState(0);
+  const [formSalaryCurrency, setFormSalaryCurrency] = useState('USD');
+  const [formCommissionStructure, setFormCommissionStructure] = useState('');
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -40,6 +44,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     { id: 'carts', label: 'Abandoned Carts' },
     { id: 'share', label: 'Share Links' },
     { id: 'reviews', label: 'Reviews' },
+    { id: 'facebook', label: 'Facebook Alerts' },
     { id: 'analytics', label: 'Analytics' },
     { id: 'cms', label: 'Content (CMS)' },
     { id: 'whatsapp_ai', label: 'WhatsApp AI' },
@@ -144,6 +149,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormPermissions(user.permissions || []);
       setFormIsSuperadmin(user.is_superadmin || false);
       setFormCommissionRate(user.commission_rate || 0);
+      setFormWeeklySalary(user.weekly_salary || 0);
+      setFormSalaryCurrency(user.salary_currency || 'USD');
+      setFormCommissionStructure(user.commission_structure || '');
     } else {
       setEditingUserId(null);
       setFormEmail('');
@@ -152,6 +160,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormPermissions([]);
       setFormIsSuperadmin(false);
       setFormCommissionRate(0);
+      setFormWeeklySalary(0);
+      setFormSalaryCurrency('USD');
+      setFormCommissionStructure('');
     }
     setIsModalOpen(true);
   };
@@ -178,7 +189,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             name: formName,
             permissions: formPermissions,
             is_superadmin: formIsSuperadmin,
-            commission_rate: formCommissionRate
+            commission_rate: formCommissionRate,
+            weekly_salary: formWeeklySalary,
+            salary_currency: formSalaryCurrency,
+            commission_structure: formCommissionStructure
           })
         });
         const data = await res.json();
@@ -194,7 +208,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             name: formName,
             permissions: formPermissions,
             is_superadmin: formIsSuperadmin,
-            commission_rate: formCommissionRate
+            commission_rate: formCommissionRate,
+            weekly_salary: formWeeklySalary,
+            salary_currency: formSalaryCurrency,
+            commission_structure: formCommissionStructure
           })
         });
         const data = await res.json();
@@ -229,7 +246,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const isSuperAdmin = currentUserProfile?.is_superadmin || currentUserEmail === 'joe@peptides.com' || currentUserEmail === 'info@peptidescostarica.net';
 
   if (!isSuperAdmin) {
-    return <div style={{ padding: '40px', textAlign: 'center', color: '#ef4444' }}>Access Denied. Superadmin only.</div>;
+    return <AgentDashboard currentUserProfile={currentUserProfile} currentUserEmail={currentUserEmail} />;
   }
 
   const formatMoneyUI = (val, curr) => {
@@ -373,6 +390,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   <th style={{ padding: '16px' }}>Name</th>
                   <th style={{ padding: '16px' }}>Email</th>
                   <th style={{ padding: '16px' }}>Role</th>
+                  <th style={{ padding: '16px' }}>Base Salary</th>
                   <th style={{ padding: '16px' }}>Commission</th>
                   <th style={{ padding: '16px' }}>Access</th>
                   <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
@@ -394,8 +412,12 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                         </span>
                       )}
                     </td>
+                    <td data-label="Base Salary" style={{ padding: '16px', fontWeight: 'bold' }}>
+                      {formatMoneyUI(u.weekly_salary, u.salary_currency)} / wk
+                    </td>
                     <td data-label="Commission" style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>
                       {u.commission_rate !== undefined ? `${u.commission_rate}%` : '0%'}
+                      {u.commission_structure && <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>{u.commission_structure}</div>}
                     </td>
                     <td data-label="Access" style={{ padding: '16px', fontSize: '0.8rem', color: '#94a3b8', maxWidth: '200px' }}>
                       {u.is_superadmin ? 'Full Access' : (u.permissions && u.permissions.length > 0 ? u.permissions.join(', ') : 'No Access')}
@@ -548,6 +570,23 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Commission Rate (%)</label>
                     <input type="number" min="0" max="100" step="0.1" value={formCommissionRate} onChange={e => setFormCommissionRate(parseFloat(e.target.value) || 0)} required className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder="e.g. 10.0" />
+                  </div>
+                </div>
+
+                <div className="admin-form-grid-2" style={{ marginBottom: '24px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Base Weekly Salary</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <select value={formSalaryCurrency} onChange={e => setFormSalaryCurrency(e.target.value)} className="admin-input" style={{ width: '90px', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }}>
+                        <option value="USD">USD</option>
+                        <option value="CRC">CRC</option>
+                      </select>
+                      <input type="number" min="0" step="0.01" value={formWeeklySalary} onChange={e => setFormWeeklySalary(parseFloat(e.target.value) || 0)} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder="e.g. 500.00" />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Commission Structure Notes</label>
+                    <input type="text" value={formCommissionStructure} onChange={e => setFormCommissionStructure(e.target.value)} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder="e.g. 10% on Gross Sales" />
                   </div>
                 </div>
                 
