@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
-import { Plus, Trash2, Edit2, Shield, Check } from 'lucide-react';
+import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import AgentDashboard from './AgentDashboard';
+import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 
 export default function TeamManagement({ currentUserProfile, currentUserEmail, onTeamChanged }) {
   const [users, setUsers] = useState([]);
@@ -18,6 +19,12 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [targetAgent, setTargetAgent] = useState('all'); // 'all' or an agent email
+  const [payoutFilterAgent, setPayoutFilterAgent] = useState('all');
+  const [payoutFilterStatus, setPayoutFilterStatus] = useState('pending');
+  const [expandedPayoutId, setExpandedPayoutId] = useState(null);
+  const [editingPayout, setEditingPayout] = useState(null);
+  const [payoutForm, setPayoutForm] = useState(null);
+  const [payoutSaveLoading, setPayoutSaveLoading] = useState(false);
 
   // Form states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -120,7 +127,11 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
           : scanPeriod === 'all-time' ? 'all-time historical orders' 
           : scanPeriod === 'custom' ? `custom range (${customStartDate} to ${customEndDate})`
           : 'current week-to-date (Mon-Now)';
-        alert(`Successfully synced commissions for ${periodMsg} and generated pending payouts!`);
+        const agentMsg = targetAgent !== 'all' ? ` for ${users.find(u => u.email === targetAgent)?.name || targetAgent}` : '';
+        alert(`Commission scan complete for ${periodMsg}${agentMsg}.\n\nExisting pending payout for the same agent + period was updated (not duplicated).`);
+        setActiveSubTab('payouts');
+        setPayoutFilterStatus('pending');
+        if (targetAgent !== 'all') setPayoutFilterAgent(targetAgent);
         fetchPayouts();
       } else {
         alert(`Failed to sync commissions: ${data.error}`);
@@ -130,6 +141,85 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       alert('Error syncing weekly commissions.');
     }
     setSyncingCommissions(false);
+  };
+
+  const filteredPayouts = useMemo(() => {
+    return payouts.filter((p) => {
+      if (payoutFilterAgent !== 'all' && p.agent_email !== payoutFilterAgent) return false;
+      if (payoutFilterStatus === 'pending' && p.status !== 'Pending') return false;
+      if (payoutFilterStatus === 'approved' && p.status !== 'Approved') return false;
+      if (payoutFilterStatus === 'rejected' && p.status !== 'Rejected') return false;
+      return true;
+    });
+  }, [payouts, payoutFilterAgent, payoutFilterStatus]);
+
+  const pendingDuplicateAgents = useMemo(() => {
+    const pending = payouts.filter((p) => p.status === 'Pending');
+    const byAgent = {};
+    for (const p of pending) {
+      const key = p.agent_email;
+      if (!byAgent[key]) byAgent[key] = [];
+      byAgent[key].push(p);
+    }
+    return Object.entries(byAgent).filter(([, rows]) => rows.length > 1);
+  }, [payouts]);
+
+  const openPayoutEditor = (payout) => {
+    setEditingPayout(payout);
+    setPayoutForm({
+      usd_sales: Number(payout.usd_sales || 0),
+      crc_sales: Number(payout.crc_sales || 0),
+      commission_rate: Number(payout.commission_rate || 0),
+      weekly_salary_paid: Number(payout.weekly_salary_paid || 0),
+      salary_currency: payout.salary_currency || 'USD',
+      admin_notes: payout.admin_notes || '',
+    });
+  };
+
+  const handleSavePayoutEdit = async (e) => {
+    e.preventDefault();
+    if (!editingPayout || !payoutForm) return;
+    setPayoutSaveLoading(true);
+    try {
+      const response = await adminFetch('/api/admin/commissions/payouts', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          payoutId: editingPayout.id,
+          ...payoutForm,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setEditingPayout(null);
+        setPayoutForm(null);
+        fetchPayouts();
+      } else {
+        alert(`Failed to save: ${data.error}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error saving payout.');
+    }
+    setPayoutSaveLoading(false);
+  };
+
+  const handleRemovePayout = async (payoutId, isHardDelete = false) => {
+    const msg = isHardDelete 
+      ? 'Permanently delete this rejected payout from the database? This cannot be undone.' 
+      : 'Remove this pending payout? Use this for duplicates or mistaken scans.';
+    if (!window.confirm(msg)) return;
+    
+    try {
+      const response = await adminFetch(`/api/admin/commissions/payouts?payoutId=${payoutId}${isHardDelete ? '&hardDelete=true' : ''}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (data.success) fetchPayouts();
+      else alert(`Failed to delete: ${data.error}`);
+    } catch (err) {
+      console.error(err);
+      alert('Network error deleting payout.');
+    }
   };
 
   useEffect(() => {
@@ -341,6 +431,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             >
               {syncingCommissions ? 'Calculating...' : '🔄 Run Commission Scan'}
             </button>
+            <p style={{ width: '100%', margin: '4px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+              Re-scanning the same agent + period updates one pending row (no duplicate). Different periods stay separate.
+            </p>
           </div>
         )}
       </div>
@@ -400,7 +493,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                 {users.map(u => (
                   <tr key={u.id}>
                     <td data-label="Name" style={{ padding: '16px', fontWeight: 'bold' }}>{u.name || 'N/A'}</td>
-                    <td data-label="Email" style={{ padding: '16px' }}>{u.email}</td>
+                    <td data-label="Email" style={{ padding: '16px', wordBreak: 'break-all' }}>{u.email}</td>
                     <td data-label="Role" style={{ padding: '16px' }}>
                       {u.is_superadmin ? (
                         <span className="status-badge" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
@@ -423,14 +516,16 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                       {u.is_superadmin ? 'Full Access' : (u.permissions && u.permissions.length > 0 ? u.permissions.join(', ') : 'No Access')}
                     </td>
                     <td data-label="Actions" style={{ padding: '16px', textAlign: 'right' }}>
-                      <button className="admin-btn" onClick={() => handleOpenModal(u)} style={{ marginRight: '8px', padding: '6px 10px' }}>
-                        <Edit2 size={14} />
-                      </button>
-                      {u.user_id !== currentUserProfile?.user_id && (
-                        <button className="admin-btn" onClick={() => handleDelete(u.user_id)} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 10px' }}>
-                          <Trash2 size={14} />
+                      <div className="admin-card-actions">
+                        <button className="admin-btn" onClick={() => handleOpenModal(u)} style={{ padding: '6px 10px' }}>
+                          <Edit2 size={14} /> Edit
                         </button>
-                      )}
+                        {u.user_id !== currentUserProfile?.user_id && (
+                          <button className="admin-btn" onClick={() => handleDelete(u.user_id)} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 10px' }}>
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -439,97 +534,257 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
           </div>
         )
       ) : (
-        loadingPayouts ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading payouts history...</div>
-        ) : payouts.length === 0 ? (
-          <div style={{ padding: '40px', textAlign: 'center', background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8' }}>
-            No commission payouts found. Click <strong>Run Commission Scan</strong> to check for weekly sales!
+        <>
+          {pendingDuplicateAgents.length > 0 && (
+            <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.25)', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px', fontSize: '0.85rem', color: '#fde68a' }}>
+              <strong>Duplicate pending payouts detected.</strong>{' '}
+              {pendingDuplicateAgents.map(([email, rows]) => {
+                const name = rows[0]?.agent_name || email;
+                return `${name} (${rows.length} pending)`;
+              }).join(' · ')}
+              . Keep the correct one and <strong>Remove</strong> the rest, or re-run the scan (same agent + period updates in place).
+            </div>
+          )}
+
+          <div className="admin-toolbar-filters" style={{ marginBottom: '16px' }}>
+            <select
+              value={payoutFilterAgent}
+              onChange={(e) => setPayoutFilterAgent(e.target.value)}
+              className="admin-input"
+              style={{ minWidth: '140px', background: '#0e1626', color: '#38bdf8', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem' }}
+            >
+              <option value="all">All agents</option>
+              {users.map((u) => (
+                <option key={u.user_id} value={u.email}>{u.name || u.email}</option>
+              ))}
+            </select>
+            <select
+              value={payoutFilterStatus}
+              onChange={(e) => setPayoutFilterStatus(e.target.value)}
+              className="admin-input"
+              style={{ minWidth: '140px', background: '#0e1626', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem' }}
+            >
+              <option value="pending">Pending only</option>
+              <option value="all">All statuses</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            <span style={{ fontSize: '0.8rem', color: '#64748b', alignSelf: 'center' }}>
+              {filteredPayouts.length} payout{filteredPayouts.length === 1 ? '' : 's'}
+            </span>
           </div>
-        ) : (
-          <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <table className="spreadsheet-table responsive-table">
-              <thead>
-                <tr>
-                  <th style={{ padding: '16px' }}>Agent</th>
-                  <th style={{ padding: '16px' }}>Period</th>
-                  <th style={{ padding: '16px' }}>Gross Sales</th>
-                  <th style={{ padding: '16px' }}>Rate</th>
-                  <th style={{ padding: '16px' }}>Commission</th>
-                  <th style={{ padding: '16px' }}>Status</th>
-                  <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payouts.map(p => {
-                  const formattedPeriod = `${new Date(p.start_date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})} - ${new Date(p.end_date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}`;
-                  return (
-                    <tr key={p.id}>
-                      <td data-label="Agent" style={{ padding: '16px', fontWeight: 'bold' }}>
-                        <div style={{ color: '#f8fafc' }}>{p.agent_name || 'N/A'}</div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.agent_email}</div>
-                      </td>
-                      <td data-label="Period" style={{ padding: '16px', color: '#cbd5e1', fontSize: '0.85rem' }}>{formattedPeriod}</td>
-                      <td data-label="Gross Sales" style={{ padding: '16px', fontSize: '0.85rem' }}>
-                        <div style={{ color: '#cbd5e1' }}>USD: <span style={{ fontWeight: 'bold', color: '#f8fafc' }}>{formatMoneyUI(p.usd_sales, 'USD')}</span></div>
-                        <div style={{ color: '#cbd5e1' }}>CRC: <span style={{ fontWeight: 'bold', color: '#f8fafc' }}>{formatMoneyUI(p.crc_sales, 'CRC')}</span></div>
-                      </td>
-                      <td data-label="Rate" style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>{p.commission_rate}%</td>
-                      <td data-label="Commission" style={{ padding: '16px', fontSize: '0.85rem' }}>
-                        <div style={{ color: '#c084fc', fontWeight: 'bold' }}>USD: {formatMoneyUI(p.usd_commission, 'USD')}</div>
-                        <div style={{ color: '#c084fc', fontWeight: 'bold' }}>CRC: {formatMoneyUI(p.crc_commission, 'CRC')}</div>
-                      </td>
-                      <td data-label="Status" style={{ padding: '16px' }}>
-                        {p.status === 'Pending' ? (
-                          <span className="status-badge" style={{ background: 'rgba(234, 179, 8, 0.15)', color: '#eab308', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                            Pending Approval
+
+          {loadingPayouts ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading payouts history...</div>
+          ) : filteredPayouts.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8' }}>
+              No payouts match this filter. Run <strong>Commission Scan</strong> with agent + period selected.
+            </div>
+          ) : (
+            <div className="commission-payouts-list">
+              {filteredPayouts.map((p) => {
+                const orderCount = getOrderCount(p);
+                const periodText = p.period_label || formatPayoutPeriod(p.start_date, p.end_date);
+                const isExpanded = expandedPayoutId === p.id;
+
+                return (
+                  <div key={p.id} className="commission-payout-card">
+                    <div className="commission-payout-card__header">
+                      <div>
+                        <div className="commission-payout-card__agent">{p.agent_name || 'N/A'}</div>
+                        <div className="commission-payout-card__email">{p.agent_email}</div>
+                      </div>
+                      <span className={`commission-payout-card__status commission-payout-card__status--${(p.status || 'pending').toLowerCase()}`}>
+                        {p.status === 'Pending' ? 'Pending' : p.status}
+                      </span>
+                    </div>
+
+                    <div className="commission-payout-card__period">
+                      <span>{periodText}</span>
+                      <span>{orderCount} order{orderCount === 1 ? '' : 's'}</span>
+                    </div>
+
+                    <div className="commission-payout-card__grid">
+                      <div className="commission-payout-card__metric">
+                        <span className="label">Gross USD</span>
+                        <span className="value">{formatMoneyUI(p.usd_sales, 'USD')}</span>
+                      </div>
+                      <div className="commission-payout-card__metric">
+                        <span className="label">Gross CRC</span>
+                        <span className="value">{formatMoneyUI(p.crc_sales, 'CRC')}</span>
+                      </div>
+                      <div className="commission-payout-card__metric">
+                        <span className="label">Rate</span>
+                        <span className="value">{p.commission_rate}%</span>
+                      </div>
+                      <div className="commission-payout-card__metric">
+                        <span className="label">Commission</span>
+                        <span className="value accent">
+                          {formatMoneyUI(p.usd_commission, 'USD')}
+                          {p.crc_commission > 0 ? ` + ${formatMoneyUI(p.crc_commission, 'CRC')}` : ''}
+                        </span>
+                      </div>
+                      {(p.weekly_salary_paid > 0 || p.total_payout_usd > 0 || p.total_payout_crc > 0) && (
+                        <div className="commission-payout-card__metric commission-payout-card__metric--wide">
+                          <span className="label">Total payout (salary + commission)</span>
+                          <span className="value">
+                            {p.total_payout_usd > 0 ? formatMoneyUI(p.total_payout_usd, 'USD') : ''}
+                            {p.total_payout_usd > 0 && p.total_payout_crc > 0 ? ' + ' : ''}
+                            {p.total_payout_crc > 0 ? formatMoneyUI(p.total_payout_crc, 'CRC') : ''}
                           </span>
-                        ) : p.status === 'Approved' ? (
-                          <span className="status-badge" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                            Approved
-                          </span>
-                        ) : (
-                          <span className="status-badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
-                            Rejected
-                          </span>
-                        )}
-                      </td>
-                      <td data-label="Actions" style={{ padding: '16px', textAlign: 'right' }}>
-                        {p.status === 'Pending' ? (
-                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                            <button 
-                              className="admin-btn"
-                              disabled={actionLoadingId !== null}
-                              onClick={() => handlePayoutAction(p.id, 'Approved')}
-                              style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.2)', padding: '6px 12px', fontSize: '0.75rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              {actionLoadingId === p.id ? '...' : <Check size={12} />} Approve & Send
-                            </button>
-                            <button 
-                              className="admin-btn"
-                              disabled={actionLoadingId !== null}
-                              onClick={() => handlePayoutAction(p.id, 'Rejected')}
-                              style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 12px', fontSize: '0.75rem', fontWeight: 'bold' }}
-                            >
-                              Reject
-                            </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {p.admin_notes && (
+                      <div className="commission-payout-card__notes">Note: {p.admin_notes}</div>
+                    )}
+
+                    {orderCount > 0 && (
+                      <button
+                        type="button"
+                        className="commission-payout-card__toggle"
+                        onClick={() => setExpandedPayoutId(isExpanded ? null : p.id)}
+                      >
+                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        {isExpanded ? 'Hide orders' : `View ${orderCount} included order${orderCount === 1 ? '' : 's'}`}
+                      </button>
+                    )}
+
+                    {isExpanded && Array.isArray(p.orders_data) && (
+                      <div className="commission-payout-card__orders">
+                        {p.orders_data.map((order) => (
+                          <div key={order.id} className="commission-payout-card__order-row">
+                            <span>#{order.order_number || order.id?.slice(0, 8)}</span>
+                            <span>{order.customer_name || 'N/A'}</span>
+                            <span>
+                              {order.currency === 'USD'
+                                ? formatMoneyUI(order.total_usd, 'USD')
+                                : formatMoneyUI(order.total_crc, 'CRC')}
+                            </span>
                           </div>
-                        ) : p.status === 'Approved' ? (
-                          <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                            Approved on {new Date(p.approved_at).toLocaleDateString()}
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: '0.75rem', color: '#ef4444' }}>
-                            Rejected
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="commission-payout-card__actions">
+                      {p.status === 'Pending' ? (
+                        <>
+                          <button className="admin-btn" onClick={() => openPayoutEditor(p)} style={{ padding: '6px 12px', fontSize: '0.75rem' }}>
+                            <Edit2 size={12} /> Edit
+                          </button>
+                          <button className="admin-btn" onClick={() => handleRemovePayout(p.id)} style={{ padding: '6px 12px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                            Remove
+                          </button>
+                          <button
+                            className="admin-btn"
+                            disabled={actionLoadingId !== null}
+                            onClick={() => handlePayoutAction(p.id, 'Approved')}
+                            style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.2)', padding: '6px 12px', fontSize: '0.75rem', fontWeight: 'bold', marginLeft: 'auto' }}
+                          >
+                            {actionLoadingId === p.id ? '...' : <Check size={12} />} Approve
+                          </button>
+                        </>
+                      ) : p.status === 'Approved' ? (
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          Approved {p.approved_at ? new Date(p.approved_at).toLocaleDateString() : ''}
+                        </span>
+                      ) : (
+                        <>
+                          <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>Rejected / removed</span>
+                          <button 
+                            className="admin-btn" 
+                            onClick={() => handleRemovePayout(p.id, true)} 
+                            style={{ padding: '4px 8px', fontSize: '0.7rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', marginLeft: 'auto' }}
+                          >
+                            <Trash2 size={12} style={{ display: 'inline', marginRight: '4px' }} /> Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Edit payout modal */}
+      {editingPayout && payoutForm && (
+        <div className="modal-overlay" style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
+          <div className="modal-content" style={{ maxWidth: '520px', background: 'linear-gradient(145deg, #111827 0%, #0f172a 100%)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '16px', marginBottom: '16px' }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#f8fafc', margin: 0 }}>
+                Edit Payout — {editingPayout.agent_name}
+              </h2>
+              <button className="close-btn" onClick={() => { setEditingPayout(null); setPayoutForm(null); }}>×</button>
+            </div>
+            <form onSubmit={handleSavePayoutEdit}>
+              <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0 0 16px' }}>
+                {editingPayout.period_label || formatPayoutPeriod(editingPayout.start_date, editingPayout.end_date)}
+                {' · '}{getOrderCount(editingPayout)} orders from scan
+              </p>
+              <div className="admin-form-grid-2" style={{ marginBottom: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold' }}>Gross USD</label>
+                  <input type="number" min="0" step="0.01" value={payoutForm.usd_sales} onChange={(e) => setPayoutForm({ ...payoutForm, usd_sales: parseFloat(e.target.value) || 0 })} className="admin-input" style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold' }}>Gross CRC</label>
+                  <input type="number" min="0" step="1" value={payoutForm.crc_sales} onChange={(e) => setPayoutForm({ ...payoutForm, crc_sales: parseFloat(e.target.value) || 0 })} className="admin-input" style={{ width: '100%' }} />
+                </div>
+              </div>
+              <div className="admin-form-grid-2" style={{ marginBottom: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold' }}>Commission rate (%)</label>
+                  <input type="number" min="0" max="100" step="0.1" value={payoutForm.commission_rate} onChange={(e) => setPayoutForm({ ...payoutForm, commission_rate: parseFloat(e.target.value) || 0 })} className="admin-input" style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold' }}>Weekly salary</label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <select value={payoutForm.salary_currency} onChange={(e) => setPayoutForm({ ...payoutForm, salary_currency: e.target.value })} className="admin-input" style={{ width: '72px' }}>
+                      <option value="USD">USD</option>
+                      <option value="CRC">CRC</option>
+                    </select>
+                    <input type="number" min="0" step="0.01" value={payoutForm.weekly_salary_paid} onChange={(e) => setPayoutForm({ ...payoutForm, weekly_salary_paid: parseFloat(e.target.value) || 0 })} className="admin-input" style={{ flex: 1 }} />
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold' }}>Admin notes (optional)</label>
+                <textarea value={payoutForm.admin_notes} onChange={(e) => setPayoutForm({ ...payoutForm, admin_notes: e.target.value })} className="admin-input" rows={2} style={{ width: '100%', resize: 'vertical' }} placeholder="e.g. Adjusted for split order with Korinne" />
+              </div>
+              {(() => {
+                const preview = recalcPayoutAmounts({
+                  usdSales: payoutForm.usd_sales,
+                  crcSales: payoutForm.crc_sales,
+                  commissionRate: payoutForm.commission_rate,
+                  weeklySalary: payoutForm.weekly_salary_paid,
+                  salaryCurrency: payoutForm.salary_currency,
+                });
+                return (
+                  <div style={{ background: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.2)', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '0.85rem' }}>
+                    <div style={{ color: '#c084fc', fontWeight: 'bold' }}>
+                      Commission: {formatMoneyUI(preview.usd_commission, 'USD')}
+                      {preview.crc_commission > 0 ? ` + ${formatMoneyUI(preview.crc_commission, 'CRC')}` : ''}
+                    </div>
+                    <div style={{ color: '#e2e8f0', marginTop: '4px' }}>
+                      Total payout: {formatMoneyUI(preview.total_payout_usd, 'USD')}
+                      {preview.total_payout_crc > 0 ? ` + ${formatMoneyUI(preview.total_payout_crc, 'CRC')}` : ''}
+                    </div>
+                  </div>
+                );
+              })()}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button type="button" className="admin-btn" onClick={() => { setEditingPayout(null); setPayoutForm(null); }}>Cancel</button>
+                <button type="submit" className="admin-btn admin-btn-primary" disabled={payoutSaveLoading}>
+                  {payoutSaveLoading ? 'Saving...' : 'Save changes'}
+                </button>
+              </div>
+            </form>
           </div>
-        )
+        </div>
       )}
 
       {/* Edit/Create Modal */}
