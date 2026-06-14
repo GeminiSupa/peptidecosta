@@ -8066,3 +8066,166 @@ body {
     transform: translateY(0);
     filter: brightness(0.95);
 }
+
+/* Commission payouts — mobile-first cards */
+.commission-payouts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.commission-payout-card {
+    background: #0e1626;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+
+.commission-payout-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.commission-payout-card__agent {
+    font-weight: 800;
+    color: #f8fafc;
+    font-size: 1rem;
+}
+
+.commission-payout-card__email {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 2px;
+    word-break: break-all;
+}
+
+.commission-payout-card__status {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+.commission-payout-card__status--pending {
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+}
+
+.commission-payout-card__status--approved {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+
+.commission-payout-card__status--rejected {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+}
+
+.commission-payout-card__period {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.commission-payout-card__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.commission-payout-card__metric .label {
+    display: block;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    margin-bottom: 2px;
+}
+
+.commission-payout-card__metric .value {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.commission-payout-card__metric .value.accent {
+    color: #c084fc;
+}
+
+.commission-payout-card__metric--wide {
+    grid-column: 1 / -1;
+}
+
+.commission-payout-card__notes {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    font-style: italic;
+    margin-bottom: 10px;
+}
+
+.commission-payout-card__toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: none;
+    color: #38bdf8;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 10px;
+}
+
+.commission-payout-card__orders {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 12px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.commission-payout-card__order-row {
+    display: grid;
+    grid-template-columns: 72px 1fr auto;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: #cbd5e1;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.commission-payout-card__order-row:last-child {
+    border-bottom: none;
+}
+
+.commission-payout-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+@media (min-width: 640px) {
+    .commission-payout-card__grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .commission-payout-card__metric--wide {
+        grid-column: span 2;
+    }
+}
+

@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getOrderSalesAmounts, orderBelongsToAgent } from '@/lib/agentOrders';
+import { getPeriodLabel, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 
 // Email Configuration from Environment variables
 const SMTP_HOST = process.env.SMTP_HOST;
@@ -81,6 +82,11 @@ export async function GET(request) {
 
     const startDateStr = startDate.toISOString();
     const endDateStr = endDate.toISOString();
+    const periodLabel = getPeriodLabel(
+      period,
+      searchParams.get('start'),
+      searchParams.get('end')
+    );
 
     // 4. Fetch all non-cancelled orders completed in the scanned period
     const { data: orders, error: ordersError } = await supabaseAdmin
@@ -172,17 +178,18 @@ export async function GET(request) {
       }
 
       // Calculate commissions
-      const usdCommission = usdSales * (rate / 100);
-      const crcCommission = crcSales * (rate / 100);
-      
-      // Calculate Total Payout
-      let totalPayoutUsd = usdCommission;
-      let totalPayoutCrc = crcCommission;
-      if (salaryCurrency === 'USD') {
-        totalPayoutUsd += weeklySalary;
-      } else {
-        totalPayoutCrc += weeklySalary;
-      }
+      const {
+        usd_commission: usdCommission,
+        crc_commission: crcCommission,
+        total_payout_usd: totalPayoutUsd,
+        total_payout_crc: totalPayoutCrc,
+      } = recalcPayoutAmounts({
+        usdSales,
+        crcSales,
+        commissionRate: rate,
+        weeklySalary,
+        salaryCurrency,
+      });
 
       // Build items table in HTML for this agent's invoice
       const ordersTableRows = agentOrders.map(order => {
@@ -292,58 +299,62 @@ export async function GET(request) {
         </div>
       `;
 
-      // 6. Save or update Pending payout in database
-      const { data: existingPayout } = await supabaseAdmin
+      // 6. Save or update pending payout for this agent + period (dedupe duplicates)
+      const { data: existingPayouts } = await supabaseAdmin
         .from('commission_payouts')
-        .select('*')
+        .select('id')
         .eq('agent_email', agent.email)
         .eq('status', 'Pending')
-        .maybeSingle();
+        .eq('start_date', startDateStr)
+        .eq('end_date', endDateStr)
+        .order('created_at', { ascending: false });
 
-      let saveError = null;
-      if (existingPayout) {
-        const { error } = await supabaseAdmin
+      const primaryPayout = existingPayouts?.[0] || null;
+      const duplicateIds = (existingPayouts || []).slice(1).map((p) => p.id);
+
+      if (duplicateIds.length > 0) {
+        await supabaseAdmin
           .from('commission_payouts')
           .update({
-            agent_id: agent.user_id || null,
-            agent_name: agent.name || null,
-            start_date: startDateStr,
-            end_date: endDateStr,
-            usd_sales: usdSales,
-            crc_sales: crcSales,
-            commission_rate: rate,
-            usd_commission: usdCommission,
-            crc_commission: crcCommission,
-            weekly_salary_paid: weeklySalary,
-            salary_currency: salaryCurrency,
-            total_payout_usd: totalPayoutUsd,
-            total_payout_crc: totalPayoutCrc,
-            orders_data: agentOrders,
-            email_html: emailHtml
+            status: 'Rejected',
+            approved_at: new Date().toISOString(),
           })
-          .eq('id', existingPayout.id);
+          .in('id', duplicateIds);
+      }
+
+      const payoutPayload = {
+        agent_id: agent.user_id || null,
+        agent_name: agent.name || null,
+        start_date: startDateStr,
+        end_date: endDateStr,
+        period_label: periodLabel,
+        usd_sales: usdSales,
+        crc_sales: crcSales,
+        commission_rate: rate,
+        usd_commission: usdCommission,
+        crc_commission: crcCommission,
+        weekly_salary_paid: weeklySalary,
+        salary_currency: salaryCurrency,
+        total_payout_usd: totalPayoutUsd,
+        total_payout_crc: totalPayoutCrc,
+        orders_data: agentOrders,
+        email_html: emailHtml,
+      };
+
+      let saveError = null;
+      if (primaryPayout) {
+        const { error } = await supabaseAdmin
+          .from('commission_payouts')
+          .update(payoutPayload)
+          .eq('id', primaryPayout.id);
         saveError = error;
       } else {
         const { error } = await supabaseAdmin
           .from('commission_payouts')
           .insert([{
-            agent_id: agent.user_id || null,
+            ...payoutPayload,
             agent_email: agent.email,
-            agent_name: agent.name || null,
-            start_date: startDateStr,
-            end_date: endDateStr,
-            usd_sales: usdSales,
-            crc_sales: crcSales,
-            commission_rate: rate,
-            usd_commission: usdCommission,
-            crc_commission: crcCommission,
-            weekly_salary_paid: weeklySalary,
-            salary_currency: salaryCurrency,
-            total_payout_usd: totalPayoutUsd,
-            total_payout_crc: totalPayoutCrc,
             status: 'Pending',
-            orders_data: agentOrders,
-            email_html: emailHtml
           }]);
         saveError = error;
       }
