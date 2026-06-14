@@ -164,8 +164,8 @@ export async function GET(request) {
         return orderBelongsToAgent(order, agent);
       });
 
-      // Skip agents with zero closed orders this week
-      if (agentOrders.length === 0) continue;
+      // Skip agents with zero closed orders this week AND no base salary
+      if (agentOrders.length === 0 && weeklySalary === 0) continue;
 
       // Group totals by currency
       let usdSales = 0;
@@ -327,7 +327,6 @@ export async function GET(request) {
         agent_name: agent.name || null,
         start_date: startDateStr,
         end_date: endDateStr,
-        period_label: periodLabel,
         usd_sales: usdSales,
         crc_sales: crcSales,
         commission_rate: rate,
