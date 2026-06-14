@@ -33,7 +33,7 @@ async function check() {
 
   const { data: orders } = await supabase
     .from('orders')
-    .select('id, total, currency, sales_agent, created_at, status')
+    .select('id, total_usd, total_crc, currency, sales_agent, created_at, status')
     .gte('created_at', startDate.toISOString())
     .lte('created_at', endDate.toISOString())
     .not('status', 'eq', 'Cancelled');
@@ -44,13 +44,14 @@ async function check() {
   
   const agentName = String(pollita.name || '').trim().toLowerCase();
   const agentEmail = String(pollita.email || '').trim().toLowerCase();
+  const agentEmailLocal = agentEmail.split('@')[0];
 
   for (const o of orders || []) {
     const orderAgent = String(o.sales_agent || '').trim().toLowerCase();
-    if (orderAgent && (orderAgent === agentName || orderAgent === agentEmail)) {
+    if (orderAgent && (orderAgent === agentName || orderAgent === agentEmail || orderAgent === agentEmailLocal)) {
       count++;
-      if (o.currency === 'USD') usdSales += Number(o.total);
-      else crcSales += Number(o.total);
+      usdSales += Number(o.total_usd || 0);
+      crcSales += Number(o.total_crc || 0);
     }
   }
   

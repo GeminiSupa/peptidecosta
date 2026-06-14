@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getOrderSalesAmounts, orderBelongsToAgent } from '@/lib/agentOrders';
 
 // Email Configuration from Environment variables
 const SMTP_HOST = process.env.SMTP_HOST;
@@ -152,16 +153,9 @@ export async function GET(request) {
       const weeklySalary = Number(agent.weekly_salary || 0);
       const salaryCurrency = agent.salary_currency || 'USD';
       
-      // Filter orders assigned to this agent (comparing against name or email dynamically)
-      const agentOrders = (orders || []).filter(order => {
-        // Skip orders that have already been paid out
+      const agentOrders = (orders || []).filter((order) => {
         if (paidOrderIds.has(order.id)) return false;
-
-        const orderAgent = String(order.sales_agent || '').trim().toLowerCase();
-        const agentName = String(agent.name || '').trim().toLowerCase();
-        const agentEmail = String(agent.email || '').trim().toLowerCase();
-        
-        return orderAgent && (orderAgent === agentName || orderAgent === agentEmail);
+        return orderBelongsToAgent(order, agent);
       });
 
       // Skip agents with zero closed orders this week
@@ -172,12 +166,9 @@ export async function GET(request) {
       let crcSales = 0;
 
       for (const order of agentOrders) {
-        const totalAmount = Number(order.total || 0);
-        if (order.currency === 'USD') {
-          usdSales += totalAmount;
-        } else {
-          crcSales += totalAmount;
-        }
+        const amounts = getOrderSalesAmounts(order);
+        usdSales += amounts.usd;
+        crcSales += amounts.crc;
       }
 
       // Calculate commissions
@@ -196,6 +187,8 @@ export async function GET(request) {
       // Build items table in HTML for this agent's invoice
       const ordersTableRows = agentOrders.map(order => {
         const date = new Date(order.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        const amounts = getOrderSalesAmounts(order);
+        const orderTotal = order.currency === 'USD' ? amounts.usd : amounts.crc;
         return `
           <tr>
             <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px;color:#e2e8f0;font-family:monospace;font-weight:bold;">
@@ -208,7 +201,7 @@ export async function GET(request) {
               ${order.customer_name || 'N/A'}
             </td>
             <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px;text-align:right;color:#f8fafc;font-weight:bold;">
-              ${formatMoney(order.total, order.currency)}
+              ${formatMoney(orderTotal, order.currency || 'CRC')}
             </td>
           </tr>
         `;
