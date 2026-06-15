@@ -1555,6 +1555,7 @@ export default function CatalogPage() {
       : totalVal;
     const totalUsd = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
     const totalCrc = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
+    const shippingCosts = getShippingCostFields(currency, exchangeRate, getShippingFee());
     const orderItems = cart.map(item => ({
       product: item.product,
       qty: item.qty,
@@ -1572,6 +1573,7 @@ export default function CatalogPage() {
       items: orderItems,
       total_usd: currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate),
       total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
+      ...shippingCosts,
       currency,
       payment_method: method === 'sinpe' ? 'sinpe' : 'tilopay',
       status: method === 'sinpe' ? 'Pending - SINPE Tilopay' : 'Pending - Card',
@@ -1679,6 +1681,7 @@ export default function CatalogPage() {
     }));
     const totalUsd = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
     const totalCrc = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
+    const shippingCosts = getShippingCostFields(currency, exchangeRate, getShippingFee());
 
     const whatsappSource = typeof window !== 'undefined' ? localStorage.getItem('whatsapp_source') : null;
 
@@ -1693,6 +1696,7 @@ export default function CatalogPage() {
       items: orderItems,
       total_usd: currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate),
       total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
+      ...shippingCosts,
       currency: currency,
       payment_method: paymentMethod,
       status: 'Pending',
@@ -1914,6 +1918,7 @@ export default function CatalogPage() {
         }
         const totalVal = (itemsTotal - promoDiscount) + shippingFee;
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
+        const paypalShippingUsd = cur === 'USD' ? shippingFee : shippingFee / rate;
         const orderItems = currentCart.map(item => {
           let p = item.priceCrc;
           if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
@@ -1952,6 +1957,8 @@ export default function CatalogPage() {
                   items: orderItems,
                   total_usd: usdTotal,
                   total_crc: Math.round(usdTotal * rate),
+                  shipping_cost_usd: Number(paypalShippingUsd.toFixed(2)),
+                  shipping_cost_crc: Math.round(paypalShippingUsd * rate),
                   currency: 'USD',
                   payment_method: 'paypal',
                   status: 'Paid',
@@ -2275,6 +2282,20 @@ export default function CatalogPage() {
         </span>
       </div>
     );
+  };
+
+  const getShippingCostFields = (orderCurrency = currency, rate = exchangeRate, shippingValue = getShippingFee()) => {
+    const shippingUsd = orderCurrency === 'USD'
+      ? Number(shippingValue.toFixed(2))
+      : Number((shippingValue / rate).toFixed(2));
+    const shippingCrc = orderCurrency === 'CRC'
+      ? Math.round(shippingValue)
+      : Math.round(shippingValue * rate);
+
+    return {
+      shipping_cost_usd: shippingUsd,
+      shipping_cost_crc: shippingCrc,
+    };
   };
 
   return (

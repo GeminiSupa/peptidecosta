@@ -25,6 +25,46 @@ const parseProductPrice = (product, currency) => {
   return parseFloat(String(product.priceCrc || '0').replace(/[^0-9.]/g, '')) || 0;
 };
 
+const getItemsSubtotal = (items = []) => items.reduce(
+  (sum, item) => sum + (Number(item.price) || 0) * (Number(item.qty) || 1),
+  0
+);
+
+const getStoredTotal = (order) => {
+  if (order.currency === 'USD') return Number(order.total_usd) || 0;
+  return Number(order.total_crc) || 0;
+};
+
+const inferShippingCosts = (order) => {
+  const explicitCrc = Number(order.shipping_cost_crc) || 0;
+  const explicitUsd = Number(order.shipping_cost_usd) || 0;
+
+  if (explicitCrc > 0 || explicitUsd > 0) {
+    return {
+      crc: explicitCrc,
+      usd: explicitUsd,
+    };
+  }
+
+  const itemsSubtotal = getItemsSubtotal(Array.isArray(order.items) ? order.items : []);
+  const storedTotal = getStoredTotal(order);
+  const inferred = Math.max(0, storedTotal - itemsSubtotal);
+
+  if (!inferred) {
+    return { crc: explicitCrc, usd: explicitUsd };
+  }
+
+  return order.currency === 'USD'
+    ? {
+        crc: Math.round(inferred * FALLBACK_EXCHANGE_RATE),
+        usd: Number(inferred.toFixed(2)),
+      }
+    : {
+        crc: Math.round(inferred),
+        usd: Number((inferred / FALLBACK_EXCHANGE_RATE).toFixed(2)),
+      };
+};
+
 export default function OrderDetailPanel({
   order,
   products = [],
@@ -33,11 +73,12 @@ export default function OrderDetailPanel({
   onStatusChange,
   onTrackingChange,
 }) {
+  const initialShipping = order ? inferShippingCosts(order) : { crc: 0, usd: 0 };
   const [notes, setNotes] = useState(order.internal_notes || '');
   const [savingNotes, setSavingNotes] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [shippingCrc, setShippingCrc] = useState(order.shipping_cost_crc ?? '');
-  const [shippingUsd, setShippingUsd] = useState(order.shipping_cost_usd ?? '');
+  const [shippingCrc, setShippingCrc] = useState(initialShipping.crc || '');
+  const [shippingUsd, setShippingUsd] = useState(initialShipping.usd || '');
 
   const [customerName, setCustomerName] = useState(order.customer_name || '');
   const [customerPhone, setCustomerPhone] = useState(order.customer_phone || '');
@@ -50,9 +91,11 @@ export default function OrderDetailPanel({
   const [phoneCopied, setPhoneCopied] = useState(false);
 
   useEffect(() => {
+    if (!order) return;
+    const nextShipping = inferShippingCosts(order);
     setNotes(order.internal_notes || '');
-    setShippingCrc(order.shipping_cost_crc ?? '');
-    setShippingUsd(order.shipping_cost_usd ?? '');
+    setShippingCrc(nextShipping.crc || '');
+    setShippingUsd(nextShipping.usd || '');
     setCustomerName(order.customer_name || '');
     setCustomerPhone(order.customer_phone || '');
     setCustomerEmail(order.customer_email || '');
@@ -68,10 +111,7 @@ export default function OrderDetailPanel({
   const shipping = order.currency === 'USD'
     ? Number(shippingUsd) || 0
     : Number(shippingCrc) || 0;
-  const itemsSubtotal = editItems.reduce(
-    (s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 1),
-    0
-  );
+  const itemsSubtotal = getItemsSubtotal(editItems);
   const orderTotal = itemsSubtotal + shipping;
 
   const patchOrder = async (updates, activityEntry) => {
@@ -96,10 +136,23 @@ export default function OrderDetailPanel({
   };
 
   const saveShipping = async () => {
+    const nextShippingCrc = Number(shippingCrc) || 0;
+    const nextShippingUsd = Number(shippingUsd) || 0;
+    const nextShipping = order.currency === 'USD' ? nextShippingUsd : nextShippingCrc;
+    const nextTotal = itemsSubtotal + nextShipping;
+    const totalUsd = order.currency === 'USD'
+      ? Number(nextTotal.toFixed(2))
+      : Number((nextTotal / FALLBACK_EXCHANGE_RATE).toFixed(2));
+    const totalCrc = order.currency === 'CRC'
+      ? Math.round(nextTotal)
+      : Math.round(nextTotal * FALLBACK_EXCHANGE_RATE);
+
     try {
       await patchOrder({
-        shipping_cost_crc: Number(shippingCrc) || 0,
-        shipping_cost_usd: Number(shippingUsd) || 0,
+        shipping_cost_crc: nextShippingCrc,
+        shipping_cost_usd: nextShippingUsd,
+        total_usd: totalUsd,
+        total_crc: totalCrc,
       }, { type: 'shipping_cost', message: `Shipping: ₡${shippingCrc} / $${shippingUsd}` });
     } catch (err) {
       alert(err.message);
@@ -177,6 +230,8 @@ export default function OrderDetailPanel({
           customer_email: customerEmail.trim() || null,
           shipping_address: shippingAddress.trim() || null,
           items: normalizedItems,
+          shipping_cost_crc: Number(shippingCrc) || 0,
+          shipping_cost_usd: Number(shippingUsd) || 0,
           total_usd: totalUsd,
           total_crc: totalCrc,
         },
@@ -364,9 +419,7 @@ export default function OrderDetailPanel({
 
           <div className="order-detail-totals">
             <div><span>Items subtotal</span><span>{order.currency === 'USD' ? `$${itemsSubtotal.toFixed(2)}` : `₡${itemsSubtotal.toLocaleString()}`}</span></div>
-            {(Number(shippingCrc) > 0 || Number(shippingUsd) > 0) && (
-              <div><span>Shipping</span><span>₡{shippingCrc || 0} / ${shippingUsd || 0}</span></div>
-            )}
+            <div><span>Shipping</span><span>₡{shippingCrc || 0} / ${shippingUsd || 0}</span></div>
             <div className="order-detail-total-line">
               <span>Total (preview)</span>
               <span>{order.currency === 'USD' ? `$${orderTotal.toFixed(2)}` : `₡${Math.round(orderTotal).toLocaleString()}`}</span>
