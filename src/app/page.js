@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { ArrowRight, ArrowUpRight, ShieldCheck, Truck, MessageCircle, Sun, Moon, ChevronDown, ChevronUp, FlaskConical, Lock, Dna, Atom, Zap, Brain, Sparkles, CheckCircle, ExternalLink, Trophy, Users, MapPin, Tag, Target, Heart, Package, DollarSign } from 'lucide-react';
+import { motion } from 'framer-motion';
+import NewsletterSignup from '@/components/NewsletterSignup';
 
 const T = {
   en: {
@@ -170,7 +172,12 @@ export default function LandingPage() {
           <div className="lp-hero-bg-image" style={{position:'absolute',inset:0,backgroundImage:'url(/peptide_molecular_3d.png)',backgroundSize:'cover',backgroundPosition:'center',opacity:0.07,zIndex:0}}/>
           <div className="lp-hero-glow" style={{zIndex:1}}/>
           <div className="container lp-hero-grid" style={{position:'relative',zIndex:2}}>
-            <div className="lp-hero-text-block">
+            <motion.div 
+              initial={{ opacity: 0, x: -30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="lp-hero-text-block"
+            >
               <div className="hero-badge">{lang==='en'?'Verified Local Supplier · Costa Rica':'Proveedor Local Verificado · Costa Rica'}</div>
               <h1 className="hero-title">{t.hero_title}</h1>
               <p style={{fontSize:'1.1rem',lineHeight:1.7,color:'var(--text-muted)',marginBottom:'32px',maxWidth:'520px'}}>{t.hero_sub}</p>
@@ -187,11 +194,16 @@ export default function LandingPage() {
                 <span><CheckCircle size={14} color="#4ade80"/> {t.t2}</span>
                 <span><CheckCircle size={14} color="#4ade80"/> {t.t3}</span>
               </div>
-            </div>
-            <div className="lp-hero-visual-block">
+            </motion.div>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+              className="lp-hero-visual-block"
+            >
               <div className="lp-hero-image-glow"/>
               <img src="https://peptidescostarica.net/wp-content/uploads/2026/04/Untitled-design-5-1.png" alt="Peptides Costa Rica" className="lp-hero-main-img" style={{width:'100%',height:'auto',objectFit:'contain',position:'relative',zIndex:10,borderRadius:'16px'}}/>
-            </div>
+            </motion.div>
           </div>
         </section>
 
@@ -455,7 +467,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* CTA BANNER */}
+        {/* CTA BANNER & NEWSLETTER */}
         <section className="lp-cta-section">
           <div className="lp-cta-glow"/>
           <div className="container lp-cta-content">
@@ -467,6 +479,10 @@ export default function LandingPage() {
                 <WaIcon/> {t.cta_wa}
               </button>
             </div>
+          </div>
+
+          <div className="container mt-16 pt-16 border-t border-white/10 relative z-10" style={{maxWidth: '800px'}}>
+            <NewsletterSignup lang={lang} />
           </div>
         </section>
       </main>

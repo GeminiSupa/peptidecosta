@@ -61,7 +61,18 @@ const buildItemsRows = (items = [], currency) => items.map((item) => {
 }).join('');
 
 // Admin HTML Template Builder
-const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) => `
+const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) => {
+  const shippingAmount = order.shipping !== undefined ? Number(order.shipping || 0) : undefined;
+  const itemsAfterDiscounts = shippingAmount !== undefined
+    ? Number(order.total || 0) - shippingAmount
+    : Number(order.total || 0);
+  const shippingLabel = shippingAmount === undefined
+    ? 'N/A'
+    : shippingAmount === 0
+      ? 'FREE'
+      : formatMoney(shippingAmount, order.currency);
+
+  return `
   <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.5;max-width:640px;margin:0 auto;padding:20px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
     <h1 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 16px;border-bottom:2px solid #e2e8f0;padding-bottom:12px;">🧪 New Order Received</h1>
     
@@ -69,7 +80,11 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
       <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#475569;">Order Reference:</strong> <span style="font-family:monospace;font-size:15px;font-weight:bold;color:#059669;">${escapeHtml(order.orderNumber || 'N/A')}</span></p>
       <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#475569;">Payment Method:</strong> ${escapeHtml(paymentLabel)}</p>
       <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#475569;">Order Status:</strong> <span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:bold;">${escapeHtml(order.status || 'Paid')}</span></p>
-      <p style="margin:0;font-size:15px;"><strong style="color:#475569;">Total Amount:</strong> <span style="font-size:18px;font-weight:900;color:#0f172a;">${totalPrimary}</span> ${totalUsd && totalUsd !== totalPrimary ? ` / <span style="color:#64748b;">${totalUsd}</span>` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / <span style="color:#64748b;">${totalCrc}</span>` : ''}</p>
+      <div style="border-top:1px solid #e2e8f0;margin-top:12px;padding-top:12px;">
+        <p style="margin:0 0 6px;font-size:14px;"><strong style="color:#475569;">Items Amount:</strong> <span style="font-weight:800;color:#0f172a;">${formatMoney(itemsAfterDiscounts, order.currency)}</span></p>
+        <p style="margin:0 0 6px;font-size:14px;"><strong style="color:#475569;">Shipping Fee:</strong> <span style="font-weight:800;color:${shippingAmount === 0 ? '#15803d' : '#0f172a'};">${shippingLabel}</span></p>
+        <p style="margin:0;font-size:15px;"><strong style="color:#475569;">Grand Total:</strong> <span style="font-size:18px;font-weight:900;color:#0f172a;">${totalPrimary}</span> ${totalUsd && totalUsd !== totalPrimary ? ` / <span style="color:#64748b;">${totalUsd}</span>` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / <span style="color:#64748b;">${totalCrc}</span>` : ''}</p>
+      </div>
     </div>
 
     <h2 style="font-size:15px;font-weight:700;color:#0f172a;margin:0 0 8px;text-transform:uppercase;letter-spacing:0.5px;">Customer Profile</h2>
@@ -126,6 +141,7 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
     </table>
   </div>
 `;
+};
 
 // Customer HTML Receipt Builder
 const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc, lang) => {
@@ -300,7 +316,11 @@ export async function POST(request) {
         `Order Reference: ${order.orderNumber || 'N/A'}`,
         `Payment Method: ${paymentLabel}`,
         `Order Status: ${order.status || 'Paid'}`,
-        `Total Amount: ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`,
+        ...(order.shipping !== undefined ? [
+          `Items Amount: ${formatMoney(Number(order.total || 0) - Number(order.shipping || 0), order.currency)}`,
+          `Shipping Fee: ${order.shipping === 0 ? 'FREE' : formatMoney(order.shipping, order.currency)}`,
+        ] : []),
+        `Grand Total: ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`,
         '',
         `Customer Profile:`,
         `• Name: ${order.customerName}`,

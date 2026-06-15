@@ -2254,6 +2254,29 @@ export default function CatalogPage() {
     );
   };
 
+  const renderPaymentTotalNotice = () => {
+    const shipFee = getShippingFee();
+    const finalTotal = getFinalTotal();
+
+    return (
+      <div className="payment-total-notice" aria-live="polite">
+        <div>
+          <span className="payment-total-notice-label">
+            {lang === 'en' ? 'You will pay' : 'Usted pagará'}
+          </span>
+          <strong>{formatPriceVal(finalTotal, currency)}</strong>
+        </div>
+        <span className="payment-total-notice-detail">
+          {shipFee > 0
+            ? (lang === 'en'
+              ? `Includes ${formatPriceVal(shipFee, currency)} shipping`
+              : `Incluye ${formatPriceVal(shipFee, currency)} de envío`)
+            : (lang === 'en' ? 'Shipping is free on this order' : 'El envío es gratis en este pedido')}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <div id="app" className="min-h-screen" suppressHydrationWarning>
       <Script id="google-tag-manager" strategy="afterInteractive">
@@ -2722,7 +2745,6 @@ export default function CatalogPage() {
                       <img 
                         src={p.imageUrl} 
                         alt={p.product} 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '12px' }} 
                       />
                     ) : getCategoryIcon(p.category)}
                     {!inStock && !comingSoon && (
@@ -2739,9 +2761,16 @@ export default function CatalogPage() {
                   <div className="product-info">
                     <div className="product-category">{translateCategory(p.category)}</div>
                     <h3 className="product-name">{p.product}</h3>
-                    {renderRatingSummary(p.product)}
+                    <div className="product-rating-slot">
+                      {renderRatingSummary(p.product)}
+                    </div>
                     <div className="product-pricing">
-                      {p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd ? (
+                      {isBac ? (
+                        <div className="bac-free-price">
+                          <span>{lang === 'en' ? 'FREE' : 'GRATIS'}</span>
+                          <small>{lang === 'en' ? 'included' : 'incluido'}</small>
+                        </div>
+                      ) : p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span className="price-main" style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '1.1rem' }}>
                             {currency === 'USD' ? p.originalPriceUsd : p.originalPriceCrc}
@@ -2751,15 +2780,18 @@ export default function CatalogPage() {
                       ) : (
                         <span className="price-main">{pMain}</span>
                       )}
-                      {pSub && <span className="price-sub">{pSub}</span>}
+                      {!isBac && pSub && <span className="price-sub">{pSub}</span>}
                     </div>
 
-                    <div className="product-actions" style={{ marginTop: '10px', position: 'relative' }}>
+                    <div className="product-actions">
                       {isBac ? (
-                        <div style={{ padding: '8px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.2)', fontSize: '0.75rem', color: '#38bdf8', textAlign: 'center', lineHeight: '1.4', fontWeight: '500' }}>
-                          {lang === 'en' 
-                            ? '🎁 We provide complimentary with every order.' 
-                            : '🎁 Proporcionamos de cortesía con cada pedido.'}
+                        <div className="complimentary-note">
+                          <span className="complimentary-note__title">
+                            {lang === 'en' ? 'Added with each order' : 'Incluido en cada pedido'}
+                          </span>
+                          <span className="complimentary-note__text">
+                            {lang === 'en' ? 'No cart action needed.' : 'No necesita agregarlo.'}
+                          </span>
                         </div>
                       ) : inStock ? (
                         (() => {
@@ -2817,7 +2849,7 @@ export default function CatalogPage() {
                     </div>
                     <div className={`stock-badge ${isBac ? 'stock-in' : inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`}>
                       <span>
-                        {isBac ? (lang === 'en' ? 'In Stock (Free)' : 'Disponible (Gratis)') : translateStatus(p.status)}
+                        {isBac ? (lang === 'en' ? 'Included' : 'Incluido') : translateStatus(p.status)}
                       </span>
                     </div>
                   </div>
@@ -3007,19 +3039,24 @@ export default function CatalogPage() {
 
         @media (min-width: 900px) {
           .cart-container-wrapper {
-            bottom: 32px;
-            right: 32px;
+            bottom: 24px;
+            right: 24px;
             left: auto;
             width: auto;
             padding: 0;
             background: none !important;
           }
           .cart-fab-sticky {
-            border-radius: 28px;
-            width: auto;
-            padding: 12px 24px;
-            font-size: 0.95rem;
-            gap: 12px;
+            width: 66px;
+            height: 66px;
+            border-radius: 50%;
+            padding: 0;
+            justify-content: center;
+            gap: 0;
+          }
+          .cart-fab-sticky > div:first-child span,
+          .cart-fab-sticky > div:nth-child(2) {
+            display: none !important;
           }
           .cart-fab-sticky:hover {
             transform: translateY(-2px) scale(1.03);
@@ -3489,6 +3526,7 @@ export default function CatalogPage() {
                   </button>
                 ))}
               </div>
+              {renderPaymentTotalNotice()}
               {paymentMethod === 'paypal' ? (
                 <div style={{ marginTop: '16px' }}>
                   {/* Helper note above PayPal buttons, shown immediately */}
@@ -3583,7 +3621,9 @@ export default function CatalogPage() {
                     {orderSubmitting ? (
                       <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
                     ) : (
-                      lang === 'en' ? 'Submit Order to WhatsApp' : 'Enviar Pedido por WhatsApp'
+                      lang === 'en'
+                        ? `Submit Order - ${formatPriceVal(getFinalTotal(), currency)}`
+                        : `Enviar Pedido - ${formatPriceVal(getFinalTotal(), currency)}`
                     )}
                   </button>
                 </div>

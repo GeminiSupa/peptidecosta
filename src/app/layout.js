@@ -63,6 +63,25 @@ export default function RootLayout({ children }) {
             `
           }}
         />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              "name": "Peptides Costa Rica",
+              "url": "https://peptidescostarica.net",
+              "logo": "https://peptidescostarica.net/logo.png",
+              "contactPoint": {
+                "@type": "ContactPoint",
+                "telephone": "+506-8404-6973",
+                "contactType": "customer service",
+                "areaServed": "CR",
+                "availableLanguage": ["es", "en"]
+              }
+            })
+          }}
+        />
       </head>
       <body suppressHydrationWarning>
         {children}
