@@ -21,6 +21,7 @@ import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
 import ExportModal from '@/components/admin/ExportModal';
 import TeamManagement from '@/components/admin/TeamManagement';
+import TeamChat from '@/components/admin/TeamChat';
 import AffiliatesManager from '@/components/admin/AffiliatesManager';
 import InquiriesManager from '@/components/admin/InquiriesManager';
 import DashboardHome from '@/components/admin/DashboardHome';
@@ -64,7 +65,7 @@ const formatCustomerIdType = (idType) => {
 const ADMIN_TABS = new Set([
   'home', 'spreadsheet', 'orders', 'customers', 'inquiries', 'leads',
   'carts', 'share', 'reviews', 'affiliates', 'analytics', 'cms',
-  'whatsapp_ai', 'team', 'facebook',
+  'whatsapp_ai', 'team', 'facebook', 'team_chat'
 ]);
 
 const TAB_TITLES = {
@@ -82,6 +83,7 @@ const TAB_TITLES = {
   cms: 'CMS',
   whatsapp_ai: 'WhatsApp AI',
   team: 'Team',
+  team_chat: 'Team Chat',
   ai: 'AI Copilot',
   facebook: 'Facebook',
 };
@@ -91,7 +93,7 @@ const ADMIN_NAV_GROUPS = [
   { title: 'Core Operations', tabs: ['spreadsheet', 'orders', 'customers', 'inquiries', 'leads'] },
   { title: 'Sales & Marketing', tabs: ['carts', 'share', 'reviews', 'affiliates', 'facebook'] },
   { title: 'Analytics & Content', tabs: ['analytics', 'cms'] },
-  { title: 'System & AI', tabs: ['whatsapp_ai', 'team'] },
+  { title: 'System & AI', tabs: ['whatsapp_ai', 'team', 'team_chat'] },
 ];
 
 function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, isStaffAgent = false }) {
@@ -135,7 +137,7 @@ const SUPERADMIN_ONLY_TABS = new Set(['affiliates', 'team', 'analytics']);
 
 function resolveTabAccess(tabId, profile) {
   if (!profile || !ADMIN_TABS.has(tabId)) return false;
-  if (tabId === 'home') return true;
+  if (tabId === 'home' || tabId === 'team_chat') return true;
   if (SUPERADMIN_ONLY_TABS.has(tabId)) return profile.is_superadmin;
   if (profile.is_superadmin) return true;
   return profile.permissions?.includes(tabId) ?? false;
@@ -1372,10 +1374,10 @@ Core Rules:
           setExchangeRate(parseFloat(cached));
           return;
         }
-        const res = await fetch('https://open.er-api.com/v6/latest/USD');
+        const res = await fetch('/api/exchange-rate');
         const data = await res.json();
-        if (data.rates && data.rates.CRC) {
-          const rate = data.rates.CRC;
+        if (data.rate) {
+          const rate = data.rate;
           setExchangeRate(rate);
           localStorage.setItem('exchangeRate_USDCRC', rate.toString());
           localStorage.setItem('exchangeRate_USDCRC_time', Date.now().toString());
@@ -3676,6 +3678,15 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   <span className="tab-label">Team</span>
                 </button>
               )}
+              {hasAccess('team_chat') && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'team_chat' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('team_chat')}
+                >
+                  <MessageCircle size={14} />
+                  <span className="tab-label">Team Chat</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -5580,6 +5591,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === 'team_chat' && (
+          <TeamChat profile={adminProfile} />
         )}
 
         {/* TAB: ANALYTICS */}
@@ -7871,6 +7886,16 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           >
             <MessageSquare size={18} />
             <span>Chat</span>
+          </button>
+        )}
+        {hasAccess('team_chat') && (
+          <button
+            type="button"
+            className={`admin-quick-nav-btn${activeTab === 'team_chat' ? ' active' : ''}`}
+            onClick={() => navigateToTab('team_chat')}
+          >
+            <MessageCircle size={18} />
+            <span>Team</span>
           </button>
         )}
         <button

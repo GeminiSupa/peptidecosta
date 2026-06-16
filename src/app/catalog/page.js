@@ -880,10 +880,10 @@ export default function CatalogPage() {
         setExchangeRate(parseFloat(cached));
         return;
       }
-      const res = await fetch('https://open.er-api.com/v6/latest/USD');
+      const res = await fetch('/api/exchange-rate');
       const data = await res.json();
-      if (data.rates && data.rates.CRC) {
-        const rate = data.rates.CRC;
+      if (data.rate) {
+        const rate = data.rate;
         setExchangeRate(rate);
         localStorage.setItem('exchangeRate_USDCRC', rate.toString());
         localStorage.setItem('exchangeRate_USDCRC_time', Date.now().toString());

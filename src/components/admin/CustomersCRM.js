@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, User, Users, Crown, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save, Phone, BadgeCheck, Upload, Sparkles, Brain } from 'lucide-react';
+import { Search, User, Users, Crown, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save, Phone, BadgeCheck, Upload, Sparkles, Brain, Send } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -78,6 +78,11 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
   const [generatingPitchId, setGeneratingPitchId] = useState(null);
   const [filterTab, setFilterTab] = useState('all');
 
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState([]);
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastLoading, setBroadcastLoading] = useState(false);
+  const [broadcastResults, setBroadcastResults] = useState(null);
   // Derived customer data from order history and abandoned carts
   const customers = useMemo(() => {
     const map = {};
@@ -391,6 +396,49 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
       alert('Error generating AI pitch: ' + err.message);
     } finally {
       setGeneratingPitchId(null);
+    }
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedCustomerIds.length === paginatedCustomers.length) {
+      setSelectedCustomerIds([]);
+    } else {
+      setSelectedCustomerIds(paginatedCustomers.map(c => c.id));
+    }
+  };
+
+  const handleToggleSelect = (id) => {
+    setSelectedCustomerIds(prev => 
+      prev.includes(id) ? prev.filter(cId => cId !== id) : [...prev, id]
+    );
+  };
+
+  const handleBroadcastSubmit = async () => {
+    if (!broadcastMessage.trim()) return;
+    setBroadcastLoading(true);
+    setBroadcastResults(null);
+    
+    const recipients = customers
+      .filter(c => selectedCustomerIds.includes(c.id))
+      .map(c => ({ phone: c.whatsappWaId || c.phone, name: c.name }))
+      .filter(c => c.phone);
+
+    try {
+      const res = await fetch('/api/whatsapp/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipients, message: broadcastMessage.trim() })
+      });
+      const data = await res.json();
+      setBroadcastResults(data);
+      if (data.success) {
+        setSelectedCustomerIds([]);
+        // Don't auto close, let them see results
+      }
+    } catch (err) {
+      alert('Broadcast failed: ' + err.message);
+    } finally {
+      setBroadcastLoading(false);
     }
   };
 
@@ -789,6 +837,14 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
               }}
             />
           </div>
+          {selectedCustomerIds.length > 0 && (
+            <button
+              onClick={() => setShowBroadcastModal(true)}
+              style={{ padding: '0 14px', fontSize: '0.85rem', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: '#4ade80', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px' }}
+            >
+              <MessageCircle size={14} /> Bulk WhatsApp ({selectedCustomerIds.length})
+            </button>
+          )}
           {filteredCustomers.length > 0 && (
             <button
               onClick={() => setShowExportModal(true)}
@@ -834,6 +890,14 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           <table className="crm-table responsive-table">
             <thead>
               <tr>
+                <th style={{ width: '40px', textAlign: 'center' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedCustomerIds.length > 0 && selectedCustomerIds.length === paginatedCustomers.length}
+                    onChange={handleToggleSelectAll}
+                    style={{ cursor: 'pointer' }}
+                  />
+                </th>
                 <th>Customer / Lead</th>
                 <th>Contact details</th>
                 <th>Location</th>
@@ -848,7 +912,15 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
               {paginatedCustomers.map(cust => {
                 const contactPhone = cust.whatsappWaId || cust.phone;
                 return (
-                  <tr key={cust.id}>
+                  <tr key={cust.id} style={{ background: selectedCustomerIds.includes(cust.id) ? 'rgba(56, 189, 248, 0.05)' : 'transparent' }}>
+                    <td style={{ textAlign: 'center' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedCustomerIds.includes(cust.id)}
+                        onChange={() => handleToggleSelect(cust.id)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </td>
                     {/* Customer Profile Column */}
                     <td data-label="Customer / Lead">
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1201,6 +1273,80 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
         onExportXLSX={() => handleExport('xlsx')}
         onExportPDF={() => handleExport('pdf')}
       />
+
+      {/* Broadcast Modal */}
+      {showBroadcastModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999
+        }}>
+          <div style={{
+            background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '16px', padding: '24px', width: '90%', maxWidth: '500px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            maxHeight: '90vh', overflowY: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MessageCircle size={18} color="#4ade80" /> Bulk WhatsApp Broadcast
+              </h3>
+              <button onClick={() => { setShowBroadcastModal(false); setBroadcastResults(null); }} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '16px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+              You are about to send a message to <strong>{selectedCustomerIds.length}</strong> selected contacts.
+              <br/><br/>
+              <span style={{ color: '#fbbf24' }}>⚠️ IMPORTANT:</span> Meta requires you to use an approved Message Template if you are initiating the conversation outside the 24-hour window. Make sure your message exactly matches an approved template in your WhatsApp Manager.
+            </div>
+
+            <textarea 
+              value={broadcastMessage}
+              onChange={e => setBroadcastMessage(e.target.value)}
+              placeholder="Paste your approved template text here..."
+              rows={6}
+              style={{ width: '100%', padding: '12px', background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', outline: 'none', resize: 'vertical', marginBottom: '16px' }}
+            />
+
+            {broadcastResults && (
+              <div style={{ padding: '12px', background: broadcastResults.success ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', border: `1px solid ${broadcastResults.success ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`, borderRadius: '8px', marginBottom: '16px' }}>
+                <h4 style={{ margin: '0 0 8px 0', color: broadcastResults.success ? '#4ade80' : '#f87171' }}>Broadcast Results</h4>
+                <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+                  Success: <strong>{broadcastResults.successCount}</strong><br/>
+                  Failed: <strong>{broadcastResults.failCount}</strong>
+                </div>
+                {broadcastResults.errors && broadcastResults.errors.length > 0 && (
+                  <div style={{ marginTop: '8px', maxHeight: '100px', overflowY: 'auto', fontSize: '0.75rem', color: '#f87171' }}>
+                    {broadcastResults.errors.map((e, i) => (
+                      <div key={i}>{e.phone}: {e.error}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={() => { setShowBroadcastModal(false); setBroadcastResults(null); }}
+                style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', cursor: 'pointer' }}
+              >
+                Close
+              </button>
+              {!broadcastResults?.success && (
+                <button 
+                  onClick={handleBroadcastSubmit}
+                  disabled={broadcastLoading || !broadcastMessage.trim()}
+                  style={{ flex: 2, padding: '10px', background: '#22c55e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontWeight: 'bold', opacity: (broadcastLoading || !broadcastMessage.trim()) ? 0.5 : 1 }}
+                >
+                  {broadcastLoading ? 'Sending...' : <><Send size={16} /> Send Broadcast</>}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
