@@ -56,6 +56,17 @@ export default function TeamChat({ profile }) {
       const { data, error } = await query;
       if (!error && data) {
         setMessages(data.reverse());
+        
+        // Mark unread messages as read
+        if (selectedContact !== null) {
+          const unreadMsgs = data.filter(m => m.recipient_email === profile.email && !m.is_read);
+          if (unreadMsgs.length > 0) {
+            await supabase
+              .from('team_messages')
+              .update({ is_read: true })
+              .in('id', unreadMsgs.map(m => m.id));
+          }
+        }
       } else if (error) {
         console.error('Fetch msgs error:', error);
       }

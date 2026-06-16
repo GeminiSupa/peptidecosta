@@ -330,6 +330,7 @@ export default function AdminPage() {
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [manualOrderOpen, setManualOrderOpen] = useState(false);
   const [inquiryCount, setInquiryCount] = useState(0);
+  const [unreadTeamMsgCount, setUnreadTeamMsgCount] = useState(0);
   const [notifRefreshKey, setNotifRefreshKey] = useState(0);
   const [selectedCartDetails, setSelectedCartDetails] = useState(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
@@ -1430,6 +1431,12 @@ Core Rules:
       .on('postgres_changes', { event: '*', schema: 'public', table: 'facebook_notifications' }, () => {
         loadAdminData();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inquiries' }, () => {
+        loadAdminData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'team_messages' }, () => {
+        loadAdminData();
+      })
       .subscribe();
 
     return () => {
@@ -1720,6 +1727,22 @@ Core Rules:
         }
       } catch {
         // inquiries API requires auth
+      }
+      
+      if (isSupabaseConfigured && supabase && adminProfile?.email) {
+        try {
+          const { data, error } = await supabase
+            .from('team_messages')
+            .select('id')
+            .eq('recipient_email', adminProfile.email)
+            .eq('is_read', false);
+          
+          if (!error && data) {
+            setUnreadTeamMsgCount(data.length);
+          }
+        } catch (err) {
+          console.error("Failed to fetch unread team messages:", err);
+        }
       }
     }
 
@@ -3548,6 +3571,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 >
                   <Inbox size={14} />
                   <span className="tab-label">Inquiries</span>
+                  {inquiryCount > 0 && <span className="admin-more-tab-badge">{inquiryCount}</span>}
                 </button>
               )}
               {hasAccess('leads') && (
@@ -3685,6 +3709,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 >
                   <MessageCircle size={14} />
                   <span className="tab-label">Team Chat</span>
+                  {unreadTeamMsgCount > 0 && <span className="admin-more-tab-badge">{unreadTeamMsgCount}</span>}
                 </button>
               )}
             </div>
@@ -7896,6 +7921,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           >
             <MessageCircle size={18} />
             <span>Team</span>
+            {unreadTeamMsgCount > 0 && (
+              <span className="admin-quick-nav-badge">{unreadTeamMsgCount}</span>
+            )}
           </button>
         )}
         <button
@@ -7945,6 +7973,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           )}
                           {tabId === 'facebook' && facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
                             <span className="admin-more-tab-badge">{facebookNotifications.filter(n => n.status === 'unread').length}</span>
+                          )}
+                          {tabId === 'inquiries' && inquiryCount > 0 && (
+                            <span className="admin-more-tab-badge">{inquiryCount}</span>
+                          )}
+                          {tabId === 'team_chat' && unreadTeamMsgCount > 0 && (
+                            <span className="admin-more-tab-badge">{unreadTeamMsgCount}</span>
                           )}
                         </button>
                       ))}
