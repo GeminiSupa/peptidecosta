@@ -12,6 +12,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
 import { adminFetch } from '@/lib/adminApi';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
 export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [] }) {
   const [explainerTopic, setExplainerTopic] = useState(null);
@@ -619,6 +620,33 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const maxSourceCount = Object.keys(whatsappSourceBreakdown).length > 0 
     ? Math.max(...Object.values(whatsappSourceBreakdown).map(s => s.count)) 
     : 1;
+
+  // -------------------------------------------------------------
+  // RECHARTS VISUAL DATA
+  // -------------------------------------------------------------
+  const revenueChartDataMap = {};
+  successfulOrders.forEach(o => {
+    if (!o.created_at) return;
+    const dateObj = new Date(o.created_at);
+    const dateKey = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+    if (!revenueChartDataMap[dateKey]) {
+      revenueChartDataMap[dateKey] = { name: dateKey, revenueUsd: 0, revenueCrc: 0, orders: 0 };
+    }
+    revenueChartDataMap[dateKey].revenueUsd += (parseFloat(o.total_usd) || 0);
+    revenueChartDataMap[dateKey].revenueCrc += (parseFloat(o.total_crc) || 0);
+    revenueChartDataMap[dateKey].orders += 1;
+  });
+  const revenueChartData = Object.values(revenueChartDataMap).sort((a,b) => {
+     const parse = (str) => { const [m,d] = str.split('/'); return parseInt(m)*100 + parseInt(d); };
+     return parse(a.name) - parse(b.name);
+  });
+
+  const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'];
+  const pieChartData = productMetrics.slice(0, 5).map((p, index) => ({
+    name: p.name,
+    value: p.purchases,
+    color: COLORS[index % COLORS.length]
+  }));
 
   const handleExport = (format) => {
     setExportLoading(true);
@@ -2461,6 +2489,90 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
       </div>
 
+      {/* ------------------------------------------------------------- */}
+      {/* RECHARTS VISUAL ANALYTICS SECTION */}
+      {/* ------------------------------------------------------------- */}
+      <div className="analytics-double-panel" style={{ marginTop: '20px', marginBottom: '20px' }}>
+        {/* Revenue Line Chart */}
+        <div className="dashboard-section-card">
+          <div className="section-card-title">
+            <TrendingUp size={16} style={{ color: '#3b82f6' }} />
+            <span>Revenue Trends (Daily Sales USD)</span>
+          </div>
+          <div style={{ width: '100%', height: '300px', marginTop: '10px' }}>
+            {revenueChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={revenueChartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={(value) => `$${value}`} />
+                  <RechartsTooltip 
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
+                    formatter={(value) => [`$${value.toFixed(2)}`, 'Revenue (USD)']}
+                  />
+                  <Line type="monotone" dataKey="revenueUsd" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#0f172a' }} activeDot={{ r: 6, stroke: '#3b82f6', strokeWidth: 2, fill: '#fff' }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                <p>Not enough daily data</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Top Products Pie Chart */}
+        <div className="dashboard-section-card">
+          <div className="section-card-title">
+            <Target size={16} style={{ color: '#ec4899' }} />
+            <span>Top Products By Quantity Sold</span>
+          </div>
+          <div style={{ width: '100%', height: '300px', marginTop: '10px' }}>
+            {pieChartData.filter(d => d.value > 0).length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={pieChartData.filter(d => d.value > 0)}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={95}
+                    paddingAngle={3}
+                    dataKey="value"
+                    stroke="none"
+                    labelLine={false}
+                    label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, value }) => {
+                      const RADIAN = Math.PI / 180;
+                      const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
+                      const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                      const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                      if (percent < 0.04) return null; // Hide if too small
+                      return (
+                        <text x={x} y={y} fill="#ffffff" textAnchor="middle" dominantBaseline="central" fontSize="10px" fontWeight="bold" style={{ textShadow: '0px 1px 2px rgba(0,0,0,0.5)' }}>
+                          {value} ({(percent * 100).toFixed(0)}%)
+                        </text>
+                      );
+                    }}
+                  >
+                    {pieChartData.filter(d => d.value > 0).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip 
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
+                    formatter={(value) => [`${value} units`, 'Sold']}
+                  />
+                  <Legend layout="vertical" verticalAlign="middle" align="right" wrapperStyle={{ fontSize: '12px', color: '#cbd5e1' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                <p>No sales data available</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* 3. Double Panel: Geographical Analytics vs Visitor Behavior */}
       <div className="analytics-double-panel">
