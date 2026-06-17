@@ -130,7 +130,16 @@ export default function GlobalSearch({
   return (
     <div className="global-search-overlay" onClick={onClose}>
       <div className="global-search-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="global-search-input-row">
+        <form 
+          className="global-search-input-row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (results[activeIdx]) {
+              onSelect(results[activeIdx]);
+              onClose();
+            }
+          }}
+        >
           <Search size={18} style={{ color: '#64748b', flexShrink: 0 }} />
           <input
             autoFocus
@@ -144,7 +153,7 @@ export default function GlobalSearch({
           <button type="button" className="global-search-close" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
-        </div>
+        </form>
         <div className="global-search-results">
           {query.length < 2 ? (
             <p className="global-search-hint">Type at least 2 characters · ↑↓ navigate · Enter to open</p>
