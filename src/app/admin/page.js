@@ -312,6 +312,7 @@ export default function AdminPage() {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [orderSearch, setOrderSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
+  const [highlightedProductId, setHighlightedProductId] = useState(null);
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [loadingAbandonedCarts, setLoadingAbandonedCarts] = useState(true);
   const [sendingRecoveryEmail, setSendingRecoveryEmail] = useState({});
@@ -1299,8 +1300,15 @@ Core Rules:
       setSelectedOrderDetails(result.payload);
       navigateToTab('orders');
     } else if (result.type === 'product') {
-      setProductSearch(result.title);
+      setProductSearch(''); // Clear inline search to avoid hiding the highlighted row
+      setHighlightedProductId(result.payload.id);
       navigateToTab('spreadsheet');
+      setTimeout(() => {
+        const el = document.getElementById(`product-row-${result.payload.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
     } else if (result.type === 'lead') {
       navigateToTab('leads');
     } else if (result.type === 'customer') {
@@ -3981,7 +3989,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     {products.filter(p => !productSearch || p.product.toLowerCase().includes(productSearch.toLowerCase()) || (p.category && p.category.toLowerCase().includes(productSearch.toLowerCase()))).map((p, filteredIdx) => {
                       const idx = products.findIndex(prod => prod.id === p.id);
                       return (
-                      <tr key={p.id}>
+                      <tr 
+                        key={p.id}
+                        id={`product-row-${p.id}`}
+                        style={highlightedProductId === p.id ? { backgroundColor: 'rgba(56, 189, 248, 0.2)', transition: 'background-color 0.5s' } : {}}
+                      >
                         <td data-label="#" style={{ color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>{idx + 1}</td>
                         
                         {/* Name */}
