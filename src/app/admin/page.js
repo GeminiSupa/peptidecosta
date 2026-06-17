@@ -311,6 +311,7 @@ export default function AdminPage() {
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [orderSearch, setOrderSearch] = useState('');
+  const [productSearch, setProductSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [loadingAbandonedCarts, setLoadingAbandonedCarts] = useState(true);
   const [sendingRecoveryEmail, setSendingRecoveryEmail] = useState({});
@@ -1298,6 +1299,7 @@ Core Rules:
       setSelectedOrderDetails(result.payload);
       navigateToTab('orders');
     } else if (result.type === 'product') {
+      setProductSearch(result.title);
       navigateToTab('spreadsheet');
     } else if (result.type === 'lead') {
       navigateToTab('leads');
@@ -3851,6 +3853,32 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 </p>
               </div>
               <div className="admin-actions-row">
+                <div style={{ position: 'relative' }}>
+                  <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <input
+                    type="text"
+                    placeholder="Search products..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    style={{
+                      padding: '8px 12px 8px 30px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      background: '#0f172a',
+                      color: '#f8fafc',
+                      fontSize: '0.85rem',
+                      width: '200px'
+                    }}
+                  />
+                  {productSearch && (
+                    <button 
+                      onClick={() => setProductSearch('')}
+                      style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
                 <button className="admin-btn" onClick={() => setIsCsvOpen(!isCsvOpen)}>
                   <Upload size={16} />
                   {isCsvOpen ? 'Hide CSV Importer' : 'Import CSV'}
@@ -3950,7 +3978,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     </tr>
                   </thead>
                   <tbody>
-                    {products.map((p, idx) => (
+                    {products.filter(p => !productSearch || p.product.toLowerCase().includes(productSearch.toLowerCase()) || (p.category && p.category.toLowerCase().includes(productSearch.toLowerCase()))).map((p, filteredIdx) => {
+                      const idx = products.findIndex(prod => prod.id === p.id);
+                      return (
                       <tr key={p.id}>
                         <td data-label="#" style={{ color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>{idx + 1}</td>
                         
@@ -4233,8 +4263,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                               className="admin-move-btn"
                               title="Move Up"
                               onClick={() => handleMoveRow(idx, -1)}
-                              disabled={idx === 0}
-                              style={{ opacity: idx === 0 ? 0.25 : 1 }}
+                              disabled={idx === 0 || productSearch !== ''}
+                              style={{ opacity: (idx === 0 || productSearch !== '') ? 0.25 : 1 }}
                             >
                               <ChevronUp size={14} />
                             </button>
@@ -4242,8 +4272,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                               className="admin-move-btn"
                               title="Move Down"
                               onClick={() => handleMoveRow(idx, 1)}
-                              disabled={idx === products.length - 1}
-                              style={{ opacity: idx === products.length - 1 ? 0.25 : 1 }}
+                              disabled={idx === products.length - 1 || productSearch !== ''}
+                              style={{ opacity: (idx === products.length - 1 || productSearch !== '') ? 0.25 : 1 }}
                             >
                               <ChevronDown size={14} />
                             </button>
@@ -4253,7 +4283,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
