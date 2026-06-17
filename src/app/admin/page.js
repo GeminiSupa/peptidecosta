@@ -1562,6 +1562,8 @@ Core Rules:
             imageUrl: item.image_url || '',
             descriptionEn: item.description_en || '',
             descriptionEs: item.description_es || '',
+            inventoryCount: item.inventory_count !== undefined ? item.inventory_count : null,
+            lowStockThreshold: item.low_stock_threshold !== undefined ? item.low_stock_threshold : 5,
             priority: item.priority || 0
           }));
           setIsDbConnected(true);
@@ -1982,6 +1984,8 @@ Core Rules:
       originalPriceCrc: '',
       discount: 'Buy 5+ vials, get 15% off',
       status: 'In Stock',
+      inventoryCount: null,
+      lowStockThreshold: 5,
       coa: '',
       imageUrl: '',
       priority: newPriority
@@ -2082,6 +2086,8 @@ Core Rules:
               originalPriceCrc: '',
               discount: p.bulkDiscountEs || p.bulkDiscountEn || '',
               status: p.status || 'In Stock',
+              inventoryCount: null,
+              lowStockThreshold: 5,
               coa: p.coa || '',
               imageUrl: p.imageUrl || '',
               priority: idx
@@ -3182,6 +3188,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             original_price_crc: p.originalPriceCrc || null,
             discount: p.discount,
             status: p.status,
+            inventory_count: p.inventoryCount === '' ? null : p.inventoryCount,
+            low_stock_threshold: p.lowStockThreshold === '' ? 5 : p.lowStockThreshold,
             coa: p.coa,
             image_url: p.imageUrl,
             description_en: p.descriptionEn || '',
@@ -3932,6 +3940,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       <th style={{ width: '110px' }}>Orig. Price (USD)</th>
                       <th style={{ width: '110px' }}>Orig. Price (CRC)</th>
                       <th style={{ minWidth: '180px' }}>Stock Status</th>
+                      <th style={{ width: '100px' }}>Inventory Count</th>
+                      <th style={{ width: '100px' }}>Low Stock Alert</th>
                       <th style={{ minWidth: '180px' }}>Volume/Bulk Discount Info</th>
                       <th style={{ minWidth: '200px' }}>Image URL / Physical Upload</th>
                       <th style={{ minWidth: '220px' }}>COA URL Link</th>
@@ -4052,10 +4062,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         <td data-label="Stock Status">
                           <select 
                             className="cell-select"
-                            value={p.status}
+                            value={p.status || 'In Stock'}
                             onChange={(e) => handleCellChange(p.id, 'status', e.target.value)}
                             style={{ 
-                              color: p.status.toLowerCase().includes('in stock') || p.status.toLowerCase().includes('disponible') ? '#4ade80' : p.status.toLowerCase().includes('coming soon') || p.status.toLowerCase().includes('próximamente') ? '#facc15' : '#f87171',
+                              color: (p.status || '').toLowerCase().includes('in stock') || (p.status || '').toLowerCase().includes('disponible') ? '#4ade80' : (p.status || '').toLowerCase().includes('coming soon') || (p.status || '').toLowerCase().includes('próximamente') ? '#facc15' : '#f87171',
                               fontWeight: 'bold'
                             }}
                           >
@@ -4063,6 +4073,38 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             <option value="Out of Stock">Out of Stock / Agotado</option>
                             <option value="Coming Soon">Coming Soon / Próximamente</option>
                           </select>
+                        </td>
+
+                        {/* Inventory Count */}
+                        <td data-label="Inventory Count">
+                          <div 
+                            contentEditable 
+                            suppressContentEditableWarning
+                            className="cell-editable"
+                            onBlur={(e) => {
+                              const val = e.target.innerText.trim();
+                              const num = parseInt(val, 10);
+                              handleCellChange(p.id, 'inventoryCount', isNaN(num) ? null : num);
+                            }}
+                          >
+                            {p.inventoryCount !== null && p.inventoryCount !== undefined ? p.inventoryCount : ''}
+                          </div>
+                        </td>
+
+                        {/* Low Stock Threshold */}
+                        <td data-label="Low Stock Alert">
+                          <div 
+                            contentEditable 
+                            suppressContentEditableWarning
+                            className="cell-editable"
+                            onBlur={(e) => {
+                              const val = e.target.innerText.trim();
+                              const num = parseInt(val, 10);
+                              handleCellChange(p.id, 'lowStockThreshold', isNaN(num) ? 5 : num);
+                            }}
+                          >
+                            {p.lowStockThreshold !== null && p.lowStockThreshold !== undefined ? p.lowStockThreshold : 5}
+                          </div>
                         </td>
 
                         {/* Discount */}

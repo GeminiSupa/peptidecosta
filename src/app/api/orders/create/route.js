@@ -63,6 +63,51 @@ export async function POST(request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // --- NEW: Deduct Inventory & Check Low Stock Threshold ---
+    try {
+      for (const item of order.items) {
+        if (!item.product || !item.qty) continue;
+
+        // Fetch current inventory and threshold
+        const { data: prodData, error: prodErr } = await supabase
+          .from('products')
+          .select('inventory_count, low_stock_threshold')
+          .eq('product', item.product)
+          .single();
+
+        if (prodErr || !prodData || prodData.inventory_count === null) {
+          continue; // Not tracking inventory for this product
+        }
+
+        const currentInventory = prodData.inventory_count;
+        const threshold = prodData.low_stock_threshold !== null ? prodData.low_stock_threshold : 5;
+        const newInventory = Math.max(0, currentInventory - item.qty);
+
+        // Update the inventory count
+        await supabase
+          .from('products')
+          .update({ inventory_count: newInventory })
+          .eq('product', item.product);
+
+        // Check if we just crossed the threshold, or hit zero
+        const crossedThreshold = currentInventory > threshold && newInventory <= threshold;
+        const hitZero = currentInventory > 0 && newInventory === 0;
+
+        if (crossedThreshold || hitZero) {
+          await supabase.from('admin_notifications').insert({
+            type: 'low_inventory',
+            title: hitZero ? `Out of Stock: ${item.product}` : `Low Stock Alert: ${item.product}`,
+            body: `Inventory has dropped to ${newInventory} unit(s).`,
+            link_tab: 'spreadsheet',
+          });
+        }
+      }
+    } catch (invErr) {
+      console.error('[orders/create] Inventory deduction failed:', invErr);
+      // We don't fail the order if inventory deduction fails
+    }
+    // --------------------------------------------------------
+
     if (body.sessionId) {
       const { error: cartErr } = await supabase
         .from('abandoned_carts')

@@ -47,7 +47,10 @@ if (supabase && typeof window !== 'undefined') {
   const _originalConsoleError = console.error.bind(console);
   console.error = (...args) => {
     const msg = args[0]?.message || args[0] || '';
-    if (isBenignSupabaseAuthNoise(msg)) {
+    if (
+      isBenignSupabaseAuthNoise(msg) || 
+      (typeof msg === 'string' && msg.includes('bis_skin_checked'))
+    ) {
       return;
     }
     _originalConsoleError(...args);

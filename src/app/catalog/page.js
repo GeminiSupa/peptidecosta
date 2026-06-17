@@ -1008,7 +1008,9 @@ export default function CatalogPage() {
             originalPriceUsd: item.original_price_usd,
             originalPriceCrc: item.original_price_crc,
             discount: item.discount,
-            status: item.status,
+            status: item.inventory_count === 0 ? 'Out of Stock' : item.status,
+            inventoryCount: item.inventory_count !== undefined ? item.inventory_count : null,
+            lowStockThreshold: item.low_stock_threshold !== undefined ? item.low_stock_threshold : 5,
             coa: item.coa,
             imageUrl: item.image_url || getProductFallbackImage(item.product, item.category),
             descriptionEn: item.description_en || '',
@@ -1243,10 +1245,17 @@ export default function CatalogPage() {
   // Cart operations
   const addToCart = (productObj) => {
     const existing = cart.find(item => item.product === productObj.product);
+    const newQty = existing ? existing.qty + 1 : 1;
+
+    if (productObj.inventoryCount !== null && newQty > productObj.inventoryCount) {
+      alert(lang === 'en' ? `Only ${productObj.inventoryCount} units available in stock.` : `Solo ${productObj.inventoryCount} unidades disponibles en inventario.`);
+      return;
+    }
+
     if (existing) {
       setCart(cart.map(item => 
         item.product === productObj.product 
-          ? { ...item, qty: item.qty + 1 }
+          ? { ...item, qty: newQty }
           : item
       ));
     } else {
@@ -1388,6 +1397,10 @@ export default function CatalogPage() {
     setCart(cart.map(item => {
       if (item.product === productName) {
         const newQty = item.qty + change;
+        if (change > 0 && item.inventoryCount !== null && newQty > item.inventoryCount) {
+          alert(lang === 'en' ? `Only ${item.inventoryCount} units available in stock.` : `Solo ${item.inventoryCount} unidades disponibles en inventario.`);
+          return item; // Max stock reached
+        }
         return newQty > 0 ? { ...item, qty: newQty } : null;
       }
       return item;
@@ -2874,6 +2887,11 @@ export default function CatalogPage() {
                         {isBac ? (lang === 'en' ? 'Included' : 'Incluido') : translateStatus(p.status)}
                       </span>
                     </div>
+                    {inStock && p.inventoryCount !== null && p.inventoryCount <= (p.lowStockThreshold || 5) && p.inventoryCount > 0 && (
+                      <div className="stock-badge stock-soon" style={{ top: '34px', background: 'rgba(239, 68, 68, 0.9)', color: '#fff' }}>
+                        <span>{lang === 'en' ? `Only ${p.inventoryCount} left!` : `¡Solo quedan ${p.inventoryCount}!`}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -3709,6 +3727,11 @@ export default function CatalogPage() {
               <div className={`stock-badge ${isBacWater(selectedProduct.product) || isInStock(selectedProduct.status) ? 'stock-in' : isComingSoon(selectedProduct.status) ? 'stock-soon' : 'stock-out'}`} style={{ position: 'static' }}>
                 {isBacWater(selectedProduct.product) ? (lang === 'en' ? 'In Stock (Free)' : 'Disponible (Gratis)') : translateStatus(selectedProduct.status)}
               </div>
+              {isInStock(selectedProduct.status) && selectedProduct.inventoryCount !== null && selectedProduct.inventoryCount <= (selectedProduct.lowStockThreshold || 5) && selectedProduct.inventoryCount > 0 && (
+                <div className="stock-badge stock-soon" style={{ position: 'static', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                  {lang === 'en' ? `Only ${selectedProduct.inventoryCount} left in stock!` : `¡Solo quedan ${selectedProduct.inventoryCount} en inventario!`}
+                </div>
+              )}
             </div>
 
             {selectedProduct.coa && selectedProduct.coa !== '—' && selectedProduct.coa !== '' && (
