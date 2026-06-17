@@ -46,6 +46,10 @@ const paymentLabels = {
 const buildItemsRows = (items = [], currency) => items.map((item) => {
   const price = Number(item.price || 0);
   const qty = Number(item.qty || 0);
+  const total = price * qty;
+  const isFree = price === 0;
+  const freeLabel = currency === 'CRC' ? 'GRATIS' : 'FREE';
+
   return `
     <tr>
       <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;font-size:14px;color:#334155;">
@@ -54,8 +58,8 @@ const buildItemsRows = (items = [], currency) => items.map((item) => {
       <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:center;font-size:14px;color:#334155;">
         ${qty}
       </td>
-      <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:right;font-size:14px;font-weight:600;color:#0f172a;">
-        ${formatMoney(price * qty, currency)}
+      <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:right;font-size:14px;font-weight:600;color:${isFree ? '#15803d' : '#0f172a'};">
+        ${isFree ? freeLabel : formatMoney(total, currency)}
       </td>
     </tr>
   `;
@@ -270,15 +274,36 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid order notification payload' }, { status: 400 });
     }
 
+    // Determine customer language
+    // Use order.lang if provided, otherwise check currency (CRC -> Spanish, USD -> English)
+    const orderLang = order.lang || (order.currency === 'CRC' ? 'es' : 'en');
+
+    // Add free Bac Water per peptide purchased
+    const peptideCount = order.items.reduce((count, item) => {
+      const name = (item.product || '').toLowerCase();
+      if (name.includes('bac water') || name.includes('bacteriostatic') || name.includes('syringe') || name.includes('supply')) {
+        return count;
+      }
+      return count + Number(item.qty || 0);
+    }, 0);
+
+    if (peptideCount > 0) {
+      const productName = orderLang === 'en' 
+        ? 'Bacteriostatic Water 3ml (Free Gift)' 
+        : 'Agua Bacteriostática 3ml (Regalo)';
+      
+      order.items.push({
+        product: productName,
+        qty: peptideCount,
+        price: 0
+      });
+    }
+
     if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
       console.warn('[Order notification] SMTP settings are not configured; email skipped.');
       return NextResponse.json({ sent: false, skipped: true });
     }
 
-    // Determine customer language
-    // Use order.lang if provided, otherwise check currency (CRC -> Spanish, USD -> English)
-    const orderLang = order.lang || (order.currency === 'CRC' ? 'es' : 'en');
-    
     // Format payment descriptions
     const paymentLabel = (paymentLabels[orderLang] || paymentLabels.en)[order.paymentMethod] || 
                          order.paymentMethod || 
@@ -333,7 +358,11 @@ export async function POST(request) {
         order.shippingAddress || 'N/A',
         '',
         `Items Summary:`,
-        ...order.items.map(item => `• ${item.product} x${item.qty} (${formatMoney(Number(item.price || 0) * Number(item.qty || 0), order.currency)})`),
+        ...order.items.map(item => {
+          const total = Number(item.price || 0) * Number(item.qty || 0);
+          const isFree = Number(item.price || 0) === 0;
+          return `• ${item.product} x${item.qty} (${isFree ? 'FREE' : formatMoney(total, order.currency)})`;
+        }),
         ...(order.subtotal ? [`Subtotal: ${formatMoney(order.subtotal, order.currency)}`] : []),
         ...(order.volumeDiscount ? [`Volume Discount: -${formatMoney(order.volumeDiscount, order.currency)}`] : []),
         ...(order.promoDiscount ? [`Promo Discount: -${formatMoney(order.promoDiscount, order.currency)}`] : []),
@@ -378,7 +407,12 @@ export async function POST(request) {
           order.shippingAddress || 'N/A',
           '',
           `${orderLang === 'en' ? 'Products' : 'Productos'}:`,
-          ...order.items.map(item => `• ${item.product} x${item.qty} (${formatMoney(Number(item.price || 0) * Number(item.qty || 0), order.currency)})`),
+          ...order.items.map(item => {
+            const total = Number(item.price || 0) * Number(item.qty || 0);
+            const isFree = Number(item.price || 0) === 0;
+            const freeLabel = orderLang === 'en' ? 'FREE' : 'GRATIS';
+            return `• ${item.product} x${item.qty} (${isFree ? freeLabel : formatMoney(total, order.currency)})`;
+          }),
           ...(order.subtotal ? [`Subtotal: ${formatMoney(order.subtotal, order.currency)}`] : []),
           ...(order.volumeDiscount ? [`${orderLang === 'en' ? 'Volume Discount' : 'Descuento Volumen'}: -${formatMoney(order.volumeDiscount, order.currency)}`] : []),
           ...(order.promoDiscount ? [`${orderLang === 'en' ? 'Promo Discount' : 'Descuento Promocional'}: -${formatMoney(order.promoDiscount, order.currency)}`] : []),
