@@ -12,6 +12,9 @@ export const supabase = isSupabaseConfigured
         persistSession: true,
         detectSessionInUrl: false,
       },
+      global: {
+        fetch: (...args) => fetch(args[0], { ...args[1], cache: 'no-store' })
+      }
     })
   : null;
 

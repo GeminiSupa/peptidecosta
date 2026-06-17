@@ -2535,6 +2535,7 @@ export default function CatalogPage() {
                             <div 
                               key={idx} 
                               className="suggested-product-row"
+                              onMouseDown={(e) => e.preventDefault()}
                               onClick={() => {
                                 handleProductClick(match);
                                 closeSearch();
