@@ -1661,7 +1661,6 @@ export default function CatalogPage() {
   // Checkout submit
   const handleCheckoutSubmit = async (e) => {
     e.preventDefault();
-    if (paymentMethod === 'paypal') return; // PayPal is handled by its own buttons
     if (paymentMethod === 'tilopay' || paymentMethod === 'sinpe') {
       // Tilopay is handled by its own button below — should not reach here
       return;
@@ -3562,9 +3561,8 @@ export default function CatalogPage() {
                         : 'Nuestro sistema automatizado de PayPal está temporalmente inactivo. Actualmente solo aceptamos pagos de PayPal mediante la opción "Amigos y Familiares".'}
                     </p>
                     <button
-                      type="button"
+                      type="submit"
                       className="whatsapp-btn"
-                      onClick={() => handleWhatsappSubmit()}
                       disabled={orderSubmitting || cart.length === 0}
                       style={{ width: '100%' }}
                     >
