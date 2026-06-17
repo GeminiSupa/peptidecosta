@@ -3118,18 +3118,6 @@ body {
     .search-bar { margin-bottom: 8px; }
     .search-row { margin-bottom: 8px; gap: 8px; }
     #searchInput { padding: 8px 10px 8px 36px; font-size: 0.9rem; border-radius: 10px; height: 40px; }
-    .search-suggestions-dropdown {
-        position: fixed;
-        top: auto;
-        bottom: 0;
-        left: 12px;
-        right: 12px;
-        margin-top: 0;
-        max-height: min(70vh, 520px);
-        border-bottom-left-radius: 0;
-        border-bottom-right-radius: 0;
-        padding-bottom: max(16px, env(safe-area-inset-bottom));
-    }
     .search-close-btn {
         width: 44px;
         height: 44px;
