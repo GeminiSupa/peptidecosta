@@ -330,7 +330,7 @@ function ThankYouContent() {
                 
                 {!reviewClicked ? (
                   <a 
-                    href="https://maps.app.goo.gl/2B8nywgBy97Y1SNG7" 
+                    href="https://maps.app.goo.gl/G4MqFLWW7y9FXvKi9?g_st=ic"
                     target="_blank" 
                     rel="noreferrer" 
                     onClick={() => setReviewClicked(true)}
