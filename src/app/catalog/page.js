@@ -1783,8 +1783,8 @@ export default function CatalogPage() {
     if (paymentMethod === 'paypal') {
       const usdTotal = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
       instructionsText = lang === 'en'
-        ? `\n\n*Payment Method: PayPal (Friends & Family)*\n_We will provide you with our current PayPal account details for the $${usdTotal} USD transfer shortly._\n\n_Once transferred, we will verify your payment and dispatch immediately._`
-        : `\n\n*Método de Pago: PayPal (Amigos y Familiares)*\n_En breve le brindaremos los detalles de nuestra cuenta actual de PayPal para la transferencia de $${usdTotal} USD._\n\n_Verificaremos su pago y despacharemos de inmediato._`;
+        ? `\n\n*Payment Method: PayPal (Friends & Family)*\n_Please send $${usdTotal} USD via PayPal "Friends and Family" to:_\n👉 *jgw899@gmail.com*\n\n_Once transferred, we will verify your payment and dispatch immediately._`
+        : `\n\n*Método de Pago: PayPal (Amigos y Familiares)*\n_Por favor envíe $${usdTotal} USD vía PayPal usando la opción "Amigos y Familiares" a:_\n👉 *jgw899@gmail.com*\n\n_Verificaremos su pago y despacharemos de inmediato._`;
     } else if (paymentMethod === 'sinpe') {
       const crcTotal = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
       instructionsText = lang === 'en'
