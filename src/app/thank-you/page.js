@@ -209,7 +209,7 @@ function ThankYouContent() {
           letterSpacing: '1.5px',
           marginBottom: '32px'
         }}>
-          <Sparkles size={12} /> 🧬 {t.status}
+          <img src="/logo.png" alt="Peptides Costa Rica Logo" style={{ height: '18px', borderRadius: '4px' }} /> {t.status}
         </div>
 
         {/* Dynamic Glowing Success Checkmark */}
