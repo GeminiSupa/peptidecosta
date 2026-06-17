@@ -3861,22 +3861,15 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 </p>
               </div>
               <div className="admin-actions-row">
-                <div style={{ position: 'relative' }}>
+                <div className="admin-search-wrapper">
                   <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                   <input
                     type="text"
+                    className="admin-input"
                     placeholder="Search products..."
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
-                    style={{
-                      padding: '8px 12px 8px 30px',
-                      borderRadius: '8px',
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      background: '#0f172a',
-                      color: '#f8fafc',
-                      fontSize: '0.85rem',
-                      width: '200px'
-                    }}
+                    style={{ paddingLeft: '32px' }}
                   />
                   {productSearch && (
                     <button 
@@ -3992,7 +3985,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       <tr 
                         key={p.id}
                         id={`product-row-${p.id}`}
-                        style={highlightedProductId === p.id ? { backgroundColor: 'rgba(56, 189, 248, 0.2)', transition: 'background-color 0.5s' } : {}}
+                        className={highlightedProductId === p.id ? 'row-highlight' : ''}
                       >
                         <td data-label="#" style={{ color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>{idx + 1}</td>
                         
