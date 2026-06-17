@@ -2536,6 +2536,13 @@ export default function CatalogPage() {
                               key={idx} 
                               className="suggested-product-row"
                               onMouseDown={(e) => e.preventDefault()}
+                              onTouchEnd={(e) => {
+                                // e.preventDefault() prevents the ghost click, but we want to allow scrolling if they dragged.
+                                // React handles scrolling vs tap reasonably well on onTouchEnd if not prevented, 
+                                // but if we want to ensure it fires instead of getting swallowed:
+                                handleProductClick(match);
+                                closeSearch();
+                              }}
                               onClick={() => {
                                 handleProductClick(match);
                                 closeSearch();
