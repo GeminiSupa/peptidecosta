@@ -1782,8 +1782,8 @@ export default function CatalogPage() {
     if (paymentMethod === 'paypal') {
       const usdTotal = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
       instructionsText = lang === 'en'
-        ? `\n\n*Payment Method: PayPal*\n_Please send $${usdTotal} USD via PayPal to:_\n👉 *jgw899@gmail.com*\n\n_We will verify your payment and coordinate dispatch details immediately._`
-        : `\n\n*Método de Pago: PayPal*\n_Por favor envíe $${usdTotal} USD vía PayPal a:_\n👉 *jgw899@gmail.com*\n\n_Verificaremos su pago y coordinaremos el despacho de inmediato._`;
+        ? `\n\n*Payment Method: PayPal (Friends & Family)*\n_Please send $${usdTotal} USD via PayPal "Friends and Family" to:_\n👉 *jgw899@gmail.com*\n\n_Once transferred, we will verify your payment and dispatch immediately._`
+        : `\n\n*Método de Pago: PayPal (Amigos y Familiares)*\n_Por favor envíe $${usdTotal} USD vía PayPal usando la opción "Amigos y Familiares" a:_\n👉 *jgw899@gmail.com*\n\n_Verificaremos su pago y despacharemos de inmediato._`;
     } else if (paymentMethod === 'sinpe') {
       const crcTotal = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
       instructionsText = lang === 'en'
@@ -3550,45 +3550,35 @@ export default function CatalogPage() {
               {renderPaymentTotalNotice()}
               {paymentMethod === 'paypal' ? (
                 <div style={{ marginTop: '16px' }}>
-                  {/* Helper note above PayPal buttons, shown immediately */}
-                  <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '12px', padding: '12px 14px', marginBottom: '12px', fontSize: '0.8rem', color: theme === 'dark' ? '#93c5fd' : '#1d4ed8', lineHeight: '1.5' }}>
-                    <div style={{ fontWeight: '700', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      💳 {lang === 'en' ? 'Payment Options' : 'Opciones de Pago'}
-                    </div>
-                    <ul style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <li>
-                        {lang === 'en' ? (
-                          <span>Pay with your <strong>PayPal account</strong>, or</span>
-                        ) : (
-                          <span>Pague con su <strong>cuenta de PayPal</strong>, o</span>
-                        )}
-                      </li>
-                      <li>
-                        {lang === 'en' ? (
-                          <span>Pay with <strong>any credit or debit card</strong> (Visa, Mastercard, AMEX, Discover) — <strong style={{ color: theme === 'dark' ? '#60a5fa' : '#2563eb' }}>no PayPal account needed!</strong></span>
-                        ) : (
-                          <span>Pague con <strong>cualquier tarjeta de crédito o débito</strong> (Visa, Mastercard, AMEX, Discover) — <strong>¡sin necesidad de tener cuenta PayPal!</strong></span>
-                        )}
-                      </li>
-                    </ul>
-                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(59, 130, 246, 0.15)', fontSize: '0.75rem', opacity: 0.85 }}>
-                      ℹ️ {lang === 'en' ? '"C. P." in the card form means Postal Code (zip code).' : '"C. P." en el formulario de la tarjeta significa Código Postal.'}
-                    </div>
+                  <div style={{ padding: '16px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.95rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', fontWeight: 'bold' }}>
+                      {lang === 'en' ? '⚠️ PayPal Checkout Maintenance' : '⚠️ Mantenimiento de PayPal'}
+                    </h4>
+                    <p style={{ margin: '0 0 16px 0', lineHeight: '1.5' }}>
+                      {lang === 'en' 
+                        ? 'Our automated PayPal system is temporarily unavailable. We are currently only accepting PayPal payments via the "Friends and Family" option.' 
+                        : 'Nuestro sistema automatizado de PayPal está temporalmente inactivo. Actualmente solo aceptamos pagos de PayPal mediante la opción "Amigos y Familiares".'}
+                    </p>
+                    <button
+                      type="button"
+                      className="whatsapp-btn"
+                      onClick={() => handleWhatsappSubmit()}
+                      disabled={orderSubmitting || cart.length === 0}
+                      style={{ width: '100%' }}
+                    >
+                      {orderSubmitting ? (
+                        <>
+                          <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
+                          {lang === 'en' ? 'Processing...' : 'Procesando...'}
+                        </>
+                      ) : (
+                        <>
+                          <MessageCircle size={18} />
+                          {lang === 'en' ? 'Order via WhatsApp for PayPal Details' : 'Pedir por WhatsApp para Detalles'}
+                        </>
+                      )}
+                    </button>
                   </div>
-
-                  {(!customerName || !customerPhone || !shippingAddress || !customerIdNumber) ? (
-                    <div style={{ padding: '12px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.9rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-                      {lang === 'en' ? 'Please enter your name, phone, shipping address, and ID number above to enable PayPal / Card payment.' : 'Por favor ingrese su nombre, teléfono, dirección de envío y número de identificación arriba para habilitar el pago con PayPal / Tarjeta.'}
-                    </div>
-                  ) : (
-                    <div ref={paypalButtonRef} style={{ minHeight: '45px' }}></div>
-                  )}
-                  {orderSubmitting && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '12px', color: '#94a3b8' }}>
-                      <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
-                      {lang === 'en' ? 'Processing payment...' : 'Procesando pago...'}
-                    </div>
-                  )}
                 </div>
               ) : paymentMethod === 'tilopay' || paymentMethod === 'sinpe' ? (
                 <div className="tilopay-payment-panel">
