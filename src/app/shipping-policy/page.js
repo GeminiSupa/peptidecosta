@@ -4,8 +4,10 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { Sun, Moon, ArrowRight, Package } from 'lucide-react';
+import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 
 export default function ShippingPolicyPage() {
+  const { links } = useBusinessLinks();
   const [theme, setTheme] = useState('light');
   const [lang, setLang] = useState('es');
   const [scrolled, setScrolled] = useState(false);
@@ -115,8 +117,8 @@ export default function ShippingPolicyPage() {
           <p>{lang === 'en' ? 'Peptides Costa Rica offers premium, research backed peptides with trusted quality.' : 'Peptides Costa Rica ofrece péptidos premium respaldados por ciencia, con calidad garantizada.'}</p>
           <div className="footer-links" style={{ marginBottom: '24px' }}>
             <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Shop Catalog' : 'Catálogo'}</Link>
-            <a href="mailto:info@peptidescostarica.net">info@peptidescostarica.net</a>
-            <a href="tel:+50684046973">CR: +506 8404-6973</a>
+            <a href={`mailto:${links.supportEmail}`}>{links.supportEmail}</a>
+            <a href={`tel:+${links.whatsappNumber}`}>CR: {links.whatsappDisplay}</a>
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
             <strong>Legal Notice:</strong> Products offered by Peptides Costa Rica are intended strictly for laboratory research use only. They are not approved or licensed by the FDA for the prevention, diagnosis, treatment, or cure of any disease. Information on this website is for educational purposes only and should not be considered medical or legal advice. Not for human or veterinary use.

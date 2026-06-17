@@ -370,7 +370,7 @@ export default function AdminPage() {
   const [cmsSaveStatus, setCmsSaveStatus] = useState('');
   const [cmsSaveLoading, setCmsSaveLoading] = useState(false);
   const [editingBlog, setEditingBlog] = useState(null);
-  
+  const [businessLinks, setBusinessLinks] = useState(null);  
   // CSV Import States
   const [csvDragActive, setCsvDragActive] = useState(false);
   const [csvStatus, setCsvStatus] = useState('');
@@ -1786,6 +1786,25 @@ Core Rules:
         }
       } catch (err) {
         console.error("Failed to load whatsapp settings:", err);
+      }
+
+      // Fetch Business Links Settings
+      try {
+        const { data: linkData, error: linkError } = await supabase.from('site_settings').select('*').eq('id', 'business_links').limit(1).maybeSingle();
+        if (!linkError && linkData) {
+          setBusinessLinks(linkData.value);
+        } else {
+          setBusinessLinks({
+            whatsappNumber: "50684046973",
+            whatsappDisplay: "+506 8404-6973",
+            googleMapsUrl: "https://maps.app.goo.gl/G4MqFLWW7y9FXvKi9?g_st=ic",
+            facebookUrl: "",
+            instagramUrl: "",
+            supportEmail: "support@peptidescostarica.net"
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load business links:", err);
       }
     }
     setLoadingSettings(false);
@@ -3330,6 +3349,29 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   };
 
   // CMS Handlers
+  const handleSaveBusinessLinks = async () => {
+    setCmsSaveLoading(true);
+    setCmsSaveStatus('');
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase.from('site_settings').upsert({
+          id: 'business_links',
+          value: businessLinks
+        });
+        if (!error) {
+          setCmsSaveStatus('success:Business links saved successfully.');
+          return;
+        }
+        throw error;
+      }
+    } catch (err) {
+      console.error("Failed to save business links:", err);
+      setCmsSaveStatus(`error:Failed to save business links (${err.message})`);
+    } finally {
+      setCmsSaveLoading(false);
+    }
+  };
+
   const handleSaveSiteSettings = async () => {
     setCmsSaveLoading(true);
     setCmsSaveStatus('');
@@ -5577,6 +5619,56 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
                     <button onClick={handleSaveSiteSettings} disabled={cmsSaveLoading} className="admin-btn admin-btn-primary" style={{ padding: '12px', justifyContent: 'center' }}>
                       {cmsSaveLoading ? 'Saving...' : <><Save size={16} /> Save Landing Page Settings</>}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Business Links Settings */}
+              <div style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Link size={18} color="#3b82f6" /> Global Business Links
+                </h3>
+                
+                {loadingSettings ? (
+                  <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Loading settings...</div>
+                ) : businessLinks ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Contact Settings</h4>
+                      <div style={{ marginBottom: '8px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>WhatsApp Number (Numbers Only e.g. 50684046973)</label>
+                        <input type="text" value={businessLinks.whatsappNumber} onChange={e => setBusinessLinks({...businessLinks, whatsappNumber: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                      <div style={{ marginBottom: '8px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>WhatsApp Display Text (e.g. +506 8404-6973)</label>
+                        <input type="text" value={businessLinks.whatsappDisplay} onChange={e => setBusinessLinks({...businessLinks, whatsappDisplay: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                      <div style={{ marginBottom: '8px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Support Email</label>
+                        <input type="text" value={businessLinks.supportEmail} onChange={e => setBusinessLinks({...businessLinks, supportEmail: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Social & Map URLs</h4>
+                      <div style={{ marginBottom: '8px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Google Maps URL</label>
+                        <input type="text" value={businessLinks.googleMapsUrl} onChange={e => setBusinessLinks({...businessLinks, googleMapsUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                      <div style={{ marginBottom: '8px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Facebook URL (Optional)</label>
+                        <input type="text" value={businessLinks.facebookUrl} onChange={e => setBusinessLinks({...businessLinks, facebookUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Instagram URL (Optional)</label>
+                        <input type="text" value={businessLinks.instagramUrl} onChange={e => setBusinessLinks({...businessLinks, instagramUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                    </div>
+
+                    <button onClick={handleSaveBusinessLinks} disabled={cmsSaveLoading} className="admin-btn admin-btn-primary" style={{ padding: '12px', justifyContent: 'center' }}>
+                      {cmsSaveLoading ? 'Saving...' : <><Save size={16} /> Save Business Links</>}
                     </button>
                   </div>
                 ) : null}

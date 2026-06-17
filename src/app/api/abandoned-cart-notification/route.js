@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
+import { getBusinessLinks } from '@/lib/settings';
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
@@ -62,7 +63,7 @@ const buildItemsRows = (items = [], currency, exchangeRate = 454.48) => items.ma
 }).join('');
 
 // Recovery Email Template Builder
-const buildRecoveryHtml = (cartData, customerName, checkoutUrl, currency, lang) => {
+const buildRecoveryHtml = (customerName, cartData, checkoutUrl, currency, lang, links) => {
   const isEn = lang === 'en';
   
   // Sanitize name to prevent literal 'null', 'undefined', 'n/a', etc.
@@ -138,7 +139,7 @@ const buildRecoveryHtml = (cartData, customerName, checkoutUrl, currency, lang) 
         <div style="background:linear-gradient(135deg, rgba(5,150,105,0.06), rgba(16,185,129,0.02));border:1px dashed rgba(5,150,105,0.25);border-radius:16px;padding:20px;text-align:center;">
           <h4 style="margin:0 0 6px;color:#047857;font-size:16px;font-weight:bold;">🔬 ${strings.supportTitle}</h4>
           <p style="margin:0 0 16px;color:#475569;font-size:13px;line-height:1.45;">${strings.supportText}</p>
-          <a href="https://api.whatsapp.com/send?phone=50684046973" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:bold;font-size:14px;box-shadow:0 2px 4px rgba(37,211,102,0.2);">
+          <a href="https://api.whatsapp.com/send?phone=${links.whatsappNumber}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:bold;font-size:14px;box-shadow:0 2px 4px rgba(37,211,102,0.2);">
             💬 ${strings.whatsappBtn}
           </a>
         </div>
@@ -165,6 +166,8 @@ export async function POST(request) {
       lang = 'es',
       currency = 'CRC'
     } = payload;
+
+    const links = await getBusinessLinks();
 
     if (!customer_email || !session_id || !Array.isArray(cart_data) || cart_data.length === 0) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
@@ -208,7 +211,7 @@ export async function POST(request) {
       }
     }
 
-    const recoveryHtml = buildRecoveryHtml(cart_data, customer_name, checkoutUrl, currency, lang);
+    const recoveryHtml = buildRecoveryHtml(customer_name, cart_data, checkoutUrl, currency, lang, links);
 
     const recoveryText = [
       isEn ? 'We saved your cart for you!' : '¡Guardamos tu carrito para ti!',

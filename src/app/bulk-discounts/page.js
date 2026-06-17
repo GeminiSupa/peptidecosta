@@ -4,8 +4,10 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { Sun, Moon, ArrowRight, Percent, Package, ShieldCheck } from 'lucide-react';
+import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 
 export default function BulkDiscountsPage() {
+  const { links } = useBusinessLinks();
   const [theme, setTheme] = useState('light');
   const [lang, setLang] = useState('es');
   const [scrolled, setScrolled] = useState(false);
@@ -124,8 +126,8 @@ export default function BulkDiscountsPage() {
           <p>{lang === 'en' ? 'Peptides Costa Rica offers premium, research backed peptides with trusted quality.' : 'Peptides Costa Rica ofrece péptidos premium respaldados por ciencia, con calidad garantizada.'}</p>
           <div className="footer-links" style={{ marginBottom: '24px' }}>
             <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Shop Catalog' : 'Catálogo'}</Link>
-            <a href="mailto:info@peptidescostarica.net">info@peptidescostarica.net</a>
-            <a href="tel:+50684046973">CR: +506 8404-6973</a>
+            <a href={`mailto:${links.supportEmail}`}>{links.supportEmail}</a>
+            <a href={`tel:+${links.whatsappNumber}`}>CR: {links.whatsappDisplay}</a>
             <Link href="/admin" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: '500' }}>
               {lang === 'en' ? 'Admin Portal' : 'Portal de Admin'}
             </Link>

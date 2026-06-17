@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getBusinessLinks } from '@/lib/settings';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -18,6 +19,7 @@ export async function POST(request) {
 
   try {
     const { inquiryId, replyMessage, adminEmail } = await request.json();
+    const links = await getBusinessLinks();
 
     if (!inquiryId || !replyMessage?.trim()) {
       return NextResponse.json({ error: 'Missing inquiryId or replyMessage' }, { status: 400 });
@@ -87,7 +89,7 @@ export async function POST(request) {
         <div style="padding:20px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
           <h4 style="margin:0 0 6px;color:#047857;font-size:15px;font-weight:bold;">🔬 Professional Peptide Solutions</h4>
           <p style="margin:0 0 14px;color:#64748b;font-size:12.5px;">Need more help? Reply to this email or chat with us directly on WhatsApp.</p>
-          <a href="https://api.whatsapp.com/send?phone=50684046973" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:13.5px;box-shadow:0 2px 4px rgba(37,211,102,0.15);">
+          <a href="https://api.whatsapp.com/send?phone=${links.whatsappNumber}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:13.5px;box-shadow:0 2px 4px rgba(37,211,102,0.15);">
             💬 Chat on WhatsApp
           </a>
         </div>
@@ -104,7 +106,7 @@ export async function POST(request) {
       to: inquiry.customer_email,
       subject: `Re: ${inquiry.subject || 'Your Inquiry'} - Peptides Costa Rica`,
       html: replyHtml,
-      text: `Hi ${inquiry.customer_name},\n\n${replyMessage.trim()}\n\n---\nYour original message:\n${inquiry.message}\n\n---\nPeptides Costa Rica\nWhatsApp: +506 8404-6973`,
+      text: `Hi ${inquiry.customer_name},\n\n${replyMessage.trim()}\n\n---\nYour original message:\n${inquiry.message}\n\n---\nPeptides Costa Rica\nWhatsApp: ${links.whatsappDisplay}`,
     });
 
     console.log(`[Inquiry Reply] Email sent to ${inquiry.customer_email}. MessageId: ${info.messageId}`);

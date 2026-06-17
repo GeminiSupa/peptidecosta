@@ -35,7 +35,11 @@ export const viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }) {
+import { getBusinessLinks } from "@/lib/settings";
+
+export default async function RootLayout({ children }) {
+  const businessLinks = await getBusinessLinks();
+  
   return (
     <html lang="es" className={`${montserrat.variable} ${inter.variable}`} suppressHydrationWarning>
       <head>
@@ -74,7 +78,7 @@ export default function RootLayout({ children }) {
               "logo": "https://peptidescostarica.net/logo.png",
               "contactPoint": {
                 "@type": "ContactPoint",
-                "telephone": "+506-8404-6973",
+                "telephone": businessLinks.whatsappDisplay,
                 "contactType": "customer service",
                 "areaServed": "CR",
                 "availableLanguage": ["es", "en"]

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getBusinessLinks } from '@/lib/settings';
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
@@ -15,6 +16,7 @@ export async function POST(request) {
 
   try {
     const { to, subject, message } = await request.json();
+    const links = await getBusinessLinks();
 
     if (!to || !subject || !message) {
       return NextResponse.json({ error: 'Missing required fields: to, subject, message' }, { status: 400 });
@@ -55,7 +57,7 @@ export async function POST(request) {
         <div style="padding:20px 24px; background:#f8fafc; border-top:1px solid #e2e8f0; text-align:center;">
           <h4 style="margin:0 0 6px; color:#047857; font-size:15px; font-weight:bold;">🔬 Professional Peptide Solutions</h4>
           <p style="margin:0 0 14px; color:#64748b; font-size:12.5px;">Our scientific support desk is ready to answer any questions about reconstitution, supplies, or shipping details.</p>
-          <a href="https://api.whatsapp.com/send?phone=50684046973" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:13.5px;box-shadow:0 2px 4px rgba(37,211,102,0.15);">
+          <a href="https://api.whatsapp.com/send?phone=${links.whatsappNumber}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:13.5px;box-shadow:0 2px 4px rgba(37,211,102,0.15);">
             💬 Chat with Support on WhatsApp
           </a>
         </div>

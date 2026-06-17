@@ -4,10 +4,12 @@ import React, { useState, useEffect } from 'react';
 import { safeLocalStorage as localStorage, safeSessionStorage as sessionStorage } from '@/lib/storage';
 import { X, Sparkles, ArrowRight } from 'lucide-react';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
+import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 export default function ExitIntentPopup() {
+  const { links } = useBusinessLinks();
   const [isVisible, setIsVisible] = useState(false);
   const [hasShown, setHasShown] = useState(false);
   const [lang, setLang] = useState('es');
@@ -148,10 +150,10 @@ export default function ExitIntentPopup() {
 
         <div style={{ marginTop: '20px' }}>
           <a
-            href="https://wa.me/50684046973"
+            href={`https://wa.me/${links.whatsappNumber}`}
             onClick={(e) => {
               e.preventDefault();
-              window.open(buildWhatsAppLink('50684046973', lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
+              window.open(buildWhatsAppLink(links.whatsappNumber, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
             }}
             target="_blank"
             rel="noopener noreferrer"

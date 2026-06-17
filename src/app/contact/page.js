@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { Sun, Moon, ArrowRight, MessageCircle, Mail, MapPin, Send, CheckCircle, User, AtSign, FileText, Loader2 } from 'lucide-react';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
+import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 
 export default function ContactPage() {
+  const { links } = useBusinessLinks();
   const [theme, setTheme] = useState('light');
   const [lang, setLang] = useState('es');
   const [scrolled, setScrolled] = useState(false);
@@ -306,12 +308,12 @@ export default function ContactPage() {
                 {lang === 'en' ? 'Fastest response time. Available for support and ordering.' : 'Respuesta más rápida. Disponible para soporte y pedidos.'}
               </p>
               <a 
-                href="https://wa.me/50684046973" 
+                href={`https://wa.me/${links.whatsappNumber}`} 
                 target="_blank" 
                 rel="noopener noreferrer"
                 onClick={(e) => {
                   e.preventDefault();
-                  window.open(buildWhatsAppLink('50684046973'), '_blank');
+                  window.open(buildWhatsAppLink(links.whatsappNumber), '_blank');
                 }}
                 className="btn-hero-primary" 
                 style={{ background: '#25D366', width: '100%' }}
@@ -329,8 +331,8 @@ export default function ContactPage() {
               <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>
                 {lang === 'en' ? 'For bulk inquiries or general questions.' : 'Para consultas por volumen o preguntas generales.'}
               </p>
-              <a href="mailto:info@peptidescostarica.net" className="btn-outline" style={{ width: '100%' }}>
-                info@peptidescostarica.net
+              <a href={`mailto:${links.supportEmail}`} className="btn-outline" style={{ width: '100%' }}>
+                {links.supportEmail}
               </a>
             </div>
 
@@ -345,8 +347,8 @@ export default function ContactPage() {
           <p>{lang === 'en' ? 'Peptides Costa Rica offers premium, research backed peptides with trusted quality.' : 'Peptides Costa Rica ofrece péptidos premium respaldados por ciencia, con calidad garantizada.'}</p>
           <div className="footer-links" style={{ marginBottom: '24px' }}>
             <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Shop Catalog' : 'Catálogo'}</Link>
-            <a href="mailto:info@peptidescostarica.net">info@peptidescostarica.net</a>
-            <a href="tel:+50684046973">CR: +506 8404-6973</a>
+            <a href={`mailto:${links.supportEmail}`}>{links.supportEmail}</a>
+            <a href={`tel:+${links.whatsappNumber}`}>CR: {links.whatsappDisplay}</a>
             <Link href="/admin" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: '500' }}>
               {lang === 'en' ? 'Admin Portal' : 'Portal de Admin'}
             </Link>

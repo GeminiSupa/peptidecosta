@@ -4,8 +4,10 @@ import React, { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, ArrowLeft, ShieldAlert, Sparkles, Send, Calendar } from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
+import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 
 function ThankYouContent() {
+  const { links } = useBusinessLinks();
   const [lang, setLang] = useState('es');
   const [mounted, setMounted] = useState(false);
   const [reviewClicked, setReviewClicked] = useState(false);
@@ -330,7 +332,7 @@ function ThankYouContent() {
                 
                 {!reviewClicked ? (
                   <a 
-                    href="https://maps.app.goo.gl/G4MqFLWW7y9FXvKi9?g_st=ic"
+                    href={links.googleMapsUrl}
                     target="_blank" 
                     rel="noreferrer" 
                     onClick={() => setReviewClicked(true)}

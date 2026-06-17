@@ -10,6 +10,7 @@ import Script from 'next/script';
 import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
+import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
@@ -19,7 +20,7 @@ import {
   CreditCard, Smartphone, MessageCircle, Lock, Share2
 } from 'lucide-react';
 
-const WHATSAPP_NUMBER = '50684046973';
+// const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
 const FALLBACK_EXCHANGE_RATE = 454.48;
 const FREE_SHIPPING_USD_THRESHOLD = 200;
 const FLAT_SHIPPING_CRC = 2500;
@@ -179,6 +180,7 @@ const COSTA_RICA_TERRITORY = {
 };
 
 export default function CatalogPage() {
+  const { links } = useBusinessLinks();
   const router = useRouter();
   
   // Theme, Lang, Currency States
@@ -1796,7 +1798,7 @@ export default function CatalogPage() {
     }
 
     const fullMessage = `${receiptHeader}${receiptDetails}${itemReceipts}${discountReceipt}${shippingReceipt}${totalReceipt}${instructionsText}`;
-    const whatsappUrl = buildWhatsAppLink(WHATSAPP_NUMBER, fullMessage);
+    const whatsappUrl = buildWhatsAppLink(links.whatsappNumber, fullMessage);
 
     // Open WhatsApp
     window.open(whatsappUrl, '_blank');
@@ -2399,7 +2401,7 @@ export default function CatalogPage() {
 
           {/* Trust Seals */}
           <div className="trust-badges-container">
-            <a href="https://maps.app.goo.gl/G4MqFLWW7y9FXvKi9?g_st=ic" target="_blank" rel="noopener noreferrer" className="trust-badge google-maps">
+            <a href={links.googleMapsUrl} target="_blank" rel="noopener noreferrer" className="trust-badge google-maps">
               <svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -3864,13 +3866,13 @@ export default function CatalogPage() {
               )}
             </div>
             <a 
-              href={`https://wa.me/${WHATSAPP_NUMBER}`} 
+              href={`https://wa.me/${links.whatsappNumber}`} 
               target="_blank" 
               rel="noreferrer"
               className="whatsapp-btn" 
               onClick={(e) => {
                 e.preventDefault();
-                window.open(buildWhatsAppLink(WHATSAPP_NUMBER, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
+                window.open(buildWhatsAppLink(links.whatsappNumber, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
               }}
               style={{ marginTop: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
             >
@@ -3892,9 +3894,9 @@ export default function CatalogPage() {
             <a href="#" onClick={(e) => { e.preventDefault(); setContactModalOpen(true); setContactFormSuccess(false); }}>
               {lang === 'en' ? 'Contact Us' : 'Contáctanos'}
             </a>
-            <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer" onClick={(e) => {
+            <a href={`https://wa.me/${links.whatsappNumber}`} target="_blank" rel="noreferrer" onClick={(e) => {
               e.preventDefault();
-              window.open(buildWhatsAppLink(WHATSAPP_NUMBER, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
+              window.open(buildWhatsAppLink(links.whatsappNumber, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
             }}>
               {lang === 'en' ? 'Contact WhatsApp' : 'Contactar WhatsApp'}
             </a>

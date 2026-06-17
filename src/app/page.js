@@ -4,6 +4,7 @@ import { safeLocalStorage as localStorage } from '@/lib/storage';
 import Link from 'next/link';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
+import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { ArrowRight, ArrowUpRight, ShieldCheck, Truck, MessageCircle, Sun, Moon, ChevronDown, ChevronUp, FlaskConical, Lock, Dna, Atom, Zap, Brain, Sparkles, CheckCircle, ExternalLink, Trophy, Users, MapPin, Tag, Target, Heart, Package, DollarSign } from 'lucide-react';
 import { motion } from 'framer-motion';
 import NewsletterSignup from '@/components/NewsletterSignup';
@@ -66,10 +67,12 @@ export default function LandingPage() {
 
   const t = T[lang];
 
+  const { links } = useBusinessLinks();
+
   const handleWA = (src) => {
     logWhatsAppSource(src);
     if (typeof window !== 'undefined') localStorage.setItem('whatsapp_source', src);
-    window.open(buildWhatsAppLink('50684046973'), '_blank');
+    window.open(buildWhatsAppLink(links.whatsappNumber), '_blank');
   };
 
   useEffect(() => {

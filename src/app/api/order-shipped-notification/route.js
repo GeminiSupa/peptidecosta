@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
+import { getBusinessLinks } from '@/lib/settings';
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
@@ -40,7 +41,7 @@ const buildItemsRows = (items = [], currency) => items.map((item) => {
 }).join('');
 
 // Customer HTML Receipt Builder
-const buildCustomerShippedHtml = (order, totalPrimary, totalUsd, totalCrc, lang) => {
+const buildCustomerShippedHtml = (order, totalPrimary, totalUsd, totalCrc, lang, links) => {
   const isEn = lang === 'en';
   
   const strings = {
@@ -124,7 +125,7 @@ const buildCustomerShippedHtml = (order, totalPrimary, totalUsd, totalCrc, lang)
         <div style="background:linear-gradient(135deg, rgba(5,150,105,0.06), rgba(16,185,129,0.02));border:1px dashed rgba(5,150,105,0.25);border-radius:16px;padding:20px;text-align:center;">
           <h4 style="margin:0 0 6px;color:#047857;font-size:16px;font-weight:bold;">🔬 ${strings.supportTitle}</h4>
           <p style="margin:0 0 16px;color:#475569;font-size:13px;line-height:1.45;">${strings.supportText}</p>
-          <a href="https://api.whatsapp.com/send?phone=50684046973" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:bold;font-size:14px;box-shadow:0 2px 4px rgba(37,211,102,0.2);">
+          <a href="https://api.whatsapp.com/send?phone=${links.whatsappNumber}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:bold;font-size:14px;box-shadow:0 2px 4px rgba(37,211,102,0.2);">
             💬 ${strings.whatsappBtn}
           </a>
         </div>
@@ -142,6 +143,7 @@ const buildCustomerShippedHtml = (order, totalPrimary, totalUsd, totalCrc, lang)
 export async function POST(request) {
   try {
     const order = await request.json();
+    const links = await getBusinessLinks();
 
     if (!order?.customer_name || !Array.isArray(order?.items) || order.items.length === 0) {
       return NextResponse.json({ error: 'Invalid order notification payload' }, { status: 400 });
@@ -186,7 +188,7 @@ export async function POST(request) {
       tracking_number: order.tracking_number
     };
 
-    const customerHtml = buildCustomerShippedHtml(normalizedOrder, totalPrimary, totalUsd, totalCrc, orderLang);
+    const customerHtml = buildCustomerShippedHtml(normalizedOrder, totalPrimary, totalUsd, totalCrc, orderLang, links);
     
     const customerText = [
       orderLang === 'en' ? 'Your order is on the way!' : '¡Su pedido está en camino!',
@@ -204,8 +206,8 @@ export async function POST(request) {
       ...order.items.map(item => `• ${item.product} x${item.qty} (${formatMoney(Number(item.price || 0) * Number(item.qty || 0), order.currency)})`),
       '',
       orderLang === 'en' 
-        ? 'Need help? Contact our support desk at +506 8404-6973 or reply to this email.'
-        : '¿Necesita ayuda? Contacte a soporte al +506 8404-6973 o responda a este correo.'
+        ? `Need help? Contact our support desk at ${links.whatsappDisplay} or reply to this email.`
+        : `¿Necesita ayuda? Contacte a soporte al ${links.whatsappDisplay} o responda a este correo.`
     ].join('\\n');
 
     const customerInfo = await transporter.sendMail({
