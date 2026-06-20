@@ -10,14 +10,20 @@ export default function BroadcastsPanel() {
 
   const handleSendTest = async () => {
     if (!message) return alert("Please enter a message first.");
+    const testNumber = prompt("Enter your test phone number (e.g., 50688888888) or email:");
+    if (!testNumber) return;
+    
     setIsSending(true);
     setResult(null);
     try {
-      const res = await fetch('/api/whatsapp/send', {
+      // Send a test payload to the broadcast API using a special audience
+      const res = await fetch('/api/admin/broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          to: 'YOUR_TEST_NUMBER', // Should probably ask user for this or use a default
+          audience: 'test',
+          testContact: testNumber,
+          channels,
           message: `[TEST BROADCAST]\n${message}`
         })
       });

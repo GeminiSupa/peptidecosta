@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import nodemailer from 'nodemailer';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+const SMTP_HOST = process.env.SMTP_HOST;
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
+const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
+const SMTP_USER = process.env.SMTP_USER;
+const SMTP_PASS = process.env.SMTP_PASS;
 
 // Helper for sending WhatsApp via the official graph API
 async function sendWhatsApp(to, message) {
@@ -42,24 +49,29 @@ async function sendWhatsApp(to, message) {
 
 // Helper for sending Emails
 async function sendEmail(to, message) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return false;
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return false;
 
   try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
+    const transporter = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+      auth: {
+        user: SMTP_USER,
+        pass: SMTP_PASS,
       },
-      body: JSON.stringify({
-        from: 'Peptides Costa Rica <sales@peptidescostarica.com>',
-        to: [to],
-        subject: 'Flash Sale! Exclusive Offer Inside',
-        text: message
-      })
+      tls: {
+        rejectUnauthorized: false
+      }
     });
-    return res.ok;
+
+    const res = await transporter.sendMail({
+      from: `Peptides Costa Rica <info@peptidescostarica.net>`,
+      to: to.trim(),
+      subject: 'Flash Sale! Exclusive Offer Inside',
+      text: message
+    });
+    return !!res.messageId;
   } catch (err) {
     return false;
   }
@@ -67,13 +79,21 @@ async function sendEmail(to, message) {
 
 export async function POST(request) {
   try {
-    const { audience, channels, message } = await request.json();
+    const { audience, channels, message, testContact } = await request.json();
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
 
     const targets = new Map(); // Use Map to deduplicate by phone/email
+
+    if (audience === 'test' && testContact) {
+       const isEmail = testContact.includes('@');
+       targets.set(testContact, { 
+         phone: isEmail ? null : testContact, 
+         email: isEmail ? testContact : null 
+       });
+    } else {
 
     if (audience === 'all_customers' || audience === 'all_leads') {
       const { data: orders } = await supabase.from('orders').select('customer_phone, customer_email').neq('status', 'cancelled');
@@ -94,6 +114,8 @@ export async function POST(request) {
         }
       });
     }
+    
+    } // Close the else block
 
     const contacts = Array.from(targets.values());
     let queuedCount = 0;

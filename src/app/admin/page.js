@@ -66,7 +66,7 @@ const formatCustomerIdType = (idType) => {
 const ADMIN_TABS = new Set([
   'home', 'spreadsheet', 'orders', 'customers', 'inquiries', 'leads',
   'carts', 'share', 'reviews', 'affiliates', 'analytics', 'cms',
-  'whatsapp_ai', 'team', 'facebook', 'team_chat'
+  'whatsapp_ai', 'team', 'facebook', 'team_chat', 'broadcasts'
 ]);
 
 const TAB_TITLES = {
@@ -309,6 +309,7 @@ export default function AdminPage() {
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [abandonedCarts, setAbandonedCarts] = useState([]);
+  const [cartSort, setCartSort] = useState('date_desc');
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [orderSearch, setOrderSearch] = useState('');
@@ -5024,15 +5025,35 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           style={{ cursor: 'pointer', transform: 'scale(1.1)' }}
                         />
                       </th>
-                      <th style={{ padding: '10px 12px' }}>Last Updated</th>
+                      <th style={{ padding: '10px 12px', cursor: 'pointer' }} onClick={() => setCartSort(cartSort === 'date_desc' ? 'date_asc' : 'date_desc')}>
+                        Last Updated {cartSort === 'date_desc' ? '↓' : cartSort === 'date_asc' ? '↑' : ''}
+                      </th>
                       <th style={{ padding: '10px 12px' }}>Customer</th>
                       <th style={{ padding: '10px 12px' }}>Cart Details</th>
-                      <th style={{ padding: '10px 12px' }}>Recovery Status</th>
+                      <th style={{ padding: '10px 12px', cursor: 'pointer' }} onClick={() => setCartSort(cartSort === 'recovery_asc' ? 'recovery_desc' : 'recovery_asc')}>
+                        Recovery Status {cartSort === 'recovery_asc' ? '↑' : cartSort === 'recovery_desc' ? '↓' : ''}
+                      </th>
                       <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {abandonedCarts.map((acart, index) => {
+                    {(() => {
+                      let sortedCarts = [...abandonedCarts];
+                      if (cartSort === 'recovery_asc' || cartSort === 'recovery_desc') {
+                        sortedCarts.sort((a, b) => {
+                          const statusA = a.recovery_status || '';
+                          const statusB = b.recovery_status || '';
+                          const res = statusA.localeCompare(statusB);
+                          return cartSort === 'recovery_asc' ? res : -res;
+                        });
+                      } else {
+                        sortedCarts.sort((a, b) => {
+                          const timeA = new Date(a.updated_at).getTime();
+                          const timeB = new Date(b.updated_at).getTime();
+                          return cartSort === 'date_desc' ? timeB - timeA : timeA - timeB;
+                        });
+                      }
+                      return sortedCarts.map((acart, index) => {
                       const totalQty = acart.cart_data ? acart.cart_data.reduce((acc, item) => acc + (item.qty || 0), 0) : 0;
                       
                       return (
@@ -5221,7 +5242,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             </td>
                         </tr>
                       );
-                    })}
+                    })})()}
                   </tbody>
                 </table>
               </div>
