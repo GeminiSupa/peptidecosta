@@ -2825,6 +2825,11 @@ export default function CatalogPage() {
                       )}
                       {!isBac && pSub && <span className="price-sub">{pSub}</span>}
                     </div>
+                    {inStock && p.inventoryCount !== null && p.inventoryCount <= (p.lowStockThreshold || 5) && p.inventoryCount > 0 && (
+                      <div style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontSize: '0.65rem', fontWeight: 'bold', border: '1px solid rgba(239, 68, 68, 0.2)', marginBottom: '8px', width: 'fit-content' }}>
+                        {lang === 'en' ? `Only ${p.inventoryCount} left!` : `¡Solo quedan ${p.inventoryCount}!`}
+                      </div>
+                    )}
 
                     <div className="product-actions">
                       {isBac ? (
@@ -2895,11 +2900,6 @@ export default function CatalogPage() {
                         {isBac ? (lang === 'en' ? 'Included' : 'Incluido') : translateStatus(p.status)}
                       </span>
                     </div>
-                    {inStock && p.inventoryCount !== null && p.inventoryCount <= (p.lowStockThreshold || 5) && p.inventoryCount > 0 && (
-                      <div className="stock-badge stock-soon" style={{ top: '34px', background: 'rgba(239, 68, 68, 0.9)', color: '#fff' }}>
-                        <span>{lang === 'en' ? `Only ${p.inventoryCount} left!` : `¡Solo quedan ${p.inventoryCount}!`}</span>
-                      </div>
-                    )}
                   </div>
                 </div>
               );
