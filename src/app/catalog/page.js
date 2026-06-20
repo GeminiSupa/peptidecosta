@@ -2825,11 +2825,18 @@ export default function CatalogPage() {
                       )}
                       {!isBac && pSub && <span className="price-sub">{pSub}</span>}
                     </div>
-                    {inStock && p.inventoryCount !== null && p.inventoryCount <= (p.lowStockThreshold || 5) && p.inventoryCount > 0 && (
-                      <div style={{ display: 'inline-block', padding: '3px 8px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontSize: '0.65rem', fontWeight: 'bold', border: '1px solid rgba(239, 68, 68, 0.2)', marginBottom: '8px', width: 'fit-content' }}>
-                        {lang === 'en' ? `Only ${p.inventoryCount} left!` : `¡Solo quedan ${p.inventoryCount}!`}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                      <div className={`stock-badge ${isBac ? 'stock-in' : inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`} style={{ position: 'relative', top: 'auto', right: 'auto', margin: 0 }}>
+                        <span>
+                          {isBac ? (lang === 'en' ? 'Included' : 'Incluido') : translateStatus(p.status)}
+                        </span>
                       </div>
-                    )}
+                      {inStock && p.inventoryCount !== null && p.inventoryCount <= (p.lowStockThreshold || 5) && p.inventoryCount > 0 && (
+                        <div style={{ padding: '4px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontSize: '0.6rem', fontWeight: '800', border: '1px solid rgba(239, 68, 68, 0.2)', textTransform: 'uppercase' }}>
+                          {lang === 'en' ? `Only ${p.inventoryCount} left!` : `¡Solo quedan ${p.inventoryCount}!`}
+                        </div>
+                      )}
+                    </div>
 
                     <div className="product-actions">
                       {isBac ? (
@@ -2894,12 +2901,6 @@ export default function CatalogPage() {
                           <span>{lang === 'en' ? 'Out of Stock' : 'Agotado'}</span>
                         </button>
                       )}
-                    </div>
-                    <div className={`stock-badge ${isBac ? 'stock-in' : inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`}>
-                      <span>
-                        {isBac ? (lang === 'en' ? 'Included' : 'Incluido') : translateStatus(p.status)}
-                      </span>
-                    </div>
                   </div>
                 </div>
               );
