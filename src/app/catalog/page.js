@@ -2849,8 +2849,8 @@ export default function CatalogPage() {
                           <small>{lang === 'en' ? 'included' : 'incluido'}</small>
                         </div>
                       ) : p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span className="price-main" style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '1.1rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: '1.2', gap: '2px' }}>
+                          <span style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '0.85rem', fontWeight: '600' }}>
                             {currency === 'USD' ? p.originalPriceUsd : p.originalPriceCrc}
                           </span>
                           <span className="price-main" style={{ color: '#ef4444' }}>{pMain}</span>
@@ -2925,7 +2925,7 @@ export default function CatalogPage() {
                               <span>
                                 {addedProductId === p.product 
                                   ? (lang === 'en' ? 'Added' : 'Añadido') 
-                                  : (lang === 'en' ? 'Add To Cart' : 'Agregar al Carrito')
+                                  : (lang === 'en' ? 'Add To Cart' : 'Agregar')
                                 }
                               </span>
                             </button>
