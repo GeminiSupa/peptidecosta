@@ -5567,7 +5567,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             ) : (
               <div className="spreadsheet-container">
-                <table className="spreadsheet-table">
+                <table className="spreadsheet-table responsive-table">
                   <thead>
                     <tr>
                       <th style={{ width: '100px' }}>Date</th>

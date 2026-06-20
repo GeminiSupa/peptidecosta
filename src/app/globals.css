@@ -2504,13 +2504,97 @@ body {
     border-right: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: #0e1626;
-    color: #e2e8f0;
+    color: #cbd5e1;
     transition: background 0.15s;
     vertical-align: middle;
 }
 
+.spreadsheet-table tr:nth-child(even) td {
+    background: #111a2c;
+}
+
 .spreadsheet-table tr:hover td {
-    background: #141e35;
+    background: #1e293b;
+}
+
+/* -------------------------------------
+   ADMIN GRID DASHBOARDS (New UX Redesign)
+   ------------------------------------- */
+.admin-grid-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.admin-grid-card {
+    background: linear-gradient(145deg, #0f172a, #1e293b);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.admin-grid-title {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+}
+
+.admin-grid-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #f8fafc;
+}
+
+/* -------------------------------------
+   COMPACT MOBILE TABLES
+   ------------------------------------- */
+@media (max-width: 768px) {
+    .responsive-table, .responsive-table tbody, .responsive-table tr, .responsive-table td {
+        display: block;
+        width: 100%;
+    }
+    .responsive-table thead {
+        display: none;
+    }
+    .responsive-table tr {
+        margin-bottom: 16px;
+        background: #0e1626;
+        border: 1px solid rgba(255,255,255,0.05);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .responsive-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-align: right;
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .responsive-table td:last-child {
+        border-bottom: none;
+    }
+    .responsive-table td::before {
+        content: attr(data-label);
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #94a3b8;
+        text-align: left;
+        margin-right: 16px;
+    }
 }
 
 /* Cell-specific styling */
