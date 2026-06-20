@@ -158,6 +158,23 @@ Instructions:
 7. End the email warmly from "El equipo de Peptides Costa Rica" or "The Peptides Costa Rica Team".
 
 Output ONLY the clean email reply text ready to be sent to the customer.`;
+    } else if (mode === 'draft_broadcast') {
+      const { prompt: userPrompt } = context;
+      finalPrompt = `You are an elite biotech e-commerce copywriter.
+Write a highly engaging, persuasive, and professional broadcast message.
+Target Audience: Costa Rican researchers and customers. Language: Spanish (unless specified otherwise).
+
+Instructions provided by the user for this broadcast:
+"${userPrompt}"
+
+Guidelines:
+1. Make it punchy, exciting, but scientifically grounded. No cheesy buzzwords.
+2. If it's a flash sale, emphasize urgency (e.g. "Solo este fin de semana", "Stock limitado").
+3. Use bullet points and basic formatting (like *bold*) for readability.
+4. Include variables like {{name}} if appropriate, so the system can personalize it.
+5. End with a clear Call to Action (e.g. link to website or tell them to reply).
+
+Output ONLY the final drafted message text.`;
     } else {
       // Default fallback
       finalPrompt = prompt || text;

@@ -79,7 +79,7 @@ async function sendEmail(to, message) {
 
 export async function POST(request) {
   try {
-    const { audience, channels, message, testContact } = await request.json();
+    const { audience, channels, message, testContact, customContacts } = await request.json();
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -113,6 +113,17 @@ export async function POST(request) {
           targets.set(key, { phone: c.phone, email: c.email });
         }
       });
+    }
+
+    if (audience === 'custom' && customContacts) {
+       const contactsList = customContacts.split(/[\n,]+/).map(c => c.trim()).filter(Boolean);
+       contactsList.forEach(c => {
+         const isEmail = c.includes('@');
+         targets.set(c, {
+           phone: isEmail ? null : c,
+           email: isEmail ? c : null
+         });
+       });
     }
     
     } // Close the else block
