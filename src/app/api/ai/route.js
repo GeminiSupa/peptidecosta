@@ -132,6 +132,32 @@ Instructions:
 6. End with a gentle, clear invitation to ask any questions or purchase the vial directly. Do NOT write placeholders, URLs, or brackets like [link].
 
 Output ONLY the clean Spanish message text ready to be sent.`;
+    } else if (mode === 'draft_inquiry_reply') {
+      const { customerName = 'Customer', subject = '', message = '' } = context;
+      
+      const productsContext = context.products 
+        ? `Active Catalog Context:\n${context.products.map(p => `- ${p.product} (Category: ${p.category}, Price: ${p.priceUsd || p.priceCrc}, Status: ${p.status})`).join('\n')}`
+        : '';
+        
+      finalPrompt = `You are "Peptides Costa Rica Customer Support", an elite customer service agent.
+Write a highly professional, polite, and scientifically accurate email reply to the customer: "${customerName}".
+
+Customer Inquiry Subject: "${subject}"
+Customer Message:
+"${message}"
+
+${productsContext}
+
+Instructions:
+1. Auto-detect the language the customer used in their message, and write your reply in that exact same language.
+2. If Spanish, use warm Costa Rican phrasing (e.g. "Estimado/a", "Pura vida", "Con gusto"). If English, be highly professional and polite.
+3. Directly answer their specific questions based on the "Active Catalog Context" provided above.
+4. If they ask about something not in the catalog, politely inform them we do not currently carry it.
+5. If they ask about shipping, mention we ship across Costa Rica via Correos de Costa Rica (1-3 days).
+6. Format your email cleanly with paragraphs. Do not include placeholders for things you don't know, just answer what you can.
+7. End the email warmly from "El equipo de Peptides Costa Rica" or "The Peptides Costa Rica Team".
+
+Output ONLY the clean email reply text ready to be sent to the customer.`;
     } else {
       // Default fallback
       finalPrompt = prompt || text;

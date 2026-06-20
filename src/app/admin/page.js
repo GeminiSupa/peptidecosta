@@ -6599,7 +6599,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {/* TAB: CUSTOMER INQUIRIES */}
         {activeTab === 'inquiries' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
-            <InquiriesManager adminEmail={loggedInEmail.current} />
+            <InquiriesManager adminEmail={loggedInEmail.current} products={products} />
           </div>
         )}
 

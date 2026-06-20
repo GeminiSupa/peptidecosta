@@ -5,7 +5,7 @@ import { adminFetch } from '@/lib/adminApi';
 import { 
   Mail, Search, Filter, Trash2, Send, Eye, Clock, CheckCircle, 
   XCircle, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Inbox,
-  ArrowLeft, User, Calendar
+  ArrowLeft, User, Calendar, Sparkles
 } from 'lucide-react';
 
 const STATUS_CONFIG = {
@@ -42,7 +42,7 @@ const extractPhone = (message) => {
   return `+506${digits}`;
 };
 
-export default function InquiriesManager({ adminEmail }) {
+export default function InquiriesManager({ adminEmail, products = [] }) {
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,6 +51,7 @@ export default function InquiriesManager({ adminEmail }) {
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [draftingReply, setDraftingReply] = useState(false);
   const replyInputRef = React.useRef(null);
 
   useEffect(() => {
@@ -143,6 +144,35 @@ export default function InquiriesManager({ adminEmail }) {
       alert('❌ Error sending reply: ' + err.message);
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDraftReply = async () => {
+    if (!selectedInquiry) return;
+    setDraftingReply(true);
+    try {
+      const res = await adminFetch('/api/ai', {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'draft_inquiry_reply',
+          context: {
+            customerName: selectedInquiry.customer_name,
+            subject: selectedInquiry.subject,
+            message: selectedInquiry.message,
+            products: products
+          }
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.text) {
+        setReplyText(data.text);
+      } else {
+        alert('❌ Failed to draft reply: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('❌ Error drafting reply: ' + err.message);
+    } finally {
+      setDraftingReply(false);
     }
   };
 
@@ -292,8 +322,32 @@ export default function InquiriesManager({ adminEmail }) {
           {/* Reply Composer */}
           {inq.status !== 'Closed' && (
             <div style={styles.replySection}>
-              <div style={styles.replyLabel}>
-                <Send size={14} /> {inq.admin_reply ? 'Send Another Reply' : 'Reply to Customer'}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={styles.replyLabel}>
+                  <Send size={14} /> {inq.admin_reply ? 'Send Another Reply' : 'Reply to Customer'}
+                </div>
+                <button
+                  onClick={handleDraftReply}
+                  disabled={draftingReply}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(168, 85, 247, 0.05))',
+                    border: '1px solid rgba(168, 85, 247, 0.4)',
+                    color: '#c084fc',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    cursor: draftingReply ? 'not-allowed' : 'pointer',
+                    opacity: draftingReply ? 0.6 : 1,
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => { if(!draftingReply) { e.currentTarget.style.boxShadow = '0 0 10px rgba(168, 85, 247, 0.3)'; e.currentTarget.style.borderColor = '#c084fc'; } }}
+                  onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.4)'; }}
+                >
+                  <Sparkles size={13} style={draftingReply ? { animation: 'spin 2s linear infinite' } : {}} />
+                  {draftingReply ? 'Drafting...' : 'Draft AI Reply'}
+                </button>
               </div>
               <textarea
                 ref={replyInputRef}
