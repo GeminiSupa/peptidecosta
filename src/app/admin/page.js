@@ -15,7 +15,7 @@ import {
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send,
-  Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft
+  Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft, Megaphone
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
@@ -32,6 +32,7 @@ import NotificationCenter from '@/components/admin/NotificationCenter';
 import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
 import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
+import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 
 const FacebookIcon = ({ size = 14, style, ...props }) => (
@@ -3714,6 +3715,15 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   <span className="tab-label">Affiliates</span>
                 </button>
               )}
+              {adminProfile?.is_superadmin && (
+                <button 
+                  className={`admin-tab-btn ${activeTab === 'broadcasts' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('broadcasts')}
+                >
+                  <Megaphone size={14} />
+                  <span className="tab-label">Broadcasts</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -5300,6 +5310,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         )}
 
         {/* TAB: Facebook Notifications */}
+        {activeTab === 'broadcasts' && (
+          <BroadcastsPanel />
+        )}
+
         {activeTab === 'facebook' && (
           <div className="admin-orders-tab">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>

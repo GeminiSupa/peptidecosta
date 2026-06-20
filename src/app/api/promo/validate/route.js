@@ -24,6 +24,10 @@ export async function POST(request) {
         code,
         discount_pct,
         is_active,
+        valid_from,
+        valid_until,
+        target_product,
+        is_flash_sale,
         affiliate_id,
         affiliates (
           commission_rate
@@ -37,11 +41,22 @@ export async function POST(request) {
       return NextResponse.json({ valid: false, error: 'Invalid or inactive promo code.' });
     }
 
+    // Check date boundaries if they exist
+    const now = new Date();
+    if (promo.valid_from && now < new Date(promo.valid_from)) {
+      return NextResponse.json({ valid: false, error: 'Promo code is not yet active.' });
+    }
+    if (promo.valid_until && now > new Date(promo.valid_until)) {
+      return NextResponse.json({ valid: false, error: 'Promo code has expired.' });
+    }
+
     // Success: Return the discount and affiliate data to the frontend
     return NextResponse.json({
       valid: true,
       code: promo.code,
       discount_pct: promo.discount_pct,
+      target_product: promo.target_product,
+      is_flash_sale: promo.is_flash_sale,
       affiliate_id: promo.affiliate_id,
       commission_rate: promo.affiliates?.commission_rate || 0.10 // Fallback to 10% if undefined
     });

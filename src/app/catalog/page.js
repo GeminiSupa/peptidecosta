@@ -1478,8 +1478,22 @@ export default function CatalogPage() {
 
   const getPromoDiscountAmount = () => {
     if (!promoData || !promoData.valid) return 0;
-    const itemsTotal = getDiscountedTotal();
-    return currency === 'USD' ? parseFloat((itemsTotal * promoData.discount_pct).toFixed(2)) : Math.round(itemsTotal * promoData.discount_pct);
+    
+    let targetTotal = getCartTotal();
+    
+    if (promoData.is_flash_sale && promoData.target_product) {
+      targetTotal = cart
+        .filter(item => item.product.toLowerCase().includes(promoData.target_product.toLowerCase()))
+        .reduce((sum, item) => sum + (currency === 'USD' ? item.priceUsd : item.priceCrc) * item.qty, 0);
+    }
+    
+    const vials = getCartVialCount();
+    const volumePct = getVolumeDiscountPct(vials);
+    if (volumePct > 0) {
+      targetTotal = targetTotal * (1 - volumePct / 100);
+    }
+    
+    return currency === 'USD' ? parseFloat((targetTotal * promoData.discount_pct).toFixed(2)) : Math.round(targetTotal * promoData.discount_pct);
   };
 
   const getFinalTotal = () => {
@@ -1500,6 +1514,15 @@ export default function CatalogPage() {
       });
       const data = await res.json();
       if (data.valid) {
+        if (data.is_flash_sale && data.target_product) {
+          const hasTargetItem = cart.some(item => item.product.toLowerCase().includes(data.target_product.toLowerCase()));
+          if (!hasTargetItem) {
+            setPromoData(null);
+            setPromoError(lang === 'en' ? `This promo requires ${data.target_product} in your cart.` : `Este código requiere ${data.target_product} en el carrito.`);
+            setPromoLoading(false);
+            return;
+          }
+        }
         setPromoData(data);
         setPromoError('');
       } else {
@@ -1923,7 +1946,19 @@ export default function CatalogPage() {
         const itemsTotal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
         
         const pData = checkoutDataRef.current.promoData;
-        const promoDiscount = pData?.valid ? (cur === 'USD' ? parseFloat((itemsTotal * pData.discount_pct).toFixed(2)) : Math.round(itemsTotal * pData.discount_pct)) : 0;
+        let targetTotalForPromo = itemsTotal;
+        if (pData?.valid && pData.is_flash_sale && pData.target_product) {
+          const rawTargetSum = currentCart
+            .filter(item => item.product.toLowerCase().includes(pData.target_product.toLowerCase()))
+            .reduce((sum, item) => {
+              let p = item.priceCrc;
+              if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
+              if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
+              return sum + (p * item.qty);
+            }, 0);
+          targetTotalForPromo = pct > 0 ? Math.round(rawTargetSum * (1 - pct / 100)) : rawTargetSum;
+        }
+        const promoDiscount = pData?.valid ? (cur === 'USD' ? parseFloat((targetTotalForPromo * pData.discount_pct).toFixed(2)) : Math.round(targetTotalForPromo * pData.discount_pct)) : 0;
 
         const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
         let shippingFee = 0;
