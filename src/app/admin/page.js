@@ -310,6 +310,9 @@ export default function AdminPage() {
   const [orders, setOrders] = useState([]);
   const [abandonedCarts, setAbandonedCarts] = useState([]);
   const [cartSort, setCartSort] = useState('date_desc');
+  const [cartFilterContact, setCartFilterContact] = useState('all');
+  const [cartFilterStatus, setCartFilterStatus] = useState('all');
+  const [cartFilterValue, setCartFilterValue] = useState('all');
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [orderSearch, setOrderSearch] = useState('');
@@ -2398,6 +2401,44 @@ Core Rules:
     } finally {
       setSendingRecoveryWhatsApp(prev => ({ ...prev, [acart.session_id]: false }));
     }
+  };
+
+  const getCartValue = (acart) => {
+    if (!acart.cart_data) return 0;
+    return acart.cart_data.reduce((acc, item) => acc + ((item.priceUsd || 0) * (item.qty || 0)), 0);
+  };
+
+  const handleExportCartsCSV = (filteredCartsToExport) => {
+    if (!filteredCartsToExport || filteredCartsToExport.length === 0) {
+      alert('No carts to export.');
+      return;
+    }
+    
+    const headers = ['email', 'phone', 'first_name', 'last_name', 'value', 'currency', 'status'];
+    
+    const rows = filteredCartsToExport.map(c => {
+      const nameParts = (c.customer_name || '').split(' ');
+      const fn = nameParts[0] || '';
+      const ln = nameParts.slice(1).join(' ') || '';
+      return [
+        c.customer_email || '',
+        c.customer_phone || '',
+        fn,
+        ln,
+        getCartValue(c).toFixed(2),
+        'USD',
+        c.recovery_status || 'not_contacted'
+      ].map(v => `"${v}"`).join(',');
+    });
+    
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `abandoned_carts_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Bulk Email reminders
@@ -5032,6 +5073,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         Customer {cartSort === 'customer_asc' ? '↑' : cartSort === 'customer_desc' ? '↓' : ''}
                       </th>
                       <th style={{ padding: '10px 12px' }}>Cart Details</th>
+                      <th style={{ padding: '10px 12px', cursor: 'pointer' }} onClick={() => setCartSort(cartSort === 'value_asc' ? 'value_desc' : 'value_asc')}>
+                        Cart Value {cartSort === 'value_asc' ? '↑' : cartSort === 'value_desc' ? '↓' : ''}
+                      </th>
                       <th style={{ padding: '10px 12px', cursor: 'pointer' }} onClick={() => setCartSort(cartSort === 'recovery_asc' ? 'recovery_desc' : 'recovery_asc')}>
                         Recovery Status {cartSort === 'recovery_asc' ? '↑' : cartSort === 'recovery_desc' ? '↓' : ''}
                       </th>
@@ -5040,8 +5084,34 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   </thead>
                   <tbody>
                     {(() => {
-                      let sortedCarts = [...abandonedCarts];
-                      if (cartSort === 'recovery_asc' || cartSort === 'recovery_desc') {
+                      let filteredCarts = abandonedCarts.filter(c => {
+                        let matchContact = true;
+                        if (cartFilterContact === 'has_email') matchContact = !!c.customer_email;
+                        if (cartFilterContact === 'has_phone') matchContact = !!c.customer_phone;
+                        if (cartFilterContact === 'actionable') matchContact = !!c.customer_email || !!c.customer_phone;
+                        if (cartFilterContact === 'none') matchContact = !c.customer_email && !c.customer_phone;
+                        
+                        let matchStatus = true;
+                        if (cartFilterStatus === 'not_contacted') matchStatus = !c.recovery_status || c.recovery_status === 'not_contacted';
+                        if (cartFilterStatus === 'contacted') matchStatus = c.recovery_status === 'contacted_email' || c.recovery_status === 'contacted_whatsapp';
+                        if (cartFilterStatus === 'recovered') matchStatus = c.recovery_status === 'recovered';
+                        
+                        let matchValue = true;
+                        const val = getCartValue(c);
+                        if (cartFilterValue === 'high') matchValue = val >= 100;
+                        if (cartFilterValue === 'low') matchValue = val < 100;
+                        
+                        return matchContact && matchStatus && matchValue;
+                      });
+
+                      let sortedCarts = [...filteredCarts];
+                      if (cartSort === 'value_asc' || cartSort === 'value_desc') {
+                        sortedCarts.sort((a, b) => {
+                          const valA = getCartValue(a);
+                          const valB = getCartValue(b);
+                          return cartSort === 'value_asc' ? valA - valB : valB - valA;
+                        });
+                      } else if (cartSort === 'recovery_asc' || cartSort === 'recovery_desc') {
                         sortedCarts.sort((a, b) => {
                           const statusA = a.recovery_status || '';
                           const statusB = b.recovery_status || '';
@@ -5123,6 +5193,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             >
                               🛒 {totalQty} {totalQty === 1 ? 'Item' : 'Items'}
                             </button>
+                          </td>
+                          <td data-label="Cart Value" style={{ padding: '10px 12px', fontSize: '0.9rem', fontWeight: 'bold', color: '#4ade80' }}>
+                            ${getCartValue(acart).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td data-label="Recovery Status" style={{ padding: '10px 12px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
