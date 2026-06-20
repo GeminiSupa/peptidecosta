@@ -466,12 +466,12 @@ body {
     justify-content: center;
     gap: 6px;
     width: auto;
-    padding: 6px 14px;
+    padding: 6px 10px;
     background: #E05A0C; /* Brighter, premium brand orange for enhanced visual prominence */
     color: white;
     border: 1px solid #E05A0C;
     border-radius: 20px;
-    font-size: 0.75rem;
+    font-size: 0.68rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -3051,7 +3051,6 @@ body {
     .product-grid:not(.compact-view):not(.grid-view) .price-main {
         font-size: 1.1rem !important;
         font-weight: 900 !important;
-        color: var(--text-primary) !important;
     }
     
     .product-grid:not(.compact-view):not(.grid-view) .price-sub {
@@ -3095,10 +3094,10 @@ body {
         width: 100% !important;
         max-width: 180px !important;
         height: 34px !important;
-        font-size: 0.78rem !important;
+        font-size: 0.68rem !important;
         font-weight: 800 !important;
         border-radius: 18px !important;
-        padding: 0 14px !important;
+        padding: 0 10px !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
@@ -8459,9 +8458,9 @@ body {
 }
 
 .product-grid.grid-view .add-to-cart-btn {
-    padding: 6px 8px;
+    padding: 6px 6px;
     border-radius: 999px;
-    font-size: 0.68rem;
+    font-size: 0.6rem;
     white-space: nowrap;
 }
 
