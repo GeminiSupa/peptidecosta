@@ -2902,6 +2902,7 @@ export default function CatalogPage() {
                         </button>
                       )}
                   </div>
+                  </div>
                 </div>
               );
             })}
