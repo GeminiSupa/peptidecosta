@@ -2405,7 +2405,11 @@ Core Rules:
 
   const getCartValue = (acart) => {
     if (!acart.cart_data) return 0;
-    return acart.cart_data.reduce((acc, item) => acc + ((item.priceUsd || 0) * (item.qty || 0)), 0);
+    return acart.cart_data.reduce((acc, item) => {
+      const rawPrice = item.priceUsd || item.price_usd || item.price || '0';
+      const price = typeof rawPrice === 'string' ? parseFloat(rawPrice.replace(/[^0-9.]/g, '')) : Number(rawPrice);
+      return acc + ((price || 0) * (item.qty || 0));
+    }, 0);
   };
 
   const handleExportCartsCSV = (filteredCartsToExport) => {
@@ -5040,6 +5044,214 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 </div>
               </div>
             )}
+
+            {/* MINI REVENUE DASHBOARD & FILTERS */}
+            {abandonedCarts.length > 0 && (() => {
+              const totalAbandonedValue = abandonedCarts.reduce((sum, c) => sum + getCartValue(c), 0);
+              const recoveredCarts = abandonedCarts.filter(c => c.recovery_status === 'recovered');
+              const totalRecoveredValue = recoveredCarts.reduce((sum, c) => sum + getCartValue(c), 0);
+              const recoveryRate = abandonedCarts.length > 0 ? ((recoveredCarts.length / abandonedCarts.length) * 100).toFixed(1) : '0.0';
+
+              return (
+                <div style={{ marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  
+                  {/* Dashboard Cards */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                    gap: '16px' 
+                  }}>
+                    <div style={{ background: 'linear-gradient(145deg, #0f172a, #1e293b)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ color: '#f87171' }}>📉</span> Lost Revenue
+                      </div>
+                      <div style={{ fontSize: '1.75rem', fontWeight: '800', color: '#f8fafc' }}>
+                        ${totalAbandonedValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    
+                    <div style={{ background: 'linear-gradient(145deg, #0f172a, #1e293b)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ color: '#4ade80' }}>📈</span> Recovered Revenue
+                      </div>
+                      <div style={{ fontSize: '1.75rem', fontWeight: '800', color: '#f8fafc' }}>
+                        ${totalRecoveredValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                    
+                    <div style={{ background: 'linear-gradient(145deg, #0f172a, #1e293b)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                      <div style={{ fontSize: '0.8rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ color: '#38bdf8' }}>⚡</span> Recovery Rate
+                      </div>
+                      <div style={{ fontSize: '1.75rem', fontWeight: '800', color: '#f8fafc' }}>
+                        {recoveryRate}% <span style={{ fontSize: '0.9rem', color: '#94a3b8', fontWeight: 'normal' }}>({recoveredCarts.length} saved)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filters Bar */}
+                  <div style={{ 
+                    background: '#0e1626', 
+                    border: '1px solid rgba(255,255,255,0.1)', 
+                    borderRadius: '16px', 
+                    padding: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                      <span style={{ fontSize: '1rem', color: '#e2e8f0', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        🔍 Advanced Filters
+                      </span>
+                      
+                      <button 
+                        onClick={() => {
+                          const exportData = abandonedCarts.filter(c => {
+                            let matchContact = true;
+                            if (cartFilterContact === 'has_email') matchContact = !!c.customer_email;
+                            if (cartFilterContact === 'has_phone') matchContact = !!c.customer_phone;
+                            if (cartFilterContact === 'actionable') matchContact = !!c.customer_email || !!c.customer_phone;
+                            if (cartFilterContact === 'none') matchContact = !c.customer_email && !c.customer_phone;
+                            
+                            let matchStatus = true;
+                            if (cartFilterStatus === 'not_contacted') matchStatus = !c.recovery_status || c.recovery_status === 'not_contacted';
+                            if (cartFilterStatus === 'contacted') matchStatus = c.recovery_status === 'contacted_email' || c.recovery_status === 'contacted_whatsapp';
+                            if (cartFilterStatus === 'recovered') matchStatus = c.recovery_status === 'recovered';
+                            
+                            let matchValue = true;
+                            const val = getCartValue(c);
+                            if (cartFilterValue === 'high') matchValue = val >= 100;
+                            if (cartFilterValue === 'low') matchValue = val < 100;
+                            
+                            return matchContact && matchStatus && matchValue;
+                          });
+                          handleExportCartsCSV(exportData);
+                        }}
+                        style={{ 
+                          padding: '8px 16px', 
+                          background: 'linear-gradient(90deg, #38bdf8 0%, #2563eb 100%)', 
+                          border: 'none', 
+                          color: '#ffffff', 
+                          borderRadius: '8px', 
+                          fontSize: '0.85rem', 
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 8px rgba(56, 189, 248, 0.4)',
+                          transition: 'transform 0.2s'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                        onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        📥 Export Filtered CSV
+                      </button>
+                    </div>
+
+                    <div style={{ 
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                      gap: '16px'
+                    }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold', letterSpacing: '0.05em' }}>CONTACT INFO</label>
+                        <select 
+                          value={cartFilterContact} 
+                          onChange={(e) => setCartFilterContact(e.target.value)} 
+                          style={{ 
+                            padding: '12px 14px', 
+                            borderRadius: '10px', 
+                            background: 'rgba(255,255,255,0.03)', 
+                            border: '1px solid rgba(255,255,255,0.1)', 
+                            color: '#f8fafc', 
+                            fontSize: '0.9rem',
+                            outline: 'none',
+                            cursor: 'pointer',
+                            appearance: 'none',
+                            backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")',
+                            backgroundRepeat: 'no-repeat',
+                            backgroundPosition: 'right 14px top 50%',
+                            backgroundSize: '10px auto',
+                            transition: 'border-color 0.2s'
+                          }}
+                          onFocus={(e) => e.target.style.borderColor = '#38bdf8'}
+                          onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                        >
+                          <option value="all" style={{ background: '#0f172a' }}>All Contacts</option>
+                          <option value="has_email" style={{ background: '#0f172a' }}>Has Email Address</option>
+                          <option value="has_phone" style={{ background: '#0f172a' }}>Has Phone Number</option>
+                          <option value="actionable" style={{ background: '#0f172a' }}>Actionable (Email or Phone)</option>
+                          <option value="none" style={{ background: '#0f172a' }}>No Contact Info</option>
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold', letterSpacing: '0.05em' }}>RECOVERY STATUS</label>
+                        <select 
+                          value={cartFilterStatus} 
+                          onChange={(e) => setCartFilterStatus(e.target.value)} 
+                          style={{ 
+                            padding: '12px 14px', 
+                            borderRadius: '10px', 
+                            background: 'rgba(255,255,255,0.03)', 
+                            border: '1px solid rgba(255,255,255,0.1)', 
+                            color: '#f8fafc', 
+                            fontSize: '0.9rem',
+                            outline: 'none',
+                            cursor: 'pointer',
+                            appearance: 'none',
+                            backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")',
+                            backgroundRepeat: 'no-repeat',
+                            backgroundPosition: 'right 14px top 50%',
+                            backgroundSize: '10px auto',
+                            transition: 'border-color 0.2s'
+                          }}
+                          onFocus={(e) => e.target.style.borderColor = '#38bdf8'}
+                          onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                        >
+                          <option value="all" style={{ background: '#0f172a' }}>All Statuses</option>
+                          <option value="not_contacted" style={{ background: '#0f172a' }}>Pending (Not Contacted)</option>
+                          <option value="contacted" style={{ background: '#0f172a' }}>Contacted</option>
+                          <option value="recovered" style={{ background: '#0f172a' }}>Recovered</option>
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 'bold', letterSpacing: '0.05em' }}>CART VALUE</label>
+                        <select 
+                          value={cartFilterValue} 
+                          onChange={(e) => setCartFilterValue(e.target.value)} 
+                          style={{ 
+                            padding: '12px 14px', 
+                            borderRadius: '10px', 
+                            background: 'rgba(255,255,255,0.03)', 
+                            border: '1px solid rgba(255,255,255,0.1)', 
+                            color: '#f8fafc', 
+                            fontSize: '0.9rem',
+                            outline: 'none',
+                            cursor: 'pointer',
+                            appearance: 'none',
+                            backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%2394a3b8%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")',
+                            backgroundRepeat: 'no-repeat',
+                            backgroundPosition: 'right 14px top 50%',
+                            backgroundSize: '10px auto',
+                            transition: 'border-color 0.2s'
+                          }}
+                          onFocus={(e) => e.target.style.borderColor = '#38bdf8'}
+                          onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                        >
+                          <option value="all" style={{ background: '#0f172a' }}>All Values</option>
+                          <option value="high" style={{ background: '#0f172a' }}>High Value (&gt;$100)</option>
+                          <option value="low" style={{ background: '#0f172a' }}>Low Value (&lt;$100)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {loadingAbandonedCarts ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Loading carts...</div>
