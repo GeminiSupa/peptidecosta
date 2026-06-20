@@ -42,8 +42,9 @@ export default async function RootLayout({ children }) {
   
   return (
     <html lang="es" className={`${montserrat.variable} ${inter.variable}`} suppressHydrationWarning>
-      <head>
+      <head suppressHydrationWarning>
         <script
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
@@ -69,6 +70,7 @@ export default async function RootLayout({ children }) {
         />
         <script
           type="application/ld+json"
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",

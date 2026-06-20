@@ -172,7 +172,7 @@ export default function BroadcastsPanel() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
           <label style={{ fontWeight: 'bold', color: '#e2e8f0', fontSize: '1.05rem' }}>Message Composer</label>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Supports {{name}} and *bold*</span>
+            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Supports {"{{name}}"} and *bold*</span>
             <button 
               onClick={handleDraftAI}
               disabled={isDrafting}
