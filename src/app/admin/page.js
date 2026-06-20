@@ -5028,7 +5028,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       <th style={{ padding: '10px 12px', cursor: 'pointer' }} onClick={() => setCartSort(cartSort === 'date_desc' ? 'date_asc' : 'date_desc')}>
                         Last Updated {cartSort === 'date_desc' ? '↓' : cartSort === 'date_asc' ? '↑' : ''}
                       </th>
-                      <th style={{ padding: '10px 12px' }}>Customer</th>
+                      <th style={{ padding: '10px 12px', cursor: 'pointer' }} onClick={() => setCartSort(cartSort === 'customer_asc' ? 'customer_desc' : 'customer_asc')}>
+                        Customer {cartSort === 'customer_asc' ? '↑' : cartSort === 'customer_desc' ? '↓' : ''}
+                      </th>
                       <th style={{ padding: '10px 12px' }}>Cart Details</th>
                       <th style={{ padding: '10px 12px', cursor: 'pointer' }} onClick={() => setCartSort(cartSort === 'recovery_asc' ? 'recovery_desc' : 'recovery_asc')}>
                         Recovery Status {cartSort === 'recovery_asc' ? '↑' : cartSort === 'recovery_desc' ? '↓' : ''}
@@ -5044,7 +5046,19 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           const statusA = a.recovery_status || '';
                           const statusB = b.recovery_status || '';
                           const res = statusA.localeCompare(statusB);
-                          return cartSort === 'recovery_asc' ? res : -res;
+                          if (res !== 0) return cartSort === 'recovery_asc' ? res : -res;
+                          
+                          // Secondary sort: automatically float carts with emails/phones to the top of their status group
+                          const hasContactA = (a.email || a.phone) ? 1 : 0;
+                          const hasContactB = (b.email || b.phone) ? 1 : 0;
+                          return hasContactB - hasContactA;
+                        });
+                      } else if (cartSort === 'customer_asc' || cartSort === 'customer_desc') {
+                        sortedCarts.sort((a, b) => {
+                          const contactA = (a.email || '') + (a.phone || '');
+                          const contactB = (b.email || '') + (b.phone || '');
+                          const res = contactA.localeCompare(contactB);
+                          return cartSort === 'customer_asc' ? res : -res;
                         });
                       } else {
                         sortedCarts.sort((a, b) => {
