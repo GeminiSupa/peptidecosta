@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader } from 'lucide-react';
+import { adminFetch } from '@/lib/adminApi';
 
 export default function BroadcastsPanel() {
   const [audience, setAudience] = useState('all_customers');
@@ -16,7 +17,7 @@ export default function BroadcastsPanel() {
 
     setIsDrafting(true);
     try {
-      const res = await fetch('/api/ai', {
+      const res = await adminFetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -44,7 +45,7 @@ export default function BroadcastsPanel() {
     setIsSending(true);
     setResult(null);
     try {
-      const res = await fetch('/api/admin/broadcast', {
+      const res = await adminFetch('/api/admin/broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -74,7 +75,7 @@ export default function BroadcastsPanel() {
     setIsSending(true);
     setResult(null);
     try {
-      const res = await fetch('/api/admin/broadcast', {
+      const res = await adminFetch('/api/admin/broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 

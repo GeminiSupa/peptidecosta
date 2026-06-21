@@ -163,7 +163,7 @@ export default function AbandonedCartEditPanel({ cart, products = [], onClose, o
       }
 
       // Outside 24h window — fall back to approved template (same as bulk Send WA)
-      const templateRes = await fetch('/api/abandoned-cart-whatsapp', {
+      const templateRes = await adminFetch('/api/abandoned-cart-whatsapp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

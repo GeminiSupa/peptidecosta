@@ -424,7 +424,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
       .filter(c => c.phone);
 
     try {
-      const res = await fetch('/api/whatsapp/broadcast', {
+      const res = await adminFetch('/api/whatsapp/broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipients, message: broadcastMessage.trim() })
