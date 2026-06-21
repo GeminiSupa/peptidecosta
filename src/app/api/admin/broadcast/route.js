@@ -48,7 +48,7 @@ async function sendWhatsApp(to, message) {
 }
 
 // Helper for sending Emails
-async function sendEmail(to, message) {
+async function sendEmail(to, message, subject) {
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return false;
 
   try {
@@ -68,7 +68,7 @@ async function sendEmail(to, message) {
     const res = await transporter.sendMail({
       from: `Peptides Costa Rica <info@peptidescostarica.net>`,
       to: to.trim(),
-      subject: 'Flash Sale! Exclusive Offer Inside',
+      subject: subject || 'Flash Sale! Exclusive Offer Inside',
       text: message
     });
     return !!res.messageId;
@@ -175,7 +175,7 @@ export async function POST(request) {
       }
       
       if (channels.email && contact.email) {
-        sentEmail = await sendEmail(contact.email, message);
+        sentEmail = await sendEmail(contact.email, message, channels.emailSubject);
       }
 
       if (sentWhatsapp || sentEmail) queuedCount++;

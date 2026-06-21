@@ -7,6 +7,7 @@ export default function BroadcastsPanel() {
   const [customContacts, setCustomContacts] = useState('');
   const [channels, setChannels] = useState({ whatsapp: true, email: false });
   const [message, setMessage] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [scheduledBroadcasts, setScheduledBroadcasts] = useState([]);
   const [isSending, setIsSending] = useState(false);
@@ -78,7 +79,7 @@ export default function BroadcastsPanel() {
         body: JSON.stringify({ 
           audience: 'test',
           testContact: testNumber,
-          channels,
+          channels: { ...channels, emailSubject },
           message: `[TEST BROADCAST]\n${message}`
         })
       });
@@ -108,7 +109,7 @@ export default function BroadcastsPanel() {
         body: JSON.stringify({ 
           audience, 
           customContacts: audience === 'custom' ? customContacts : undefined,
-          channels, 
+          channels: { ...channels, emailSubject }, 
           message,
           scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null
         })
@@ -303,6 +304,20 @@ export default function BroadcastsPanel() {
             </button>
           </div>
         </div>
+        
+        {channels.email && (
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Email Subject</label>
+            <input 
+              type="text"
+              className="admin-input"
+              style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '12px 16px', borderRadius: '8px', fontSize: '0.95rem' }}
+              placeholder="e.g. Flash Sale! Exclusive Offer Inside"
+              value={emailSubject}
+              onChange={e => setEmailSubject(e.target.value)}
+            />
+          </div>
+        )}
         
         <textarea
           className="admin-input"
