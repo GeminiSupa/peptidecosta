@@ -12,7 +12,7 @@
 //   ALLOWED_ORIGINS: for browser-based callers (e.g. a future chat widget).
 //                    Full origins like 'https://bot.yourdomain.com'.
 export const ALLOWED_IPS = [
-  '89.117.149.101',
+  '195.26.242.166',
 ];
 
 export const ALLOWED_ORIGINS = [
