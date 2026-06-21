@@ -77,12 +77,41 @@ async function sendEmail(to, message) {
   }
 }
 
+export async function DELETE(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
+    
+    const { error } = await supabase.from('scheduled_broadcasts').delete().eq('id', id);
+    if (error) throw error;
+    
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error('Delete Broadcast Error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+  }
+}
+
 export async function POST(request) {
   try {
-    const { audience, channels, message, testContact, customContacts } = await request.json();
+    const { audience, channels, message, testContact, customContacts, scheduledAt } = await request.json();
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+    }
+
+    if (scheduledAt && audience !== 'test') {
+      const { error } = await supabase.from('scheduled_broadcasts').insert({
+        audience,
+        custom_contacts: customContacts || null,
+        channels,
+        message,
+        scheduled_at: scheduledAt,
+        status: 'pending'
+      });
+      if (error) throw error;
+      return NextResponse.json({ success: true, text: 'Broadcast scheduled successfully', queuedCount: 1 });
     }
 
     const targets = new Map(); // Use Map to deduplicate by phone/email

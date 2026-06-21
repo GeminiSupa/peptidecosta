@@ -343,3 +343,21 @@ CREATE INDEX IF NOT EXISTS idx_orders_whatsapp_wa_id ON public.orders (whatsapp_
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_id_type TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS customer_id_number TEXT;
 
+
+-- =========================================================================
+-- 9. SCHEDULED BROADCASTS TABLE
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS public.scheduled_broadcasts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  audience TEXT NOT NULL,
+  custom_contacts TEXT,
+  channels JSONB NOT NULL,
+  message TEXT NOT NULL,
+  scheduled_at TIMESTAMPTZ NOT NULL,
+  status TEXT DEFAULT 'pending', -- 'pending', 'processing', 'completed', 'failed'
+  created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.scheduled_broadcasts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all access for service role on scheduled_broadcasts" 
+ON public.scheduled_broadcasts FOR ALL USING (true);

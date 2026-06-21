@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader, Calendar, Trash2 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
 export default function BroadcastsPanel() {
@@ -7,9 +7,36 @@ export default function BroadcastsPanel() {
   const [customContacts, setCustomContacts] = useState('');
   const [channels, setChannels] = useState({ whatsapp: true, email: false });
   const [message, setMessage] = useState('');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [scheduledBroadcasts, setScheduledBroadcasts] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const [isDrafting, setIsDrafting] = useState(false);
   const [result, setResult] = useState(null);
+
+  const fetchScheduled = async () => {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+      const { data } = await supabase.from('scheduled_broadcasts').select('*').eq('status', 'pending').order('scheduled_at', { ascending: true });
+      if (data) setScheduledBroadcasts(data);
+    } catch (e) {
+      console.error('Failed to fetch scheduled broadcasts', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchScheduled();
+  }, []);
+
+  const handleDeleteScheduled = async (id) => {
+    if (!window.confirm("Delete this scheduled broadcast?")) return;
+    try {
+      const res = await adminFetch(`/api/admin/broadcast?id=${id}`, { method: 'DELETE' });
+      if (res.ok) fetchScheduled();
+    } catch(err) {
+      alert("Error deleting: " + err.message);
+    }
+  };
 
   const handleDraftAI = async () => {
     const prompt = window.prompt("What is this broadcast about? (e.g. '20% flash sale on Tirzepatide using code FLASH20')");
@@ -82,13 +109,16 @@ export default function BroadcastsPanel() {
           audience, 
           customContacts: audience === 'custom' ? customContacts : undefined,
           channels, 
-          message 
+          message,
+          scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null
         })
       });
       const data = await res.json();
       if (res.ok) {
-        setResult({ success: true, text: `Broadcast initiated successfully. Queued ${data.queuedCount} messages.` });
+        setResult({ success: true, text: data.text || `Broadcast initiated successfully. Queued ${data.queuedCount} messages.` });
         if (audience === 'custom') setCustomContacts('');
+        setScheduledAt('');
+        fetchScheduled();
       } else {
         setResult({ success: false, text: data.error || 'Failed to start broadcast.' });
       }
@@ -222,6 +252,21 @@ export default function BroadcastsPanel() {
           </div>
         </div>
 
+        <div>
+          <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px', color: '#e2e8f0', fontSize: '0.95rem' }}>Schedule Time (Optional)</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#0f172a', padding: '8px 16px', borderRadius: '8px', border: '1px solid #334155' }}>
+            <Calendar size={18} color="#94a3b8" />
+            <input 
+              type="datetime-local" 
+              className="admin-input"
+              value={scheduledAt}
+              onChange={e => setScheduledAt(e.target.value)}
+              style={{ flexGrow: 1, background: 'transparent', border: 'none', color: '#f8fafc', padding: 0 }}
+            />
+          </div>
+          <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Leave empty to blast immediately.</p>
+        </div>
+
       </div>
 
       {/* Message Composer */}
@@ -278,7 +323,7 @@ export default function BroadcastsPanel() {
           disabled={isSending || !message || (!channels.whatsapp && !channels.email)}
           style={{ background: '#0ea5e9', color: '#fff', border: 'none', padding: '12px 32px', fontSize: '1rem', fontWeight: 'bold', borderRadius: '8px', boxShadow: '0 4px 14px rgba(14, 165, 233, 0.3)' }}
         >
-          {isSending ? 'Broadcasting...' : 'Blast Broadcast Now'}
+          {isSending ? (scheduledAt ? 'Scheduling...' : 'Broadcasting...') : (scheduledAt ? 'Schedule Broadcast' : 'Blast Broadcast Now')}
         </button>
       </div>
 
@@ -296,6 +341,39 @@ export default function BroadcastsPanel() {
           gap: '10px'
         }}>
           {result.success ? '✅' : '❌'} {result.text}
+        </div>
+      )}
+      {scheduledBroadcasts.length > 0 && (
+        <div style={{ marginTop: '32px', padding: '24px', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '16px', border: '1px solid rgba(56, 189, 248, 0.15)' }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: '1.1rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Calendar size={18} color="#38bdf8" /> Scheduled Broadcasts
+          </h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {scheduledBroadcasts.map(sb => (
+              <div key={sb.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f172a', padding: '12px 16px', borderRadius: '8px', border: '1px solid #334155' }}>
+                <div style={{ flexGrow: 1, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '6px' }}>
+                    <span style={{ fontWeight: 'bold', color: '#38bdf8', fontSize: '0.9rem' }}>
+                      {new Date(sb.scheduled_at).toLocaleString()}
+                    </span>
+                    <span style={{ color: '#94a3b8', fontSize: '0.85rem', textTransform: 'capitalize' }}>
+                      To: {sb.audience.replace('_', ' ')} {sb.channels?.whatsapp ? '(WA)' : ''} {sb.channels?.email ? '(Email)' : ''}
+                    </span>
+                  </div>
+                  <div style={{ color: '#cbd5e1', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {sb.message}
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleDeleteScheduled(sb.id)}
+                  style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', padding: '8px' }}
+                  title="Delete Scheduled Broadcast"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
