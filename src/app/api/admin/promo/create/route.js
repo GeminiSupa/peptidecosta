@@ -10,7 +10,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const { code, discount_pct, is_flash_sale, target_product } = body;
+    const { code, discount_pct, is_flash_sale, target_product, valid_from, valid_until } = body;
 
     if (!code || !discount_pct) {
       return NextResponse.json({ error: 'Code and discount_pct are required' }, { status: 400 });
@@ -26,6 +26,8 @@ export async function POST(request) {
         discount_pct,
         is_flash_sale: is_flash_sale || false,
         target_product: target_product || null,
+        valid_from: valid_from || null,
+        valid_until: valid_until || null,
         is_active: true
       }])
       .select('*')

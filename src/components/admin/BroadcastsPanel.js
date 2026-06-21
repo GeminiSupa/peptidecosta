@@ -165,18 +165,35 @@ export default function BroadcastsPanel() {
             <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Target Products (comma separated, leave blank for all products)</label>
             <input type="text" id="flash-products" className="admin-input" placeholder="e.g. Tirzepatide, Retatrutide 40mg" style={{ width: '100%' }} />
           </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid From (Optional)</label>
+            <input type="datetime-local" id="flash-valid-from" className="admin-input" style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid Until (Optional)</label>
+            <input type="datetime-local" id="flash-valid-until" className="admin-input" style={{ width: '100%' }} />
+          </div>
           <div style={{ gridColumn: '1 / -1' }}>
             <button
               onClick={async () => {
                 const code = document.getElementById('flash-code').value;
                 const discount_pct = parseFloat(document.getElementById('flash-discount').value);
                 const target_product = document.getElementById('flash-products').value;
+                const valid_from = document.getElementById('flash-valid-from').value;
+                const valid_until = document.getElementById('flash-valid-until').value;
                 if (!code) return alert('Enter a promo code name');
                 try {
                   const res = await adminFetch('/api/admin/promo/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code, discount_pct, is_flash_sale: !!target_product, target_product })
+                    body: JSON.stringify({ 
+                      code, 
+                      discount_pct, 
+                      is_flash_sale: !!target_product, 
+                      target_product,
+                      valid_from: valid_from ? new Date(valid_from).toISOString() : null,
+                      valid_until: valid_until ? new Date(valid_until).toISOString() : null
+                    })
                   });
                   const data = await res.json();
                   if (res.ok) {
