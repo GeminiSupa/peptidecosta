@@ -1572,6 +1572,8 @@ Core Rules:
             originalPriceUsd: item.original_price_usd || '',
             originalPriceCrc: item.original_price_crc || '',
             discount: item.discount || '',
+            saleStartTime: item.sale_start_time ? new Date(new Date(item.sale_start_time).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '',
+            saleEndTime: item.sale_end_time ? new Date(new Date(item.sale_end_time).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '',
             status: item.status || 'In Stock',
             coa: item.coa || '',
             imageUrl: item.image_url || '',
@@ -1998,6 +2000,8 @@ Core Rules:
       originalPriceUsd: '',
       originalPriceCrc: '',
       discount: 'Buy 5+ vials, get 15% off',
+      saleStartTime: '',
+      saleEndTime: '',
       status: 'In Stock',
       inventoryCount: null,
       lowStockThreshold: 5,
@@ -3243,7 +3247,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             price_crc: p.priceCrc,
             original_price_usd: p.originalPriceUsd || null,
             original_price_crc: p.originalPriceCrc || null,
-            discount: p.discount,
+            discount: p.discount || null,
+            sale_start_time: p.saleStartTime ? new Date(p.saleStartTime).toISOString() : null,
+            sale_end_time: p.saleEndTime ? new Date(p.saleEndTime).toISOString() : null,
             status: p.status,
             inventory_count: p.inventoryCount === '' ? null : p.inventoryCount,
             low_stock_threshold: p.lowStockThreshold === '' ? 5 : p.lowStockThreshold,
@@ -4024,6 +4030,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       <th style={{ width: '100px' }}>Price (CRC)</th>
                       <th style={{ width: '110px' }}>Orig. Price (USD)</th>
                       <th style={{ width: '110px' }}>Orig. Price (CRC)</th>
+                      <th style={{ width: '130px' }}>Sale Start</th>
+                      <th style={{ width: '130px' }}>Sale End</th>
                       <th style={{ minWidth: '180px' }}>Stock Status</th>
                       <th style={{ width: '100px' }}>Inventory Count</th>
                       <th style={{ width: '100px' }}>Low Stock Alert</th>
@@ -4147,6 +4155,28 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           >
                             {p.originalPriceCrc}
                           </div>
+                        </td>
+
+                        {/* Sale Start Time */}
+                        <td data-label="Sale Start">
+                          <input 
+                            type="datetime-local" 
+                            className="cell-input"
+                            value={p.saleStartTime || ''}
+                            onChange={(e) => handleCellChange(p.id, 'saleStartTime', e.target.value)}
+                            style={{ background: 'transparent', color: '#fff', border: 'none', width: '100%', fontSize: '0.75rem', outline: 'none' }}
+                          />
+                        </td>
+
+                        {/* Sale End Time */}
+                        <td data-label="Sale End">
+                          <input 
+                            type="datetime-local" 
+                            className="cell-input"
+                            value={p.saleEndTime || ''}
+                            onChange={(e) => handleCellChange(p.id, 'saleEndTime', e.target.value)}
+                            style={{ background: 'transparent', color: '#fff', border: 'none', width: '100%', fontSize: '0.75rem', outline: 'none' }}
+                          />
                         </td>
 
                         {/* Status */}
