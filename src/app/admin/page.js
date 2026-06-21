@@ -6038,7 +6038,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {/* Business Links Settings */}
               <div style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Link size={18} color="#3b82f6" /> Global Business Links
+                  <Link2 size={18} color="#3b82f6" /> Global Business Links
                 </h3>
                 
                 {loadingSettings ? (

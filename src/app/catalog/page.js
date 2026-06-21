@@ -1482,8 +1482,9 @@ export default function CatalogPage() {
     let targetTotal = getCartTotal();
     
     if (promoData.is_flash_sale && promoData.target_product) {
+      const targets = promoData.target_product.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
       targetTotal = cart
-        .filter(item => item.product.toLowerCase().includes(promoData.target_product.toLowerCase()))
+        .filter(item => targets.some(t => item.product.toLowerCase().includes(t)))
         .reduce((sum, item) => sum + (currency === 'USD' ? item.priceUsd : item.priceCrc) * item.qty, 0);
     }
     
@@ -1515,7 +1516,8 @@ export default function CatalogPage() {
       const data = await res.json();
       if (data.valid) {
         if (data.is_flash_sale && data.target_product) {
-          const hasTargetItem = cart.some(item => item.product.toLowerCase().includes(data.target_product.toLowerCase()));
+          const targets = data.target_product.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+          const hasTargetItem = cart.some(item => targets.some(t => item.product.toLowerCase().includes(t)));
           if (!hasTargetItem) {
             setPromoData(null);
             setPromoError(lang === 'en' ? `This promo requires ${data.target_product} in your cart.` : `Este código requiere ${data.target_product} en el carrito.`);

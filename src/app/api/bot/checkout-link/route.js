@@ -215,6 +215,30 @@ export async function POST(req) {
     return json({ error: 'Could not create order' }, 500);
   }
 
+  // Convert any abandoned carts for this user
+  const updatePromises = [];
+  if (customerPhone) {
+    updatePromises.push(
+      supabase
+        .from('abandoned_carts')
+        .update({ status: 'converted' })
+        .eq('customer_phone', customerPhone)
+    );
+  }
+  if (customerEmail) {
+    updatePromises.push(
+      supabase
+        .from('abandoned_carts')
+        .update({ status: 'converted' })
+        .eq('customer_email', customerEmail)
+    );
+  }
+  if (updatePromises.length > 0) {
+    Promise.all(updatePromises).catch((err) => {
+      console.warn('[bot/checkout-link] Abandoned cart update failed:', err.message);
+    });
+  }
+
   // ─── Generate payment link ────────────────────────────────────────────────
   // SINPE is settled in CRC; mirror catalog behaviour of converting if needed.
   const linkCurrency = paymentMethod === 'sinpe' ? 'CRC' : currency;

@@ -108,13 +108,36 @@ export async function POST(request) {
     }
     // --------------------------------------------------------
 
+    const updatePromises = [];
     if (body.sessionId) {
-      const { error: cartErr } = await supabase
-        .from('abandoned_carts')
-        .update({ status: 'converted' })
-        .eq('session_id', body.sessionId);
+      updatePromises.push(
+        supabase
+          .from('abandoned_carts')
+          .update({ status: 'converted' })
+          .eq('session_id', body.sessionId)
+      );
+    }
+    if (order.customer_phone) {
+      updatePromises.push(
+        supabase
+          .from('abandoned_carts')
+          .update({ status: 'converted' })
+          .eq('customer_phone', order.customer_phone)
+      );
+    }
+    if (order.customer_email) {
+      updatePromises.push(
+        supabase
+          .from('abandoned_carts')
+          .update({ status: 'converted' })
+          .eq('customer_email', order.customer_email)
+      );
+    }
 
-      if (cartErr) {
+    if (updatePromises.length > 0) {
+      try {
+        await Promise.all(updatePromises);
+      } catch (cartErr) {
         console.warn('[orders/create] Abandoned cart update failed:', cartErr.message);
       }
     }

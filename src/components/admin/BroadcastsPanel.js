@@ -112,6 +112,62 @@ export default function BroadcastsPanel() {
         </div>
       </div>
 
+      {/* Flash Sale Generator Section */}
+      <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '24px', borderRadius: '16px', marginBottom: '24px', border: '1px dashed rgba(16, 185, 129, 0.3)' }}>
+        <h3 style={{ margin: '0 0 16px', fontSize: '1.05rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Sparkles size={18} /> Quick Flash Sale Generator
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'flex-end' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Promo Code Name</label>
+            <input type="text" id="flash-code" className="admin-input" placeholder="e.g. FATHERSDAY" style={{ width: '100%', textTransform: 'uppercase' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Discount %</label>
+            <select id="flash-discount" className="admin-input" style={{ width: '100%' }}>
+              <option value="0.10">10% Off</option>
+              <option value="0.15">15% Off</option>
+              <option value="0.20">20% Off</option>
+              <option value="0.25">25% Off</option>
+            </select>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Target Products (comma separated, leave blank for all products)</label>
+            <input type="text" id="flash-products" className="admin-input" placeholder="e.g. Tirzepatide, Retatrutide 40mg" style={{ width: '100%' }} />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <button
+              onClick={async () => {
+                const code = document.getElementById('flash-code').value;
+                const discount_pct = parseFloat(document.getElementById('flash-discount').value);
+                const target_product = document.getElementById('flash-products').value;
+                if (!code) return alert('Enter a promo code name');
+                try {
+                  const res = await adminFetch('/api/admin/promo/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code, discount_pct, is_flash_sale: !!target_product, target_product })
+                  });
+                  const data = await res.json();
+                  if (res.ok) {
+                    alert(`✅ Flash Sale promo code ${code} created successfully!`);
+                    setMessage(prev => `${prev}\n\nUse code ${code} at checkout for ${discount_pct * 100}% off!`.trim());
+                  } else {
+                    alert(`❌ Failed to create promo code: ${data.error}`);
+                  }
+                } catch(err) {
+                  alert(`❌ Error: ${err.message}`);
+                }
+              }}
+              className="admin-btn"
+              style={{ background: '#10b981', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              Generate & Insert Into Message
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Configuration Section */}
       <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '24px', borderRadius: '16px', marginBottom: '24px', border: '1px solid rgba(56, 189, 248, 0.15)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
         

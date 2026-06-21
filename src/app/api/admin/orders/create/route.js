@@ -52,6 +52,32 @@ export async function POST(request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const updatePromises = [];
+    if (row.customer_phone) {
+      updatePromises.push(
+        supabase
+          .from('abandoned_carts')
+          .update({ status: 'converted' })
+          .eq('customer_phone', row.customer_phone)
+      );
+    }
+    if (row.customer_email) {
+      updatePromises.push(
+        supabase
+          .from('abandoned_carts')
+          .update({ status: 'converted' })
+          .eq('customer_email', row.customer_email)
+      );
+    }
+
+    if (updatePromises.length > 0) {
+      try {
+        await Promise.all(updatePromises);
+      } catch (cartErr) {
+        console.warn('[admin/orders/create] Abandoned cart update failed:', cartErr.message);
+      }
+    }
+
     return NextResponse.json({ ok: true, order: data });
   } catch (err) {
     console.error('[admin/orders/create]', err);
