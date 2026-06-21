@@ -1000,23 +1000,30 @@ export default function CatalogPage() {
         }
 
         if (!error && data && data.length > 0) {
-          loadedProducts = data.map(item => ({
-            product: item.product,
-            category: item.category,
-            priceUsd: item.price_usd,
-            priceCrc: item.price_crc,
-            originalPriceUsd: item.original_price_usd,
-            originalPriceCrc: item.original_price_crc,
-            discount: item.discount,
-            status: item.inventory_count === 0 ? 'Out of Stock' : item.status,
-            inventoryCount: item.inventory_count !== undefined ? item.inventory_count : null,
-            lowStockThreshold: item.low_stock_threshold !== undefined ? item.low_stock_threshold : 5,
-            coa: item.coa,
-            imageUrl: item.image_url || getProductFallbackImage(item.product, item.category),
-            descriptionEn: item.description_en || '',
-            descriptionEs: item.description_es || '',
-            emoji: item.emoji || getEmojiForCategory(item.category)
-          }));
+          const now = new Date();
+          loadedProducts = data.map(item => {
+            const isSaleActive = item.discount && 
+              (!item.sale_start_time || new Date(item.sale_start_time) <= now) &&
+              (!item.sale_end_time || new Date(item.sale_end_time) >= now);
+
+            return {
+              product: item.product,
+              category: item.category,
+              priceUsd: item.price_usd,
+              priceCrc: item.price_crc,
+              originalPriceUsd: isSaleActive ? item.original_price_usd : null,
+              originalPriceCrc: isSaleActive ? item.original_price_crc : null,
+              discount: isSaleActive ? item.discount : null,
+              status: item.inventory_count === 0 ? 'Out of Stock' : item.status,
+              inventoryCount: item.inventory_count !== undefined ? item.inventory_count : null,
+              lowStockThreshold: item.low_stock_threshold !== undefined ? item.low_stock_threshold : 5,
+              coa: item.coa,
+              imageUrl: item.image_url || getProductFallbackImage(item.product, item.category),
+              descriptionEn: item.description_en || '',
+              descriptionEs: item.description_es || '',
+              emoji: item.emoji || getEmojiForCategory(item.category)
+            };
+          });
           dbConnected = true;
           setIsDbBacked(true);
         }

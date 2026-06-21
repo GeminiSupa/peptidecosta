@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS public.products (
     original_price_usd TEXT,
     original_price_crc TEXT,
     discount TEXT,
+    sale_start_time TIMESTAMPTZ,
+    sale_end_time TIMESTAMPTZ,
     status TEXT NOT NULL DEFAULT 'In Stock',
     coa TEXT,
     image_url TEXT,

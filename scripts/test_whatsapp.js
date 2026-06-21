@@ -37,7 +37,7 @@ async function runTest() {
     console.log(`Using default recipient: ${recipient}`);
   }
 
-  console.log(`\nSending test template message (jaspers_market_plain_text_v1) to ${recipient}...`);
+  console.log(`\nSending test template message (hello_world) to ${recipient}...`);
   
   try {
     const response = await fetch(
@@ -53,7 +53,7 @@ async function runTest() {
           to: recipient,
           type: 'template',
           template: {
-            name: 'jaspers_market_plain_text_v1',
+            name: 'hello_world',
             language: { code: 'en_US' }
           }
         }),
