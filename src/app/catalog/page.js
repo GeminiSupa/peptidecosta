@@ -248,6 +248,13 @@ export default function CatalogPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState(false);
 
+  // CMS Settings State
+  const [cmsSettings, setCmsSettings] = useState({
+    bannerActive: true,
+    bannerTextEn: "Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed. • 🚚 FREE SHIPPING ON ORDERS OVER $200!",
+    bannerTextEs: "Descuento por Volumen: ¡Compra 5+ viales y recibe 15% de descuento, compra 10+ viales y recibe 20%! Puedes combinar diferentes productos. • 🚚 ¡ENVÍO GRATIS EN PEDIDOS SUPERIORES A $200!"
+  });
+
   // Access Gate States
   const [gateAccessGranted, setGateAccessGranted] = useState(false); // Default false for security, updated in useEffect
   const [gateLoading, setGateLoading] = useState(true);
@@ -287,6 +294,27 @@ export default function CatalogPage() {
       setGateAccessGranted(hasAccess);
       setGateLoading(false);
     }
+  }, []);
+
+  // Load Site Settings for Banner
+  useEffect(() => {
+    async function loadSettings() {
+      if (!isSupabaseConfigured || !supabase) return;
+      try {
+        const { data, error } = await supabase.from('site_settings').select('value').eq('id', 'landing_page').single();
+        if (data && data.value) {
+          setCmsSettings(prev => ({
+            ...prev,
+            bannerActive: data.value.bannerActive !== undefined ? data.value.bannerActive : prev.bannerActive,
+            bannerTextEn: data.value.bannerTextEn || prev.bannerTextEn,
+            bannerTextEs: data.value.bannerTextEs || prev.bannerTextEs
+          }));
+        }
+      } catch (err) {
+        console.error('Error loading site settings:', err);
+      }
+    }
+    loadSettings();
   }, []);
 
   const closeSearch = useCallback(() => {
@@ -2382,30 +2410,22 @@ export default function CatalogPage() {
         })(window,document,'script','dataLayer','GTM-M2GVDQ44');`}
       </Script>
       {/* Global Promo Banner */}
-      <div className="promo-banner-global">
-        <div className="promo-banner-ticker">
-          <div className="promo-banner-track">
-            <div className="promo-banner-text">
-              <Sparkles size={14} className="promo-icon" />
-              <span>
-                {lang === 'en'
-                  ? "Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed. • 🚚 FREE SHIPPING ON ORDERS OVER $200!"
-                  : "Descuento por Volumen: ¡Compra 5+ viales y recibe 15% de descuento, compra 10+ viales y recibe 20%! Puedes combinar diferentes productos. • 🚚 ¡ENVÍO GRATIS EN PEDIDOS SUPERIORES A $200!"
-                }
-              </span>
-            </div>
-            <div className="promo-banner-text">
-              <Sparkles size={14} className="promo-icon" />
-              <span>
-                {lang === 'en'
-                  ? "Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed. • 🚚 FREE SHIPPING ON ORDERS OVER $200!"
-                  : "Descuento por Volumen: ¡Compra 5+ viales y recibe 15% de descuento, compra 10+ viales y recibe 20%! Puedes combinar diferentes productos. • 🚚 ¡ENVÍO GRATIS EN PEDIDOS SUPERIORES A $200!"
-                }
-              </span>
+      {cmsSettings.bannerActive && (
+        <div className="promo-banner-global">
+          <div className="promo-banner-ticker">
+            <div className="promo-banner-track">
+              <div className="promo-banner-text">
+                <Sparkles size={14} className="promo-icon" />
+                <span>{lang === 'en' ? cmsSettings.bannerTextEn : cmsSettings.bannerTextEs}</span>
+              </div>
+              <div className="promo-banner-text">
+                <Sparkles size={14} className="promo-icon" />
+                <span>{lang === 'en' ? cmsSettings.bannerTextEn : cmsSettings.bannerTextEs}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
       {/* Static Top Header Section */}
       <header className="header-top-section">
         <div className="header-top container">
