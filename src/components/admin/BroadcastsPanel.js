@@ -167,20 +167,31 @@ export default function BroadcastsPanel({ products = [] }) {
             <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>
               Target Products (Select multiple, or leave unselected for all products)
             </label>
-            <select
-              multiple
-              className="admin-input"
-              style={{ width: '100%', minHeight: '120px', padding: '8px' }}
-              value={targetProducts}
-              onChange={(e) => {
-                const selected = Array.from(e.target.selectedOptions, option => option.value);
-                setTargetProducts(selected);
-              }}
+            <div 
+              className="admin-input" 
+              style={{ width: '100%', maxHeight: '180px', overflowY: 'auto', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}
             >
               {products.map(p => (
-                <option key={p.id || p.product} value={p.product}>{p.product}</option>
+                <label key={p.id || p.product} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f8fafc', transition: 'background 0.2s' }}>
+                  <input 
+                    type="checkbox" 
+                    style={{ width: '18px', height: '18px', accentColor: '#10b981', cursor: 'pointer' }}
+                    checked={targetProducts.includes(p.product)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setTargetProducts([...targetProducts, p.product]);
+                      } else {
+                        setTargetProducts(targetProducts.filter(item => item !== p.product));
+                      }
+                    }}
+                  />
+                  <span style={{ fontSize: '0.9rem', fontWeight: targetProducts.includes(p.product) ? 'bold' : 'normal', color: targetProducts.includes(p.product) ? '#34d399' : '#e2e8f0' }}>
+                    {p.product}
+                  </span>
+                </label>
               ))}
-            </select>
+              {products.length === 0 && <div style={{ color: '#94a3b8', fontSize: '0.85rem', padding: '8px' }}>No products found...</div>}
+            </div>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid From (Optional)</label>
