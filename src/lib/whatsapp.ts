@@ -2,6 +2,29 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 
 /**
+ * Cleans and formats a phone number for WhatsApp API usage.
+ * Assumes default country codes based on length (e.g., 8 digits -> Costa Rica +506, 10 digits -> US/Canada +1).
+ * @param phone - The raw phone number string
+ * @returns The cleaned phone number in E.164 format (without the '+')
+ */
+export const cleanPhoneNumber = (phone: string | null | undefined): string => {
+  if (!phone) return '';
+  let cleaned = phone.replace(/[^0-9]/g, '');
+  if (cleaned.startsWith('00')) {
+    cleaned = cleaned.substring(2);
+  }
+  // Standard Costa Rican 8-digit phone number -> prepend '506'
+  if (cleaned.length === 8) {
+    cleaned = '506' + cleaned;
+  }
+  // Standard US/Canada 10-digit phone number -> prepend '1'
+  else if (cleaned.length === 10) {
+    cleaned = '1' + cleaned;
+  }
+  return cleaned;
+};
+
+/**
  * Build a WhatsApp link that includes a source identifier.
  * The source is embedded in the pre‑filled text so the sales team can see where the user came from.
  * Example: buildWhatsAppLink('50684046973', 'homepage')

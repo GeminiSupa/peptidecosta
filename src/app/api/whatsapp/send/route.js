@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { cleanPhoneNumber } from '@/lib/whatsapp';
 
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -30,17 +31,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Meta WhatsApp credentials (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID) are not configured on the server.' }, { status: 500 });
     }
 
-    let cleanPhone = to.replace(/[^0-9]/g, '');
-    
-    // Auto-remove leading zeros if it starts with 00 followed by country code
-    if (cleanPhone.startsWith('00')) {
-      cleanPhone = cleanPhone.substring(2);
-    }
-    
-    // If it's a standard Costa Rican 8-digit phone number, automatically prepend the '506' country code
-    if (cleanPhone.length === 8) {
-      cleanPhone = '506' + cleanPhone;
-    }
+    const cleanPhone = cleanPhoneNumber(to);
 
     if (!cleanPhone || cleanPhone.length < 8 || cleanPhone.length > 15) {
       return NextResponse.json({ 

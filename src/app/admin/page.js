@@ -8,6 +8,7 @@ import 'jspdf-autotable';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
+import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { 
   Lock, LayoutDashboard, ListFilter, Plus, Trash2, Mail, MessageCircle,
   Save, Upload, Download, Share2, Clipboard, LogOut, Check, 
@@ -1048,8 +1049,7 @@ Core Rules:
     setLeadOutreachSending(true);
     try {
       if (leadOutreachMethod === 'whatsapp') {
-        const cleanPhone = leadOutreachActive.contact_value.replace(/[^0-9]/g, '');
-        const formattedPhone = cleanPhone.length === 8 ? '506' + cleanPhone : cleanPhone;
+        const formattedPhone = cleanPhoneNumber(leadOutreachActive.contact_value);
         window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(leadOutreachMessage)}`, '_blank');
         
         await logOutreachToNotes(leadOutreachActive, 'whatsapp', leadOutreachMessage);
@@ -7702,8 +7702,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {currentLead.contact_method === 'whatsapp' ? (
                         <button
                           onClick={async () => {
-                            const cleanPhone = currentLead.contact_value.replace(/[^0-9]/g, '');
-                            const formattedPhone = cleanPhone.length === 8 ? '506' + cleanPhone : cleanPhone;
+                            const formattedPhone = cleanPhoneNumber(currentLead.contact_value);
                             window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(individualAiText)}`, '_blank');
                             await logOutreachToNotes(currentLead, 'whatsapp', individualAiText);
                             await handleMarkAsContacted(currentLead.id);
