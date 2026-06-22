@@ -2416,22 +2416,32 @@ export default function CatalogPage() {
         })(window,document,'script','dataLayer','GTM-M2GVDQ44');`}
       </Script>
       {/* Global Promo Banner */}
-      {cmsSettings.bannerActive && (
+      {(() => {
+        const parseBannerText = (text) => {
+          if (!text) return '';
+          return text.replace(/\{\{usd_(\d+)\}\}/g, (match, amountStr) => {
+            const usdAmount = parseFloat(amountStr);
+            if (currency === 'USD') return `$${usdAmount.toLocaleString()}`;
+            const crcAmount = Math.round(usdAmount * exchangeRate);
+            return `₡${crcAmount.toLocaleString()}`;
+          });
+        };
+        return cmsSettings.bannerActive && (
         <div className="promo-banner-global">
           <div className="promo-banner-ticker">
             <div className="promo-banner-track">
               <div className="promo-banner-text">
                 <Sparkles size={14} className="promo-icon" />
-                <span>{lang === 'en' ? cmsSettings.bannerTextEn : cmsSettings.bannerTextEs}</span>
+                <span>{lang === 'en' ? parseBannerText(cmsSettings.bannerTextEn) : parseBannerText(cmsSettings.bannerTextEs)}</span>
               </div>
               <div className="promo-banner-text">
                 <Sparkles size={14} className="promo-icon" />
-                <span>{lang === 'en' ? cmsSettings.bannerTextEn : cmsSettings.bannerTextEs}</span>
+                <span>{lang === 'en' ? parseBannerText(cmsSettings.bannerTextEn) : parseBannerText(cmsSettings.bannerTextEs)}</span>
               </div>
             </div>
           </div>
         </div>
-      )}
+      );})()}
       {/* Static Top Header Section */}
       <header className="header-top-section">
         <div className="header-top container">

@@ -47,17 +47,37 @@ export default function BroadcastsPanel({ products = [] }) {
     }
   };
 
-  const handleCreateBanner = () => {
+  const [editingBannerId, setEditingBannerId] = useState(null);
+
+  const handleCreateOrUpdateBanner = () => {
     if (!newBannerEn || !newBannerEs) return alert('Please fill both EN and ES text');
-    const newBanner = {
-      id: Date.now().toString(),
-      textEn: newBannerEn,
-      textEs: newBannerEs,
-      isActive: false
-    };
-    saveBanners([...banners, newBanner]);
+    if (editingBannerId) {
+      const updated = banners.map(b => b.id === editingBannerId ? { ...b, textEn: newBannerEn, textEs: newBannerEs } : b);
+      saveBanners(updated);
+      setEditingBannerId(null);
+    } else {
+      const newBanner = {
+        id: Date.now().toString(),
+        textEn: newBannerEn,
+        textEs: newBannerEs,
+        isActive: false
+      };
+      saveBanners([...banners, newBanner]);
+    }
     setNewBannerEn('');
     setNewBannerEs('');
+  };
+
+  const startEditBanner = (b) => {
+    setNewBannerEn(b.textEn);
+    setNewBannerEs(b.textEs);
+    setEditingBannerId(b.id);
+  };
+  
+  const cancelEditBanner = () => {
+    setNewBannerEn('');
+    setNewBannerEs('');
+    setEditingBannerId(null);
   };
 
   const handleDeleteBanner = (id) => {
@@ -213,16 +233,23 @@ export default function BroadcastsPanel({ products = [] }) {
         {/* Create Banner */}
         <div style={{ display: 'grid', gap: '12px', marginBottom: '20px', background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '12px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>English Banner Text</label>
-            <input type="text" value={newBannerEn} onChange={e => setNewBannerEn(e.target.value)} className="admin-input" placeholder="e.g. Flash Sale! 15% off with code FLASH15" style={{ width: '100%' }} />
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>English Banner Text (Use {'{{usd_200}}'} for dynamic currency)</label>
+            <input type="text" value={newBannerEn} onChange={e => setNewBannerEn(e.target.value)} className="admin-input" placeholder="e.g. Free shipping over {{usd_200}}!" style={{ width: '100%' }} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Spanish Banner Text</label>
-            <input type="text" value={newBannerEs} onChange={e => setNewBannerEs(e.target.value)} className="admin-input" placeholder="e.g. ¡Oferta Relámpago! 15% de descuento con el código FLASH15" style={{ width: '100%' }} />
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Spanish Banner Text (Use {'{{usd_200}}'} for dynamic currency)</label>
+            <input type="text" value={newBannerEs} onChange={e => setNewBannerEs(e.target.value)} className="admin-input" placeholder="e.g. ¡Envío gratis superior a {{usd_200}}!" style={{ width: '100%' }} />
           </div>
-          <button type="button" onClick={handleCreateBanner} style={{ padding: '8px 16px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-            + Create New Banner
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" onClick={handleCreateOrUpdateBanner} style={{ flex: 1, padding: '8px 16px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+              {editingBannerId ? 'Save Changes' : '+ Create New Banner'}
+            </button>
+            {editingBannerId && (
+              <button type="button" onClick={cancelEditBanner} style={{ padding: '8px 16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
 
         {/* List Banners */}
@@ -237,6 +264,9 @@ export default function BroadcastsPanel({ products = [] }) {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button type="button" onClick={() => handleToggleBanner(banner.id)} style={{ padding: '8px', background: banner.isActive ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.05)', color: banner.isActive ? '#10b981' : '#94a3b8', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
                   {banner.isActive ? 'Deactivate' : 'Set Active'}
+                </button>
+                <button type="button" onClick={() => startEditBanner(banner)} style={{ padding: '8px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                  Edit
                 </button>
                 <button type="button" onClick={() => handleDeleteBanner(banner.id)} style={{ padding: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
                   <Trash2 size={16} />
