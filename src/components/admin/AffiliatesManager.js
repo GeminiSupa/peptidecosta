@@ -285,8 +285,30 @@ export default function AffiliatesManager() {
               {loading ? <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Loading...</p> : promoCodes.length === 0 ? <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>No promo codes active.</p> : promoCodes.map(promo => (
                 <div key={promo.id} style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: promo.is_active ? 1 : 0.5, transition: 'opacity 0.2s' }}>
                   <div>
-                    <div style={{ fontWeight: '900', color: '#f8fafc', fontSize: '1.2rem', letterSpacing: '1px' }}>{promo.code}</div>
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>Linked to: <span style={{color: '#e2e8f0'}}>{promo.affiliates?.name || 'Unknown'}</span></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                      <div style={{ fontWeight: '900', color: '#f8fafc', fontSize: '1.2rem', letterSpacing: '1px' }}>{promo.code}</div>
+                      {promo.is_flash_sale ? (
+                        <span style={{ background: 'rgba(249, 115, 22, 0.15)', color: '#fb923c', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' }}>⚡ FLASH SALE</span>
+                      ) : promo.affiliate_id ? (
+                        <span style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' }}>🤝 AFFILIATE</span>
+                      ) : (
+                        <span style={{ background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' }}>🏷️ STORE WIDE</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
+                      Linked to: <span style={{color: '#e2e8f0'}}>{promo.affiliate_id ? (promo.affiliates?.name || 'Unknown') : 'N/A (General Code)'}</span>
+                    </div>
+                    {(promo.valid_from || promo.valid_until) && (
+                      <div style={{ fontSize: '0.8rem', color: '#fca5a5', marginTop: '4px', fontWeight: 'bold' }}>
+                        ⏱️ {promo.valid_from ? `Starts: ${new Date(promo.valid_from).toLocaleDateString()} ` : ''} 
+                        {promo.valid_until ? `Expires: ${new Date(promo.valid_until).toLocaleString()}` : ''}
+                      </div>
+                    )}
+                    {promo.target_product && (
+                      <div style={{ fontSize: '0.8rem', color: '#a78bfa', marginTop: '4px' }}>
+                        🎯 Applies to: <span style={{color: '#e2e8f0'}}>{promo.target_product}</span>
+                      </div>
+                    )}
                     <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', padding: '2px 8px', borderRadius: '12px', display: 'inline-block', marginTop: '8px' }}>
                       {(promo.discount_pct * 100).toFixed(0)}% Customer Discount
                     </div>
