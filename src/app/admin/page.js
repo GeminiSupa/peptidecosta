@@ -3764,7 +3764,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   onClick={() => navigateToTab('affiliates')}
                 >
                   <UserPlus size={14} />
-                  <span className="tab-label">Affiliates</span>
+                  <span className="tab-label">Affiliates and Promotions</span>
                 </button>
               )}
               {adminProfile?.is_superadmin && (

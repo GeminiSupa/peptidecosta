@@ -3344,7 +3344,7 @@ body {
         position: fixed !important;
         left: 0 !important;
         top: 0 !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
         border-bottom: none !important;
         padding: 20px 12px 90px 12px !important;
         display: flex !important;
@@ -3354,9 +3354,12 @@ body {
         gap: 20px !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
-        background: #080f1d !important;
+        background: rgba(10, 15, 28, 0.75) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
         flex-shrink: 0 !important;
-        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25) !important;
+        box-shadow: 4px 0 32px rgba(0, 0, 0, 0.4) !important;
+        z-index: 100 !important;
     }
     
     /* Custom premium scrollbar for sidebar */
@@ -3435,22 +3438,24 @@ body {
         justify-content: flex-start !important;
         padding: 10px 14px !important;
         font-size: 0.85rem !important;
-        border-radius: 8px !important;
+        border-radius: 10px !important;
         border-left: 3px solid transparent !important;
         flex-shrink: 0 !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     }
     
     .admin-tab-btn:hover {
-        background: rgba(255, 255, 255, 0.04) !important;
+        background: rgba(255, 255, 255, 0.06) !important;
         color: #f8fafc !important;
-        transform: translateX(4px) !important; /* Premium slide-in, clamped to prevent edge clipping */
+        transform: translateX(4px) !important; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
     }
     
     .admin-tab-btn.active {
-        background: linear-gradient(90deg, rgba(0, 212, 255, 0.12) 0%, rgba(0, 212, 255, 0.03) 100%) !important;
+        background: linear-gradient(90deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 114, 255, 0.05) 100%) !important;
         color: #00D4FF !important;
         border-left: 3px solid #00D4FF !important;
-        box-shadow: none !important;
+        box-shadow: inset 1px 0 0 rgba(255,255,255,0.1) !important;
         font-weight: 800 !important;
     }
     
@@ -7984,7 +7989,8 @@ body {
 
 .admin-quick-nav-btn.active {
     color: #00D4FF;
-    background: rgba(0, 212, 255, 0.08);
+    background: linear-gradient(180deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 114, 255, 0.05) 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
 }
 
 .admin-quick-nav-btn.active::before {
