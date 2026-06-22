@@ -65,11 +65,28 @@ async function sendEmail(to, message, subject) {
       }
     });
 
+    const htmlMessage = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height: 60px; border-radius: 8px; background: #0f172a; padding: 8px;" />
+        </div>
+        <div style="color: #334155; line-height: 1.6; font-size: 16px; margin-bottom: 32px; white-space: pre-wrap;">
+          ${message.replace(/\n/g, '<br>')}
+        </div>
+        <div style="text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+          <a href="https://catalog.peptidescostarica.net/catalog" style="display: inline-block; background-color: #059669; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px rgba(5, 150, 105, 0.2);">
+            View Catalog / Ver Catálogo
+          </a>
+        </div>
+      </div>
+    `;
+
     const res = await transporter.sendMail({
       from: `Peptides Costa Rica <info@peptidescostarica.net>`,
       to: to.trim(),
       subject: subject || 'Flash Sale! Exclusive Offer Inside',
-      text: message
+      text: message,
+      html: htmlMessage
     });
     return !!res.messageId;
   } catch (err) {
