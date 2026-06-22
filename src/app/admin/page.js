@@ -4533,8 +4533,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             </td>
                             <td data-label="Total Amount" style={{ padding: '10px 12px', fontWeight: 'bold', color: '#38bdf8', fontSize: '0.9rem' }}>
                               {order.currency === 'USD' 
-                                ? `$${order.total_usd}` 
-                                : `₡${order.total_crc.toLocaleString('en-US')}`
+                                ? `$${Number(order.total_usd || 0).toLocaleString('en-US')}` 
+                                : `₡${Number(order.total_crc || 0).toLocaleString('en-US')}`
                               }
                             </td>
                             <td data-label="Payment" style={{ padding: '10px 12px' }}>

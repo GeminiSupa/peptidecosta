@@ -1492,7 +1492,7 @@ export default function CatalogPage() {
       const targets = promoData.target_product.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
       targetTotal = cart
         .filter(item => targets.some(t => item.product.toLowerCase().includes(t)))
-        .reduce((sum, item) => sum + (currency === 'USD' ? item.priceUsd : item.priceCrc) * item.qty, 0);
+        .reduce((sum, item) => sum + getPriceAsNumber(item, currency) * item.qty, 0);
     }
     
     const vials = getCartVialCount();
