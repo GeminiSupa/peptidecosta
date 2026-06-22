@@ -7,7 +7,7 @@ import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 export default function ExitIntentPopup() {
   const { links } = useBusinessLinks();
@@ -16,7 +16,6 @@ export default function ExitIntentPopup() {
   const [lang, setLang] = useState('es');
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith('/admin');
-  const supabase = createClientComponentClient();
   const [promoBanner, setPromoBanner] = useState(null);
   
   // Parse variables like {{usd_200}}
@@ -31,7 +30,7 @@ export default function ExitIntentPopup() {
 
   useEffect(() => {
     async function fetchPromo() {
-      if (isAdmin) return;
+      if (isAdmin || !isSupabaseConfigured || !supabase) return;
       const { data } = await supabase.from('site_settings').select('value').eq('id', 'announcement_banners').single();
       if (data && Array.isArray(data.value)) {
         const activeBanners = data.value.filter(b => b.isActive);
