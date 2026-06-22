@@ -5661,7 +5661,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {/* TAB: Facebook Notifications */}
         {activeTab === 'broadcasts' && (
-          <BroadcastsPanel />
+          <BroadcastsPanel products={products} />
         )}
 
         {activeTab === 'facebook' && (

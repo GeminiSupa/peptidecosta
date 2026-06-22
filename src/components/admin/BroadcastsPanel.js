@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader, Calendar, Trash2 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
-export default function BroadcastsPanel() {
+export default function BroadcastsPanel({ products = [] }) {
   const [audience, setAudience] = useState('all_customers');
   const [customContacts, setCustomContacts] = useState('');
   const [channels, setChannels] = useState({ whatsapp: true, email: false });
@@ -13,6 +13,7 @@ export default function BroadcastsPanel() {
   const [isSending, setIsSending] = useState(false);
   const [isDrafting, setIsDrafting] = useState(false);
   const [result, setResult] = useState(null);
+  const [targetProducts, setTargetProducts] = useState([]);
 
   const fetchScheduled = async () => {
     try {
@@ -163,8 +164,23 @@ export default function BroadcastsPanel() {
             </select>
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Target Products (comma separated, leave blank for all products)</label>
-            <input type="text" id="flash-products" className="admin-input" placeholder="e.g. Tirzepatide, Retatrutide 40mg" style={{ width: '100%' }} />
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>
+              Target Products (Select multiple, or leave unselected for all products)
+            </label>
+            <select
+              multiple
+              className="admin-input"
+              style={{ width: '100%', minHeight: '120px', padding: '8px' }}
+              value={targetProducts}
+              onChange={(e) => {
+                const selected = Array.from(e.target.selectedOptions, option => option.value);
+                setTargetProducts(selected);
+              }}
+            >
+              {products.map(p => (
+                <option key={p.id || p.product} value={p.product}>{p.product}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid From (Optional)</label>
@@ -179,7 +195,7 @@ export default function BroadcastsPanel() {
               onClick={async () => {
                 const code = document.getElementById('flash-code').value;
                 const discount_pct = parseFloat(document.getElementById('flash-discount').value);
-                const target_product = document.getElementById('flash-products').value;
+                const target_product = targetProducts.join(', ');
                 const valid_from = document.getElementById('flash-valid-from').value;
                 const valid_until = document.getElementById('flash-valid-until').value;
                 if (!code) return alert('Enter a promo code name');
