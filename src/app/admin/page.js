@@ -6956,7 +6956,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {/* TAB: AFFILIATES */}
         {activeTab === 'affiliates' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
-            <AffiliatesManager />
+            <AffiliatesManager products={products} />
           </div>
         )}
 

@@ -3,7 +3,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check } from 'lucide-react';
 
-export default function AffiliatesManager() {
+export default function AffiliatesManager({ products = [] }) {
   const [affiliates, setAffiliates] = useState([]);
   const [promoCodes, setPromoCodes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +22,40 @@ export default function AffiliatesManager() {
   // Forms State
   const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
   const [newPromo, setNewPromo] = useState({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true });
+  const [editingPromo, setEditingPromo] = useState(null);
+
+  const handleUpdatePromo = async (e) => {
+    e.preventDefault();
+    if (!editingPromo || !editingPromo.id) return;
+    
+    try {
+      const target_product = Array.isArray(editingPromo.targetProducts) 
+        ? editingPromo.targetProducts.join(', ') 
+        : editingPromo.target_product || null;
+
+      const res = await adminFetch('/api/admin/promo/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingPromo.id,
+          discount_pct: editingPromo.discount_pct,
+          is_flash_sale: !!target_product,
+          target_product,
+          valid_from: editingPromo.valid_from ? new Date(editingPromo.valid_from).toISOString() : null,
+          valid_until: editingPromo.valid_until ? new Date(editingPromo.valid_until).toISOString() : null,
+          affiliate_id: editingPromo.affiliate_id || null
+        })
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+      
+      setEditingPromo(null);
+      loadData(); // reload to get fresh data
+      alert('✅ Promo code updated successfully!');
+    } catch (err) {
+      alert('Error updating promo code: ' + err.message);
+    }
+  };
 
   const loadData = async () => {
     if (!isSupabaseConfigured || !supabase) return;
@@ -317,6 +351,14 @@ export default function AffiliatesManager() {
                     <button onClick={() => handleTogglePromo(promo.id, promo.is_active)} style={{ background: promo.is_active ? 'rgba(52, 211, 153, 0.1)' : 'rgba(148, 163, 184, 0.1)', border: `1px solid ${promo.is_active ? 'rgba(52, 211, 153, 0.2)' : 'rgba(148, 163, 184, 0.2)'}`, borderRadius: '8px', cursor: 'pointer', padding: '8px', color: promo.is_active ? '#34d399' : '#94a3b8' }}>
                       {promo.is_active ? <CheckCircle size={18} /> : <XCircle size={18} />}
                     </button>
+                    <button onClick={() => setEditingPromo({
+                      ...promo, 
+                      targetProducts: promo.target_product ? promo.target_product.split(',').map(s => s.trim()) : [],
+                      valid_from: promo.valid_from ? new Date(promo.valid_from).toISOString().slice(0, 16) : '',
+                      valid_until: promo.valid_until ? new Date(promo.valid_until).toISOString().slice(0, 16) : ''
+                    })} style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', cursor: 'pointer', padding: '8px', transition: 'all 0.2s' }}>
+                      <Edit2 size={18} />
+                    </button>
                     <button onClick={() => handleDeletePromo(promo.id)} style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', cursor: 'pointer', padding: '8px' }}><Trash2 size={18} /></button>
                   </div>
                 </div>
@@ -435,6 +477,70 @@ export default function AffiliatesManager() {
               </table>
             </div>
           )}
+        </div>
+      )}
+      {/* EDIT PROMO MODAL */}
+      {editingPromo && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <form onSubmit={handleUpdatePromo} style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+            <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Edit2 size={20} color="#38bdf8" /> Edit Promo Code: {editingPromo.code}
+            </h2>
+            
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Discount Percentage</label>
+                <select value={editingPromo.discount_pct} onChange={e => setEditingPromo({...editingPromo, discount_pct: parseFloat(e.target.value)})} className="admin-input" style={{ width: '100%' }}>
+                  <option value={0.05}>5% Off</option>
+                  <option value={0.10}>10% Off</option>
+                  <option value={0.15}>15% Off</option>
+                  <option value={0.20}>20% Off</option>
+                  <option value={0.25}>25% Off</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid From (Optional)</label>
+                <input type="datetime-local" className="admin-input" style={{ width: '100%' }} value={editingPromo.valid_from} onChange={e => setEditingPromo({...editingPromo, valid_from: e.target.value})} />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid Until (Optional)</label>
+                <input type="datetime-local" className="admin-input" style={{ width: '100%' }} value={editingPromo.valid_until} onChange={e => setEditingPromo({...editingPromo, valid_until: e.target.value})} />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Target Products (Optional Flash Sale Constraint)</label>
+                <div className="admin-input" style={{ width: '100%', maxHeight: '180px', overflowY: 'auto', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}>
+                  {products.map(p => {
+                    const isChecked = editingPromo.targetProducts?.includes(p.product);
+                    return (
+                      <label key={p.id || p.product} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f8fafc' }}>
+                        <input 
+                          type="checkbox" 
+                          style={{ width: '18px', height: '18px', accentColor: '#38bdf8', cursor: 'pointer' }}
+                          checked={isChecked}
+                          onChange={(e) => {
+                            let updated = [...(editingPromo.targetProducts || [])];
+                            if (e.target.checked) updated.push(p.product);
+                            else updated = updated.filter(item => item !== p.product);
+                            setEditingPromo({...editingPromo, targetProducts: updated});
+                          }}
+                        />
+                        <span style={{ fontSize: '0.9rem', fontWeight: isChecked ? 'bold' : 'normal', color: isChecked ? '#38bdf8' : '#e2e8f0' }}>{p.product}</span>
+                      </label>
+                    );
+                  })}
+                  {products.length === 0 && <div style={{ color: '#94a3b8', fontSize: '0.85rem', padding: '8px' }}>No products found to select...</div>}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+              <button type="button" onClick={() => setEditingPromo(null)} style={{ flex: 1, padding: '12px', background: 'transparent', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Cancel</button>
+              <button type="submit" style={{ flex: 1, padding: '12px', background: '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Save Changes</button>
+            </div>
+          </form>
         </div>
       )}
     </div>
