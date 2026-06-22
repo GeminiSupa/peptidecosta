@@ -303,12 +303,12 @@ export default function CatalogPage() {
       try {
         const { data, error } = await supabase.from('site_settings').select('value').eq('id', 'announcement_banners').single();
         if (data && Array.isArray(data.value)) {
-          const activeBanner = data.value.find(b => b.isActive);
-          if (activeBanner) {
+          const activeBanners = data.value.filter(b => b.isActive);
+          if (activeBanners.length > 0) {
             setCmsSettings({
               bannerActive: true,
-              bannerTextEn: activeBanner.textEn,
-              bannerTextEs: activeBanner.textEs
+              bannerTextEn: activeBanners.map(b => b.textEn).join("  🌟  "),
+              bannerTextEs: activeBanners.map(b => b.textEs).join("  🌟  ")
             });
           } else {
             setCmsSettings(prev => ({ ...prev, bannerActive: false }));

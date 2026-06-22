@@ -66,10 +66,10 @@ export default function BroadcastsPanel({ products = [] }) {
   };
 
   const handleToggleBanner = (id) => {
-    // Only one banner can be active at a time
+    // Allow multiple banners to be active at once
     const updated = banners.map(b => ({
       ...b,
-      isActive: b.id === id ? !b.isActive : false
+      isActive: b.id === id ? !b.isActive : b.isActive
     }));
     saveBanners(updated);
   };
