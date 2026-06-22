@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { buildWhatsAppLink } from '@/lib/whatsapp';
+import { buildWhatsAppLink, cleanPhoneNumber } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
@@ -439,9 +439,12 @@ export default function CatalogPage() {
           }
         }
 
+        // Format WhatsApp numbers if applicable
+        const cleanContact = isEmail ? gateInput.trim() : cleanPhoneNumber(gateInput.trim());
+
         await supabase.from('catalog_leads').insert([{
           contact_method: isEmail ? 'email' : 'whatsapp',
-          contact_value: gateInput.trim(),
+          contact_value: cleanContact,
           language: lang,
           ip_address: ip,
           city: city,
@@ -455,14 +458,24 @@ export default function CatalogPage() {
       }
       
       // Grant access regardless of DB success to not block users if offline
+      const finalContact = isEmail ? gateInput.trim() : cleanPhoneNumber(gateInput.trim());
       localStorage.setItem('catalog_access_granted', 'true');
-      localStorage.setItem('catalog_lead_contact', gateInput.trim());
+      localStorage.setItem('catalog_lead_contact', finalContact);
       setGateAccessGranted(true);
+
+      // Trigger the welcome WhatsApp message if it's a phone number
+      if (!isEmail) {
+        fetch('/api/whatsapp/welcome', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: finalContact, lang })
+        }).catch(err => console.warn('Welcome message fetch error:', err));
+      }
     } catch (err) {
       console.error('Error saving lead:', err);
-      // Still grant access to prevent bad UX on error
+      const fallbackContact = gateInput.includes('@') ? gateInput.trim() : cleanPhoneNumber(gateInput.trim());
       localStorage.setItem('catalog_access_granted', 'true');
-      localStorage.setItem('catalog_lead_contact', gateInput.trim());
+      localStorage.setItem('catalog_lead_contact', fallbackContact);
       setGateAccessGranted(true);
     } finally {
       setGateSubmitting(false);
