@@ -7,6 +7,7 @@ import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 
 export default function ExitIntentPopup() {
   const { links } = useBusinessLinks();
@@ -15,6 +16,35 @@ export default function ExitIntentPopup() {
   const [lang, setLang] = useState('es');
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith('/admin');
+  const supabase = createClientComponentClient();
+  const [promoBanner, setPromoBanner] = useState(null);
+  
+  // Parse variables like {{usd_200}}
+  const parseBannerText = (text) => {
+    if (!text) return '';
+    return text.replace(/\{\{usd_(\d+)\}\}/g, (match, amountStr) => {
+      // For exit intent, we just use a generic conversion or default to USD
+      // Since we don't have exchangeRate easily here, let's just show USD, or fetch exchangeRate
+      return `$${amountStr}`;
+    });
+  };
+
+  useEffect(() => {
+    async function fetchPromo() {
+      if (isAdmin) return;
+      const { data } = await supabase.from('site_settings').select('value').eq('id', 'announcement_banners').single();
+      if (data && Array.isArray(data.value)) {
+        const activeBanners = data.value.filter(b => b.isActive);
+        if (activeBanners.length > 0) {
+          setPromoBanner({
+            en: activeBanners.map(b => b.textEn).join(" • "),
+            es: activeBanners.map(b => b.textEs).join(" • ")
+          });
+        }
+      }
+    }
+    fetchPromo();
+  }, [isAdmin]);
 
   useEffect(() => {
     if (isAdmin) return;
@@ -118,11 +148,20 @@ export default function ExitIntentPopup() {
           {lang === 'en' ? 'Wait! Before you go...' : '¡Espera! Antes de irte...'}
         </h2>
         
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.5', marginBottom: '20px' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.5', marginBottom: '16px' }}>
           {lang === 'en' 
             ? "Don't forget to complete your order today. We offer the highest purity and fastest local delivery."
             : "No olvides completar tu orden hoy. Ofrecemos la más alta pureza y la entrega local más rápida."}
         </p>
+
+        {promoBanner && (
+          <div style={{ marginBottom: '20px', background: 'rgba(255, 107, 0, 0.05)', padding: '12px', borderRadius: '8px', border: '1px dashed rgba(255, 107, 0, 0.3)' }}>
+            <p style={{ margin: 0, color: '#d21f24', fontWeight: '800', fontSize: '0.85rem' }}>
+              <Sparkles size={14} style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: '6px' }} />
+              {lang === 'en' ? parseBannerText(promoBanner.en) : parseBannerText(promoBanner.es)}
+            </p>
+          </div>
+        )}
 
         <Link 
           href="/catalog" 
