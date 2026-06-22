@@ -1971,7 +1971,10 @@ export default function CatalogPage() {
         let targetTotalForPromo = itemsTotal;
         if (pData?.valid && pData.is_flash_sale && pData.target_product) {
           const rawTargetSum = currentCart
-            .filter(item => item.product.toLowerCase().includes(pData.target_product.toLowerCase()))
+            .filter(item => {
+              const targets = pData.target_product.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+              return targets.some(target => item.product.toLowerCase().includes(target));
+            })
             .reduce((sum, item) => {
               let p = item.priceCrc;
               if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
