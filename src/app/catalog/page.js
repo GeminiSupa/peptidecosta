@@ -301,14 +301,20 @@ export default function CatalogPage() {
     async function loadSettings() {
       if (!isSupabaseConfigured || !supabase) return;
       try {
-        const { data, error } = await supabase.from('site_settings').select('value').eq('id', 'landing_page').single();
-        if (data && data.value) {
-          setCmsSettings(prev => ({
-            ...prev,
-            bannerActive: data.value.bannerActive !== undefined ? data.value.bannerActive : prev.bannerActive,
-            bannerTextEn: data.value.bannerTextEn || prev.bannerTextEn,
-            bannerTextEs: data.value.bannerTextEs || prev.bannerTextEs
-          }));
+        const { data, error } = await supabase.from('site_settings').select('value').eq('id', 'announcement_banners').single();
+        if (data && Array.isArray(data.value)) {
+          const activeBanner = data.value.find(b => b.isActive);
+          if (activeBanner) {
+            setCmsSettings({
+              bannerActive: true,
+              bannerTextEn: activeBanner.textEn,
+              bannerTextEs: activeBanner.textEs
+            });
+          } else {
+            setCmsSettings(prev => ({ ...prev, bannerActive: false }));
+          }
+        } else {
+          setCmsSettings(prev => ({ ...prev, bannerActive: false }));
         }
       } catch (err) {
         console.error('Error loading site settings:', err);

@@ -15,6 +15,65 @@ export default function BroadcastsPanel({ products = [] }) {
   const [result, setResult] = useState(null);
   const [targetProducts, setTargetProducts] = useState([]);
 
+  // Banners State
+  const [banners, setBanners] = useState([]);
+  const [newBannerEn, setNewBannerEn] = useState('');
+  const [newBannerEs, setNewBannerEs] = useState('');
+  const [bannersLoading, setBannersLoading] = useState(true);
+
+  const loadBanners = async () => {
+    try {
+      setBannersLoading(true);
+      const res = await adminFetch('/api/admin/banners');
+      const data = await res.json();
+      if (data.banners) setBanners(data.banners);
+    } catch (e) {
+      console.error('Failed to load banners', e);
+    } finally {
+      setBannersLoading(false);
+    }
+  };
+
+  const saveBanners = async (updatedBanners) => {
+    try {
+      const res = await adminFetch('/api/admin/banners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ banners: updatedBanners })
+      });
+      if (res.ok) setBanners(updatedBanners);
+    } catch (e) {
+      alert('Error saving banners: ' + e.message);
+    }
+  };
+
+  const handleCreateBanner = () => {
+    if (!newBannerEn || !newBannerEs) return alert('Please fill both EN and ES text');
+    const newBanner = {
+      id: Date.now().toString(),
+      textEn: newBannerEn,
+      textEs: newBannerEs,
+      isActive: false
+    };
+    saveBanners([...banners, newBanner]);
+    setNewBannerEn('');
+    setNewBannerEs('');
+  };
+
+  const handleDeleteBanner = (id) => {
+    if (!window.confirm("Delete this banner?")) return;
+    saveBanners(banners.filter(b => b.id !== id));
+  };
+
+  const handleToggleBanner = (id) => {
+    // Only one banner can be active at a time
+    const updated = banners.map(b => ({
+      ...b,
+      isActive: b.id === id ? !b.isActive : false
+    }));
+    saveBanners(updated);
+  };
+
   const fetchScheduled = async () => {
     try {
       const { createClient } = await import('@supabase/supabase-js');
@@ -28,6 +87,7 @@ export default function BroadcastsPanel({ products = [] }) {
 
   useEffect(() => {
     fetchScheduled();
+    loadBanners();
   }, []);
 
   const handleDeleteScheduled = async (id) => {
@@ -141,6 +201,49 @@ export default function BroadcastsPanel({ products = [] }) {
           <p style={{ color: '#94a3b8', margin: 0, fontSize: '0.95rem' }}>
             Send bulk messages for Flash Sales, promotions, or general updates to your contacts.
           </p>
+        </div>
+      </div>
+
+      {/* Announcement Banners Section */}
+      <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '24px', borderRadius: '16px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <h3 style={{ margin: '0 0 16px', fontSize: '1.05rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Sparkles size={18} /> Announcement Banners Manager
+        </h3>
+        
+        {/* Create Banner */}
+        <div style={{ display: 'grid', gap: '12px', marginBottom: '20px', background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '12px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>English Banner Text</label>
+            <input type="text" value={newBannerEn} onChange={e => setNewBannerEn(e.target.value)} className="admin-input" placeholder="e.g. Flash Sale! 15% off with code FLASH15" style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Spanish Banner Text</label>
+            <input type="text" value={newBannerEs} onChange={e => setNewBannerEs(e.target.value)} className="admin-input" placeholder="e.g. ¡Oferta Relámpago! 15% de descuento con el código FLASH15" style={{ width: '100%' }} />
+          </div>
+          <button type="button" onClick={handleCreateBanner} style={{ padding: '8px 16px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+            + Create New Banner
+          </button>
+        </div>
+
+        {/* List Banners */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
+          {bannersLoading ? <p style={{ color: '#94a3b8' }}>Loading banners...</p> : banners.length === 0 ? <p style={{ color: '#94a3b8' }}>No banners saved.</p> : banners.map(banner => (
+            <div key={banner.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: `1px solid ${banner.isActive ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255,255,255,0.05)'}` }}>
+              <div>
+                <div style={{ color: '#f8fafc', fontSize: '0.9rem', marginBottom: '4px' }}>🇺🇸 {banner.textEn}</div>
+                <div style={{ color: '#cbd5e1', fontSize: '0.85rem' }}>🇪🇸 {banner.textEs}</div>
+                {banner.isActive && <div style={{ display: 'inline-block', marginTop: '8px', padding: '2px 8px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' }}>LIVE ON SITE</div>}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button type="button" onClick={() => handleToggleBanner(banner.id)} style={{ padding: '8px', background: banner.isActive ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.05)', color: banner.isActive ? '#10b981' : '#94a3b8', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                  {banner.isActive ? 'Deactivate' : 'Set Active'}
+                </button>
+                <button type="button" onClick={() => handleDeleteBanner(banner.id)} style={{ padding: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
