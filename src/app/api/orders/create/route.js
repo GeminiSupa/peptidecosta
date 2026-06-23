@@ -133,6 +133,16 @@ export async function POST(request) {
           .eq('customer_email', order.customer_email)
       );
     }
+    if (order.promo_code) {
+      updatePromises.push(
+        (async () => {
+          const { data: pCode } = await supabase.from('promo_codes').select('usage_count').eq('code', order.promo_code).single();
+          if (pCode) {
+            await supabase.from('promo_codes').update({ usage_count: (pCode.usage_count || 0) + 1 }).eq('code', order.promo_code);
+          }
+        })()
+      );
+    }
 
     if (updatePromises.length > 0) {
       try {

@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS public.promo_codes (
   code TEXT UNIQUE NOT NULL,
   affiliate_id UUID REFERENCES public.affiliates(id) ON DELETE CASCADE,
   discount_pct NUMERIC DEFAULT 0.10, -- 10% default discount for the customer
+  usage_limit INTEGER DEFAULT NULL,
+  usage_count INTEGER DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

@@ -476,19 +476,23 @@ export default function CatalogPage() {
         // Format WhatsApp numbers if applicable
         const cleanContact = isEmail ? gateInput.trim() : cleanPhoneNumber(gateInput.trim());
 
-        await supabase.from('catalog_leads').insert([{
-          contact_method: isEmail ? 'email' : 'whatsapp',
-          contact_value: cleanContact,
-          language: lang,
-          ip_address: ip,
-          city: city,
-          region: region,
-          country: country,
-          utm_source: utmSource,
-          utm_medium: utmMedium,
-          utm_campaign: utmCampaign,
-          referrer: referrer
-        }]);
+        await fetch('/api/leads/capture', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contact_method: isEmail ? 'email' : 'whatsapp',
+            contact_value: cleanContact,
+            language: lang,
+            ip_address: ip,
+            city: city,
+            region: region,
+            country: country,
+            utm_source: utmSource,
+            utm_medium: utmMedium,
+            utm_campaign: utmCampaign,
+            referrer: referrer
+          })
+        }).catch(err => console.warn('Lead capture fetch error:', err));
       }
       
       // Grant access regardless of DB success to not block users if offline
@@ -496,15 +500,6 @@ export default function CatalogPage() {
       localStorage.setItem('catalog_access_granted', 'true');
       localStorage.setItem('catalog_lead_contact', finalContact);
       setGateAccessGranted(true);
-
-      // Trigger the welcome WhatsApp message if it's a phone number
-      if (!isEmail) {
-        fetch('/api/whatsapp/welcome', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: finalContact, lang })
-        }).catch(err => console.warn('Welcome message fetch error:', err));
-      }
     } catch (err) {
       console.error('Error saving lead:', err);
       const fallbackContact = gateInput.includes('@') ? gateInput.trim() : cleanPhoneNumber(gateInput.trim());

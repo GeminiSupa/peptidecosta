@@ -28,6 +28,8 @@ export async function POST(request) {
         valid_until,
         target_product,
         is_flash_sale,
+        usage_limit,
+        usage_count,
         affiliate_id,
         affiliates (
           commission_rate
@@ -48,6 +50,11 @@ export async function POST(request) {
     }
     if (promo.valid_until && now > new Date(promo.valid_until)) {
       return NextResponse.json({ valid: false, error: 'Promo code has expired.' });
+    }
+
+    // Check usage limits
+    if (promo.usage_limit !== null && promo.usage_count >= promo.usage_limit) {
+      return NextResponse.json({ valid: false, error: 'Promo code has already been used or reached its usage limit.' });
     }
 
     // Success: Return the discount and affiliate data to the frontend
