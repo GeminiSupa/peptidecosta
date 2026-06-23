@@ -444,7 +444,7 @@ export default function BroadcastsPanel({ products = [] }) {
               style={{ flexGrow: 1, background: 'transparent', border: 'none', color: '#f8fafc', padding: 0 }}
             />
           </div>
-          <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Leave empty to blast immediately. Note: Large lists (>200) will be safely auto-batched over multiple days to protect your Meta API limits.</p>
+          <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Leave empty to blast immediately. Note: Large lists (&gt;200) will be safely auto-batched over multiple days to protect your Meta API limits.</p>
         </div>
 
       </div>
