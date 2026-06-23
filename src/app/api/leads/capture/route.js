@@ -151,8 +151,8 @@ export async function POST(request) {
                 to: cleanContact,
                 type: 'template',
                 template: {
-                  name: 'welcome_promo', // Ensure this template is approved in Meta
-                  language: { code: language === 'en' ? 'en_US' : 'es' },
+                  name: 'welcome_promo1', // Matches the exact name the user created in Meta
+                  language: { code: 'en' }, // The user created it under 'English' (en), even though the text is Spanish
                   components: [
                     {
                       type: 'body',
