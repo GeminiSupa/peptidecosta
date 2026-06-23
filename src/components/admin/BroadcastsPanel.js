@@ -192,7 +192,8 @@ export default function BroadcastsPanel({ products = [] }) {
           customContacts: audience === 'custom' ? customContacts : undefined,
           channels: { ...channels, emailSubject }, 
           message,
-          scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null
+          scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+          enableBatching: channels.whatsapp // Automatically batch whatsapp to avoid limits
         })
       });
       const data = await res.json();
@@ -390,6 +391,7 @@ export default function BroadcastsPanel({ products = [] }) {
             <option value="all_customers">All Past Customers</option>
             <option value="abandoned_carts">Abandoned Carts (Not purchased yet)</option>
             <option value="all_leads">Everyone (Customers + Leads)</option>
+            <option value="leads_7_days">Recent Leads (Last 7 Days)</option>
             <option value="custom">Custom List (Manual Entry)</option>
           </select>
 
@@ -442,7 +444,7 @@ export default function BroadcastsPanel({ products = [] }) {
               style={{ flexGrow: 1, background: 'transparent', border: 'none', color: '#f8fafc', padding: 0 }}
             />
           </div>
-          <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Leave empty to blast immediately.</p>
+          <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Leave empty to blast immediately. Note: Large lists (>200) will be safely auto-batched over multiple days to protect your Meta API limits.</p>
         </div>
 
       </div>

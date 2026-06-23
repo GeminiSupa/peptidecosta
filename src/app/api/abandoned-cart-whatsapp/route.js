@@ -109,18 +109,21 @@ export async function POST(request) {
           console.log(`[Abandoned Cart WhatsApp] DB status updated for session ${session_id}`);
         }
 
-        // Log the outbound reply to CRM messages
-        const { error: logErr } = await supabase
-          .from('whatsapp_messages')
-          .insert({
-            wa_id: cleanPhone,
-            display_name: customerDisplayName === 'Cliente' ? 'Peptides Customer' : customerDisplayName,
-            message_text: message,
-            message_type: 'text',
-            direction: 'outbound',
-            matched_order_id: null,
-            raw_payload: metaData
-          });
+          // Log the outbound reply to CRM messages
+          const metaMessageId = metaData?.messages?.[0]?.id || null;
+          const { error: logErr } = await supabase
+            .from('whatsapp_messages')
+            .insert({
+              wa_id: cleanPhone,
+              display_name: customerDisplayName === 'Cliente' ? 'Peptides Customer' : customerDisplayName,
+              message_text: message,
+              message_type: 'text',
+              direction: 'outbound',
+              matched_order_id: null,
+              raw_payload: metaData,
+              meta_message_id: metaMessageId,
+              delivery_status: 'sent'
+            });
 
         if (logErr) {
           console.error('[Abandoned Cart WhatsApp] Failed to log outbound message in DB:', logErr);

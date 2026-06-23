@@ -7344,7 +7344,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                                 <span style={{ fontSize: '0.6rem', color: isInbound ? '#94a3b8' : isAi ? '#4ade80' : '#38bdf8', fontWeight: 'bold', textTransform: 'uppercase' }}>
                                   {isInbound ? (msg.display_name || 'Customer') : isAi ? '✨ AI Copilot' : '👤 Administrator'}
                                 </span>
-                                <span style={{ fontSize: '0.55rem', color: '#64748b' }}>
+                                <span style={{ fontSize: '0.55rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  {!isInbound && msg.delivery_status && (
+                                    <span style={{ fontSize: '0.65rem' }}>
+                                      {msg.delivery_status === 'read' ? '✅✅' : msg.delivery_status === 'delivered' ? '✔️✔️' : '✔️'}
+                                    </span>
+                                  )}
                                   {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                               </div>

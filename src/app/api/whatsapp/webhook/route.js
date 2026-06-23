@@ -293,7 +293,7 @@ Reply in the same language the customer used (Spanish or English). If they have 
               }
 
               // Send the reply via WhatsApp Cloud API
-              await fetch(
+              const metaRes = await fetch(
                 `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
                 {
                   method: 'POST',
@@ -309,11 +309,13 @@ Reply in the same language the customer used (Spanish or English). If they have 
                   }),
                 }
               );
+              const metaData = await metaRes.json();
 
               console.log(`[WhatsApp Webhook] 📤 Auto-reply sent to ${waId}`);
 
               // Log the outbound reply in Supabase
               if (supabase) {
+                const metaMessageId = metaData?.messages?.[0]?.id || null;
                 await supabase.from('whatsapp_messages').insert({
                   wa_id: waId,
                   display_name: isAiGenerated ? 'AI Copilot' : 'Peptides Costa Rica',
@@ -321,6 +323,8 @@ Reply in the same language the customer used (Spanish or English). If they have 
                   message_type: 'text',
                   direction: 'outbound',
                   matched_order_id: matchedOrderId,
+                  meta_message_id: metaMessageId,
+                  delivery_status: 'sent'
                 });
               }
             } catch (replyErr) {
@@ -333,7 +337,13 @@ Reply in the same language the customer used (Spanish or English). If they have 
         const statuses = value?.statuses || [];
         for (const status of statuses) {
           console.log(`[WhatsApp Webhook] 📊 Status: ${status.status} for message ${status.id}`);
-          // Could log delivery/read receipts in the future
+          if (supabase && status.id && status.status) {
+            // Update the delivery_status for the message
+            await supabase
+              .from('whatsapp_messages')
+              .update({ delivery_status: status.status })
+              .eq('meta_message_id', status.id);
+          }
         }
       }
     }

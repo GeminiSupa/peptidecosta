@@ -185,13 +185,16 @@ export async function POST(request) {
           } else {
             console.log('[Leads Capture] WhatsApp welcome sent:', metaData.messages?.[0]?.id);
             if (supabase) {
+              const metaMessageId = metaData?.messages?.[0]?.id || null;
               await supabase.from('whatsapp_messages').insert([{
                 wa_id: cleanContact,
                 display_name: 'Catalog Lead',
                 message_text: `¡Bienvenido a Peptides Costa Rica! Gracias por registrarte. Como regalo especial, aquí tienes un código promocional de un solo uso para obtener un 15% de descuento en tu primera compra: ${promoCode}\n\nPuedes aplicar este código durante el proceso de pago. Válido únicamente para una compra.`,
                 message_type: 'template',
                 direction: 'outbound',
-                raw_payload: metaData
+                raw_payload: metaData,
+                meta_message_id: metaMessageId,
+                delivery_status: 'sent'
               }]);
             }
           }

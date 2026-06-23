@@ -112,7 +112,7 @@ export async function DELETE(request) {
 
 export async function POST(request) {
   try {
-    const { audience, channels, message, testContact, customContacts, scheduledAt } = await request.json();
+    const { audience, channels, message, testContact, customContacts, scheduledAt, enableBatching } = await request.json();
 
     if (!message) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
@@ -141,8 +141,14 @@ export async function POST(request) {
        });
     } else {
 
-    if (audience === 'all_customers' || audience === 'all_leads') {
-      const { data: orders } = await supabase.from('orders').select('customer_phone, customer_email').neq('status', 'cancelled');
+    if (audience === 'all_customers' || audience === 'all_leads' || audience === 'leads_7_days') {
+      let query = supabase.from('orders').select('customer_phone, customer_email').neq('status', 'cancelled');
+      if (audience === 'leads_7_days') {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        query = query.gte('created_at', sevenDaysAgo.toISOString());
+      }
+      const { data: orders } = await query;
       orders?.forEach(o => {
         const key = o.customer_phone || o.customer_email;
         if (key && !targets.has(key)) {
@@ -151,12 +157,35 @@ export async function POST(request) {
       });
     }
 
-    if (audience === 'abandoned_carts' || audience === 'all_leads') {
-      const { data: carts } = await supabase.from('abandoned_carts').select('phone, email');
+    if (audience === 'abandoned_carts' || audience === 'all_leads' || audience === 'leads_7_days') {
+      let query = supabase.from('abandoned_carts').select('phone, email');
+      if (audience === 'leads_7_days') {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        query = query.gte('created_at', sevenDaysAgo.toISOString());
+      }
+      const { data: carts } = await query;
       carts?.forEach(c => {
         const key = c.phone || c.email;
         if (key && !targets.has(key)) {
           targets.set(key, { phone: c.phone, email: c.email });
+        }
+      });
+
+      // Also pull from catalog_leads for leads_7_days/all_leads
+      let leadsQuery = supabase.from('catalog_leads').select('contact_value, contact_method');
+      if (audience === 'leads_7_days') {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        leadsQuery = leadsQuery.gte('created_at', sevenDaysAgo.toISOString());
+      }
+      const { data: catalogLeads } = await leadsQuery;
+      catalogLeads?.forEach(cl => {
+        if (!targets.has(cl.contact_value)) {
+          targets.set(cl.contact_value, {
+            phone: cl.contact_method === 'whatsapp' ? cl.contact_value : null,
+            email: cl.contact_method === 'email' ? cl.contact_value : null
+          });
         }
       });
     }
@@ -176,11 +205,41 @@ export async function POST(request) {
 
     const contacts = Array.from(targets.values());
     let queuedCount = 0;
+    
+    // Batching logic for large broadcasts
+    const BATCH_SIZE = 200;
+    let contactsToProcessNow = contacts;
 
-    // Send the broadcasts
-    // Note: In production for 1000s of users, this should be pushed to a background queue
-    // Since we are running in Next.js Serverless, we do it in a Promise.all block with slight concurrency control.
-    const promises = contacts.map(async (contact, i) => {
+    if (enableBatching && contacts.length > BATCH_SIZE) {
+      contactsToProcessNow = contacts.slice(0, BATCH_SIZE);
+      const remainingContacts = contacts.slice(BATCH_SIZE);
+      
+      // Chunk remaining into daily schedules
+      const chunks = [];
+      for (let i = 0; i < remainingContacts.length; i += BATCH_SIZE) {
+        chunks.push(remainingContacts.slice(i, i + BATCH_SIZE));
+      }
+
+      const schedulePromises = chunks.map(async (chunk, index) => {
+        const scheduleDate = scheduledAt ? new Date(scheduledAt) : new Date();
+        scheduleDate.setDate(scheduleDate.getDate() + index + 1); // Add 1 day for each chunk
+        
+        const chunkCustomList = chunk.map(c => c.phone || c.email).join(',');
+        
+        await supabase.from('scheduled_broadcasts').insert({
+          audience: 'custom',
+          custom_contacts: chunkCustomList,
+          channels,
+          message,
+          scheduled_at: scheduleDate.toISOString(),
+          status: 'pending'
+        });
+      });
+      await Promise.all(schedulePromises);
+    }
+
+    // Send the broadcasts for the current batch
+    const promises = contactsToProcessNow.map(async (contact, i) => {
       // Add artificial delay to avoid hitting rate limits instantly
       await new Promise(r => setTimeout(r, i * 150)); 
       
@@ -198,11 +257,14 @@ export async function POST(request) {
       if (sentWhatsapp || sentEmail) queuedCount++;
     });
 
-    // Don't await all of them if the list is huge, but Vercel timeout is 10-60s depending on plan.
-    // For now we will await them all since the list is likely < 500 contacts initially.
     await Promise.all(promises);
 
-    return NextResponse.json({ success: true, queuedCount });
+    let resMessage = 'Broadcast completed successfully.';
+    if (enableBatching && contacts.length > BATCH_SIZE) {
+      resMessage = `Sent 200 immediately. Auto-scheduled remaining ${contacts.length - 200} over upcoming days to protect Meta API limits.`;
+    }
+
+    return NextResponse.json({ success: true, queuedCount, text: resMessage });
   } catch (err) {
     console.error('Broadcast Error:', err);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

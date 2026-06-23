@@ -80,6 +80,7 @@ export async function POST(request) {
           }
         }
 
+        const metaMessageId = metaData?.messages?.[0]?.id || null;
         const { error: logErr } = await supabase
           .from('whatsapp_messages')
           .insert({
@@ -89,7 +90,9 @@ export async function POST(request) {
             message_type: 'text',
             direction: 'outbound',
             matched_order_id: orderId || null,
-            raw_payload: metaData
+            raw_payload: metaData,
+            meta_message_id: metaMessageId,
+            delivery_status: 'sent'
           });
 
         if (logErr) {
