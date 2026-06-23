@@ -301,21 +301,47 @@ export default function CatalogPage() {
     async function loadSettings() {
       if (!isSupabaseConfigured || !supabase) return;
       try {
-        const { data, error } = await supabase.from('site_settings').select('value').eq('id', 'announcement_banners').single();
+        let bannerActive = false;
+        let bannerTextEn = '';
+        let bannerTextEs = '';
+
+        // Check landing_page banner (managed in Admin UI)
+        const { data: lpData } = await supabase.from('site_settings').select('value').eq('id', 'landing_page').single();
+        if (lpData && lpData.value && lpData.value.bannerActive) {
+          let isValid = true;
+          if (lpData.value.linkedPromoCode) {
+            const { data: promo } = await supabase.from('promo_codes').select('valid_until, is_active').eq('code', lpData.value.linkedPromoCode.toUpperCase()).single();
+            if (promo) {
+              if (promo.valid_until && new Date(promo.valid_until) < new Date()) {
+                isValid = false;
+              } else if (!promo.is_active) {
+                isValid = false;
+              }
+            } else {
+              isValid = false;
+            }
+          }
+          if (isValid) {
+            bannerActive = true;
+            bannerTextEn = lpData.value.bannerTextEn || '';
+            bannerTextEs = lpData.value.bannerTextEs || '';
+          }
+        }
+
+        // Check announcement_banners (secondary source)
+        const { data } = await supabase.from('site_settings').select('value').eq('id', 'announcement_banners').single();
         if (data && Array.isArray(data.value)) {
           const activeBanners = data.value.filter(b => b.isActive);
           if (activeBanners.length > 0) {
-            setCmsSettings({
-              bannerActive: true,
-              bannerTextEn: activeBanners.map(b => b.textEn).join("  🌟  "),
-              bannerTextEs: activeBanners.map(b => b.textEs).join("  🌟  ")
-            });
-          } else {
-            setCmsSettings(prev => ({ ...prev, bannerActive: false }));
+            bannerActive = true;
+            const annEn = activeBanners.map(b => b.textEn).join("  🌟  ");
+            const annEs = activeBanners.map(b => b.textEs).join("  🌟  ");
+            bannerTextEn = bannerTextEn ? `${bannerTextEn}  🌟  ${annEn}` : annEn;
+            bannerTextEs = bannerTextEs ? `${bannerTextEs}  🌟  ${annEs}` : annEs;
           }
-        } else {
-          setCmsSettings(prev => ({ ...prev, bannerActive: false }));
         }
+
+        setCmsSettings(prev => ({ ...prev, bannerActive, bannerTextEn, bannerTextEs }));
       } catch (err) {
         console.error('Error loading site settings:', err);
       }

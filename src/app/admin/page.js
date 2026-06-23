@@ -6039,8 +6039,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>Enable Banner</span>
                         </label>
                       </div>
-                      <input type="text" placeholder="Banner Text (EN)" value={siteSettings.bannerTextEn} onChange={e => setSiteSettings({...siteSettings, bannerTextEn: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
-                      <input type="text" placeholder="Banner Text (ES)" value={siteSettings.bannerTextEs} onChange={e => setSiteSettings({...siteSettings, bannerTextEs: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      <input type="text" placeholder="Banner Text (EN)" value={siteSettings.bannerTextEn || ''} onChange={e => setSiteSettings({...siteSettings, bannerTextEn: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      <input type="text" placeholder="Banner Text (ES)" value={siteSettings.bannerTextEs || ''} onChange={e => setSiteSettings({...siteSettings, bannerTextEs: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      <input type="text" placeholder="Linked Promo Code (e.g. VENTAFLASH15) - Auto-hides when expired" value={siteSettings.linkedPromoCode || ''} onChange={e => setSiteSettings({...siteSettings, linkedPromoCode: e.target.value.toUpperCase()})} style={{ width: '100%', padding: '8px', marginTop: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                     </div>
 
                     {/* Hero Text Controls */}

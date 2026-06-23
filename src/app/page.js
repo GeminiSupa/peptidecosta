@@ -91,7 +91,27 @@ export default function LandingPage() {
       const { data } = await supabase.from('products').select('product,price_usd,price_crc,original_price_usd,original_price_crc,status,image_url,category,emoji').eq('status','In Stock').order('priority',{ascending:true}).limit(4);
       if (data) setFeaturedProducts(data);
       const { data: s } = await supabase.from('site_settings').select('value').eq('id','landing_page').single();
-      if (s?.value) setCmsSettings(s.value);
+      if (s?.value) {
+        let finalSettings = { ...s.value };
+        if (finalSettings.linkedPromoCode && finalSettings.bannerActive) {
+          try {
+            const { data: promo } = await supabase.from('promo_codes').select('valid_until, is_active').eq('code', finalSettings.linkedPromoCode.toUpperCase()).single();
+            if (promo) {
+              if (promo.valid_until && new Date(promo.valid_until) < new Date()) {
+                finalSettings.bannerActive = false;
+              } else if (!promo.is_active) {
+                finalSettings.bannerActive = false;
+              }
+            } else {
+              // Promo code doesn't exist or was deleted, optionally hide banner or keep as is. Hiding is safer.
+              finalSettings.bannerActive = false;
+            }
+          } catch(e) {
+            console.error('Failed to verify linked promo code expiration:', e);
+          }
+        }
+        setCmsSettings(finalSettings);
+      }
     };
     load();
   }, []);
