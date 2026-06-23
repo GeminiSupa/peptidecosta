@@ -45,6 +45,20 @@ export async function POST(request) {
       ? contact_value.trim() 
       : cleanPhoneNumber(contact_value.trim());
 
+    if (supabase) {
+      // Security Check: Prevent duplicate promo codes for the same contact
+      const { data: existingLead } = await supabase
+        .from('catalog_leads')
+        .select('id')
+        .eq('contact_value', cleanContact)
+        .maybeSingle();
+
+      if (existingLead) {
+        console.log(`[Leads Capture] Contact ${cleanContact} already exists. Skipping promo generation.`);
+        return NextResponse.json({ success: true, message: 'Already registered' });
+      }
+    }
+
     // Generate unique promo code
     const promoCode = 'WELCOME-' + Math.random().toString(36).substring(2, 8).toUpperCase();
 
