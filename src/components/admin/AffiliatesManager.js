@@ -18,6 +18,7 @@ export default function AffiliatesManager({ products = [] }) {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [targetAffiliate, setTargetAffiliate] = useState('all');
+  const [promoFilter, setPromoFilter] = useState('standard');
 
   // Forms State
   const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
@@ -297,27 +298,80 @@ export default function AffiliatesManager({ products = [] }) {
           </div>
           
           <div style={{ padding: '20px' }}>
-            <form onSubmit={handleCreatePromo} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px', padding: '20px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px dashed rgba(255,255,255,0.1)' }}>
-              <h3 style={{ margin: '0', fontSize: '0.9rem', fontWeight: 'bold', color: '#e2e8f0' }}>Generate Promo Code</h3>
-              <div className="admin-form-grid-2">
-                <input required placeholder="Code (e.g. SMITH10)" value={newPromo.code} onChange={e => setNewPromo({...newPromo, code: e.target.value.toUpperCase()})} style={{...inputStyle, textTransform: 'uppercase'}} />
-                <select required value={newPromo.affiliate_id} onChange={e => setNewPromo({...newPromo, affiliate_id: e.target.value})} style={{...inputStyle, color: newPromo.affiliate_id ? '#f8fafc' : '#94a3b8'}}>
-                  <option value="" disabled>Select Affiliate...</option>
-                  {affiliates.map(a => <option key={a.id} value={a.id} style={{color: '#0f172a'}}>{a.name}</option>)}
-                </select>
-                <select value={newPromo.discount_pct} onChange={e => setNewPromo({...newPromo, discount_pct: parseFloat(e.target.value)})} style={inputStyle}>
-                  <option value={0.05}>5% Customer Discount</option>
-                  <option value={0.10}>10% Customer Discount</option>
-                  <option value={0.15}>15% Customer Discount</option>
-                  <option value={0.20}>20% Customer Discount</option>
-                </select>
-                <button type="submit" style={btnStyle('#059669')}><Plus size={16} /> Create Code</button>
-              </div>
-            </form>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+              <button 
+                onClick={() => setPromoFilter('standard')}
+                className="admin-btn"
+                style={{ 
+                  background: promoFilter === 'standard' ? '#38bdf8' : 'rgba(255,255,255,0.02)', 
+                  color: promoFilter === 'standard' ? '#0e1626' : '#94a3b8',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                  fontWeight: 'bold', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem'
+                }}
+              >
+                Standard Promos
+              </button>
+              <button 
+                onClick={() => setPromoFilter('welcome')}
+                className="admin-btn"
+                style={{ 
+                  background: promoFilter === 'welcome' ? '#38bdf8' : 'rgba(255,255,255,0.02)', 
+                  color: promoFilter === 'welcome' ? '#0e1626' : '#94a3b8',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                  fontWeight: 'bold', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem'
+                }}
+              >
+                Auto-Generated Leads
+              </button>
+            </div>
+
+            {promoFilter === 'standard' && (
+              <form onSubmit={handleCreatePromo} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px', padding: '20px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                <h3 style={{ margin: '0', fontSize: '0.9rem', fontWeight: 'bold', color: '#e2e8f0' }}>Generate Promo Code</h3>
+                <div className="admin-form-grid-2">
+                  <input required placeholder="Code (e.g. SMITH10)" value={newPromo.code} onChange={e => setNewPromo({...newPromo, code: e.target.value.toUpperCase()})} style={{...inputStyle, textTransform: 'uppercase'}} />
+                  <select required value={newPromo.affiliate_id} onChange={e => setNewPromo({...newPromo, affiliate_id: e.target.value})} style={{...inputStyle, color: newPromo.affiliate_id ? '#f8fafc' : '#94a3b8'}}>
+                    <option value="" disabled>Select Affiliate...</option>
+                    {affiliates.map(a => <option key={a.id} value={a.id} style={{color: '#0f172a'}}>{a.name}</option>)}
+                  </select>
+                  <select value={newPromo.discount_pct} onChange={e => setNewPromo({...newPromo, discount_pct: parseFloat(e.target.value)})} style={inputStyle}>
+                    <option value={0.05}>5% Customer Discount</option>
+                    <option value={0.10}>10% Customer Discount</option>
+                    <option value={0.15}>15% Customer Discount</option>
+                    <option value={0.20}>20% Customer Discount</option>
+                  </select>
+                  <button type="submit" style={btnStyle('#059669')}><Plus size={16} /> Create Code</button>
+                </div>
+              </form>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '400px', overflowY: 'auto' }}>
-              {loading ? <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Loading...</p> : promoCodes.length === 0 ? <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>No promo codes active.</p> : promoCodes.map(promo => (
-                <div key={promo.id} style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: promo.is_active ? 1 : 0.5, transition: 'opacity 0.2s' }}>
+              {(() => {
+                const filteredCodes = promoCodes.filter(p => promoFilter === 'welcome' ? p.code.startsWith('WELCOME-') : !p.code.startsWith('WELCOME-'));
+                
+                if (loading) return <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Loading...</p>;
+                
+                let statsUI = null;
+                if (promoFilter === 'welcome') {
+                  const used = filteredCodes.filter(p => p.usage_count >= 1).length;
+                  const valid = filteredCodes.length - used;
+                  statsUI = (
+                    <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', padding: '12px', background: 'rgba(56, 189, 248, 0.05)', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
+                      <div style={{ color: '#34d399', fontSize: '0.85rem', fontWeight: 'bold' }}>✅ {valid} Usable Codes</div>
+                      <div style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 'bold' }}>🛒 {used} Used (Expired)</div>
+                    </div>
+                  );
+                }
+
+                if (filteredCodes.length === 0) return <>{statsUI}<p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>No {promoFilter} codes active.</p></>;
+
+                return (
+                  <>
+                    {statsUI}
+                    {filteredCodes.map(promo => {
+                      const isUsed = promo.usage_count >= 1;
+                      return (
+                        <div key={promo.id} style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: promo.is_active ? 1 : 0.5, transition: 'opacity 0.2s' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
                       <div style={{ fontWeight: '900', color: '#f8fafc', fontSize: '1.2rem', letterSpacing: '1px' }}>{promo.code}</div>
@@ -343,26 +397,41 @@ export default function AffiliatesManager({ products = [] }) {
                         🎯 Applies to: <span style={{color: '#e2e8f0'}}>{promo.target_product}</span>
                       </div>
                     )}
-                    <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', padding: '2px 8px', borderRadius: '12px', display: 'inline-block', marginTop: '8px' }}>
-                      {(promo.discount_pct * 100).toFixed(0)}% Customer Discount
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', padding: '2px 8px', borderRadius: '12px' }}>
+                        {(promo.discount_pct * 100).toFixed(0)}% Customer Discount
+                      </div>
+                      {promoFilter === 'welcome' && (
+                        <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: isUsed ? '#94a3b8' : '#34d399', background: isUsed ? 'rgba(148, 163, 184, 0.1)' : 'rgba(52, 211, 153, 0.1)', padding: '2px 8px', borderRadius: '12px' }}>
+                          {isUsed ? '🛒 Used' : '✅ Usable'}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => handleTogglePromo(promo.id, promo.is_active)} style={{ background: promo.is_active ? 'rgba(52, 211, 153, 0.1)' : 'rgba(148, 163, 184, 0.1)', border: `1px solid ${promo.is_active ? 'rgba(52, 211, 153, 0.2)' : 'rgba(148, 163, 184, 0.2)'}`, borderRadius: '8px', cursor: 'pointer', padding: '8px', color: promo.is_active ? '#34d399' : '#94a3b8' }}>
-                      {promo.is_active ? <CheckCircle size={18} /> : <XCircle size={18} />}
-                    </button>
-                    <button onClick={() => setEditingPromo({
-                      ...promo, 
-                      targetProducts: promo.target_product ? promo.target_product.split(',').map(s => s.trim()) : [],
-                      valid_from: promo.valid_from ? new Date(promo.valid_from).toISOString().slice(0, 16) : '',
-                      valid_until: promo.valid_until ? new Date(promo.valid_until).toISOString().slice(0, 16) : ''
-                    })} style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', cursor: 'pointer', padding: '8px', transition: 'all 0.2s' }}>
-                      <Edit2 size={18} />
-                    </button>
+                    {promoFilter !== 'welcome' && (
+                      <button onClick={() => handleTogglePromo(promo.id, promo.is_active)} style={{ background: promo.is_active ? 'rgba(52, 211, 153, 0.1)' : 'rgba(148, 163, 184, 0.1)', border: `1px solid ${promo.is_active ? 'rgba(52, 211, 153, 0.2)' : 'rgba(148, 163, 184, 0.2)'}`, borderRadius: '8px', cursor: 'pointer', padding: '8px', color: promo.is_active ? '#34d399' : '#94a3b8' }}>
+                        {promo.is_active ? <CheckCircle size={18} /> : <XCircle size={18} />}
+                      </button>
+                    )}
+                    {promoFilter !== 'welcome' && (
+                      <button onClick={() => setEditingPromo({
+                        ...promo, 
+                        targetProducts: promo.target_product ? promo.target_product.split(',').map(s => s.trim()) : [],
+                        valid_from: promo.valid_from ? new Date(promo.valid_from).toISOString().slice(0, 16) : '',
+                        valid_until: promo.valid_until ? new Date(promo.valid_until).toISOString().slice(0, 16) : ''
+                      })} style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', cursor: 'pointer', padding: '8px', transition: 'all 0.2s' }}>
+                        <Edit2 size={18} />
+                      </button>
+                    )}
                     <button onClick={() => handleDeletePromo(promo.id)} style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', cursor: 'pointer', padding: '8px' }}><Trash2 size={18} /></button>
                   </div>
                 </div>
-              ))}
+                      );
+                    })}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
