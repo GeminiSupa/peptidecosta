@@ -2789,13 +2789,13 @@ export default function CatalogPage() {
               </h2>
               <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.5 }}>
                 {lang === 'en' 
-                  ? 'Please provide your WhatsApp number or email address to view our premium peptide catalog and current pricing.' 
-                  : 'Por favor, ingrese su número de WhatsApp o correo electrónico para ver nuestro catálogo premium y precios actuales.'}
+                  ? 'Add your real WhatsApp number or email to view our premium catalog and instantly receive a promo code for 15% off your first purchase on all products.' 
+                  : 'Agrega tu número de WhatsApp o correo electrónico real para ver nuestro catálogo premium y recibir al instante un código de descuento del 15% para tu primera compra en todos los productos.'}
               </p>
               <form onSubmit={handleGateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <input 
                   type="text" 
-                  placeholder={lang === 'en' ? 'WhatsApp Number or Email' : 'WhatsApp o Correo Electrónico'}
+                  placeholder={lang === 'en' ? 'WhatsApp (e.g. +1... or +506...) or Email' : 'WhatsApp (ej. +506... o +1...) o Correo'}
                   value={gateInput}
                   onChange={(e) => setGateInput(e.target.value)}
                   style={{ 
@@ -2805,6 +2805,11 @@ export default function CatalogPage() {
                   }}
                   required
                 />
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '-4px', textAlign: 'left', paddingLeft: '4px', lineHeight: 1.4 }}>
+                  {lang === 'en' 
+                    ? 'Tip: Use + and your country code (e.g., +1 for US, +506 for CR) to ensure you receive the WhatsApp promo code.' 
+                    : 'Nota: Usa + y tu código de país (ej. +506 para CR, +1 para US) para asegurar que recibas el código en WhatsApp.'}
+                </div>
                 {gateError && <div style={{ color: '#ef4444', fontSize: '0.8rem', fontWeight: 'bold' }}>{gateError}</div>}
                 <button 
                   type="submit" 
