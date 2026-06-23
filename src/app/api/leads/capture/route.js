@@ -152,7 +152,7 @@ export async function POST(request) {
                 type: 'template',
                 template: {
                   name: 'welcome_promo1', // Matches the exact name the user created in Meta
-                  language: { code: 'en' }, // The user created it under 'English' (en), even though the text is Spanish
+                  language: { code: 'es' }, // Updated to 'es' to match Meta API
                   components: [
                     {
                       type: 'body',
