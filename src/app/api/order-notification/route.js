@@ -79,10 +79,18 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
       : formatMoney(shippingAmount, order.currency);
 
   return `
-  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.6;width:100%;max-width:700px;margin:0 auto;padding:24px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;box-sizing:border-box;">
-    <h1 style="font-size:22px;font-weight:800;color:#0f172a;margin:0 0 20px;border-bottom:2px solid #e2e8f0;padding-bottom:12px;">🧪 New Order Received</h1>
-    
-    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);">
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.6;width:100%;max-width:700px;margin:0 auto;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);box-sizing:border-box;">
+      
+      <!-- Premium Admin Header Banner -->
+      <div style="background:linear-gradient(135deg, #0f172a, #4338ca);padding:40px 32px;text-align:center;">
+        <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height:56px;border-radius:8px;margin-bottom:20px;background:rgba(255,255,255,0.08);padding:6px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+        <h1 style="color:#ffffff;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">New Order Received!</h1>
+        <p style="color:#c7d2fe;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">A new order has been placed on the Peptides Costa Rica catalog.</p>
+      </div>
+
+      <div style="padding:32px;background-color:#f8fafc;">
+        
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);">
       <p style="margin:0 0 10px;font-size:14px;"><strong style="color:#475569;">Order Reference:</strong> <span style="font-family:monospace;font-size:16px;font-weight:bold;color:#059669;">${escapeHtml(order.orderNumber || 'N/A')}</span></p>
       <p style="margin:0 0 10px;font-size:14px;"><strong style="color:#475569;">Payment Method:</strong> ${escapeHtml(paymentLabel)}</p>
       <p style="margin:0 0 10px;font-size:14px;"><strong style="color:#475569;">Order Status:</strong> <span style="background:#dcfce7;color:#15803d;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:bold;">${escapeHtml(order.status || 'Paid')}</span></p>
@@ -145,7 +153,12 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
         </tr>` : ''}
       </tbody>
     </table>
+
+    <div style="text-align:center;padding-top:20px;color:#94a3b8;font-size:12px;">
+      Peptides Costa Rica Admin Notification System
+    </div>
   </div>
+</div>
 `;
 };
 
