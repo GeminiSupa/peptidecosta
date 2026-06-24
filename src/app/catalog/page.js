@@ -2455,10 +2455,6 @@ export default function CatalogPage() {
                 <Sparkles size={14} className="promo-icon" />
                 <span>{lang === 'en' ? parseBannerText(cmsSettings.bannerTextEn) : parseBannerText(cmsSettings.bannerTextEs)}</span>
               </div>
-              <div className="promo-banner-text">
-                <Sparkles size={14} className="promo-icon" />
-                <span>{lang === 'en' ? parseBannerText(cmsSettings.bannerTextEn) : parseBannerText(cmsSettings.bannerTextEs)}</span>
-              </div>
             </div>
           </div>
         </div>

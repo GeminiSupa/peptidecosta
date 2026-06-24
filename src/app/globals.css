@@ -5589,20 +5589,21 @@ body {
     overflow: hidden;
     width: 100%;
     display: flex;
+    justify-content: center;
 }
 
 .promo-banner-track {
     display: flex;
-    white-space: nowrap;
-    animation: marqueeTicker 25s linear infinite;
+    white-space: normal;
+    text-align: center;
 }
 
 .promo-banner-text {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
-    padding-right: 80px;
-    flex-shrink: 0;
+    padding: 0 10px;
 }
 
 .promo-icon {
