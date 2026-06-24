@@ -45,6 +45,12 @@ export async function PATCH(request) {
       patch.activity_log = activityLog;
     }
 
+    const { data: currentOrder } = await supabase
+      .from('orders')
+      .select('status')
+      .eq('id', orderId)
+      .single();
+
     const { data, error } = await supabase
       .from('orders')
       .update(patch)
@@ -55,6 +61,55 @@ export async function PATCH(request) {
     if (error) {
       console.error('[admin/orders/update]', error.message);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Trigger Customer Receipt if status changed to Paid/Completed
+    if (patch.status && currentOrder) {
+      const wasPaid = currentOrder.status && (currentOrder.status.toLowerCase().includes('paid') || currentOrder.status.toLowerCase().includes('complet'));
+      const isNowPaid = patch.status.toLowerCase().includes('paid') || patch.status.toLowerCase().includes('complet');
+
+      if (!wasPaid && isNowPaid) {
+        try {
+          const itemsAmount = (data.items || []).reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
+          const shippingCost = data.currency === 'CRC' ? Number(data.shipping_cost_crc || 0) : Number(data.shipping_cost_usd || 0);
+          const promoDiscount = data.currency === 'CRC' ? Number(data.discount_amount_crc || 0) : Number(data.discount_amount_usd || 0);
+          const total = data.currency === 'CRC' ? Number(data.total_crc || 0) : Number(data.total_usd || 0);
+          
+          let volumeDiscount = itemsAmount - promoDiscount + shippingCost - total;
+          if (volumeDiscount < 0.01) volumeDiscount = 0; // handle floating point errors
+
+          const baseUrl = new URL(request.url).origin;
+          await fetch(`${baseUrl}/api/order-notification`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+               orderNumber: data.order_number,
+               customerName: data.customer_name,
+               customerPhone: data.customer_phone,
+               customerEmail: data.customer_email,
+               shippingAddress: data.shipping_address,
+               customerIdType: data.customer_id_type,
+               customerIdNumber: data.customer_id_number,
+               items: data.items || [],
+               total: total,
+               totalUsd: data.total_usd,
+               totalCrc: data.total_crc,
+               subtotal: itemsAmount,
+               volumeDiscount: volumeDiscount,
+               promoDiscount: promoDiscount,
+               shipping: shippingCost,
+               currency: data.currency || 'USD',
+               paymentMethod: data.payment_method,
+               status: data.status,
+               customerReceiptOnly: true,
+               forceCustomerReceipt: true,
+               lang: data.currency === 'CRC' ? 'es' : 'en',
+            })
+          });
+        } catch (e) {
+          console.error('[admin/orders/update] Failed to send customer confirmation:', e);
+        }
+      }
     }
 
     return NextResponse.json({ ok: true, order: data });

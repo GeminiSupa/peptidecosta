@@ -375,9 +375,14 @@ export async function POST(request) {
       customerReceipt: { sent: false, skipped: true }
     };
 
+    const isPaid = order.status && (order.status.toLowerCase().includes('paid') || order.status.toLowerCase().includes('complet'));
+    const skipAdmin = order.customerReceiptOnly === true;
+    const skipCustomer = order.adminNotificationOnly === true || (!isPaid && !order.forceCustomerReceipt);
+
     // ── 1. SEND ADMIN NOTIFICATION ──────────────────────────────────────────
-    try {
-      const adminSubject = `New Order ${order.orderNumber ? `#${order.orderNumber}` : ''} - ${order.customerName} [${order.paymentMethod?.toUpperCase()}]`;
+    if (!skipAdmin) {
+      try {
+        const adminSubject = `New Order ${order.orderNumber ? `#${order.orderNumber}` : ''} - ${order.customerName} [${order.paymentMethod?.toUpperCase()}]`;
       const adminHtml = buildAdminHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc);
       
       const adminText = [
@@ -427,9 +432,10 @@ export async function POST(request) {
       console.error('[Order notification] Admin notification failed to send:', adminErr);
       results.adminNotification = { sent: false, error: adminErr.message };
     }
+    }
 
     // ── 2. SEND CUSTOMER CONFIRMATION RECEIPT ───────────────────────────────
-    if (order.customerEmail && order.customerEmail.trim() !== '') {
+    if (!skipCustomer && order.customerEmail && order.customerEmail.trim() !== '') {
       try {
         const customerSubject = orderLang === 'en'
           ? `Order Confirmation #${order.orderNumber || ''} - Peptides Costa Rica`
