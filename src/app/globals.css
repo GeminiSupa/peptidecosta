@@ -541,6 +541,7 @@ body {
     object-fit: contain !important;
     mix-blend-mode: multiply;
     padding-top: 12px;
+    padding-bottom: 12px;
     box-sizing: border-box;
 }
 
@@ -4830,6 +4831,7 @@ body {
     animation: floatImage 6s ease-in-out infinite;
     filter: drop-shadow(0 15px 25px rgba(0, 39, 102, 0.12));
     padding-top: 12px;
+    padding-bottom: 12px;
     box-sizing: border-box;
 }
 
