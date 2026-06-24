@@ -465,7 +465,8 @@ body {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    width: 100%;
+    width: 80%;
+    margin: 0 auto;
     padding: 6px 10px;
     background: #E05A0C; /* Brighter, premium brand orange for enhanced visual prominence */
     color: white;
@@ -8547,7 +8548,8 @@ body {
 
 .product-grid.grid-view .add-to-cart-btn,
 .product-grid.grid-view .inline-qty-selector {
-    width: 100%;
+    width: 80%;
+    margin: 0 auto;
     min-height: 30px;
 }
 
