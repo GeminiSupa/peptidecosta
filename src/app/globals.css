@@ -7461,6 +7461,22 @@ body {
     max-height: calc(100vh - 24px);
     overflow-y: auto;
     box-sizing: border-box;
+    background: #0f172a !important;
+    color: #f8fafc !important;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.manual-order-modal h2 {
+    color: #ffffff !important;
+}
+
+.manual-order-modal .close-modal {
+    color: #94a3b8 !important;
+}
+
+.manual-order-modal .close-modal:hover {
+    color: #ffffff !important;
 }
 
 .manual-order-form { display: flex; flex-direction: column; gap: 10px; }
