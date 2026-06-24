@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 const rawNotificationTo = process.env.ORDER_NOTIFICATION_TO || 'omerforce@gmail.com, info@peptidescostarica.net';
 const NOTIFICATION_TO = rawNotificationTo.includes('surfyesi@hotmail.com')
@@ -78,25 +79,25 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
       : formatMoney(shippingAmount, order.currency);
 
   return `
-  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.5;max-width:640px;margin:0 auto;padding:20px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
-    <h1 style="font-size:20px;font-weight:800;color:#0f172a;margin:0 0 16px;border-bottom:2px solid #e2e8f0;padding-bottom:12px;">🧪 New Order Received</h1>
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.6;width:100%;max-width:700px;margin:0 auto;padding:24px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;box-sizing:border-box;">
+    <h1 style="font-size:22px;font-weight:800;color:#0f172a;margin:0 0 20px;border-bottom:2px solid #e2e8f0;padding-bottom:12px;">🧪 New Order Received</h1>
     
-    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-      <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#475569;">Order Reference:</strong> <span style="font-family:monospace;font-size:15px;font-weight:bold;color:#059669;">${escapeHtml(order.orderNumber || 'N/A')}</span></p>
-      <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#475569;">Payment Method:</strong> ${escapeHtml(paymentLabel)}</p>
-      <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#475569;">Order Status:</strong> <span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:12px;font-size:12px;font-weight:bold;">${escapeHtml(order.status || 'Paid')}</span></p>
-      <div style="border-top:1px solid #e2e8f0;margin-top:12px;padding-top:12px;">
-        <p style="margin:0 0 6px;font-size:14px;"><strong style="color:#475569;">Items Amount:</strong> <span style="font-weight:800;color:#0f172a;">${formatMoney(itemsAfterDiscounts, order.currency)}</span></p>
-        <p style="margin:0 0 6px;font-size:14px;"><strong style="color:#475569;">Shipping Fee:</strong> <span style="font-weight:800;color:${shippingAmount === 0 ? '#15803d' : '#0f172a'};">${shippingLabel}</span></p>
-        <p style="margin:0;font-size:15px;"><strong style="color:#475569;">Grand Total:</strong> <span style="font-size:18px;font-weight:900;color:#0f172a;">${totalPrimary}</span> ${totalUsd && totalUsd !== totalPrimary ? ` / <span style="color:#64748b;">${totalUsd}</span>` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / <span style="color:#64748b;">${totalCrc}</span>` : ''}</p>
+    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);">
+      <p style="margin:0 0 10px;font-size:14px;"><strong style="color:#475569;">Order Reference:</strong> <span style="font-family:monospace;font-size:16px;font-weight:bold;color:#059669;">${escapeHtml(order.orderNumber || 'N/A')}</span></p>
+      <p style="margin:0 0 10px;font-size:14px;"><strong style="color:#475569;">Payment Method:</strong> ${escapeHtml(paymentLabel)}</p>
+      <p style="margin:0 0 10px;font-size:14px;"><strong style="color:#475569;">Order Status:</strong> <span style="background:#dcfce7;color:#15803d;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:bold;">${escapeHtml(order.status || 'Paid')}</span></p>
+      <div style="border-top:1px solid #e2e8f0;margin-top:16px;padding-top:16px;">
+        <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#475569;">Items Amount:</strong> <span style="font-weight:800;color:#0f172a;">${formatMoney(itemsAfterDiscounts, order.currency)}</span></p>
+        <p style="margin:0 0 8px;font-size:14px;"><strong style="color:#475569;">Shipping Fee:</strong> <span style="font-weight:800;color:${shippingAmount === 0 ? '#15803d' : '#0f172a'};">${shippingLabel}</span></p>
+        <p style="margin:0;font-size:16px;"><strong style="color:#475569;">Grand Total:</strong> <span style="font-size:20px;font-weight:900;color:#0f172a;">${totalPrimary}</span> ${totalUsd && totalUsd !== totalPrimary ? ` / <span style="color:#64748b;">${totalUsd}</span>` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / <span style="color:#64748b;">${totalCrc}</span>` : ''}</p>
       </div>
     </div>
 
-    <h2 style="font-size:15px;font-weight:700;color:#0f172a;margin:0 0 8px;text-transform:uppercase;letter-spacing:0.5px;">Customer Profile</h2>
-    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
-      <p style="margin:0 0 6px;font-size:14px;"><strong>Name:</strong> ${escapeHtml(order.customerName)}</p>
+    <h2 style="font-size:16px;font-weight:700;color:#0f172a;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">Customer Profile</h2>
+    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);">
+      <p style="margin:0 0 8px;font-size:14px;"><strong>Name:</strong> ${escapeHtml(order.customerName)}</p>
       ${order.customerIdNumber ? `
-        <p style="margin:0 0 6px;font-size:14px;"><strong>ID:</strong> ${escapeHtml(order.customerIdNumber)} (${escapeHtml(
+        <p style="margin:0 0 8px;font-size:14px;"><strong>ID:</strong> ${escapeHtml(order.customerIdNumber)} (${escapeHtml(
           order.customerIdType === '1' ? 'National ID' :
           order.customerIdType === '6' ? 'DIMEX' :
           order.customerIdType === '5' ? 'Passport' :
@@ -104,43 +105,43 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
           order.customerIdType || 'N/A'
         )})</p>
       ` : ''}
-      <p style="margin:0 0 6px;font-size:14px;"><strong>WhatsApp:</strong> <a href="https://wa.me/${(order.customerPhone || '').replace(/[^0-9]/g, '')}" style="color:#059669;text-decoration:none;font-weight:bold;">${escapeHtml(order.customerPhone || 'N/A')}</a></p>
+      <p style="margin:0 0 8px;font-size:14px;"><strong>WhatsApp:</strong> <a href="https://wa.me/${(order.customerPhone || '').replace(/[^0-9]/g, '')}" style="color:#059669;text-decoration:none;font-weight:bold;">${escapeHtml(order.customerPhone || 'N/A')}</a></p>
       <p style="margin:0;font-size:14px;"><strong>Email:</strong> ${escapeHtml(order.customerEmail || 'N/A')}</p>
     </div>
 
-    <h2 style="font-size:15px;font-weight:700;color:#0f172a;margin:0 0 8px;text-transform:uppercase;letter-spacing:0.5px;">Shipping Coordinates</h2>
-    <pre style="white-space:pre-wrap;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;color:#334155;margin:0 0 20px;line-height:1.6;box-shadow:0 1px 3px rgba(0,0,0,0.05);">${escapeHtml(order.shippingAddress || 'N/A')}</pre>
+    <h2 style="font-size:16px;font-weight:700;color:#0f172a;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">Shipping Coordinates</h2>
+    <pre style="white-space:pre-wrap;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;color:#334155;margin:0 0 24px;line-height:1.6;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);">${escapeHtml(order.shippingAddress || 'N/A')}</pre>
 
-    <h2 style="font-size:15px;font-weight:700;color:#0f172a;margin:0 0 8px;text-transform:uppercase;letter-spacing:0.5px;">Purchased Items</h2>
-    <table style="width:100%;border-collapse:collapse;margin:0 0 16px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+    <h2 style="font-size:16px;font-weight:700;color:#0f172a;margin:0 0 12px;text-transform:uppercase;letter-spacing:0.5px;">Purchased Items</h2>
+    <table style="width:100%;border-collapse:collapse;margin:0 0 20px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);">
       <thead>
-        <tr style="background-color:#f1f5f9;">
-          <th style="text-align:left;padding:10px 14px;border-bottom:2px solid #cbd5e1;font-size:12.5px;text-transform:uppercase;color:#475569;">Product</th>
-          <th style="text-align:center;padding:10px 14px;border-bottom:2px solid #cbd5e1;font-size:12.5px;text-transform:uppercase;color:#475569;width:60px;">Qty</th>
-          <th style="text-align:right;padding:10px 14px;border-bottom:2px solid #cbd5e1;font-size:12.5px;text-transform:uppercase;color:#475569;width:100px;">Total</th>
+        <tr style="background-color:#f8fafc;">
+          <th style="text-align:left;padding:12px 16px;border-bottom:2px solid #e2e8f0;font-size:13px;text-transform:uppercase;color:#64748b;font-weight:600;">Product</th>
+          <th style="text-align:center;padding:12px 16px;border-bottom:2px solid #e2e8f0;font-size:13px;text-transform:uppercase;color:#64748b;font-weight:600;width:70px;">Qty</th>
+          <th style="text-align:right;padding:12px 16px;border-bottom:2px solid #e2e8f0;font-size:13px;text-transform:uppercase;color:#64748b;font-weight:600;width:110px;">Total</th>
         </tr>
       </thead>
-      <tbody style="padding:0 14px;">
+      <tbody style="padding:0 16px;">
         ${buildItemsRows(order.items, order.currency)}
         ${order.subtotal ? `
-        <tr style="border-top:2px solid #cbd5e1;">
-          <td colspan="2" style="text-align:right;padding:10px 14px;font-size:13px;color:#475569;font-weight:600;">Subtotal</td>
-          <td style="text-align:right;padding:10px 14px;font-size:13px;color:#0f172a;font-weight:700;">${formatMoney(order.subtotal, order.currency)}</td>
+        <tr style="border-top:2px solid #e2e8f0;">
+          <td colspan="2" style="text-align:right;padding:12px 16px;font-size:14px;color:#475569;font-weight:600;">Subtotal</td>
+          <td style="text-align:right;padding:12px 16px;font-size:14px;color:#0f172a;font-weight:700;">${formatMoney(order.subtotal, order.currency)}</td>
         </tr>` : ''}
         ${order.volumeDiscount ? `
         <tr>
-          <td colspan="2" style="text-align:right;padding:6px 14px;font-size:13px;color:#15803d;font-weight:600;">Volume Discount</td>
-          <td style="text-align:right;padding:6px 14px;font-size:13px;color:#15803d;font-weight:700;">-${formatMoney(order.volumeDiscount, order.currency)}</td>
+          <td colspan="2" style="text-align:right;padding:8px 16px;font-size:14px;color:#15803d;font-weight:600;">Volume Discount</td>
+          <td style="text-align:right;padding:8px 16px;font-size:14px;color:#15803d;font-weight:700;">-${formatMoney(order.volumeDiscount, order.currency)}</td>
         </tr>` : ''}
         ${order.promoDiscount ? `
         <tr>
-          <td colspan="2" style="text-align:right;padding:6px 14px;font-size:13px;color:#0284c7;font-weight:600;">Promo Discount</td>
-          <td style="text-align:right;padding:6px 14px;font-size:13px;color:#0284c7;font-weight:700;">-${formatMoney(order.promoDiscount, order.currency)}</td>
+          <td colspan="2" style="text-align:right;padding:8px 16px;font-size:14px;color:#0284c7;font-weight:600;">Promo Discount</td>
+          <td style="text-align:right;padding:8px 16px;font-size:14px;color:#0284c7;font-weight:700;">-${formatMoney(order.promoDiscount, order.currency)}</td>
         </tr>` : ''}
         ${order.shipping !== undefined ? `
         <tr>
-          <td colspan="2" style="text-align:right;padding:6px 14px;font-size:13px;color:#475569;font-weight:600;">Shipping</td>
-          <td style="text-align:right;padding:6px 14px;font-size:13px;color:#0f172a;font-weight:700;">${order.shipping === 0 ? 'FREE' : formatMoney(order.shipping, order.currency)}</td>
+          <td colspan="2" style="text-align:right;padding:8px 16px;font-size:14px;color:#475569;font-weight:600;">Shipping</td>
+          <td style="text-align:right;padding:8px 16px;font-size:14px;color:#0f172a;font-weight:700;">${order.shipping === 0 ? 'FREE' : formatMoney(order.shipping, order.currency)}</td>
         </tr>` : ''}
       </tbody>
     </table>
@@ -149,7 +150,7 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
 };
 
 // Customer HTML Receipt Builder
-const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc, lang, links) => {
+const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc, lang, links, salesTextEn, salesTextEs, promoCodesList) => {
   const isEn = lang === 'en';
   
   const strings = {
@@ -171,93 +172,105 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
   };
 
   return `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.5;max-width:600px;margin:0 auto;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.03);">
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.6;width:100%;max-width:700px;margin:0 auto;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);box-sizing:border-box;">
       
       <!-- Premium Science Theme Header Banner -->
-      <div style="background:linear-gradient(135deg, #0f172a, #022c22);padding:32px 24px;text-align:center;">
-        <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height:48px;border-radius:8px;margin-bottom:16px;background:rgba(255,255,255,0.08);padding:4px;">
-        <h1 style="color:#ffffff;font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-0.5px;">${strings.title}</h1>
-        <p style="color:#a7f3d0;font-size:14px;margin:0;max-width:440px;margin:0 auto;line-height:1.4;">${strings.subtitle}</p>
+      <div style="background:linear-gradient(135deg, #0f172a, #022c22);padding:40px 32px;text-align:center;">
+        <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height:56px;border-radius:8px;margin-bottom:20px;background:rgba(255,255,255,0.08);padding:6px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+        <h1 style="color:#ffffff;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">${strings.title}</h1>
+        <p style="color:#a7f3d0;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">${strings.subtitle}</p>
       </div>
 
-      <div style="padding:24px;">
+      <div style="padding:32px;">
         
         <!-- Summary Dashboard Grid -->
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-bottom:24px;">
-          <table style="width:100%;border-collapse:collapse;font-size:13.5px;">
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:24px;margin-bottom:32px;box-shadow:inset 0 2px 4px 0 rgba(0,0,0,0.02);">
+          <table style="width:100%;border-collapse:collapse;font-size:14.5px;">
             <tr>
-              <td style="padding:6px 0;color:#64748b;font-weight:600;">${strings.ref}</td>
-              <td style="padding:6px 0;text-align:right;font-family:monospace;font-weight:bold;color:#059669;font-size:14.5px;">${escapeHtml(order.orderNumber || 'N/A')}</td>
+              <td style="padding:8px 0;color:#64748b;font-weight:600;">${strings.ref}</td>
+              <td style="padding:8px 0;text-align:right;font-family:monospace;font-weight:bold;color:#059669;font-size:16px;">${escapeHtml(order.orderNumber || 'N/A')}</td>
             </tr>
             <tr>
-              <td style="padding:6px 0;color:#64748b;font-weight:600;">${strings.method}</td>
-              <td style="padding:6px 0;text-align:right;font-weight:bold;color:#0f172a;">${escapeHtml(paymentLabel)}</td>
+              <td style="padding:8px 0;color:#64748b;font-weight:600;">${strings.method}</td>
+              <td style="padding:8px 0;text-align:right;font-weight:bold;color:#0f172a;">${escapeHtml(paymentLabel)}</td>
             </tr>
             <tr>
-              <td style="padding:6px 0;color:#64748b;font-weight:600;">${strings.status}</td>
-              <td style="padding:6px 0;text-align:right;">
-                <span style="background-color:#dcfce7;color:#15803d;font-weight:800;font-size:11px;padding:2px 8px;border-radius:12px;text-transform:uppercase;">${strings.paidStatus}</span>
+              <td style="padding:8px 0;color:#64748b;font-weight:600;">${strings.status}</td>
+              <td style="padding:8px 0;text-align:right;">
+                <span style="background-color:#dcfce7;color:#15803d;font-weight:800;font-size:12px;padding:4px 10px;border-radius:12px;text-transform:uppercase;letter-spacing:0.5px;">${strings.paidStatus}</span>
               </td>
             </tr>
-            <tr style="border-top:1px solid #cbd5e1;">
-              <td style="padding:12px 0 6px;color:#64748b;font-weight:600;">Subtotal</td>
-              <td style="padding:12px 0 6px;text-align:right;font-weight:bold;color:#0f172a;">${order.subtotal ? formatMoney(order.subtotal, order.currency) : totalPrimary}</td>
+            <tr style="border-top:2px solid #e2e8f0;">
+              <td style="padding:16px 0 8px;color:#64748b;font-weight:600;">Subtotal</td>
+              <td style="padding:16px 0 8px;text-align:right;font-weight:bold;color:#0f172a;">${order.subtotal ? formatMoney(order.subtotal, order.currency) : totalPrimary}</td>
             </tr>
             ${order.volumeDiscount ? `
             <tr>
-              <td style="padding:6px 0;color:#15803d;font-weight:600;">${isEn ? 'Volume Discount' : 'Descuento por Volumen'}</td>
-              <td style="padding:6px 0;text-align:right;font-weight:bold;color:#15803d;">-${formatMoney(order.volumeDiscount, order.currency)}</td>
+              <td style="padding:8px 0;color:#15803d;font-weight:600;">${isEn ? 'Volume Discount' : 'Descuento por Volumen'}</td>
+              <td style="padding:8px 0;text-align:right;font-weight:bold;color:#15803d;">-${formatMoney(order.volumeDiscount, order.currency)}</td>
             </tr>` : ''}
             ${order.promoDiscount ? `
             <tr>
-              <td style="padding:6px 0;color:#0284c7;font-weight:600;">${isEn ? 'Promo Discount' : 'Descuento Promocional'}</td>
-              <td style="padding:6px 0;text-align:right;font-weight:bold;color:#0284c7;">-${formatMoney(order.promoDiscount, order.currency)}</td>
+              <td style="padding:8px 0;color:#0284c7;font-weight:600;">${isEn ? 'Promo Discount' : 'Descuento Promocional'}</td>
+              <td style="padding:8px 0;text-align:right;font-weight:bold;color:#0284c7;">-${formatMoney(order.promoDiscount, order.currency)}</td>
             </tr>` : ''}
             ${order.shipping !== undefined ? `
             <tr>
-              <td style="padding:6px 0;color:#64748b;font-weight:600;">${isEn ? 'Shipping' : 'Envío'}</td>
-              <td style="padding:6px 0;text-align:right;font-weight:bold;color:#0f172a;">${order.shipping === 0 ? (isEn ? 'FREE' : 'GRATIS') : formatMoney(order.shipping, order.currency)}</td>
+              <td style="padding:8px 0;color:#64748b;font-weight:600;">${isEn ? 'Shipping' : 'Envío'}</td>
+              <td style="padding:8px 0;text-align:right;font-weight:bold;color:#0f172a;">${order.shipping === 0 ? (isEn ? 'FREE' : 'GRATIS') : formatMoney(order.shipping, order.currency)}</td>
             </tr>` : ''}
-            <tr style="border-top:1px solid #cbd5e1;">
-              <td style="padding:12px 0 0;font-size:15px;font-weight:800;color:#0f172a;">${strings.totalPrice}</td>
-              <td style="padding:12px 0 0;text-align:right;font-size:18px;font-weight:900;color:#059669;">
-                ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}
+            <tr style="border-top:2px solid #e2e8f0;">
+              <td style="padding:16px 0 0;font-size:16px;font-weight:800;color:#0f172a;">${strings.totalPrice}</td>
+              <td style="padding:16px 0 0;text-align:right;font-size:20px;font-weight:900;color:#059669;">
+                ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / <span style="font-size:16px;color:#64748b;font-weight:600;">${totalUsd}</span>` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / <span style="font-size:16px;color:#64748b;font-weight:600;">${totalCrc}</span>` : ''}
               </td>
             </tr>
           </table>
         </div>
 
         <!-- Shipping Section -->
-        <h3 style="font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px;">📦 ${strings.shippingTo}</h3>
-        <pre style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13.5px;color:#475569;margin:0 0 24px;line-height:1.6;">${escapeHtml(order.shippingAddress || 'N/A')}</pre>
+        <h3 style="font-size:15px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 12px;">📦 ${strings.shippingTo}</h3>
+        <pre style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;color:#475569;margin:0 0 32px;line-height:1.6;box-shadow:0 1px 2px 0 rgba(0,0,0,0.05);">${escapeHtml(order.shippingAddress || 'N/A')}</pre>
 
         <!-- Cart Table -->
-        <h3 style="font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px;">📋 ${strings.orderSummary}</h3>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:28px;">
-          <thead>
-            <tr style="border-bottom:2px solid #cbd5e1;">
-              <th style="text-align:left;padding:8px 0;font-size:12px;color:#64748b;text-transform:uppercase;">${strings.product}</th>
-              <th style="text-align:center;padding:8px 0;font-size:12px;color:#64748b;text-transform:uppercase;width:50px;">${strings.qty}</th>
-              <th style="text-align:right;padding:8px 0;font-size:12px;color:#64748b;text-transform:uppercase;width:90px;">Total</th>
+        <h3 style="font-size:15px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 12px;">📋 ${strings.orderSummary}</h3>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:32px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px 0 rgba(0,0,0,0.05);">
+          <thead style="background:#f8fafc;">
+            <tr>
+              <th style="text-align:left;padding:12px 16px;font-size:13px;color:#64748b;text-transform:uppercase;font-weight:600;border-bottom:2px solid #e2e8f0;">${strings.product}</th>
+              <th style="text-align:center;padding:12px 16px;font-size:13px;color:#64748b;text-transform:uppercase;font-weight:600;border-bottom:2px solid #e2e8f0;width:60px;">${strings.qty}</th>
+              <th style="text-align:right;padding:12px 16px;font-size:13px;color:#64748b;text-transform:uppercase;font-weight:600;border-bottom:2px solid #e2e8f0;width:100px;">Total</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody style="padding:0 16px;">
             ${buildItemsRows(order.items, order.currency)}
           </tbody>
         </table>
 
+        ${(promoCodesList && promoCodesList.length > 0) || (isEn ? salesTextEn : salesTextEs) ? `
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:16px;padding:20px;margin-bottom:32px;box-shadow:0 1px 2px 0 rgba(0,0,0,0.05);">
+          <h4 style="margin:0 0 10px;color:#b45309;font-size:16px;font-weight:bold;">🎁 ${isEn ? 'Current Sales & Promo Codes' : 'Ventas Actuales y Códigos Promocionales'}</h4>
+          ${(isEn ? salesTextEn : salesTextEs) ? `<p style="margin:0 0 10px;color:#92400e;font-size:14.5px;line-height:1.5;">${escapeHtml(isEn ? salesTextEn : salesTextEs)}</p>` : ''}
+          ${promoCodesList && promoCodesList.length > 0 ? `<p style="margin:0;color:#92400e;font-size:14.5px;line-height:1.5;"><strong>${isEn ? 'Active Codes:' : 'Códigos Activos:'}</strong> ${promoCodesList.map(p => `<strong>${p.code}</strong> (${p.discount_pct * 100}% off)`).join(', ')}</p>` : ''}
+        </div>
+        ` : ''}
+
         <!-- Science High Purity Support CTA Block -->
-        <div style="background:linear-gradient(135deg, rgba(5,150,105,0.06), rgba(16,185,129,0.02));border:1px dashed rgba(5,150,105,0.25);border-radius:16px;padding:20px;text-align:center;">
-          <h4 style="margin:0 0 6px;color:#047857;font-size:16px;font-weight:bold;">🔬 ${strings.supportTitle}</h4>
-          <p style="margin:0 0 16px;color:#475569;font-size:13px;line-height:1.45;">${strings.supportText}</p>
-          <a href="https://api.whatsapp.com/send?phone=${links.whatsappNumber}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:bold;font-size:14px;box-shadow:0 2px 4px rgba(37,211,102,0.2);">
+        <div style="background:linear-gradient(135deg, rgba(5,150,105,0.06), rgba(16,185,129,0.02));border:1px dashed rgba(5,150,105,0.3);border-radius:16px;padding:24px;text-align:center;">
+          <h4 style="margin:0 0 8px;color:#047857;font-size:18px;font-weight:bold;">🔬 ${strings.supportTitle}</h4>
+          <p style="margin:0 0 16px;color:#475569;font-size:14.5px;line-height:1.5;">${strings.supportText}</p>
+          <p style="margin:0 0 20px;color:#0f172a;font-size:15px;line-height:1.6;font-weight:500;">
+            <strong>Costa Rica:</strong> +506 8404-6973<br/>
+            <strong>USA / Int'l:</strong> +1 (831) 471-5559
+          </p>
+          <a href="https://api.whatsapp.com/send?phone=${links.whatsappNumber}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:12px;font-weight:bold;font-size:15px;box-shadow:0 4px 6px rgba(37,211,102,0.25);transition:transform 0.2s;">
             💬 ${strings.whatsappBtn}
           </a>
         </div>
 
       </div>
 
-      <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 24px;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
+      <div style="background:#f1f5f9;border-top:1px solid #e2e8f0;padding:20px 32px;text-align:center;font-size:12.5px;color:#64748b;font-weight:500;">
         ${strings.footer}
       </div>
 
@@ -272,6 +285,35 @@ export async function POST(request) {
 
     if (!order?.customerName || !Array.isArray(order?.items) || order.items.length === 0) {
       return NextResponse.json({ error: 'Invalid order notification payload' }, { status: 400 });
+    }
+
+    // Fetch sales and promos
+    let salesTextEn = '';
+    let salesTextEs = '';
+    let promoCodesList = [];
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: lpData } = await supabase.from('site_settings').select('value').eq('id', 'landing_page').single();
+        if (lpData && lpData.value && lpData.value.bannerActive) {
+          salesTextEn = lpData.value.bannerTextEn || '';
+          salesTextEs = lpData.value.bannerTextEs || '';
+        }
+
+        const now = new Date().toISOString();
+        const { data: promos } = await supabase
+          .from('promo_codes')
+          .select('*')
+          .eq('is_active', true)
+          .or(`valid_until.is.null,valid_until.gt.${now}`)
+          .or(`usage_limit.is.null,usage_limit.gt.usage_count`);
+        
+        if (promos && promos.length > 0) {
+          promoCodesList = promos;
+        }
+      } catch (err) {
+        console.warn('Could not fetch sales/promos for email:', err.message);
+      }
     }
 
     // Determine customer language
@@ -393,7 +435,7 @@ export async function POST(request) {
           ? `Order Confirmation #${order.orderNumber || ''} - Peptides Costa Rica`
           : `Confirmación de Pedido #${order.orderNumber || ''} - Péptidos Costa Rica`;
           
-        const customerHtml = buildCustomerHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc, orderLang, links);
+        const customerHtml = buildCustomerHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc, orderLang, links, salesTextEn, salesTextEs, promoCodesList);
         
         const customerText = [
           orderLang === 'en' ? 'Thank you for your order!' : '¡Gracias por su compra!',
@@ -419,8 +461,8 @@ export async function POST(request) {
           ...(order.shipping !== undefined ? [`${orderLang === 'en' ? 'Shipping' : 'Envío'}: ${order.shipping === 0 ? 'FREE / GRATIS' : formatMoney(order.shipping, order.currency)}`] : []),
           '',
           orderLang === 'en' 
-            ? `Need help? Contact our support desk at ${links.whatsappDisplay} or reply to this email.`
-            : `¿Necesita ayuda? Contacte a soporte al ${links.whatsappDisplay} o responda a este correo.`
+            ? `Need help? Contact our support desk at +506 8404-6973 (CR) / +1 (831) 471-5559 (US) or reply to this email.`
+            : `¿Necesita ayuda? Contacte a soporte al +506 8404-6973 (CR) / +1 (831) 471-5559 (US) o responda a este correo.`
         ].join('\n');
 
         const customerInfo = await transporter.sendMail({
