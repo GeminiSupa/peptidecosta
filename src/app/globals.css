@@ -8411,17 +8411,19 @@ body {
 
 .product-grid.grid-view {
     gap: 14px;
-    align-items: start;
+    align-items: stretch;
 }
 
 .product-grid.grid-view .product-card {
     min-width: 0;
     min-height: auto !important;
-    height: auto;
-    align-self: start;
+    height: 100%;
+    align-self: stretch;
     padding: 10px;
     gap: 8px;
     border-radius: 12px;
+    display: flex;
+    flex-direction: column;
 }
 
 .product-grid.grid-view .product-image {
@@ -8444,14 +8446,11 @@ body {
 }
 
 .product-grid.grid-view .product-info {
-    display: grid !important;
-    grid-template-rows: 2.05rem 2.44rem 18px 32px 36px 28px;
-    row-gap: 7px;
+    display: flex !important;
+    flex-direction: column;
     min-height: 0;
-    flex-grow: 1;
+    flex: 1;
     width: 100%;
-    align-items: stretch;
-    justify-content: flex-start !important;
 }
 
 .product-grid.grid-view .product-category {
@@ -8466,8 +8465,7 @@ body {
 
 .product-grid.grid-view .product-name {
     width: 100%;
-    min-height: 2.44rem;
-    height: 2.44rem;
+    min-height: 48px;
     font-size: 0.82rem;
     line-height: 1.2;
     margin-bottom: 0;
@@ -8489,7 +8487,7 @@ body {
 }
 
 .product-grid.grid-view .product-pricing {
-    min-height: 32px;
+    min-height: 40px;
     margin-top: 0 !important;
     justify-content: center !important;
     flex-wrap: wrap;
@@ -8542,7 +8540,8 @@ body {
 
 .product-grid.grid-view .product-actions {
     min-height: 36px;
-    margin-top: 0 !important;
+    margin-top: auto !important;
+    width: 100%;
     display: flex;
     align-items: flex-end;
     justify-content: center;
@@ -8551,6 +8550,8 @@ body {
 .product-grid.grid-view .add-to-cart-btn,
 .product-grid.grid-view .inline-qty-selector {
     width: 80%;
+    min-width: 80%;
+    max-width: 80%;
     margin: 0 auto;
     min-height: 30px;
     box-sizing: border-box;
