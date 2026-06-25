@@ -2457,14 +2457,20 @@ export default function CatalogPage() {
             return `₡${crcAmount.toLocaleString()}`;
           });
         };
+        const bannerText = cmsSettings?.bannerActive
+          ? (lang === 'en' ? parseBannerText(cmsSettings.bannerTextEn) : parseBannerText(cmsSettings.bannerTextEs))
+          : '';
+        const textLength = bannerText.length || 100;
+        const duration = Math.round(textLength * (80 / 140));
+
         return cmsSettings?.bannerActive && (
         <div className="promo-banner-global">
           <div className="promo-banner-ticker">
-            <div className="promo-banner-track">
+            <div className="promo-banner-track" style={{ animationDuration: `${duration}s` }}>
               {[...Array(6)].map((_, i) => (
                 <div key={i} className="promo-banner-text" style={{ padding: '0 20px' }}>
                   <Sparkles size={14} className="promo-icon" />
-                  <span>{lang === 'en' ? parseBannerText(cmsSettings.bannerTextEn) : parseBannerText(cmsSettings.bannerTextEs)}</span>
+                  <span>{bannerText}</span>
                 </div>
               ))}
             </div>
