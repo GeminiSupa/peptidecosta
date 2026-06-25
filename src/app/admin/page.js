@@ -70,7 +70,7 @@ const formatCustomerIdType = (idType) => {
 const ADMIN_TABS = new Set([
   'home', 'spreadsheet', 'orders', 'customers', 'inquiries', 'leads',
   'carts', 'share', 'reviews', 'affiliates', 'analytics', 'cms',
-  'whatsapp_ai', 'team', 'facebook', 'team_chat', 'broadcasts'
+  'whatsapp_ai', 'team', 'facebook', 'team_chat', 'broadcasts', 'marketing'
 ]);
 
 const TAB_TITLES = {
@@ -91,6 +91,7 @@ const TAB_TITLES = {
   team_chat: 'Team Chat',
   ai: 'AI Copilot',
   facebook: 'Facebook',
+  marketing: 'Marketing Studio'
 };
 
 const ADMIN_NAV_GROUPS = [
