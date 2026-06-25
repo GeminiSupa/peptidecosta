@@ -1,7 +1,6 @@
 "use client";
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, CheckCircle, ArrowRight, AlertCircle } from 'lucide-react';
 
 export default function NewsletterSignup({ lang = 'es' }) {

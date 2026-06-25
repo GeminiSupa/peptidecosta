@@ -12,13 +12,12 @@ export async function POST(request) {
   const supabaseAdmin = getSupabaseAdmin();
 
   try {
-    const { campaign_id } = await request.json();
+    const { campaign_id, is_test_batch, send_winner, winner_variant } = await request.json();
     
     if (!campaign_id) {
       return NextResponse.json({ error: 'Campaign ID is required' }, { status: 400 });
     }
 
-    // Fetch the campaign
     const { data: campaign, error: campError } = await supabaseAdmin
       .from('email_campaigns')
       .select('*')
@@ -29,20 +28,43 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
-    // Fetch active subscribers
-    const { data: subscribers, error: subError } = await supabaseAdmin
-      .from('email_subscribers')
-      .select('*')
-      .eq('status', 'subscribed');
-
-    if (subError || !subscribers || subscribers.length === 0) {
-      return NextResponse.json({ error: 'No active subscribers found' }, { status: 400 });
+    // Determine target audience based on tags
+    let query = supabaseAdmin.from('email_subscribers').select('*').eq('status', 'subscribed');
+    if (campaign.target_tags && campaign.target_tags.length > 0) {
+      query = query.contains('tags', [campaign.target_tags[0]]);
     }
 
-    // Update campaign status
-    await supabaseAdmin.from('email_campaigns').update({ status: 'sending', sent_at: new Date().toISOString() }).eq('id', campaign_id);
+    const { data: subscribers, error: subError } = await query;
 
-    // Setup Nodemailer (Assuming standard Gmail SMTP for MVP)
+    if (subError || !subscribers || subscribers.length === 0) {
+      return NextResponse.json({ error: 'No active subscribers found for this segment' }, { status: 400 });
+    }
+
+    // Handle A/B Test Logic
+    let targetSubscribers = [...subscribers];
+    let newStatus = 'sending';
+    
+    if (is_test_batch && campaign.is_ab_test) {
+      // Pick 20% random for testing
+      targetSubscribers = targetSubscribers.sort(() => 0.5 - Math.random()).slice(0, Math.max(2, Math.floor(subscribers.length * 0.2)));
+      newStatus = 'testing';
+    } else if (send_winner) {
+      // If sending winner, we must exclude people who already received it
+      const { data: previousSends } = await supabaseAdmin.from('campaign_sends').select('subscriber_id').eq('campaign_id', campaign_id);
+      const sentIds = new Set(previousSends?.map(s => s.subscriber_id) || []);
+      targetSubscribers = subscribers.filter(s => !sentIds.has(s.id));
+      newStatus = 'sending';
+    }
+
+    if (targetSubscribers.length === 0) {
+      return NextResponse.json({ error: 'No remaining subscribers to send to.' }, { status: 400 });
+    }
+
+    await supabaseAdmin.from('email_campaigns').update({ 
+      status: newStatus, 
+      sent_at: campaign.sent_at || new Date().toISOString() 
+    }).eq('id', campaign_id);
+
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -51,10 +73,10 @@ export async function POST(request) {
       },
     });
 
-    // Fire and forget batch sending process
-    processBatch(transporter, campaign, subscribers);
+    // Fire and forget batch process
+    processBatch(transporter, campaign, targetSubscribers, is_test_batch, send_winner, winner_variant);
 
-    return NextResponse.json({ success: true, message: `Sending campaign to ${subscribers.length} subscribers` });
+    return NextResponse.json({ success: true, message: `Sending to ${targetSubscribers.length} subscribers` });
   } catch (err) {
     console.error('Error initiating campaign send:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -62,16 +84,47 @@ export async function POST(request) {
 }
 
 // Background batch processor
-async function processBatch(transporter, campaign, subscribers) {
+async function processBatch(transporter, campaign, subscribers, is_test_batch, send_winner, winner_variant) {
   const supabaseAdmin = getSupabaseAdmin();
   let successCount = 0;
   
-  for (const sub of subscribers) {
+  for (let i = 0; i < subscribers.length; i++) {
+    const sub = subscribers[i];
     try {
-      // 1. Inject Tracking Pixel into HTML
-      const trackingPixel = `<img src="${DOMAIN}/api/tracking/open?c=${campaign.id}&s=${sub.id}" width="1" height="1" alt="" />`;
+      // Determine variant for this user
+      let variant = 'A';
+      let subject = campaign.subject_line;
       
-      // 2. Add Unsubscribe Link
+      if (campaign.is_ab_test) {
+        if (is_test_batch) {
+          // Split 50/50 in the test batch
+          if (i % 2 !== 0) {
+            variant = 'B';
+            subject = campaign.subject_line_b;
+          }
+        } else if (send_winner && winner_variant === 'B') {
+          variant = 'B';
+          subject = campaign.subject_line_b;
+        }
+      }
+
+      // Personalization
+      const firstName = sub.first_name || 'Friend';
+      const lastName = sub.last_name || '';
+      let personalizedSubject = subject.replace(/\[FIRST_NAME\]/g, firstName).replace(/\[LAST_NAME\]/g, lastName);
+      let htmlContent = campaign.html_content.replace(/\[FIRST_NAME\]/g, firstName).replace(/\[LAST_NAME\]/g, lastName);
+
+      // E-commerce UTM Tracking Appending
+      // Match all href="URL" and append UTM params
+      htmlContent = htmlContent.replace(/href="([^"]+)"/g, (match, url) => {
+        if (url.startsWith('http') || url.startsWith('/')) {
+          const separator = url.includes('?') ? '&' : '?';
+          return `href="${url}${separator}utm_source=email&utm_campaign=${campaign.id}"`;
+        }
+        return match;
+      });
+
+      const trackingPixel = `<img src="${DOMAIN}/api/tracking/open?c=${campaign.id}&s=${sub.id}" width="1" height="1" alt="" />`;
       const unsubscribeUrl = `${DOMAIN}/unsubscribe?s=${sub.id}`;
       const unsubscribeFooter = `
         <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eaeaea; text-align: center; color: #666; font-size: 12px; font-family: sans-serif;">
@@ -81,34 +134,30 @@ async function processBatch(transporter, campaign, subscribers) {
         </div>
       `;
 
-      // Simple click tracking replacement (A more robust version would use cheerio/regex to rewrite all <a> tags)
-      let finalHtml = campaign.html_content + unsubscribeFooter;
+      let finalHtml = htmlContent + unsubscribeFooter;
 
-      // Send Email
       await transporter.sendMail({
         from: `"Costa Peptides" <${process.env.EMAIL_USER}>`,
         to: sub.email,
-        subject: campaign.subject_line,
+        subject: personalizedSubject,
         html: finalHtml,
       });
 
-      // Log the send
       await supabaseAdmin.from('campaign_sends').insert([{
         campaign_id: campaign.id,
-        subscriber_id: sub.id
+        subscriber_id: sub.id,
+        subject_variant: variant
       }]);
 
       successCount++;
-      
-      // Basic rate limiting (pause 1s between emails to avoid hitting SMTP limits too quickly)
       await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (e) {
       console.error(`Failed to send to ${sub.email}:`, e);
-      // Optional: log bounce
     }
   }
 
-  // Mark campaign as sent
-  await supabaseAdmin.from('email_campaigns').update({ status: 'sent' }).eq('id', campaign.id);
-  console.log(`Campaign ${campaign.id} complete. Sent ${successCount}/${subscribers.length}.`);
+  // Update status when complete
+  const finalStatus = is_test_batch ? 'testing' : 'sent';
+  await supabaseAdmin.from('email_campaigns').update({ status: finalStatus }).eq('id', campaign.id);
+  console.log(`Campaign ${campaign.id} batch complete. Sent ${successCount}/${subscribers.length}.`);
 }

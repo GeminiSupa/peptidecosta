@@ -11,6 +11,11 @@ export default function CampaignBuilder() {
   const [isSaving, setIsSaving] = useState(false);
   const [subject, setSubject] = useState('');
   const [campaignName, setCampaignName] = useState('New Campaign ' + new Date().toLocaleDateString());
+  
+  // Phase 3 additions
+  const [isABTest, setIsABTest] = useState(false);
+  const [subjectB, setSubjectB] = useState('');
+  const [targetSegment, setTargetSegment] = useState(''); // empty means all
 
   const exportHtml = () => {
     emailEditorRef.current.editor.exportHtml((data) => {
@@ -21,8 +26,8 @@ export default function CampaignBuilder() {
   };
 
   const saveCampaign = async () => {
-    if (!subject) {
-      alert("Please enter a subject line.");
+    if (!subject || (isABTest && !subjectB)) {
+      alert("Please enter subject line(s).");
       return;
     }
 
@@ -36,13 +41,16 @@ export default function CampaignBuilder() {
           body: JSON.stringify({
             title: campaignName,
             subject_line: subject,
+            subject_line_b: isABTest ? subjectB : null,
+            is_ab_test: isABTest,
+            target_tags: targetSegment ? [targetSegment] : null,
             design_json: design,
             html_content: html
           })
         });
         
         if (res.error) throw new Error(res.error);
-        alert('Campaign saved successfully!');
+        alert(`Campaign saved! ID: ${res.campaign.id}`);
       } catch (err) {
         console.error(err);
         alert('Failed to save campaign');
@@ -52,14 +60,17 @@ export default function CampaignBuilder() {
     });
   };
 
-  const sendCampaign = async () => {
-    const campaignId = prompt("To confirm sending to all active subscribers, enter the Campaign ID you just saved (or we can build a better UI to pick drafts):");
+  const sendCampaign = async (isTestBatch = false) => {
+    const promptMsg = isTestBatch 
+      ? "Enter Campaign ID to send A/B Test Batch (20% of list):" 
+      : "Enter Campaign ID to send to full list:";
+    const campaignId = prompt(promptMsg);
     if (!campaignId) return;
 
     try {
       const res = await adminFetch('/api/admin/campaigns/send', {
         method: 'POST',
-        body: JSON.stringify({ campaign_id: campaignId })
+        body: JSON.stringify({ campaign_id: campaignId, is_test_batch: isTestBatch })
       });
       if (res.error) throw new Error(res.error);
       alert('Campaign sending initiated! Emails are being dispatched in the background.');
@@ -80,31 +91,77 @@ export default function CampaignBuilder() {
     <div className="mkt-flex mkt-flex-col" style={{height: '800px'}}>
       <div className="mkt-flex mkt-justify-between mkt-mb-6" style={{flexWrap: 'wrap', gap: '16px'}}>
         <div className="mkt-flex-1" style={{maxWidth: '500px'}}>
-          <div className="mkt-input-group">
-            <label className="mkt-label">Campaign Name (Internal)</label>
-            <input 
-              type="text" 
-              value={campaignName}
-              onChange={e => setCampaignName(e.target.value)}
-              className="mkt-input" 
-            />
+          <div className="mkt-flex mkt-gap-4">
+            <div className="mkt-input-group mkt-flex-1">
+              <label className="mkt-label">Campaign Name (Internal)</label>
+              <input 
+                type="text" 
+                value={campaignName}
+                onChange={e => setCampaignName(e.target.value)}
+                className="mkt-input" 
+              />
+            </div>
+            <div className="mkt-input-group mkt-flex-1">
+              <label className="mkt-label">Audience Segment (Tag)</label>
+              <input 
+                type="text" 
+                value={targetSegment}
+                onChange={e => setTargetSegment(e.target.value)}
+                placeholder="Leave blank for all"
+                className="mkt-input" 
+              />
+            </div>
           </div>
-          <div className="mkt-input-group" style={{marginBottom: 0}}>
-            <label className="mkt-label">Subject Line *</label>
-            <input 
-              type="text" 
-              value={subject}
-              onChange={e => setSubject(e.target.value)}
-              placeholder="e.g. Huge Sale on BPC-157!"
-              className="mkt-input" 
-              style={{fontWeight: 500}}
-            />
+          
+          <div className="mkt-flex mkt-gap-4 mkt-items-start" style={{marginBottom: '0px'}}>
+            <div className="mkt-input-group mkt-flex-1" style={{marginBottom: 0}}>
+              <label className="mkt-label mkt-flex mkt-justify-between mkt-items-center">
+                <span>Subject Line (A) *</span>
+                <label className="mkt-flex mkt-items-center mkt-gap-1" style={{fontSize: '10px', fontWeight: 'normal', cursor: 'pointer', color: '#34d399'}}>
+                  <input type="checkbox" checked={isABTest} onChange={e => setIsABTest(e.target.checked)} />
+                  A/B Test
+                </label>
+              </label>
+              <input 
+                type="text" 
+                value={subject}
+                onChange={e => setSubject(e.target.value)}
+                placeholder="e.g. Hi [FIRST_NAME], Huge Sale!"
+                className="mkt-input" 
+                style={{fontWeight: 500}}
+              />
+            </div>
+            {isABTest && (
+              <div className="mkt-input-group mkt-flex-1" style={{marginBottom: 0}}>
+                <label className="mkt-label">Subject Line (B) *</label>
+                <input 
+                  type="text" 
+                  value={subjectB}
+                  onChange={e => setSubjectB(e.target.value)}
+                  placeholder="e.g. Don't miss this, [FIRST_NAME]!"
+                  className="mkt-input" 
+                  style={{fontWeight: 500}}
+                />
+              </div>
+            )}
           </div>
+          <p style={{fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '6px'}}>Tip: Use <code style={{background:'rgba(255,255,255,0.1)', padding:'2px 4px', borderRadius:'4px'}}>[FIRST_NAME]</code> to personalize.</p>
         </div>
         
         <div className="mkt-flex mkt-items-end mkt-gap-2 pb-1">
+          {isABTest && (
+            <button 
+              onClick={() => sendCampaign(true)}
+              disabled={!isReady}
+              className="mkt-btn mkt-btn-warning"
+              title="Send A/B Test Batch to 20% of your list"
+            >
+              <Send size={16} />
+              Test Batch (20%)
+            </button>
+          )}
           <button 
-            onClick={sendCampaign}
+            onClick={() => sendCampaign(false)}
             disabled={!isReady}
             className="mkt-btn mkt-btn-danger"
           >

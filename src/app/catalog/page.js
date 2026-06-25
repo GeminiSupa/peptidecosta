@@ -1614,10 +1614,20 @@ export default function CatalogPage() {
 
   const saveOrderToDatabase = async (orderRow) => {
     try {
+      // E-commerce attribution: attach campaign_id if user came from an email
+      let campaignId = null;
+      try {
+        const attr = JSON.parse(localStorage.getItem('costa_attribution') || '{}');
+        if (attr.campaign_id && attr.expires > Date.now()) {
+          campaignId = attr.campaign_id;
+        }
+      } catch {}
+      const orderPayload = campaignId ? { ...orderRow, campaign_id: campaignId } : orderRow;
+
       const res = await fetch('/api/orders/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: orderRow, sessionId: sessionId || null }),
+        body: JSON.stringify({ order: orderPayload, sessionId: sessionId || null }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

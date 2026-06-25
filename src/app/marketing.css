@@ -130,6 +130,14 @@
 .mkt-btn-danger:hover {
   background: rgba(239, 68, 68, 0.3);
 }
+.mkt-btn-warning {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.3);
+}
+.mkt-btn-warning:hover {
+  background: rgba(251, 191, 36, 0.3);
+}
 
 .mkt-input-group {
   margin-bottom: 16px;
@@ -168,6 +176,7 @@
 }
 .mkt-badge-success { background: rgba(16, 185, 129, 0.2); color: #34d399; }
 .mkt-badge-warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.mkt-badge-info { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
 .mkt-badge-neutral { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6); }
 
 /* Utility classes */
@@ -177,6 +186,8 @@
 .mkt-justify-end { justify-content: flex-end; }
 .mkt-items-center { align-items: center; }
 .mkt-items-end { align-items: flex-end; }
+.mkt-items-start { align-items: flex-start; }
+.mkt-gap-1 { gap: 4px; }
 .mkt-gap-2 { gap: 8px; }
 .mkt-gap-4 { gap: 16px; }
 .mkt-gap-6 { gap: 24px; }

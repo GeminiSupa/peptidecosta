@@ -62,11 +62,18 @@ export default function SubscriberManager() {
 
   const startEdit = (sub) => {
     setEditingId(sub.id);
-    setEditForm({ ...sub });
+    setEditForm({ 
+      ...sub,
+      tags_raw: sub.tags ? sub.tags.join(', ') : ''
+    });
   };
 
   const saveEdit = async () => {
     try {
+      const tagsArray = editForm.tags_raw 
+        ? editForm.tags_raw.split(',').map(t => t.trim()).filter(t => t) 
+        : [];
+
       const res = await adminFetch('/api/admin/subscribers', {
         method: 'PUT',
         body: JSON.stringify({
@@ -74,7 +81,8 @@ export default function SubscriberManager() {
           email: editForm.email,
           first_name: editForm.first_name,
           last_name: editForm.last_name,
-          status: editForm.status
+          status: editForm.status,
+          tags: tagsArray
         })
       });
       if (res.error) throw new Error(res.error);
@@ -196,7 +204,7 @@ export default function SubscriberManager() {
           <thead>
             <tr>
               <th>Subscriber</th>
-              <th>Source</th>
+              <th>Tags</th>
               <th>Status</th>
               <th>Added</th>
               <th style={{textAlign: 'right'}}>Actions</th>
@@ -220,7 +228,7 @@ export default function SubscriberManager() {
                         </div>
                       </td>
                       <td>
-                        <span className="mkt-text-xs mkt-text-muted" style={{textTransform: 'capitalize'}}>{(sub.source || 'Website').replace('_', ' ')}</span>
+                        <input type="text" placeholder="Tags (comma separated)" className="mkt-input" style={{padding: '6px 10px', fontSize: '12px'}} value={editForm.tags_raw || ''} onChange={e => setEditForm({...editForm, tags_raw: e.target.value})} />
                       </td>
                       <td>
                         <select className="mkt-input" style={{padding: '6px 10px', width: 'auto'}} value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
@@ -245,7 +253,13 @@ export default function SubscriberManager() {
                         <div className="mkt-text-xs mkt-text-muted">{sub.first_name} {sub.last_name}</div>
                       </td>
                       <td>
-                        <span className="mkt-text-xs mkt-text-muted" style={{textTransform: 'capitalize'}}>{(sub.source || 'Website').replace('_', ' ')}</span>
+                        {sub.tags && sub.tags.length > 0 ? (
+                          <div className="mkt-flex mkt-gap-1" style={{flexWrap: 'wrap'}}>
+                            {sub.tags.map(t => <span key={t} style={{background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px'}}>{t}</span>)}
+                          </div>
+                        ) : (
+                          <span className="mkt-text-xs mkt-text-muted">No tags</span>
+                        )}
                       </td>
                       <td>
                         <span className={`mkt-badge ${sub.status === 'subscribed' ? 'mkt-badge-success' : sub.status === 'unsubscribed' ? 'mkt-badge-warning' : 'mkt-badge-neutral'}`}>

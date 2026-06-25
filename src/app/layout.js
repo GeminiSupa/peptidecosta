@@ -1,6 +1,7 @@
 import { Montserrat, Inter } from "next/font/google";
 import "./globals.css";
 import ExitIntentPopup from "@/components/ExitIntentPopup";
+import UTMTracker from "@/components/UTMTracker";
 const montserrat = Montserrat({
   variable: "--font-montserrat",
   subsets: ["latin"],
@@ -92,6 +93,7 @@ export default async function RootLayout({ children }) {
       <body suppressHydrationWarning>
         {children}
         <ExitIntentPopup />
+        <UTMTracker />
       </body>
     </html>
   );

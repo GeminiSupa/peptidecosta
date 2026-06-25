@@ -98,7 +98,7 @@ export async function PUT(request) {
   const supabaseAdmin = getSupabaseAdmin();
 
   try {
-    const { id, email, first_name, last_name, status } = await request.json();
+    const { id, email, first_name, last_name, status, tags } = await request.json();
     
     if (!id || !email) {
       return NextResponse.json({ error: 'ID and Email are required' }, { status: 400 });
@@ -110,7 +110,8 @@ export async function PUT(request) {
         email, 
         first_name, 
         last_name, 
-        status
+        status,
+        tags: tags || []
       })
       .eq('id', id)
       .select()
