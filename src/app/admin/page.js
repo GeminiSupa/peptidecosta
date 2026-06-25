@@ -84,10 +84,10 @@ const TAB_TITLES = {
   share: 'Share Links',
   reviews: 'Reviews',
   affiliates: 'Affiliates',
-  analytics: 'Analytics',
-  cms: 'CMS',
-  whatsapp_ai: 'WhatsApp AI',
-  team: 'Team',
+  analytics: 'Analytics & Conversions',
+  cms: 'CMS Editor',
+  whatsapp_ai: 'Sales WhatsApp',
+  team: 'Team Management',
   team_chat: 'Team Chat',
   ai: 'AI Copilot',
   facebook: 'Facebook',
@@ -97,9 +97,9 @@ const TAB_TITLES = {
 const ADMIN_NAV_GROUPS = [
   { title: 'Overview', tabs: ['home'] },
   { title: 'Core Operations', tabs: ['spreadsheet', 'orders', 'customers', 'inquiries', 'leads'] },
-  { title: 'Sales & Marketing', tabs: ['carts', 'share', 'reviews', 'affiliates', 'facebook'] },
+  { title: 'Sales & Marketing', tabs: ['whatsapp_ai', 'carts', 'share', 'reviews', 'affiliates', 'facebook'] },
   { title: 'Analytics & Content', tabs: ['analytics', 'cms'] },
-  { title: 'System & AI', tabs: ['whatsapp_ai', 'team', 'team_chat'] },
+  { title: 'System & AI', tabs: ['team', 'team_chat'] },
 ];
 
 function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, isStaffAgent = false }) {
@@ -3825,7 +3825,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 onClick={() => navigateToTab('whatsapp_ai')}
               >
                 <MessageSquare size={14} style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981' }} />
-                <span className="tab-label" style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981', fontWeight: 'bold' }}>WhatsApp AI</span>
+                <span className="tab-label" style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981', fontWeight: 'bold' }}>Sales WhatsApp</span>
               </button>
               )}
               {adminProfile?.is_superadmin && (
