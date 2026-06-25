@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
+  const supabaseAdmin = getSupabaseAdmin();
+
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('email_campaigns')
       .select(`
         *,
@@ -29,6 +31,8 @@ export async function POST(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
+  const supabaseAdmin = getSupabaseAdmin();
+
   try {
     const { title, subject_line, design_json, html_content } = await request.json();
     
@@ -36,7 +40,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Title and Subject Line are required' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('email_campaigns')
       .insert([{ 
         title, 

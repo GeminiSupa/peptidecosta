@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
+  const supabaseAdmin = getSupabaseAdmin();
+
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('email_subscribers')
       .select('*')
       .order('created_at', { ascending: false });
@@ -23,35 +25,66 @@ export async function GET(request) {
 export async function POST(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
+  
+  const supabaseAdmin = getSupabaseAdmin();
 
   try {
-    const { email, first_name, last_name, tags, source } = await request.json();
-    
-    if (!email) {
-      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
-    }
+    const body = await request.json();
 
-    const { data, error } = await supabase
-      .from('email_subscribers')
-      .insert([{ 
-        email, 
-        first_name, 
-        last_name, 
-        tags: tags || [],
-        source: source || 'manual',
+    if (body.bulk && Array.isArray(body.subscribers)) {
+      // Bulk Insert
+      const payload = body.subscribers.map(sub => ({
+        email: sub.email,
+        first_name: sub.first_name || null,
+        last_name: sub.last_name || null,
+        tags: sub.tags || [],
+        source: sub.source || 'bulk_import',
         status: 'subscribed'
-      }])
-      .select()
-      .single();
+      }));
 
-    if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json({ error: 'Email already exists' }, { status: 409 });
+      // Supabase insert array of objects
+      const { data, error } = await supabaseAdmin
+        .from('email_subscribers')
+        .insert(payload)
+        .select();
+
+      if (error) {
+        if (error.code === '23505') {
+          return NextResponse.json({ error: 'One or more emails already exist. Please clean your list and try again.' }, { status: 409 });
+        }
+        throw error;
       }
-      throw error;
-    }
+      return NextResponse.json({ success: true, count: data?.length || 0 });
+    } else {
+      // Single Insert
+      const { email, first_name, last_name, tags, source } = body;
+      
+      if (!email) {
+        return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+      }
 
-    return NextResponse.json({ subscriber: data });
+      const { data, error } = await supabaseAdmin
+        .from('email_subscribers')
+        .insert([{ 
+          email, 
+          first_name, 
+          last_name, 
+          tags: tags || [],
+          source: source || 'manual',
+          status: 'subscribed'
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '23505') {
+          return NextResponse.json({ error: 'Email already exists' }, { status: 409 });
+        }
+        throw error;
+      }
+
+      return NextResponse.json({ subscriber: data });
+    }
   } catch (err) {
     console.error('Error adding subscriber:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -62,6 +95,8 @@ export async function PUT(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
+  const supabaseAdmin = getSupabaseAdmin();
+
   try {
     const { id, email, first_name, last_name, status } = await request.json();
     
@@ -69,7 +104,7 @@ export async function PUT(request) {
       return NextResponse.json({ error: 'ID and Email are required' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('email_subscribers')
       .update({ 
         email, 

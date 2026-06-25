@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/adminApi';
-import { Users, Search, Plus, Download, UserPlus, Loader2, Edit2, Check, X } from 'lucide-react';
+import { Users, Search, Plus, Download, UserPlus, Loader2, Edit2, Check, X, Upload } from 'lucide-react';
 
 export default function SubscriberManager() {
   const [subscribers, setSubscribers] = useState([]);
@@ -86,6 +86,60 @@ export default function SubscriberManager() {
     }
   };
 
+  const handleBulkImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const text = evt.target.result;
+      const rows = text.split('\n').filter(r => r.trim() !== '');
+      
+      // Basic CSV parsing assuming format: email,first_name,last_name
+      // Skip header if first row has 'email'
+      const startIdx = rows[0].toLowerCase().includes('email') ? 1 : 0;
+      
+      const parsedSubscribers = [];
+      for (let i = startIdx; i < rows.length; i++) {
+        const columns = rows[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+        if (columns[0]) {
+          parsedSubscribers.push({
+            email: columns[0],
+            first_name: columns[1] || '',
+            last_name: columns[2] || '',
+          });
+        }
+      }
+
+      if (parsedSubscribers.length === 0) {
+        alert('No valid rows found in CSV. Make sure the first column is email addresses.');
+        return;
+      }
+
+      if (!confirm(`Found ${parsedSubscribers.length} subscribers. Import them now?`)) {
+        e.target.value = '';
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const res = await adminFetch('/api/admin/subscribers', {
+          method: 'POST',
+          body: JSON.stringify({ bulk: true, subscribers: parsedSubscribers })
+        });
+        
+        if (res.error) throw new Error(res.error);
+        alert(`Successfully imported ${res.count} subscribers!`);
+        fetchSubscribers();
+      } catch (err) {
+        alert('Bulk import failed: ' + err.message);
+        setLoading(false);
+      }
+      e.target.value = ''; // Reset input
+    };
+    reader.readAsText(file);
+  };
+
   const filteredSubs = subscribers.filter(s => 
     s.email.toLowerCase().includes(search.toLowerCase()) || 
     (s.first_name && s.first_name.toLowerCase().includes(search.toLowerCase())) ||
@@ -111,6 +165,17 @@ export default function SubscriberManager() {
         </div>
         
         <div className="mkt-flex mkt-gap-2">
+          <input 
+            type="file" 
+            accept=".csv" 
+            id="csv-upload" 
+            style={{display: 'none'}} 
+            onChange={handleBulkImport} 
+          />
+          <label htmlFor="csv-upload" className="mkt-btn" style={{cursor: 'pointer'}}>
+            <Upload size={16} />
+            Import CSV
+          </label>
           <button className="mkt-btn">
             <Download size={16} />
             Export CSV

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
@@ -8,6 +8,8 @@ const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.co
 export async function POST(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
+
+  const supabaseAdmin = getSupabaseAdmin();
 
   try {
     const { campaign_id } = await request.json();
@@ -17,7 +19,7 @@ export async function POST(request) {
     }
 
     // Fetch the campaign
-    const { data: campaign, error: campError } = await supabase
+    const { data: campaign, error: campError } = await supabaseAdmin
       .from('email_campaigns')
       .select('*')
       .eq('id', campaign_id)
@@ -28,7 +30,7 @@ export async function POST(request) {
     }
 
     // Fetch active subscribers
-    const { data: subscribers, error: subError } = await supabase
+    const { data: subscribers, error: subError } = await supabaseAdmin
       .from('email_subscribers')
       .select('*')
       .eq('status', 'subscribed');
@@ -38,7 +40,7 @@ export async function POST(request) {
     }
 
     // Update campaign status
-    await supabase.from('email_campaigns').update({ status: 'sending', sent_at: new Date().toISOString() }).eq('id', campaign_id);
+    await supabaseAdmin.from('email_campaigns').update({ status: 'sending', sent_at: new Date().toISOString() }).eq('id', campaign_id);
 
     // Setup Nodemailer (Assuming standard Gmail SMTP for MVP)
     const transporter = nodemailer.createTransport({
@@ -61,6 +63,7 @@ export async function POST(request) {
 
 // Background batch processor
 async function processBatch(transporter, campaign, subscribers) {
+  const supabaseAdmin = getSupabaseAdmin();
   let successCount = 0;
   
   for (const sub of subscribers) {
@@ -90,7 +93,7 @@ async function processBatch(transporter, campaign, subscribers) {
       });
 
       // Log the send
-      await supabase.from('campaign_sends').insert([{
+      await supabaseAdmin.from('campaign_sends').insert([{
         campaign_id: campaign.id,
         subscriber_id: sub.id
       }]);
@@ -106,6 +109,6 @@ async function processBatch(transporter, campaign, subscribers) {
   }
 
   // Mark campaign as sent
-  await supabase.from('email_campaigns').update({ status: 'sent' }).eq('id', campaign.id);
+  await supabaseAdmin.from('email_campaigns').update({ status: 'sent' }).eq('id', campaign.id);
   console.log(`Campaign ${campaign.id} complete. Sent ${successCount}/${subscribers.length}.`);
 }
