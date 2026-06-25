@@ -5598,7 +5598,7 @@ body {
     display: flex;
     white-space: nowrap;
     width: max-content;
-    animation: marqueeTicker 30s linear infinite;
+    animation: marqueeTicker 60s linear infinite;
 }
 
 .promo-banner-track:hover {
