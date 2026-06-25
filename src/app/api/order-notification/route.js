@@ -53,13 +53,13 @@ const buildItemsRows = (items = [], currency) => items.map((item) => {
 
   return `
     <tr>
-      <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;font-size:14px;color:#334155;">
+      <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#334155;text-align:left;">
         <strong>${escapeHtml(item.product || 'Premium Peptide')}</strong>
       </td>
-      <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:center;font-size:14px;color:#334155;">
+      <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;font-size:14px;color:#334155;width:60px;">
         ${qty}
       </td>
-      <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:right;font-size:14px;font-weight:600;color:${isFree ? '#15803d' : '#0f172a'};">
+      <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:14px;font-weight:600;color:${isFree ? '#15803d' : '#0f172a'};width:100px;">
         ${isFree ? freeLabel : formatMoney(total, currency)}
       </td>
     </tr>
@@ -85,10 +85,10 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.6;width:100%;max-width:700px;margin:0 auto;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);box-sizing:border-box;">
       
       <!-- Premium Admin Header Banner -->
-      <div style="background:linear-gradient(135deg, #0f172a, #4338ca);padding:40px 32px;text-align:center;">
+      <div style="background-color:#0f172a;background:linear-gradient(135deg, #0f172a, #4338ca);padding:40px 32px;text-align:center;">
         <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height:56px;border-radius:8px;margin-bottom:20px;background:rgba(255,255,255,0.08);padding:6px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
-        <h1 style="color:#ffffff;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">New Order Received!</h1>
-        <p style="color:#e0e7ff;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">A new order has been placed on the Peptides Costa Rica catalog.</p>
+        <h1 style="color:#ffffff !important;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">New Order Received!</h1>
+        <p style="color:#e0e7ff !important;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">A new order has been placed on the Peptides Costa Rica catalog.</p>
       </div>
 
       <div style="padding:32px;background-color:#f8fafc;">
@@ -127,7 +127,7 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
             </div>
           </div>
         </div>
-
+ 
         <h2 style="font-size:14px;font-weight:800;color:#0f172a;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px;text-align:center;">Customer Profile</h2>
         <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:24px;margin:0 auto 24px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);max-width:500px;text-align:center;">
           <div style="margin-bottom:12px;"><span style="color:#64748b;font-size:13px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px;">Name</span> <span style="font-weight:600;font-size:16px;color:#0f172a;">${escapeHtml(order.customerName)}</span></div>
@@ -143,12 +143,12 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
           <div style="margin-bottom:12px;"><span style="color:#64748b;font-size:13px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px;">WhatsApp</span> <a href="https://wa.me/${(order.customerPhone || '').replace(/[^0-9]/g, '')}" style="color:#25D366;text-decoration:none;font-weight:800;font-size:16px;">${escapeHtml(order.customerPhone || 'N/A')}</a></div>
           <div><span style="color:#64748b;font-size:13px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px;">Email</span> <span style="font-weight:600;font-size:15px;color:#0f172a;">${escapeHtml(order.customerEmail || 'N/A')}</span></div>
         </div>
-
+ 
         <h2 style="font-size:14px;font-weight:800;color:#0f172a;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px;text-align:center;">Shipping Coordinates</h2>
         <pre style="white-space:pre-wrap;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;color:#334155;margin:0 auto 24px;line-height:1.6;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);max-width:500px;text-align:center;">${escapeHtml(order.shippingAddress || 'N/A')}</pre>
-
+ 
         <h2 style="font-size:14px;font-weight:800;color:#0f172a;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px;text-align:center;">Purchased Items</h2>
-        <div style="max-width:500px;margin:0 auto 20px;">
+        <div style="max-width:440px;margin:0 auto 20px;">
           <table style="width:100%;border-collapse:collapse;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);">
             <thead>
               <tr style="background-color:#f8fafc;">
@@ -230,19 +230,30 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.6;width:100%;max-width:700px;margin:0 auto;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);box-sizing:border-box;">
       
       <!-- Premium Science Theme Header Banner -->
-      <div style="background:linear-gradient(135deg, #0f172a, #022c22);padding:40px 32px;text-align:center;">
+      <div style="background-color:#0f172a;background:linear-gradient(135deg, #0f172a, #022c22);padding:40px 32px;text-align:center;">
         <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height:56px;border-radius:8px;margin-bottom:20px;background:rgba(255,255,255,0.08);padding:6px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
-        <h1 style="color:#ffffff;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">${strings.title}</h1>
-        <p style="color:#e2e8f0;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">${strings.subtitle}</p>
+        <h1 style="color:#ffffff !important;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">${strings.title}</h1>
+        <p style="color:#e2e8f0 !important;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">${strings.subtitle}</p>
       </div>
 
       <div style="padding:32px;">
         
         ${!isPaid ? `
-        <div style="text-align:center;margin-bottom:32px;">
-          <a href="${whatsappPayLink}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:16px 32px;border-radius:12px;font-weight:800;font-size:18px;box-shadow:0 4px 12px rgba(37,211,102,0.3);transition:transform 0.2s;text-transform:uppercase;letter-spacing:0.5px;">
-             ${strings.payNowBtn}
+        <div style="background-color:#f0fdf4; border:1px solid #bbf7d0; border-radius:16px; padding:24px; text-align:center; margin-bottom:32px; box-shadow:0 4px 12px rgba(34,197,94,0.08);">
+          <h2 style="color:#166534; font-size:18px; font-weight:800; margin:0 0 8px; line-height:1.3;">
+            ${isEn ? '⚠️ Action Required: Complete Your Payment' : '⚠️ Acción Requerida: Complete su Pago'}
+          </h2>
+          <p style="color:#166534; font-size:14px; margin:0 0 18px; font-weight:500; line-height:1.5;">
+            ${isEn 
+              ? 'To secure your order and schedule dispatch, please send your payment confirmation screenshot to our agent on WhatsApp.' 
+              : 'Para asegurar su pedido y programar el envío, por favor envíe el comprobante de su pago a nuestro asesor por WhatsApp.'}
+          </p>
+          <a href="${whatsappPayLink}" style="display:inline-block;background-color:#22c55e;color:#ffffff;text-decoration:none;padding:16px 32px;border-radius:12px;font-weight:800;font-size:18px;box-shadow:0 4px 12px rgba(34,197,94,0.3);text-transform:uppercase;letter-spacing:0.5px;">
+             ${isEn ? '💬 Tap to Pay via WhatsApp' : '💬 Toca para Pagar por WhatsApp'}
           </a>
+          <div style="color:#15803d; font-size:12px; margin-top:8px; font-weight:700;">
+            ${isEn ? '⚡ Response time: < 3 minutes' : '⚡ Tiempo de respuesta: < 3 minutos'}
+          </div>
         </div>
         ` : ''}
 
@@ -311,7 +322,7 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
 
         <!-- Cart Table -->
         <h3 style="font-size:15px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 12px;text-align:center;"> ${strings.orderSummary}</h3>
-        <div style="max-width:500px;margin:0 auto 32px;">
+        <div style="max-width:440px;margin:0 auto 32px;">
           <table style="width:100%;border-collapse:collapse;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px 0 rgba(0,0,0,0.05);">
             <thead style="background:#f8fafc;">
               <tr>
@@ -328,9 +339,14 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
 
         ${!isPaid ? `
         <div style="text-align:center;margin-bottom:32px;border-top:1px solid #e2e8f0;padding-top:32px;">
-          <h4 style="margin:0 0 16px;color:#0f172a;font-size:16px;font-weight:800;">${isEn ? 'Ready to complete your order?' : 'Listo para completar su pedido?'}</h4>
-          <a href="${whatsappPayLink}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:12px;font-weight:800;font-size:16px;box-shadow:0 4px 6px rgba(37,211,102,0.25);transition:transform 0.2s;">
-             ${strings.payNowBtn}
+          <h4 style="margin:0 0 8px;color:#0f172a;font-size:17px;font-weight:800;">
+            ${isEn ? 'Ready to complete your order?' : '¿Listo para completar su pedido?'}
+          </h4>
+          <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.4;">
+            ${isEn ? 'Tap the button below to connect with us on WhatsApp instantly.' : 'Toque el botón a continuación para comunicarse por WhatsApp al instante.'}
+          </p>
+          <a href="${whatsappPayLink}" style="display:inline-block;background-color:#22c55e;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:12px;font-weight:800;font-size:16px;box-shadow:0 4px 12px rgba(34,197,94,0.25);">
+             ${isEn ? '💬 Confirm & Pay on WhatsApp' : '💬 Confirmar y Pagar en WhatsApp'}
           </a>
         </div>
         ` : ''}

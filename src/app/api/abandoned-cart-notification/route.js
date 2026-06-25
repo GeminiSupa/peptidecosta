@@ -49,13 +49,13 @@ const buildItemsRows = (items = [], currency, exchangeRate = 454.48) => items.ma
   const qty = Number(item.qty || 0);
   return `
     <tr>
-      <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;font-size:14px;color:#334155;">
+      <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#334155;text-align:left;">
         <strong>${escapeHtml(item.product || 'Premium Peptide')}</strong>
       </td>
-      <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:center;font-size:14px;color:#334155;">
+      <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;font-size:14px;color:#334155;width:60px;">
         x${qty}
       </td>
-      <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:right;font-size:14px;font-weight:600;color:#0f172a;">
+      <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:14px;font-weight:600;color:#0f172a;width:100px;">
         ${formatMoney(price * qty, currency)}
       </td>
     </tr>
@@ -102,9 +102,9 @@ const buildRecoveryHtml = (customerName, cartData, checkoutUrl, currency, lang, 
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.5;max-width:600px;margin:0 auto;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.03);">
       
       <!-- Premium Science Theme Header Banner -->
-      <div style="background:linear-gradient(135deg, #0f172a, #022c22);padding:32px 24px;text-align:center;">
+      <div style="background-color:#0f172a;background:linear-gradient(135deg, #0f172a, #022c22);padding:32px 24px;text-align:center;">
         <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height:48px;border-radius:8px;margin-bottom:16px;background:rgba(255,255,255,0.08);padding:4px;">
-        <h1 style="color:#ffffff;font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-0.5px;">${strings.title}</h1>
+        <h1 style="color:#ffffff !important;font-size:24px;font-weight:800;margin:0 0 8px;letter-spacing:-0.5px;">${strings.title}</h1>
       </div>
 
       <div style="padding:24px;">
@@ -122,12 +122,12 @@ const buildRecoveryHtml = (customerName, cartData, checkoutUrl, currency, lang, 
 
         <!-- Cart Table -->
         <h3 style="font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px;border-bottom:1px solid #cbd5e1;padding-bottom:6px;">📋 ${strings.itemsLeft}</h3>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:28px;">
+        <table style="width:100%;max-width:440px;margin:0 auto 28px;border-collapse:collapse;">
           <thead>
             <tr style="border-bottom:2px solid #cbd5e1;">
-              <th style="text-align:left;padding:8px 0;font-size:12px;color:#64748b;text-transform:uppercase;">${strings.product}</th>
-              <th style="text-align:center;padding:8px 0;font-size:12px;color:#64748b;text-transform:uppercase;width:50px;">${strings.qty}</th>
-              <th style="text-align:right;padding:8px 0;font-size:12px;color:#64748b;text-transform:uppercase;width:90px;">${strings.totalPrice}</th>
+              <th style="text-align:left;padding:8px 16px;font-size:12px;color:#64748b;text-transform:uppercase;">${strings.product}</th>
+              <th style="text-align:center;padding:8px 16px;font-size:12px;color:#64748b;text-transform:uppercase;width:60px;">${strings.qty}</th>
+              <th style="text-align:right;padding:8px 16px;font-size:12px;color:#64748b;text-transform:uppercase;width:100px;">${strings.totalPrice}</th>
             </tr>
           </thead>
           <tbody>
