@@ -2277,12 +2277,6 @@ Core Rules:
   const handleOrderSalesAgentUpdate = async (orderId, agentName) => {
     let finalAgentName = agentName;
 
-    if (agentName === 'ADD_CUSTOM_AGENT') {
-      const customName = prompt("Enter Custom Sales Agent Name:");
-      if (customName === null) return; // Admin cancelled the prompt
-      finalAgentName = customName.trim();
-    }
-
     setOrders(orders.map(o => o.id === orderId ? { ...o, sales_agent: finalAgentName } : o));
 
     if (isSupabaseConfigured && supabase) {
@@ -4616,7 +4610,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                                 {isCustomAgent && (
                                   <option value={order.sales_agent}>{order.sales_agent} (Custom)</option>
                                 )}
-                                <option value="ADD_CUSTOM_AGENT">✍️ Add Custom...</option>
                               </select>
                             </td>
                             <td data-label="Actions" style={{ padding: '10px 12px' }}>
