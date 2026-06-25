@@ -54,8 +54,8 @@ export default function NewsletterSignup({ lang = 'es' }) {
       if (!supabase) throw new Error('Supabase not configured');
       
       const { error } = await supabase
-        .from('newsletter_subscribers')
-        .insert([{ email, source: 'website_footer' }]);
+        .from('email_subscribers')
+        .insert([{ email, source: 'newsletter_form' }]);
 
       if (error) {
         if (error.code === '23505') { // Unique violation

@@ -35,6 +35,9 @@ import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
 import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
+import dynamic from 'next/dynamic';
+
+const EmailMarketingStudio = dynamic(() => import('@/components/admin/marketing/EmailMarketingStudio'), { ssr: false });
 
 const FacebookIcon = ({ size = 14, style, ...props }) => (
   <svg 
@@ -3760,6 +3763,15 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               )}
               {adminProfile?.is_superadmin && (
                 <button 
+                  className={`admin-tab-btn ${activeTab === 'marketing' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('marketing')}
+                >
+                  <Mail size={14} />
+                  <span className="tab-label">Marketing Studio</span>
+                </button>
+              )}
+              {adminProfile?.is_superadmin && (
+                <button 
                   className={`admin-tab-btn ${activeTab === 'affiliates' ? 'active' : ''}`}
                   onClick={() => navigateToTab('affiliates')}
                 >
@@ -6943,6 +6955,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         )}
 
         {/* TAB: AFFILIATES */}
+        {activeTab === 'marketing' && (
+          <div className="admin-orders-tab">
+            <EmailMarketingStudio />
+          </div>
+        )}
+
         {activeTab === 'affiliates' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
             <AffiliatesManager products={products} />
