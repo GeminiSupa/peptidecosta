@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '@/lib/supabase';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, CheckCircle, ArrowRight, AlertCircle } from 'lucide-react';
 
 export default function NewsletterSignup({ lang = 'es' }) {
@@ -51,18 +51,20 @@ export default function NewsletterSignup({ lang = 'es' }) {
     setStatus('loading');
 
     try {
-      if (!supabase) throw new Error('Supabase not configured');
+      const res = await fetch('/api/newsletter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
       
-      const { error } = await supabase
-        .from('email_subscribers')
-        .insert([{ email, source: 'newsletter_form' }]);
+      const data = await res.json();
 
-      if (error) {
-        if (error.code === '23505') { // Unique violation
+      if (!res.ok) {
+        if (res.status === 409) {
           setStatus('error');
           setMessage(text.exists);
         } else {
-          throw error;
+          throw new Error(data.error || 'Failed to subscribe');
         }
       } else {
         setStatus('success');
