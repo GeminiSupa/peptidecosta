@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Mail, Users, Settings } from 'lucide-react';
+import { Mail, Users, Settings, BarChart2 } from 'lucide-react';
 import SubscriberManager from './SubscriberManager';
+import CampaignAnalytics from './CampaignAnalytics';
 
 // We dynamically import the campaign builder because react-email-editor is heavy
 const CampaignBuilder = dynamic(() => import('./CampaignBuilder'), { 
@@ -44,12 +45,22 @@ export default function EmailMarketingStudio() {
             <Mail size={16} />
             Campaigns
           </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
+              activeTab === 'analytics' ? 'bg-emerald-500/20 text-emerald-400 shadow-sm' : 'text-white/60 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <BarChart2 size={16} />
+            Analytics
+          </button>
         </div>
       </div>
 
       <div className="bg-white/5 border border-white/10 rounded-2xl p-6 min-h-[600px] shadow-xl backdrop-blur-md">
         {activeTab === 'subscribers' && <SubscriberManager />}
         {activeTab === 'campaigns' && <CampaignBuilder />}
+        {activeTab === 'analytics' && <CampaignAnalytics />}
       </div>
     </div>
   );

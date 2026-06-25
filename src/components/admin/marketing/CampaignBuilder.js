@@ -30,27 +30,46 @@ export default function CampaignBuilder() {
     emailEditorRef.current.editor.exportHtml(async (data) => {
       const { design, html } = data;
       
-      // In Phase 2, we will send this to our API
-      // const res = await adminFetch('/api/admin/campaigns', {
-      //   method: 'POST',
-      //   body: JSON.stringify({
-      //     title: campaignName,
-      //     subject_line: subject,
-      //     design_json: design,
-      //     html_content: html
-      //   })
-      // });
-      
-      setTimeout(() => {
+      try {
+        const res = await adminFetch('/api/admin/campaigns', {
+          method: 'POST',
+          body: JSON.stringify({
+            title: campaignName,
+            subject_line: subject,
+            design_json: design,
+            html_content: html
+          })
+        });
+        
+        if (res.error) throw new Error(res.error);
+        alert('Campaign saved successfully!');
+      } catch (err) {
+        console.error(err);
+        alert('Failed to save campaign');
+      } finally {
         setIsSaving(false);
-        alert('Campaign draft saved successfully! (Phase 1 Mock)');
-      }, 1000);
+      }
     });
+  };
+
+  const sendCampaign = async () => {
+    const campaignId = prompt("To confirm sending to all active subscribers, enter the Campaign ID you just saved (or we can build a better UI to pick drafts):");
+    if (!campaignId) return;
+
+    try {
+      const res = await adminFetch('/api/admin/campaigns/send', {
+        method: 'POST',
+        body: JSON.stringify({ campaign_id: campaignId })
+      });
+      if (res.error) throw new Error(res.error);
+      alert('Campaign sending initiated! Emails are being dispatched in the background.');
+    } catch (err) {
+      alert('Failed to send: ' + err.message);
+    }
   };
 
   const onLoad = () => {
     setIsReady(true);
-    // You can load a template JSON here if editing an existing campaign
   };
 
   const onReady = () => {
@@ -83,6 +102,14 @@ export default function CampaignBuilder() {
         </div>
         
         <div className="flex items-end gap-2 pb-1">
+          <button 
+            onClick={sendCampaign}
+            disabled={!isReady}
+            className="px-4 h-[42px] bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 text-red-400 rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
+          >
+            <Send size={16} />
+            Send to List
+          </button>
           <button 
             onClick={exportHtml}
             className="px-4 h-[42px] bg-white/10 hover:bg-white/15 border border-white/10 rounded-lg text-white font-medium flex items-center gap-2 transition-colors"
