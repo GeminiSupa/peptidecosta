@@ -2447,7 +2447,7 @@ export default function CatalogPage() {
             return `₡${crcAmount.toLocaleString()}`;
           });
         };
-        return false && (
+        return cmsSettings?.bannerActive && (
         <div className="promo-banner-global">
           <div className="promo-banner-ticker">
             <div className="promo-banner-track">
