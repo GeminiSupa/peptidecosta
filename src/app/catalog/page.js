@@ -2451,10 +2451,12 @@ export default function CatalogPage() {
         <div className="promo-banner-global">
           <div className="promo-banner-ticker">
             <div className="promo-banner-track">
-              <div className="promo-banner-text">
-                <Sparkles size={14} className="promo-icon" />
-                <span>{lang === 'en' ? parseBannerText(cmsSettings.bannerTextEn) : parseBannerText(cmsSettings.bannerTextEs)}</span>
-              </div>
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="promo-banner-text" style={{ padding: '0 20px' }}>
+                  <Sparkles size={14} className="promo-icon" />
+                  <span>{lang === 'en' ? parseBannerText(cmsSettings.bannerTextEn) : parseBannerText(cmsSettings.bannerTextEs)}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

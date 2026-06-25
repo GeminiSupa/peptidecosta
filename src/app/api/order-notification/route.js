@@ -24,23 +24,23 @@ const escapeHtml = (value = '') => String(value)
 const formatMoney = (value, currency) => {
   const amount = Number(value || 0);
   if (currency === 'USD') return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  return `₡${Math.round(amount).toLocaleString('en-US')}`;
+  return `${Math.round(amount).toLocaleString('en-US')}`;
 };
 
 const paymentLabels = {
   en: {
     whatsapp: 'WhatsApp Manual Coordination',
     paypal: 'PayPal Secure Payment',
-    sinpe: 'SINPE Móvil via Tilopay',
+    sinpe: 'SINPE Mvil via Tilopay',
     tilopay: 'Credit / Debit Card via Tilopay',
     unknown: 'Standard Payment Method',
   },
   es: {
-    whatsapp: 'Coordinación Manual por WhatsApp',
+    whatsapp: 'Coordinacin Manual por WhatsApp',
     paypal: 'Pago Seguro con PayPal',
-    sinpe: 'SINPE Móvil vía Tilopay',
-    tilopay: 'Tarjeta de Crédito / Débito vía Tilopay',
-    unknown: 'Método de Pago Estándar',
+    sinpe: 'SINPE Mvil va Tilopay',
+    tilopay: 'Tarjeta de Crdito / Dbito va Tilopay',
+    unknown: 'Mtodo de Pago Estndar',
   }
 };
 
@@ -199,31 +199,31 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
   const isPaid = order.status && (order.status.toLowerCase().includes('paid') || order.status.toLowerCase().includes('complet'));
   
   const strings = {
-    title: isPaid ? (isEn ? 'Order Confirmed!' : '¡Pedido Confirmado!') : (isEn ? 'Action Required: Complete Payment' : 'Acción Requerida: Completar Pago'),
+    title: isPaid ? (isEn ? 'Order Confirmed!' : 'Pedido Confirmado!') : (isEn ? 'Action Required: Complete Payment' : 'Accin Requerida: Completar Pago'),
     subtitle: isPaid 
-      ? (isEn ? "We've received your order and payment. Here are your transaction details." : 'Hemos recibido su pedido y su pago. A continuación encontrará los detalles.') 
-      : (isEn ? "We've received your order! Please submit your payment to complete processing." : '¡Hemos recibido su pedido! Por favor envíe su pago para procesarlo.'),
+      ? (isEn ? "We've received your order and payment. Here are your transaction details." : 'Hemos recibido su pedido y su pago. A continuacin encontrar los detalles.') 
+      : (isEn ? "We've received your order! Please submit your payment to complete processing." : 'Hemos recibido su pedido! Por favor enve su pago para procesarlo.'),
     ref: isEn ? 'Order Reference' : 'Referencia del Pedido',
-    method: isEn ? 'Payment Method' : 'Método de Pago',
+    method: isEn ? 'Payment Method' : 'Mtodo de Pago',
     status: isEn ? 'Payment Status' : 'Estado del Pago',
     paidStatus: isEn ? 'Paid / Completed' : 'Pagado / Completado',
     pendingStatus: isEn ? 'Pending Payment' : 'Pago Pendiente',
-    shippingTo: isEn ? 'Shipping Destination' : 'Destinatario de Envío',
+    shippingTo: isEn ? 'Shipping Destination' : 'Destinatario de Envo',
     orderSummary: isEn ? 'Order Summary' : 'Resumen de su Orden',
     product: isEn ? 'Product' : 'Producto',
     qty: isEn ? 'Qty' : 'Cant',
     totalPrice: isEn ? 'Total Price' : 'Precio Total',
-    supportTitle: isEn ? 'Need Assistance?' : '¿Necesita Ayuda?',
-    supportText: isEn ? 'Our scientific support desk is ready to answer any questions about reconstitution, supplies, or shipping details.' : 'Nuestra mesa de soporte científico está lista para responder cualquier consulta sobre reconstitución, suministros o logística de envío.',
+    supportTitle: isEn ? 'Need Assistance?' : 'Necesita Ayuda?',
+    supportText: isEn ? 'Our scientific support desk is ready to answer any questions about reconstitution, supplies, or shipping details.' : 'Nuestra mesa de soporte cientfico est lista para responder cualquier consulta sobre reconstitucin, suministros o logstica de envo.',
     whatsappBtn: isEn ? 'Chat with Support on WhatsApp' : 'Chatear con Soporte por WhatsApp',
-    payNowBtn: isEn ? 'Pay Now via WhatsApp' : 'Pagar Ahora vía WhatsApp',
-    footer: isEn ? 'High-Purity Research Peptides · Base in Costa Rica' : 'Péptidos de Alta Pureza para Investigación · Con base en Costa Rica',
+    payNowBtn: isEn ? 'Pay Now via WhatsApp' : 'Pagar Ahora va WhatsApp',
+    footer: isEn ? 'High-Purity Research Peptides  Base in Costa Rica' : 'Pptidos de Alta Pureza para Investigacin  Con base en Costa Rica',
   };
 
   const whatsappPayLink = `https://api.whatsapp.com/send?phone=${links.whatsappNumber}&text=${encodeURIComponent(
     isEn 
       ? `Hi, I need to complete payment for Order ${order.orderNumber}. My selected method was ${paymentLabel}.`
-      : `Hola, necesito completar el pago de mi Pedido ${order.orderNumber}. Mi método seleccionado fue ${paymentLabel}.`
+      : `Hola, necesito completar el pago de mi Pedido ${order.orderNumber}. Mi mtodo seleccionado fue ${paymentLabel}.`
   )}`;
 
   return `
@@ -241,7 +241,7 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
         ${!isPaid ? `
         <div style="text-align:center;margin-bottom:32px;">
           <a href="${whatsappPayLink}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:16px 32px;border-radius:12px;font-weight:800;font-size:18px;box-shadow:0 4px 12px rgba(37,211,102,0.3);transition:transform 0.2s;text-transform:uppercase;letter-spacing:0.5px;">
-            💰 ${strings.payNowBtn}
+             ${strings.payNowBtn}
           </a>
         </div>
         ` : ''}
@@ -289,7 +289,7 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
             ` : ''}
             ${order.shipping !== undefined ? `
             <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:14.5px;">
-              <span style="color:#64748b;font-weight:600;">${isEn ? 'Shipping' : 'Envío'}</span>
+              <span style="color:#64748b;font-weight:600;">${isEn ? 'Shipping' : 'Envo'}</span>
               <span style="font-weight:700;color:#0f172a;">${order.shipping === 0 ? (isEn ? 'FREE' : 'GRATIS') : formatMoney(order.shipping, order.currency)}</span>
             </div>
             ` : ''}
@@ -306,11 +306,11 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
         </div>
 
         <!-- Shipping Section -->
-        <h3 style="font-size:15px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 12px;text-align:center;">📦 ${strings.shippingTo}</h3>
+        <h3 style="font-size:15px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 12px;text-align:center;"> ${strings.shippingTo}</h3>
         <pre style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;color:#475569;margin:0 auto 32px;line-height:1.6;box-shadow:0 1px 2px 0 rgba(0,0,0,0.05);text-align:center;max-width:500px;">${escapeHtml(order.shippingAddress || 'N/A')}</pre>
 
         <!-- Cart Table -->
-        <h3 style="font-size:15px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 12px;text-align:center;">📋 ${strings.orderSummary}</h3>
+        <h3 style="font-size:15px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 12px;text-align:center;"> ${strings.orderSummary}</h3>
         <div style="max-width:500px;margin:0 auto 32px;">
           <table style="width:100%;border-collapse:collapse;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px 0 rgba(0,0,0,0.05);">
             <thead style="background:#f8fafc;">
@@ -328,31 +328,31 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
 
         ${!isPaid ? `
         <div style="text-align:center;margin-bottom:32px;border-top:1px solid #e2e8f0;padding-top:32px;">
-          <h4 style="margin:0 0 16px;color:#0f172a;font-size:16px;font-weight:800;">${isEn ? 'Ready to complete your order?' : '¿Listo para completar su pedido?'}</h4>
+          <h4 style="margin:0 0 16px;color:#0f172a;font-size:16px;font-weight:800;">${isEn ? 'Ready to complete your order?' : 'Listo para completar su pedido?'}</h4>
           <a href="${whatsappPayLink}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:12px;font-weight:800;font-size:16px;box-shadow:0 4px 6px rgba(37,211,102,0.25);transition:transform 0.2s;">
-            💰 ${strings.payNowBtn}
+             ${strings.payNowBtn}
           </a>
         </div>
         ` : ''}
 
         ${(promoCodesList && promoCodesList.length > 0) || (isEn ? salesTextEn : salesTextEs) ? `
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:16px;padding:20px;margin:0 auto 32px;box-shadow:0 1px 2px 0 rgba(0,0,0,0.05);max-width:500px;text-align:center;">
-          <h4 style="margin:0 0 10px;color:#b45309;font-size:15px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;">🎁 ${isEn ? 'Current Sales & Promo Codes' : 'Ventas Actuales y Códigos Promocionales'}</h4>
+          <h4 style="margin:0 0 10px;color:#b45309;font-size:15px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;"> ${isEn ? 'Current Sales & Promo Codes' : 'Ventas Actuales y Cdigos Promocionales'}</h4>
           ${(isEn ? salesTextEn : salesTextEs) ? `<p style="margin:0 0 10px;color:#92400e;font-size:14px;line-height:1.5;font-weight:500;">${escapeHtml(isEn ? salesTextEn : salesTextEs)}</p>` : ''}
-          ${promoCodesList && promoCodesList.length > 0 ? `<p style="margin:0;color:#92400e;font-size:14px;line-height:1.5;"><strong>${isEn ? 'Active Codes:' : 'Códigos Activos:'}</strong> <br/> ${promoCodesList.map(p => `<span style="background:#fef3c7;padding:2px 6px;border-radius:4px;border:1px solid #fde68a;"><strong>${p.code}</strong> (${p.discount_pct * 100}% off)</span>`).join(' ')}</p>` : ''}
+          ${promoCodesList && promoCodesList.length > 0 ? `<p style="margin:0;color:#92400e;font-size:14px;line-height:1.5;"><strong>${isEn ? 'Active Codes:' : 'Cdigos Activos:'}</strong> <br/> ${promoCodesList.map(p => `<span style="background:#fef3c7;padding:2px 6px;border-radius:4px;border:1px solid #fde68a;"><strong>${p.code}</strong> (${p.discount_pct * 100}% off)</span>`).join(' ')}</p>` : ''}
         </div>
         ` : ''}
 
         <!-- Science High Purity Support CTA Block -->
         <div style="background:linear-gradient(135deg, rgba(5,150,105,0.06), rgba(16,185,129,0.02));border:1px dashed rgba(5,150,105,0.3);border-radius:16px;padding:24px;text-align:center;max-width:500px;margin:0 auto;">
-          <h4 style="margin:0 0 8px;color:#047857;font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;">🔬 ${strings.supportTitle}</h4>
+          <h4 style="margin:0 0 8px;color:#047857;font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;"> ${strings.supportTitle}</h4>
           <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.5;font-weight:500;">${strings.supportText}</p>
           <p style="margin:0 0 20px;color:#0f172a;font-size:14.5px;line-height:1.6;font-weight:600;">
             <strong>Costa Rica:</strong> +506 8404-6973<br/>
             <strong>USA / Int'l:</strong> +1 (831) 471-5559
           </p>
           <a href="https://api.whatsapp.com/send?phone=${links.whatsappNumber}" style="display:inline-block;background-color:#0f172a;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px;box-shadow:0 4px 6px rgba(0,0,0,0.1);transition:transform 0.2s;">
-            💬 ${strings.whatsappBtn}
+             ${strings.whatsappBtn}
           </a>
         </div>
 
@@ -420,7 +420,7 @@ export async function POST(request) {
     if (peptideCount > 0) {
       const productName = orderLang === 'en' 
         ? 'Bacteriostatic Water 3ml (Free Gift)' 
-        : 'Agua Bacteriostática 3ml (Regalo)';
+        : 'Agua Bacteriosttica 3ml (Regalo)';
       
       order.items.push({
         product: productName,
@@ -467,14 +467,14 @@ export async function POST(request) {
     const skipAdmin = order.customerReceiptOnly === true;
     const skipCustomer = order.adminNotificationOnly === true;
 
-    // ── 1. SEND ADMIN NOTIFICATION ──────────────────────────────────────────
+    //  1. SEND ADMIN NOTIFICATION 
     if (!skipAdmin) {
       try {
         const adminSubject = `New Order ${order.orderNumber ? `#${order.orderNumber}` : ''} - ${order.customerName} [${order.paymentMethod?.toUpperCase()}]`;
       const adminHtml = buildAdminHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc);
       
       const adminText = [
-        '🧪 Peptides Costa Rica - New Order Received',
+        ' Peptides Costa Rica - New Order Received',
         `Order Reference: ${order.orderNumber || 'N/A'}`,
         `Payment Method: ${paymentLabel}`,
         `Order Status: ${order.status || 'Paid'}`,
@@ -485,9 +485,9 @@ export async function POST(request) {
         `Grand Total: ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`,
         '',
         `Customer Profile:`,
-        `• Name: ${order.customerName}`,
-        `• WhatsApp: ${order.customerPhone || 'N/A'}`,
-        `• Email: ${order.customerEmail || 'N/A'}`,
+        ` Name: ${order.customerName}`,
+        ` WhatsApp: ${order.customerPhone || 'N/A'}`,
+        ` Email: ${order.customerEmail || 'N/A'}`,
         '',
         `Shipping Address:`,
         order.shippingAddress || 'N/A',
@@ -496,7 +496,7 @@ export async function POST(request) {
         ...order.items.map(item => {
           const total = Number(item.price || 0) * Number(item.qty || 0);
           const isFree = Number(item.price || 0) === 0;
-          return `• ${item.product} x${item.qty} (${isFree ? 'FREE' : formatMoney(total, order.currency)})`;
+          return ` ${item.product} x${item.qty} (${isFree ? 'FREE' : formatMoney(total, order.currency)})`;
         }),
         ...(order.subtotal ? [`Subtotal: ${formatMoney(order.subtotal, order.currency)}`] : []),
         ...(order.volumeDiscount ? [`Volume Discount: -${formatMoney(order.volumeDiscount, order.currency)}`] : []),
@@ -522,24 +522,24 @@ export async function POST(request) {
     }
     }
 
-    // ── 2. SEND CUSTOMER CONFIRMATION RECEIPT ───────────────────────────────
+    //  2. SEND CUSTOMER CONFIRMATION RECEIPT 
     if (!skipCustomer && order.customerEmail && order.customerEmail.trim() !== '') {
       try {
         const customerSubject = orderLang === 'en'
           ? `Order Confirmation #${order.orderNumber || ''} - Peptides Costa Rica`
-          : `Confirmación de Pedido #${order.orderNumber || ''} - Péptidos Costa Rica`;
+          : `Confirmacin de Pedido #${order.orderNumber || ''} - Pptidos Costa Rica`;
           
         const customerHtml = buildCustomerHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc, orderLang, links, salesTextEn, salesTextEs, promoCodesList);
         
         const customerText = [
-          orderLang === 'en' ? 'Thank you for your order!' : '¡Gracias por su compra!',
+          orderLang === 'en' ? 'Thank you for your order!' : 'Gracias por su compra!',
           '',
           `${orderLang === 'en' ? 'Order Summary' : 'Resumen de su Orden'}:`,
-          `• ${orderLang === 'en' ? 'Reference' : 'Referencia'}: ${order.orderNumber || 'N/A'}`,
-          `• ${orderLang === 'en' ? 'Payment Method' : 'Método de Pago'}: ${paymentLabel}`,
-          `• ${orderLang === 'en' ? 'Total Paid' : 'Total Pagado'}: ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`,
+          ` ${orderLang === 'en' ? 'Reference' : 'Referencia'}: ${order.orderNumber || 'N/A'}`,
+          ` ${orderLang === 'en' ? 'Payment Method' : 'Mtodo de Pago'}: ${paymentLabel}`,
+          ` ${orderLang === 'en' ? 'Total Paid' : 'Total Pagado'}: ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`,
           '',
-          `${orderLang === 'en' ? 'Delivery Details' : 'Detalles de Envío'}:`,
+          `${orderLang === 'en' ? 'Delivery Details' : 'Detalles de Envo'}:`,
           order.shippingAddress || 'N/A',
           '',
           `${orderLang === 'en' ? 'Products' : 'Productos'}:`,
@@ -547,16 +547,16 @@ export async function POST(request) {
             const total = Number(item.price || 0) * Number(item.qty || 0);
             const isFree = Number(item.price || 0) === 0;
             const freeLabel = orderLang === 'en' ? 'FREE' : 'GRATIS';
-            return `• ${item.product} x${item.qty} (${isFree ? freeLabel : formatMoney(total, order.currency)})`;
+            return ` ${item.product} x${item.qty} (${isFree ? freeLabel : formatMoney(total, order.currency)})`;
           }),
           ...(order.subtotal ? [`Subtotal: ${formatMoney(order.subtotal, order.currency)}`] : []),
           ...(order.volumeDiscount ? [`${orderLang === 'en' ? 'Volume Discount' : 'Descuento Volumen'}: -${formatMoney(order.volumeDiscount, order.currency)}`] : []),
           ...(order.promoDiscount ? [`${orderLang === 'en' ? 'Promo Discount' : 'Descuento Promocional'}: -${formatMoney(order.promoDiscount, order.currency)}`] : []),
-          ...(order.shipping !== undefined ? [`${orderLang === 'en' ? 'Shipping' : 'Envío'}: ${order.shipping === 0 ? 'FREE / GRATIS' : formatMoney(order.shipping, order.currency)}`] : []),
+          ...(order.shipping !== undefined ? [`${orderLang === 'en' ? 'Shipping' : 'Envo'}: ${order.shipping === 0 ? 'FREE / GRATIS' : formatMoney(order.shipping, order.currency)}`] : []),
           '',
           orderLang === 'en' 
             ? `Need help? Contact our support desk at +506 8404-6973 (CR) / +1 (831) 471-5559 (US) or reply to this email.`
-            : `¿Necesita ayuda? Contacte a soporte al +506 8404-6973 (CR) / +1 (831) 471-5559 (US) o responda a este correo.`
+            : `Necesita ayuda? Contacte a soporte al +506 8404-6973 (CR) / +1 (831) 471-5559 (US) o responda a este correo.`
         ].join('\n');
 
         const customerInfo = await transporter.sendMail({

@@ -5596,8 +5596,13 @@ body {
 
 .promo-banner-track {
     display: flex;
-    white-space: normal;
-    text-align: center;
+    white-space: nowrap;
+    width: max-content;
+    animation: marqueeTicker 30s linear infinite;
+}
+
+.promo-banner-track:hover {
+    animation-play-state: paused;
 }
 
 .promo-banner-text {
