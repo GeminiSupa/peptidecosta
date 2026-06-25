@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/adminApi';
-import { Users, Search, Plus, Download, UserPlus, Loader2 } from 'lucide-react';
+import { Users, Search, Plus, Download, UserPlus, Loader2, Edit2, Check, X } from 'lucide-react';
 
 export default function SubscriberManager() {
   const [subscribers, setSubscribers] = useState([]);
@@ -13,6 +13,10 @@ export default function SubscriberManager() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newSub, setNewSub] = useState({ email: '', first_name: '', last_name: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Edit state
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
   useEffect(() => {
     fetchSubscribers();
@@ -53,6 +57,32 @@ export default function SubscriberManager() {
       alert('Failed to add subscriber: ' + err.message);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const startEdit = (sub) => {
+    setEditingId(sub.id);
+    setEditForm({ ...sub });
+  };
+
+  const saveEdit = async () => {
+    try {
+      const res = await adminFetch('/api/admin/subscribers', {
+        method: 'PUT',
+        body: JSON.stringify({
+          id: editingId,
+          email: editForm.email,
+          first_name: editForm.first_name,
+          last_name: editForm.last_name,
+          status: editForm.status
+        })
+      });
+      if (res.error) throw new Error(res.error);
+      
+      setEditingId(null);
+      fetchSubscribers();
+    } catch (err) {
+      alert('Failed to update: ' + err.message);
     }
   };
 
@@ -104,31 +134,69 @@ export default function SubscriberManager() {
               <th>Source</th>
               <th>Status</th>
               <th>Added</th>
+              <th style={{textAlign: 'right'}}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="4" className="mkt-text-center mkt-text-muted"><Loader2 className="animate-spin" size={20} style={{display: 'inline-block', marginRight: '8px'}}/> Loading...</td></tr>
+              <tr><td colSpan="5" className="mkt-text-center mkt-text-muted"><Loader2 className="animate-spin" size={20} style={{display: 'inline-block', marginRight: '8px'}}/> Loading...</td></tr>
             ) : filteredSubs.length === 0 ? (
-              <tr><td colSpan="4" className="mkt-text-center mkt-text-muted">No subscribers found.</td></tr>
+              <tr><td colSpan="5" className="mkt-text-center mkt-text-muted">No subscribers found.</td></tr>
             ) : (
               filteredSubs.map((sub) => (
                 <tr key={sub.id}>
-                  <td>
-                    <div className="mkt-font-medium">{sub.email}</div>
-                    <div className="mkt-text-xs mkt-text-muted">{sub.first_name} {sub.last_name}</div>
-                  </td>
-                  <td>
-                    <span className="mkt-text-xs mkt-text-muted" style={{textTransform: 'capitalize'}}>{(sub.source || 'Website').replace('_', ' ')}</span>
-                  </td>
-                  <td>
-                    <span className={`mkt-badge ${sub.status === 'subscribed' ? 'mkt-badge-success' : sub.status === 'unsubscribed' ? 'mkt-badge-warning' : 'mkt-badge-neutral'}`}>
-                      {sub.status}
-                    </span>
-                  </td>
-                  <td className="mkt-text-xs mkt-text-muted">
-                    {new Date(sub.created_at).toLocaleDateString()}
-                  </td>
+                  {editingId === sub.id ? (
+                    <>
+                      <td>
+                        <input type="email" className="mkt-input" style={{padding: '6px 10px', marginBottom: '4px'}} value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
+                        <div className="mkt-flex mkt-gap-2">
+                          <input type="text" placeholder="First Name" className="mkt-input" style={{padding: '6px 10px', fontSize: '12px'}} value={editForm.first_name || ''} onChange={e => setEditForm({...editForm, first_name: e.target.value})} />
+                          <input type="text" placeholder="Last Name" className="mkt-input" style={{padding: '6px 10px', fontSize: '12px'}} value={editForm.last_name || ''} onChange={e => setEditForm({...editForm, last_name: e.target.value})} />
+                        </div>
+                      </td>
+                      <td>
+                        <span className="mkt-text-xs mkt-text-muted" style={{textTransform: 'capitalize'}}>{(sub.source || 'Website').replace('_', ' ')}</span>
+                      </td>
+                      <td>
+                        <select className="mkt-input" style={{padding: '6px 10px', width: 'auto'}} value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
+                          <option value="subscribed">Subscribed</option>
+                          <option value="unsubscribed">Unsubscribed</option>
+                        </select>
+                      </td>
+                      <td className="mkt-text-xs mkt-text-muted">
+                        {new Date(sub.created_at).toLocaleDateString()}
+                      </td>
+                      <td style={{textAlign: 'right'}}>
+                        <div className="mkt-flex mkt-justify-end mkt-gap-2">
+                          <button onClick={() => setEditingId(null)} style={{background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer'}}><X size={14} /></button>
+                          <button onClick={saveEdit} style={{background: 'rgba(16,185,129,0.2)', border: 'none', color: '#34d399', padding: '6px', borderRadius: '6px', cursor: 'pointer'}}><Check size={14} /></button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td>
+                        <div className="mkt-font-medium">{sub.email}</div>
+                        <div className="mkt-text-xs mkt-text-muted">{sub.first_name} {sub.last_name}</div>
+                      </td>
+                      <td>
+                        <span className="mkt-text-xs mkt-text-muted" style={{textTransform: 'capitalize'}}>{(sub.source || 'Website').replace('_', ' ')}</span>
+                      </td>
+                      <td>
+                        <span className={`mkt-badge ${sub.status === 'subscribed' ? 'mkt-badge-success' : sub.status === 'unsubscribed' ? 'mkt-badge-warning' : 'mkt-badge-neutral'}`}>
+                          {sub.status}
+                        </span>
+                      </td>
+                      <td className="mkt-text-xs mkt-text-muted">
+                        {new Date(sub.created_at).toLocaleDateString()}
+                      </td>
+                      <td style={{textAlign: 'right'}}>
+                        <button onClick={() => startEdit(sub)} style={{background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '4px'}} title="Edit Subscriber">
+                          <Edit2 size={16} />
+                        </button>
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))
             )}
