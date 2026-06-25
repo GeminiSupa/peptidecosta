@@ -27,93 +27,86 @@ export default function CampaignAnalytics() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-xl font-bold text-white flex items-center gap-2">
-          <BarChart2 className="text-emerald-400" />
+    <div>
+      <div className="mkt-flex mkt-justify-between mkt-items-center mkt-mb-6">
+        <h3 className="mkt-title">
+          <BarChart2 />
           Campaign Performance
         </h3>
         <button 
           onClick={fetchCampaigns}
-          className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+          className="mkt-btn"
+          style={{background: 'transparent', border: 'none', color: '#34d399'}}
         >
           Refresh Data
         </button>
       </div>
 
-      {loading ? (
-        <div className="py-12 flex justify-center text-emerald-400">
-          <Loader2 className="animate-spin" size={32} />
-        </div>
-      ) : (
-        <div className="bg-black/20 border border-white/5 rounded-xl overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-white/5 border-b border-white/10">
-                <th className="p-4 font-semibold text-white/60 text-sm">Campaign</th>
-                <th className="p-4 font-semibold text-white/60 text-sm">Status</th>
-                <th className="p-4 font-semibold text-white/60 text-sm text-right">Sends</th>
-                <th className="p-4 font-semibold text-white/60 text-sm text-right">Opens</th>
-                <th className="p-4 font-semibold text-white/60 text-sm text-right">Clicks</th>
-              </tr>
-            </thead>
-            <tbody>
-              {campaigns.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="p-8 text-center text-white/40">
-                    No campaigns found. Build and send one first!
-                  </td>
-                </tr>
-              ) : (
-                campaigns.map((camp) => {
-                  const sends = camp.campaign_sends?.[0]?.count || 0;
-                  const opens = camp.campaign_opens?.[0]?.count || 0;
-                  const clicks = camp.campaign_clicks?.[0]?.count || 0;
-                  
-                  const openRate = sends > 0 ? Math.round((opens / sends) * 100) : 0;
-                  const clickRate = opens > 0 ? Math.round((clicks / opens) * 100) : 0;
+      <div className="mkt-table-wrapper">
+        <table className="mkt-table">
+          <thead>
+            <tr>
+              <th>Campaign</th>
+              <th>Status</th>
+              <th className="mkt-text-right">Sends</th>
+              <th className="mkt-text-right">Opens</th>
+              <th className="mkt-text-right">Clicks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="5" className="mkt-text-center mkt-text-muted"><Loader2 className="animate-spin" size={20} style={{display: 'inline-block', marginRight: '8px'}}/> Loading...</td></tr>
+            ) : campaigns.length === 0 ? (
+              <tr><td colSpan="5" className="mkt-text-center mkt-text-muted">No campaigns found. Build and send one first!</td></tr>
+            ) : (
+              campaigns.map((camp) => {
+                const sends = camp.campaign_sends?.[0]?.count || 0;
+                const opens = camp.campaign_opens?.[0]?.count || 0;
+                const clicks = camp.campaign_clicks?.[0]?.count || 0;
+                
+                const openRate = sends > 0 ? Math.round((opens / sends) * 100) : 0;
+                const clickRate = opens > 0 ? Math.round((clicks / opens) * 100) : 0;
 
-                  return (
-                    <tr key={camp.id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-                      <td className="p-4">
-                        <div className="text-white font-medium">{camp.title}</div>
-                        <div className="text-white/50 text-xs">{camp.subject_line}</div>
-                        <div className="text-white/30 text-[10px] font-mono mt-1">ID: {camp.id}</div>
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-1 rounded-md text-xs font-semibold uppercase tracking-wider ${
-                          camp.status === 'sent' ? 'bg-emerald-500/20 text-emerald-400' :
-                          camp.status === 'sending' ? 'bg-amber-500/20 text-amber-400 animate-pulse' :
-                          'bg-white/10 text-white/60'
-                        }`}>
-                          {camp.status}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2 text-white/80">
-                          {sends} <Send size={14} className="text-white/40" />
-                        </div>
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2 text-white/80">
-                          <span>{opens} <span className="text-emerald-400 text-xs ml-1">({openRate}%)</span></span>
-                          <Eye size={14} className="text-white/40" />
-                        </div>
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2 text-white/80">
-                          <span>{clicks} <span className="text-blue-400 text-xs ml-1">({clickRate}%)</span></span>
-                          <MousePointerClick size={14} className="text-white/40" />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
+                return (
+                  <tr key={camp.id}>
+                    <td>
+                      <div className="mkt-font-medium">{camp.title}</div>
+                      <div className="mkt-text-xs mkt-text-muted">{camp.subject_line}</div>
+                      <div style={{fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginTop: '4px'}}>ID: {camp.id}</div>
+                    </td>
+                    <td>
+                      <span className={`mkt-badge ${
+                        camp.status === 'sent' ? 'mkt-badge-success' :
+                        camp.status === 'sending' ? 'mkt-badge-warning' :
+                        'mkt-badge-neutral'
+                      }`}>
+                        {camp.status}
+                      </span>
+                    </td>
+                    <td className="mkt-text-right">
+                      <div className="mkt-flex mkt-items-center mkt-justify-end mkt-gap-2">
+                        {sends} <Send size={14} color="rgba(255,255,255,0.4)" />
+                      </div>
+                    </td>
+                    <td className="mkt-text-right">
+                      <div className="mkt-flex mkt-items-center mkt-justify-end mkt-gap-2">
+                        <span>{opens} <span style={{color: '#34d399', fontSize: '12px', marginLeft: '4px'}}>({openRate}%)</span></span>
+                        <Eye size={14} color="rgba(255,255,255,0.4)" />
+                      </div>
+                    </td>
+                    <td className="mkt-text-right">
+                      <div className="mkt-flex mkt-items-center mkt-justify-end mkt-gap-2">
+                        <span>{clicks} <span style={{color: '#60a5fa', fontSize: '12px', marginLeft: '4px'}}>({clickRate}%)</span></span>
+                        <MousePointerClick size={14} color="rgba(255,255,255,0.4)" />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import React, { useRef, useState } from 'react';
 import EmailEditor from 'react-email-editor';
-import { Save, Send, Eye, Loader2, ArrowLeft } from 'lucide-react';
+import { Save, Send, Eye, Loader2 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
 export default function CampaignBuilder() {
@@ -77,42 +77,43 @@ export default function CampaignBuilder() {
   };
 
   return (
-    <div className="flex flex-col h-[800px]">
-      <div className="flex flex-col sm:flex-row justify-between gap-4 mb-6">
-        <div className="flex-1 max-w-lg space-y-3">
-          <div>
-            <label className="block text-xs text-white/50 mb-1 uppercase tracking-wider font-semibold">Campaign Name (Internal)</label>
+    <div className="mkt-flex mkt-flex-col" style={{height: '800px'}}>
+      <div className="mkt-flex mkt-justify-between mkt-mb-6" style={{flexWrap: 'wrap', gap: '16px'}}>
+        <div className="mkt-flex-1" style={{maxWidth: '500px'}}>
+          <div className="mkt-input-group">
+            <label className="mkt-label">Campaign Name (Internal)</label>
             <input 
               type="text" 
               value={campaignName}
               onChange={e => setCampaignName(e.target.value)}
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white" 
+              className="mkt-input" 
             />
           </div>
-          <div>
-            <label className="block text-xs text-white/50 mb-1 uppercase tracking-wider font-semibold">Subject Line *</label>
+          <div className="mkt-input-group" style={{marginBottom: 0}}>
+            <label className="mkt-label">Subject Line *</label>
             <input 
               type="text" 
               value={subject}
               onChange={e => setSubject(e.target.value)}
               placeholder="e.g. Huge Sale on BPC-157!"
-              className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white font-medium" 
+              className="mkt-input" 
+              style={{fontWeight: 500}}
             />
           </div>
         </div>
         
-        <div className="flex items-end gap-2 pb-1">
+        <div className="mkt-flex mkt-items-end mkt-gap-2 pb-1">
           <button 
             onClick={sendCampaign}
             disabled={!isReady}
-            className="px-4 h-[42px] bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 text-red-400 rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
+            className="mkt-btn mkt-btn-danger"
           >
             <Send size={16} />
             Send to List
           </button>
           <button 
             onClick={exportHtml}
-            className="px-4 h-[42px] bg-white/10 hover:bg-white/15 border border-white/10 rounded-lg text-white font-medium flex items-center gap-2 transition-colors"
+            className="mkt-btn"
           >
             <Eye size={16} />
             Preview HTML
@@ -120,7 +121,7 @@ export default function CampaignBuilder() {
           <button 
             onClick={saveCampaign}
             disabled={!isReady || isSaving}
-            className="px-4 h-[42px] bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-50 shadow-lg shadow-emerald-500/20"
+            className="mkt-btn mkt-btn-primary"
           >
             {isSaving ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
             Save Draft
@@ -128,9 +129,9 @@ export default function CampaignBuilder() {
         </div>
       </div>
 
-      <div className="flex-1 rounded-xl overflow-hidden border border-white/10 relative bg-white">
+      <div style={{flex: 1, borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', position: 'relative', background: '#fff'}}>
         {!isReady && (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 z-10 text-white/50 flex-col gap-3">
+          <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', zIndex: 10, color: 'rgba(255,255,255,0.5)', flexDirection: 'column', gap: '12px'}}>
             <Loader2 className="animate-spin" size={32} />
             <p>Loading Editor...</p>
           </div>
