@@ -76,33 +76,32 @@ export default function NewsletterSignup({ lang = 'es' }) {
   };
 
   return (
-    <div className="w-full">
+    <div className="nl-container">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, margin: "-50px" }}
         transition={{ duration: 0.5 }}
-        className="w-full"
       >
-        <div className="flex flex-col md:flex-row items-center justify-between gap-8 sm:gap-12 text-left">
+        <div className="nl-wrapper">
           
-          <div className="flex-1 text-center md:text-left">
-            <h3 className="text-2xl sm:text-3xl font-black text-white mb-2 tracking-tight font-montserrat">
+          <div className="nl-text-block">
+            <h3 className="nl-title">
               {text.title}
             </h3>
-            <p className="text-sm sm:text-base text-white/70 max-w-md mx-auto md:mx-0">
+            <p className="nl-desc">
               {text.desc}
             </p>
           </div>
 
-          <div className="flex-1 w-full max-w-md">
+          <div className="nl-form-block">
             <AnimatePresence mode="wait">
               {status === 'success' ? (
                 <motion.div
                   key="success"
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="flex items-center justify-center gap-2 text-white font-bold bg-emerald-500 py-4 px-6 rounded-2xl shadow-[0_4px_20px_rgba(16,185,129,0.3)]"
+                  className="nl-success"
                 >
                   <CheckCircle size={22} />
                   {text.success}
@@ -114,10 +113,9 @@ export default function NewsletterSignup({ lang = 'es' }) {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   onSubmit={handleSubmit} 
-                  className="w-full relative"
                 >
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative flex-1">
+                  <div className="nl-form">
+                    <div className="nl-input-wrapper">
                       <input
                         type="email"
                         value={email}
@@ -127,17 +125,17 @@ export default function NewsletterSignup({ lang = 'es' }) {
                         }}
                         placeholder={text.placeholder}
                         disabled={status === 'loading'}
-                        className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 focus:bg-white/10 transition-all disabled:opacity-50 text-base shadow-inner"
+                        className="nl-input"
                         required
                       />
                     </div>
                     <button
                       type="submit"
                       disabled={status === 'loading'}
-                      className="w-full sm:w-auto px-6 py-4 bg-[var(--accent)] hover:opacity-90 text-white rounded-xl font-bold transition-all shadow-[0_4px_14px_rgba(200,83,12,0.4)] flex items-center justify-center gap-2 disabled:opacity-70 text-base"
+                      className="nl-button"
                     >
                       {status === 'loading' ? (
-                        <span className="inline-block animate-pulse">{text.loading}</span>
+                        <span style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}>{text.loading}</span>
                       ) : (
                         <>
                           {text.btn}
@@ -151,7 +149,7 @@ export default function NewsletterSignup({ lang = 'es' }) {
                     <motion.div 
                       initial={{ opacity: 0, y: -5 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="absolute -bottom-7 left-0 w-full flex items-center justify-center gap-1.5 text-red-400 text-sm mt-2 font-medium"
+                      className="nl-error"
                     >
                       <AlertCircle size={14} />
                       {message}

@@ -8750,3 +8750,172 @@ body {
         font-size: 0.72rem;
     }
 }
+
+/* ── Newsletter Signup ────────────────────────────────────── */
+.nl-container {
+    width: 100%;
+    margin: 0 auto;
+    padding: 32px 24px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 24px;
+    box-shadow: 0 10px 40px -10px rgba(0,0,0,0.3);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.nl-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px;
+}
+
+@media (min-width: 768px) {
+    .nl-wrapper {
+        flex-direction: row;
+        gap: 48px;
+    }
+    .nl-container {
+        padding: 40px 48px;
+    }
+}
+
+.nl-text-block {
+    flex: 1;
+    text-align: center;
+}
+
+@media (min-width: 768px) {
+    .nl-text-block {
+        text-align: left;
+    }
+}
+
+.nl-title {
+    font-size: 1.8rem;
+    font-weight: 900;
+    color: #ffffff;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+    font-family: var(--font-montserrat), sans-serif;
+}
+
+.nl-desc {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.6;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+    .nl-desc {
+        margin: 0;
+    }
+}
+
+.nl-form-block {
+    flex: 1;
+    width: 100%;
+    max-width: 450px;
+    position: relative;
+}
+
+.nl-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+@media (min-width: 576px) {
+    .nl-form {
+        flex-direction: row;
+    }
+}
+
+.nl-input-wrapper {
+    flex: 1;
+    position: relative;
+}
+
+.nl-input {
+    width: 100%;
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 14px;
+    color: #ffffff;
+    font-size: 1rem;
+    outline: none;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+    box-sizing: border-box;
+}
+
+.nl-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.nl-input:focus {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.05);
+}
+
+.nl-button {
+    padding: 16px 28px;
+    background: linear-gradient(135deg, var(--accent) 0%, #a23f05 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 14px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 14px rgba(200, 83, 12, 0.4);
+}
+
+.nl-button:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(200, 83, 12, 0.6);
+}
+
+.nl-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.nl-error {
+    position: absolute;
+    bottom: -28px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #f87171;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.nl-success {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+    padding: 16px 24px;
+    border-radius: 14px;
+    font-weight: 700;
+    font-size: 1rem;
+}
