@@ -26,8 +26,9 @@ export default function SubscriberManager() {
     try {
       setLoading(true);
       const res = await adminFetch('/api/admin/subscribers');
-      if (res.subscribers) {
-        setSubscribers(res.subscribers);
+      const data = await res.json();
+      if (data.subscribers) {
+        setSubscribers(data.subscribers);
       }
     } catch (err) {
       console.error('Failed to fetch subscribers:', err);
@@ -46,8 +47,8 @@ export default function SubscriberManager() {
         method: 'POST',
         body: JSON.stringify({ ...newSub, source: 'admin_manual' })
       });
-      
-      if (res.error) throw new Error(res.error);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to add subscriber');
       
       alert('Subscriber added successfully!');
       setShowAddModal(false);
@@ -85,7 +86,8 @@ export default function SubscriberManager() {
           tags: tagsArray
         })
       });
-      if (res.error) throw new Error(res.error);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to update subscriber');
       
       setEditingId(null);
       fetchSubscribers();
@@ -135,9 +137,9 @@ export default function SubscriberManager() {
           method: 'POST',
           body: JSON.stringify({ bulk: true, subscribers: parsedSubscribers })
         });
-        
-        if (res.error) throw new Error(res.error);
-        alert(`Successfully imported ${res.count} subscribers!`);
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Bulk import failed');
+        alert(`Successfully imported ${data.count || 0} subscribers!`);
         fetchSubscribers();
       } catch (err) {
         alert('Bulk import failed: ' + err.message);

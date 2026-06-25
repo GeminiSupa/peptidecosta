@@ -16,8 +16,9 @@ export default function CampaignAnalytics() {
     try {
       setLoading(true);
       const res = await adminFetch('/api/admin/campaigns');
-      if (res.campaigns) {
-        setCampaigns(res.campaigns);
+      const data = await res.json();
+      if (data.campaigns) {
+        setCampaigns(data.campaigns);
       }
     } catch (err) {
       console.error('Failed to fetch campaigns:', err);
@@ -33,7 +34,8 @@ export default function CampaignAnalytics() {
         method: 'POST',
         body: JSON.stringify({ campaign_id: campaignId, send_winner: true, winner_variant: variant })
       });
-      if (res.error) throw new Error(res.error);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to send winner');
       alert('Winner is being sent to the remaining subscribers!');
       fetchCampaigns();
     } catch (err) {

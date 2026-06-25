@@ -48,12 +48,12 @@ export default function CampaignBuilder() {
             html_content: html
           })
         });
-        
-        if (res.error) throw new Error(res.error);
-        alert(`Campaign saved! ID: ${res.campaign.id}`);
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Failed to save campaign');
+        alert(`Campaign saved! ID: ${data.campaign.id}`);
       } catch (err) {
         console.error(err);
-        alert('Failed to save campaign');
+        alert('Failed to save campaign: ' + err.message);
       } finally {
         setIsSaving(false);
       }
@@ -72,7 +72,8 @@ export default function CampaignBuilder() {
         method: 'POST',
         body: JSON.stringify({ campaign_id: campaignId, is_test_batch: isTestBatch })
       });
-      if (res.error) throw new Error(res.error);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to send campaign');
       alert('Campaign sending initiated! Emails are being dispatched in the background.');
     } catch (err) {
       alert('Failed to send: ' + err.message);
