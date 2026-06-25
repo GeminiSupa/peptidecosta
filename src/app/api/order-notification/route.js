@@ -576,8 +576,90 @@ export async function POST(request) {
       }
     }
 
+    //  3. SEND CUSTOMER WHATSAPP NOTIFICATION
+    if (!skipCustomer && order.customerPhone && order.customerPhone.trim() !== '') {
+      try {
+        const { cleanPhoneNumber } = await import('@/lib/whatsapp');
+        const cleanPhone = cleanPhoneNumber(order.customerPhone);
+        
+        if (cleanPhone && cleanPhone.length >= 8) {
+          const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+          const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+          if (ACCESS_TOKEN && PHONE_NUMBER_ID) {
+            let waMessage = '';
+            const totalStr = `${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`;
+
+            if (isPaid) {
+              if (orderLang === 'en') {
+                waMessage = `Hi ${order.customerName || 'there'},\n\nThank you for your order #${order.orderNumber || ''}! 📦\n\nWe've received your payment of ${totalStr} via ${paymentLabel}. Your order is now being processed and we will notify you once it ships!`;
+              } else {
+                waMessage = `Hola ${order.customerName || ''},\n\n¡Gracias por tu pedido #${order.orderNumber || ''}! 📦\n\nHemos recibido tu pago de ${totalStr} vía ${paymentLabel}. ¡Tu pedido está siendo procesado y te notificaremos una vez que sea enviado!`;
+              }
+            } else {
+              if (orderLang === 'en') {
+                waMessage = `Hi ${order.customerName || 'there'},\n\nThank you for your order #${order.orderNumber || ''}! 📦\n\nYour total is ${totalStr}. Since you chose ${paymentLabel}, please reply to this message to coordinate your payment. We will ship your order as soon as payment is confirmed.`;
+              } else {
+                waMessage = `Hola ${order.customerName || ''},\n\n¡Gracias por tu pedido #${order.orderNumber || ''}! 📦\n\nEl total es ${totalStr}. Dado que elegiste ${paymentLabel}, por favor responde a este mensaje para coordinar tu pago. Enviaremos tu pedido tan pronto como el pago sea confirmado.`;
+              }
+            }
+
+            const metaResponse = await fetch(
+              `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${ACCESS_TOKEN}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  messaging_product: 'whatsapp',
+                  to: cleanPhone,
+                  type: 'text',
+                  text: { body: waMessage },
+                }),
+              }
+            );
+
+            const metaData = await metaResponse.json();
+
+            if (!metaResponse.ok) {
+              console.error('[WhatsApp Outbound] Meta API delivery failed:', metaData);
+              results.whatsappNotification = { sent: false, error: metaData.error?.message || 'Meta API delivery failed' };
+            } else {
+              results.whatsappNotification = { sent: true, messageId: metaData.messages?.[0]?.id };
+              console.log(`[Order notification] Customer WhatsApp dispatched: ${metaData.messages?.[0]?.id} to ${cleanPhone}`);
+              
+              if (supabase) {
+                const { error: logErr } = await supabase
+                  .from('whatsapp_messages')
+                  .insert({
+                    wa_id: cleanPhone,
+                    display_name: order.customerName || 'Peptides Customer',
+                    message_text: waMessage,
+                    message_type: 'text',
+                    direction: 'outbound',
+                    matched_order_id: order.id || null,
+                    raw_payload: metaData,
+                    meta_message_id: metaData.messages?.[0]?.id,
+                    delivery_status: 'sent'
+                  });
+                  if (logErr) console.error('[WhatsApp Outbound] Failed to log outbound message in DB:', logErr);
+              }
+            }
+          } else {
+            console.warn('[WhatsApp Outbound] WhatsApp credentials not configured.');
+            results.whatsappNotification = { sent: false, error: 'Credentials missing' };
+          }
+        }
+      } catch (waErr) {
+        console.error('[Order notification] Customer WhatsApp notification failed:', waErr);
+        results.whatsappNotification = { sent: false, error: waErr.message };
+      }
+    }
+
     return NextResponse.json({
-      success: results.adminNotification.sent || results.customerReceipt.sent,
+      success: results.adminNotification.sent || results.customerReceipt.sent || (results.whatsappNotification && results.whatsappNotification.sent),
       results
     });
   } catch (err) {
