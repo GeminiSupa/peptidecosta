@@ -54,7 +54,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     { id: 'facebook', label: 'Facebook Alerts' },
     { id: 'analytics', label: 'Analytics' },
     { id: 'cms', label: 'Content (CMS)' },
-    { id: 'whatsapp_ai', label: 'WhatsApp AI' },
+    { id: 'whatsapp_ai', label: 'Sales WhatsApp' },
   ];
 
   const fetchUsers = async () => {

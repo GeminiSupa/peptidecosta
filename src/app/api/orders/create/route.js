@@ -113,7 +113,7 @@ export async function POST(request) {
       updatePromises.push(
         supabase
           .from('abandoned_carts')
-          .update({ status: 'converted' })
+          .delete()
           .eq('session_id', body.sessionId)
       );
     }
@@ -121,7 +121,7 @@ export async function POST(request) {
       updatePromises.push(
         supabase
           .from('abandoned_carts')
-          .update({ status: 'converted' })
+          .delete()
           .eq('customer_phone', order.customer_phone)
       );
     }
@@ -129,7 +129,7 @@ export async function POST(request) {
       updatePromises.push(
         supabase
           .from('abandoned_carts')
-          .update({ status: 'converted' })
+          .delete()
           .eq('customer_email', order.customer_email)
       );
     }

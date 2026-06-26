@@ -221,7 +221,7 @@ export async function POST(req) {
     updatePromises.push(
       supabase
         .from('abandoned_carts')
-        .update({ status: 'converted' })
+        .delete()
         .eq('customer_phone', customerPhone)
     );
   }
@@ -229,7 +229,7 @@ export async function POST(req) {
     updatePromises.push(
       supabase
         .from('abandoned_carts')
-        .update({ status: 'converted' })
+        .delete()
         .eq('customer_email', customerEmail)
     );
   }
