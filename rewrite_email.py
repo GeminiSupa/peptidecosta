@@ -1,74 +1,13 @@
-import { NextResponse } from 'next/server';
-import nodemailer from 'nodemailer';
-import { getBusinessLinks } from '@/lib/settings';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import re
 
-const rawNotificationTo = process.env.ORDER_NOTIFICATION_TO || 'omerforce@gmail.com, info@peptidescostarica.net';
-const NOTIFICATION_TO = rawNotificationTo.includes('surfyesi@hotmail.com')
-  ? rawNotificationTo
-  : `${rawNotificationTo}, surfyesi@hotmail.com`;
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
+path = "src/app/api/order-notification/route.js"
+with open(path, "r", encoding="utf-8") as f:
+    content = f.read()
 
-const escapeHtml = (value = '') => String(value)
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;');
+# Admin HTML
+admin_pattern = re.compile(r"(const buildAdminHtml = \([^)]+\) => \{)(.*?)(^\s*};\s*^// Customer HTML)", re.DOTALL | re.MULTILINE)
 
-const formatMoney = (value, currency) => {
-  const amount = Number(value || 0);
-  if (currency === 'USD') return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  return `${Math.round(amount).toLocaleString('en-US')}`;
-};
-
-const paymentLabels = {
-  en: {
-    whatsapp: 'WhatsApp Manual Coordination',
-    paypal: 'PayPal Secure Payment',
-    sinpe: 'SINPE Mvil via Tilopay',
-    tilopay: 'Credit / Debit Card via Tilopay',
-    unknown: 'Standard Payment Method',
-  },
-  es: {
-    whatsapp: 'Coordinacin Manual por WhatsApp',
-    paypal: 'Pago Seguro con PayPal',
-    sinpe: 'SINPE Mvil va Tilopay',
-    tilopay: 'Tarjeta de Crdito / Dbito va Tilopay',
-    unknown: 'Mtodo de Pago Estndar',
-  }
-};
-
-const buildItemsRows = (items = [], currency) => items.map((item) => {
-  const price = Number(item.price || 0);
-  const qty = Number(item.qty || 0);
-  const total = price * qty;
-  const isFree = price === 0;
-  const freeLabel = currency === 'CRC' ? 'GRATIS' : 'FREE';
-
-  return `
-    <tr>
-      <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#334155;text-align:left;">
-        <strong>${escapeHtml(item.product || 'Premium Peptide')}</strong>
-      </td>
-      <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:center;font-size:14px;color:#334155;width:60px;">
-        ${qty}
-      </td>
-      <td style="padding:10px 16px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:14px;font-weight:600;color:${isFree ? '#15803d' : '#0f172a'};width:100px;">
-        ${isFree ? freeLabel : formatMoney(total, currency)}
-      </td>
-    </tr>
-  `;
-}).join('');
-
-// Admin HTML Template Builder
-const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) => {
-
+new_admin = """
   const shippingAmount = order.shipping !== undefined ? Number(order.shipping || 0) : undefined;
   const itemsAfterDiscounts = shippingAmount !== undefined
     ? Number(order.total || 0) - shippingAmount
@@ -158,8 +97,7 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
 
         <h2 style="font-size:14px;font-weight:800;color:#0f172a;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px;text-align:center;">Shipping Coordinates</h2>
         <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;color:#334155;margin:0 auto 24px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);max-width:500px;text-align:center;">
-          ${escapeHtml(order.shippingAddress || 'N/A').replace(/
-/g, '<br/>')}
+          ${escapeHtml(order.shippingAddress || 'N/A').replace(/\\n/g, '<br/>')}
         </div>
 
         <h2 style="font-size:14px;font-weight:800;color:#0f172a;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px;text-align:center;">Purchased Items</h2>
@@ -207,11 +145,12 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
     </td></tr></table>
     <![endif]-->
   `;
-};
+"""
 
-// Customer HTML Receipt Builder
-const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc, lang, links, salesTextEn, salesTextEs, promoCodesList) => {
+# Customer HTML
+customer_pattern = re.compile(r"(const buildCustomerHtml = \([^)]+\) => \{)(.*?)(^\s*};\s*^export async function POST)", re.DOTALL | re.MULTILINE)
 
+new_customer = """
   const isEn = lang === 'en';
   const isPaid = order.status && (order.status.toLowerCase().includes('paid') || order.status.toLowerCase().includes('complet'));
   const strings = {
@@ -331,8 +270,7 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
 
         <h3 style="font-size:15px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 12px;text-align:center;">📦 ${strings.shippingTo}</h3>
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;color:#475569;margin:0 auto 32px;line-height:1.6;text-align:center;max-width:500px;">
-          ${escapeHtml(order.shippingAddress || 'N/A').replace(/
-/g, '<br/>')}
+          ${escapeHtml(order.shippingAddress || 'N/A').replace(/\\n/g, '<br/>')}
         </div>
 
         <h3 style="font-size:15px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 12px;text-align:center;">📋 ${strings.orderSummary}</h3>
@@ -397,306 +335,11 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
     </td></tr></table>
     <![endif]-->
   `;
-};
+"""
 
-export async function POST(request) {
-  try {
-    const order = await request.json();
-    const links = await getBusinessLinks();
+content = admin_pattern.sub(r"\1\n" + new_admin + r"\3", content)
+content = customer_pattern.sub(r"\1\n" + new_customer + r"\3", content)
 
-    if (!order?.customerName || !Array.isArray(order?.items) || order.items.length === 0) {
-      return NextResponse.json({ error: 'Invalid order notification payload' }, { status: 400 });
-    }
+with open(path, "w", encoding="utf-8") as f:
+    f.write(content)
 
-    // Fetch sales and promos
-    let salesTextEn = '';
-    let salesTextEs = '';
-    let promoCodesList = [];
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data: lpData } = await supabase.from('site_settings').select('value').eq('id', 'landing_page').single();
-        if (lpData && lpData.value && lpData.value.bannerActive) {
-          salesTextEn = lpData.value.bannerTextEn || '';
-          salesTextEs = lpData.value.bannerTextEs || '';
-        }
-
-        const now = new Date().toISOString();
-        const { data: promos } = await supabase
-          .from('promo_codes')
-          .select('*')
-          .eq('is_active', true)
-          .or(`valid_until.is.null,valid_until.gt.${now}`)
-          .or(`usage_limit.is.null,usage_limit.gt.usage_count`);
-        
-        if (promos && promos.length > 0) {
-          promoCodesList = promos;
-        }
-      } catch (err) {
-        console.warn('Could not fetch sales/promos for email:', err.message);
-      }
-    }
-
-    // Determine customer language
-    // Use order.lang if provided, otherwise check currency (CRC -> Spanish, USD -> English)
-    const orderLang = order.lang || (order.currency === 'CRC' ? 'es' : 'en');
-
-    // Add free Bac Water per peptide purchased
-    const peptideCount = order.items.reduce((count, item) => {
-      const name = (item.product || '').toLowerCase();
-      if (name.includes('bac water') || name.includes('bacteriostatic') || name.includes('syringe') || name.includes('supply')) {
-        return count;
-      }
-      return count + Number(item.qty || 0);
-    }, 0);
-
-    if (peptideCount > 0) {
-      const productName = orderLang === 'en' 
-        ? 'Bacteriostatic Water 3ml (Free Gift)' 
-        : 'Agua Bacteriosttica 3ml (Regalo)';
-      
-      order.items.push({
-        product: productName,
-        qty: peptideCount,
-        price: 0
-      });
-    }
-
-    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-      console.warn('[Order notification] SMTP settings are not configured; email skipped.');
-      return NextResponse.json({ sent: false, skipped: true });
-    }
-
-    // Format payment descriptions
-    const paymentLabel = (paymentLabels[orderLang] || paymentLabels.en)[order.paymentMethod] || 
-                         order.paymentMethod || 
-                         (paymentLabels[orderLang] || paymentLabels.en).unknown;
-
-    // Monetary conversions
-    const totalPrimary = formatMoney(order.total, order.currency);
-    const totalUsd = order.totalUsd ? formatMoney(order.totalUsd, 'USD') : null;
-    const totalCrc = order.totalCrc ? formatMoney(order.totalCrc, 'CRC') : null;
-
-    // Nodemailer transporter creation
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
-
-    const results = {
-      adminNotification: { sent: false },
-      customerReceipt: { sent: false, skipped: true }
-    };
-
-    const isPaid = order.status && (order.status.toLowerCase().includes('paid') || order.status.toLowerCase().includes('complet'));
-    const skipAdmin = order.customerReceiptOnly === true;
-    const skipCustomer = order.adminNotificationOnly === true;
-
-    //  1. SEND ADMIN NOTIFICATION 
-    if (!skipAdmin) {
-      try {
-        const adminSubject = `New Order ${order.orderNumber ? `#${order.orderNumber}` : ''} - ${order.customerName} [${order.paymentMethod?.toUpperCase()}]`;
-      const adminHtml = buildAdminHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc);
-      
-      const adminText = [
-        ' Peptides Costa Rica - New Order Received',
-        `Order Reference: ${order.orderNumber || 'N/A'}`,
-        `Payment Method: ${paymentLabel}`,
-        `Order Status: ${order.status || 'Paid'}`,
-        ...(order.shipping !== undefined ? [
-          `Items Amount: ${formatMoney(Number(order.total || 0) - Number(order.shipping || 0), order.currency)}`,
-          `Shipping Fee: ${order.shipping === 0 ? 'FREE' : formatMoney(order.shipping, order.currency)}`,
-        ] : []),
-        `Grand Total: ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`,
-        '',
-        `Customer Profile:`,
-        ` Name: ${order.customerName}`,
-        ` WhatsApp: ${order.customerPhone || 'N/A'}`,
-        ` Email: ${order.customerEmail || 'N/A'}`,
-        '',
-        `Shipping Address:`,
-        order.shippingAddress || 'N/A',
-        '',
-        `Items Summary:`,
-        ...order.items.map(item => {
-          const total = Number(item.price || 0) * Number(item.qty || 0);
-          const isFree = Number(item.price || 0) === 0;
-          return ` ${item.product} x${item.qty} (${isFree ? 'FREE' : formatMoney(total, order.currency)})`;
-        }),
-        ...(order.subtotal ? [`Subtotal: ${formatMoney(order.subtotal, order.currency)}`] : []),
-        ...(order.volumeDiscount ? [`Volume Discount: -${formatMoney(order.volumeDiscount, order.currency)}`] : []),
-        ...(order.promoDiscount ? [`Promo Discount: -${formatMoney(order.promoDiscount, order.currency)}`] : []),
-        ...(order.shipping !== undefined ? [`Shipping: ${order.shipping === 0 ? 'FREE' : formatMoney(order.shipping, order.currency)}`] : []),
-        `Total: ${totalPrimary}`,
-      ].join('\n');
-
-      const adminInfo = await transporter.sendMail({
-        from: `Peptides Costa Rica <info@peptidescostarica.net>`,
-        to: NOTIFICATION_TO,
-        subject: adminSubject,
-        html: adminHtml,
-        text: adminText,
-        replyTo: order.customerEmail || undefined,
-      });
-
-      results.adminNotification = { sent: true, messageId: adminInfo.messageId };
-      console.log(`[Order notification] Admin email dispatched: ${adminInfo.messageId}`);
-    } catch (adminErr) {
-      console.error('[Order notification] Admin notification failed to send:', adminErr);
-      results.adminNotification = { sent: false, error: adminErr.message };
-    }
-    }
-
-    //  2. SEND CUSTOMER CONFIRMATION RECEIPT 
-    if (!skipCustomer && order.customerEmail && order.customerEmail.trim() !== '') {
-      try {
-        const customerSubject = orderLang === 'en'
-          ? `Order Confirmation #${order.orderNumber || ''} - Peptides Costa Rica`
-          : `Confirmacin de Pedido #${order.orderNumber || ''} - Pptidos Costa Rica`;
-          
-        const customerHtml = buildCustomerHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc, orderLang, links, salesTextEn, salesTextEs, promoCodesList);
-        
-        const customerText = [
-          orderLang === 'en' ? 'Thank you for your order!' : 'Gracias por su compra!',
-          '',
-          `${orderLang === 'en' ? 'Order Summary' : 'Resumen de su Orden'}:`,
-          ` ${orderLang === 'en' ? 'Reference' : 'Referencia'}: ${order.orderNumber || 'N/A'}`,
-          ` ${orderLang === 'en' ? 'Payment Method' : 'Mtodo de Pago'}: ${paymentLabel}`,
-          ` ${orderLang === 'en' ? 'Total Paid' : 'Total Pagado'}: ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`,
-          '',
-          `${orderLang === 'en' ? 'Delivery Details' : 'Detalles de Envo'}:`,
-          order.shippingAddress || 'N/A',
-          '',
-          `${orderLang === 'en' ? 'Products' : 'Productos'}:`,
-          ...order.items.map(item => {
-            const total = Number(item.price || 0) * Number(item.qty || 0);
-            const isFree = Number(item.price || 0) === 0;
-            const freeLabel = orderLang === 'en' ? 'FREE' : 'GRATIS';
-            return ` ${item.product} x${item.qty} (${isFree ? freeLabel : formatMoney(total, order.currency)})`;
-          }),
-          ...(order.subtotal ? [`Subtotal: ${formatMoney(order.subtotal, order.currency)}`] : []),
-          ...(order.volumeDiscount ? [`${orderLang === 'en' ? 'Volume Discount' : 'Descuento Volumen'}: -${formatMoney(order.volumeDiscount, order.currency)}`] : []),
-          ...(order.promoDiscount ? [`${orderLang === 'en' ? 'Promo Discount' : 'Descuento Promocional'}: -${formatMoney(order.promoDiscount, order.currency)}`] : []),
-          ...(order.shipping !== undefined ? [`${orderLang === 'en' ? 'Shipping' : 'Envo'}: ${order.shipping === 0 ? 'FREE / GRATIS' : formatMoney(order.shipping, order.currency)}`] : []),
-          '',
-          orderLang === 'en' 
-            ? `Need help? Contact our support desk at +506 8404-6973 (CR) / +1 (831) 471-5559 (US) or reply to this email.`
-            : `Necesita ayuda? Contacte a soporte al +506 8404-6973 (CR) / +1 (831) 471-5559 (US) o responda a este correo.`
-        ].join('\n');
-
-        const customerInfo = await transporter.sendMail({
-          from: `Peptides Costa Rica <info@peptidescostarica.net>`,
-          replyTo: 'info@peptidescostarica.net',
-          to: order.customerEmail.trim(),
-          subject: customerSubject,
-          html: customerHtml,
-          text: customerText,
-        });
-
-        results.customerReceipt = { sent: true, messageId: customerInfo.messageId };
-        console.log(`[Order notification] Customer receipt dispatched: ${customerInfo.messageId} to ${order.customerEmail}`);
-      } catch (custErr) {
-        console.error('[Order notification] Customer receipt failed to send:', custErr);
-        results.customerReceipt = { sent: false, error: custErr.message };
-      }
-    }
-
-    //  3. SEND CUSTOMER WHATSAPP NOTIFICATION
-    if (!skipCustomer && order.customerPhone && order.customerPhone.trim() !== '') {
-      try {
-        const { cleanPhoneNumber } = await import('@/lib/whatsapp');
-        const cleanPhone = cleanPhoneNumber(order.customerPhone);
-        
-        if (cleanPhone && cleanPhone.length >= 8) {
-          const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
-          const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
-
-          if (ACCESS_TOKEN && PHONE_NUMBER_ID) {
-            let waMessage = '';
-            const totalStr = `${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`;
-
-            if (isPaid) {
-              if (orderLang === 'en') {
-                waMessage = `Hi ${order.customerName || 'there'},\n\nThank you for your order #${order.orderNumber || ''}! 📦\n\nWe've received your payment of ${totalStr} via ${paymentLabel}. Your order is now being processed and we will notify you once it ships!`;
-              } else {
-                waMessage = `Hola ${order.customerName || ''},\n\n¡Gracias por tu pedido #${order.orderNumber || ''}! 📦\n\nHemos recibido tu pago de ${totalStr} vía ${paymentLabel}. ¡Tu pedido está siendo procesado y te notificaremos una vez que sea enviado!`;
-              }
-            } else {
-              if (orderLang === 'en') {
-                waMessage = `Hi ${order.customerName || 'there'},\n\nThank you for your order #${order.orderNumber || ''}! 📦\n\nYour total is ${totalStr}. Since you chose ${paymentLabel}, please reply to this message to coordinate your payment. We will ship your order as soon as payment is confirmed.`;
-              } else {
-                waMessage = `Hola ${order.customerName || ''},\n\n¡Gracias por tu pedido #${order.orderNumber || ''}! 📦\n\nEl total es ${totalStr}. Dado que elegiste ${paymentLabel}, por favor responde a este mensaje para coordinar tu pago. Enviaremos tu pedido tan pronto como el pago sea confirmado.`;
-              }
-            }
-
-            const metaResponse = await fetch(
-              `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
-              {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${ACCESS_TOKEN}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  messaging_product: 'whatsapp',
-                  to: cleanPhone,
-                  type: 'text',
-                  text: { body: waMessage },
-                }),
-              }
-            );
-
-            const metaData = await metaResponse.json();
-
-            if (!metaResponse.ok) {
-              console.error('[WhatsApp Outbound] Meta API delivery failed:', metaData);
-              results.whatsappNotification = { sent: false, error: metaData.error?.message || 'Meta API delivery failed' };
-            } else {
-              results.whatsappNotification = { sent: true, messageId: metaData.messages?.[0]?.id };
-              console.log(`[Order notification] Customer WhatsApp dispatched: ${metaData.messages?.[0]?.id} to ${cleanPhone}`);
-              
-              if (supabase) {
-                const { error: logErr } = await supabase
-                  .from('whatsapp_messages')
-                  .insert({
-                    wa_id: cleanPhone,
-                    display_name: order.customerName || 'Peptides Customer',
-                    message_text: waMessage,
-                    message_type: 'text',
-                    direction: 'outbound',
-                    matched_order_id: order.id || null,
-                    raw_payload: metaData,
-                    meta_message_id: metaData.messages?.[0]?.id,
-                    delivery_status: 'sent'
-                  });
-                  if (logErr) console.error('[WhatsApp Outbound] Failed to log outbound message in DB:', logErr);
-              }
-            }
-          } else {
-            console.warn('[WhatsApp Outbound] WhatsApp credentials not configured.');
-            results.whatsappNotification = { sent: false, error: 'Credentials missing' };
-          }
-        }
-      } catch (waErr) {
-        console.error('[Order notification] Customer WhatsApp notification failed:', waErr);
-        results.whatsappNotification = { sent: false, error: waErr.message };
-      }
-    }
-
-    return NextResponse.json({
-      success: results.adminNotification.sent || results.customerReceipt.sent || (results.whatsappNotification && results.whatsappNotification.sent),
-      results
-    });
-  } catch (err) {
-    console.error('[Order notification] Unexpected handler crash:', err);
-    return NextResponse.json({ error: 'Internal server error', details: err.message }, { status: 500 });
-  }
-}
