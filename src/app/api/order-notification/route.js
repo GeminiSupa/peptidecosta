@@ -15,11 +15,11 @@ const SMTP_PASS = process.env.SMTP_PASS;
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
 
 const escapeHtml = (value = '') => String(value)
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&#39;');
+  .replace(/\n&/g, '&amp;')
+  .replace(/\n</g, '&lt;')
+  .replace(/\n>/g, '&gt;')
+  .replace(/\n"/g, '&quot;')
+  .replace(/\n'/g, '&#39;');
 
 const formatMoney = (value, currency) => {
   const amount = Number(value || 0);
@@ -80,7 +80,7 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
       : formatMoney(shippingAmount, order.currency);
       
   const isPaid = order.status && (order.status.toLowerCase().includes('paid') || order.status.toLowerCase().includes('complet'));
-  const whatsappNumberClean = (order.customerPhone || '').replace(/[^0-9]/g, '');
+  const whatsappNumberClean = (order.customerPhone || '').replace(/\n[^0-9]/g, '');
   const whatsappPayLink = `https://wa.me/${whatsappNumberClean}`;
 
   return `
@@ -158,7 +158,7 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
 
         <h2 style="font-size:14px;font-weight:800;color:#0f172a;margin:0 0 12px;text-transform:uppercase;letter-spacing:1px;text-align:center;">Shipping Coordinates</h2>
         <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;color:#334155;margin:0 auto 24px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);max-width:500px;text-align:center;">
-          ${escapeHtml(order.shippingAddress || 'N/A').replace(/
+          ${escapeHtml(order.shippingAddress || 'N/A').replace(/\n
 /g, '<br/>')}
         </div>
 
@@ -331,7 +331,7 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
 
         <h3 style="font-size:15px;font-weight:800;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 12px;text-align:center;">📦 ${strings.shippingTo}</h3>
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14.5px;color:#475569;margin:0 auto 32px;line-height:1.6;text-align:center;max-width:500px;">
-          ${escapeHtml(order.shippingAddress || 'N/A').replace(/
+          ${escapeHtml(order.shippingAddress || 'N/A').replace(/\n
 /g, '<br/>')}
         </div>
 
