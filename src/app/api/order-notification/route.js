@@ -15,11 +15,11 @@ const SMTP_PASS = process.env.SMTP_PASS;
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
 
 const escapeHtml = (value = '') => String(value)
-  .replace(/\n&/g, '&amp;')
-  .replace(/\n</g, '&lt;')
-  .replace(/\n>/g, '&gt;')
-  .replace(/\n"/g, '&quot;')
-  .replace(/\n'/g, '&#39;');
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
 
 const formatMoney = (value, currency) => {
   const amount = Number(value || 0);
@@ -31,16 +31,16 @@ const paymentLabels = {
   en: {
     whatsapp: 'WhatsApp Manual Coordination',
     paypal: 'PayPal Secure Payment',
-    sinpe: 'SINPE Mvil via Tilopay',
+    sinpe: 'SINPE Móvil vía Tilopay',
     tilopay: 'Credit / Debit Card via Tilopay',
     unknown: 'Standard Payment Method',
   },
   es: {
-    whatsapp: 'Coordinacin Manual por WhatsApp',
+    whatsapp: 'Coordinación Manual por WhatsApp',
     paypal: 'Pago Seguro con PayPal',
-    sinpe: 'SINPE Mvil va Tilopay',
-    tilopay: 'Tarjeta de Crdito / Dbito va Tilopay',
-    unknown: 'Mtodo de Pago Estndar',
+    sinpe: 'SINPE Móvil vía Tilopay',
+    tilopay: 'Tarjeta de Crédito / Débito vía Tilopay',
+    unknown: 'Método de Pago Estándar',
   }
 };
 
@@ -80,7 +80,7 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
       : formatMoney(shippingAmount, order.currency);
       
   const isPaid = order.status && (order.status.toLowerCase().includes('paid') || order.status.toLowerCase().includes('complet'));
-  const whatsappNumberClean = (order.customerPhone || '').replace(/\n[^0-9]/g, '');
+  const whatsappNumberClean = (order.customerPhone || '').replace(/[^0-9]/g, '');
   const whatsappPayLink = `https://wa.me/${whatsappNumberClean}`;
 
   return `
@@ -558,7 +558,7 @@ export async function POST(request) {
       try {
         const customerSubject = orderLang === 'en'
           ? `Order Confirmation #${order.orderNumber || ''} - Peptides Costa Rica`
-          : `Confirmacin de Pedido #${order.orderNumber || ''} - Pptidos Costa Rica`;
+          : `Confirmación de Pedido #${order.orderNumber || ''} - Péptidos Costa Rica`;
           
         const customerHtml = buildCustomerHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc, orderLang, links, salesTextEn, salesTextEs, promoCodesList);
         
@@ -567,10 +567,10 @@ export async function POST(request) {
           '',
           `${orderLang === 'en' ? 'Order Summary' : 'Resumen de su Orden'}:`,
           ` ${orderLang === 'en' ? 'Reference' : 'Referencia'}: ${order.orderNumber || 'N/A'}`,
-          ` ${orderLang === 'en' ? 'Payment Method' : 'Mtodo de Pago'}: ${paymentLabel}`,
+          ` ${orderLang === 'en' ? 'Payment Method' : 'Método de Pago'}: ${paymentLabel}`,
           ` ${orderLang === 'en' ? 'Total Paid' : 'Total Pagado'}: ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`,
           '',
-          `${orderLang === 'en' ? 'Delivery Details' : 'Detalles de Envo'}:`,
+          `${orderLang === 'en' ? 'Delivery Details' : 'Detalles de Envío'}:`,
           order.shippingAddress || 'N/A',
           '',
           `${orderLang === 'en' ? 'Products' : 'Productos'}:`,
@@ -583,7 +583,7 @@ export async function POST(request) {
           ...(order.subtotal ? [`Subtotal: ${formatMoney(order.subtotal, order.currency)}`] : []),
           ...(order.volumeDiscount ? [`${orderLang === 'en' ? 'Volume Discount' : 'Descuento Volumen'}: -${formatMoney(order.volumeDiscount, order.currency)}`] : []),
           ...(order.promoDiscount ? [`${orderLang === 'en' ? 'Promo Discount' : 'Descuento Promocional'}: -${formatMoney(order.promoDiscount, order.currency)}`] : []),
-          ...(order.shipping !== undefined ? [`${orderLang === 'en' ? 'Shipping' : 'Envo'}: ${order.shipping === 0 ? 'FREE / GRATIS' : formatMoney(order.shipping, order.currency)}`] : []),
+          ...(order.shipping !== undefined ? [`${orderLang === 'en' ? 'Shipping' : 'Envío'}: ${order.shipping === 0 ? 'FREE / GRATIS' : formatMoney(order.shipping, order.currency)}`] : []),
           '',
           orderLang === 'en' 
             ? `Need help? Contact our support desk at +506 8404-6973 (CR) / +1 (831) 471-5559 (US) or reply to this email.`
