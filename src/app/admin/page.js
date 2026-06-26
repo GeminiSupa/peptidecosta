@@ -56,6 +56,13 @@ const FALLBACK_EXCHANGE_RATE = 454.48;
 
 const cartHasItems = (cartData) => Array.isArray(cartData) && cartData.length > 0;
 
+const getCartRecoveryStatus = (c) => {
+  if (c.status === 'recovered' || c.status === 'converted') return 'recovered';
+  if (c.recovery_whatsapp_sent) return 'contacted_whatsapp';
+  if (c.recovery_email_sent) return 'contacted_email';
+  return 'not_contacted';
+};
+
 const formatCustomerIdType = (idType) => {
   if (!idType) return '';
   const types = {
@@ -2433,7 +2440,7 @@ Core Rules:
         ln,
         getCartValue(c).toFixed(2),
         'USD',
-        c.recovery_status || 'not_contacted'
+        getCartRecoveryStatus(c) || 'not_contacted'
       ].map(v => `"${v}"`).join(',');
     });
     
@@ -5084,7 +5091,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             {/* MINI REVENUE DASHBOARD & FILTERS */}
             {abandonedCarts.length > 0 && (() => {
               const totalAbandonedValue = abandonedCarts.reduce((sum, c) => sum + getCartValue(c), 0);
-              const recoveredCarts = abandonedCarts.filter(c => c.recovery_status === 'recovered');
+              const recoveredCarts = abandonedCarts.filter(c => getCartRecoveryStatus(c) === 'recovered');
               const totalRecoveredValue = recoveredCarts.reduce((sum, c) => sum + getCartValue(c), 0);
               const recoveryRate = abandonedCarts.length > 0 ? ((recoveredCarts.length / abandonedCarts.length) * 100).toFixed(1) : '0.0';
 
@@ -5151,9 +5158,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             if (cartFilterContact === 'none') matchContact = !c.customer_email && !c.customer_phone;
                             
                             let matchStatus = true;
-                            if (cartFilterStatus === 'not_contacted') matchStatus = !c.recovery_status || c.recovery_status === 'not_contacted';
-                            if (cartFilterStatus === 'contacted') matchStatus = c.recovery_status === 'contacted_email' || c.recovery_status === 'contacted_whatsapp';
-                            if (cartFilterStatus === 'recovered') matchStatus = c.recovery_status === 'recovered';
+                            if (cartFilterStatus === 'not_contacted') matchStatus = !getCartRecoveryStatus(c) || getCartRecoveryStatus(c) === 'not_contacted';
+                            if (cartFilterStatus === 'contacted') matchStatus = getCartRecoveryStatus(c) === 'contacted_email' || getCartRecoveryStatus(c) === 'contacted_whatsapp';
+                            if (cartFilterStatus === 'recovered') matchStatus = getCartRecoveryStatus(c) === 'recovered';
                             
                             let matchValue = true;
                             const val = getCartValue(c);
@@ -5340,9 +5347,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         if (cartFilterContact === 'none') matchContact = !c.customer_email && !c.customer_phone;
                         
                         let matchStatus = true;
-                        if (cartFilterStatus === 'not_contacted') matchStatus = !c.recovery_status || c.recovery_status === 'not_contacted';
-                        if (cartFilterStatus === 'contacted') matchStatus = c.recovery_status === 'contacted_email' || c.recovery_status === 'contacted_whatsapp';
-                        if (cartFilterStatus === 'recovered') matchStatus = c.recovery_status === 'recovered';
+                        if (cartFilterStatus === 'not_contacted') matchStatus = !getCartRecoveryStatus(c) || getCartRecoveryStatus(c) === 'not_contacted';
+                        if (cartFilterStatus === 'contacted') matchStatus = getCartRecoveryStatus(c) === 'contacted_email' || getCartRecoveryStatus(c) === 'contacted_whatsapp';
+                        if (cartFilterStatus === 'recovered') matchStatus = getCartRecoveryStatus(c) === 'recovered';
                         
                         let matchValue = true;
                         const val = getCartValue(c);
@@ -5361,8 +5368,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         });
                       } else if (cartSort === 'recovery_asc' || cartSort === 'recovery_desc') {
                         sortedCarts.sort((a, b) => {
-                          const statusA = a.recovery_status || '';
-                          const statusB = b.recovery_status || '';
+                          const statusA = getCartRecoveryStatus(a) || '';
+                          const statusB = getCartRecoveryStatus(b) || '';
                           const res = statusA.localeCompare(statusB);
                           if (res !== 0) return cartSort === 'recovery_asc' ? res : -res;
                           
