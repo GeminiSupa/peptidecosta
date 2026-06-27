@@ -17,7 +17,7 @@ import {
 } from '@/lib/catalogProducts';
 import {
   ShoppingBag, X, Search, SlidersHorizontal,
-  List, Grid, Sparkles, Phone, FileText,
+  List, LayoutGrid, Sparkles, Phone, FileText,
   Plus, Minus, Trash2, Check, AlertCircle, ArrowLeft,
   Dna, FlaskConical, Syringe, TestTubes, Atom,
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
@@ -539,7 +539,7 @@ export default function CatalogClient({
 
     // Viewmode loaded from localStorage
     const savedView = localStorage.getItem('viewMode') || 'grid';
-    setViewMode(savedView === 'compact' ? 'list' : savedView);
+    setViewMode(savedView === 'list' ? 'list' : 'grid');
 
     // Cart loaded from localStorage
     const savedCart = localStorage.getItem('cart');
@@ -1266,8 +1266,8 @@ export default function CatalogClient({
     queueMicrotask(() => localStorage.setItem('theme', selectedTheme));
   };
 
-  const handleViewToggle = () => {
-    const nextView = viewMode === 'list' ? 'grid' : 'list';
+  const handleViewChange = (nextView) => {
+    if (nextView === viewMode) return;
     startTransition(() => setViewMode(nextView));
     queueMicrotask(() => localStorage.setItem('viewMode', nextView));
   };
@@ -2685,9 +2685,28 @@ export default function CatalogClient({
                 </>
               )}
             </div>
-            <button onClick={handleViewToggle} className="filter-btn" title={viewMode === 'list' ? (lang === 'en' ? 'Grid View' : 'Vista Cuadrícula') : (lang === 'en' ? 'List View' : 'Vista Lista')}>
-              {viewMode === 'list' ? <Grid size={18} /> : <List size={18} />}
-            </button>
+            <div className="view-toggle" role="group" aria-label={lang === 'en' ? 'Catalog display view' : 'Vista del catálogo'}>
+              <button
+                type="button"
+                onClick={() => handleViewChange('grid')}
+                className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                aria-label={lang === 'en' ? 'Grid View' : 'Vista Cuadrícula'}
+                aria-pressed={viewMode === 'grid'}
+                title={lang === 'en' ? 'Grid View' : 'Vista Cuadrícula'}
+              >
+                <LayoutGrid size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleViewChange('list')}
+                className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
+                aria-label={lang === 'en' ? 'List View' : 'Vista Lista'}
+                aria-pressed={viewMode === 'list'}
+                title={lang === 'en' ? 'List View' : 'Vista Lista'}
+              >
+                <List size={19} />
+              </button>
+            </div>
             <button
               onClick={() => startTransition(() => setShowFilters(!showFilters))}
               className={`filter-btn ${showFilters ? 'active' : ''}`}
