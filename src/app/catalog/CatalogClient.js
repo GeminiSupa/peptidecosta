@@ -2406,7 +2406,7 @@ export default function CatalogClient({
   };
 
   return (
-    <div id="app" className="min-h-screen" suppressHydrationWarning>
+    <div id="app" className="catalog-page-shell min-h-screen" suppressHydrationWarning>
       {/* Global Promo Banner */}
       {(() => {
         const parseBannerText = (text) => {
