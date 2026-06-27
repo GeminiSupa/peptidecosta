@@ -2960,7 +2960,7 @@ export default function CatalogClient({
                       )}
                       {!isBac && pSub && <span className="price-sub">{pSub}</span>}
                     </div>
-                    <div className="stock-badges-slot" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', minHeight: '42px', marginBottom: '8px' }}>
+                    <div className="stock-badges-slot" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: viewMode === 'grid' ? 'center' : 'flex-start', minHeight: '42px', marginBottom: '8px' }}>
                       <div className={`stock-badge ${isBac ? 'stock-in' : inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`} style={{ position: 'relative', top: 'auto', right: 'auto', margin: 0, height: 'fit-content' }}>
                         <span>
                           {isBac ? (lang === 'en' ? 'Included' : 'Incluido') : translateStatus(p.status)}

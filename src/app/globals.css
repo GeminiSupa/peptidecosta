@@ -1563,7 +1563,7 @@ body {
 .product-grid.compact-view .product-card {
     padding: 16px !important;
     gap: 20px !important;
-    align-items: flex-start !important;
+    align-items: stretch !important;
     min-height: 215px !important;
     position: relative !important;
 }
@@ -1604,6 +1604,7 @@ body {
 
 .product-grid.compact-view .product-pricing {
     gap: 8px !important;
+    margin-top: auto !important;
     margin-bottom: 4px !important;
 }
 
