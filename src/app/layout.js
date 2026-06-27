@@ -7,12 +7,16 @@ const montserrat = Montserrat({
   variable: "--font-montserrat",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800", "900"],
+  display: "swap",
+  preload: true,
 });
 
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   weight: ["400", "700"],
+  display: "swap",
+  preload: false,
 });
 
 export const metadata = {
@@ -89,6 +93,17 @@ export default async function RootLayout({ children }) {
               }
             })
           }}
+        />
+        {/* Preconnect to critical third-party origins */}
+        <link rel="preconnect" href="https://www.googletagmanager.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://cbanvzipzfmllexraiei.supabase.co" />
+        {/* Preload the logo — it's the LCP element on catalog & home */}
+        <link
+          rel="preload"
+          href="/logo.webp"
+          as="image"
+          type="image/webp"
         />
       </head>
       <body suppressHydrationWarning>

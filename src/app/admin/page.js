@@ -1,5 +1,6 @@
 "use client";
 
+import '@/app/admin.css';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';

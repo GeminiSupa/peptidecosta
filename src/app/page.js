@@ -163,7 +163,7 @@ export default function LandingPage() {
       <header className={`lp-header${scrolled?' lp-header--scrolled':''}`}>
         <div className="lp-header-inner">
           <Link href="/" className="lp-logo">
-            <img src="/logo.png" alt="Peptides Costa Rica" className="logo-img-custom" style={{maxHeight:'34px',width:'auto',borderRadius:'4px'}}/>
+            <img src="/logo.webp" alt="Peptides Costa Rica" className="logo-img-custom" style={{maxHeight:'34px',width:'auto',borderRadius:'4px'}} loading="eager"/>
           </Link>
           <nav className="lp-nav">
             <Link href={`/catalog?lang=${lang}`}>{lang==='en'?'Catalog':'Catálogo'}</Link>
@@ -513,7 +513,7 @@ export default function LandingPage() {
       {/* FOOTER */}
       <footer className="footer" style={{marginTop:0}}>
         <div className="container">
-          <img src="/logo.png" alt="Logo" style={{height:'36px',marginBottom:'16px',opacity:0.95,borderRadius:'8px'}}/>
+          <img src="/logo.webp" alt="Logo" style={{height:'36px',marginBottom:'16px',opacity:0.95,borderRadius:'8px'}} loading="lazy"/>
           <p>{t.f_desc}</p>
           <div className="footer-links-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'32px',textAlign:'left',margin:'40px 0'}}>
             <div>

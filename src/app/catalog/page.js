@@ -10,11 +10,12 @@ import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, cleanPhoneNumber } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import { 
+import Image from 'next/image';
+import {
   ShoppingBag, X, Search, SlidersHorizontal,
-  List, Grid, Sparkles, Phone, FileText, 
+  List, Grid, Sparkles, Phone, FileText,
   Plus, Minus, Trash2, Check, AlertCircle, ArrowLeft,
-  Dna, FlaskConical, Syringe, TestTubes, Atom, 
+  Dna, FlaskConical, Syringe, TestTubes, Atom,
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
   CreditCard, Smartphone, MessageCircle, Lock, Share2
 } from 'lucide-react';
@@ -2532,10 +2533,14 @@ export default function CatalogPage() {
 
         <div className="header-content container">
           <a href="/" className="logo">
-            <img 
-              src="/logo.png" 
-              alt="Peptides Costa Rica Logo" 
+            <Image
+              src="/logo.webp"
+              alt="Peptides Costa Rica Logo"
               className="logo-img-custom"
+              width={416}
+              height={205}
+              priority
+              style={{ height: 'auto' }}
             />
           </a>
 
@@ -2820,7 +2825,7 @@ export default function CatalogPage() {
               maxWidth: '480px', width: '100%', textAlign: 'center', overflow: 'hidden'
             }}>
               <div style={{ padding: '24px 24px 32px 24px' }}>
-              <img src="/logo.png" alt="Peptides Costa Rica Logo" style={{ height: '40px', margin: '0 auto 16px auto', display: 'block', borderRadius: '8px' }} />
+              <img src="/logo.webp" alt="Peptides Costa Rica Logo" style={{ height: '40px', margin: '0 auto 16px auto', display: 'block', borderRadius: '8px' }} />
               <h2 style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px' }}>
                 {lang === 'en' ? 'Exclusive Catalog Access' : 'Acceso Exclusivo al Catálogo'}
               </h2>
@@ -3105,6 +3110,7 @@ export default function CatalogPage() {
                 src="/customer_transformation.png"
                 alt={lang === 'en' ? 'Customer experience with Peptides Costa Rica' : 'Experiencias de clientes con Péptidos Costa Rica'}
                 style={{ width: '100%', display: 'block', height: 'auto', maxHeight: '440px', objectFit: 'cover', objectPosition: 'center top' }}
+                loading="lazy"
                 onError={(e) => { e.target.parentElement.parentElement.parentElement.style.display = 'none'; }}
               />
               <div style={{
@@ -3342,7 +3348,7 @@ export default function CatalogPage() {
               <div key={item.product} className="cart-item">
                 <div className="cart-item-img">
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.product} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={item.imageUrl} alt={item.product} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
                   ) : getCategoryIcon(item.category, 22)}
                 </div>
                 <div className="cart-item-details">
@@ -3827,7 +3833,8 @@ export default function CatalogPage() {
                     <img 
                       src={selectedProduct.imageUrl} 
                       alt={selectedProduct.product} 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '20px' }} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '20px' }}
+                      loading="lazy"
                     />
                   ) : getCategoryIcon(selectedProduct.category, 56)}
                 </div>
