@@ -1,13 +1,14 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import Link from 'next/link';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import { ArrowRight, ArrowUpRight, ShieldCheck, Truck, MessageCircle, Sun, Moon, ChevronDown, ChevronUp, FlaskConical, Lock, Dna, Atom, Zap, Brain, Sparkles, CheckCircle, ExternalLink, Trophy, Users, MapPin, Tag, Target, Heart, Package, DollarSign } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ArrowRight, ArrowUpRight, ShieldCheck, Truck, MessageCircle, Sun, Moon, ChevronDown, ChevronUp, FlaskConical, Lock, Dna, Atom, Zap, Brain, Sparkles, CheckCircle, ExternalLink, Trophy, Users, MapPin, Tag, Target, Heart, Package, DollarSign, Menu, X } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
 import NewsletterSignup from '@/components/NewsletterSignup';
+import './landing.css';
 
 const T = {
   en: {
@@ -63,9 +64,13 @@ export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState(0);
   const [featuredProducts, setFeaturedProducts] = useState([]);
   const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cmsSettings, setCmsSettings] = useState(null);
+  const prefersReducedMotion = useReducedMotion();
 
   const t = T[lang];
+
+  const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
 
   const { links } = useBusinessLinks();
 
@@ -84,6 +89,18 @@ export default function LandingPage() {
     window.addEventListener('scroll', onScroll);
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = mobileMenuOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') closeMobileMenu(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileMenuOpen, closeMobileMenu]);
 
   useEffect(() => {
     const load = async () => {
@@ -162,16 +179,32 @@ export default function LandingPage() {
       {/* HEADER */}
       <header className={`lp-header${scrolled?' lp-header--scrolled':''}`}>
         <div className="lp-header-inner">
-          <Link href="/" className="lp-logo">
+          <Link href="/" className="lp-logo" onClick={closeMobileMenu}>
             <img src="/logo.webp" alt="Peptides Costa Rica" className="logo-img-custom" style={{maxHeight:'34px',width:'auto',borderRadius:'4px'}} loading="eager"/>
           </Link>
-          <nav className="lp-nav">
-            <Link href={`/catalog?lang=${lang}`}>{lang==='en'?'Catalog':'Catálogo'}</Link>
-            <a href="#our-story">{lang==='en'?'Our Story':'Nuestra Historia'}</a>
-            <Link href={`/about?lang=${lang}`}>{lang==='en'?'About Us':'Sobre Nosotros'}</Link>
-            <Link href={`/blog?lang=${lang}`}>Blog</Link>
-            <Link href={`/contact?lang=${lang}`}>{lang==='en'?'Contact':'Contacto'}</Link>
-            <Link href="/admin" style={{display:'flex',alignItems:'center',gap:'4px',opacity:0.4,fontSize:'0.8rem',fontWeight:'600',color:'var(--text-muted)'}} title="Admin"><Lock size={12}/> Admin</Link>
+          <button
+            type="button"
+            className="lp-menu-btn"
+            aria-label={mobileMenuOpen ? (lang==='en'?'Close menu':'Cerrar menú') : (lang==='en'?'Open menu':'Abrir menú')}
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen((open) => !open)}
+          >
+            {mobileMenuOpen ? <X size={20} strokeWidth={2.2}/> : <Menu size={20} strokeWidth={2.2}/>}
+          </button>
+          <button
+            type="button"
+            className={`lp-mobile-nav-backdrop${mobileMenuOpen ? ' is-open' : ''}`}
+            aria-label={lang==='en'?'Close menu':'Cerrar menú'}
+            onClick={closeMobileMenu}
+            tabIndex={mobileMenuOpen ? 0 : -1}
+          />
+          <nav className={`lp-nav${mobileMenuOpen ? ' is-open' : ''}`}>
+            <Link href={`/catalog?lang=${lang}`} onClick={closeMobileMenu}>{lang==='en'?'Catalog':'Catálogo'}</Link>
+            <a href="#our-story" onClick={closeMobileMenu}>{lang==='en'?'Our Story':'Nuestra Historia'}</a>
+            <Link href={`/about?lang=${lang}`} onClick={closeMobileMenu}>{lang==='en'?'About Us':'Sobre Nosotros'}</Link>
+            <Link href={`/blog?lang=${lang}`} onClick={closeMobileMenu}>Blog</Link>
+            <Link href={`/contact?lang=${lang}`} onClick={closeMobileMenu}>{lang==='en'?'Contact':'Contacto'}</Link>
+            <Link href="/admin" onClick={closeMobileMenu} style={{display:'flex',alignItems:'center',gap:'4px',opacity:0.4,fontSize:'0.8rem',fontWeight:'600',color:'var(--text-muted)'}} title="Admin"><Lock size={12}/> Admin</Link>
           </nav>
           <div className="lp-header-actions">
             <div className="lp-controls">
@@ -196,42 +229,42 @@ export default function LandingPage() {
           <div className="lp-hero-glow" style={{zIndex:1}}/>
           <div className="container lp-hero-grid" style={{position:'relative',zIndex:2}}>
             <motion.div 
-              initial={{ opacity: 0, x: -30 }}
+              initial={prefersReducedMotion ? false : { opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.8, ease: "easeOut" }}
               className="lp-hero-text-block"
             >
               <div className="hero-badge">{lang==='en'?'Verified Local Supplier · Costa Rica':'Proveedor Local Verificado · Costa Rica'}</div>
               <h1 className="hero-title">{t.hero_title}</h1>
-              <p style={{fontSize:'1.1rem',lineHeight:1.7,color:'var(--text-muted)',marginBottom:'32px',maxWidth:'520px'}}>{t.hero_sub}</p>
-              <div className="hero-actions" style={{display:'flex',flexWrap:'wrap',gap:'14px',alignItems:'center'}}>
-                <Link href={`/catalog?lang=${lang}`} className="btn-hero-primary" style={{flex:'1 1 auto',minWidth:'max-content',textAlign:'center',justifyContent:'center'}}>
+              <p className="hero-sub">{t.hero_sub}</p>
+              <div className="hero-actions">
+                <Link href={`/catalog?lang=${lang}`} className="btn-hero-primary">
                   {t.hero_cta} <ArrowUpRight size={18}/>
                 </Link>
-                <button onClick={()=>handleWA('homepage')} style={{backgroundColor:'#25D366',color:'white',border:'none',borderRadius:'25px',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',padding:'12px 24px',fontWeight:'700',fontSize:'0.95rem',cursor:'pointer',boxShadow:'0 4px 14px rgba(37,211,102,0.35)',transition:'all 0.25s ease',flex:'1 1 auto',minWidth:'max-content'}}>
+                <button type="button" onClick={()=>handleWA('homepage')} className="btn-hero-wa">
                   <WaIcon/> {t.hero_cta2}
                 </button>
               </div>
-              <div className="hero-features-row" style={{marginTop:'28px'}}>
+              <div className="hero-features-row">
                 <span><CheckCircle size={14} color="#4ade80"/> {t.t1}</span>
                 <span><CheckCircle size={14} color="#4ade80"/> {t.t2}</span>
                 <span><CheckCircle size={14} color="#4ade80"/> {t.t3}</span>
               </div>
             </motion.div>
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.8, delay: prefersReducedMotion ? 0 : 0.2, ease: "easeOut" }}
               className="lp-hero-visual-block"
             >
               <div className="lp-hero-image-glow"/>
-              <img src="/catalog-promo-banner.webp" alt="Peptides Costa Rica" className="lp-hero-main-img" width={900} height={400} fetchPriority="high" decoding="async" style={{width:'100%',height:'auto',objectFit:'contain',position:'relative',zIndex:10,borderRadius:'16px'}}/>
+              <img src="/catalog-promo-banner.webp" alt="Peptides Costa Rica" className="lp-hero-main-img" width={900} height={400} fetchPriority="high" decoding="async"/>
             </motion.div>
           </div>
         </section>
 
         {/* TRUST CARDS */}
-        <section style={{background:'var(--bg-main)',padding:'56px 20px',borderBottom:'1px solid var(--border)'}}>
+        <section className="lp-trust-section">
           <div className="container">
             <div className="lp-trust-grid">
               {trustCards.map((c,i)=>(
@@ -352,7 +385,7 @@ export default function LandingPage() {
         </section>
 
         {/* HOW TO ORDER */}
-        <section style={{background:'var(--bg-secondary)',padding:'64px 20px'}}>
+        <section className="lp-how-section">
           <div className="container">
             <div className="lp-section-header">
               <h2>{t.how_t}</h2>
