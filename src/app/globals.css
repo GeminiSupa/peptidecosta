@@ -452,6 +452,22 @@ body {
     cursor: pointer;
     position: relative;
     overflow: hidden;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 280px;
+    touch-action: manipulation;
+}
+
+.product-grid--pending {
+    opacity: 0.92;
+}
+
+.filter-btn,
+.cat-chip,
+.nav-cart-btn,
+.cart-qty-btn,
+.product-actions button,
+.inline-qty-selector button {
+    touch-action: manipulation;
 }
 
 .product-card:hover {
@@ -3977,5 +3993,88 @@ body {
     color: var(--text-muted);
     margin: 0;
     line-height: 1.4;
+}
+
+/* Catalog loading skeleton */
+.catalog-skeleton {
+    min-height: 100vh;
+    padding: 16px;
+    background: var(--bg-main, #f8fafc);
+}
+
+.catalog-skeleton__header {
+    max-width: 1200px;
+    margin: 0 auto 24px;
+}
+
+.catalog-skeleton__logo {
+    width: 180px;
+    height: 48px;
+    border-radius: 8px;
+    margin: 0 auto 20px;
+    background: #e2e8f0;
+    animation: catalog-shimmer 1.2s infinite;
+}
+
+.catalog-skeleton__chips {
+    display: flex;
+    gap: 8px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.catalog-skeleton__chip {
+    flex: 0 0 88px;
+    height: 32px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    animation: catalog-shimmer 1.2s infinite;
+}
+
+.catalog-skeleton__grid {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+@media (min-width: 768px) {
+    .catalog-skeleton__grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.catalog-skeleton__card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.catalog-skeleton__img {
+    aspect-ratio: 1;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    background: #e2e8f0;
+    animation: catalog-shimmer 1.2s infinite;
+}
+
+.catalog-skeleton__line {
+    height: 12px;
+    border-radius: 4px;
+    background: #e2e8f0;
+    margin-bottom: 8px;
+    animation: catalog-shimmer 1.2s infinite;
+}
+
+.catalog-skeleton__line--short {
+    width: 55%;
+}
+
+@keyframes catalog-shimmer {
+    0% { opacity: 0.55; }
+    50% { opacity: 1; }
+    100% { opacity: 0.55; }
 }
 

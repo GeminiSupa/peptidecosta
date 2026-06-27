@@ -1,6 +1,6 @@
 "use client";
 
-import CatalogPage from "@/app/catalog/page";
+import CatalogClient from "@/app/catalog/CatalogClient";
 import { useEffect } from "react";
 
 export default function EmbedCatalog() {
@@ -39,5 +39,5 @@ export default function EmbedCatalog() {
   }, []);
 
   // Render the exact same catalog component, just with the CSS overrides active
-  return <CatalogPage />;
+  return <CatalogClient />;
 }

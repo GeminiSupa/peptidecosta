@@ -2,14 +2,30 @@
 const nextConfig = {
   allowedDevOrigins: ['192.168.100.71', '192.168.18.57'],
 
-  // Enable gzip/brotli compression
   compress: true,
 
-  // Image optimization: serve modern formats, cache aggressively
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
+
   images: {
     formats: ['image/avif', 'image/webp'],
-    minimumCacheTTL: 31536000, // 1 year
+    minimumCacheTTL: 31536000,
     dangerouslyAllowSVG: false,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.supabase.co',
+      },
+      {
+        protocol: 'https',
+        hostname: 'peptidescostarica.net',
+      },
+      {
+        protocol: 'https',
+        hostname: 'catalog.peptidescostarica.net',
+      },
+    ],
   },
 
   async headers() {

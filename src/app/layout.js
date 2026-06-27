@@ -1,12 +1,13 @@
 import { Montserrat, Inter } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
-import ExitIntentPopup from "@/components/ExitIntentPopup";
 import UTMTracker from "@/components/UTMTracker";
+import DeferredClientWidgets from "@/components/DeferredClientWidgets";
+
 const montserrat = Montserrat({
   variable: "--font-montserrat",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800", "900"],
+  weight: ["400", "600", "800"],
   display: "swap",
   preload: true,
 });
@@ -117,10 +118,10 @@ export default async function RootLayout({ children }) {
           />
         </noscript>
         {children}
-        <ExitIntentPopup />
+        <DeferredClientWidgets />
         <UTMTracker />
         {/* Google Tag Manager */}
-        <Script id="gtm" strategy="afterInteractive">
+        <Script id="gtm" strategy="lazyOnload">
           {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
           new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
           j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
