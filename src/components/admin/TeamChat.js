@@ -162,8 +162,8 @@ export default function TeamChat({ profile }) {
       <style dangerouslySetInnerHTML={{__html: `
         .team-chat-wrapper {
           display: flex;
-          height: calc(100vh - 180px); /* Fill available space minus header */
-          min-height: 500px;
+          height: calc(100dvh - 200px);
+          min-height: 400px;
           background: #0f172a;
           border-radius: 12px;
           border: 1px solid rgba(255, 255, 255, 0.05);
@@ -196,9 +196,11 @@ export default function TeamChat({ profile }) {
           align-items: center;
           gap: 12px;
           padding: 14px 16px;
+          min-height: 52px;
           cursor: pointer;
           transition: background 0.2s;
           border-bottom: 1px solid rgba(255,255,255,0.02);
+          touch-action: manipulation;
         }
         
         .contact-item:hover {
@@ -272,8 +274,13 @@ export default function TeamChat({ profile }) {
           background: none;
           border: none;
           color: #94a3b8;
-          padding: 4px;
           cursor: pointer;
+          min-width: 44px;
+          min-height: 44px;
+          align-items: center;
+          justify-content: center;
+          border-radius: 10px;
+          flex-shrink: 0;
         }
         
         .chat-header-title {
@@ -356,9 +363,10 @@ export default function TeamChat({ profile }) {
           margin-top: 4px;
         }
         .chat-input-container {
-          padding: 16px;
+          padding: 12px 16px max(12px, env(safe-area-inset-bottom, 0px));
           background: rgba(15, 23, 42, 0.8);
           border-top: 1px solid rgba(255, 255, 255, 0.05);
+          flex-shrink: 0;
         }
         .chat-form {
           display: flex;
@@ -378,20 +386,22 @@ export default function TeamChat({ profile }) {
           color: white;
           padding: 8px 16px;
           outline: none;
-          font-size: 0.95rem;
+          font-size: 16px;
         }
         .chat-send-btn {
           background: #0ea5e9;
           color: white;
           border: none;
-          width: 40px;
-          height: 40px;
+          width: 44px;
+          height: 44px;
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
           transition: background 0.2s;
+          flex-shrink: 0;
+          touch-action: manipulation;
         }
         .chat-send-btn:hover {
           background: #0284c7;
@@ -402,12 +412,11 @@ export default function TeamChat({ profile }) {
         }
 
         /* Mobile adjustments */
-        @media (max-width: 768px) {
+        @media (max-width: 1023px) {
           .team-chat-wrapper {
-            height: calc(100vh - 120px);
-            border-radius: 0;
-            border-left: none;
-            border-right: none;
+            height: calc(100dvh - 148px);
+            min-height: 320px;
+            border-radius: 12px;
           }
           
           .chat-sidebar {
@@ -418,10 +427,20 @@ export default function TeamChat({ profile }) {
           .chat-main {
             display: ${mobileShowContacts ? 'none' : 'flex'};
             width: 100%;
+            min-height: 0;
           }
           
           .back-btn {
-            display: flex;
+            display: inline-flex;
+          }
+
+          .chat-messages {
+            padding: 12px;
+            -webkit-overflow-scrolling: touch;
+          }
+
+          .msg-bubble {
+            max-width: 88%;
           }
         }
       `}} />

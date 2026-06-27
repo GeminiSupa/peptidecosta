@@ -346,18 +346,18 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   };
 
   return (
-    <div style={{ padding: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+    <div className="admin-team-panel">
+      <div className="admin-team-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Team Management</h2>
-          <p style={{ color: '#94a3b8' }}>Manage admin users, commission rates, and payouts.</p>
+          <h2 className="admin-section-title" style={{ fontSize: '1.5rem' }}>Team Management</h2>
+          <p className="admin-page-subtitle">Manage admin users, commission rates, and payouts.</p>
         </div>
         {activeSubTab === 'members' ? (
           <button className="admin-btn admin-btn-primary" onClick={() => handleOpenModal()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Plus size={16} /> Add User
           </button>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div className="admin-team-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
             <select
               value={targetAgent}
               onChange={(e) => setTargetAgent(e.target.value)}
@@ -439,7 +439,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       </div>
 
       {/* Sub-tab Toggle buttons */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
+      <div className="admin-team-subtabs" style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
         <button 
           onClick={() => setActiveSubTab('members')}
           className="admin-btn"

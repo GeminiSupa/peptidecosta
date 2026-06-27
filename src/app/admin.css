@@ -4517,14 +4517,25 @@
 
     .responsive-table .admin-card-actions {
         width: 100%;
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        flex-direction: unset;
         align-items: stretch !important;
     }
 
     .responsive-table .admin-card-actions .admin-btn,
     .responsive-table .admin-card-actions button {
-        width: 100%;
+        width: auto !important;
+        min-height: 44px;
+        font-size: 0.72rem;
+        padding: 8px 10px !important;
         justify-content: center;
+    }
+
+    .responsive-table .admin-card-actions .admin-btn-primary:first-child,
+    .responsive-table .admin-card-actions .admin-btn-cta-primary {
+        grid-column: 1 / -1;
     }
 
     .responsive-table td > select {
@@ -5541,3 +5552,208 @@
     font-size: 1rem;
 }
 @import "./marketing.css";
+
+/* ═══════════════════════════════════════════════════════════
+   ADMIN MOBILE-FIRST TAB SHELL (orders, CRM, leads, etc.)
+   ═══════════════════════════════════════════════════════════ */
+
+.admin-tab-panel {
+    min-width: 0;
+}
+
+@media (max-width: 1023px) {
+    body[class*="admin-tab-"] .admin-page-subtitle {
+        display: none;
+    }
+
+    body[class*="admin-tab-"] .admin-container {
+        padding-left: max(8px, env(safe-area-inset-left, 0px));
+        padding-right: max(8px, env(safe-area-inset-right, 0px));
+    }
+
+    .admin-tab-panel,
+    .admin-orders-tab {
+        padding: 8px 0 !important;
+        min-width: 0;
+    }
+
+    .admin-section-header,
+    .admin-leads-header {
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 0 !important;
+        margin-bottom: 12px !important;
+    }
+
+    .admin-section-header > div:last-child,
+    .admin-leads-header > div:last-child {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .admin-section-header .admin-btn,
+    .admin-leads-header .admin-btn {
+        flex: 1 1 calc(50% - 4px);
+        min-width: 0;
+        justify-content: center;
+    }
+
+    .admin-funnel-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 0 !important;
+        margin-bottom: 16px !important;
+    }
+
+    .admin-leads-padded {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    .admin-ai-insight-card {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+
+    .admin-ai-insight-card .admin-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .admin-bulk-actions {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .admin-bulk-actions button {
+        flex: 1 1 calc(50% - 4px);
+        min-height: 44px;
+        justify-content: center;
+    }
+
+    /* Team management */
+    .admin-team-panel {
+        padding: 12px 0 !important;
+    }
+
+    .admin-team-header {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 12px;
+        margin-bottom: 16px !important;
+    }
+
+    .admin-team-toolbar {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .admin-team-toolbar select,
+    .admin-team-toolbar input[type="date"] {
+        flex: 1 1 calc(50% - 4px);
+        min-width: 0;
+        min-height: 44px;
+    }
+
+    .admin-team-toolbar .admin-btn {
+        flex: 1 1 100%;
+        justify-content: center;
+    }
+
+    .admin-team-subtabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap !important;
+    }
+
+    /* Broadcasts */
+    .admin-broadcasts-panel {
+        padding: 12px 0 !important;
+        max-width: none !important;
+    }
+
+    .admin-broadcasts-section {
+        padding: 16px !important;
+        margin-bottom: 16px !important;
+    }
+
+    .admin-broadcasts-banner-row {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+
+    .admin-broadcasts-banner-actions {
+        flex-wrap: wrap;
+        justify-content: stretch;
+    }
+
+    .admin-broadcasts-banner-actions button {
+        flex: 1 1 calc(33% - 6px);
+        min-height: 44px;
+    }
+
+    .admin-broadcasts-channels {
+        flex-direction: column !important;
+        gap: 10px !important;
+    }
+
+    .admin-broadcasts-audience {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Team chat — full height above bottom nav */
+    .admin-team-chat-shell {
+        min-height: 0;
+    }
+
+    body.admin-tab-team_chat .admin-team-chat-shell .team-chat-wrapper {
+        height: calc(100dvh - 148px);
+        min-height: 320px;
+        border-radius: 12px;
+    }
+
+    /* Analytics shell */
+    body.admin-tab-analytics .admin-orders-tab {
+        padding: 0 !important;
+    }
+
+    /* Marketing shell */
+    body.admin-tab-marketing .admin-orders-tab {
+        padding: 0 !important;
+    }
+
+    /* CRM shell */
+    body.admin-tab-customers .admin-orders-tab {
+        padding: 0 !important;
+    }
+}
+
+@media (max-width: 640px) {
+    .admin-funnel-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .responsive-table td {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .responsive-table td::before {
+        flex: 0 0 100%;
+        margin-right: 0;
+        margin-bottom: 2px;
+    }
+
+    .responsive-table td > div {
+        align-items: flex-start !important;
+        text-align: left !important;
+        width: 100%;
+    }
+}

@@ -60,7 +60,7 @@ export default function CampaignAnalytics() {
       </div>
 
       <div className="mkt-table-wrapper">
-        <table className="mkt-table">
+        <table className="mkt-table responsive-table">
           <thead>
             <tr>
               <th>Campaign</th>
@@ -90,7 +90,7 @@ export default function CampaignAnalytics() {
                 return (
                   <React.Fragment key={camp.id}>
                     <tr>
-                      <td>
+                      <td data-label="Campaign">
                         <div className="mkt-font-medium">{camp.title}</div>
                         <div className="mkt-text-xs mkt-text-muted">
                           A: {camp.subject_line}
@@ -103,7 +103,7 @@ export default function CampaignAnalytics() {
                         )}
                         <div style={{fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginTop: '4px'}}>ID: {camp.id}</div>
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <span className={`mkt-badge ${
                           camp.status === 'sent' ? 'mkt-badge-success' :
                           camp.status === 'sending' ? 'mkt-badge-warning' :
@@ -113,24 +113,24 @@ export default function CampaignAnalytics() {
                           {camp.status}
                         </span>
                       </td>
-                      <td className="mkt-text-right">
+                      <td data-label="Sends" className="mkt-text-right">
                         <div className="mkt-flex mkt-items-center mkt-justify-end mkt-gap-2">
                           {sends} <Send size={14} color="rgba(255,255,255,0.4)" />
                         </div>
                       </td>
-                      <td className="mkt-text-right">
+                      <td data-label="Opens" className="mkt-text-right">
                         <div className="mkt-flex mkt-items-center mkt-justify-end mkt-gap-2">
                           <span>{opens} <span style={{color: '#34d399', fontSize: '12px', marginLeft: '4px'}}>({openRate}%)</span></span>
                           <Eye size={14} color="rgba(255,255,255,0.4)" />
                         </div>
                       </td>
-                      <td className="mkt-text-right">
+                      <td data-label="Clicks" className="mkt-text-right">
                         <div className="mkt-flex mkt-items-center mkt-justify-end mkt-gap-2">
                           <span>{clicks} <span style={{color: '#60a5fa', fontSize: '12px', marginLeft: '4px'}}>({clickRate}%)</span></span>
                           <MousePointerClick size={14} color="rgba(255,255,255,0.4)" />
                         </div>
                       </td>
-                      <td className="mkt-text-right">
+                      <td data-label="Revenue" className="mkt-text-right">
                         <div className="mkt-flex mkt-flex-col mkt-items-end">
                           {orders > 0 ? (
                             <>

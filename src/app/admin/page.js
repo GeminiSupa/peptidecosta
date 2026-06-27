@@ -1267,6 +1267,12 @@ Core Rules:
     activeBtn?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }, [activeTab, mounted]);
 
+  useEffect(() => {
+    const cls = `admin-tab-${activeTab}`;
+    document.body.classList.add(cls);
+    return () => document.body.classList.remove(cls);
+  }, [activeTab]);
+
   // Resolve ?tab= from URL once admin profile is loaded
   useEffect(() => {
     if (!mounted || !adminProfile || profileLoading) return;
@@ -4425,9 +4431,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           );
 
           return (
-            <div>
+            <div className="admin-tab-panel admin-tab-orders-panel">
             <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: '16px' }}>
-              <div style={{ flex: '1 1 auto', minWidth: '300px' }}>
+              <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                 <h3>{isStaffAgent ? 'My Orders' : 'Customer Orders Log Ledger'}</h3>
                 <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 12px 0' }}>
                   {isStaffAgent
@@ -4933,7 +4939,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         )}
 
         {activeTab === 'carts' && (
-          <div className="admin-orders-tab">
+          <div className="admin-orders-tab admin-tab-panel">
             <div className="admin-section-header">
               <h2 className="admin-section-title">🛒 Active / Abandoned Carts</h2>
               <div className="admin-toolbar-actions">
@@ -5001,6 +5007,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               ) : (
                 <div 
                   onClick={handleGenerateCartsAi}
+                  className="admin-ai-insight-card"
                   style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.25) 0%, rgba(15, 23, 42, 0.45) 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '16px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.2s', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -6156,19 +6163,21 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         )}
 
         {activeTab === 'team_chat' && (
-          <TeamChat profile={adminProfile} />
+          <div className="admin-team-chat-shell admin-tab-panel">
+            <TeamChat profile={adminProfile} />
+          </div>
         )}
 
         {/* TAB: ANALYTICS */}
         {activeTab === 'analytics' && (
-          <div className="admin-orders-tab">
+          <div className="admin-orders-tab admin-tab-panel">
             <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} productViews={productViews} />
           </div>
         )}
 
         {/* TAB: CUSTOMERS CRM */}
         {activeTab === 'customers' && (
-          <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
+          <div className="admin-orders-tab admin-tab-panel">
             <CustomersCRM 
               orders={orders} 
               abandonedCarts={abandonedCarts} 
@@ -6198,13 +6207,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           const totalLeadsPages = Math.ceil(filteredLeads.length / leadsPerPage);
 
           return (
-            <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
-              <div className="section-header" style={{ padding: '0 24px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="admin-orders-tab admin-tab-panel">
+              <div className="admin-section-header admin-leads-header">
                 <div>
-                  <h2>Catalog Access Leads</h2>
-                  <p>Users who provided their contact info to view the catalog.</p>
+                  <h2 className="admin-section-title">Catalog Access Leads</h2>
+                  <p className="admin-page-subtitle">Users who provided their contact info to view the catalog.</p>
                 </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
+                <div>
                   <button 
                     className={`admin-btn admin-btn-danger ${selectedLeads.length === 0 ? 'disabled' : ''}`}
                     onClick={handleBulkDeleteLeads}
@@ -6224,13 +6233,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
 
               {/* Funnel Metrics Grid */}
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', 
-                gap: '20px', 
-                padding: '0 24px', 
-                marginBottom: '24px' 
-              }}>
+              <div className="admin-funnel-grid">
                 {/* Captured Leads Card */}
                 <div style={{
                   background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.9) 100%)',
@@ -6415,7 +6418,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
 
               {/* LEADS AI CAMPAIGN STRATEGY CARD */}
-              <div style={{ padding: '0 24px', marginBottom: '24px' }}>
+              <div className="admin-leads-padded" style={{ marginBottom: '24px' }}>
                 {generatingLeadsAi ? (
                   <div style={{ background: 'linear-gradient(135deg, rgba(14, 22, 38, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', padding: '24px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -6482,7 +6485,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
 
               {/* Filtering Controls */}
-              <div style={{ padding: '0 24px', marginBottom: '16px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="admin-leads-padded admin-bulk-actions" style={{ marginBottom: '16px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ position: 'relative', flex: '1 1 auto', minWidth: '220px' }}>
                   <input 
                     className="admin-input"
@@ -6952,14 +6955,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {/* TAB: TEAM MANAGEMENT */}
         {activeTab === 'team' && (
-          <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
+          <div className="admin-orders-tab admin-tab-panel">
             <TeamManagement currentUserProfile={adminProfile} currentUserEmail={loggedInEmail.current} onTeamChanged={fetchAgents} />
           </div>
         )}
 
         {/* TAB: AFFILIATES */}
         {activeTab === 'marketing' && (
-          <div className="admin-orders-tab">
+          <div className="admin-orders-tab admin-tab-panel">
             <EmailMarketingStudio />
           </div>
         )}

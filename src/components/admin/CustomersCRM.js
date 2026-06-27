@@ -784,6 +784,39 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
+
+        @media (max-width: 1023px) {
+          .crm-kpi-row {
+            grid-template-columns: 1fr;
+            padding: 12px;
+            gap: 10px;
+          }
+          .crm-header {
+            flex-direction: column;
+            align-items: stretch;
+            padding: 16px;
+          }
+          .crm-search {
+            min-width: 0;
+            width: 100%;
+          }
+          .crm-tabs {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            flex-wrap: nowrap;
+            padding: 0 12px;
+          }
+          .crm-tab-btn {
+            flex-shrink: 0;
+            min-height: 44px;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .crm-table-wrapper {
+            overflow-x: visible;
+          }
+        }
       `}} />
 
       {/* KPI stats summary cards */}
@@ -913,7 +946,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                 const contactPhone = cust.whatsappWaId || cust.phone;
                 return (
                   <tr key={cust.id} style={{ background: selectedCustomerIds.includes(cust.id) ? 'rgba(56, 189, 248, 0.05)' : 'transparent' }}>
-                    <td style={{ textAlign: 'center' }}>
+                    <td data-label="Select" style={{ textAlign: 'center' }}>
                       <input 
                         type="checkbox" 
                         checked={selectedCustomerIds.includes(cust.id)}

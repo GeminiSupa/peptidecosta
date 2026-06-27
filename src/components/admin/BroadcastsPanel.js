@@ -212,21 +212,21 @@ export default function BroadcastsPanel({ products = [] }) {
   };
 
   return (
-    <div className="admin-panel" style={{ padding: '24px', maxWidth: '850px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+    <div className="admin-panel admin-broadcasts-panel admin-tab-panel">
+      <div className="admin-section-header" style={{ marginBottom: '24px' }}>
         <div>
-          <h2 style={{ fontSize: '1.75rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px', color: '#f8fafc' }}>
+          <h2 className="admin-section-title" style={{ fontSize: '1.75rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Send size={28} color="#38bdf8" />
             Marketing Broadcasts
           </h2>
-          <p style={{ color: '#94a3b8', margin: 0, fontSize: '0.95rem' }}>
+          <p className="admin-page-subtitle" style={{ margin: 0, fontSize: '0.95rem' }}>
             Send bulk messages for Flash Sales, promotions, or general updates to your contacts.
           </p>
         </div>
       </div>
 
       {/* Announcement Banners Section */}
-      <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '24px', borderRadius: '16px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.05)' }}>
+      <div className="admin-broadcasts-section" style={{ background: 'rgba(30, 41, 59, 0.5)', borderRadius: '16px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.05)' }}>
         <h3 style={{ margin: '0 0 16px', fontSize: '1.05rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Sparkles size={18} /> Announcement Banners Manager
         </h3>
@@ -256,13 +256,13 @@ export default function BroadcastsPanel({ products = [] }) {
         {/* List Banners */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
           {bannersLoading ? <p style={{ color: '#94a3b8' }}>Loading banners...</p> : banners.length === 0 ? <p style={{ color: '#94a3b8' }}>No banners saved.</p> : banners.map(banner => (
-            <div key={banner.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: `1px solid ${banner.isActive ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255,255,255,0.05)'}` }}>
+            <div key={banner.id} className="admin-broadcasts-banner-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: `1px solid ${banner.isActive ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255,255,255,0.05)'}` }}>
               <div>
                 <div style={{ color: '#f8fafc', fontSize: '0.9rem', marginBottom: '4px' }}>🇺🇸 {banner.textEn}</div>
                 <div style={{ color: '#cbd5e1', fontSize: '0.85rem' }}>🇪🇸 {banner.textEs}</div>
                 {banner.isActive && <div style={{ display: 'inline-block', marginTop: '8px', padding: '2px 8px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' }}>LIVE ON SITE</div>}
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="admin-broadcasts-banner-actions" style={{ display: 'flex', gap: '8px' }}>
                 <button type="button" onClick={() => handleToggleBanner(banner.id)} style={{ padding: '8px', background: banner.isActive ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.05)', color: banner.isActive ? '#10b981' : '#94a3b8', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
                   {banner.isActive ? 'Deactivate' : 'Set Active'}
                 </button>
@@ -378,7 +378,7 @@ export default function BroadcastsPanel({ products = [] }) {
       </div>
 
       {/* Configuration Section */}
-      <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '24px', borderRadius: '16px', marginBottom: '24px', border: '1px solid rgba(56, 189, 248, 0.15)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+      <div className="admin-broadcasts-section admin-broadcasts-audience" style={{ background: 'rgba(30, 41, 59, 0.5)', borderRadius: '16px', marginBottom: '24px', border: '1px solid rgba(56, 189, 248, 0.15)', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
         
         <div>
           <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px', color: '#e2e8f0', fontSize: '0.95rem' }}>Target Audience</label>
@@ -410,7 +410,7 @@ export default function BroadcastsPanel({ products = [] }) {
 
         <div>
           <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '10px', color: '#e2e8f0', fontSize: '0.95rem' }}>Delivery Channels</label>
-          <div style={{ display: 'flex', gap: '20px', background: '#0f172a', padding: '12px 16px', borderRadius: '8px', border: '1px solid #334155' }}>
+          <div className="admin-broadcasts-channels" style={{ display: 'flex', gap: '20px', background: '#0f172a', padding: '12px 16px', borderRadius: '8px', border: '1px solid #334155' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', color: '#f8fafc' }}>
               <input 
                 type="checkbox" 

@@ -202,7 +202,7 @@ export default function SubscriberManager() {
 
       {/* Data Table */}
       <div className="mkt-table-wrapper">
-        <table className="mkt-table">
+        <table className="mkt-table responsive-table">
           <thead>
             <tr>
               <th>Subscriber</th>
@@ -250,11 +250,11 @@ export default function SubscriberManager() {
                     </>
                   ) : (
                     <>
-                      <td>
+                      <td data-label="Subscriber">
                         <div className="mkt-font-medium">{sub.email}</div>
                         <div className="mkt-text-xs mkt-text-muted">{sub.first_name} {sub.last_name}</div>
                       </td>
-                      <td>
+                      <td data-label="Tags">
                         {sub.tags && sub.tags.length > 0 ? (
                           <div className="mkt-flex mkt-gap-1" style={{flexWrap: 'wrap'}}>
                             {sub.tags.map(t => <span key={t} style={{background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px'}}>{t}</span>)}
@@ -263,15 +263,15 @@ export default function SubscriberManager() {
                           <span className="mkt-text-xs mkt-text-muted">No tags</span>
                         )}
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <span className={`mkt-badge ${sub.status === 'subscribed' ? 'mkt-badge-success' : sub.status === 'unsubscribed' ? 'mkt-badge-warning' : 'mkt-badge-neutral'}`}>
                           {sub.status}
                         </span>
                       </td>
-                      <td className="mkt-text-xs mkt-text-muted">
+                      <td data-label="Added" className="mkt-text-xs mkt-text-muted">
                         {new Date(sub.created_at).toLocaleDateString()}
                       </td>
-                      <td style={{textAlign: 'right'}}>
+                      <td data-label="Actions" style={{textAlign: 'right'}}>
                         <button onClick={() => startEdit(sub)} style={{background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '4px'}} title="Edit Subscriber">
                           <Edit2 size={16} />
                         </button>

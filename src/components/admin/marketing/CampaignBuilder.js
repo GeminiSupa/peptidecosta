@@ -89,7 +89,7 @@ export default function CampaignBuilder() {
   };
 
   return (
-    <div className="mkt-flex mkt-flex-col" style={{height: '800px'}}>
+    <div className="mkt-builder-shell mkt-flex mkt-flex-col">
       <div className="mkt-flex mkt-justify-between mkt-mb-6" style={{flexWrap: 'wrap', gap: '16px'}}>
         <div className="mkt-flex-1" style={{maxWidth: '500px'}}>
           <div className="mkt-flex mkt-gap-4">
