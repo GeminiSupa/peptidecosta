@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { createUnsubscribeToken } from '@/lib/marketingTokens';
 import nodemailer from 'nodemailer';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
@@ -26,6 +27,26 @@ export async function POST(request) {
 
     if (campError || !campaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    }
+
+    if (!campaign.subject_line || !campaign.html_content) {
+      return NextResponse.json({ error: 'Campaign must have a subject and saved email body before sending' }, { status: 400 });
+    }
+
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      return NextResponse.json({ error: 'Email sender credentials are not configured' }, { status: 500 });
+    }
+
+    if (campaign.status === 'sending') {
+      return NextResponse.json({ error: 'Campaign is already sending' }, { status: 409 });
+    }
+
+    if (campaign.status === 'sent' && !send_winner) {
+      return NextResponse.json({ error: 'Campaign was already sent. Duplicate it before sending again.' }, { status: 409 });
+    }
+
+    if (campaign.status === 'testing' && campaign.is_ab_test && !send_winner) {
+      return NextResponse.json({ error: 'A/B test is in progress. Pick a winner before sending the remaining subscribers.' }, { status: 409 });
     }
 
     // Determine target audience based on tags
@@ -114,18 +135,20 @@ async function processBatch(transporter, campaign, subscribers, is_test_batch, s
       let personalizedSubject = subject.replace(/\[FIRST_NAME\]/g, firstName).replace(/\[LAST_NAME\]/g, lastName);
       let htmlContent = campaign.html_content.replace(/\[FIRST_NAME\]/g, firstName).replace(/\[LAST_NAME\]/g, lastName);
 
-      // E-commerce UTM Tracking Appending
-      // Match all href="URL" and append UTM params
+      // E-commerce UTM and click tracking.
       htmlContent = htmlContent.replace(/href="([^"]+)"/g, (match, url) => {
         if (url.startsWith('http') || url.startsWith('/')) {
-          const separator = url.includes('?') ? '&' : '?';
-          return `href="${url}${separator}utm_source=email&utm_campaign=${campaign.id}"`;
+          const absoluteUrl = url.startsWith('/') ? `${DOMAIN}${url}` : url;
+          const separator = absoluteUrl.includes('?') ? '&' : '?';
+          const trackedUrl = `${absoluteUrl}${separator}utm_source=email&utm_medium=campaign&utm_campaign=${campaign.id}`;
+          const redirectUrl = `${DOMAIN}/api/tracking/click?c=${campaign.id}&s=${sub.id}&url=${encodeURIComponent(trackedUrl)}`;
+          return `href="${redirectUrl}"`;
         }
         return match;
       });
 
       const trackingPixel = `<img src="${DOMAIN}/api/tracking/open?c=${campaign.id}&s=${sub.id}" width="1" height="1" alt="" />`;
-      const unsubscribeUrl = `${DOMAIN}/unsubscribe?s=${sub.id}`;
+      const unsubscribeUrl = `${DOMAIN}/unsubscribe?t=${encodeURIComponent(createUnsubscribeToken(sub.id))}`;
       const unsubscribeFooter = `
         <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eaeaea; text-align: center; color: #666; font-size: 12px; font-family: sans-serif;">
           <p>You are receiving this email because you subscribed to Costa Peptides.</p>

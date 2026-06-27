@@ -2,32 +2,32 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 function UnsubscribeContent() {
   const searchParams = useSearchParams();
-  const subscriber_id = searchParams.get('s');
+  const token = searchParams.get('t');
   
   const [status, setStatus] = useState('loading'); // loading, success, error
 
   useEffect(() => {
-    if (subscriber_id) {
-      processUnsubscribe(subscriber_id);
+    if (token) {
+      processUnsubscribe(token);
     } else {
       setStatus('error');
     }
-  }, [subscriber_id]);
+  }, [token]);
 
-  const processUnsubscribe = async (id) => {
+  const processUnsubscribe = async (unsubscribeToken) => {
     try {
-      const { error } = await supabase
-        .from('email_subscribers')
-        .update({ status: 'unsubscribed', updated_at: new Date().toISOString() })
-        .eq('id', id);
+      const res = await fetch('/api/unsubscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: unsubscribeToken })
+      });
 
-      if (error) throw error;
+      if (!res.ok) throw new Error('Failed to unsubscribe');
       setStatus('success');
     } catch (err) {
       console.error('Unsubscribe error:', err);

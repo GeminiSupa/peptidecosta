@@ -1,14 +1,18 @@
 "use client";
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import EmailEditor from 'react-email-editor';
-import { Save, Send, Eye, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Copy, Eye, Loader2, Save, Send, Users } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
 export default function CampaignBuilder() {
   const emailEditorRef = useRef(null);
   const [isReady, setIsReady] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [campaigns, setCampaigns] = useState([]);
+  const [subscribers, setSubscribers] = useState([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState('');
   const [subject, setSubject] = useState('');
   const [campaignName, setCampaignName] = useState('New Campaign ' + new Date().toLocaleDateString());
   
@@ -16,6 +20,64 @@ export default function CampaignBuilder() {
   const [isABTest, setIsABTest] = useState(false);
   const [subjectB, setSubjectB] = useState('');
   const [targetSegment, setTargetSegment] = useState(''); // empty means all
+
+  useEffect(() => {
+    fetchCampaigns();
+    fetchSubscribers();
+  }, []);
+
+  const fetchCampaigns = async () => {
+    try {
+      const res = await adminFetch('/api/admin/campaigns');
+      const data = await res.json();
+      if (data.campaigns) setCampaigns(data.campaigns);
+    } catch (err) {
+      console.error('Failed to fetch campaigns:', err);
+    }
+  };
+
+  const fetchSubscribers = async () => {
+    try {
+      const res = await adminFetch('/api/admin/subscribers');
+      const data = await res.json();
+      if (data.subscribers) setSubscribers(data.subscribers);
+    } catch (err) {
+      console.error('Failed to fetch subscribers:', err);
+    }
+  };
+
+  const selectedCampaign = useMemo(
+    () => campaigns.find(campaign => campaign.id === selectedCampaignId),
+    [campaigns, selectedCampaignId]
+  );
+
+  const estimatedAudience = useMemo(() => {
+    const campaignTags = selectedCampaign?.target_tags || (targetSegment ? [targetSegment] : []);
+    return subscribers.filter(sub => {
+      if (sub.status !== 'subscribed') return false;
+      if (!campaignTags.length) return true;
+      return Array.isArray(sub.tags) && sub.tags.includes(campaignTags[0]);
+    });
+  }, [selectedCampaign, subscribers, targetSegment]);
+
+  const preflightItems = useMemo(() => {
+    const activeSubject = selectedCampaign?.subject_line || subject;
+    const activeHtml = selectedCampaign?.html_content || '';
+    const activeTitle = selectedCampaign?.title || campaignName;
+    return [
+      { label: 'Campaign has a name', ok: Boolean(activeTitle?.trim()) },
+      { label: 'Subject line is ready', ok: Boolean(activeSubject?.trim()) },
+      { label: 'Audience has subscribers', ok: estimatedAudience.length > 0 },
+      { label: 'Sender credentials configured', ok: true, note: 'Server verifies credentials during send.' },
+      { label: 'Unsubscribe footer added automatically', ok: true },
+      { label: 'Open and click tracking enabled', ok: true },
+      { label: 'Saved campaign selected for send', ok: Boolean(selectedCampaignId) },
+      { label: 'Email body saved', ok: Boolean(activeHtml || selectedCampaignId) }
+    ];
+  }, [campaignName, estimatedAudience.length, selectedCampaign, selectedCampaignId, subject]);
+
+  const canSend = preflightItems.every(item => item.ok);
+  const activeCampaignIsABTest = Boolean(selectedCampaign?.is_ab_test || isABTest);
 
   const exportHtml = () => {
     emailEditorRef.current.editor.exportHtml((data) => {
@@ -51,6 +113,8 @@ export default function CampaignBuilder() {
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Failed to save campaign');
         alert(`Campaign saved! ID: ${data.campaign.id}`);
+        setSelectedCampaignId(data.campaign.id);
+        fetchCampaigns();
       } catch (err) {
         console.error(err);
         alert('Failed to save campaign: ' + err.message);
@@ -61,22 +125,33 @@ export default function CampaignBuilder() {
   };
 
   const sendCampaign = async (isTestBatch = false) => {
-    const promptMsg = isTestBatch 
-      ? "Enter Campaign ID to send A/B Test Batch (20% of list):" 
-      : "Enter Campaign ID to send to full list:";
-    const campaignId = prompt(promptMsg);
-    if (!campaignId) return;
+    if (!selectedCampaignId) {
+      alert('Select a saved campaign first.');
+      return;
+    }
+
+    if (!canSend) {
+      alert('Resolve the preflight checks before sending.');
+      return;
+    }
+
+    const label = isTestBatch ? 'A/B test batch' : 'full campaign';
+    if (!confirm(`Send ${label} to ${estimatedAudience.length} subscriber${estimatedAudience.length === 1 ? '' : 's'}?`)) return;
 
     try {
+      setIsSending(true);
       const res = await adminFetch('/api/admin/campaigns/send', {
         method: 'POST',
-        body: JSON.stringify({ campaign_id: campaignId, is_test_batch: isTestBatch })
+        body: JSON.stringify({ campaign_id: selectedCampaignId, is_test_batch: isTestBatch })
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to send campaign');
       alert('Campaign sending initiated! Emails are being dispatched in the background.');
+      fetchCampaigns();
     } catch (err) {
       alert('Failed to send: ' + err.message);
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -90,6 +165,60 @@ export default function CampaignBuilder() {
 
   return (
     <div className="mkt-builder-shell mkt-flex mkt-flex-col">
+      <div className="mkt-command-grid mkt-mb-6">
+        <div className="mkt-panel">
+          <div className="mkt-panel-header">
+            <div>
+              <div className="mkt-panel-kicker">Campaign Library</div>
+              <h3 className="mkt-panel-title">Select a saved campaign</h3>
+            </div>
+            <Copy size={18} />
+          </div>
+          <select
+            className="mkt-input"
+            value={selectedCampaignId}
+            onChange={e => setSelectedCampaignId(e.target.value)}
+          >
+            <option value="">Choose draft or sent campaign...</option>
+            {campaigns.map(campaign => (
+              <option key={campaign.id} value={campaign.id}>
+                {campaign.title} · {campaign.status}
+              </option>
+            ))}
+          </select>
+          {selectedCampaign && (
+            <div className="mkt-selected-campaign">
+              <div className="mkt-font-medium">{selectedCampaign.subject_line}</div>
+              <div className="mkt-text-xs mkt-text-muted">
+                {selectedCampaign.target_tags?.length ? `Segment: ${selectedCampaign.target_tags.join(', ')}` : 'Audience: all subscribers'}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mkt-panel">
+          <div className="mkt-panel-header">
+            <div>
+              <div className="mkt-panel-kicker">Preflight</div>
+              <h3 className="mkt-panel-title">Send readiness</h3>
+            </div>
+            <Users size={18} />
+          </div>
+          <div className="mkt-audience-count">
+            <span>{estimatedAudience.length}</span>
+            eligible subscribers
+          </div>
+          <div className="mkt-checklist">
+            {preflightItems.map(item => (
+              <div key={item.label} className={`mkt-check ${item.ok ? 'ok' : 'warn'}`}>
+                {item.ok ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+                <span>{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="mkt-flex mkt-justify-between mkt-mb-6" style={{flexWrap: 'wrap', gap: '16px'}}>
         <div className="mkt-flex-1" style={{maxWidth: '500px'}}>
           <div className="mkt-flex mkt-gap-4">
@@ -150,10 +279,10 @@ export default function CampaignBuilder() {
         </div>
         
         <div className="mkt-flex mkt-items-end mkt-gap-2 pb-1">
-          {isABTest && (
+          {activeCampaignIsABTest && (
             <button 
               onClick={() => sendCampaign(true)}
-              disabled={!isReady}
+              disabled={!isReady || isSending || !selectedCampaign?.is_ab_test}
               className="mkt-btn mkt-btn-warning"
               title="Send A/B Test Batch to 20% of your list"
             >
@@ -163,10 +292,11 @@ export default function CampaignBuilder() {
           )}
           <button 
             onClick={() => sendCampaign(false)}
-            disabled={!isReady}
+            disabled={!isReady || isSending || !selectedCampaignId || selectedCampaign?.status === 'testing'}
             className="mkt-btn mkt-btn-danger"
+            title={selectedCampaign?.status === 'testing' ? 'Pick the A/B winner from Analytics to send the remaining audience.' : 'Send selected campaign'}
           >
-            <Send size={16} />
+            {isSending ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
             Send to List
           </button>
           <button 

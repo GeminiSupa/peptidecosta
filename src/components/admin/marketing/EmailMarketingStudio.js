@@ -2,9 +2,10 @@
 
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Mail, Users, Settings, BarChart2 } from 'lucide-react';
+import { BarChart2, Mail, Users, Zap } from 'lucide-react';
 import SubscriberManager from './SubscriberManager';
 import CampaignAnalytics from './CampaignAnalytics';
+import AutomationStudio from './AutomationStudio';
 
 // We dynamically import the campaign builder because react-email-editor is heavy
 const CampaignBuilder = dynamic(() => import('./CampaignBuilder'), { 
@@ -42,6 +43,13 @@ export default function EmailMarketingStudio() {
             Campaigns
           </button>
           <button
+            onClick={() => setActiveTab('automations')}
+            className={`mkt-tab ${activeTab === 'automations' ? 'active' : ''}`}
+          >
+            <Zap size={16} />
+            Automations
+          </button>
+          <button
             onClick={() => setActiveTab('analytics')}
             className={`mkt-tab ${activeTab === 'analytics' ? 'active' : ''}`}
           >
@@ -54,6 +62,7 @@ export default function EmailMarketingStudio() {
       <div className="mkt-container">
         {activeTab === 'subscribers' && <SubscriberManager />}
         {activeTab === 'campaigns' && <CampaignBuilder />}
+        {activeTab === 'automations' && <AutomationStudio />}
         {activeTab === 'analytics' && <CampaignAnalytics />}
       </div>
     </div>
