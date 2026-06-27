@@ -258,6 +258,7 @@ export default function CatalogPage() {
   // Access Gate States
   const [gateAccessGranted, setGateAccessGranted] = useState(false); // Default false for security, updated in useEffect
   const [gateLoading, setGateLoading] = useState(true);
+  const [gateVisible, setGateVisible] = useState(false); // Gate won't show until 10s delay fires
   const [gateInput, setGateInput] = useState('');
   const [gateSubmitting, setGateSubmitting] = useState(false);
   const [gateError, setGateError] = useState('');
@@ -287,12 +288,16 @@ export default function CatalogPage() {
     checkoutDataRef.current = { cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata, promoData };
   }, [cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata, promoData]);
 
-  // Check Access Gate Status
+  // Check Access Gate Status — show gate after 10s for new visitors
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
       setGateAccessGranted(hasAccess);
       setGateLoading(false);
+      if (!hasAccess) {
+        const timer = setTimeout(() => setGateVisible(true), 10000);
+        return () => clearTimeout(timer);
+      }
     }
   }, []);
 
@@ -2809,7 +2814,7 @@ export default function CatalogPage() {
             <div className="sync-spinner" style={{ marginBottom: '16px' }}></div>
             <div>{lang === 'en' ? 'Syncing catalog...' : 'Sincronizando catálogo...'}</div>
           </div>
-        ) : !gateAccessGranted ? (
+        ) : !gateAccessGranted && gateVisible ? (
           <div className="access-gate-overlay" style={{
             position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', 
             background: theme === 'dark' ? 'rgba(5, 11, 24, 0.8)' : 'rgba(244, 246, 249, 0.8)',
