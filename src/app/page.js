@@ -192,7 +192,7 @@ export default function LandingPage() {
       <main>
         {/* HERO */}
         <section className="lp-hero" style={{position:'relative',overflow:'hidden'}}>
-          <div className="lp-hero-bg-image" style={{position:'absolute',inset:0,backgroundImage:'url(/peptide_molecular_3d.png)',backgroundSize:'cover',backgroundPosition:'center',opacity:0.07,zIndex:0}}/>
+          <div className="lp-hero-bg-image" style={{position:'absolute',inset:0,backgroundImage:'url(/peptide_molecular_3d.webp)',backgroundSize:'cover',backgroundPosition:'center',opacity:0.07,zIndex:0}}/>
           <div className="lp-hero-glow" style={{zIndex:1}}/>
           <div className="container lp-hero-grid" style={{position:'relative',zIndex:2}}>
             <motion.div 
@@ -225,7 +225,7 @@ export default function LandingPage() {
               className="lp-hero-visual-block"
             >
               <div className="lp-hero-image-glow"/>
-              <img src="https://peptidescostarica.net/wp-content/uploads/2026/04/Untitled-design-5-1.png" alt="Peptides Costa Rica" className="lp-hero-main-img" style={{width:'100%',height:'auto',objectFit:'contain',position:'relative',zIndex:10,borderRadius:'16px'}}/>
+              <img src="/catalog-promo-banner.webp" alt="Peptides Costa Rica" className="lp-hero-main-img" width={900} height={400} fetchPriority="high" decoding="async" style={{width:'100%',height:'auto',objectFit:'contain',position:'relative',zIndex:10,borderRadius:'16px'}}/>
             </motion.div>
           </div>
         </section>
@@ -258,7 +258,7 @@ export default function LandingPage() {
 
             <div className="lp-about-cards-grid lp-story-origin-grid">
               <div className="lp-about-card lp-about-card--image">
-                <img src="/science_lab_about.png" alt={t.story_origin_t} className="lp-about-card-img"/>
+                <img src="/science_lab_about.webp" alt={t.story_origin_t} className="lp-about-card-img" width={700} height={700} loading="lazy" decoding="async"/>
                 <div className="lp-about-card-overlay">
                   <h3>{t.story_origin_t}</h3>
                   <p>{t.story_origin_d}</p>
@@ -444,7 +444,7 @@ export default function LandingPage() {
               <p>{t.res_s}</p>
             </div>
             <div style={{borderRadius:'20px',overflow:'hidden',boxShadow:'0 8px 40px rgba(0,0,0,0.1)',position:'relative',marginTop:'32px'}}>
-              <img src="/customer_transformation.png" alt={lang==='en'?'Customer experience with Peptides Costa Rica':'Experiencias de clientes con Péptidos Costa Rica'} style={{width:'100%',display:'block',height:'auto',maxHeight:'420px',objectFit:'cover',objectPosition:'center top'}} onError={(e)=>{e.target.parentElement.parentElement.parentElement.style.display='none';}}/>
+              <img src="/customer_transformation.webp" alt={lang==='en'?'Customer experience with Peptides Costa Rica':'Experiencias de clientes con Péptidos Costa Rica'} width={800} height={330} loading="lazy" decoding="async" style={{width:'100%',display:'block',height:'auto',maxHeight:'420px',objectFit:'cover',objectPosition:'center top'}} onError={(e)=>{e.target.parentElement.parentElement.parentElement.style.display='none';}}/>
               <div style={{position:'absolute',top:'16px',left:'16px',background:'linear-gradient(135deg,#22c55e,#16a34a)',color:'#fff',fontSize:'0.78rem',fontWeight:'800',padding:'6px 16px',borderRadius:'24px',letterSpacing:'0.04em',textTransform:'uppercase',boxShadow:'0 4px 14px rgba(34,197,94,0.4)'}}>
                 {lang==='en'?'✓ Verified Results':'✓ Resultados Verificados'}
               </div>

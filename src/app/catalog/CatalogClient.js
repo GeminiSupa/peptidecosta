@@ -2856,8 +2856,10 @@ export default function CatalogClient({
             onClick={() => window.open('https://peptidescostarica.net', '_blank')}
           >
             <img
-              src="https://peptidescostarica.net/wp-content/uploads/2026/04/Untitled-design-5-1.png"
+              src="/catalog-promo-banner.webp"
               alt={lang === 'en' ? 'Peptides Costa Rica – Premium Peptide Research Supplies' : 'Péptidos Costa Rica – Suministros de Investigación Premium'}
+              width={900}
+              height={220}
               loading="lazy"
               decoding="async"
               style={{
@@ -3075,10 +3077,13 @@ export default function CatalogClient({
 
             <div style={{ borderRadius: '20px', overflow: 'hidden', boxShadow: '0 8px 40px rgba(0,0,0,0.12)', position: 'relative' }}>
               <img
-                src="/customer_transformation.png"
+                src="/customer_transformation.webp"
                 alt={lang === 'en' ? 'Customer experience with Peptides Costa Rica' : 'Experiencias de clientes con Péptidos Costa Rica'}
+                width={800}
+                height={330}
                 style={{ width: '100%', display: 'block', height: 'auto', maxHeight: '440px', objectFit: 'cover', objectPosition: 'center top' }}
                 loading="lazy"
+                decoding="async"
                 onError={(e) => { e.target.parentElement.parentElement.parentElement.style.display = 'none'; }}
               />
               <div style={{
