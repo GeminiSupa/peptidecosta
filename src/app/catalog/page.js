@@ -2928,6 +2928,11 @@ export default function CatalogPage() {
                         <span>{lang === 'en' ? 'OUT OF STOCK' : 'AGOTADO'}</span>
                       </div>
                     )}
+                    {inStock && p.inventoryCount !== null && p.inventoryCount <= (p.lowStockThreshold || 5) && p.inventoryCount > 0 && (
+                      <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', background: '#ef4444', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontSize: '0.65rem', fontWeight: '800', boxShadow: '0 4px 10px rgba(239, 68, 68, 0.4)', zIndex: 3, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        {lang === 'en' ? `🔥 Only ${p.inventoryCount} left!` : `🔥 ¡Solo quedan ${p.inventoryCount}!`}
+                      </div>
+                    )}
                     {inStock && p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd && (
                       <div className="sale-badge" style={{ position: 'absolute', top: '10px', right: '10px', background: '#ef4444', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', zIndex: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
                         {(() => {
@@ -2950,9 +2955,8 @@ export default function CatalogPage() {
                     </div>
                     <div className="product-pricing">
                       {isBac ? (
-                        <div className="bac-free-price">
-                          <span>{lang === 'en' ? 'FREE' : 'GRATIS'}</span>
-                          <small>{lang === 'en' ? 'included' : 'incluido'}</small>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                          <span className="price-main" style={{ color: '#16a34a' }}>{lang === 'en' ? 'FREE' : 'GRATIS'}</span>
                         </div>
                       ) : p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd ? (
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
@@ -2966,29 +2970,19 @@ export default function CatalogPage() {
                       )}
                       {!isBac && pSub && <span className="price-sub">{pSub}</span>}
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                      <div className={`stock-badge ${isBac ? 'stock-in' : inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`} style={{ position: 'relative', top: 'auto', right: 'auto', margin: 0 }}>
+                    <div className="stock-badges-slot" style={{ display: 'flex', gap: '8px', justifyContent: viewMode === 'grid' ? 'center' : 'flex-start', marginBottom: '8px' }}>
+                      <div className={`stock-badge ${isBac ? 'stock-in' : inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`} style={{ position: 'relative', top: 'auto', right: 'auto', margin: 0, height: 'fit-content' }}>
                         <span>
-                          {isBac ? (lang === 'en' ? 'Included' : 'Incluido') : translateStatus(p.status)}
+                          {isBac ? (lang === 'en' ? 'Auto-Added' : 'Auto-Agregado') : translateStatus(p.status)}
                         </span>
                       </div>
-                      {inStock && p.inventoryCount !== null && p.inventoryCount <= (p.lowStockThreshold || 5) && p.inventoryCount > 0 && (
-                        <div style={{ padding: '4px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontSize: '0.6rem', fontWeight: '800', border: '1px solid rgba(239, 68, 68, 0.2)', textTransform: 'uppercase' }}>
-                          {lang === 'en' ? `Only ${p.inventoryCount} left!` : `¡Solo quedan ${p.inventoryCount}!`}
-                        </div>
-                      )}
                     </div>
 
                     <div className="product-actions">
                       {isBac ? (
-                        <div className="complimentary-note">
-                          <span className="complimentary-note__title">
-                            {lang === 'en' ? 'Added with each order' : 'Incluido en cada pedido'}
-                          </span>
-                          <span className="complimentary-note__text">
-                            {lang === 'en' ? 'No cart action needed.' : 'No necesita agregarlo.'}
-                          </span>
-                        </div>
+                        <button className="add-to-cart-btn" style={{ background: 'var(--bg-secondary)', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'default', boxShadow: 'none' }} disabled>
+                          {lang === 'en' ? 'Included in Order' : 'Incluido en Pedido'}
+                        </button>
                       ) : inStock ? (
                         (() => {
                           const cartItem = cart.find(item => item.product === p.product);
