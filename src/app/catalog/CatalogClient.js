@@ -152,7 +152,7 @@ export default function CatalogClient({
   const [priceFilter, setPriceFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState('pop');
   const [inStockOnly, setInStockOnly] = useState(true);
-  const [viewMode, setViewMode] = useState('list'); // 'list', 'grid'
+  const [viewMode, setViewMode] = useState('grid'); // 'list', 'grid'
 
   // Cart & Modals States
   const [cart, setCart] = useState([]);
@@ -538,7 +538,7 @@ export default function CatalogClient({
     document.documentElement.setAttribute('data-theme', savedTheme);
 
     // Viewmode loaded from localStorage
-    const savedView = localStorage.getItem('viewMode') || 'list';
+    const savedView = localStorage.getItem('viewMode') || 'grid';
     setViewMode(savedView === 'compact' ? 'list' : savedView);
 
     // Cart loaded from localStorage

@@ -1723,7 +1723,7 @@ body {
     }
 }
 
-/* Grid View Styles (2 Columns) */
+/* Grid View Styles (Mobile First: 2 Columns, Desktop: 4 Columns) */
 .product-grid.grid-view {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -1732,6 +1732,13 @@ body {
 
 @media (max-width: 360px) {
     .product-grid.grid-view { gap: 8px; }
+}
+
+@media (min-width: 769px) {
+    .product-grid.grid-view {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+    }
 }
 
 .product-grid.grid-view .product-card {
