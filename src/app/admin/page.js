@@ -40,6 +40,7 @@ import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 import dynamic from 'next/dynamic';
 
 const EmailMarketingStudio = dynamic(() => import('@/components/admin/marketing/EmailMarketingStudio'), { ssr: false });
+const WhatsAppSession = dynamic(() => import('@/components/admin/marketing/WhatsAppSession'), { ssr: false });
 
 const FacebookIcon = ({ size = 14, style, ...props }) => (
   <svg 
@@ -79,7 +80,7 @@ const formatCustomerIdType = (idType) => {
 const ADMIN_TABS = new Set([
   'home', 'spreadsheet', 'orders', 'customers', 'inquiries', 'leads',
   'carts', 'share', 'reviews', 'affiliates', 'analytics', 'cms',
-  'whatsapp_ai', 'team', 'facebook', 'team_chat', 'broadcasts', 'marketing'
+  'whatsapp_ai', 'team', 'facebook', 'team_chat', 'broadcasts', 'marketing', 'wa_session'
 ]);
 
 const TAB_TITLES = {
@@ -100,7 +101,8 @@ const TAB_TITLES = {
   team_chat: 'Team Chat',
   ai: 'AI Copilot',
   facebook: 'Facebook',
-  marketing: 'Marketing Studio'
+  marketing: 'Marketing Studio',
+  wa_session: 'WA Session (2nd Device)',
 };
 
 const ADMIN_NAV_GROUPS = [
@@ -148,11 +150,13 @@ function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, i
   }
 }
 
-const SUPERADMIN_ONLY_TABS = new Set(['affiliates', 'team', 'analytics']);
+const SUPERADMIN_ONLY_TABS = new Set(['affiliates', 'team', 'analytics', 'wa_session']);
 
 function resolveTabAccess(tabId, profile) {
   if (!profile || !ADMIN_TABS.has(tabId)) return false;
   if (tabId === 'home' || tabId === 'team_chat') return true;
+  // wa_session: superadmin always has access; other admins need explicit permission
+  if (tabId === 'wa_session') return profile.is_superadmin || (profile.permissions?.includes('wa_session') ?? false);
   if (SUPERADMIN_ONLY_TABS.has(tabId)) return profile.is_superadmin;
   if (profile.is_superadmin) return true;
   return profile.permissions?.includes(tabId) ?? false;
@@ -3837,6 +3841,15 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 <span className="tab-label" style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981', fontWeight: 'bold' }}>Sales WhatsApp</span>
               </button>
               )}
+              {hasAccess('wa_session') && (
+                <button
+                  className={`admin-tab-btn ${activeTab === 'wa_session' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('wa_session')}
+                >
+                  <Smartphone size={14} style={{ color: activeTab === 'wa_session' ? 'inherit' : '#34d399' }} />
+                  <span className="tab-label" style={{ color: activeTab === 'wa_session' ? 'inherit' : '#34d399', fontWeight: '600' }}>WA Session (2nd Device)</span>
+                </button>
+              )}
               {adminProfile?.is_superadmin && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'team' ? 'active' : ''}`}
@@ -6964,6 +6977,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'marketing' && (
           <div className="admin-orders-tab admin-tab-panel">
             <EmailMarketingStudio />
+          </div>
+        )}
+
+        {activeTab === 'wa_session' && (
+          <div className="admin-orders-tab admin-tab-panel">
+            <WhatsAppSession />
           </div>
         )}
 
