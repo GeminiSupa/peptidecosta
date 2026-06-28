@@ -7037,7 +7037,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             {/* Full Baileys inbox */}
             <div style={{ flex: 1, minHeight: 0 }}>
               <WhatsAppInbox
-                whatsappMessages={whatsappMessages}
+                whatsappMessages={whatsappMessages.filter(m => m.source === 'baileys_session')}
                 loadingWhatsappMessages={loadingWhatsappMessages}
                 whatsappSettings={whatsappSettings}
                 setWhatsappSettings={setWhatsappSettings}
