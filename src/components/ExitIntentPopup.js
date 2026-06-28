@@ -58,7 +58,7 @@ export default function ExitIntentPopup() {
     // Only allow exit intent after the user has been browsing for at least 60 seconds.
     // Firing it immediately feels aggressive and hurts UX for new visitors.
     const arrivedAt = Date.now();
-    const MIN_BROWSE_TIME_MS = 60_000;
+    const MIN_BROWSE_TIME_MS = 30_000;
 
     const handleMouseOut = (e) => {
       const timeOnSite = Date.now() - arrivedAt;
