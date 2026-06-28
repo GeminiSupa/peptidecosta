@@ -74,7 +74,7 @@ export async function startSession() {
           : state.keys,
       },
       printQRInTerminal: false,
-      browser: ['Costa Peptides Admin', 'Chrome', '1.0.0'],
+      browser: ['Ubuntu', 'Chrome', '20.0.04'],
       // Keep alive pings
       keepAliveIntervalMs: 30_000,
     });
