@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import EmailEditor from 'react-email-editor';
 import {
   AlertTriangle, CheckCircle2, Copy, Eye, Loader2, Save, Send,
@@ -10,41 +10,188 @@ import {
 import { adminFetch } from '@/lib/adminApi';
 
 // ── Template Library ─────────────────────────────────────────────────
+const brandButton = {
+  href: { name: 'web', values: { href: 'https://www.costapeptides.com/catalog', target: '_blank' } },
+  buttonColors: { color: '#ffffff', backgroundColor: '#10b981', hoverColor: '#ffffff', hoverBackgroundColor: '#059669' },
+  border: {},
+  borderRadius: '6px',
+  padding: '14px 28px',
+  textAlign: 'center',
+  lineHeight: '120%',
+  fontSize: '15px',
+  fontWeight: 700,
+};
+
+const textBlock = (text, overrides = {}) => ({
+  type: 'text',
+  values: {
+    containerPadding: '10px 20px',
+    fontFamily: { label: 'Arial', value: 'arial,helvetica,sans-serif' },
+    lineHeight: '150%',
+    color: '#1f2937',
+    fontSize: '16px',
+    text,
+    ...overrides,
+  },
+});
+
+const buttonBlock = (text, href = 'https://www.costapeptides.com/catalog') => ({
+  type: 'button',
+  values: {
+    ...brandButton,
+    href: { name: 'web', values: { href, target: '_blank' } },
+    text,
+    containerPadding: '16px 20px 24px',
+  },
+});
+
+const dividerBlock = () => ({
+  type: 'divider',
+  values: {
+    containerPadding: '10px 20px',
+    border: { borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: '#d1fae5' },
+  },
+});
+
+const createTemplateDesign = ({ headline, eyebrow, body, cta, footerNote, accent = '#10b981' }) => ({
+  counters: { u_row: 5, u_column: 5, u_content_text: 8, u_content_button: 1, u_content_divider: 1 },
+  body: {
+    rows: [
+      {
+        cells: [1],
+        columns: [
+          {
+            contents: [
+              textBlock('Costa Peptides', {
+                containerPadding: '26px 20px 6px',
+                textAlign: 'center',
+                color: accent,
+                fontSize: '15px',
+                fontWeight: 700,
+              }),
+              textBlock(headline, {
+                containerPadding: '4px 28px 10px',
+                textAlign: 'center',
+                color: '#111827',
+                fontSize: '30px',
+                lineHeight: '120%',
+                fontWeight: 700,
+              }),
+              textBlock(eyebrow, {
+                containerPadding: '0 34px 18px',
+                textAlign: 'center',
+                color: '#4b5563',
+                fontSize: '15px',
+              }),
+            ],
+            values: { backgroundColor: '#ecfdf5', padding: '0px' },
+          },
+        ],
+        values: { backgroundColor: '#ecfdf5', padding: '0px' },
+      },
+      {
+        cells: [1],
+        columns: [
+          {
+            contents: [
+              textBlock(body),
+              buttonBlock(cta),
+              dividerBlock(),
+              textBlock(footerNote, {
+                color: '#6b7280',
+                fontSize: '13px',
+                lineHeight: '145%',
+              }),
+            ],
+            values: { backgroundColor: '#ffffff', padding: '0px' },
+          },
+        ],
+        values: { backgroundColor: '#ffffff', padding: '0px' },
+      },
+    ],
+    values: {
+      backgroundColor: '#f3f4f6',
+      contentWidth: '600px',
+      fontFamily: { label: 'Arial', value: 'arial,helvetica,sans-serif' },
+      preheaderText: eyebrow,
+    },
+  },
+  schemaVersion: 21,
+});
+
 const TEMPLATES = [
   {
     id: 'newsletter',
     icon: '📰',
     name: 'Newsletter',
     desc: 'Regular content digest',
-    design: null, // will use default blank
+    subject: 'Costa Peptides update for [FIRST_NAME]',
+    design: createTemplateDesign({
+      headline: 'This week from Costa Peptides',
+      eyebrow: 'A quick digest of product updates, education, and customer support notes.',
+      body: '<p>Hi [FIRST_NAME],</p><p>Here is your latest Costa Peptides digest. Add your featured article, product note, or customer story here, then keep the message focused on one clear next step.</p><ul><li>New educational resource or protocol reminder</li><li>Featured peptide category or restock note</li><li>Customer service update or ordering tip</li></ul>',
+      cta: 'Browse the catalog',
+      footerNote: '<p>Have a question before ordering? Reply to this email and our team will help.</p>',
+    }),
   },
   {
     id: 'promo',
     icon: '🏷️',
     name: 'Promotion',
     desc: 'Sale or discount offer',
-    design: null,
+    subject: 'A Costa Peptides offer for [FIRST_NAME]',
+    design: createTemplateDesign({
+      headline: 'Limited-time peptide offer',
+      eyebrow: 'Highlight your promotion, discount code, or bundle here.',
+      body: '<p>Hi [FIRST_NAME],</p><p>Your promotion details go here. Keep the discount, deadline, and qualifying products easy to scan.</p><p><strong>Offer:</strong> Add discount or bundle details<br><strong>Ends:</strong> Add deadline<br><strong>Code:</strong> Add promo code</p>',
+      cta: 'Shop the offer',
+      footerNote: '<p>Promo availability may vary by inventory. Replace this line with the terms that apply to the campaign.</p>',
+      accent: '#f59e0b',
+    }),
   },
   {
     id: 'welcome',
     icon: '👋',
     name: 'Welcome',
     desc: 'Greet new subscribers',
-    design: null,
+    subject: 'Welcome to Costa Peptides, [FIRST_NAME]',
+    design: createTemplateDesign({
+      headline: 'Welcome to Costa Peptides',
+      eyebrow: 'A warm first email for new subscribers and leads.',
+      body: '<p>Hi [FIRST_NAME],</p><p>Thanks for joining Costa Peptides. We are glad you are here.</p><p>Use this email to introduce your standards, ordering process, support channels, and the easiest first action for a new subscriber.</p>',
+      cta: 'Explore products',
+      footerNote: '<p>Need help finding the right product information? Reply to this email and our team will point you in the right direction.</p>',
+    }),
   },
   {
     id: 'product',
     icon: '🧪',
     name: 'Product Spotlight',
     desc: 'Feature a peptide',
-    design: null,
+    subject: 'Product spotlight: featured peptide update',
+    design: createTemplateDesign({
+      headline: 'Product spotlight',
+      eyebrow: 'Feature one peptide with benefits, specs, and a single call to action.',
+      body: '<p>Hi [FIRST_NAME],</p><p>This week we are spotlighting <strong>[PRODUCT_NAME]</strong>. Replace this section with product-specific details, storage notes, availability, and what makes it worth attention.</p><p><strong>Key details:</strong></p><ul><li>Purity or testing note</li><li>Format and size</li><li>Inventory or shipping note</li></ul>',
+      cta: 'View product details',
+      footerNote: '<p>Swap [PRODUCT_NAME] for the peptide you want to promote before saving.</p>',
+      accent: '#3b82f6',
+    }),
   },
   {
     id: 'winback',
     icon: '🔄',
     name: 'Win-Back',
     desc: 'Re-engage inactive leads',
-    design: null,
+    subject: 'Still interested, [FIRST_NAME]?',
+    design: createTemplateDesign({
+      headline: 'Still thinking it over?',
+      eyebrow: 'A re-engagement email for inactive leads or older subscribers.',
+      body: '<p>Hi [FIRST_NAME],</p><p>It has been a little while, so we wanted to check in. If you are still comparing options or waiting on a restock, our team can help you find current availability.</p><p>You can update this section with a reason to return, such as a new product, improved shipping, or a personal support offer.</p>',
+      cta: 'Return to Costa Peptides',
+      footerNote: '<p>If now is not the right time, no worries. You can keep receiving useful updates or unsubscribe below.</p>',
+      accent: '#8b5cf6',
+    }),
   },
   {
     id: 'blank',
@@ -88,6 +235,7 @@ export default function CampaignBuilder() {
   const [campaignName,      setCampaignName]      = useState('New Campaign ' + new Date().toLocaleDateString());
   const [selectedTemplate,  setSelectedTemplate]  = useState('blank');
   const [showTemplates,     setShowTemplates]     = useState(true);
+  const [pendingDesign,     setPendingDesign]     = useState(null);
 
   // A/B test
   const [isABTest,    setIsABTest]    = useState(false);
@@ -98,6 +246,36 @@ export default function CampaignBuilder() {
     fetchCampaigns();
     fetchSubscribers();
   }, []);
+
+  const loadEditorDesign = useCallback((design) => {
+    const editor = emailEditorRef.current?.editor;
+    if (!editor || !isReady || !design) return false;
+
+    const parsedDesign = typeof design === 'string' ? JSON.parse(design) : design;
+    editor.loadDesign(parsedDesign);
+    return true;
+  }, [isReady]);
+
+  const applyTemplate = (tpl) => {
+    setSelectedTemplate(tpl.id);
+    setShowTemplates(false);
+    setSelectedCampaignId('');
+
+    if (tpl.subject) setSubject(tpl.subject);
+    if (tpl.id !== 'blank') setCampaignName(`${tpl.name} Campaign ${new Date().toLocaleDateString()}`);
+
+    if (!tpl.design) {
+      emailEditorRef.current?.editor?.loadBlank?.();
+      return;
+    }
+
+    try {
+      if (!loadEditorDesign(tpl.design)) setPendingDesign(tpl.design);
+    } catch (err) {
+      console.error('Failed to load template design:', err);
+      alert('Could not load that template. Please try again.');
+    }
+  };
 
   const fetchCampaigns = async () => {
     try {
@@ -123,6 +301,36 @@ export default function CampaignBuilder() {
     () => campaigns.find(c => c.id === selectedCampaignId),
     [campaigns, selectedCampaignId]
   );
+
+  useEffect(() => {
+    if (!selectedCampaign || !isReady) return;
+
+    setCampaignName(selectedCampaign.title || '');
+    setSubject(selectedCampaign.subject_line || '');
+    setSubjectB(selectedCampaign.subject_line_b || '');
+    setIsABTest(Boolean(selectedCampaign.is_ab_test));
+    setTargetSegment(selectedCampaign.target_tags?.[0] || '');
+
+    if (selectedCampaign.design_json) {
+      try {
+        loadEditorDesign(selectedCampaign.design_json);
+      } catch (err) {
+        console.error('Failed to load saved campaign design:', err);
+        alert('Could not load the saved email design for this campaign.');
+      }
+    }
+  }, [loadEditorDesign, selectedCampaign, isReady]);
+
+  useEffect(() => {
+    if (!pendingDesign || !isReady) return;
+
+    try {
+      if (loadEditorDesign(pendingDesign)) setPendingDesign(null);
+    } catch (err) {
+      console.error('Failed to load pending template design:', err);
+      setPendingDesign(null);
+    }
+  }, [loadEditorDesign, pendingDesign, isReady]);
 
   const estimatedAudience = useMemo(() => {
     const tags = selectedCampaign?.target_tags || (targetSegment ? [targetSegment] : []);
@@ -229,7 +437,7 @@ export default function CampaignBuilder() {
               <button
                 key={tpl.id}
                 type="button"
-                onClick={() => { setSelectedTemplate(tpl.id); setShowTemplates(false); }}
+                onClick={() => applyTemplate(tpl)}
                 className={`mkt-template-card ${selectedTemplate === tpl.id ? 'selected' : ''}`}
               >
                 <div className="mkt-template-icon">{tpl.icon}</div>
@@ -367,7 +575,7 @@ export default function CampaignBuilder() {
         <div className="mkt-email-editor">
           <EmailEditor
             ref={emailEditorRef}
-            onLoad={() => setIsReady(true)}
+            onReady={() => setIsReady(true)}
             minHeight="640px"
             options={{ appearance: { theme: 'dark' } }}
           />
