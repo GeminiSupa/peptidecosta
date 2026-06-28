@@ -7,6 +7,7 @@
 
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 
 // ── Lazy imports (Baileys is ESM-only, load dynamically) ──────────────────
 let makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore;
@@ -32,7 +33,7 @@ if (!g.__waSession) {
   };
 }
 
-const SESSION_DIR = path.join(process.cwd(), '.wa-session');
+const SESSION_DIR = path.join(os.tmpdir(), '.wa-session');
 
 export function getSessionStatus() {
   const { state, qrDataUrl, number, error } = g.__waSession;
