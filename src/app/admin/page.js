@@ -450,6 +450,11 @@ export default function AdminPage() {
   const [chatInputText, setChatInputText] = useState('');
   const [draftingAiReply, setDraftingAiReply] = useState(false);
 
+  // Baileys (2nd Device) Inbox States
+  const [baileysActiveChatWaId, setBaileysActiveChatWaId] = useState(null);
+  const [baileysChatInputText, setBaileysChatInputText] = useState('');
+  const [sendingBaileysMsg, setSendingBaileysMsg] = useState(false);
+
   // Save WhatsApp settings handler
   const handleSaveWhatsappSettings = async (settings) => {
     setSavingWaSettings(true);
@@ -593,6 +598,49 @@ Please draft a perfect next response to this customer. Match their language (Spa
       alert('❌ Failed to send WhatsApp: ' + err.message);
       setWhatsappMessages(prev => prev.filter(m => m.id !== tempId));
       setChatInputText(textToSend);
+    }
+  };
+
+  // Send reply via Baileys (2nd Device) session
+  const handleSendBaileysMessage = async () => {
+    if (!baileysActiveChatWaId || !baileysChatInputText.trim()) return;
+    const textToSend = baileysChatInputText.trim();
+    setBaileysChatInputText('');
+    setSendingBaileysMsg(true);
+
+    const tempId = `temp-baileys-${Date.now()}`;
+    const optimisticMessage = {
+      id: tempId,
+      wa_id: baileysActiveChatWaId,
+      display_name: 'Peptides Costa Rica',
+      message_text: textToSend,
+      message_type: 'text',
+      direction: 'outbound',
+      source: 'baileys_session',
+      created_at: new Date().toISOString(),
+    };
+    setWhatsappMessages(prev => [optimisticMessage, ...prev]);
+
+    try {
+      const res = await adminFetch('/api/admin/whatsapp-session/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: baileysActiveChatWaId, message: textToSend }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        alert('❌ Failed to send: ' + (data.error || 'Unknown error'));
+        setWhatsappMessages(prev => prev.filter(m => m.id !== tempId));
+        setBaileysChatInputText(textToSend);
+      } else {
+        loadAdminData();
+      }
+    } catch (err) {
+      alert('❌ Failed to send: ' + err.message);
+      setWhatsappMessages(prev => prev.filter(m => m.id !== tempId));
+      setBaileysChatInputText(textToSend);
+    } finally {
+      setSendingBaileysMsg(false);
     }
   };
 
@@ -6981,8 +7029,30 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         )}
 
         {activeTab === 'wa_session' && (
-          <div className="admin-orders-tab admin-tab-panel">
-            <WhatsAppSession />
+          <div className="admin-orders-tab admin-tab-panel" style={{ display: 'flex', flexDirection: 'column', gap: '24px', padding: '0' }}>
+            {/* Session status card */}
+            <div style={{ padding: '20px 20px 0' }}>
+              <WhatsAppSession />
+            </div>
+            {/* Full Baileys inbox */}
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <WhatsAppInbox
+                whatsappMessages={whatsappMessages.filter(m => m.source === 'baileys_session')}
+                loadingWhatsappMessages={loadingWhatsappMessages}
+                whatsappSettings={whatsappSettings}
+                setWhatsappSettings={setWhatsappSettings}
+                handleSaveWhatsappSettings={handleSaveWhatsappSettings}
+                savingWaSettings={savingWaSettings}
+                activeChatWaId={baileysActiveChatWaId}
+                setActiveChatWaId={setBaileysActiveChatWaId}
+                chatInputText={baileysChatInputText}
+                setChatInputText={setBaileysChatInputText}
+                handleSendLiveWhatsappMessage={handleSendBaileysMessage}
+                handleDraftAiChatReply={handleDraftAiChatReply}
+                draftingAiReply={draftingAiReply}
+                loadAdminData={loadAdminData}
+              />
+            </div>
           </div>
         )}
 
