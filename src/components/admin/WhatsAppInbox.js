@@ -291,7 +291,26 @@ export default function WhatsAppInbox({
                         })}
                       </span>
                     </div>
-                    <div className="admin-wa-bubble-text">{msg.message_text}</div>
+                    <div className="admin-wa-bubble-text">
+                      {msg.media_url && (
+                        <div style={{ marginBottom: '8px' }}>
+                          {msg.media_url.endsWith('.pdf') ? (
+                            <a href={msg.media_url} target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>
+                              📄 View Document (PDF)
+                            </a>
+                          ) : (
+                            <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                              <img 
+                                src={msg.media_url} 
+                                alt="Attachment" 
+                                style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', cursor: 'zoom-in' }} 
+                              />
+                            </a>
+                          )}
+                        </div>
+                      )}
+                      {msg.message_text}
+                    </div>
                   </div>
                 );
               })}

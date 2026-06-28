@@ -10,7 +10,16 @@ import fs from 'fs';
 import os from 'os';
 
 // ── Lazy imports (Baileys is ESM-only, load dynamically) ──────────────────
-let makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore;
+let makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, downloadMediaMessage;
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase service client for background inserts
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabase = supabaseUrl && (supabaseServiceKey || supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey)
+  : null;
 
 async function loadBaileys() {
   if (makeWASocket) return; // already loaded
@@ -19,6 +28,7 @@ async function loadBaileys() {
   useMultiFileAuthState     = mod.useMultiFileAuthState;
   DisconnectReason          = mod.DisconnectReason;
   makeCacheableSignalKeyStore = mod.makeCacheableSignalKeyStore;
+  downloadMediaMessage      = mod.downloadMediaMessage;
 }
 
 // ── Global singleton (survives hot reload) ────────────────────────────────
@@ -115,6 +125,99 @@ export async function startSession() {
         }
       }
     });
+
+    // Handle Incoming Messages
+    sock.ev.on('messages.upsert', async (m) => {
+      if (!supabase) return;
+      
+      const msg = m.messages[0];
+      if (!msg.message || msg.key.fromMe) return; // Skip our own messages
+
+      const remoteJid = msg.key.remoteJid;
+      if (remoteJid === 'status@broadcast') return; // Skip status updates
+
+      const waId = remoteJid.split('@')[0];
+      const displayName = msg.pushName || '';
+
+      // Determine message type and text content
+      const msgType = Object.keys(msg.message)[0];
+      let messageText = '';
+      if (msgType === 'conversation') {
+        messageText = msg.message.conversation;
+      } else if (msgType === 'extendedTextMessage') {
+        messageText = msg.message.extendedTextMessage.text;
+      } else if (msgType === 'imageMessage') {
+        messageText = msg.message.imageMessage.caption || '[Image]';
+      } else if (msgType === 'documentMessage') {
+        messageText = msg.message.documentMessage.caption || '[Document]';
+      } else {
+        messageText = `[${msgType}]`;
+      }
+
+      console.log(`[WA Session] 📩 Incoming message from ${waId}: "${messageText}"`);
+
+      let mediaUrl = null;
+
+      // Handle Media Downloading
+      if (msgType === 'imageMessage' || msgType === 'documentMessage') {
+        try {
+          const buffer = await downloadMediaMessage(
+            msg,
+            'buffer',
+            { },
+            { 
+              logger: console,
+              reuploadRequest: sock.updateMediaMessage
+            }
+          );
+
+          if (buffer) {
+            // Upload to Supabase Storage bucket 'whatsapp_media'
+            const ext = msgType === 'imageMessage' ? 'jpeg' : 'pdf'; // Simplified extension handling
+            const mimeType = msgType === 'imageMessage' ? 'image/jpeg' : 'application/pdf';
+            const fileName = `${waId}_${Date.now()}.${ext}`;
+
+            const { data, error } = await supabase.storage
+              .from('whatsapp_media')
+              .upload(fileName, buffer, {
+                contentType: mimeType,
+                upsert: false
+              });
+
+            if (error) {
+              console.error('[WA Session] ❌ Failed to upload media to Supabase:', error);
+            } else if (data) {
+              const { data: publicUrlData } = supabase.storage
+                .from('whatsapp_media')
+                .getPublicUrl(data.path);
+              
+              mediaUrl = publicUrlData.publicUrl;
+              console.log(`[WA Session] ✅ Media uploaded: ${mediaUrl}`);
+            }
+          }
+        } catch (err) {
+          console.error('[WA Session] ❌ Failed to download media:', err);
+        }
+      }
+
+      // Save to Database
+      const { error: insertError } = await supabase
+        .from('whatsapp_messages')
+        .insert({
+          wa_id: waId,
+          display_name: displayName,
+          message_text: messageText,
+          message_type: msgType === 'imageMessage' || msgType === 'documentMessage' ? 'media' : 'text',
+          direction: 'inbound',
+          source: 'baileys_session',
+          media_url: mediaUrl // Ensure this column exists in your table!
+        });
+
+      if (insertError) {
+        console.error('[WA Session] ❌ Failed to log incoming message to DB:', insertError);
+      }
+    });
+
   } catch (err) {
     console.error('[WA Session] Start error:', err);
     g.__waSession.state = 'disconnected';
