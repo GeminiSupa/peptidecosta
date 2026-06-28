@@ -2,24 +2,36 @@
 
 import React, { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/adminApi';
-import { BarChart2, Eye, MousePointerClick, Send, Loader2, Trophy, DollarSign, ShoppingCart } from 'lucide-react';
+import {
+  BarChart2, Eye, MousePointerClick, Send, Loader2,
+  Trophy, RefreshCw, TrendingUp,
+} from 'lucide-react';
+
+function RateBar({ value, max = 100, className }) {
+  return (
+    <div className="mkt-metric-bar">
+      <div className="mkt-metric-bar-track">
+        <div
+          className={`mkt-metric-bar-fill ${className}`}
+          style={{ width: `${Math.min(value, 100)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default function CampaignAnalytics() {
   const [campaigns, setCampaigns] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading,   setLoading]   = useState(true);
 
-  useEffect(() => {
-    fetchCampaigns();
-  }, []);
+  useEffect(() => { fetchCampaigns(); }, []);
 
   const fetchCampaigns = async () => {
     try {
       setLoading(true);
-      const res = await adminFetch('/api/admin/campaigns');
+      const res  = await adminFetch('/api/admin/campaigns');
       const data = await res.json();
-      if (data.campaigns) {
-        setCampaigns(data.campaigns);
-      }
+      if (data.campaigns) setCampaigns(data.campaigns);
     } catch (err) {
       console.error('Failed to fetch campaigns:', err);
     } finally {
@@ -30,9 +42,9 @@ export default function CampaignAnalytics() {
   const sendWinner = async (campaignId, variant) => {
     if (!confirm(`Send Subject Line ${variant} to the remaining 80% of subscribers?`)) return;
     try {
-      const res = await adminFetch('/api/admin/campaigns/send', {
+      const res  = await adminFetch('/api/admin/campaigns/send', {
         method: 'POST',
-        body: JSON.stringify({ campaign_id: campaignId, send_winner: true, winner_variant: variant })
+        body: JSON.stringify({ campaign_id: campaignId, send_winner: true, winner_variant: variant }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to send winner');
@@ -43,22 +55,50 @@ export default function CampaignAnalytics() {
     }
   };
 
+  // Aggregate summary stats
+  const totalSent    = campaigns.reduce((sum, c) => sum + (c.campaign_sends?.[0]?.count || 0), 0);
+  const totalOpens   = campaigns.reduce((sum, c) => sum + (c.campaign_opens?.[0]?.count || 0), 0);
+  const totalClicks  = campaigns.reduce((sum, c) => sum + (c.campaign_clicks?.[0]?.count || 0), 0);
+  const totalRevenue = campaigns.reduce((sum, c) => sum + (c.orders_revenue || 0), 0);
+  const avgOpenRate  = totalSent > 0 ? Math.round((totalOpens / totalSent) * 100) : 0;
+  const avgClickRate = totalOpens > 0 ? Math.round((totalClicks / totalOpens) * 100) : 0;
+
   return (
-    <div>
-      <div className="mkt-flex mkt-justify-between mkt-items-center mkt-mb-6">
-        <h3 className="mkt-title">
-          <BarChart2 />
-          Campaign Performance
+    <div className="mkt-fade-in">
+      {/* ── Header ── */}
+      <div className="mkt-flex mkt-justify-between mkt-items-center mkt-mb-4">
+        <h3 className="mkt-title" style={{ fontSize: '1rem' }}>
+          <BarChart2 size={18} /> Campaign Performance
         </h3>
-        <button 
-          onClick={fetchCampaigns}
-          className="mkt-btn"
-          style={{background: 'transparent', border: 'none', color: '#34d399'}}
-        >
-          Refresh Data
+        <button onClick={fetchCampaigns} className="mkt-btn" disabled={loading} aria-label="Refresh data">
+          {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+          <span className="mkt-hide-xs">Refresh</span>
         </button>
       </div>
 
+      {/* ── Aggregate KPIs ── */}
+      {campaigns.length > 0 && (
+        <div className="mkt-stats-grid mkt-mb-4" style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}>
+          {[
+            { label: 'Total Sends',  value: totalSent.toLocaleString(),    icon: Send,              color: '#60a5fa' },
+            { label: 'Avg Open Rate', value: `${avgOpenRate}%`,            icon: Eye,               color: '#34d399' },
+            { label: 'Avg CTR',      value: `${avgClickRate}%`,            icon: MousePointerClick, color: '#a78bfa' },
+            { label: 'Revenue',      value: `$${totalRevenue.toLocaleString()}`, icon: TrendingUp,  color: '#fbbf24' },
+          ].map(({ label, value, icon: Icon, color }) => (
+            <div key={label} className="mkt-stat-card">
+              <div className="mkt-stat-icon" style={{ color, background: `${color}18`, borderColor: `${color}22` }}>
+                <Icon size={16} />
+              </div>
+              <div>
+                <div className="mkt-stat-value" style={{ color, fontSize: '18px' }}>{value}</div>
+                <div className="mkt-stat-label">{label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Campaigns table ── */}
       <div className="mkt-table-wrapper">
         <table className="mkt-table responsive-table">
           <thead>
@@ -66,119 +106,121 @@ export default function CampaignAnalytics() {
               <th>Campaign</th>
               <th>Status</th>
               <th className="mkt-text-right">Sends</th>
-              <th className="mkt-text-right">Opens</th>
-              <th className="mkt-text-right">Clicks</th>
+              <th>Open Rate</th>
+              <th>Click Rate</th>
               <th className="mkt-text-right">Revenue</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="6" className="mkt-text-center mkt-text-muted"><Loader2 className="animate-spin" size={20} style={{display: 'inline-block', marginRight: '8px'}}/> Loading...</td></tr>
+              <tr>
+                <td colSpan="6" className="mkt-text-center mkt-text-muted" style={{ padding: '40px' }}>
+                  <Loader2 className="animate-spin" size={22} style={{ display: 'inline-block', color: '#34d399' }} />
+                </td>
+              </tr>
             ) : campaigns.length === 0 ? (
-              <tr><td colSpan="6" className="mkt-text-center mkt-text-muted">No campaigns found. Build and send one first!</td></tr>
+              <tr>
+                <td colSpan="6">
+                  <div className="mkt-empty-state">
+                    <BarChart2 size={36} />
+                    <h4>No campaigns yet</h4>
+                    <p>Build and send your first campaign to see analytics here.</p>
+                  </div>
+                </td>
+              </tr>
             ) : (
               campaigns.map((camp) => {
-                const sends = camp.campaign_sends?.[0]?.count || 0;
-                const opens = camp.campaign_opens?.[0]?.count || 0;
+                const sends  = camp.campaign_sends?.[0]?.count  || 0;
+                const opens  = camp.campaign_opens?.[0]?.count  || 0;
                 const clicks = camp.campaign_clicks?.[0]?.count || 0;
-                const orders = camp.orders_count || 0;
+                const orders  = camp.orders_count   || 0;
                 const revenue = camp.orders_revenue || 0;
-                
-                const openRate = sends > 0 ? Math.round((opens / sends) * 100) : 0;
-                const clickRate = opens > 0 ? Math.round((clicks / opens) * 100) : 0;
+                const openRate  = sends  > 0 ? Math.round((opens  / sends)  * 100) : 0;
+                const clickRate = opens  > 0 ? Math.round((clicks / opens)  * 100) : 0;
 
                 return (
                   <React.Fragment key={camp.id}>
                     <tr>
                       <td data-label="Campaign">
-                        <div className="mkt-font-medium">{camp.title}</div>
+                        <div style={{ fontWeight: '700', fontSize: '13px', marginBottom: '2px' }}>{camp.title}</div>
                         <div className="mkt-text-xs mkt-text-muted">
                           A: {camp.subject_line}
-                          {camp.subject_line_b && <><br/>B: {camp.subject_line_b}</>}
+                          {camp.subject_line_b && <><br />B: {camp.subject_line_b}</>}
                         </div>
-                        {camp.target_tags && camp.target_tags.length > 0 && (
-                          <div style={{marginTop: '4px'}}>
-                            {camp.target_tags.map(t => <span key={t} style={{background: 'rgba(96,165,250,0.2)', color: '#60a5fa', padding: '1px 6px', borderRadius: '4px', fontSize: '10px', marginRight: '4px'}}>🎯 {t}</span>)}
+                        {camp.target_tags?.length > 0 && (
+                          <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                            {camp.target_tags.map(t => (
+                              <span key={t} style={{ background: 'rgba(96,165,250,0.15)', color: '#60a5fa', padding: '2px 7px', borderRadius: '4px', fontSize: '10px', fontWeight: '700' }}>🎯 {t}</span>
+                            ))}
                           </div>
                         )}
-                        <div style={{fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginTop: '4px'}}>ID: {camp.id}</div>
                       </td>
                       <td data-label="Status">
                         <span className={`mkt-badge ${
-                          camp.status === 'sent' ? 'mkt-badge-success' :
+                          camp.status === 'sent'    ? 'mkt-badge-success' :
                           camp.status === 'sending' ? 'mkt-badge-warning' :
-                          camp.status === 'testing' ? 'mkt-badge-info' :
+                          camp.status === 'testing' ? 'mkt-badge-info'    :
                           'mkt-badge-neutral'
                         }`}>
                           {camp.status}
                         </span>
                       </td>
                       <td data-label="Sends" className="mkt-text-right">
-                        <div className="mkt-flex mkt-items-center mkt-justify-end mkt-gap-2">
-                          {sends} <Send size={14} color="rgba(255,255,255,0.4)" />
+                        <span style={{ fontWeight: '700', fontSize: '15px' }}>{sends.toLocaleString()}</span>
+                      </td>
+                      <td data-label="Open Rate">
+                        <div>
+                          <div className="mkt-flex mkt-items-center mkt-gap-2" style={{ marginBottom: '4px' }}>
+                            <span style={{ fontWeight: '700', color: '#34d399', fontSize: '14px' }}>{openRate}%</span>
+                            <span className="mkt-text-xs mkt-text-muted">({opens})</span>
+                          </div>
+                          <RateBar value={openRate} className="opens" />
                         </div>
                       </td>
-                      <td data-label="Opens" className="mkt-text-right">
-                        <div className="mkt-flex mkt-items-center mkt-justify-end mkt-gap-2">
-                          <span>{opens} <span style={{color: '#34d399', fontSize: '12px', marginLeft: '4px'}}>({openRate}%)</span></span>
-                          <Eye size={14} color="rgba(255,255,255,0.4)" />
-                        </div>
-                      </td>
-                      <td data-label="Clicks" className="mkt-text-right">
-                        <div className="mkt-flex mkt-items-center mkt-justify-end mkt-gap-2">
-                          <span>{clicks} <span style={{color: '#60a5fa', fontSize: '12px', marginLeft: '4px'}}>({clickRate}%)</span></span>
-                          <MousePointerClick size={14} color="rgba(255,255,255,0.4)" />
+                      <td data-label="Click Rate">
+                        <div>
+                          <div className="mkt-flex mkt-items-center mkt-gap-2" style={{ marginBottom: '4px' }}>
+                            <span style={{ fontWeight: '700', color: '#60a5fa', fontSize: '14px' }}>{clickRate}%</span>
+                            <span className="mkt-text-xs mkt-text-muted">({clicks})</span>
+                          </div>
+                          <RateBar value={clickRate} className="clicks" />
                         </div>
                       </td>
                       <td data-label="Revenue" className="mkt-text-right">
-                        <div className="mkt-flex mkt-flex-col mkt-items-end">
-                          {orders > 0 ? (
-                            <>
-                              <span style={{color: '#fbbf24', fontWeight: 600}}>${revenue.toLocaleString()}</span>
-                              <span className="mkt-text-xs mkt-text-muted">{orders} order{orders !== 1 ? 's' : ''}</span>
-                            </>
-                          ) : (
-                            <span className="mkt-text-xs mkt-text-muted">—</span>
-                          )}
-                        </div>
+                        {orders > 0 ? (
+                          <div>
+                            <div style={{ color: '#fbbf24', fontWeight: '800', fontSize: '14px' }}>${revenue.toLocaleString()}</div>
+                            <div className="mkt-text-xs mkt-text-muted">{orders} order{orders !== 1 ? 's' : ''}</div>
+                          </div>
+                        ) : (
+                          <span className="mkt-text-xs mkt-text-muted">—</span>
+                        )}
                       </td>
                     </tr>
-                    {/* A/B Test Winner Selection Row */}
+
+                    {/* A/B winner picker */}
                     {camp.status === 'testing' && camp.is_ab_test && (
                       <tr>
                         <td colSpan="6">
                           <div style={{
-                            background: 'rgba(251,191,36,0.08)',
-                            border: '1px solid rgba(251,191,36,0.2)',
-                            borderRadius: '8px',
-                            padding: '12px 16px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap',
-                            gap: '12px'
+                            background: 'rgba(251,191,36,0.07)',
+                            border: '1px solid rgba(251,191,36,0.18)',
+                            borderRadius: '10px', padding: '14px 16px',
+                            display: 'flex', alignItems: 'center',
+                            justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px',
                           }}>
                             <div>
-                              <div style={{fontWeight: 600, color: '#fbbf24', fontSize: '13px', marginBottom: '4px'}}>
-                                <Trophy size={14} style={{display: 'inline', marginRight: '6px'}} />
-                                A/B Test Complete — Pick the Winner
+                              <div style={{ fontWeight: '700', color: '#fbbf24', fontSize: '13px', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <Trophy size={14} /> A/B Test Complete — Pick the Winner
                               </div>
-                              <div className="mkt-text-xs mkt-text-muted">Review the open rates above, then send the winning subject to the remaining 80%.</div>
+                              <div className="mkt-text-xs mkt-text-muted">Review open rates above, then send the winning subject to the remaining 80%.</div>
                             </div>
                             <div className="mkt-flex mkt-gap-2">
-                              <button 
-                                onClick={() => sendWinner(camp.id, 'A')} 
-                                className="mkt-btn mkt-btn-primary" 
-                                style={{fontSize: '12px', padding: '6px 14px'}}
-                              >
-                                Send A as Winner
+                              <button onClick={() => sendWinner(camp.id, 'A')} className="mkt-btn mkt-btn-primary" style={{ fontSize: '12px', padding: '8px 16px' }}>
+                                🏆 Send A as Winner
                               </button>
-                              <button 
-                                onClick={() => sendWinner(camp.id, 'B')} 
-                                className="mkt-btn mkt-btn-primary" 
-                                style={{fontSize: '12px', padding: '6px 14px'}}
-                              >
-                                Send B as Winner
+                              <button onClick={() => sendWinner(camp.id, 'B')} className="mkt-btn mkt-btn-primary" style={{ fontSize: '12px', padding: '8px 16px' }}>
+                                🏆 Send B as Winner
                               </button>
                             </div>
                           </div>

@@ -1,35 +1,41 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { adminFetch } from '@/lib/adminApi';
-import { Users, Search, Plus, Download, UserPlus, Loader2, Edit2, Check, X, Upload } from 'lucide-react';
+import {
+  Users, Search, Plus, Download, UserPlus, Loader2,
+  Edit2, Check, X, Upload, CheckCircle2, XCircle, RefreshCw, Tag,
+} from 'lucide-react';
+
+function getInitials(sub) {
+  const f = sub.first_name?.[0] || '';
+  const l = sub.last_name?.[0]  || '';
+  return (f + l).toUpperCase() || sub.email[0].toUpperCase();
+}
 
 export default function SubscriberManager() {
   const [subscribers, setSubscribers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  
-  // Add modal state
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newSub, setNewSub] = useState({ email: '', first_name: '', last_name: '' });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Edit state
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({});
+  const [loading,     setLoading]     = useState(true);
+  const [search,      setSearch]      = useState('');
+  const [filterStatus, setFilterStatus] = useState('all'); // all | subscribed | unsubscribed
 
-  useEffect(() => {
-    fetchSubscribers();
-  }, []);
+  // Add modal
+  const [showAddModal,  setShowAddModal]  = useState(false);
+  const [newSub,        setNewSub]        = useState({ email: '', first_name: '', last_name: '' });
+  const [isSubmitting,  setIsSubmitting]  = useState(false);
+
+  // Inline edit
+  const [editingId,  setEditingId]  = useState(null);
+  const [editForm,   setEditForm]   = useState({});
+
+  useEffect(() => { fetchSubscribers(); }, []);
 
   const fetchSubscribers = async () => {
     try {
       setLoading(true);
-      const res = await adminFetch('/api/admin/subscribers');
+      const res  = await adminFetch('/api/admin/subscribers');
       const data = await res.json();
-      if (data.subscribers) {
-        setSubscribers(data.subscribers);
-      }
+      if (data.subscribers) setSubscribers(data.subscribers);
     } catch (err) {
       console.error('Failed to fetch subscribers:', err);
     } finally {
@@ -40,17 +46,14 @@ export default function SubscriberManager() {
   const handleAddSubscriber = async (e) => {
     e.preventDefault();
     if (!newSub.email) return;
-    
     setIsSubmitting(true);
     try {
-      const res = await adminFetch('/api/admin/subscribers', {
+      const res  = await adminFetch('/api/admin/subscribers', {
         method: 'POST',
-        body: JSON.stringify({ ...newSub, source: 'admin_manual' })
+        body: JSON.stringify({ ...newSub, source: 'admin_manual' }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to add subscriber');
-      
-      alert('Subscriber added successfully!');
       setShowAddModal(false);
       setNewSub({ email: '', first_name: '', last_name: '' });
       fetchSubscribers();
@@ -63,32 +66,26 @@ export default function SubscriberManager() {
 
   const startEdit = (sub) => {
     setEditingId(sub.id);
-    setEditForm({ 
-      ...sub,
-      tags_raw: sub.tags ? sub.tags.join(', ') : ''
-    });
+    setEditForm({ ...sub, tags_raw: sub.tags ? sub.tags.join(', ') : '' });
   };
+
+  const cancelEdit = () => setEditingId(null);
 
   const saveEdit = async () => {
     try {
-      const tagsArray = editForm.tags_raw 
-        ? editForm.tags_raw.split(',').map(t => t.trim()).filter(t => t) 
+      const tagsArray = editForm.tags_raw
+        ? editForm.tags_raw.split(',').map(t => t.trim()).filter(Boolean)
         : [];
-
-      const res = await adminFetch('/api/admin/subscribers', {
+      const res  = await adminFetch('/api/admin/subscribers', {
         method: 'PUT',
         body: JSON.stringify({
-          id: editingId,
-          email: editForm.email,
-          first_name: editForm.first_name,
-          last_name: editForm.last_name,
-          status: editForm.status,
-          tags: tagsArray
-        })
+          id: editingId, email: editForm.email,
+          first_name: editForm.first_name, last_name: editForm.last_name,
+          status: editForm.status, tags: tagsArray,
+        }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to update subscriber');
-      
       setEditingId(null);
       fetchSubscribers();
     } catch (err) {
@@ -99,44 +96,21 @@ export default function SubscriberManager() {
   const handleBulkImport = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (evt) => {
       const text = evt.target.result;
       const rows = text.split('\n').filter(r => r.trim() !== '');
-      
-      // Basic CSV parsing assuming format: email,first_name,last_name
-      // Skip header if first row has 'email'
       const startIdx = rows[0].toLowerCase().includes('email') ? 1 : 0;
-      
-      const parsedSubscribers = [];
+      const parsed = [];
       for (let i = startIdx; i < rows.length; i++) {
-        const columns = rows[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-        if (columns[0]) {
-          parsedSubscribers.push({
-            email: columns[0],
-            first_name: columns[1] || '',
-            last_name: columns[2] || '',
-          });
-        }
+        const cols = rows[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+        if (cols[0]) parsed.push({ email: cols[0], first_name: cols[1] || '', last_name: cols[2] || '' });
       }
-
-      if (parsedSubscribers.length === 0) {
-        alert('No valid rows found in CSV. Make sure the first column is email addresses.');
-        return;
-      }
-
-      if (!confirm(`Found ${parsedSubscribers.length} subscribers. Import them now?`)) {
-        e.target.value = '';
-        return;
-      }
-
+      if (parsed.length === 0) { alert('No valid rows found. Make sure the first column is email addresses.'); return; }
+      if (!confirm(`Found ${parsed.length} subscribers. Import them now?`)) { e.target.value = ''; return; }
       setLoading(true);
       try {
-        const res = await adminFetch('/api/admin/subscribers', {
-          method: 'POST',
-          body: JSON.stringify({ bulk: true, subscribers: parsedSubscribers })
-        });
+        const res  = await adminFetch('/api/admin/subscribers', { method: 'POST', body: JSON.stringify({ bulk: true, subscribers: parsed }) });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Bulk import failed');
         alert(`Successfully imported ${data.count || 0} subscribers!`);
@@ -145,201 +119,223 @@ export default function SubscriberManager() {
         alert('Bulk import failed: ' + err.message);
         setLoading(false);
       }
-      e.target.value = ''; // Reset input
+      e.target.value = '';
     };
     reader.readAsText(file);
   };
 
-  const filteredSubs = subscribers.filter(s => 
-    s.email.toLowerCase().includes(search.toLowerCase()) || 
-    (s.first_name && s.first_name.toLowerCase().includes(search.toLowerCase())) ||
-    (s.last_name && s.last_name.toLowerCase().includes(search.toLowerCase()))
-  );
+  const handleExport = () => {
+    const rows = [['Email', 'First Name', 'Last Name', 'Status', 'Tags', 'Added']];
+    subscribers.forEach(s => rows.push([
+      s.email, s.first_name || '', s.last_name || '', s.status,
+      (s.tags || []).join(' | '), new Date(s.created_at).toLocaleDateString(),
+    ]));
+    const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), { href: url, download: 'subscribers.csv' });
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  // Stats
+  const total       = subscribers.length;
+  const active      = subscribers.filter(s => s.status === 'subscribed').length;
+  const unsub       = subscribers.filter(s => s.status === 'unsubscribed').length;
+
+  const filtered = useMemo(() => subscribers.filter(s => {
+    const q = search.toLowerCase();
+    const matchSearch = !q ||
+      s.email.toLowerCase().includes(q) ||
+      (s.first_name || '').toLowerCase().includes(q) ||
+      (s.last_name  || '').toLowerCase().includes(q);
+    const matchStatus = filterStatus === 'all' || s.status === filterStatus;
+    return matchSearch && matchStatus;
+  }), [subscribers, search, filterStatus]);
 
   return (
     <div>
-      {/* Top Actions */}
-      <div className="mkt-flex mkt-justify-between mkt-items-center mkt-mb-6" style={{flexWrap: 'wrap', gap: '16px'}}>
-        <div className="mkt-flex mkt-items-center mkt-gap-4" style={{ flex: 1, minWidth: '250px' }}>
-          <div style={{position: 'relative', width: '100%', maxWidth: '300px'}}>
-            <Search size={16} style={{position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.4)'}} />
-            <input 
-              type="text" 
-              placeholder="Search subscribers..." 
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="mkt-input"
-              style={{paddingLeft: '36px'}}
-            />
+      {/* ── Stats row ── */}
+      <div className="mkt-stats-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0,1fr))', marginBottom: '20px' }}>
+        {[
+          { label: 'Total', value: total,  color: '#fff',    icon: Users },
+          { label: 'Active',  value: active, color: '#34d399', icon: CheckCircle2 },
+          { label: 'Unsub',   value: unsub,  color: '#f87171', icon: XCircle },
+        ].map(({ label, value, color, icon: Icon }) => (
+          <div key={label} className="mkt-stat-card">
+            <div className="mkt-stat-icon" style={{ color, background: `${color}18`, borderColor: `${color}25` }}>
+              <Icon size={17} />
+            </div>
+            <div>
+              <div className="mkt-stat-value" style={{ color }}>{value}</div>
+              <div className="mkt-stat-label">{label}</div>
+            </div>
           </div>
-        </div>
-        
-        <div className="mkt-flex mkt-gap-2">
-          <input 
-            type="file" 
-            accept=".csv" 
-            id="csv-upload" 
-            style={{display: 'none'}} 
-            onChange={handleBulkImport} 
+        ))}
+      </div>
+
+      {/* ── Toolbar ── */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '16px', alignItems: 'center' }}>
+        {/* Search */}
+        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: '180px', maxWidth: '320px' }}>
+          <Search size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
+          <input
+            type="search"
+            placeholder="Search subscribers…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="mkt-input"
+            style={{ paddingLeft: '36px' }}
           />
-          <label htmlFor="csv-upload" className="mkt-btn" style={{cursor: 'pointer'}}>
-            <Upload size={16} />
-            Import CSV
-          </label>
-          <button className="mkt-btn">
-            <Download size={16} />
-            Export CSV
+        </div>
+
+        {/* Status filter */}
+        <select
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value)}
+          className="mkt-input"
+          style={{ flex: '0 0 auto', width: 'auto', minWidth: '130px' }}
+          aria-label="Filter by status"
+        >
+          <option value="all">All statuses</option>
+          <option value="subscribed">Subscribed</option>
+          <option value="unsubscribed">Unsubscribed</option>
+        </select>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginLeft: 'auto' }}>
+          <button className="mkt-btn" onClick={fetchSubscribers} disabled={loading} title="Refresh" aria-label="Refresh subscribers">
+            {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+            <span className="mkt-hide-xs">Refresh</span>
           </button>
-          <button 
-            onClick={() => setShowAddModal(true)}
-            className="mkt-btn mkt-btn-primary"
-          >
-            <Plus size={16} />
-            Add Subscriber
+          <input type="file" accept=".csv" id="csv-upload-sub" style={{ display: 'none' }} onChange={handleBulkImport} />
+          <label htmlFor="csv-upload-sub" className="mkt-btn" style={{ cursor: 'pointer' }}>
+            <Upload size={15} /><span className="mkt-hide-xs">Import CSV</span>
+          </label>
+          <button className="mkt-btn" onClick={handleExport}>
+            <Download size={15} /><span className="mkt-hide-xs">Export</span>
+          </button>
+          <button className="mkt-btn mkt-btn-primary" onClick={() => setShowAddModal(true)}>
+            <Plus size={15} /> Add Subscriber
           </button>
         </div>
       </div>
 
-      {/* Data Table */}
-      <div className="mkt-table-wrapper">
-        <table className="mkt-table responsive-table">
-          <thead>
-            <tr>
-              <th>Subscriber</th>
-              <th>Tags</th>
-              <th>Status</th>
-              <th>Added</th>
-              <th style={{textAlign: 'right'}}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan="5" className="mkt-text-center mkt-text-muted"><Loader2 className="animate-spin" size={20} style={{display: 'inline-block', marginRight: '8px'}}/> Loading...</td></tr>
-            ) : filteredSubs.length === 0 ? (
-              <tr><td colSpan="5" className="mkt-text-center mkt-text-muted">No subscribers found.</td></tr>
-            ) : (
-              filteredSubs.map((sub) => (
-                <tr key={sub.id}>
-                  {editingId === sub.id ? (
-                    <>
-                      <td>
-                        <input type="email" className="mkt-input" style={{padding: '6px 10px', marginBottom: '4px'}} value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
-                        <div className="mkt-flex mkt-gap-2">
-                          <input type="text" placeholder="First Name" className="mkt-input" style={{padding: '6px 10px', fontSize: '12px'}} value={editForm.first_name || ''} onChange={e => setEditForm({...editForm, first_name: e.target.value})} />
-                          <input type="text" placeholder="Last Name" className="mkt-input" style={{padding: '6px 10px', fontSize: '12px'}} value={editForm.last_name || ''} onChange={e => setEditForm({...editForm, last_name: e.target.value})} />
-                        </div>
-                      </td>
-                      <td>
-                        <input type="text" placeholder="Tags (comma separated)" className="mkt-input" style={{padding: '6px 10px', fontSize: '12px'}} value={editForm.tags_raw || ''} onChange={e => setEditForm({...editForm, tags_raw: e.target.value})} />
-                      </td>
-                      <td>
-                        <select className="mkt-input" style={{padding: '6px 10px', width: 'auto'}} value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
-                          <option value="subscribed">Subscribed</option>
-                          <option value="unsubscribed">Unsubscribed</option>
-                        </select>
-                      </td>
-                      <td className="mkt-text-xs mkt-text-muted">
-                        {new Date(sub.created_at).toLocaleDateString()}
-                      </td>
-                      <td style={{textAlign: 'right'}}>
-                        <div className="mkt-flex mkt-justify-end mkt-gap-2">
-                          <button onClick={() => setEditingId(null)} style={{background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer'}}><X size={14} /></button>
-                          <button onClick={saveEdit} style={{background: 'rgba(16,185,129,0.2)', border: 'none', color: '#34d399', padding: '6px', borderRadius: '6px', cursor: 'pointer'}}><Check size={14} /></button>
-                        </div>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td data-label="Subscriber">
-                        <div className="mkt-font-medium">{sub.email}</div>
-                        <div className="mkt-text-xs mkt-text-muted">{sub.first_name} {sub.last_name}</div>
-                      </td>
-                      <td data-label="Tags">
-                        {sub.tags && sub.tags.length > 0 ? (
-                          <div className="mkt-flex mkt-gap-1" style={{flexWrap: 'wrap'}}>
-                            {sub.tags.map(t => <span key={t} style={{background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px'}}>{t}</span>)}
-                          </div>
-                        ) : (
-                          <span className="mkt-text-xs mkt-text-muted">No tags</span>
-                        )}
-                      </td>
-                      <td data-label="Status">
-                        <span className={`mkt-badge ${sub.status === 'subscribed' ? 'mkt-badge-success' : sub.status === 'unsubscribed' ? 'mkt-badge-warning' : 'mkt-badge-neutral'}`}>
-                          {sub.status}
-                        </span>
-                      </td>
-                      <td data-label="Added" className="mkt-text-xs mkt-text-muted">
-                        {new Date(sub.created_at).toLocaleDateString()}
-                      </td>
-                      <td data-label="Actions" style={{textAlign: 'right'}}>
-                        <button onClick={() => startEdit(sub)} style={{background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', padding: '4px'}} title="Edit Subscriber">
-                          <Edit2 size={16} />
-                        </button>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* ── Result count ── */}
+      {!loading && (
+        <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.38)', marginBottom: '12px', margin: '0 0 12px' }}>
+          Showing {filtered.length} of {total} subscribers
+        </p>
+      )}
 
-      {/* Add Modal */}
+      {/* ── Subscriber list ── */}
+      {loading ? (
+        <div className="mkt-loading-state">
+          <Loader2 size={28} className="animate-spin" style={{ color: '#34d399' }} />
+          <span>Loading subscribers…</span>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="mkt-empty-state">
+          <Users size={40} />
+          <h4>No subscribers found</h4>
+          <p>{search ? 'Try a different search term.' : 'Add your first subscriber to get started.'}</p>
+        </div>
+      ) : (
+        <div className="mkt-sub-card-grid">
+          {filtered.map((sub) => (
+            <div key={sub.id} className="mkt-sub-card">
+              {editingId === sub.id ? (
+                /* ── Edit mode ── */
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <input type="email" className="mkt-input" style={{ flex: '2 1 180px' }} value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} placeholder="Email" />
+                    <input type="text"  className="mkt-input" style={{ flex: '1 1 100px' }} value={editForm.first_name || ''} onChange={e => setEditForm({ ...editForm, first_name: e.target.value })} placeholder="First" />
+                    <input type="text"  className="mkt-input" style={{ flex: '1 1 100px' }} value={editForm.last_name  || ''} onChange={e => setEditForm({ ...editForm, last_name:  e.target.value })} placeholder="Last" />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <div style={{ position: 'relative', flex: '1 1 160px' }}>
+                      <Tag size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
+                      <input type="text" className="mkt-input" style={{ paddingLeft: '28px' }} value={editForm.tags_raw || ''} onChange={e => setEditForm({ ...editForm, tags_raw: e.target.value })} placeholder="Tags (comma separated)" />
+                    </div>
+                    <select className="mkt-input" style={{ flex: '0 0 auto', width: 'auto' }} value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value })}>
+                      <option value="subscribed">Subscribed</option>
+                      <option value="unsubscribed">Unsubscribed</option>
+                    </select>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={cancelEdit} className="mkt-btn mkt-btn-ghost mkt-btn-icon" aria-label="Cancel edit"><X size={16} /></button>
+                      <button onClick={saveEdit}   className="mkt-btn mkt-btn-primary mkt-btn-icon" aria-label="Save changes"><Check size={16} /></button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* ── View mode ── */
+                <>
+                  <div className="mkt-sub-card-avatar">{getInitials(sub)}</div>
+                  <div className="mkt-sub-card-body">
+                    <div className="mkt-sub-card-email">{sub.email}</div>
+                    <div className="mkt-sub-card-meta">
+                      {sub.first_name || sub.last_name ? `${sub.first_name || ''} ${sub.last_name || ''}`.trim() : 'No name'}
+                      {' · '}
+                      {new Date(sub.created_at).toLocaleDateString()}
+                    </div>
+                    {sub.tags && sub.tags.length > 0 && (
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '6px' }}>
+                        {sub.tags.map(t => (
+                          <span key={t} style={{ background: 'rgba(96,165,250,0.12)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.18)', padding: '2px 7px', borderRadius: '4px', fontSize: '10px', fontWeight: '700' }}>
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mkt-sub-card-actions">
+                    <span className={`mkt-badge ${sub.status === 'subscribed' ? 'mkt-badge-success' : 'mkt-badge-warning'}`}>
+                      {sub.status === 'subscribed' ? 'Active' : 'Unsub'}
+                    </span>
+                    <button onClick={() => startEdit(sub)} className="mkt-btn mkt-btn-ghost mkt-btn-icon" aria-label="Edit subscriber">
+                      <Edit2 size={16} />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Add Subscriber Modal ── */}
       {showAddModal && (
-        <div style={{position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)'}}>
-          <div style={{background: '#1a1f2c', padding: '32px', borderRadius: '16px', width: '100%', maxWidth: '400px', border: '1px solid rgba(255,255,255,0.1)'}}>
-            <h3 className="mkt-title mkt-mb-6">
-              <UserPlus size={20} /> Add Subscriber
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', backdropFilter: 'blur(6px)', padding: '0' }}
+          onClick={() => setShowAddModal(false)}
+        >
+          <div
+            style={{ background: '#111827', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '480px', padding: '28px 24px', paddingBottom: 'max(28px, env(safe-area-inset-bottom))', border: '1px solid rgba(255,255,255,0.1)', borderBottom: 'none', boxShadow: '0 -16px 48px rgba(0,0,0,0.4)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Drag handle */}
+            <div style={{ width: '40px', height: '4px', background: 'rgba(255,255,255,0.15)', borderRadius: '4px', margin: '0 auto 20px' }} />
+            <h3 className="mkt-title" style={{ marginBottom: '20px', fontSize: '1.1rem' }}>
+              <UserPlus size={19} /> Add Subscriber
             </h3>
-            
             <form onSubmit={handleAddSubscriber}>
               <div className="mkt-input-group">
                 <label className="mkt-label">Email Address *</label>
-                <input 
-                  type="email" 
-                  required
-                  value={newSub.email}
-                  onChange={e => setNewSub({...newSub, email: e.target.value})}
-                  className="mkt-input"
-                />
+                <input type="email" required value={newSub.email} onChange={e => setNewSub({ ...newSub, email: e.target.value })} className="mkt-input" placeholder="name@example.com" />
               </div>
-              <div className="mkt-flex mkt-gap-4 mkt-mb-6">
-                <div className="mkt-flex-1">
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="mkt-input-group mkt-flex-1">
                   <label className="mkt-label">First Name</label>
-                  <input 
-                    type="text" 
-                    value={newSub.first_name}
-                    onChange={e => setNewSub({...newSub, first_name: e.target.value})}
-                    className="mkt-input"
-                  />
+                  <input type="text" value={newSub.first_name} onChange={e => setNewSub({ ...newSub, first_name: e.target.value })} className="mkt-input" placeholder="Jose" />
                 </div>
-                <div className="mkt-flex-1">
+                <div className="mkt-input-group mkt-flex-1">
                   <label className="mkt-label">Last Name</label>
-                  <input 
-                    type="text" 
-                    value={newSub.last_name}
-                    onChange={e => setNewSub({...newSub, last_name: e.target.value})}
-                    className="mkt-input"
-                  />
+                  <input type="text" value={newSub.last_name} onChange={e => setNewSub({ ...newSub, last_name: e.target.value })} className="mkt-input" placeholder="Rodriguez" />
                 </div>
               </div>
-              
-              <div className="mkt-flex mkt-justify-end mkt-gap-2 mt-6">
-                <button 
-                  type="button" 
-                  onClick={() => setShowAddModal(false)}
-                  className="mkt-btn"
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  className="mkt-btn mkt-btn-primary"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : 'Save'}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button type="button" onClick={() => setShowAddModal(false)} className="mkt-btn mkt-flex-1" disabled={isSubmitting}>Cancel</button>
+                <button type="submit" className="mkt-btn mkt-btn-primary mkt-flex-1" disabled={isSubmitting}>
+                  {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <><UserPlus size={15} /> Save</>}
                 </button>
               </div>
             </form>

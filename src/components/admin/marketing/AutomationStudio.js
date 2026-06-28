@@ -2,44 +2,41 @@
 
 import React, { useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/adminApi';
-import { Activity, CalendarClock, Loader2, Play, RefreshCw, ShoppingCart, Sparkles, Users, Zap } from 'lucide-react';
+import {
+  Activity, CalendarClock, Loader2, Play, RefreshCw,
+  ShoppingCart, Sparkles, Users, Zap, Clock, CheckCircle2,
+} from 'lucide-react';
 
-const statIcons = {
-  subscribers: Users,
-  newSubscribers: Sparkles,
-  activeCarts: ShoppingCart,
-  newCatalogLeads: Zap,
-  reorderReady: CalendarClock,
-  winbackReady: Activity
+const STAT_CONFIG = {
+  subscribers:     { label: 'Audience',        icon: Users,         color: '#34d399' },
+  newSubscribers:  { label: 'New Subscribers',  icon: Sparkles,      color: '#60a5fa' },
+  activeCarts:     { label: 'Active Carts',     icon: ShoppingCart,  color: '#fbbf24' },
+  newCatalogLeads: { label: 'Catalog Leads',    icon: Zap,           color: '#a78bfa' },
+  reorderReady:    { label: 'Reorder Ready',    icon: CalendarClock, color: '#fb923c' },
+  winbackReady:    { label: 'Win-Back Pool',    icon: Activity,      color: '#f472b6' },
 };
 
-const statLabels = {
-  subscribers: 'Subscribed Audience',
-  newSubscribers: 'New Subscribers',
-  activeCarts: 'Active Carts',
-  newCatalogLeads: 'New Catalog Leads',
-  reorderReady: 'Ready To Reorder',
-  winbackReady: 'Win-Back Pool'
+const STATUS_COLOR = {
+  ready:    { bg: 'rgba(16,185,129,0.15)', color: '#34d399', border: 'rgba(16,185,129,0.25)' },
+  watching: { bg: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.45)', border: 'rgba(255,255,255,0.08)' },
 };
 
 export default function AutomationStudio() {
-  const [summary, setSummary] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [summary,     setSummary]     = useState(null);
+  const [loading,     setLoading]     = useState(true);
   const [schedulingId, setSchedulingId] = useState('');
 
-  useEffect(() => {
-    fetchSummary();
-  }, []);
+  useEffect(() => { fetchSummary(); }, []);
 
   const fetchSummary = async () => {
     try {
       setLoading(true);
-      const res = await adminFetch('/api/admin/automations');
+      const res  = await adminFetch('/api/admin/automations');
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed to load automations');
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to load');
       setSummary(data);
     } catch (err) {
-      alert('Failed to load automations: ' + err.message);
+      console.error('Failed to load automations:', err);
     } finally {
       setLoading(false);
     }
@@ -47,15 +44,11 @@ export default function AutomationStudio() {
 
   const scheduleFlow = async (flow) => {
     if (!confirm(`Schedule "${flow.name}" for the next available run?`)) return;
-
     try {
       setSchedulingId(flow.id);
-      const res = await adminFetch('/api/admin/automations', {
-        method: 'POST',
-        body: JSON.stringify({ flowId: flow.id })
-      });
+      const res  = await adminFetch('/api/admin/automations', { method: 'POST', body: JSON.stringify({ flowId: flow.id }) });
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed to schedule flow');
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to schedule');
       await fetchSummary();
       alert('Automation scheduled successfully.');
     } catch (err) {
@@ -68,107 +61,137 @@ export default function AutomationStudio() {
   if (loading && !summary) {
     return (
       <div className="mkt-loading-state">
-        <Loader2 className="animate-spin" size={28} />
-        <span>Loading automation opportunities...</span>
+        <Loader2 className="animate-spin" size={28} style={{ color: '#34d399' }} />
+        <span>Loading automation opportunities…</span>
       </div>
     );
   }
 
-  const totals = summary?.totals || {};
-  const flows = summary?.flows || [];
+  const totals    = summary?.totals || {};
+  const flows     = summary?.flows || [];
   const scheduled = summary?.scheduledBroadcasts || [];
 
   return (
-    <div className="mkt-automation">
-      <div className="mkt-flex mkt-justify-between mkt-items-center mkt-mb-6">
+    <div className="mkt-automation mkt-fade-in">
+      {/* ── Header ── */}
+      <div className="mkt-flex mkt-justify-between mkt-items-center mkt-mb-4">
         <div>
-          <h3 className="mkt-title">
-            <Zap />
-            Lifecycle Automations
+          <h3 className="mkt-title" style={{ fontSize: '1rem' }}>
+            <Zap size={18} /> Lifecycle Automations
           </h3>
-          <p className="mkt-subtitle">Turn leads, carts, and reorder windows into scheduled revenue plays.</p>
+          <p className="mkt-subtitle">Turn leads, carts, and reorder windows into revenue.</p>
         </div>
-        <button onClick={fetchSummary} className="mkt-btn" disabled={loading}>
-          {loading ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}
-          Refresh
+        <button onClick={fetchSummary} className="mkt-btn" disabled={loading} aria-label="Refresh automations">
+          {loading ? <Loader2 className="animate-spin" size={15} /> : <RefreshCw size={15} />}
+          <span className="mkt-hide-xs">Refresh</span>
         </button>
       </div>
 
-      <div className="mkt-stats-grid mkt-mb-6">
-        {Object.entries(statLabels).map(([key, label]) => {
-          const Icon = statIcons[key];
-          return (
-            <div key={key} className="mkt-stat-card">
-              <div className="mkt-stat-icon"><Icon size={18} /></div>
-              <div>
-                <div className="mkt-stat-value">{totals[key] || 0}</div>
-                <div className="mkt-stat-label">{label}</div>
-              </div>
+      {/* ── Stat cards ── */}
+      <div className="mkt-stats-grid mkt-mb-4">
+        {Object.entries(STAT_CONFIG).map(([key, { label, icon: Icon, color }]) => (
+          <div key={key} className="mkt-stat-card">
+            <div className="mkt-stat-icon" style={{ color, background: `${color}18`, borderColor: `${color}22` }}>
+              <Icon size={17} />
             </div>
-          );
-        })}
-      </div>
-
-      <div className="mkt-flow-grid">
-        {flows.map(flow => (
-          <div key={flow.id} className="mkt-flow-card">
-            <div className="mkt-flow-header">
-              <div>
-                <div className="mkt-panel-kicker">{flow.status === 'ready' ? 'Ready To Run' : 'Watching'}</div>
-                <h4>{flow.name}</h4>
-              </div>
-              <span className={`mkt-badge ${flow.status === 'ready' ? 'mkt-badge-success' : 'mkt-badge-neutral'}`}>
-                {flow.opportunities}
-              </span>
+            <div>
+              <div className="mkt-stat-value" style={{ color }}>{totals[key] ?? 0}</div>
+              <div className="mkt-stat-label">{label}</div>
             </div>
-            <div className="mkt-flow-meta">
-              <span>Audience: {flow.audience.replaceAll('_', ' ')}</span>
-              <span>Channel: {flow.channel}</span>
-            </div>
-            <p>{flow.message.split('\n').find(Boolean)}</p>
-            <button
-              onClick={() => scheduleFlow(flow)}
-              disabled={schedulingId === flow.id || flow.opportunities === 0}
-              className="mkt-btn mkt-btn-primary mkt-w-full"
-            >
-              {schedulingId === flow.id ? <Loader2 className="animate-spin" size={16} /> : <Play size={16} />}
-              Schedule Flow
-            </button>
           </div>
         ))}
       </div>
 
-      <div className="mkt-table-wrapper">
-        <table className="mkt-table responsive-table">
-          <thead>
-            <tr>
-              <th>Scheduled Broadcast</th>
-              <th>Audience</th>
-              <th>Channels</th>
-              <th>Status</th>
-              <th className="mkt-text-right">Run Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {scheduled.length === 0 ? (
-              <tr><td colSpan="5" className="mkt-text-center mkt-text-muted">No pending automation broadcasts.</td></tr>
-            ) : scheduled.map(item => (
-              <tr key={item.id}>
-                <td data-label="Broadcast">
-                  <div className="mkt-font-medium">{item.channels?.emailSubject || 'Lifecycle broadcast'}</div>
-                  <div className="mkt-text-xs mkt-text-muted">{String(item.message || '').slice(0, 90)}...</div>
-                </td>
-                <td data-label="Audience">{item.audience?.replaceAll('_', ' ')}</td>
-                <td data-label="Channels">
-                  {Object.entries(item.channels || {}).filter(([, value]) => value === true).map(([key]) => key).join(', ') || 'email'}
-                </td>
-                <td data-label="Status"><span className="mkt-badge mkt-badge-warning">{item.status}</span></td>
-                <td data-label="Run Time" className="mkt-text-right">{new Date(item.scheduled_at).toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* ── Flow cards ── */}
+      <h4 style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.6px', color: 'rgba(255,255,255,0.38)', margin: '0 0 10px' }}>
+        Available Flows
+      </h4>
+      {flows.length === 0 ? (
+        <div className="mkt-empty-state">
+          <Zap size={36} />
+          <h4>No automations available</h4>
+          <p>Grow your subscriber list to unlock lifecycle flows.</p>
+        </div>
+      ) : (
+        <div className="mkt-flow-grid">
+          {flows.map(flow => {
+            const { bg, color, border } = STATUS_COLOR[flow.status] || STATUS_COLOR.watching;
+            const isReady = flow.status === 'ready' && flow.opportunities > 0;
+            return (
+              <div key={flow.id} className="mkt-flow-card">
+                <div className="mkt-flow-header">
+                  <div>
+                    <div className="mkt-panel-kicker">{flow.status === 'ready' ? '● Ready to Run' : '○ Watching'}</div>
+                    <h4>{flow.name}</h4>
+                  </div>
+                  <span style={{ background: bg, color, border: `1px solid ${border}`, borderRadius: '20px', padding: '4px 10px', fontSize: '13px', fontWeight: '900', flexShrink: 0 }}>
+                    {flow.opportunities}
+                  </span>
+                </div>
+                <div className="mkt-flow-meta">
+                  <span>👥 {flow.audience.replaceAll('_', ' ')}</span>
+                  <span>📡 {flow.channel}</span>
+                </div>
+                <p>{flow.message.split('\n').find(Boolean)}</p>
+                <button
+                  onClick={() => scheduleFlow(flow)}
+                  disabled={schedulingId === flow.id || !isReady}
+                  className={`mkt-btn ${isReady ? 'mkt-btn-primary' : ''} mkt-w-full`}
+                >
+                  {schedulingId === flow.id ? <Loader2 className="animate-spin" size={15} /> : <Play size={15} />}
+                  {isReady ? 'Schedule Flow' : 'Waiting for opportunities'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Scheduled broadcasts table ── */}
+      {scheduled.length > 0 && (
+        <>
+          <hr className="mkt-divider" />
+          <h4 style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.6px', color: 'rgba(255,255,255,0.38)', margin: '0 0 10px' }}>
+            Scheduled Broadcasts
+          </h4>
+          <div className="mkt-table-wrapper">
+            <table className="mkt-table responsive-table">
+              <thead>
+                <tr>
+                  <th>Broadcast</th>
+                  <th>Audience</th>
+                  <th>Channels</th>
+                  <th>Status</th>
+                  <th className="mkt-text-right">Run Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scheduled.map(item => (
+                  <tr key={item.id}>
+                    <td data-label="Broadcast">
+                      <div className="mkt-font-medium" style={{ fontSize: '13px' }}>{item.channels?.emailSubject || 'Lifecycle broadcast'}</div>
+                      <div className="mkt-text-xs mkt-text-muted">{String(item.message || '').slice(0, 80)}…</div>
+                    </td>
+                    <td data-label="Audience">{item.audience?.replaceAll('_', ' ')}</td>
+                    <td data-label="Channels">
+                      {Object.entries(item.channels || {}).filter(([, v]) => v === true).map(([k]) => k).join(', ') || 'email'}
+                    </td>
+                    <td data-label="Status">
+                      <span className="mkt-badge mkt-badge-warning">{item.status}</span>
+                    </td>
+                    <td data-label="Run Time" className="mkt-text-right">
+                      <div className="mkt-flex mkt-items-center mkt-justify-end mkt-gap-1" style={{ fontSize: '12px' }}>
+                        <Clock size={12} style={{ color: 'rgba(255,255,255,0.35)' }} />
+                        {new Date(item.scheduled_at).toLocaleString()}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }
