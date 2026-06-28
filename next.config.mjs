@@ -4,6 +4,9 @@ const nextConfig = {
 
   compress: true,
 
+  // Baileys (WhatsApp) is ESM-only with optional native deps — let Node.js handle it at runtime
+  serverExternalPackages: ['@whiskeysockets/baileys', 'jimp', 'sharp'],
+
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
