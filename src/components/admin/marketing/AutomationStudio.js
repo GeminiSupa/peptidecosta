@@ -50,7 +50,8 @@ export default function AutomationStudio() {
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to schedule');
       await fetchSummary();
-      alert('Automation scheduled successfully.');
+      const sent = data.queuedCount ?? 0;
+      alert(data.text || `Automation triggered. ${sent} email${sent === 1 ? '' : 's'} sent.`);
     } catch (err) {
       alert('Failed to schedule automation: ' + err.message);
     } finally {

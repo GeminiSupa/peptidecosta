@@ -158,7 +158,7 @@ export async function POST(request) {
     }
 
     if (audience === 'abandoned_carts' || audience === 'all_leads' || audience === 'leads_7_days') {
-      let query = supabase.from('abandoned_carts').select('phone, email');
+      let query = supabase.from('abandoned_carts').select('phone, email').eq('status', 'active');
       if (audience === 'leads_7_days') {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);

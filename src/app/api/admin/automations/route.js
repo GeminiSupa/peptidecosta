@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+
 
 export const dynamic = 'force-dynamic';
 
@@ -146,36 +146,46 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   try {
-    const { flowId, scheduledAt } = await request.json();
+    const { flowId } = await request.json();
     const flow = FLOW_CATALOG.find(item => item.id === flowId);
 
     if (!flow) {
       return NextResponse.json({ error: 'Unknown automation flow' }, { status: 400 });
     }
 
-    const supabaseAdmin = getSupabaseAdmin();
-    const runAt = scheduledAt || new Date(Date.now() + 10 * 60 * 1000).toISOString();
     const channels = flow.channel === 'email'
       ? { email: true, whatsapp: false, emailSubject: flow.subject }
       : { email: false, whatsapp: true };
 
-    const { data, error } = await supabaseAdmin
-      .from('scheduled_broadcasts')
-      .insert({
+    // Derive the internal broadcast URL from the incoming request host
+    const host = request.headers.get('host') || 'localhost:3000';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const broadcastUrl = `${protocol}://${host}/api/admin/broadcast`;
+
+    // Trigger the broadcast immediately — no scheduledAt so it sends right away
+    const broadcastRes = await fetch(broadcastUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         audience: flow.audience,
         channels,
         message: flow.message,
-        scheduled_at: runAt,
-        status: 'pending'
-      })
-      .select()
-      .single();
+      }),
+    });
 
-    if (error) throw error;
+    const broadcastData = await broadcastRes.json();
 
-    return NextResponse.json({ broadcast: data });
+    if (!broadcastRes.ok || broadcastData.error) {
+      throw new Error(broadcastData.error || 'Broadcast failed');
+    }
+
+    return NextResponse.json({
+      success: true,
+      queuedCount: broadcastData.queuedCount ?? 0,
+      text: broadcastData.text || 'Automation triggered successfully.',
+    });
   } catch (err) {
     console.error('[Automations] Schedule error:', err);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }
