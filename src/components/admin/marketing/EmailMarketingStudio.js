@@ -6,6 +6,7 @@ import { BarChart2, Mail, Users, Zap, TrendingUp, Send } from 'lucide-react';
 import SubscriberManager from './SubscriberManager';
 import CampaignAnalytics from './CampaignAnalytics';
 import AutomationStudio from './AutomationStudio';
+import WhatsAppSession from './WhatsAppSession';
 import { adminFetch } from '@/lib/adminApi';
 
 // We dynamically import the campaign builder because react-email-editor is heavy
@@ -24,6 +25,7 @@ const TABS = [
   { id: 'campaigns',   label: 'Campaigns',   icon: Mail },
   { id: 'automations', label: 'Automations', icon: Zap },
   { id: 'analytics',   label: 'Analytics',   icon: BarChart2 },
+  { id: 'whatsapp',    label: 'WhatsApp',    icon: Send },
 ];
 
 export default function EmailMarketingStudio() {
@@ -102,6 +104,7 @@ export default function EmailMarketingStudio() {
         {activeTab === 'campaigns'   && <CampaignBuilder />}
         {activeTab === 'automations' && <AutomationStudio />}
         {activeTab === 'analytics'   && <CampaignAnalytics />}
+        {activeTab === 'whatsapp'    && <WhatsAppSession />}
       </div>
     </div>
   );
