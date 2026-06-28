@@ -43,7 +43,7 @@ if (!g.__waSession) {
   };
 }
 
-const SESSION_DIR = path.join(os.tmpdir(), '.wa-session');
+const SESSION_DIR = process.env.WA_SESSION_DIR || path.join(os.tmpdir(), '.wa-session');
 
 export function getSessionStatus() {
   const { state, qrDataUrl, number, error } = g.__waSession;
