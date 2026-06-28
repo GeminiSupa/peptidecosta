@@ -357,19 +357,21 @@ export default function CampaignBuilder() {
       </div>
 
       {/* ══ EMAIL EDITOR ══ */}
-      <div style={{ flex: 1, borderRadius: '14px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.09)', position: 'relative', background: '#fff', minHeight: '380px' }}>
+      <div className="mkt-email-editor-frame">
         {!isReady && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0e1626', zIndex: 10, flexDirection: 'column', gap: '14px', color: 'rgba(255,255,255,0.5)' }}>
+          <div className="mkt-email-editor-loading">
             <Loader2 className="animate-spin" size={30} style={{ color: '#34d399' }} />
             <p style={{ margin: 0, fontSize: '14px' }}>Loading Email Editor…</p>
           </div>
         )}
-        <EmailEditor
-          ref={emailEditorRef}
-          onLoad={() => setIsReady(true)}
-          minHeight="100%"
-          options={{ appearance: { theme: 'dark' } }}
-        />
+        <div className="mkt-email-editor">
+          <EmailEditor
+            ref={emailEditorRef}
+            onLoad={() => setIsReady(true)}
+            minHeight="640px"
+            options={{ appearance: { theme: 'dark' } }}
+          />
+        </div>
       </div>
     </div>
   );

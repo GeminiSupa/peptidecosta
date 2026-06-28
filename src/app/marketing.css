@@ -592,6 +592,52 @@
   min-height: 360px;
 }
 
+.mkt-email-editor-frame {
+  flex: 1;
+  min-height: 640px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(8, 13, 23, 0.98)),
+    #0b1220;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.mkt-email-editor-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: #0e1626;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.mkt-email-editor {
+  height: 100%;
+  min-height: 640px;
+  background: #0f172a;
+}
+
+.mkt-email-editor,
+.mkt-email-editor > div,
+.mkt-email-editor iframe {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.mkt-email-editor iframe {
+  display: block;
+  min-height: 640px;
+  border: 0;
+  background: #0f172a;
+}
+
 .mkt-builder-config {
   display: flex;
   flex-direction: column;
@@ -737,6 +783,11 @@
   .mkt-stats-grid  { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mkt-flow-grid   { grid-template-columns: 1fr; }
   .mkt-builder-shell { min-height: min(560px, calc(100dvh - 200px)); }
+  .mkt-email-editor-frame,
+  .mkt-email-editor,
+  .mkt-email-editor iframe {
+    min-height: 560px;
+  }
 
   /* Responsive table → card view */
   .mkt-table-wrapper { overflow-x: visible; }
