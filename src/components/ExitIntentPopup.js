@@ -55,8 +55,19 @@ export default function ExitIntentPopup() {
       return;
     }
 
+    // Only allow exit intent after the user has been browsing for at least 60 seconds.
+    // Firing it immediately feels aggressive and hurts UX for new visitors.
+    const arrivedAt = Date.now();
+    const MIN_BROWSE_TIME_MS = 60_000;
+
     const handleMouseOut = (e) => {
-      if (e.clientY < 50 && e.relatedTarget === null && !hasShown) {
+      const timeOnSite = Date.now() - arrivedAt;
+      if (
+        e.clientY < 50 &&
+        e.relatedTarget === null &&
+        !hasShown &&
+        timeOnSite >= MIN_BROWSE_TIME_MS
+      ) {
         setIsVisible(true);
         setHasShown(true);
         sessionStorage.setItem('exitIntentShown', 'true');
