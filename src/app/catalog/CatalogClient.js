@@ -237,14 +237,14 @@ export default function CatalogClient({
     checkoutDataRef.current = { cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata, promoData };
   }, [cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata, promoData]);
 
-  // Check Access Gate Status — show gate after 10s for new visitors
+  // Check Access Gate Status — show gate after 2s for new visitors
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
       setGateAccessGranted(hasAccess);
       setGateLoading(false);
       if (!hasAccess) {
-        const timer = setTimeout(() => setGateVisible(true), 10000);
+        const timer = setTimeout(() => setGateVisible(true), 2000);
         return () => clearTimeout(timer);
       }
     }
