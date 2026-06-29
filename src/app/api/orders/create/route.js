@@ -109,7 +109,7 @@ async function sendCustomerOrderConfirmation(order, orderNumber) {
         to: cleanPhone,
         type: 'template',
         template: {
-          name: 'confirmacion_pedido_cliente_v2',
+          name: process.env.WHATSAPP_CUSTOMER_ORDER_TEMPLATE || 'confirmacion_pedido_cliente_v2',
           language: { code: templateLanguage },
           components: [{
             type: 'body',
