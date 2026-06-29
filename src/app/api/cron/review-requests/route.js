@@ -18,7 +18,7 @@ export async function GET(request) {
 
     const { data: eligibleOrders, error } = await supabase
       .from('orders')
-      .select('id, customer_email, customer_name, customer_phone')
+      .select('id, customer_email, customer_name, customer_phone, currency')
       .eq('status', 'Order Complete')
       .is('review_requested_at', null)
       .lte('updated_at', fiveDaysAgo.toISOString())
@@ -56,8 +56,23 @@ export async function GET(request) {
       if (!order.customer_email) continue;
 
       const reviewLink = process.env.REVIEW_LINK_GOOGLE || process.env.REVIEW_LINK_TRUSTPILOT || 'https://catalog.peptidescostarica.net/customer-feedback';
-      const subject = `How is your research going? 🧪`;
-      const html = `
+      
+      const isSpanish = order.currency === 'CRC';
+      const subject = isSpanish ? `¿Cómo va tu investigación? 🧪` : `How is your research going? 🧪`;
+      const html = isSpanish 
+        ? `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#333;">
+          <h2>¡Nos encantaría saber tu opinión!</h2>
+          <p>Hola ${order.customer_name || ''},</p>
+          <p>Han pasado unos días desde que se completó tu pedido de Peptides Costa Rica. ¡Esperamos que tu investigación vaya de maravilla!</p>
+          <p>Si tienes un momento, te agradeceríamos mucho que nos dejaras una reseña sobre tu experiencia con nuestros productos y servicio.</p>
+          <p>
+            <a href="${reviewLink}" style="display:inline-block;padding:12px 24px;background:#10b981;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Dejar una Reseña</a>
+          </p>
+          <p>Gracias,<br/>El equipo de Peptides Costa Rica</p>
+        </div>
+        ` 
+        : `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#333;">
           <h2>We'd love to hear from you!</h2>
           <p>Hi ${order.customer_name || 'there'},</p>
@@ -99,12 +114,12 @@ export async function GET(request) {
               type: 'template',
               template: {
                 name: 'review_request_5_day',
-                language: { code: 'en' },
+                language: { code: isSpanish ? 'es' : 'en' },
                 components: [
                   {
                     type: 'body',
                     parameters: [
-                      { type: 'text', text: order.customer_name || 'there' },
+                      { type: 'text', text: order.customer_name || (isSpanish ? '' : 'there') },
                       { type: 'text', text: reviewLink }
                     ]
                   }
