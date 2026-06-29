@@ -10,6 +10,13 @@ function nowCR() {
   return new Date(nowUTC.getTime() + CR_OFFSET * 60 * 60 * 1000);
 }
 
+function startOfMonthCR(date = nowCR()) {
+  const d = new Date(date);
+  d.setUTCDate(1);
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
 function startOfWeekCR(date = nowCR()) {
   const d = new Date(date);
   const day = d.getUTCDay();
@@ -48,6 +55,7 @@ export async function GET(request) {
     const supabaseAdmin = getSupabaseAdmin();
     const profile = auth.profile;
 
+    const monthStartUtc = crToUtc(startOfMonthCR()).toISOString();
     const weekStartUtc = crToUtc(startOfWeekCR()).toISOString();
     const weekEndUtc = crToUtc(nowCR()).toISOString();
     const todayStartUtc = crToUtc(startOfDayCR()).toISOString();
@@ -55,7 +63,7 @@ export async function GET(request) {
     const { data: orders, error: ordersError } = await supabaseAdmin
       .from('orders')
       .select('id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at')
-      .gte('created_at', weekStartUtc)
+      .gte('created_at', monthStartUtc)
       .lte('created_at', weekEndUtc)
       .not('status', 'eq', 'Cancelled')
       .order('created_at', { ascending: false });
@@ -67,9 +75,11 @@ export async function GET(request) {
 
     const agentOrders = (orders || []).filter((o) => orderBelongsToAgent(o, profile));
     const todayOrders = agentOrders.filter((o) => o.created_at >= todayStartUtc);
+    const weekOrders = agentOrders.filter((o) => o.created_at >= weekStartUtc);
     const pendingOrders = agentOrders.filter((o) => (o.status || 'Pending') === 'Pending');
 
-    const weekSales = sumAgentOrders(agentOrders);
+    const monthSales = sumAgentOrders(agentOrders);
+    const weekSales = sumAgentOrders(weekOrders);
     const todaySales = sumAgentOrders(todayOrders);
 
     const rate = Number(profile.commission_rate || 0);
@@ -92,11 +102,11 @@ export async function GET(request) {
       .select('id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at')
       .not('status', 'eq', 'Cancelled')
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(500);
 
     const recentOrders = (recentAll || [])
       .filter((o) => orderBelongsToAgent(o, profile))
-      .slice(0, 8);
+      .slice(0, 50);
 
     return NextResponse.json({
       success: true,
@@ -105,6 +115,9 @@ export async function GET(request) {
         salaryCurrency: profile.salary_currency || 'USD',
         commissionRate: rate,
         commissionStructure: profile.commission_structure || '',
+        currentMonthOrdersCount: monthSales.count,
+        currentMonthSalesUSD: monthSales.usd,
+        currentMonthSalesCRC: monthSales.crc,
         currentWeekOrdersCount: weekSales.count,
         currentWeekSalesUSD: weekSales.usd,
         currentWeekSalesCRC: weekSales.crc,

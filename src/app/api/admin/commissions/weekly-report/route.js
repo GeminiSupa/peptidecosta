@@ -4,6 +4,11 @@ import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getOrderSalesAmounts, orderBelongsToAgent } from '@/lib/agentOrders';
 import { getPeriodLabel, recalcPayoutAmounts } from '@/lib/commissionPayouts';
+import { getUsdToCrcRate } from '@/lib/pricing';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 // Email Configuration from Environment variables
 const SMTP_HOST = process.env.SMTP_HOST;
@@ -12,7 +17,8 @@ const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
-const ADMIN_CC_EMAILS = 'info@peptidescostarica.net, omerforce@gmail.com';
+const ADMIN_CC_EMAILS = process.env.COMMISSION_REPORT_ADMIN_EMAILS
+  || 'info@peptidescostarica.net, omerforce@gmail.com';
 
 const formatMoney = (value, currency) => {
   const amount = Number(value || 0);
@@ -20,9 +26,43 @@ const formatMoney = (value, currency) => {
   return `₡${Math.round(amount).toLocaleString('en-US')}`;
 };
 
+const formatCrDate = (value, options = {}) => new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Costa_Rica',
+  month: 'short',
+  day: 'numeric',
+  ...options,
+}).format(new Date(value));
+
+const escapeHtml = (value) => String(value ?? '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#039;');
+
+const getEquivalentAmounts = (usdAmount, crcAmount, exchangeRate) => ({
+  usd: Number(usdAmount || 0) + (Number(crcAmount || 0) / exchangeRate),
+  crc: Math.round(Number(crcAmount || 0) + (Number(usdAmount || 0) * exchangeRate)),
+});
+
+const payoutOptionsHtml = (usd, crc, { large = false } = {}) => `
+  <div style="font-size:${large ? '28px' : '17px'};font-weight:800;color:#0f172a;line-height:1.25;">
+    ${formatMoney(usd, 'USD')}
+  </div>
+  <div style="margin:4px 0;color:#64748b;font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;">or</div>
+  <div style="font-size:${large ? '28px' : '17px'};font-weight:800;color:#0f172a;line-height:1.25;">
+    ${formatMoney(crc, 'CRC')}
+  </div>
+`;
+
 export async function GET(request) {
-  const auth = await verifyAdminSession(request, { requireSuperadmin: true });
-  if (auth.error) return auth.error;
+  const authHeader = request.headers.get('authorization');
+  const isCronRequest = Boolean(process.env.CRON_SECRET)
+    && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+  if (!isCronRequest) {
+    const auth = await verifyAdminSession(request, { requireSuperadmin: true });
+    if (auth.error) return auth.error;
+  }
 
   try {
     // 1. Initialize Supabase Admin Client
@@ -87,6 +127,8 @@ export async function GET(request) {
       searchParams.get('start'),
       searchParams.get('end')
     );
+    const periodDisplay = `${formatCrDate(startDateStr)} – ${formatCrDate(endDateStr, { year: 'numeric' })}`;
+    const exchangeRate = await getUsdToCrcRate();
 
     // 4. Fetch all non-cancelled orders completed in the scanned period
     const { data: orders, error: ordersError } = await supabaseAdmin
@@ -164,8 +206,9 @@ export async function GET(request) {
         return orderBelongsToAgent(order, agent);
       });
 
-      // Skip agents with zero closed orders this week AND no base salary
-      if (agentOrders.length === 0 && weeklySalary === 0) continue;
+      // Ignore non-commission staff, but keep configured agents in the all-agent report
+      // even when their result for the week is zero.
+      if (agentOrders.length === 0 && weeklySalary === 0 && rate === 0) continue;
 
       // Group totals by currency
       let usdSales = 0;
@@ -190,112 +233,88 @@ export async function GET(request) {
         weeklySalary,
         salaryCurrency,
       });
+      const commissionEquivalent = getEquivalentAmounts(usdCommission, crcCommission, exchangeRate);
+      const totalPayoutEquivalent = getEquivalentAmounts(totalPayoutUsd, totalPayoutCrc, exchangeRate);
 
       // Build items table in HTML for this agent's invoice
       const ordersTableRows = agentOrders.map(order => {
-        const date = new Date(order.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        const date = formatCrDate(order.created_at);
         const amounts = getOrderSalesAmounts(order);
         const orderTotal = order.currency === 'USD' ? amounts.usd : amounts.crc;
         return `
           <tr>
-            <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px;color:#e2e8f0;font-family:monospace;font-weight:bold;">
-              #${order.order_number || order.id.slice(0, 8)}
+            <td style="padding:11px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#0f172a;font-family:monospace;font-weight:bold;">
+              #${escapeHtml(order.order_number || order.id.slice(0, 8))}
             </td>
-            <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px;color:#94a3b8;">
+            <td style="padding:11px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#64748b;">
               ${date}
             </td>
-            <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px;color:#cbd5e1;font-weight:bold;">
-              ${order.customer_name || 'N/A'}
+            <td style="padding:11px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#334155;font-weight:600;">
+              ${escapeHtml(order.customer_name || 'N/A')}
             </td>
-            <td style="padding:12px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px;text-align:right;color:#f8fafc;font-weight:bold;">
+            <td style="padding:11px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;text-align:right;color:#0f172a;font-weight:bold;white-space:nowrap;">
               ${formatMoney(orderTotal, order.currency || 'CRC')}
             </td>
           </tr>
         `;
       }).join('');
 
-      // Build premium HTML Email template with science design aesthetics
+      const salaryEquivalent = salaryCurrency === 'USD'
+        ? getEquivalentAmounts(weeklySalary, 0, exchangeRate)
+        : getEquivalentAmounts(0, weeklySalary, exchangeRate);
+
+      // Individual report: contains only this agent's compensation and orders.
       const emailHtml = `
-        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#e2e8f0;background:#0b0f19;max-width:640px;margin:0 auto;padding:32px 24px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;">
-          <!-- Header Logo/Branding -->
-          <div style="text-align:center;margin-bottom:24px;">
-            <div style="display:inline-block;padding:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;margin-bottom:12px;">
-              <span style="font-size:24px;font-weight:bold;color:#f8fafc;letter-spacing:1px;">🧬 PEPTIDES COSTA RICA</span>
-            </div>
-            <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:-0.5px;">Weekly Sales Commission Invoice</h1>
-            <p style="color:#94a3b8;font-size:13px;margin:0;">Invoice Period: ${new Date(startDateStr).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})} to ${new Date(endDateStr).toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}</p>
+        <div style="background:#f1f5f9;padding:24px 12px;">
+        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#334155;background:#ffffff;max-width:640px;margin:0 auto;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
+          <div style="background:#0f172a;padding:28px 24px;text-align:center;">
+            <div style="color:#ffffff;font-size:19px;font-weight:800;letter-spacing:.7px;">PEPTIDES COSTA RICA</div>
+            <h1 style="color:#ffffff;font-size:24px;margin:14px 0 6px;">Weekly pay report</h1>
+            <p style="color:#cbd5e1;font-size:13px;margin:0;">${periodDisplay} · Costa Rica time</p>
           </div>
+          <div style="padding:26px 24px;">
+            <p style="font-size:16px;margin:0 0 18px;">Hi ${escapeHtml(agent.name || agent.email)}, here is your pay report for the previous work week.</p>
 
-          <!-- Greeting Card -->
-          <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:12px;padding:20px;margin-bottom:24px;text-align:center;">
-            <p style="margin:0 0 4px;font-size:14px;color:#94a3b8;">Sales Representative</p>
-            <p style="margin:0 0 16px;font-size:18px;font-weight:800;color:#c084fc;">${agent.name || agent.email}</p>
-            <div style="border-top:1px dashed rgba(255,255,255,0.08);margin-bottom:16px;"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center;">
-              <div>
-                <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;text-transform:uppercase;">Gross USD Sales</p>
-                <p style="margin:0;font-size:20px;font-weight:900;color:#f8fafc;">${formatMoney(usdSales, 'USD')}</p>
-              </div>
-              <div>
-                <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;text-transform:uppercase;">Gross CRC Sales</p>
-                <p style="margin:0;font-size:20px;font-weight:900;color:#f8fafc;">${formatMoney(crcSales, 'CRC')}</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Commission Highlight Summary -->
-          <div style="background:linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(56, 189, 248, 0.05) 100%);border:1px solid rgba(168, 85, 247, 0.3);border-radius:12px;padding:20px;margin-bottom:24px;text-align:center;">
-            
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center;margin-bottom:16px;">
-              <div>
-                <span style="font-size:11px;font-weight:bold;color:#38bdf8;text-transform:uppercase;letter-spacing:1px;background:rgba(56, 189, 248, 0.1);padding:4px 10px;border-radius:12px;">Base Salary</span>
-                <div style="margin-top:8px;font-size:18px;font-weight:900;color:#f8fafc;">${formatMoney(weeklySalary, salaryCurrency)}</div>
-              </div>
-              <div>
-                <span style="font-size:11px;font-weight:bold;color:#c084fc;text-transform:uppercase;letter-spacing:1px;background:rgba(168, 85, 247, 0.1);padding:4px 10px;border-radius:12px;">Commission (${rate}%)</span>
-                <div style="margin-top:8px;font-size:18px;font-weight:900;color:#f8fafc;">
-                  ${usdCommission > 0 ? formatMoney(usdCommission, 'USD') : ''}
-                  ${usdCommission > 0 && crcCommission > 0 ? ' + ' : ''}
-                  ${crcCommission > 0 ? formatMoney(crcCommission, 'CRC') : ''}
-                  ${usdCommission === 0 && crcCommission === 0 ? '$0.00' : ''}
-                </div>
-              </div>
+            <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:14px;padding:22px;text-align:center;margin-bottom:18px;">
+              <div style="font-size:12px;color:#047857;font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">Total payout (salary + commission)</div>
+              ${payoutOptionsHtml(totalPayoutEquivalent.usd, totalPayoutEquivalent.crc, { large: true })}
+              <div style="font-size:12px;color:#047857;margin-top:12px;font-weight:700;">These are two currency options for the same total. Choose one—not both.</div>
             </div>
 
-            <div style="border-top:1px dashed rgba(255,255,255,0.1);margin:16px 0;"></div>
+            <table role="presentation" style="width:100%;border-collapse:separate;border-spacing:8px 0;margin:0 -8px 22px;">
+              <tr>
+                <td style="width:50%;vertical-align:top;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;">
+                  <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Base salary</div>
+                  ${payoutOptionsHtml(salaryEquivalent.usd, salaryEquivalent.crc)}
+                </td>
+                <td style="width:50%;vertical-align:top;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;">
+                  <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Commission (${rate}%)</div>
+                  ${payoutOptionsHtml(commissionEquivalent.usd, commissionEquivalent.crc)}
+                </td>
+              </tr>
+            </table>
 
-            <h2 style="font-size:15px;color:#e2e8f0;margin:0 0 8px;font-weight:600;">Total Payout Owed This Week</h2>
-            <div style="font-size:26px;font-weight:950;color:#ffffff;line-height:1.2;margin:0 0 4px 0;">
-              ${totalPayoutUsd > 0 ? formatMoney(totalPayoutUsd, 'USD') : ''}
-              ${totalPayoutUsd > 0 && totalPayoutCrc > 0 ? ' + ' : ''}
-              ${totalPayoutCrc > 0 ? formatMoney(totalPayoutCrc, 'CRC') : ''}
-              ${totalPayoutUsd === 0 && totalPayoutCrc === 0 ? '$0.00' : ''}
-            </div>
-            <p style="margin:0;font-size:12px;color:#64748b;">Includes guaranteed base salary plus commissions on successful USD and CRC orders.</p>
-          </div>
+            <div style="font-size:13px;color:#475569;margin-bottom:22px;text-align:center;">${agentOrders.length} closed order${agentOrders.length === 1 ? '' : 's'} · Sales: ${formatMoney(usdSales, 'USD')} and ${formatMoney(crcSales, 'CRC')} · FX rate: $1 = ${formatMoney(exchangeRate, 'CRC')}</div>
 
-          <!-- Closed Orders Table -->
-          <h3 style="font-size:13px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px 0;">Closed Orders History</h3>
-          <div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.05);border-radius:12px;overflow:hidden;margin-bottom:24px;">
+            <h2 style="font-size:15px;color:#0f172a;margin:0 0 10px;">Your closed orders</h2>
+          <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:24px;">
             <table style="width:100%;border-collapse:collapse;">
               <thead>
-                <tr style="background:rgba(255,255,255,0.02);border-bottom:1px solid rgba(255,255,255,0.05);">
-                  <th style="padding:12px;font-size:11px;font-weight:bold;text-align:left;color:#94a3b8;text-transform:uppercase;">Order #</th>
-                  <th style="padding:12px;font-size:11px;font-weight:bold;text-align:left;color:#94a3b8;text-transform:uppercase;">Date</th>
-                  <th style="padding:12px;font-size:11px;font-weight:bold;text-align:left;color:#94a3b8;text-transform:uppercase;">Customer</th>
-                  <th style="padding:12px;font-size:11px;font-weight:bold;text-align:right;color:#94a3b8;text-transform:uppercase;">Total Amount</th>
+                <tr style="background:#f8fafc;">
+                  <th style="padding:10px;font-size:10px;text-align:left;color:#64748b;text-transform:uppercase;">Order</th>
+                  <th style="padding:10px;font-size:10px;text-align:left;color:#64748b;text-transform:uppercase;">Date</th>
+                  <th style="padding:10px;font-size:10px;text-align:left;color:#64748b;text-transform:uppercase;">Customer</th>
+                  <th style="padding:10px;font-size:10px;text-align:right;color:#64748b;text-transform:uppercase;">Amount</th>
                 </tr>
               </thead>
-              <tbody>
-                ${ordersTableRows}
-              </tbody>
+              <tbody>${ordersTableRows || '<tr><td colspan="4" style="padding:18px;text-align:center;color:#64748b;font-size:13px;">No closed orders this week.</td></tr>'}</tbody>
             </table>
           </div>
-
-          <!-- Footer/Support -->
-          <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:16px;text-align:center;font-size:11px;color:#64748b;">
-            Peptides Costa Rica Administrative Automated CRM · Sales and Invoicing Ledger
+          <div style="border-top:1px solid #e2e8f0;padding-top:16px;text-align:center;font-size:11px;color:#94a3b8;">
+            Automated weekly report · Peptides Costa Rica
           </div>
+          </div>
+        </div>
         </div>
       `;
 
@@ -358,6 +377,29 @@ export async function GET(request) {
         saveError = error;
       }
 
+      let agentEmailSent = false;
+      let agentEmailError = null;
+      if (transporter && agent.email && !saveError) {
+        try {
+          await transporter.sendMail({
+            from: NOTIFICATION_FROM,
+            to: agent.email,
+            subject: `Your weekly pay report · ${periodDisplay}`,
+            html: emailHtml,
+            text: [
+              `Weekly pay report for ${periodDisplay}`,
+              `Total payout (salary + commission): ${formatMoney(totalPayoutEquivalent.usd, 'USD')} OR ${formatMoney(totalPayoutEquivalent.crc, 'CRC')}`,
+              'These are two currency options for the same total. Choose one—not both.',
+              `Closed orders: ${agentOrders.length}`,
+            ].join('\n'),
+          });
+          agentEmailSent = true;
+        } catch (mailErr) {
+          console.error(`[Weekly Commissions] Failed to email ${agent.email}:`, mailErr);
+          agentEmailError = mailErr.message;
+        }
+      }
+
       reportResults.push({
         agentId: agent.id,
         name: agent.name,
@@ -368,6 +410,10 @@ export async function GET(request) {
         crcSales: formatMoney(crcSales, 'CRC'),
         usdCommission: formatMoney(usdCommission, 'USD'),
         crcCommission: formatMoney(crcCommission, 'CRC'),
+        totalPayoutUsd: totalPayoutEquivalent.usd,
+        totalPayoutCrc: totalPayoutEquivalent.crc,
+        agentEmailSent,
+        agentEmailError,
         savedSuccessfully: !saveError,
         saveError: saveError ? saveError.message : null
       });
@@ -380,33 +426,33 @@ export async function GET(request) {
     if (transporter && reportResults.length > 0) {
       try {
         const adminEmailHtml = `
-          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#e2e8f0;background:#0b0f19;max-width:640px;margin:0 auto;padding:32px 24px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;">
-            <div style="text-align:center;margin-bottom:24px;">
-              <div style="display:inline-block;padding:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;margin-bottom:12px;">
-                <span style="font-size:24px;font-weight:bold;color:#f8fafc;letter-spacing:1px;">🧬 PEPTIDES COSTA RICA</span>
-              </div>
-              <h1 style="color:#ffffff;font-size:20px;font-weight:800;margin:0 0 6px;letter-spacing:-0.5px;">Pending Commissions Action Required</h1>
-              <p style="color:#94a3b8;font-size:13px;margin:0;">Weekly commission calculations are complete and awaiting admin approval.</p>
+          <div style="background:#f1f5f9;padding:24px 12px;">
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#334155;background:#ffffff;max-width:680px;margin:0 auto;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
+            <div style="background:#0f172a;padding:28px 24px;text-align:center;">
+              <div style="color:#ffffff;font-size:19px;font-weight:800;letter-spacing:.7px;">PEPTIDES COSTA RICA</div>
+              <h1 style="color:#ffffff;font-size:24px;margin:14px 0 6px;">Weekly team pay report</h1>
+              <p style="color:#cbd5e1;font-size:13px;margin:0;">${periodDisplay} · Costa Rica time</p>
             </div>
-
-            <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:12px;padding:20px;margin-bottom:24px;">
+            <div style="padding:26px 24px;">
+              <p style="font-size:15px;line-height:1.5;margin:0 0 18px;">Reports are ready for ${reportResults.length} agent${reportResults.length === 1 ? '' : 's'}. Each row shows one payout in two equivalent currencies; the USD and CRC figures are alternatives, not amounts to add together.</p>
+            <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:24px;">
               <table style="width:100%;border-collapse:collapse;">
                 <thead>
-                  <tr style="border-bottom:1px solid rgba(255,255,255,0.08);text-align:left;">
-                    <th style="padding:10px;font-size:11px;font-weight:bold;color:#94a3b8;text-transform:uppercase;">Representative</th>
-                    <th style="padding:10px;font-size:11px;font-weight:bold;text-align:center;color:#94a3b8;text-transform:uppercase;">Closed Orders</th>
-                    <th style="padding:10px;font-size:11px;font-weight:bold;text-align:right;color:#94a3b8;text-transform:uppercase;">Pending Payout</th>
+                  <tr style="background:#f8fafc;text-align:left;">
+                    <th style="padding:11px 10px;font-size:10px;color:#64748b;text-transform:uppercase;">Agent</th>
+                    <th style="padding:11px 10px;font-size:10px;text-align:center;color:#64748b;text-transform:uppercase;">Orders</th>
+                    <th style="padding:11px 10px;font-size:10px;text-align:right;color:#64748b;text-transform:uppercase;">Total payout</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${reportResults.map(r => `
-                    <tr style="border-bottom:1px solid rgba(255,255,255,0.03);">
-                      <td style="padding:12px 10px;font-size:13px;font-weight:bold;color:#f8fafc;">${r.name || r.email}</td>
-                      <td style="padding:12px 10px;font-size:13px;text-align:center;color:#cbd5e1;">${r.closedOrdersCount}</td>
-                      <td style="padding:12px 10px;font-size:13px;text-align:right;font-weight:bold;color:#c084fc;">
-                        ${r.usdCommission !== '$0.00' ? r.usdCommission : ''}
-                        ${r.usdCommission !== '$0.00' && r.crcCommission !== '₡0' ? ' + ' : ''}
-                        ${r.crcCommission !== '₡0' ? r.crcCommission : ''}
+                    <tr>
+                      <td style="padding:13px 10px;border-top:1px solid #e2e8f0;font-size:13px;font-weight:700;color:#0f172a;">${escapeHtml(r.name || r.email)}</td>
+                      <td style="padding:13px 10px;border-top:1px solid #e2e8f0;font-size:13px;text-align:center;color:#475569;">${r.closedOrdersCount}</td>
+                      <td style="padding:13px 10px;border-top:1px solid #e2e8f0;font-size:13px;text-align:right;font-weight:800;color:#0f172a;white-space:nowrap;">
+                        ${formatMoney(r.totalPayoutUsd, 'USD')}<br>
+                        <span style="font-size:10px;color:#64748b;text-transform:uppercase;">or</span><br>
+                        ${formatMoney(r.totalPayoutCrc, 'CRC')}
                       </td>
                     </tr>
                   `).join('')}
@@ -415,23 +461,24 @@ export async function GET(request) {
             </div>
 
             <div style="text-align:center;margin-bottom:24px;">
-              <a href="https://peptidescostarica.net/admin?tab=team" style="display:inline-block;background:#38bdf8;color:#0b0f19;font-weight:bold;padding:12px 24px;border-radius:8px;text-decoration:none;font-size:13px;">
+              <a href="https://peptidescostarica.net/admin?tab=team" style="display:inline-block;background:#0f766e;color:#ffffff;font-weight:bold;padding:13px 24px;border-radius:9px;text-decoration:none;font-size:13px;">
                 Review & Approve Payouts
               </a>
             </div>
-
-            <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:16px;text-align:center;font-size:11px;color:#64748b;">
-              Peptides Costa Rica Administrative Automated CRM · Sales and Invoicing Ledger
+            <div style="border-top:1px solid #e2e8f0;padding-top:16px;text-align:center;font-size:11px;color:#94a3b8;">
+              Automated weekly report · Exchange rate used: $1 = ${formatMoney(exchangeRate, 'CRC')}
             </div>
+            </div>
+          </div>
           </div>
         `;
 
         await transporter.sendMail({
           from: NOTIFICATION_FROM,
           to: ADMIN_CC_EMAILS,
-          subject: `🧬 [Action Required] Weekly Commissions Pending Approval (${reportResults.length} Agents)`,
+          subject: `Weekly team pay report · ${periodDisplay}`,
           html: adminEmailHtml,
-          text: `Weekly commission reports are generated and pending approval for: ${reportResults.map(r => `${r.name || r.email} (Payout: ${r.usdCommission} + ${r.crcCommission})`).join(', ')}`
+          text: `Weekly team pay report for ${periodDisplay}\n\n${reportResults.map(r => `${r.name || r.email}: ${formatMoney(r.totalPayoutUsd, 'USD')} OR ${formatMoney(r.totalPayoutCrc, 'CRC')}`).join('\n')}\n\nEach pair is one payout expressed in two currencies. Choose one—not both.`
         });
         adminEmailSent = true;
       } catch (mailErr) {
@@ -444,7 +491,10 @@ export async function GET(request) {
       success: true,
       period: {
         start: startDateStr,
-        end: endDateStr
+        end: endDateStr,
+        label: periodLabel,
+        timeZone: 'America/Costa_Rica',
+        exchangeRate,
       },
       payoutReport: reportResults,
       adminNotification: {

@@ -80,6 +80,20 @@ export default function AgentDashboard({
 
       <div className="dashboard-kpi-grid">
         <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-icon" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
+            <TrendingUp size={20} />
+          </div>
+          <div>
+            <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>
+              {stats.currentMonthSalesUSD > 0
+                ? formatMoney(stats.currentMonthSalesUSD, 'USD')
+                : formatMoney(stats.currentMonthSalesCRC, 'CRC')}
+            </div>
+            <div className="dashboard-kpi-label">My sales this month</div>
+            <div className="dashboard-mini-sub">{stats.currentMonthOrdersCount} completed</div>
+          </div>
+        </div>
+        <div className="dashboard-kpi-card">
           <div className="dashboard-kpi-icon" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80' }}>
             <DollarSign size={20} />
           </div>
@@ -134,7 +148,7 @@ export default function AgentDashboard({
       <div className="dashboard-two-col">
         <section className="dashboard-section">
           <h3 className="dashboard-section-title">Pay structure</h3>
-          <div className="dashboard-mini-list">
+          <div className="dashboard-mini-list" style={{ maxHeight: "400px", overflowY: "auto", paddingRight: "8px" }}>
             <div className="dashboard-mini-row" style={{ cursor: 'default' }}>
               <Briefcase size={16} style={{ color: '#38bdf8' }} />
               <div style={{ flex: 1 }}>
@@ -175,7 +189,7 @@ export default function AgentDashboard({
         </section>
 
         <section className="dashboard-section">
-          <h3 className="dashboard-section-title">My recent orders</h3>
+          <h3 className="dashboard-section-title">My recent orders ({stats.recentOrders.length})</h3>
           {stats.recentOrders.length === 0 ? (
             <p className="dashboard-empty">No orders assigned to you yet.</p>
           ) : (

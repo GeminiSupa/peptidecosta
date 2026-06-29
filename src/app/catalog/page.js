@@ -257,7 +257,7 @@ export default function CatalogPage() {
   // Access Gate States
   const [gateAccessGranted, setGateAccessGranted] = useState(false); // Default false for security, updated in useEffect
   const [gateLoading, setGateLoading] = useState(true);
-  const [gateVisible, setGateVisible] = useState(false); // Gate won't show until 10s delay fires
+  const [gateVisible, setGateVisible] = useState(false); // New visitors see products briefly before the gate appears.
   const [gateInput, setGateInput] = useState('');
   const [gateSubmitting, setGateSubmitting] = useState(false);
   const [gateError, setGateError] = useState('');
@@ -287,18 +287,18 @@ export default function CatalogPage() {
     checkoutDataRef.current = { cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata, promoData };
   }, [cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata, promoData]);
 
-  // Check Access Gate Status — show gate after 10s for new visitors
+  // Let new visitors see the populated catalog before asking for contact info.
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
       setGateAccessGranted(hasAccess);
       setGateLoading(false);
-      if (!hasAccess) {
-        const timer = setTimeout(() => setGateVisible(true), 10000);
+      if (!hasAccess && !loading) {
+        const timer = setTimeout(() => setGateVisible(true), 2000);
         return () => clearTimeout(timer);
       }
     }
-  }, []);
+  }, [loading]);
 
   // Load Site Settings for Banner
   useEffect(() => {
@@ -2866,8 +2866,15 @@ export default function CatalogPage() {
           </div>
         ) : null}
 
-        {!gateLoading && gateAccessGranted && (
-          <div style={{ opacity: 1, pointerEvents: 'auto', transition: 'opacity 0.3s' }}>
+        {!gateLoading && (
+          <div
+            aria-hidden={!gateAccessGranted && gateVisible}
+            style={{
+              opacity: 1,
+              pointerEvents: !gateAccessGranted && gateVisible ? 'none' : 'auto',
+              transition: 'filter 0.3s',
+            }}
+          >
           {loading ? (
           <div className="loader">
             <div className="sync-spinner" style={{ marginBottom: '16px' }}></div>

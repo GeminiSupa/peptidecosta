@@ -1,7 +1,36 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, ChevronLeft, ChevronRight, MessageCircle, Send } from 'lucide-react';
+import { Brain, ChevronLeft, ChevronRight, MessageCircle, Search, Send } from 'lucide-react';
+
+const INITIAL_CHAT_LIMIT = 30;
+const GENERIC_CONTACT_NAMES = new Set([
+  'administrator',
+  'ai copilot',
+  'catalog lead',
+  'customer',
+  'peptides costa rica',
+  'peptides customer',
+]);
+
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function cleanContactName(value) {
+  const name = String(value || '').trim();
+  if (!name || ['null', 'undefined', 'n/a', 'unknown'].includes(name.toLowerCase())) return '';
+  if (GENERIC_CONTACT_NAMES.has(name.toLowerCase())) return '';
+  return name;
+}
+
+function addContactName(map, phone, name) {
+  const digits = normalizePhone(phone);
+  const cleanName = cleanContactName(name);
+  if (!digits || !cleanName) return;
+  map.set(digits, cleanName);
+  if (digits.length >= 8) map.set(digits.slice(-8), cleanName);
+}
 
 function useIsMobileWa() {
   const [isMobile, setIsMobile] = useState(false);
@@ -19,6 +48,9 @@ function useIsMobileWa() {
 
 export default function WhatsAppInbox({
   whatsappMessages,
+  orders = [],
+  leads = [],
+  abandonedCarts = [],
   loadingWhatsappMessages,
   whatsappSettings,
   setWhatsappSettings,
@@ -36,6 +68,32 @@ export default function WhatsAppInbox({
   const isMobile = useIsMobileWa();
   const messagesEndRef = useRef(null);
   const composerRef = useRef(null);
+  const [chatSearch, setChatSearch] = useState('');
+  const [visibleChatCount, setVisibleChatCount] = useState(INITIAL_CHAT_LIMIT);
+
+  const contactNamesByPhone = useMemo(() => {
+    const names = new Map();
+
+    [...leads]
+      .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
+      .forEach((lead) => addContactName(
+        names,
+        lead.whatsapp_wa_id || lead.customer_phone || lead.phone || lead.contact_value,
+        lead.customer_name || lead.name
+      ));
+    [...abandonedCarts]
+      .sort((a, b) => new Date(a.last_updated || a.created_at || 0) - new Date(b.last_updated || b.created_at || 0))
+      .forEach((cart) => addContactName(names, cart.customer_phone, cart.customer_name));
+    [...orders]
+      .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0))
+      .forEach((order) => addContactName(
+        names,
+        order.whatsapp_wa_id || order.customer_phone,
+        order.customer_name
+      ));
+
+    return names;
+  }, [abandonedCarts, leads, orders]);
 
   const chatsList = useMemo(() => {
     const chatsMap = new Map();
@@ -44,27 +102,46 @@ export default function WhatsAppInbox({
     );
 
     chronological.forEach((m) => {
-      chatsMap.set(m.wa_id, {
-        waId: m.wa_id,
-        displayName:
-          m.display_name && m.display_name !== 'AI Copilot'
-            ? m.display_name
-            : `Customer ${m.wa_id.slice(-4)}`,
+      const waId = normalizePhone(m.wa_id);
+      if (!waId) return;
+      const existing = chatsMap.get(waId);
+      const messageName = cleanContactName(m.display_name);
+      const inboundName = m.direction === 'inbound' ? messageName : existing?.inboundName;
+      const crmName = contactNamesByPhone.get(waId) || contactNamesByPhone.get(waId.slice(-8));
+
+      chatsMap.set(waId, {
+        waId,
+        displayName: crmName || inboundName || existing?.displayName || messageName || `Customer ${waId.slice(-4)}`,
+        inboundName,
         lastMessageText: m.message_text,
         lastMessageAt: m.created_at,
         direction: m.direction,
+        isAiLast: m.direction === 'outbound' && m.display_name === 'AI Copilot',
       });
     });
 
     return Array.from(chatsMap.values()).sort(
       (a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt)
     );
-  }, [whatsappMessages]);
+  }, [contactNamesByPhone, whatsappMessages]);
+
+  const filteredChats = useMemo(() => {
+    const query = chatSearch.trim().toLowerCase();
+    if (!query) return chatsList;
+    const digits = normalizePhone(query);
+    return chatsList.filter((chat) =>
+      chat.displayName.toLowerCase().includes(query) ||
+      chat.lastMessageText?.toLowerCase().includes(query) ||
+      (digits && chat.waId.includes(digits))
+    );
+  }, [chatSearch, chatsList]);
+
+  const visibleChats = filteredChats.slice(0, visibleChatCount);
 
   const activeChatMessages = useMemo(
     () =>
       whatsappMessages
-        .filter((m) => m.wa_id === activeChatWaId)
+        .filter((m) => normalizePhone(m.wa_id) === activeChatWaId)
         .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
     [whatsappMessages, activeChatWaId]
   );
@@ -75,6 +152,16 @@ export default function WhatsAppInbox({
     document.body.classList.add('admin-wa-tab-active');
     return () => document.body.classList.remove('admin-wa-tab-active');
   }, []);
+
+  useEffect(() => {
+    const isOpen = Boolean(isMobile && activeChatWaId);
+    document.body.classList.toggle('admin-wa-conversation-open', isOpen);
+    return () => document.body.classList.remove('admin-wa-conversation-open');
+  }, [activeChatWaId, isMobile]);
+
+  useEffect(() => {
+    setVisibleChatCount(INITIAL_CHAT_LIMIT);
+  }, [chatSearch]);
 
   useEffect(() => {
     if (!activeChatWaId) return;
@@ -168,53 +255,70 @@ export default function WhatsAppInbox({
             <span className="admin-wa-conversations-count">{chatsList.length}</span>
           </div>
 
+          <label className="admin-wa-search">
+            <Search size={16} aria-hidden />
+            <input
+              type="search"
+              value={chatSearch}
+              onChange={(event) => setChatSearch(event.target.value)}
+              placeholder="Search name, phone, or message"
+              aria-label="Search WhatsApp conversations"
+            />
+          </label>
+
           <div className="admin-wa-conversations-scroll">
             {loadingWhatsappMessages ? (
               <div className="admin-wa-state-msg">Loading conversations...</div>
-            ) : chatsList.length === 0 ? (
+            ) : filteredChats.length === 0 ? (
               <div className="admin-wa-state-msg admin-wa-state-msg--empty">
-                No conversations yet. Incoming messages will appear here.
+                {chatSearch
+                  ? 'No conversations match your search.'
+                  : 'No conversations yet. Incoming messages will appear here.'}
               </div>
             ) : (
-              chatsList.map((chat) => {
-                const isActive = activeChatWaId === chat.waId;
-                const lastThreadMsg = whatsappMessages
-                  .filter((m) => m.wa_id === chat.waId)
-                  .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-                  .at(-1);
-                const isAiLast =
-                  lastThreadMsg?.direction === 'outbound' &&
-                  lastThreadMsg?.display_name === 'AI Copilot';
+              <>
+                {visibleChats.map((chat) => {
+                  const isActive = activeChatWaId === chat.waId;
 
-                return (
+                  return (
+                    <button
+                      type="button"
+                      key={chat.waId}
+                      className={`admin-wa-chat-item${isActive ? ' active' : ''}`}
+                      onClick={() => setActiveChatWaId(chat.waId)}
+                    >
+                      <div className="admin-wa-chat-item-top">
+                        <span className="admin-wa-chat-item-name">{chat.displayName}</span>
+                        <span className="admin-wa-chat-item-time">
+                          {new Date(chat.lastMessageAt).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <div className="admin-wa-chat-item-bottom">
+                        <span className="admin-wa-chat-item-preview">{chat.lastMessageText}</span>
+                        {chat.isAiLast ? (
+                          <span className="admin-wa-badge admin-wa-badge--ai">AI</span>
+                        ) : chat.direction === 'outbound' ? (
+                          <span className="admin-wa-badge admin-wa-badge--human">Human</span>
+                        ) : (
+                          <span className="admin-wa-unread-dot" aria-label="Unread" />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+                {visibleChats.length < filteredChats.length && (
                   <button
                     type="button"
-                    key={chat.waId}
-                    className={`admin-wa-chat-item${isActive ? ' active' : ''}`}
-                    onClick={() => setActiveChatWaId(chat.waId)}
+                    className="admin-wa-load-more"
+                    onClick={() => setVisibleChatCount((count) => count + INITIAL_CHAT_LIMIT)}
                   >
-                    <div className="admin-wa-chat-item-top">
-                      <span className="admin-wa-chat-item-name">{chat.displayName}</span>
-                      <span className="admin-wa-chat-item-time">
-                        {new Date(chat.lastMessageAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    </div>
-                    <div className="admin-wa-chat-item-bottom">
-                      <span className="admin-wa-chat-item-preview">{chat.lastMessageText}</span>
-                      {isAiLast ? (
-                        <span className="admin-wa-badge admin-wa-badge--ai">AI</span>
-                      ) : chat.direction === 'outbound' ? (
-                        <span className="admin-wa-badge admin-wa-badge--human">Human</span>
-                      ) : (
-                        <span className="admin-wa-unread-dot" aria-label="Unread" />
-                      )}
-                    </div>
+                    Load more conversations
                   </button>
-                );
-              })
+                )}
+              </>
             )}
           </div>
         </div>

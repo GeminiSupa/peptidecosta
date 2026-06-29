@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/admin/commissions/weekly-report?period=previous",
+      "schedule": "0 14 * * 1"
+    }
+  ]
+}

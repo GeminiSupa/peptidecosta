@@ -4539,7 +4539,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             ) : (
               <div className="table-responsive admin-table-wrap" style={{ background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <table className="spreadsheet-table responsive-table">
+                <table className="spreadsheet-table responsive-table admin-orders-table">
                   <thead>
                     <tr>
                       <th style={{ padding: '10px 12px' }}>Date</th>
@@ -7009,6 +7009,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <div style={{ flex: 1, minHeight: 0 }}>
               <WhatsAppInbox
                 whatsappMessages={whatsappMessages.filter(m => m.source === 'baileys_session')}
+                orders={orders}
+                leads={leads}
+                abandonedCarts={abandonedCarts}
                 loadingWhatsappMessages={loadingWhatsappMessages}
                 whatsappSettings={whatsappSettings}
                 setWhatsappSettings={setWhatsappSettings}
@@ -7176,6 +7179,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'whatsapp_ai' && (
           <WhatsAppInbox
             whatsappMessages={whatsappMessages}
+            orders={orders}
+            leads={leads}
+            abandonedCarts={abandonedCarts}
             loadingWhatsappMessages={loadingWhatsappMessages}
             whatsappSettings={whatsappSettings}
             setWhatsappSettings={setWhatsappSettings}
@@ -8299,6 +8305,25 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   </div>
                 );
               })}
+              <div className="admin-more-account">
+                <div className="admin-more-group-title">Account</div>
+                <div className="admin-more-account-card">
+                  <div className="admin-more-account-copy">
+                    <span>{adminProfile?.name || adminProfile?.email?.split('@')[0] || 'Administrator'}</span>
+                    <small>{adminProfile?.is_superadmin ? 'Super Admin' : 'Staff Agent'}</small>
+                  </div>
+                  <div className="admin-more-account-actions">
+                    <button type="button" onClick={() => { setMobileMoreOpen(false); setShowPasswordModal(true); }}>
+                      <KeyRound size={16} />
+                      Password
+                    </button>
+                    <button type="button" className="logout" onClick={handleLogout}>
+                      <LogOut size={16} />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
