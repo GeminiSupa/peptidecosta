@@ -37,6 +37,13 @@ import ManualOrderModal from '@/components/admin/ManualOrderModal';
 import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
 import WhatsAppInbox from '@/components/admin/WhatsAppInbox';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
+import {
+  ADMIN_NAV_GROUPS,
+  ADMIN_TAB_IDS,
+  ADMIN_TAB_TITLES,
+  ALWAYS_AVAILABLE_TAB_IDS,
+  SUPERADMIN_ONLY_TAB_IDS,
+} from '@/lib/adminModules';
 import dynamic from 'next/dynamic';
 
 const EmailMarketingStudio = dynamic(() => import('@/components/admin/marketing/EmailMarketingStudio'), { ssr: false });
@@ -77,42 +84,6 @@ const formatCustomerIdType = (idType) => {
   return types[String(idType)] || idType;
 };
 
-const ADMIN_TABS = new Set([
-  'home', 'spreadsheet', 'orders', 'customers', 'inquiries', 'leads',
-  'carts', 'share', 'reviews', 'affiliates', 'analytics', 'cms',
-  'whatsapp_ai', 'team', 'facebook', 'team_chat', 'broadcasts', 'marketing', 'wa_session'
-]);
-
-const TAB_TITLES = {
-  home: 'Today',
-  spreadsheet: 'Products',
-  orders: 'Orders',
-  customers: 'Customers',
-  inquiries: 'Inquiries',
-  leads: 'Leads',
-  carts: 'Abandoned Carts',
-  share: 'Share Links',
-  reviews: 'Reviews',
-  affiliates: 'Affiliates',
-  analytics: 'Analytics & Conversions',
-  cms: 'CMS Editor',
-  whatsapp_ai: 'Sales WhatsApp',
-  team: 'Team Management',
-  team_chat: 'Team Chat',
-  ai: 'AI Copilot',
-  facebook: 'Facebook',
-  marketing: 'Marketing Studio',
-  wa_session: 'WA Session (2nd Device)',
-};
-
-const ADMIN_NAV_GROUPS = [
-  { title: 'Overview', tabs: ['home'] },
-  { title: 'Core Operations', tabs: ['spreadsheet', 'orders', 'customers', 'inquiries', 'leads'] },
-  { title: 'Sales & Marketing', tabs: ['whatsapp_ai', 'carts', 'share', 'reviews', 'affiliates', 'facebook'] },
-  { title: 'Analytics & Content', tabs: ['analytics', 'cms'] },
-  { title: 'System & AI', tabs: ['team', 'team_chat'] },
-];
-
 function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, isStaffAgent = false }) {
   const pendingOrders = orders.filter((o) => (o.status || 'Pending') === 'Pending').length;
   const pendingReviews = reviews.filter((r) => r.status === 'Pending').length;
@@ -150,14 +121,10 @@ function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, i
   }
 }
 
-const SUPERADMIN_ONLY_TABS = new Set(['affiliates', 'team', 'analytics', 'wa_session']);
-
 function resolveTabAccess(tabId, profile) {
-  if (!profile || !ADMIN_TABS.has(tabId)) return false;
-  if (tabId === 'home' || tabId === 'team_chat') return true;
-  // wa_session: superadmin always has access; other admins need explicit permission
-  if (tabId === 'wa_session') return profile.is_superadmin || (profile.permissions?.includes('wa_session') ?? false);
-  if (SUPERADMIN_ONLY_TABS.has(tabId)) return profile.is_superadmin;
+  if (!profile || !ADMIN_TAB_IDS.has(tabId)) return false;
+  if (ALWAYS_AVAILABLE_TAB_IDS.has(tabId)) return true;
+  if (SUPERADMIN_ONLY_TAB_IDS.has(tabId)) return profile.is_superadmin;
   if (profile.is_superadmin) return true;
   return profile.permissions?.includes(tabId) ?? false;
 }
@@ -1307,7 +1274,7 @@ Core Rules:
   );
 
   const navigateToTab = useCallback((tabId) => {
-    if (!ADMIN_TABS.has(tabId)) return;
+    if (!ADMIN_TAB_IDS.has(tabId)) return;
     setActiveTab(tabId);
     setMobileMoreOpen(false);
     router.replace(`/admin?tab=${encodeURIComponent(tabId)}`, { scroll: false });
@@ -1331,7 +1298,7 @@ Core Rules:
 
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
-    let targetTab = tabParam && ADMIN_TABS.has(tabParam) ? tabParam : getDefaultTab(adminProfile);
+    let targetTab = tabParam && ADMIN_TAB_IDS.has(tabParam) ? tabParam : getDefaultTab(adminProfile);
 
     if (!resolveTabAccess(targetTab, adminProfile)) {
       targetTab = getDefaultTab(adminProfile);
@@ -1350,7 +1317,7 @@ Core Rules:
 
     const onPopState = () => {
       const tabParam = new URLSearchParams(window.location.search).get('tab');
-      if (tabParam && ADMIN_TABS.has(tabParam) && resolveTabAccess(tabParam, adminProfile)) {
+      if (tabParam && ADMIN_TAB_IDS.has(tabParam) && resolveTabAccess(tabParam, adminProfile)) {
         setActiveTab(tabParam);
       }
     };
@@ -3707,6 +3674,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             </div>
           </div>
 
+          {['spreadsheet','orders','customers','inquiries','leads'].some(hasAccess) && (
           <div className="admin-nav-section">
             <div className="admin-nav-section-title">Core Operations</div>
             <div className="admin-nav-section-items">
@@ -3768,7 +3736,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               )}
             </div>
           </div>
+          )}
 
+          {['carts','share','reviews','facebook','marketing','affiliates','broadcasts'].some(hasAccess) && (
           <div className="admin-nav-section">
             <div className="admin-nav-section-title">Sales & Marketing</div>
             <div className="admin-nav-section-items">
@@ -3823,7 +3793,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   )}
                 </button>
               )}
-              {adminProfile?.is_superadmin && (
+              {hasAccess('marketing') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'marketing' ? 'active' : ''}`}
                   onClick={() => navigateToTab('marketing')}
@@ -3832,7 +3802,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   <span className="tab-label">Marketing Studio</span>
                 </button>
               )}
-              {adminProfile?.is_superadmin && (
+              {hasAccess('affiliates') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'affiliates' ? 'active' : ''}`}
                   onClick={() => navigateToTab('affiliates')}
@@ -3841,7 +3811,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   <span className="tab-label">Affiliates and Promotions</span>
                 </button>
               )}
-              {adminProfile?.is_superadmin && (
+              {hasAccess('broadcasts') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'broadcasts' ? 'active' : ''}`}
                   onClick={() => navigateToTab('broadcasts')}
@@ -3852,7 +3822,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               )}
             </div>
           </div>
+          )}
 
+          {['analytics','cms'].some(hasAccess) && (
           <div className="admin-nav-section">
             <div className="admin-nav-section-title">Analytics & Content</div>
             <div className="admin-nav-section-items">
@@ -3876,7 +3848,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               )}
             </div>
           </div>
+          )}
 
+          {(['whatsapp_ai','wa_session','team_chat'].some(hasAccess) || adminProfile?.is_superadmin) && (
           <div className="admin-nav-section">
             <div className="admin-nav-section-title">System & AI</div>
             <div className="admin-nav-section-items">
@@ -3919,6 +3893,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               )}
             </div>
           </div>
+          )}
         </div>
         </div>
 
@@ -3959,7 +3934,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       {/* Main Admin dashboard container */}
       <div className="admin-container">
         <header className="admin-page-header">
-          <h1 className="admin-page-title">{TAB_TITLES[activeTab] || 'Admin'}</h1>
+          <h1 className="admin-page-title">{ADMIN_TAB_TITLES[activeTab] || 'Admin'}</h1>
           {(() => {
             const subtitle = getAdminPageSubtitle(activeTab, {
               orders: visibleOrders,
@@ -8299,7 +8274,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           className={`admin-more-tab-btn${activeTab === tabId ? ' active' : ''}`}
                           onClick={() => navigateToTab(tabId)}
                         >
-                          {TAB_TITLES[tabId] || tabId}
+                          {ADMIN_TAB_TITLES[tabId] || tabId}
                           {tabId === 'orders' && visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length > 0 && (
                             <span className="admin-more-tab-badge">{visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length}</span>
                           )}
