@@ -87,8 +87,6 @@ export async function GET(request) {
           let cleanPhone = order.customer_phone.replace(/[^0-9]/g, '');
           if (cleanPhone.length === 8) cleanPhone = '506' + cleanPhone;
 
-          const waMessage = `Hi ${order.customer_name || 'there'}! It's been a few days since your Peptides Costa Rica order. We hope your research is going perfectly! 🧪\n\nIf you have a moment, we would greatly appreciate a review: ${reviewLink}\n\nThanks!`;
-
           await fetch(`https://graph.facebook.com/v25.0/${metaPhoneId}/messages`, {
             method: 'POST',
             headers: {
@@ -98,8 +96,20 @@ export async function GET(request) {
             body: JSON.stringify({
               messaging_product: 'whatsapp',
               to: cleanPhone,
-              type: 'text',
-              text: { body: waMessage },
+              type: 'template',
+              template: {
+                name: 'review_request_5_day',
+                language: { code: 'en' },
+                components: [
+                  {
+                    type: 'body',
+                    parameters: [
+                      { type: 'text', text: order.customer_name || 'there' },
+                      { type: 'text', text: reviewLink }
+                    ]
+                  }
+                ]
+              }
             }),
           }).catch(e => console.error(`Failed to send WhatsApp review request to ${cleanPhone}`, e));
         }
