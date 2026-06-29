@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const runtime = 'nodejs';
@@ -8,6 +8,130 @@ const REQUIRED_FIELDS = ['order_number', 'customer_name', 'customer_phone', 'ite
 function isFkViolation(error) {
   const msg = error?.message || '';
   return msg.includes('foreign key constraint') || error?.code === '23503';
+}
+
+function formatSalesAlertTotal(order) {
+  return order.currency === 'USD'
+    ? `$${Number(order.total_usd || 0).toLocaleString('en-US')}`
+    : `CRC ${Number(order.total_crc || 0).toLocaleString('es-CR')}`;
+}
+
+async function sendSalesOrderAlerts(order, orderNumber) {
+  const recipients = (process.env.SALES_TEAM_WHATSAPP_NUMBERS || '')
+    .split(',')
+    .map((phone) => phone.replace(/\D/g, ''))
+    .filter(Boolean);
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (recipients.length === 0 || !accessToken || !phoneNumberId) {
+    console.warn('[orders/create] Sales WhatsApp alert skipped: configuration is incomplete.');
+    return;
+  }
+
+  const templateName = process.env.SALES_TEAM_WHATSAPP_TEMPLATE || 'alerta_nuevo_pedido';
+  const templateLanguage = process.env.SALES_TEAM_WHATSAPP_TEMPLATE_LANGUAGE || 'es';
+  const itemCount = order.items.reduce((total, item) => total + Number(item.qty || 0), 0);
+  const itemLabel = `${itemCount} ${itemCount === 1 ? 'articulo' : 'articulos'}`;
+
+  const results = await Promise.allSettled(recipients.map(async (phone) => {
+    const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: templateLanguage },
+          components: [{
+            type: 'body',
+            parameters: [
+              { type: 'text', text: orderNumber },
+              { type: 'text', text: order.customer_name },
+              { type: 'text', text: formatSalesAlertTotal(order) },
+              { type: 'text', text: itemLabel },
+            ],
+          }],
+        },
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(result?.error?.message || `Meta API returned ${response.status}`);
+    }
+
+    return { phone, messageId: result.messages?.[0]?.id };
+  }));
+
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      console.log('[orders/create] Sales WhatsApp alert sent:', result.value);
+    } else {
+      console.error(
+        '[orders/create] Sales WhatsApp alert failed:',
+        { phone: recipients[index], error: result.reason?.message || String(result.reason) }
+      );
+    }
+  });
+}
+
+async function sendCustomerOrderConfirmation(order, orderNumber) {
+  const customerPhone = order.customer_phone?.replace(/\D/g, '');
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!customerPhone || !accessToken || !phoneNumberId) {
+    return;
+  }
+  
+  // Format Costa Rica numbers if lacking country code
+  let cleanPhone = customerPhone;
+  if (cleanPhone.length === 8) cleanPhone = '506' + cleanPhone;
+
+  // Use Spanish by default, or English if currency is USD
+  const templateLanguage = order.currency === 'USD' ? 'en' : 'es';
+
+  try {
+    const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: cleanPhone,
+        type: 'template',
+        template: {
+          name: 'confirmacion_pedido_cliente',
+          language: { code: templateLanguage },
+          components: [{
+            type: 'body',
+            parameters: [
+              { type: 'text', text: order.customer_name || 'Cliente' },
+              { type: 'text', text: orderNumber },
+              { type: 'text', text: formatSalesAlertTotal(order) },
+            ],
+          }],
+        },
+      }),
+    });
+    
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      console.error('[orders/create] Customer WhatsApp alert failed:', result);
+    } else {
+      console.log('[orders/create] Customer WhatsApp alert sent successfully to', cleanPhone);
+    }
+  } catch (error) {
+    console.error('[orders/create] Customer WhatsApp alert error:', error.message);
+  }
 }
 
 export async function POST(request) {
@@ -152,41 +276,20 @@ export async function POST(request) {
       }
     }
 
-    // --- NEW: Push New Order Alert to Sales Team WhatsApp ---
-    try {
-      const salesNumbersStr = process.env.SALES_TEAM_WHATSAPP_NUMBERS;
-      const metaToken = process.env.WHATSAPP_ACCESS_TOKEN;
-      const metaPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-
-      if (salesNumbersStr && metaToken && metaPhoneId) {
-        const salesNumbers = salesNumbersStr.split(',').map(n => n.trim()).filter(Boolean);
-        const totalFormatted = order.currency === 'USD' 
-          ? `$${Number(order.total_usd || 0).toLocaleString('en-US')}` 
-          : `₡${Number(order.total_crc || 0).toLocaleString('en-US')}`;
-        
-        const messageBody = `🚨 *New Order Alert!* 🚨\n\n*Order:* #${data.order_number}\n*Customer:* ${order.customer_name}\n*Total:* ${totalFormatted}\n*Items:* ${order.items.length}\n\nLog in to the admin dashboard to claim and process it!`;
-
-        for (const phone of salesNumbers) {
-          // Fire and forget (don't block the request)
-          fetch(`https://graph.facebook.com/v25.0/${metaPhoneId}/messages`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${metaToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              to: phone,
-              type: 'text',
-              text: { body: messageBody },
-            }),
-          }).catch(e => console.error('[orders/create] Failed to send WhatsApp alert to', phone, e));
-        }
+    // Execute post-order alerts in the background
+    after(async () => {
+      try {
+        await sendSalesOrderAlerts(order, data.order_number);
+      } catch (err) {
+        console.error('[orders/create] Background sales alert error:', err);
       }
-    } catch (alertErr) {
-      console.error('[orders/create] Failed to process sales team WhatsApp alert:', alertErr);
-    }
-    // --------------------------------------------------------
+      
+      try {
+        await sendCustomerOrderConfirmation(order, data.order_number);
+      } catch (err) {
+        console.error('[orders/create] Background customer alert error:', err);
+      }
+    });
 
     return NextResponse.json({ ok: true, id: data.id, orderNumber: data.order_number });
   } catch (err) {
