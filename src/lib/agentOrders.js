@@ -1,4 +1,13 @@
 /** Lowercase keys used to match order.sales_agent to a profile. */
+export const COMMISSION_ELIGIBLE_ORDER_STATUSES = ['Paid', 'Completed', 'Order Complete'];
+
+export function isCommissionEligibleOrder(order) {
+  const status = String(order?.status || '').trim().toLowerCase();
+  return COMMISSION_ELIGIBLE_ORDER_STATUSES.some(
+    (eligibleStatus) => eligibleStatus.toLowerCase() === status
+  );
+}
+
 export function agentMatchKeys(profile) {
   const keys = new Set();
   if (!profile) return keys;

@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import {
+  COMMISSION_ELIGIBLE_ORDER_STATUSES,
+  getOrderSalesAmounts,
+  isCommissionEligibleOrder,
+} from '@/lib/agentOrders';
+import { formatPayoutPeriod, recalcPayoutAmounts } from '@/lib/commissionPayouts';
+import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
 
 // Email Configuration from Environment variables
 const SMTP_HOST = process.env.SMTP_HOST;
@@ -11,12 +18,6 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
 const ADMIN_CC_EMAILS = 'info@peptidescostarica.net, omerforce@gmail.com';
-
-const formatMoney = (value, currency) => {
-  const amount = Number(value || 0);
-  if (currency === 'USD') return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  return `₡${Math.round(amount).toLocaleString('en-US')}`;
-};
 
 export async function POST(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
@@ -66,11 +67,66 @@ export async function POST(request) {
       return NextResponse.json({ success: true, status: 'Rejected' });
     }
 
+    // Refresh the saved order snapshots before approval. This prevents orders
+    // that are still pending from being paid and picks up orders completed
+    // since the commission scan was generated.
+    const savedOrders = Array.isArray(payout.orders_data) ? payout.orders_data : [];
+    const savedOrderIds = savedOrders.map((order) => order?.id).filter(Boolean);
+    let eligibleOrders = savedOrders
+      .filter(isCommissionEligibleOrder)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    if (savedOrderIds.length > 0) {
+      const { data: currentOrders, error: currentOrdersError } = await supabaseAdmin
+        .from('orders')
+        .select('*')
+        .in('id', savedOrderIds)
+        .in('status', COMMISSION_ELIGIBLE_ORDER_STATUSES)
+        .order('created_at', { ascending: false });
+
+      if (currentOrdersError) {
+        console.error('[Commission Approval] Could not refresh order statuses:', currentOrdersError);
+      } else {
+        eligibleOrders = currentOrders || [];
+      }
+    }
+
+    let usdSales = 0;
+    let crcSales = 0;
+    for (const order of eligibleOrders) {
+      const amounts = getOrderSalesAmounts(order);
+      usdSales += amounts.usd;
+      crcSales += amounts.crc;
+    }
+
+    const recalculated = recalcPayoutAmounts({
+      usdSales,
+      crcSales,
+      commissionRate: payout.commission_rate,
+      weeklySalary: payout.weekly_salary_paid,
+      salaryCurrency: payout.salary_currency,
+    });
+    const periodDisplay = formatPayoutPeriod(payout.start_date, payout.end_date);
+    const { html: refreshedEmailHtml, text: refreshedEmailText } = buildAgentCommissionEmail({
+      agentName: payout.agent_name || payout.agent_email,
+      periodDisplay,
+      commissionRate: payout.commission_rate,
+      weeklySalary: payout.weekly_salary_paid,
+      salaryCurrency: payout.salary_currency,
+      usdSales,
+      crcSales,
+      usdCommission: recalculated.usd_commission,
+      crcCommission: recalculated.crc_commission,
+      totalPayoutUsd: recalculated.total_payout_usd,
+      totalPayoutCrc: recalculated.total_payout_crc,
+      orders: eligibleOrders,
+    });
+
     // 3. Handle Approval & Outbound Email
     let emailSent = false;
     let emailError = null;
 
-    if (payout.email_html && payout.agent_email) {
+    if (payout.agent_email) {
       const transporter = (SMTP_HOST && SMTP_USER && SMTP_PASS) ? nodemailer.createTransport({
         host: SMTP_HOST,
         port: SMTP_PORT,
@@ -92,8 +148,8 @@ export async function POST(request) {
             to: payout.agent_email.trim(),
             cc: ADMIN_CC_EMAILS,
             subject: subject,
-            html: payout.email_html.replaceAll(' + ', ' OR '),
-            text: `Weekly Commissions Invoice for ${payout.agent_name || payout.agent_email}.\nGross USD: ${formatMoney(payout.usd_sales, 'USD')}\nGross CRC: ${formatMoney(payout.crc_sales, 'CRC')}\nCommission Owed: ${formatMoney(payout.usd_commission, 'USD')} OR ${formatMoney(payout.crc_commission, 'CRC')}\nTotal payout: ${formatMoney(payout.total_payout_usd, 'USD')} OR ${formatMoney(payout.total_payout_crc, 'CRC')}`
+            html: refreshedEmailHtml,
+            text: refreshedEmailText,
           });
           emailSent = true;
         } catch (mailErr) {
@@ -112,6 +168,14 @@ export async function POST(request) {
       .from('commission_payouts')
       .update({
         status: 'Approved',
+        usd_sales: usdSales,
+        crc_sales: crcSales,
+        usd_commission: recalculated.usd_commission,
+        crc_commission: recalculated.crc_commission,
+        total_payout_usd: recalculated.total_payout_usd,
+        total_payout_crc: recalculated.total_payout_crc,
+        orders_data: eligibleOrders,
+        email_html: refreshedEmailHtml,
         approved_at: new Date().toISOString(),
         approved_by: 'Super Admin' // Can be customized if user authentication details are available
       })

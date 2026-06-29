@@ -2,8 +2,13 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { getOrderSalesAmounts, orderBelongsToAgent } from '@/lib/agentOrders';
+import {
+  COMMISSION_ELIGIBLE_ORDER_STATUSES,
+  getOrderSalesAmounts,
+  orderBelongsToAgent,
+} from '@/lib/agentOrders';
 import { getPeriodLabel, recalcPayoutAmounts } from '@/lib/commissionPayouts';
+import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,16 +43,6 @@ const escapeHtml = (value) => String(value ?? '')
   .replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;');
-
-const payoutOptionsHtml = (usd, crc, { large = false } = {}) => `
-  <div style="font-size:${large ? '28px' : '17px'};font-weight:800;color:#0f172a;line-height:1.25;">
-    ${formatMoney(usd, 'USD')}
-  </div>
-  <div style="margin:4px 0;color:#64748b;font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;">or</div>
-  <div style="font-size:${large ? '28px' : '17px'};font-weight:800;color:#0f172a;line-height:1.25;">
-    ${formatMoney(crc, 'CRC')}
-  </div>
-`;
 
 export async function GET(request) {
   const authHeader = request.headers.get('authorization');
@@ -123,13 +118,15 @@ export async function GET(request) {
     );
     const periodDisplay = `${formatCrDate(startDateStr)} – ${formatCrDate(endDateStr, { year: 'numeric' })}`;
 
-    // 4. Fetch all non-cancelled orders completed in the scanned period
+    // 4. Only paid/completed orders earn commission. Pending and processing
+    // orders remain outside the payout until a future completed-week scan.
     const { data: orders, error: ordersError } = await supabaseAdmin
       .from('orders')
       .select('*')
       .gte('created_at', startDateStr)
       .lte('created_at', endDateStr)
-      .not('status', 'eq', 'Cancelled');
+      .in('status', COMMISSION_ELIGIBLE_ORDER_STATUSES)
+      .order('created_at', { ascending: false });
 
     if (ordersError) {
       console.error('Error fetching orders for weekly commissions:', ordersError);
@@ -194,10 +191,12 @@ export async function GET(request) {
       const weeklySalary = Number(agent.weekly_salary || 0);
       const salaryCurrency = agent.salary_currency || 'USD';
       
-      const agentOrders = (orders || []).filter((order) => {
-        if (paidOrderIds.has(order.id)) return false;
-        return orderBelongsToAgent(order, agent);
-      });
+      const agentOrders = (orders || [])
+        .filter((order) => {
+          if (paidOrderIds.has(order.id)) return false;
+          return orderBelongsToAgent(order, agent);
+        })
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
       // Ignore non-commission staff, but keep configured agents in the all-agent report
       // even when their result for the week is zero.
@@ -227,83 +226,21 @@ export async function GET(request) {
         salaryCurrency,
       });
 
-      // Build items table in HTML for this agent's invoice
-      const ordersTableRows = agentOrders.map(order => {
-        const date = formatCrDate(order.created_at);
-        const amounts = getOrderSalesAmounts(order);
-        const orderTotal = order.currency === 'USD' ? amounts.usd : amounts.crc;
-        return `
-          <tr>
-            <td style="padding:11px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#0f172a;font-family:monospace;font-weight:bold;">
-              #${escapeHtml(order.order_number || order.id.slice(0, 8))}
-            </td>
-            <td style="padding:11px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#64748b;">
-              ${date}
-            </td>
-            <td style="padding:11px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;color:#334155;font-weight:600;">
-              ${escapeHtml(order.customer_name || 'N/A')}
-            </td>
-            <td style="padding:11px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;text-align:right;color:#0f172a;font-weight:bold;white-space:nowrap;">
-              ${formatMoney(orderTotal, order.currency || 'CRC')}
-            </td>
-          </tr>
-        `;
-      }).join('');
-
-      // Individual report: contains only this agent's compensation and orders.
-      const emailHtml = `
-        <div style="background:#f1f5f9;padding:24px 12px;">
-        <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#334155;background:#ffffff;max-width:640px;margin:0 auto;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;">
-          <div style="background:#0f172a;padding:28px 24px;text-align:center;">
-            <div style="color:#ffffff;font-size:19px;font-weight:800;letter-spacing:.7px;">PEPTIDES COSTA RICA</div>
-            <h1 style="color:#ffffff;font-size:24px;margin:14px 0 6px;">Weekly pay report</h1>
-            <p style="color:#cbd5e1;font-size:13px;margin:0;">${periodDisplay} · Costa Rica time</p>
-          </div>
-          <div style="padding:26px 24px;">
-            <p style="font-size:16px;margin:0 0 18px;">Hi ${escapeHtml(agent.name || agent.email)}, here is your pay report for the previous work week.</p>
-
-            <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:14px;padding:22px;text-align:center;margin-bottom:18px;">
-              <div style="font-size:12px;color:#047857;font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">Total payout (salary + commission)</div>
-              ${payoutOptionsHtml(totalPayoutUsd, totalPayoutCrc, { large: true })}
-              <div style="font-size:12px;color:#047857;margin-top:12px;font-weight:700;">These are two currency options for the same total. Choose one—not both.</div>
-            </div>
-
-            <table role="presentation" style="width:100%;border-collapse:separate;border-spacing:8px 0;margin:0 -8px 22px;">
-              <tr>
-                <td style="width:50%;vertical-align:top;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;">
-                  <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Base salary</div>
-                  <div style="font-size:17px;font-weight:800;color:#0f172a;line-height:1.25;">${formatMoney(weeklySalary, salaryCurrency)}</div>
-                </td>
-                <td style="width:50%;vertical-align:top;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;">
-                  <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Commission (${rate}%)</div>
-                  ${payoutOptionsHtml(usdCommission, crcCommission)}
-                </td>
-              </tr>
-            </table>
-
-            <div style="font-size:13px;color:#475569;margin-bottom:22px;text-align:center;">${agentOrders.length} closed order${agentOrders.length === 1 ? '' : 's'} · Sales: ${formatMoney(usdSales, 'USD')} and ${formatMoney(crcSales, 'CRC')}</div>
-
-            <h2 style="font-size:15px;color:#0f172a;margin:0 0 10px;">Your closed orders</h2>
-          <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:24px;">
-            <table style="width:100%;border-collapse:collapse;">
-              <thead>
-                <tr style="background:#f8fafc;">
-                  <th style="padding:10px;font-size:10px;text-align:left;color:#64748b;text-transform:uppercase;">Order</th>
-                  <th style="padding:10px;font-size:10px;text-align:left;color:#64748b;text-transform:uppercase;">Date</th>
-                  <th style="padding:10px;font-size:10px;text-align:left;color:#64748b;text-transform:uppercase;">Customer</th>
-                  <th style="padding:10px;font-size:10px;text-align:right;color:#64748b;text-transform:uppercase;">Amount</th>
-                </tr>
-              </thead>
-              <tbody>${ordersTableRows || '<tr><td colspan="4" style="padding:18px;text-align:center;color:#64748b;font-size:13px;">No closed orders this week.</td></tr>'}</tbody>
-            </table>
-          </div>
-          <div style="border-top:1px solid #e2e8f0;padding-top:16px;text-align:center;font-size:11px;color:#94a3b8;">
-            Automated weekly report · Peptides Costa Rica
-          </div>
-          </div>
-        </div>
-        </div>
-      `;
+      // Individual report: Outlook-safe, light, and limited to this agent.
+      const { html: emailHtml, text: emailText } = buildAgentCommissionEmail({
+        agentName: agent.name || agent.email,
+        periodDisplay,
+        commissionRate: rate,
+        weeklySalary,
+        salaryCurrency,
+        usdSales,
+        crcSales,
+        usdCommission,
+        crcCommission,
+        totalPayoutUsd,
+        totalPayoutCrc,
+        orders: agentOrders,
+      });
 
       // 6. Save or update pending payout for this agent + period (dedupe duplicates)
       const { data: existingPayouts } = await supabaseAdmin
@@ -373,12 +310,7 @@ export async function GET(request) {
             to: agent.email,
             subject: `Your weekly pay report · ${periodDisplay}`,
             html: emailHtml,
-            text: [
-              `Weekly pay report for ${periodDisplay}`,
-              `Total payout (salary + commission): ${formatMoney(totalPayoutUsd, 'USD')} OR ${formatMoney(totalPayoutCrc, 'CRC')}`,
-              'These are two currency options for the same total. Choose one—not both.',
-              `Closed orders: ${agentOrders.length}`,
-            ].join('\n'),
+            text: emailText,
           });
           agentEmailSent = true;
         } catch (mailErr) {

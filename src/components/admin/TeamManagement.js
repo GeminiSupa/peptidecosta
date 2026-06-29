@@ -4,6 +4,7 @@ import { adminFetch } from '@/lib/adminApi';
 import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import AgentDashboard from './AgentDashboard';
 import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/commissionPayouts';
+import { getOrderSalesAmounts, isCommissionEligibleOrder } from '@/lib/agentOrders';
 import { ASSIGNABLE_ADMIN_MODULES } from '@/lib/adminModules';
 
 export default function TeamManagement({ currentUserProfile, currentUserEmail, onTeamChanged }) {
@@ -568,7 +569,34 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
           ) : (
             <div className="commission-payouts-list">
               {filteredPayouts.map((p) => {
-                const orderCount = getOrderCount(p);
+                const savedOrders = Array.isArray(p.orders_data) ? p.orders_data : [];
+                const includedOrders = [...(p.status === 'Pending'
+                  ? savedOrders.filter(isCommissionEligibleOrder)
+                  : savedOrders
+                )].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                const orderCount = includedOrders.length;
+                const currentAmounts = includedOrders.reduce((totals, order) => {
+                  const amounts = getOrderSalesAmounts(order);
+                  totals.usd += amounts.usd;
+                  totals.crc += amounts.crc;
+                  return totals;
+                }, { usd: 0, crc: 0 });
+                const displayedPayout = p.status === 'Pending'
+                  ? recalcPayoutAmounts({
+                      usdSales: currentAmounts.usd,
+                      crcSales: currentAmounts.crc,
+                      commissionRate: p.commission_rate,
+                      weeklySalary: p.weekly_salary_paid,
+                      salaryCurrency: p.salary_currency,
+                    })
+                  : {
+                      usd_commission: Number(p.usd_commission || 0),
+                      crc_commission: Number(p.crc_commission || 0),
+                      total_payout_usd: Number(p.total_payout_usd || 0),
+                      total_payout_crc: Number(p.total_payout_crc || 0),
+                    };
+                const displayedUsdSales = p.status === 'Pending' ? currentAmounts.usd : p.usd_sales;
+                const displayedCrcSales = p.status === 'Pending' ? currentAmounts.crc : p.crc_sales;
                 const periodText = p.period_label || formatPayoutPeriod(p.start_date, p.end_date);
                 const isExpanded = expandedPayoutId === p.id;
 
@@ -592,11 +620,11 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                     <div className="commission-payout-card__grid">
                       <div className="commission-payout-card__metric">
                         <span className="label">Gross USD</span>
-                        <span className="value">{formatMoneyUI(p.usd_sales, 'USD')}</span>
+                        <span className="value">{formatMoneyUI(displayedUsdSales, 'USD')}</span>
                       </div>
                       <div className="commission-payout-card__metric">
                         <span className="label">Gross CRC</span>
-                        <span className="value">{formatMoneyUI(p.crc_sales, 'CRC')}</span>
+                        <span className="value">{formatMoneyUI(displayedCrcSales, 'CRC')}</span>
                       </div>
                       <div className="commission-payout-card__metric">
                         <span className="label">Rate</span>
@@ -605,17 +633,17 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                       <div className="commission-payout-card__metric">
                         <span className="label">Commission</span>
                         <span className="value accent">
-                          {formatMoneyUI(p.usd_commission, 'USD')}
-                          {p.crc_commission > 0 ? ` OR ${formatMoneyUI(p.crc_commission, 'CRC')}` : ''}
+                          {formatMoneyUI(displayedPayout.usd_commission, 'USD')}
+                          {displayedPayout.crc_commission > 0 ? ` OR ${formatMoneyUI(displayedPayout.crc_commission, 'CRC')}` : ''}
                         </span>
                       </div>
-                      {(p.weekly_salary_paid > 0 || p.total_payout_usd > 0 || p.total_payout_crc > 0) && (
+                      {(p.weekly_salary_paid > 0 || displayedPayout.total_payout_usd > 0 || displayedPayout.total_payout_crc > 0) && (
                         <div className="commission-payout-card__metric commission-payout-card__metric--wide">
                           <span className="label">Total payout (salary + commission)</span>
                           <span className="value">
-                            {p.total_payout_usd > 0 ? formatMoneyUI(p.total_payout_usd, 'USD') : ''}
-                            {p.total_payout_usd > 0 && p.total_payout_crc > 0 ? ' OR ' : ''}
-                            {p.total_payout_crc > 0 ? formatMoneyUI(p.total_payout_crc, 'CRC') : ''}
+                            {displayedPayout.total_payout_usd > 0 ? formatMoneyUI(displayedPayout.total_payout_usd, 'USD') : ''}
+                            {displayedPayout.total_payout_usd > 0 && displayedPayout.total_payout_crc > 0 ? ' OR ' : ''}
+                            {displayedPayout.total_payout_crc > 0 ? formatMoneyUI(displayedPayout.total_payout_crc, 'CRC') : ''}
                           </span>
                         </div>
                       )}
@@ -636,9 +664,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                       </button>
                     )}
 
-                    {isExpanded && Array.isArray(p.orders_data) && (
+                    {isExpanded && (
                       <div className="commission-payout-card__orders">
-                        {p.orders_data.map((order) => (
+                        {includedOrders.map((order) => (
                           <div key={order.id} className="commission-payout-card__order-row">
                             <span>#{order.order_number || order.id?.slice(0, 8)}</span>
                             <span>{order.customer_name || 'N/A'}</span>
