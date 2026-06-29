@@ -114,6 +114,7 @@ export async function GET(request) {
 
     // Only send the admin email to the first email in the list to avoid spamming multiple admin addresses if not wanted, but we'll send to the whole raw string.
     await transporter.sendMail({
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
       from: `Peptides Costa Rica System <${SMTP_USER}>`,
       to: ADMIN_EMAIL,
       subject: `Weekly Affiliate Report - $${totalCommissionsUsd.toFixed(2)}`,
@@ -140,6 +141,7 @@ export async function GET(request) {
         `;
 
         await transporter.sendMail({
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
           from: `Peptides Costa Rica Affiliates <${SMTP_USER}>`,
           to: payout.email,
           subject: `Your Weekly Affiliate Summary - Peptides Costa Rica`,

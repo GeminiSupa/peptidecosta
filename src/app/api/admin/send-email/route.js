@@ -69,6 +69,7 @@ export async function POST(request) {
     `;
 
     const info = await transporter.sendMail({
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
       from: `Peptides Costa Rica <info@peptidescostarica.net>`,
       replyTo: 'info@peptidescostarica.net',
       to: to.trim(),
