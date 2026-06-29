@@ -152,6 +152,42 @@ export async function POST(request) {
       }
     }
 
+    // --- NEW: Push New Order Alert to Sales Team WhatsApp ---
+    try {
+      const salesNumbersStr = process.env.SALES_TEAM_WHATSAPP_NUMBERS;
+      const metaToken = process.env.WHATSAPP_ACCESS_TOKEN;
+      const metaPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+      if (salesNumbersStr && metaToken && metaPhoneId) {
+        const salesNumbers = salesNumbersStr.split(',').map(n => n.trim()).filter(Boolean);
+        const totalFormatted = order.currency === 'USD' 
+          ? `$${Number(order.total_usd || 0).toLocaleString('en-US')}` 
+          : `₡${Number(order.total_crc || 0).toLocaleString('en-US')}`;
+        
+        const messageBody = `🚨 *New Order Alert!* 🚨\n\n*Order:* #${data.order_number}\n*Customer:* ${order.customer_name}\n*Total:* ${totalFormatted}\n*Items:* ${order.items.length}\n\nLog in to the admin dashboard to claim and process it!`;
+
+        for (const phone of salesNumbers) {
+          // Fire and forget (don't block the request)
+          fetch(`https://graph.facebook.com/v25.0/${metaPhoneId}/messages`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${metaToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to: phone,
+              type: 'text',
+              text: { body: messageBody },
+            }),
+          }).catch(e => console.error('[orders/create] Failed to send WhatsApp alert to', phone, e));
+        }
+      }
+    } catch (alertErr) {
+      console.error('[orders/create] Failed to process sales team WhatsApp alert:', alertErr);
+    }
+    // --------------------------------------------------------
+
     return NextResponse.json({ ok: true, id: data.id, orderNumber: data.order_number });
   } catch (err) {
     console.error('[orders/create] Unexpected error:', err);

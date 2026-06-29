@@ -10,18 +10,18 @@ export async function GET(request) {
     const supabase = getSupabaseAdmin();
 
     // Find orders that are:
-    // - Delivered
-    // - Updated at least 14 days ago (approx delivery time)
+    // - Order Complete
+    // - Updated at least 5 days ago
     // - Have not been asked for a review yet
-    const fourteenDaysAgo = new Date();
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+    const fiveDaysAgo = new Date();
+    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
 
     const { data: eligibleOrders, error } = await supabase
       .from('orders')
-      .select('id, customer_email, customer_name')
-      .eq('status', 'Delivered')
+      .select('id, customer_email, customer_name, customer_phone')
+      .eq('status', 'Order Complete')
       .is('review_requested_at', null)
-      .lte('updated_at', fourteenDaysAgo.toISOString())
+      .lte('updated_at', fiveDaysAgo.toISOString())
       .limit(50); // Process in batches to avoid timeouts
 
     if (error) {
@@ -55,15 +55,16 @@ export async function GET(request) {
     for (const order of eligibleOrders) {
       if (!order.customer_email) continue;
 
+      const reviewLink = process.env.REVIEW_LINK_GOOGLE || process.env.REVIEW_LINK_TRUSTPILOT || 'https://catalog.peptidescostarica.net/customer-feedback';
       const subject = `How is your research going? 🧪`;
       const html = `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#333;">
           <h2>We'd love to hear from you!</h2>
           <p>Hi ${order.customer_name || 'there'},</p>
-          <p>It's been a couple of weeks since your Peptides Costa Rica order was delivered. We hope your research is going perfectly!</p>
+          <p>It's been a few days since your Peptides Costa Rica order was completed. We hope your research is going perfectly!</p>
           <p>If you have a moment, we would greatly appreciate it if you could leave a review about your experience with our products and service.</p>
           <p>
-            <a href="https://catalog.peptidescostarica.net/customer-feedback" style="display:inline-block;padding:12px 24px;background:#10b981;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Leave a Review</a>
+            <a href="${reviewLink}" style="display:inline-block;padding:12px 24px;background:#10b981;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Leave a Review</a>
           </p>
           <p>Thank you,<br/>The Peptides Costa Rica Team</p>
         </div>
@@ -77,6 +78,32 @@ export async function GET(request) {
           subject,
           html,
         });
+
+        // --- NEW: WhatsApp Review Request ---
+        const metaToken = process.env.WHATSAPP_ACCESS_TOKEN;
+        const metaPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+        if (order.customer_phone && metaToken && metaPhoneId) {
+          let cleanPhone = order.customer_phone.replace(/[^0-9]/g, '');
+          if (cleanPhone.length === 8) cleanPhone = '506' + cleanPhone;
+
+          const waMessage = `Hi ${order.customer_name || 'there'}! It's been a few days since your Peptides Costa Rica order. We hope your research is going perfectly! 🧪\n\nIf you have a moment, we would greatly appreciate a review: ${reviewLink}\n\nThanks!`;
+
+          await fetch(`https://graph.facebook.com/v25.0/${metaPhoneId}/messages`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${metaToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              to: cleanPhone,
+              type: 'text',
+              text: { body: waMessage },
+            }),
+          }).catch(e => console.error(`Failed to send WhatsApp review request to ${cleanPhone}`, e));
+        }
+        // ------------------------------------
 
         // Mark as sent in DB
         await supabase
