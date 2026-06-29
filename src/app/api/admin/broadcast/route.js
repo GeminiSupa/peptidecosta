@@ -82,7 +82,7 @@ async function sendEmail(to, message, subject) {
     `;
 
     const res = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com, elainedrb@gmail.com',
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
       from: `Peptides Costa Rica <info@peptidescostarica.net>`,
       to: to.trim(),
       subject: subject || 'Flash Sale! Exclusive Offer Inside',

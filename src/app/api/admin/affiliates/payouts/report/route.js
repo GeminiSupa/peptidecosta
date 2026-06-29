@@ -361,7 +361,7 @@ export async function GET(request) {
         `;
 
         await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com, elainedrb@gmail.com',
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
           from: NOTIFICATION_FROM,
           to: ADMIN_CC_EMAILS,
           subject: `🧬 [Action Required] Weekly Affiliate Payouts Pending Approval (${reportResults.length} Partners)`,

@@ -76,7 +76,7 @@ export async function GET(request) {
 
       try {
         await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com, elainedrb@gmail.com',
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
           from: `Peptides Costa Rica <${SMTP_USER}>`,
           replyTo: 'info@peptidescostarica.net',
           to: order.customer_email.trim(),

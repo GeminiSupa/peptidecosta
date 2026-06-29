@@ -144,7 +144,7 @@ export async function POST(request) {
         try {
           const subject = `Weekly Commissions Invoice - ${payout.agent_name || payout.agent_email} [${payout.commission_rate}%]`;
           await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com, elainedrb@gmail.com',
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
             from: NOTIFICATION_FROM,
             to: payout.agent_email.trim(),
             cc: ADMIN_CC_EMAILS,
