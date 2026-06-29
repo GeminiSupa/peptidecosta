@@ -109,13 +109,14 @@ async function sendCustomerOrderConfirmation(order, orderNumber) {
         to: cleanPhone,
         type: 'template',
         template: {
-          name: 'confirmacion_pedido_cliente',
+          name: 'confirmacion_pedido_cliente_v2',
           language: { code: templateLanguage },
           components: [{
             type: 'body',
             parameters: [
               { type: 'text', text: order.customer_name || 'Cliente' },
               { type: 'text', text: orderNumber },
+              { type: 'text', text: order.items?.map(i => `${i.quantity || 1}x ${i.name || i.product_name || 'Producto'}`).join(', ') || 'Productos varios' },
               { type: 'text', text: formatSalesAlertTotal(order) },
             ],
           }],
