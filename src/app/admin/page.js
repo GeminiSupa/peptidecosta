@@ -4581,7 +4581,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     {paginatedOrders.map(order => {
                         const items = Array.isArray(order.items) ? order.items : [];
                         const orderDate = new Date(order.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
-                        const isCustomAgent = order.sales_agent && !agents.includes(order.sales_agent);
                         
                         return (
                           <tr key={order.id}>
@@ -4683,9 +4682,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                                 {agents.map(agent => (
                                   <option key={agent} value={agent}>{agent}</option>
                                 ))}
-                                {isCustomAgent && (
-                                  <option value={order.sales_agent}>{order.sales_agent} (Custom)</option>
-                                )}
                               </select>
                             </td>
                             <td data-label="Actions" style={{ padding: '10px 12px' }}>
