@@ -160,7 +160,7 @@ async function processBatch(transporter, campaign, subscribers, is_test_batch, s
       let finalHtml = htmlContent + unsubscribeFooter;
 
       await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com, elainedrb@gmail.com',
         from: `"Costa Peptides" <${process.env.EMAIL_USER}>`,
         to: sub.email,
         subject: personalizedSubject,

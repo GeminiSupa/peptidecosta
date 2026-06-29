@@ -542,7 +542,7 @@ export async function POST(request) {
       ].join('\n');
 
       const adminInfo = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com, elainedrb@gmail.com',
         from: NOTIFICATION_FROM,
         to: NOTIFICATION_TO,
         subject: adminSubject,
@@ -597,7 +597,7 @@ export async function POST(request) {
         ].join('\n');
 
         const customerInfo = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com, elainedrb@gmail.com',
           from: NOTIFICATION_FROM,
           replyTo: 'info@peptidescostarica.net',
           to: order.customerEmail.trim(),
