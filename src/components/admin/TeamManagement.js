@@ -4,6 +4,7 @@ import { adminFetch } from '@/lib/adminApi';
 import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import AgentDashboard from './AgentDashboard';
 import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/commissionPayouts';
+import { ASSIGNABLE_ADMIN_MODULES } from '@/lib/adminModules';
 
 export default function TeamManagement({ currentUserProfile, currentUserEmail, onTeamChanged }) {
   const [users, setUsers] = useState([]);
@@ -40,22 +41,6 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [formCommissionStructure, setFormCommissionStructure] = useState('');
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
-
-  const AVAILABLE_TABS = [
-    { id: 'home', label: 'Today (Home)' },
-    { id: 'spreadsheet', label: 'Products' },
-    { id: 'orders', label: 'Orders' },
-    { id: 'customers', label: 'Customers' },
-    { id: 'inquiries', label: 'Inquiries' },
-    { id: 'leads', label: 'Leads' },
-    { id: 'carts', label: 'Abandoned Carts' },
-    { id: 'share', label: 'Share Links' },
-    { id: 'reviews', label: 'Reviews' },
-    { id: 'facebook', label: 'Facebook Alerts' },
-    { id: 'analytics', label: 'Analytics' },
-    { id: 'cms', label: 'Content (CMS)' },
-    { id: 'whatsapp_ai', label: 'Sales WhatsApp' },
-  ];
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -809,22 +794,22 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                 <div className="admin-form-grid-2" style={{ marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Full Name</label>
-                    <input type="text" value={formName} onChange={e => setFormName(e.target.value)} required className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder="John Doe" />
+                    <input type="text" value={formName} onChange={e => setFormName(e.target.value)} required className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc' }} placeholder="John Doe" />
                   </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email Address</label>
-                    <input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} required={!editingUserId} disabled={!!editingUserId} className="admin-input" style={{ width: '100%', background: editingUserId ? 'rgba(255,255,255,0.02)' : '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: editingUserId ? '#64748b' : '#38bdf8' }} placeholder="john@example.com" />
+                    <input type="email" value={formEmail} onChange={e => setFormEmail(e.target.value)} required={!editingUserId} disabled={!!editingUserId} className="admin-input" style={{ width: '100%', background: editingUserId ? 'rgba(255,255,255,0.02)' : '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: editingUserId ? '#94a3b8' : '#f8fafc' }} placeholder="john@example.com" />
                   </div>
                 </div>
                 
                 <div className="admin-form-grid-2" style={{ marginBottom: '24px' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Password</label>
-                    <input type="password" value={formPassword} onChange={e => setFormPassword(e.target.value)} required={!editingUserId} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder={editingUserId ? "Leave blank to keep current" : "Enter temporary password"} />
+                    <input type="password" value={formPassword} onChange={e => setFormPassword(e.target.value)} required={!editingUserId} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc' }} placeholder={editingUserId ? "Leave blank to keep current" : "Enter temporary password"} />
                   </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Commission Rate (%)</label>
-                    <input type="number" min="0" max="100" step="0.1" value={formCommissionRate} onChange={e => setFormCommissionRate(parseFloat(e.target.value) || 0)} required className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder="e.g. 10.0" />
+                    <input type="number" min="0" max="100" step="0.1" value={formCommissionRate} onChange={e => setFormCommissionRate(parseFloat(e.target.value) || 0)} required className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc' }} placeholder="e.g. 10.0" />
                   </div>
                 </div>
 
@@ -832,16 +817,16 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Base Weekly Salary</label>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <select value={formSalaryCurrency} onChange={e => setFormSalaryCurrency(e.target.value)} className="admin-input" style={{ width: '90px', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }}>
+                      <select value={formSalaryCurrency} onChange={e => setFormSalaryCurrency(e.target.value)} className="admin-input" style={{ width: '90px', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc' }}>
                         <option value="USD">USD</option>
                         <option value="CRC">CRC</option>
                       </select>
-                      <input type="number" min="0" step="0.01" value={formWeeklySalary} onChange={e => setFormWeeklySalary(parseFloat(e.target.value) || 0)} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder="e.g. 500.00" />
+                      <input type="number" min="0" step="0.01" value={formWeeklySalary} onChange={e => setFormWeeklySalary(parseFloat(e.target.value) || 0)} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc' }} placeholder="e.g. 500.00" />
                     </div>
                   </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Commission Structure Notes</label>
-                    <input type="text" value={formCommissionStructure} onChange={e => setFormCommissionStructure(e.target.value)} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8' }} placeholder="e.g. 10% on Gross Sales" />
+                    <input type="text" value={formCommissionStructure} onChange={e => setFormCommissionStructure(e.target.value)} className="admin-input" style={{ width: '100%', background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc' }} placeholder="e.g. 10% on Gross Sales" />
                   </div>
                 </div>
                 
@@ -861,26 +846,59 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   
                   {!formIsSuperadmin && (
                     <div style={{ paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                      <h3 style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#e2e8f0', margin: '0 0 12px 0' }}>Select Permitted Modules:</h3>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '10px' }}>
-                        {AVAILABLE_TABS.map(tab => {
-                          const isActive = formPermissions.includes(tab.id);
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                        <h3 style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#e2e8f0', margin: 0 }}>Select Permitted Modules:</h3>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setFormPermissions(ASSIGNABLE_ADMIN_MODULES.map(m => m.id))}
+                            style={{ fontSize: '0.72rem', padding: '4px 10px', background: 'rgba(56,189,248,0.12)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.25)', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                          >
+                            Select All
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFormPermissions([])}
+                            style={{ fontSize: '0.72rem', padding: '4px 10px', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', cursor: 'pointer' }}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
+                        {['Core Operations', 'Sales & Marketing', 'Analytics & Content', 'System & AI'].map(group => {
+                          const groupModules = ASSIGNABLE_ADMIN_MODULES.filter(m => m.group === group);
+                          if (!groupModules.length) return null;
                           return (
-                            <div 
-                              key={tab.id} 
-                              onClick={() => handleTogglePermission(tab.id)}
-                              style={{ 
-                                padding: '10px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
-                                fontSize: '0.8rem', fontWeight: '600', transition: 'all 0.2s', userSelect: 'none',
-                                background: isActive ? 'rgba(56, 189, 248, 0.15)' : 'rgba(255,255,255,0.03)',
-                                color: isActive ? '#38bdf8' : '#64748b',
-                                border: isActive ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(255,255,255,0.05)'
-                              }}
-                            >
-                              {tab.label}
+                            <div key={group} style={{ marginBottom: '14px' }}>
+                              <div style={{ fontSize: '0.7rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>{group}</div>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px' }}>
+                                {groupModules.map(tab => {
+                                  const isActive = formPermissions.includes(tab.id);
+                                  return (
+                                    <div
+                                      key={tab.id}
+                                      onClick={() => handleTogglePermission(tab.id)}
+                                      style={{
+                                        padding: '9px 10px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
+                                        fontSize: '0.78rem', fontWeight: '600', transition: 'all 0.2s', userSelect: 'none',
+                                        background: isActive ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255,255,255,0.05)',
+                                        color: isActive ? '#f8fafc' : '#cbd5e1',
+                                        border: isActive ? '1px solid rgba(125, 211, 252, 0.55)' : '1px solid rgba(255,255,255,0.12)'
+                                      }}
+                                    >
+                                      {isActive && <Check size={11} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }} />}
+                                      {tab.label}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           );
                         })}
+                      </div>
+                      <div style={{ marginTop: '10px', fontSize: '0.75rem', color: '#475569' }}>
+                        {formPermissions.length} of {ASSIGNABLE_ADMIN_MODULES.length} modules selected
                       </div>
                     </div>
                   )}
