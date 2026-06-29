@@ -18,6 +18,7 @@ export function formatPayoutPeriod(startDate, endDate) {
   const sameYear = start.getFullYear() === end.getFullYear();
   const fmt = (d, withYear) =>
     d.toLocaleDateString(undefined, {
+      timeZone: 'America/Costa_Rica',
       month: 'short',
       day: 'numeric',
       ...(withYear ? { year: 'numeric' } : {}),

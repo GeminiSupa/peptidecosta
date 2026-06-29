@@ -606,7 +606,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                         <span className="label">Commission</span>
                         <span className="value accent">
                           {formatMoneyUI(p.usd_commission, 'USD')}
-                          {p.crc_commission > 0 ? ` + ${formatMoneyUI(p.crc_commission, 'CRC')}` : ''}
+                          {p.crc_commission > 0 ? ` OR ${formatMoneyUI(p.crc_commission, 'CRC')}` : ''}
                         </span>
                       </div>
                       {(p.weekly_salary_paid > 0 || p.total_payout_usd > 0 || p.total_payout_crc > 0) && (
@@ -614,7 +614,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                           <span className="label">Total payout (salary + commission)</span>
                           <span className="value">
                             {p.total_payout_usd > 0 ? formatMoneyUI(p.total_payout_usd, 'USD') : ''}
-                            {p.total_payout_usd > 0 && p.total_payout_crc > 0 ? ' + ' : ''}
+                            {p.total_payout_usd > 0 && p.total_payout_crc > 0 ? ' OR ' : ''}
                             {p.total_payout_crc > 0 ? formatMoneyUI(p.total_payout_crc, 'CRC') : ''}
                           </span>
                         </div>
@@ -752,11 +752,11 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   <div style={{ background: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.2)', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '0.85rem' }}>
                     <div style={{ color: '#c084fc', fontWeight: 'bold' }}>
                       Commission: {formatMoneyUI(preview.usd_commission, 'USD')}
-                      {preview.crc_commission > 0 ? ` + ${formatMoneyUI(preview.crc_commission, 'CRC')}` : ''}
+                      {preview.crc_commission > 0 ? ` OR ${formatMoneyUI(preview.crc_commission, 'CRC')}` : ''}
                     </div>
                     <div style={{ color: '#e2e8f0', marginTop: '4px' }}>
                       Total payout: {formatMoneyUI(preview.total_payout_usd, 'USD')}
-                      {preview.total_payout_crc > 0 ? ` + ${formatMoneyUI(preview.total_payout_crc, 'CRC')}` : ''}
+                      {preview.total_payout_crc > 0 ? ` OR ${formatMoneyUI(preview.total_payout_crc, 'CRC')}` : ''}
                     </div>
                   </div>
                 );

@@ -4,7 +4,6 @@ import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getOrderSalesAmounts, orderBelongsToAgent } from '@/lib/agentOrders';
 import { getPeriodLabel, recalcPayoutAmounts } from '@/lib/commissionPayouts';
-import { getUsdToCrcRate } from '@/lib/pricing';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,11 +38,6 @@ const escapeHtml = (value) => String(value ?? '')
   .replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;');
-
-const getEquivalentAmounts = (usdAmount, crcAmount, exchangeRate) => ({
-  usd: Number(usdAmount || 0) + (Number(crcAmount || 0) / exchangeRate),
-  crc: Math.round(Number(crcAmount || 0) + (Number(usdAmount || 0) * exchangeRate)),
-});
 
 const payoutOptionsHtml = (usd, crc, { large = false } = {}) => `
   <div style="font-size:${large ? '28px' : '17px'};font-weight:800;color:#0f172a;line-height:1.25;">
@@ -128,7 +122,6 @@ export async function GET(request) {
       searchParams.get('end')
     );
     const periodDisplay = `${formatCrDate(startDateStr)} – ${formatCrDate(endDateStr, { year: 'numeric' })}`;
-    const exchangeRate = await getUsdToCrcRate();
 
     // 4. Fetch all non-cancelled orders completed in the scanned period
     const { data: orders, error: ordersError } = await supabaseAdmin
@@ -233,8 +226,6 @@ export async function GET(request) {
         weeklySalary,
         salaryCurrency,
       });
-      const commissionEquivalent = getEquivalentAmounts(usdCommission, crcCommission, exchangeRate);
-      const totalPayoutEquivalent = getEquivalentAmounts(totalPayoutUsd, totalPayoutCrc, exchangeRate);
 
       // Build items table in HTML for this agent's invoice
       const ordersTableRows = agentOrders.map(order => {
@@ -259,10 +250,6 @@ export async function GET(request) {
         `;
       }).join('');
 
-      const salaryEquivalent = salaryCurrency === 'USD'
-        ? getEquivalentAmounts(weeklySalary, 0, exchangeRate)
-        : getEquivalentAmounts(0, weeklySalary, exchangeRate);
-
       // Individual report: contains only this agent's compensation and orders.
       const emailHtml = `
         <div style="background:#f1f5f9;padding:24px 12px;">
@@ -277,7 +264,7 @@ export async function GET(request) {
 
             <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:14px;padding:22px;text-align:center;margin-bottom:18px;">
               <div style="font-size:12px;color:#047857;font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;">Total payout (salary + commission)</div>
-              ${payoutOptionsHtml(totalPayoutEquivalent.usd, totalPayoutEquivalent.crc, { large: true })}
+              ${payoutOptionsHtml(totalPayoutUsd, totalPayoutCrc, { large: true })}
               <div style="font-size:12px;color:#047857;margin-top:12px;font-weight:700;">These are two currency options for the same total. Choose one—not both.</div>
             </div>
 
@@ -285,16 +272,16 @@ export async function GET(request) {
               <tr>
                 <td style="width:50%;vertical-align:top;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;">
                   <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Base salary</div>
-                  ${payoutOptionsHtml(salaryEquivalent.usd, salaryEquivalent.crc)}
+                  <div style="font-size:17px;font-weight:800;color:#0f172a;line-height:1.25;">${formatMoney(weeklySalary, salaryCurrency)}</div>
                 </td>
                 <td style="width:50%;vertical-align:top;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;">
                   <div style="font-size:11px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Commission (${rate}%)</div>
-                  ${payoutOptionsHtml(commissionEquivalent.usd, commissionEquivalent.crc)}
+                  ${payoutOptionsHtml(usdCommission, crcCommission)}
                 </td>
               </tr>
             </table>
 
-            <div style="font-size:13px;color:#475569;margin-bottom:22px;text-align:center;">${agentOrders.length} closed order${agentOrders.length === 1 ? '' : 's'} · Sales: ${formatMoney(usdSales, 'USD')} and ${formatMoney(crcSales, 'CRC')} · FX rate: $1 = ${formatMoney(exchangeRate, 'CRC')}</div>
+            <div style="font-size:13px;color:#475569;margin-bottom:22px;text-align:center;">${agentOrders.length} closed order${agentOrders.length === 1 ? '' : 's'} · Sales: ${formatMoney(usdSales, 'USD')} and ${formatMoney(crcSales, 'CRC')}</div>
 
             <h2 style="font-size:15px;color:#0f172a;margin:0 0 10px;">Your closed orders</h2>
           <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:24px;">
@@ -388,7 +375,7 @@ export async function GET(request) {
             html: emailHtml,
             text: [
               `Weekly pay report for ${periodDisplay}`,
-              `Total payout (salary + commission): ${formatMoney(totalPayoutEquivalent.usd, 'USD')} OR ${formatMoney(totalPayoutEquivalent.crc, 'CRC')}`,
+              `Total payout (salary + commission): ${formatMoney(totalPayoutUsd, 'USD')} OR ${formatMoney(totalPayoutCrc, 'CRC')}`,
               'These are two currency options for the same total. Choose one—not both.',
               `Closed orders: ${agentOrders.length}`,
             ].join('\n'),
@@ -410,8 +397,8 @@ export async function GET(request) {
         crcSales: formatMoney(crcSales, 'CRC'),
         usdCommission: formatMoney(usdCommission, 'USD'),
         crcCommission: formatMoney(crcCommission, 'CRC'),
-        totalPayoutUsd: totalPayoutEquivalent.usd,
-        totalPayoutCrc: totalPayoutEquivalent.crc,
+        totalPayoutUsd,
+        totalPayoutCrc,
         agentEmailSent,
         agentEmailError,
         savedSuccessfully: !saveError,
@@ -466,7 +453,7 @@ export async function GET(request) {
               </a>
             </div>
             <div style="border-top:1px solid #e2e8f0;padding-top:16px;text-align:center;font-size:11px;color:#94a3b8;">
-              Automated weekly report · Exchange rate used: $1 = ${formatMoney(exchangeRate, 'CRC')}
+              Automated weekly report · Peptides Costa Rica
             </div>
             </div>
           </div>
@@ -494,7 +481,6 @@ export async function GET(request) {
         end: endDateStr,
         label: periodLabel,
         timeZone: 'America/Costa_Rica',
-        exchangeRate,
       },
       payoutReport: reportResults,
       adminNotification: {

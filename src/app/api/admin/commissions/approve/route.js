@@ -92,8 +92,8 @@ export async function POST(request) {
             to: payout.agent_email.trim(),
             cc: ADMIN_CC_EMAILS,
             subject: subject,
-            html: payout.email_html,
-            text: `Weekly Commissions Invoice for ${payout.agent_name || payout.agent_email}.\nGross USD: ${formatMoney(payout.usd_sales, 'USD')}\nGross CRC: ${formatMoney(payout.crc_sales, 'CRC')}\nCommission Owed: ${formatMoney(payout.usd_commission, 'USD')} + ${formatMoney(payout.crc_commission, 'CRC')}`
+            html: payout.email_html.replaceAll(' + ', ' OR '),
+            text: `Weekly Commissions Invoice for ${payout.agent_name || payout.agent_email}.\nGross USD: ${formatMoney(payout.usd_sales, 'USD')}\nGross CRC: ${formatMoney(payout.crc_sales, 'CRC')}\nCommission Owed: ${formatMoney(payout.usd_commission, 'USD')} OR ${formatMoney(payout.crc_commission, 'CRC')}\nTotal payout: ${formatMoney(payout.total_payout_usd, 'USD')} OR ${formatMoney(payout.total_payout_crc, 'CRC')}`
           });
           emailSent = true;
         } catch (mailErr) {
