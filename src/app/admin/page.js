@@ -623,13 +623,13 @@ Please draft a perfect next response to this customer. Match their language (Spa
       const fileName = `wa-attach-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       
       const { error: uploadError } = await supabase.storage
-        .from('product-pics')
+        .from('whatsapp-media')
         .upload(fileName, file);
         
       if (uploadError) throw uploadError;
       
       const { data: { publicUrl } } = supabase.storage
-        .from('product-pics')
+        .from('whatsapp-media')
         .getPublicUrl(fileName);
         
       await handleSendLiveWhatsappMessage(publicUrl);
