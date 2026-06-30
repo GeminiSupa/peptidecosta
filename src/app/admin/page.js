@@ -417,6 +417,47 @@ export default function AdminPage() {
   const [chatInputText, setChatInputText] = useState('');
   const [draftingAiReply, setDraftingAiReply] = useState(false);
 
+  // ── WA unread tracking (localStorage-backed) ──────────────────────────────
+  // seenMap: { [waId]: isoTimestamp } — the lastInboundAt we have "seen"
+  const [seenMap, setSeenMap] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('wa_seen_map') || '{}'); } catch { return {}; }
+  });
+
+  const markSeen = (waId, lastInboundAt) => {
+    if (!waId || !lastInboundAt) return;
+    setSeenMap(prev => {
+      const next = { ...prev, [waId]: lastInboundAt };
+      try { localStorage.setItem('wa_seen_map', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  // Auto-mark current open chat as seen when new messages arrive
+  useEffect(() => {
+    if (!activeChatWaId || !whatsappMessages.length) return;
+    const msgs = whatsappMessages.filter(m => String(m.wa_id).replace(/\D/g, '') === activeChatWaId);
+    const lastInbound = msgs.filter(m => m.direction === 'inbound').sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+    if (lastInbound) markSeen(activeChatWaId, lastInbound.created_at);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChatWaId, whatsappMessages]);
+
+  // Count chats with unseen inbound messages
+  const unreadWaCount = useMemo(() => {
+    const chatLastInbound = {};
+    whatsappMessages.forEach(m => {
+      if (m.direction !== 'inbound') return;
+      const waId = String(m.wa_id).replace(/\D/g, '');
+      if (!waId) return;
+      if (!chatLastInbound[waId] || new Date(m.created_at) > new Date(chatLastInbound[waId])) {
+        chatLastInbound[waId] = m.created_at;
+      }
+    });
+    return Object.entries(chatLastInbound).filter(([waId, lastAt]) => {
+      const seenAt = seenMap[waId];
+      return !seenAt || new Date(lastAt) > new Date(seenAt);
+    }).length;
+  }, [whatsappMessages, seenMap]);
+
   // Baileys (2nd Device) Inbox States
   const [baileysActiveChatWaId, setBaileysActiveChatWaId] = useState(null);
   const [baileysChatInputText, setBaileysChatInputText] = useState('');
@@ -3858,9 +3899,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <button 
                 className={`admin-tab-btn ${activeTab === 'whatsapp_ai' ? 'active' : ''}`}
                 onClick={() => navigateToTab('whatsapp_ai')}
+                style={{ position: 'relative' }}
               >
                 <MessageSquare size={14} style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981' }} />
                 <span className="tab-label" style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981', fontWeight: 'bold' }}>Sales WhatsApp</span>
+                {unreadWaCount > 0 && (
+                  <span className="admin-more-tab-badge" style={{ marginLeft: 'auto' }}>{unreadWaCount}</span>
+                )}
               </button>
               )}
               {hasAccess('wa_session') && (
@@ -7050,6 +7095,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 handleDraftAiChatReply={handleDraftAiChatReply}
                 draftingAiReply={draftingAiReply}
                 loadAdminData={loadAdminData}
+                seenMap={seenMap}
+                markSeen={markSeen}
               />
             </div>
           </div>
@@ -7220,6 +7267,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             handleDraftAiChatReply={handleDraftAiChatReply}
             draftingAiReply={draftingAiReply}
             loadAdminData={loadAdminData}
+            seenMap={seenMap}
+            markSeen={markSeen}
           />
         )}
       </div>
@@ -8255,6 +8304,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           >
             <MessageSquare size={18} />
             <span>Chat</span>
+            {unreadWaCount > 0 && (
+              <span className="admin-quick-nav-badge">{unreadWaCount}</span>
+            )}
           </button>
         )}
         {hasAccess('team_chat') && (
@@ -8323,6 +8375,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           )}
                           {tabId === 'team_chat' && unreadTeamMsgCount > 0 && (
                             <span className="admin-more-tab-badge">{unreadTeamMsgCount}</span>
+                          )}
+                          {tabId === 'whatsapp_ai' && unreadWaCount > 0 && (
+                            <span className="admin-more-tab-badge">{unreadWaCount}</span>
                           )}
                         </button>
                       ))}

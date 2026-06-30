@@ -64,6 +64,8 @@ export default function WhatsAppInbox({
   handleDraftAiChatReply,
   draftingAiReply,
   loadAdminData,
+  seenMap = {},
+  markSeen,
 }) {
   const isMobile = useIsMobileWa();
   const messagesEndRef = useRef(null);
@@ -108,6 +110,10 @@ export default function WhatsAppInbox({
       const messageName = cleanContactName(m.display_name);
       const inboundName = m.direction === 'inbound' ? messageName : existing?.inboundName;
       const crmName = contactNamesByPhone.get(waId) || contactNamesByPhone.get(waId.slice(-8));
+      // Track the most-recent inbound message timestamp per chat
+      const lastInboundAt = m.direction === 'inbound'
+        ? m.created_at
+        : (existing?.lastInboundAt || null);
 
       chatsMap.set(waId, {
         waId,
@@ -115,6 +121,7 @@ export default function WhatsAppInbox({
         inboundName,
         lastMessageText: m.message_text,
         lastMessageAt: m.created_at,
+        lastInboundAt,
         direction: m.direction,
         isAiLast: m.direction === 'outbound' && m.display_name === 'AI Copilot',
       });
@@ -124,6 +131,20 @@ export default function WhatsAppInbox({
       (a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt)
     );
   }, [contactNamesByPhone, whatsappMessages]);
+
+  // A chat has "unseen" inbound messages when lastInboundAt > the timestamp stored in seenMap
+  const hasUnread = (chat) => {
+    if (!chat.lastInboundAt) return false;
+    const seenAt = seenMap[chat.waId];
+    if (!seenAt) return true;
+    return new Date(chat.lastInboundAt) > new Date(seenAt);
+  };
+
+  const unreadCount = useMemo(
+    () => chatsList.filter(hasUnread).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chatsList, seenMap]
+  );
 
   const filteredChats = useMemo(() => {
     const query = chatSearch.trim().toLowerCase();
@@ -252,7 +273,24 @@ export default function WhatsAppInbox({
         <div className="admin-wa-conversations-panel">
           <div className="admin-wa-conversations-header">
             <span>Active WhatsApp Chats</span>
-            <span className="admin-wa-conversations-count">{chatsList.length}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {unreadCount > 0 && (
+                <span style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontSize: '0.7rem',
+                  fontWeight: '800',
+                  borderRadius: '999px',
+                  padding: '2px 7px',
+                  lineHeight: '1.4',
+                  minWidth: '20px',
+                  textAlign: 'center',
+                }}>
+                  {unreadCount} new
+                </span>
+              )}
+              <span className="admin-wa-conversations-count">{chatsList.length}</span>
+            </div>
           </div>
 
           <label className="admin-wa-search">
@@ -279,13 +317,17 @@ export default function WhatsAppInbox({
               <>
                 {visibleChats.map((chat) => {
                   const isActive = activeChatWaId === chat.waId;
+                  const chatIsUnread = hasUnread(chat);
 
                   return (
                     <button
                       type="button"
                       key={chat.waId}
-                      className={`admin-wa-chat-item${isActive ? ' active' : ''}`}
-                      onClick={() => setActiveChatWaId(chat.waId)}
+                      className={`admin-wa-chat-item${isActive ? ' active' : ''}${chatIsUnread ? ' admin-wa-chat-item--unread' : ''}`}
+                      onClick={() => {
+                        setActiveChatWaId(chat.waId);
+                        if (markSeen) markSeen(chat.waId, chat.lastInboundAt);
+                      }}
                     >
                       <div className="admin-wa-chat-item-top">
                         <span className="admin-wa-chat-item-name">{chat.displayName}</span>
@@ -300,11 +342,11 @@ export default function WhatsAppInbox({
                         <span className="admin-wa-chat-item-preview">{chat.lastMessageText}</span>
                         {chat.isAiLast ? (
                           <span className="admin-wa-badge admin-wa-badge--ai">AI</span>
+                        ) : chatIsUnread ? (
+                          <span className="admin-wa-unread-dot" aria-label="New message" />
                         ) : chat.direction === 'outbound' ? (
                           <span className="admin-wa-badge admin-wa-badge--human">Human</span>
-                        ) : (
-                          <span className="admin-wa-unread-dot" aria-label="Unread" />
-                        )}
+                        ) : null}
                       </div>
                     </button>
                   );
