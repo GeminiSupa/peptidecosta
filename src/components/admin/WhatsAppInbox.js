@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, ChevronLeft, ChevronRight, MessageCircle, Search, Send, Filter, X, Paperclip, Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Brain, Check, CheckCheck, ChevronLeft, ChevronRight, MessageCircle, Search, Send, Filter, X, Paperclip, Loader2 } from 'lucide-react';
 
 const INITIAL_CHAT_LIMIT = 30;
 const GENERIC_CONTACT_NAMES = new Set([
@@ -32,6 +32,31 @@ function addContactName(map, phone, name) {
   if (digits.length >= 8) map.set(digits.slice(-8), cleanName);
 }
 
+function getInitials(name) {
+  const words = String(name || 'Customer').trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map((word) => word[0]).join('').toUpperCase() || 'C';
+}
+
+function formatConversationTime(value) {
+  const date = new Date(value);
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function formatMessageDate(value) {
+  const date = new Date(value);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) return 'Today';
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function useIsMobileWa() {
   const [isMobile, setIsMobile] = useState(false);
 
@@ -48,10 +73,12 @@ function useIsMobileWa() {
 
 const WaChatItem = ({ chat, isActive, isUnread, onClick, onMarkUnread }) => {
   const [offset, setOffset] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
   const startX = useRef(null);
 
   const handleTouchStart = (e) => {
     startX.current = e.touches[0].clientX;
+    setIsSwiping(true);
   };
 
   const handleTouchMove = (e) => {
@@ -71,14 +98,15 @@ const WaChatItem = ({ chat, isActive, isUnread, onClick, onMarkUnread }) => {
       setOffset(0);
     }
     startX.current = null;
+    setIsSwiping(false);
   };
 
   return (
-    <div style={{ position: 'relative', marginBottom: '4px', overflow: 'hidden', borderRadius: '12px' }}>
-      <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '80px', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px' }}>
+    <div className="admin-wa-chat-item-shell">
+      <div className="admin-wa-chat-swipe-action">
         <button 
           onClick={(e) => { e.stopPropagation(); onMarkUnread(); setOffset(0); }}
-          style={{ background: 'none', border: 'none', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', width: '100%', height: '100%', cursor: 'pointer' }}
+          aria-label={`Mark conversation with ${chat.displayName} as unread`}
         >
           Unread
         </button>
@@ -87,30 +115,28 @@ const WaChatItem = ({ chat, isActive, isUnread, onClick, onMarkUnread }) => {
       <button
         type="button"
         className={`admin-wa-chat-item${isActive ? ' active' : ''}${isUnread ? ' admin-wa-chat-item--unread' : ''}`}
-        style={{ transform: `translateX(${offset}px)`, transition: startX.current !== null ? 'none' : 'transform 0.2s', margin: 0, width: '100%' }}
+        style={{ transform: `translateX(${offset}px)`, transition: isSwiping ? 'none' : 'transform 0.2s', margin: 0, width: '100%' }}
         onClick={() => { if (offset === 0) onClick(); else setOffset(0); }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <div className="admin-wa-chat-item-top">
-          <span className="admin-wa-chat-item-name">{chat.displayName}</span>
-          <span className="admin-wa-chat-item-time">
-            {new Date(chat.lastMessageAt).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </span>
-        </div>
-        <div className="admin-wa-chat-item-bottom">
-          <span className="admin-wa-chat-item-preview">{chat.lastMessageText || '📸 Image'}</span>
-          {chat.isAiLast ? (
-            <span className="admin-wa-badge admin-wa-badge--ai">AI</span>
-          ) : isUnread ? (
-            <span className="admin-wa-unread-dot" aria-label="New message" />
-          ) : chat.direction === 'outbound' ? (
-            <span className="admin-wa-badge admin-wa-badge--human">Human</span>
-          ) : null}
+        <span className="admin-wa-chat-avatar" aria-hidden>{getInitials(chat.displayName)}</span>
+        <div className="admin-wa-chat-item-content">
+          <div className="admin-wa-chat-item-top">
+            <span className="admin-wa-chat-item-name">{chat.displayName}</span>
+            <span className="admin-wa-chat-item-time">{formatConversationTime(chat.lastMessageAt)}</span>
+          </div>
+          <div className="admin-wa-chat-item-bottom">
+            <span className="admin-wa-chat-item-preview">{chat.lastMessageText || 'Photo'}</span>
+            {chat.isAiLast ? (
+              <span className="admin-wa-badge admin-wa-badge--ai">AI</span>
+            ) : isUnread ? (
+              <span className="admin-wa-unread-dot" aria-label="New message" />
+            ) : chat.direction === 'outbound' ? (
+              <CheckCheck size={14} className="admin-wa-chat-sent-icon" aria-label="Sent" />
+            ) : null}
+          </div>
         </div>
       </button>
     </div>
@@ -239,17 +265,16 @@ export default function WhatsAppInbox({
   }, [contactNamesByPhone, whatsappMessages]);
 
   // A chat has "unseen" inbound messages when lastInboundAt > the timestamp stored in seenMap
-  const hasUnread = (chat) => {
+  const hasUnread = useCallback((chat) => {
     if (!chat.lastInboundAt) return false;
     const seenAt = seenMap[chat.waId];
     if (!seenAt) return true;
     return new Date(chat.lastInboundAt) > new Date(seenAt);
-  };
+  }, [seenMap]);
 
   const unreadCount = useMemo(
     () => chatsList.filter(hasUnread).length,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [chatsList, seenMap]
+    [chatsList, hasUnread]
   );
 
   const filteredChats = useMemo(() => {
@@ -267,7 +292,7 @@ export default function WhatsAppInbox({
       );
     }
     return result;
-  }, [chatSearch, chatsList, showUnreadOnly, seenMap]);
+  }, [chatSearch, chatsList, hasUnread, showUnreadOnly]);
 
   const visibleChats = filteredChats.slice(0, visibleChatCount);
 
@@ -300,10 +325,6 @@ export default function WhatsAppInbox({
     document.body.classList.toggle('admin-wa-conversation-open', isOpen);
     return () => document.body.classList.remove('admin-wa-conversation-open');
   }, [activeChatWaId, isMobile]);
-
-  useEffect(() => {
-    setVisibleChatCount(INITIAL_CHAT_LIMIT);
-  }, [chatSearch]);
 
   useEffect(() => {
     if (!activeChatWaId) return;
@@ -420,7 +441,10 @@ export default function WhatsAppInbox({
               <input
                 type="search"
                 value={chatSearch}
-                onChange={(event) => setChatSearch(event.target.value)}
+                onChange={(event) => {
+                  setChatSearch(event.target.value);
+                  setVisibleChatCount(INITIAL_CHAT_LIMIT);
+                }}
                 placeholder="Search name, phone, or message"
                 aria-label="Search WhatsApp conversations"
               />
@@ -518,10 +542,17 @@ export default function WhatsAppInbox({
                   <ChevronLeft size={18} />
                 </button>
                 <div className="admin-wa-chat-header-text">
-                  <span className="admin-wa-chat-title">
-                    {currentChat?.displayName || activeChatWaId}
+                  <span className="admin-wa-chat-title-row">
+                    <span className="admin-wa-header-avatar" aria-hidden>
+                      {getInitials(currentChat?.displayName || activeChatWaId)}
+                    </span>
+                    <span>
+                      <span className="admin-wa-chat-title">
+                        {currentChat?.displayName || activeChatWaId}
+                      </span>
+                      <span className="admin-wa-chat-phone">+{activeChatWaId}</span>
+                    </span>
                   </span>
-                  <span className="admin-wa-chat-phone">+{activeChatWaId}</span>
                 </div>
               </div>
 
@@ -579,73 +610,87 @@ export default function WhatsAppInbox({
               {displayChatMessages.map((msg, index) => {
                 const isInbound = msg.direction === 'inbound';
                 const isAi = msg.display_name === 'AI Copilot';
+                const previousMessage = displayChatMessages[index - 1];
+                const showDateSeparator = !previousMessage ||
+                  new Date(previousMessage.created_at).toDateString() !== new Date(msg.created_at).toDateString();
+                const senderName = isInbound
+                  ? msg.display_name || currentChat?.displayName || 'Customer'
+                  : isAi
+                    ? 'AI Copilot'
+                    : 'Administrator';
 
                 return (
-                  <div
-                    key={msg.id || index}
-                    className={`admin-wa-bubble admin-wa-bubble--${
-                      isInbound ? 'inbound' : isAi ? 'ai' : 'human'
-                    }`}
-                  >
-                    <div className="admin-wa-bubble-meta">
-                      <span className="admin-wa-bubble-sender">
-                        {isInbound
-                          ? msg.display_name || 'Customer'
-                          : isAi
-                            ? 'AI Copilot'
-                            : 'Administrator'}
-                      </span>
-                      <span className="admin-wa-bubble-time">
-                        {!isInbound && msg.delivery_status && (
-                          <span className="admin-wa-delivery">
-                            {msg.delivery_status === 'read'
-                              ? '✅✅'
-                              : msg.delivery_status === 'delivered'
-                                ? '✔️✔️'
-                                : '✔️'}
+                  <React.Fragment key={msg.id || index}>
+                    {showDateSeparator && (
+                      <div className="admin-wa-date-separator">
+                        <span>{formatMessageDate(msg.created_at)}</span>
+                      </div>
+                    )}
+                    <div className={`admin-wa-message-row admin-wa-message-row--${isInbound ? 'inbound' : 'outbound'}`}>
+                      {isInbound && (
+                        <span className="admin-wa-message-avatar" aria-hidden>{getInitials(senderName)}</span>
+                      )}
+                      <div
+                        className={`admin-wa-bubble admin-wa-bubble--${
+                          isInbound ? 'inbound' : isAi ? 'ai' : 'human'
+                        }`}
+                      >
+                        <span className="admin-wa-bubble-sender">{senderName}</span>
+                        <div className="admin-wa-bubble-text">
+                          {msg.media_url && (
+                            <div className="admin-wa-media">
+                              {msg.media_url.endsWith('.pdf') ? (
+                                <a href={msg.media_url} target="_blank" rel="noopener noreferrer" className="admin-wa-document-link">
+                                  View document (PDF)
+                                </a>
+                              ) : (
+                                <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                                  {/* WhatsApp media hosts are dynamic and cannot be safely allowlisted for next/image. */}
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={msg.media_url}
+                                    alt="Attachment"
+                                    className="admin-wa-media-image"
+                                  />
+                                </a>
+                              )}
+                            </div>
+                          )}
+                          {msg.message_text}
+                        </div>
+                        <div className="admin-wa-bubble-footer">
+                          <span className="admin-wa-bubble-time">
+                            {new Date(msg.created_at).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
                           </span>
-                        )}
-                        {new Date(msg.created_at).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    </div>
-                    <div className="admin-wa-bubble-text">
-                      {msg.media_url && (
-                        <div style={{ marginBottom: '8px' }}>
-                          {msg.media_url.endsWith('.pdf') ? (
-                            <a href={msg.media_url} target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>
-                              📄 View Document (PDF)
-                            </a>
-                          ) : (
-                            <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
-                              <img 
-                                src={msg.media_url} 
-                                alt="Attachment" 
-                                style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', cursor: 'zoom-in' }} 
-                              />
-                            </a>
+                          {!isInbound && msg.delivery_status && (
+                            <span className={`admin-wa-delivery admin-wa-delivery--${msg.delivery_status}`} aria-label={`Message ${msg.delivery_status}`}>
+                              {msg.delivery_status === 'read' || msg.delivery_status === 'delivered'
+                                ? <CheckCheck size={14} aria-hidden />
+                                : <Check size={14} aria-hidden />}
+                            </span>
                           )}
                         </div>
-                      )}
-                      {msg.message_text}
+                      </div>
                     </div>
-                  </div>
+                  </React.Fragment>
                 );
               })}
               <div ref={messagesEndRef} className="admin-wa-messages-anchor" aria-hidden />
             </div>
 
             <div className="admin-wa-composer" ref={composerRef}>
-              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '8px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                <button type="button" onClick={() => setChatInputText(prev => prev + (prev ? ' ' : '') + 'Hello! How can I help you today?')} style={{ whiteSpace: 'nowrap', padding: '6px 12px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', color: '#38bdf8', fontSize: '0.75rem', cursor: 'pointer' }}>Hello 👋</button>
-                <button type="button" onClick={() => setChatInputText(prev => prev + (prev ? ' ' : '') + 'Here is our full catalog and price list: https://peptidescostarica.net/')} style={{ whiteSpace: 'nowrap', padding: '6px 12px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', color: '#38bdf8', fontSize: '0.75rem', cursor: 'pointer' }}>Price List 📋</button>
-                <button type="button" onClick={() => setChatInputText(prev => prev + (prev ? ' ' : '') + 'We offer fast local delivery in Costa Rica!')} style={{ whiteSpace: 'nowrap', padding: '6px 12px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', color: '#38bdf8', fontSize: '0.75rem', cursor: 'pointer' }}>Delivery 🚚</button>
+              <div className="admin-wa-quick-replies" aria-label="Quick replies">
+                <span className="admin-wa-quick-label">Quick replies</span>
+                <button type="button" onClick={() => setChatInputText(prev => prev + (prev ? ' ' : '') + 'Hello! How can I help you today?')}>Hello 👋</button>
+                <button type="button" onClick={() => setChatInputText(prev => prev + (prev ? ' ' : '') + 'Here is our full catalog and price list: https://peptidescostarica.net/')}>Price list</button>
+                <button type="button" onClick={() => setChatInputText(prev => prev + (prev ? ' ' : '') + 'We offer fast local delivery in Costa Rica!')}>Delivery</button>
               </div>
 
               <div className="admin-wa-composer-row">
-                <label className="admin-wa-attach-btn" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', minHeight: '48px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <label className="admin-wa-attach-btn" title="Attach an image">
                   {uploadingWaImage ? <Loader2 size={20} className="spinner" color="#94a3b8" /> : <Paperclip size={20} color="#94a3b8" />}
                   <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { if(handleWaImageUpload) handleWaImageUpload(e.target.files[0]); }} disabled={uploadingWaImage} />
                 </label>

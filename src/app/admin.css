@@ -3897,29 +3897,98 @@
 .admin-wa-conversations-scroll {
     flex: 1;
     overflow-y: auto;
-    padding: 8px;
+    padding: 6px 8px 10px;
     -webkit-overflow-scrolling: touch;
+}
+
+.admin-wa-chat-item-shell {
+    position: relative;
+    margin-bottom: 4px;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #2563eb;
+}
+
+.admin-wa-chat-swipe-action {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: 80px;
+    background: #2563eb;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+}
+
+.admin-wa-chat-swipe-action button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    font-size: 0.7rem;
+    font-weight: 800;
+    cursor: pointer;
 }
 
 .admin-wa-chat-item {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex-direction: row;
+    align-items: center;
+    gap: 11px;
     width: 100%;
-    padding: 12px;
+    min-height: 64px;
+    padding: 10px 11px;
     margin-bottom: 4px;
-    background: transparent;
+    background: #0e1626;
     border: 1px solid transparent;
     border-radius: 12px;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition: background 0.15s, border-color 0.15s, transform 0.2s;
     text-align: left;
     touch-action: manipulation;
 }
 
+.admin-wa-chat-item:hover {
+    background: #131f32;
+}
+
+.admin-wa-chat-item--unread {
+    background: #111e31;
+}
+
 .admin-wa-chat-item.active {
-    background: rgba(16, 185, 129, 0.1);
-    border-color: rgba(16, 185, 129, 0.2);
+    background: #132a2c;
+    border-color: rgba(45, 212, 191, 0.35);
+}
+
+.admin-wa-chat-avatar,
+.admin-wa-header-avatar,
+.admin-wa-message-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #24344f, #18243a);
+    color: #cbd5e1;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+.admin-wa-chat-avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 0.7rem;
+}
+
+.admin-wa-chat-item.active .admin-wa-chat-avatar {
+    background: linear-gradient(145deg, #14b8a6, #047857);
+    color: #fff;
+}
+
+.admin-wa-chat-item-content {
+    min-width: 0;
+    flex: 1;
 }
 
 .admin-wa-chat-item-top,
@@ -3933,15 +4002,15 @@
 
 .admin-wa-chat-item-name {
     font-size: 0.85rem;
-    font-weight: 700;
-    color: #cbd5e1;
+    font-weight: 650;
+    color: #e5edf7;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .admin-wa-chat-item.active .admin-wa-chat-item-name {
-    color: #4ade80;
+    color: #ccfbf1;
 }
 
 .admin-wa-chat-item-time {
@@ -3952,7 +4021,7 @@
 
 .admin-wa-chat-item-preview {
     font-size: 0.75rem;
-    color: #94a3b8;
+    color: #8391a7;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -3979,10 +4048,16 @@
 }
 
 .admin-wa-unread-dot {
-    width: 8px;
-    height: 8px;
-    background: #e11d48;
+    width: 9px;
+    height: 9px;
+    background: #2dd4bf;
     border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
+}
+
+.admin-wa-chat-sent-icon {
+    color: #64748b;
     flex-shrink: 0;
 }
 
@@ -4011,7 +4086,8 @@
 }
 
 .admin-wa-chat-header {
-    padding: 12px 16px;
+    min-height: 68px;
+    padding: 10px 16px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     background: rgba(255, 255, 255, 0.01);
     display: flex;
@@ -4031,6 +4107,21 @@
 
 .admin-wa-chat-header-text {
     min-width: 0;
+}
+
+.admin-wa-chat-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.admin-wa-header-avatar {
+    width: 38px;
+    height: 38px;
+    background: linear-gradient(145deg, #14b8a6, #047857);
+    color: #fff;
+    font-size: 0.72rem;
 }
 
 .admin-wa-chat-title {
@@ -4096,12 +4187,16 @@
 .admin-wa-messages {
     flex: 1;
     min-height: 0;
-    padding: 16px;
+    padding: 18px clamp(16px, 3vw, 32px) 24px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    background: radial-gradient(circle at top left, #0b111e, #070a12);
+    gap: 6px;
+    background:
+        radial-gradient(circle at 12% 18%, rgba(45, 212, 191, 0.035) 0 2px, transparent 3px),
+        radial-gradient(circle at 78% 72%, rgba(148, 163, 184, 0.035) 0 2px, transparent 3px),
+        linear-gradient(145deg, #080d17, #070b13 65%, #08111a);
+    background-size: 38px 38px, 52px 52px, auto;
     -webkit-overflow-scrolling: touch;
 }
 
@@ -4110,49 +4205,76 @@
     flex-shrink: 0;
 }
 
+.admin-wa-date-separator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 8px 0 12px;
+}
+
+.admin-wa-date-separator span {
+    padding: 5px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.88);
+    color: #8290a5;
+    font-size: 0.66rem;
+    font-weight: 700;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+}
+
+.admin-wa-message-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    width: 100%;
+}
+
+.admin-wa-message-row--outbound {
+    justify-content: flex-end;
+}
+
+.admin-wa-message-avatar {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 2px;
+    font-size: 0.58rem;
+}
+
 .admin-wa-bubble {
-    max-width: 72%;
+    width: fit-content;
+    max-width: min(76%, 680px);
     color: #f8fafc;
-    padding: 10px 14px;
-    font-size: 0.85rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    word-break: break-word;
+    padding: 9px 12px 7px;
+    font-size: 0.875rem;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+    overflow-wrap: anywhere;
 }
 
 .admin-wa-bubble--inbound {
-    align-self: flex-start;
-    background: #1f2937;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 14px 14px 14px 4px;
+    background: #192436;
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    border-radius: 4px 14px 14px 14px;
 }
 
 .admin-wa-bubble--ai {
-    align-self: flex-end;
-    background: rgba(16, 185, 129, 0.15);
-    border: 1px solid rgba(16, 185, 129, 0.2);
-    border-radius: 14px 14px 4px 14px;
+    background: #123b35;
+    border: 1px solid rgba(45, 212, 191, 0.22);
+    border-radius: 14px 4px 14px 14px;
 }
 
 .admin-wa-bubble--human {
-    align-self: flex-end;
-    background: rgba(56, 189, 248, 0.15);
-    border: 1px solid rgba(56, 189, 248, 0.2);
-    border-radius: 14px 14px 4px 14px;
-}
-
-.admin-wa-bubble-meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 4px;
+    background: #123d4c;
+    border: 1px solid rgba(56, 189, 248, 0.18);
+    border-radius: 14px 4px 14px 14px;
 }
 
 .admin-wa-bubble-sender {
-    font-size: 0.62rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
+    display: block;
+    margin-bottom: 3px;
+    font-size: 0.68rem;
+    font-weight: 750;
+    letter-spacing: 0.01em;
 }
 
 .admin-wa-bubble--inbound .admin-wa-bubble-sender { color: #94a3b8; }
@@ -4160,21 +4282,54 @@
 .admin-wa-bubble--human .admin-wa-bubble-sender { color: #38bdf8; }
 
 .admin-wa-bubble-time {
-    font-size: 0.58rem;
-    color: #64748b;
+    font-size: 0.61rem;
+    color: #8391a7;
+}
+
+.admin-wa-bubble-footer {
     display: flex;
     align-items: center;
-    gap: 4px;
-    flex-shrink: 0;
+    justify-content: flex-end;
+    gap: 3px;
+    min-height: 15px;
+    margin-top: 3px;
+}
+
+.admin-wa-delivery {
+    display: inline-flex;
+    color: #94a3b8;
+}
+
+.admin-wa-delivery--read {
+    color: #5eead4;
 }
 
 .admin-wa-bubble-text {
     white-space: pre-wrap;
-    line-height: 1.45;
+    line-height: 1.52;
+    color: #edf3fa;
+}
+
+.admin-wa-media {
+    margin-bottom: 8px;
+}
+
+.admin-wa-media-image {
+    display: block;
+    max-width: 100%;
+    max-height: 320px;
+    border-radius: 9px;
+    cursor: zoom-in;
+}
+
+.admin-wa-document-link {
+    color: #7dd3fc;
+    text-decoration: underline;
+    text-underline-offset: 2px;
 }
 
 .admin-wa-composer {
-    padding: 12px 16px max(12px, env(safe-area-inset-bottom, 0px));
+    padding: 10px 16px max(12px, env(safe-area-inset-bottom, 0px));
     border-top: 1px solid rgba(255, 255, 255, 0.06);
     background: rgba(255, 255, 255, 0.01);
     flex-shrink: 0;
@@ -4183,11 +4338,11 @@
 .admin-wa-composer-input {
     flex: 1;
     min-height: 48px;
-    background: #172237;
+    background: #111c2e;
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: white;
-    border-radius: 10px;
-    padding: 12px;
+    border-radius: 12px;
+    padding: 12px 14px;
     font-size: 16px;
     outline: none;
     resize: none;
@@ -4315,6 +4470,60 @@
     display: flex;
     gap: 10px;
     align-items: stretch;
+}
+
+.admin-wa-quick-replies {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    margin-bottom: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+.admin-wa-quick-replies::-webkit-scrollbar {
+    display: none;
+}
+
+.admin-wa-quick-label {
+    color: #64748b;
+    font-size: 0.68rem;
+    font-weight: 700;
+    white-space: nowrap;
+    margin-right: 2px;
+}
+
+.admin-wa-quick-replies button {
+    white-space: nowrap;
+    padding: 6px 11px;
+    background: rgba(45, 212, 191, 0.07);
+    border: 1px solid rgba(45, 212, 191, 0.18);
+    border-radius: 999px;
+    color: #99f6e4;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.admin-wa-quick-replies button:hover {
+    background: rgba(45, 212, 191, 0.13);
+    border-color: rgba(45, 212, 191, 0.32);
+}
+
+.admin-wa-attach-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    min-height: 48px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
 }
 
 .admin-wa-composer-actions {
@@ -4492,7 +4701,19 @@
     }
 
     .admin-wa-bubble {
-        max-width: 88%;
+        max-width: calc(100% - 42px);
+    }
+
+    .admin-wa-message-row--outbound .admin-wa-bubble {
+        max-width: 92%;
+    }
+
+    .admin-wa-messages {
+        padding: 14px 12px 18px;
+    }
+
+    .admin-wa-quick-label {
+        display: none;
     }
 
     .admin-wa-composer-row {
