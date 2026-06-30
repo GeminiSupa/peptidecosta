@@ -20,10 +20,10 @@ export async function POST(request) {
 
   try {
     const payload = await request.json();
-    const { to, message, customerName, orderId, sessionId } = payload;
+    const { to, message, customerName, orderId, sessionId, mediaUrl } = payload;
 
-    if (!to || !message) {
-      return NextResponse.json({ error: 'Missing required parameters: "to" and "message" are required' }, { status: 400 });
+    if (!to || (!message && !mediaUrl)) {
+      return NextResponse.json({ error: 'Missing required parameters: "to" and either "message" or "mediaUrl" are required' }, { status: 400 });
     }
 
     if (!ACCESS_TOKEN || !PHONE_NUMBER_ID) {
@@ -41,6 +41,23 @@ export async function POST(request) {
 
     console.log(`[WhatsApp Outbound] Sending message to ${cleanPhone} via Meta API...`);
 
+    // Construct the payload for Meta based on message type
+    const metaPayload = {
+      messaging_product: 'whatsapp',
+      to: cleanPhone,
+    };
+
+    if (mediaUrl) {
+      metaPayload.type = 'image';
+      metaPayload.image = { link: mediaUrl };
+      if (message && message.trim() !== '') {
+        metaPayload.image.caption = message.trim();
+      }
+    } else {
+      metaPayload.type = 'text';
+      metaPayload.text = { body: message };
+    }
+
     // Invoke Meta Cloud API
     const metaResponse = await fetch(
       `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
@@ -50,12 +67,7 @@ export async function POST(request) {
           'Authorization': `Bearer ${ACCESS_TOKEN}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: cleanPhone,
-          type: 'text',
-          text: { body: message },
-        }),
+        body: JSON.stringify(metaPayload),
       }
     );
 
@@ -86,8 +98,9 @@ export async function POST(request) {
           .insert({
             wa_id: cleanPhone,
             display_name: cleanDisplayName,
-            message_text: message,
-            message_type: 'text',
+            message_text: message || '',
+            media_url: mediaUrl || null,
+            message_type: mediaUrl ? 'image' : 'text',
             direction: 'outbound',
             matched_order_id: orderId || null,
             raw_payload: metaData,

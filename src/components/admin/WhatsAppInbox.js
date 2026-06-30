@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, ChevronLeft, ChevronRight, MessageCircle, Search, Send, Filter, X } from 'lucide-react';
+import { Brain, ChevronLeft, ChevronRight, MessageCircle, Search, Send, Filter, X, Paperclip, Loader2 } from 'lucide-react';
 
 const INITIAL_CHAT_LIMIT = 30;
 const GENERIC_CONTACT_NAMES = new Set([
@@ -46,6 +46,77 @@ function useIsMobileWa() {
   return isMobile;
 }
 
+const WaChatItem = ({ chat, isActive, isUnread, onClick, onMarkUnread }) => {
+  const [offset, setOffset] = useState(0);
+  const startX = useRef(null);
+
+  const handleTouchStart = (e) => {
+    startX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e) => {
+    if (startX.current === null) return;
+    const diff = e.touches[0].clientX - startX.current;
+    if (diff < 0) {
+      setOffset(Math.max(-80, diff));
+    } else {
+      setOffset(0);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (offset < -40) {
+      setOffset(-80);
+    } else {
+      setOffset(0);
+    }
+    startX.current = null;
+  };
+
+  return (
+    <div style={{ position: 'relative', marginBottom: '4px', overflow: 'hidden', borderRadius: '12px' }}>
+      <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '80px', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px' }}>
+        <button 
+          onClick={(e) => { e.stopPropagation(); onMarkUnread(); setOffset(0); }}
+          style={{ background: 'none', border: 'none', color: 'white', fontWeight: 'bold', fontSize: '0.7rem', width: '100%', height: '100%', cursor: 'pointer' }}
+        >
+          Unread
+        </button>
+      </div>
+      
+      <button
+        type="button"
+        className={`admin-wa-chat-item${isActive ? ' active' : ''}${isUnread ? ' admin-wa-chat-item--unread' : ''}`}
+        style={{ transform: `translateX(${offset}px)`, transition: startX.current !== null ? 'none' : 'transform 0.2s', margin: 0, width: '100%' }}
+        onClick={() => { if (offset === 0) onClick(); else setOffset(0); }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <div className="admin-wa-chat-item-top">
+          <span className="admin-wa-chat-item-name">{chat.displayName}</span>
+          <span className="admin-wa-chat-item-time">
+            {new Date(chat.lastMessageAt).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </span>
+        </div>
+        <div className="admin-wa-chat-item-bottom">
+          <span className="admin-wa-chat-item-preview">{chat.lastMessageText || '📸 Image'}</span>
+          {chat.isAiLast ? (
+            <span className="admin-wa-badge admin-wa-badge--ai">AI</span>
+          ) : isUnread ? (
+            <span className="admin-wa-unread-dot" aria-label="New message" />
+          ) : chat.direction === 'outbound' ? (
+            <span className="admin-wa-badge admin-wa-badge--human">Human</span>
+          ) : null}
+        </div>
+      </button>
+    </div>
+  );
+};
+
 export default function WhatsAppInbox({
   whatsappMessages,
   orders = [],
@@ -66,6 +137,8 @@ export default function WhatsAppInbox({
   loadAdminData,
   seenMap = {},
   markSeen,
+  uploadingWaImage,
+  handleWaImageUpload,
 }) {
   const isMobile = useIsMobileWa();
   const messagesEndRef = useRef(null);
@@ -75,6 +148,36 @@ export default function WhatsAppInbox({
   const [messageSearch, setMessageSearch] = useState('');
   const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [visibleChatCount, setVisibleChatCount] = useState(INITIAL_CHAT_LIMIT);
+
+  // Pull-to-refresh state
+  const scrollRef = useRef(null);
+  const [pullDist, setPullDist] = useState(0);
+  const pullStartY = useRef(null);
+
+  const handleListTouchStart = (e) => {
+    if (scrollRef.current && scrollRef.current.scrollTop === 0) {
+      pullStartY.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleListTouchMove = (e) => {
+    if (pullStartY.current !== null) {
+      const diff = e.touches[0].clientY - pullStartY.current;
+      if (diff > 0) {
+        setPullDist(Math.min(diff, 60));
+      } else {
+        setPullDist(0);
+      }
+    }
+  };
+
+  const handleListTouchEnd = () => {
+    if (pullDist >= 50) {
+      if (loadAdminData) loadAdminData();
+    }
+    setPullDist(0);
+    pullStartY.current = null;
+  };
 
   const contactNamesByPhone = useMemo(() => {
     const names = new Map();
@@ -342,7 +445,20 @@ export default function WhatsAppInbox({
             </button>
           </div>
 
-          <div className="admin-wa-conversations-scroll">
+          <div 
+            className="admin-wa-conversations-scroll" 
+            ref={scrollRef}
+            onTouchStart={handleListTouchStart}
+            onTouchMove={handleListTouchMove}
+            onTouchEnd={handleListTouchEnd}
+            style={{ position: 'relative' }}
+          >
+            {pullDist > 0 && (
+              <div style={{ height: `${pullDist}px`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.75rem', transition: 'height 0s' }}>
+                {pullDist >= 50 ? 'Release to refresh' : 'Pull to refresh'}
+              </div>
+            )}
+            
             {loadingWhatsappMessages ? (
               <div className="admin-wa-state-msg">Loading conversations...</div>
             ) : filteredChats.length === 0 ? (
@@ -358,35 +474,19 @@ export default function WhatsAppInbox({
                   const chatIsUnread = hasUnread(chat);
 
                   return (
-                    <button
-                      type="button"
+                    <WaChatItem
                       key={chat.waId}
-                      className={`admin-wa-chat-item${isActive ? ' active' : ''}${chatIsUnread ? ' admin-wa-chat-item--unread' : ''}`}
+                      chat={chat}
+                      isActive={isActive}
+                      isUnread={chatIsUnread}
                       onClick={() => {
                         setActiveChatWaId(chat.waId);
                         if (markSeen) markSeen(chat.waId, chat.lastInboundAt);
                       }}
-                    >
-                      <div className="admin-wa-chat-item-top">
-                        <span className="admin-wa-chat-item-name">{chat.displayName}</span>
-                        <span className="admin-wa-chat-item-time">
-                          {new Date(chat.lastMessageAt).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                      </div>
-                      <div className="admin-wa-chat-item-bottom">
-                        <span className="admin-wa-chat-item-preview">{chat.lastMessageText}</span>
-                        {chat.isAiLast ? (
-                          <span className="admin-wa-badge admin-wa-badge--ai">AI</span>
-                        ) : chatIsUnread ? (
-                          <span className="admin-wa-unread-dot" aria-label="New message" />
-                        ) : chat.direction === 'outbound' ? (
-                          <span className="admin-wa-badge admin-wa-badge--human">Human</span>
-                        ) : null}
-                      </div>
-                    </button>
+                      onMarkUnread={() => {
+                        if (markSeen) markSeen(chat.waId, new Date(0).toISOString()); // Resets seen state
+                      }}
+                    />
                   );
                 })}
                 {visibleChats.length < filteredChats.length && (
@@ -538,7 +638,17 @@ export default function WhatsAppInbox({
             </div>
 
             <div className="admin-wa-composer" ref={composerRef}>
+              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '8px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                <button type="button" onClick={() => setChatInputText(prev => prev + (prev ? ' ' : '') + 'Hello! How can I help you today?')} style={{ whiteSpace: 'nowrap', padding: '6px 12px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', color: '#38bdf8', fontSize: '0.75rem', cursor: 'pointer' }}>Hello 👋</button>
+                <button type="button" onClick={() => setChatInputText(prev => prev + (prev ? ' ' : '') + 'Here is our full catalog and price list: https://peptidescostarica.net/')} style={{ whiteSpace: 'nowrap', padding: '6px 12px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', color: '#38bdf8', fontSize: '0.75rem', cursor: 'pointer' }}>Price List 📋</button>
+                <button type="button" onClick={() => setChatInputText(prev => prev + (prev ? ' ' : '') + 'We offer fast local delivery in Costa Rica!')} style={{ whiteSpace: 'nowrap', padding: '6px 12px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', color: '#38bdf8', fontSize: '0.75rem', cursor: 'pointer' }}>Delivery 🚚</button>
+              </div>
+
               <div className="admin-wa-composer-row">
+                <label className="admin-wa-attach-btn" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '48px', minHeight: '48px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  {uploadingWaImage ? <Loader2 size={20} className="spinner" color="#94a3b8" /> : <Paperclip size={20} color="#94a3b8" />}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { if(handleWaImageUpload) handleWaImageUpload(e.target.files[0]); }} disabled={uploadingWaImage} />
+                </label>
                 <textarea
                   className="admin-wa-composer-input"
                   value={chatInputText}

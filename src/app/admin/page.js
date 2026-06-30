@@ -562,11 +562,11 @@ Please draft a perfect next response to this customer. Match their language (Spa
   };
 
   // Send Manual reply via WhatsApp Cloud API
-  const handleSendLiveWhatsappMessage = async () => {
-    if (!activeChatWaId || !chatInputText.trim()) return;
+  const handleSendLiveWhatsappMessage = async (mediaUrl = null) => {
+    if (!activeChatWaId || (!chatInputText.trim() && !mediaUrl)) return;
     
     const textToSend = chatInputText.trim();
-    setChatInputText('');
+    if (!mediaUrl) setChatInputText('');
 
     // Optimistically insert message into UI state thread
     const tempId = `temp-${Date.now()}`;
@@ -575,7 +575,8 @@ Please draft a perfect next response to this customer. Match their language (Spa
       wa_id: activeChatWaId,
       display_name: 'Peptides Costa Rica',
       message_text: textToSend,
-      message_type: 'text',
+      media_url: mediaUrl,
+      message_type: mediaUrl ? 'image' : 'text',
       direction: 'outbound',
       created_at: new Date().toISOString()
     };
@@ -589,6 +590,7 @@ Please draft a perfect next response to this customer. Match their language (Spa
         body: JSON.stringify({
           to: activeChatWaId,
           message: textToSend,
+          mediaUrl: mediaUrl,
           customerName: 'Peptides Customer'
         })
       });
@@ -605,7 +607,37 @@ Please draft a perfect next response to this customer. Match their language (Spa
       console.error(err);
       alert('❌ Failed to send WhatsApp: ' + err.message);
       setWhatsappMessages(prev => prev.filter(m => m.id !== tempId));
-      setChatInputText(textToSend);
+      if (!mediaUrl) setChatInputText(textToSend);
+    }
+  };
+
+  const [uploadingWaImage, setUploadingWaImage] = useState(false);
+
+  const handleWaImageUpload = async (file) => {
+    if (!file) return;
+    setUploadingWaImage(true);
+    try {
+      if (!isSupabaseConfigured || !supabase) throw new Error('Supabase not configured');
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `wa-attach-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('product-pics')
+        .upload(fileName, file);
+        
+      if (uploadError) throw uploadError;
+      
+      const { data: { publicUrl } } = supabase.storage
+        .from('product-pics')
+        .getPublicUrl(fileName);
+        
+      await handleSendLiveWhatsappMessage(publicUrl);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to send image: ' + err.message);
+    } finally {
+      setUploadingWaImage(false);
     }
   };
 
@@ -7097,6 +7129,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 loadAdminData={loadAdminData}
                 seenMap={seenMap}
                 markSeen={markSeen}
+                // (Baileys might not support image upload through same mechanism easily, but we'll pass it anyway)
+                uploadingWaImage={uploadingWaImage}
+                handleWaImageUpload={handleWaImageUpload}
               />
             </div>
           </div>
@@ -7269,6 +7304,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             loadAdminData={loadAdminData}
             seenMap={seenMap}
             markSeen={markSeen}
+            uploadingWaImage={uploadingWaImage}
+            handleWaImageUpload={handleWaImageUpload}
           />
         )}
       </div>
