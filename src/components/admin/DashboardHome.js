@@ -219,16 +219,8 @@ export default function DashboardHome({
             <div className="dashboard-mini-list">
               {stats.recentOrders.map((o) => {
                 const _oItems = Array.isArray(o.items) ? o.items : [];
-                const _oSubtotal = _oItems.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 1), 0);
-                const _oVials = _oItems.reduce((s, i) => s + (Number(i.qty) || 1), 0);
-                let _oDisc = 0;
-                if (_oVials >= 10) _oDisc = 20;
-                else if (_oVials >= 5) _oDisc = 15;
-                const _oDiscSubtotal = _oDisc > 0 ? _oSubtotal * (1 - _oDisc / 100) : _oSubtotal;
-                const _oShip = o.currency === 'USD' ? (Number(o.shipping_cost_usd) || 0) : (Number(o.shipping_cost_crc) || 0);
-                const _oComputed = _oDiscSubtotal + _oShip;
                 const _oStored = o.currency === 'USD' ? Number(o.total_usd || 0) : Number(o.total_crc || 0);
-                const _oDisplay = (_oSubtotal > 0 && Math.abs(_oComputed - _oStored) > 1) ? _oComputed : _oStored;
+                const _oDisplay = _oStored;
                 return (
                 <button
                   key={o.id}

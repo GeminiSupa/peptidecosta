@@ -4634,25 +4634,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         const items = Array.isArray(order.items) ? order.items : [];
                         const orderDate = new Date(order.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
 
-                        // Compute correct displayed total (mirrors OrderDetailPanel logic)
-                        // so it reflects the volume discount even if total_crc/total_usd in the DB
-                        // was stored before the discount was applied.
-                        const _itemsSubtotal = items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 1), 0);
                         const _vialCount = items.reduce((s, i) => s + (Number(i.qty) || 1), 0);
                         let _discountPct = 0;
                         if (_vialCount >= 10) _discountPct = 20;
                         else if (_vialCount >= 5) _discountPct = 15;
-                        const _discountedSubtotal = _discountPct > 0 ? _itemsSubtotal * (1 - _discountPct / 100) : _itemsSubtotal;
-                        const _shipping = order.currency === 'USD'
-                          ? (Number(order.shipping_cost_usd) || 0)
-                          : (Number(order.shipping_cost_crc) || 0);
-                        const _computedTotal = _discountedSubtotal + _shipping;
-                        // Use computed total if it differs meaningfully from the stored one
-                        // (handles legacy orders where stored total = pre-discount subtotal)
+                        
                         const _storedTotal = order.currency === 'USD' ? Number(order.total_usd || 0) : Number(order.total_crc || 0);
-                        const _displayTotal = (_itemsSubtotal > 0 && Math.abs(_computedTotal - _storedTotal) > 1)
-                          ? _computedTotal
-                          : _storedTotal;
+                        const _displayTotal = _storedTotal;
                         
                         return (
                           <tr key={order.id}>
