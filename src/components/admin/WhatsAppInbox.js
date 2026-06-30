@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, ChevronLeft, ChevronRight, MessageCircle, Search, Send } from 'lucide-react';
+import { Brain, ChevronLeft, ChevronRight, MessageCircle, Search, Send, Filter, X } from 'lucide-react';
 
 const INITIAL_CHAT_LIMIT = 30;
 const GENERIC_CONTACT_NAMES = new Set([
@@ -71,6 +71,9 @@ export default function WhatsAppInbox({
   const messagesEndRef = useRef(null);
   const composerRef = useRef(null);
   const [chatSearch, setChatSearch] = useState('');
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [messageSearch, setMessageSearch] = useState('');
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [visibleChatCount, setVisibleChatCount] = useState(INITIAL_CHAT_LIMIT);
 
   const contactNamesByPhone = useMemo(() => {
@@ -147,15 +150,21 @@ export default function WhatsAppInbox({
   );
 
   const filteredChats = useMemo(() => {
+    let result = chatsList;
+    if (showUnreadOnly) {
+      result = result.filter(hasUnread);
+    }
     const query = chatSearch.trim().toLowerCase();
-    if (!query) return chatsList;
-    const digits = normalizePhone(query);
-    return chatsList.filter((chat) =>
-      chat.displayName.toLowerCase().includes(query) ||
-      chat.lastMessageText?.toLowerCase().includes(query) ||
-      (digits && chat.waId.includes(digits))
-    );
-  }, [chatSearch, chatsList]);
+    if (query) {
+      const digits = normalizePhone(query);
+      result = result.filter((chat) =>
+        chat.displayName.toLowerCase().includes(query) ||
+        chat.lastMessageText?.toLowerCase().includes(query) ||
+        (digits && chat.waId.includes(digits))
+      );
+    }
+    return result;
+  }, [chatSearch, chatsList, showUnreadOnly, seenMap]);
 
   const visibleChats = filteredChats.slice(0, visibleChatCount);
 
@@ -166,6 +175,15 @@ export default function WhatsAppInbox({
         .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
     [whatsappMessages, activeChatWaId]
   );
+
+  const displayChatMessages = useMemo(() => {
+    const query = messageSearch.trim().toLowerCase();
+    if (!query) return activeChatMessages;
+    return activeChatMessages.filter(m => 
+      m.message_text?.toLowerCase().includes(query) || 
+      m.display_name?.toLowerCase().includes(query)
+    );
+  }, [activeChatMessages, messageSearch]);
 
   const currentChat = chatsList.find((c) => c.waId === activeChatWaId);
 
@@ -293,16 +311,36 @@ export default function WhatsAppInbox({
             </div>
           </div>
 
-          <label className="admin-wa-search">
-            <Search size={16} aria-hidden />
-            <input
-              type="search"
-              value={chatSearch}
-              onChange={(event) => setChatSearch(event.target.value)}
-              placeholder="Search name, phone, or message"
-              aria-label="Search WhatsApp conversations"
-            />
-          </label>
+          <div className="admin-wa-search-row" style={{ display: 'flex', gap: '8px', margin: '10px 12px' }}>
+            <label className="admin-wa-search" style={{ margin: 0, flex: 1 }}>
+              <Search size={16} aria-hidden />
+              <input
+                type="search"
+                value={chatSearch}
+                onChange={(event) => setChatSearch(event.target.value)}
+                placeholder="Search name, phone, or message"
+                aria-label="Search WhatsApp conversations"
+              />
+            </label>
+            <button 
+              type="button"
+              className="admin-wa-refresh-btn"
+              style={{ 
+                background: showUnreadOnly ? '#10b981' : 'transparent', 
+                color: showUnreadOnly ? 'white' : '#94a3b8', 
+                borderColor: showUnreadOnly ? '#10b981' : 'rgba(255,255,255,0.1)',
+                minWidth: '44px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              onClick={() => setShowUnreadOnly(!showUnreadOnly)}
+              title="Show unread only"
+            >
+              <Filter size={16} />
+            </button>
+          </div>
 
           <div className="admin-wa-conversations-scroll">
             {loadingWhatsappMessages ? (
@@ -388,6 +426,18 @@ export default function WhatsAppInbox({
               </div>
 
               <div className="admin-wa-chat-header-actions">
+                <button 
+                  type="button" 
+                  className="admin-wa-refresh-btn" 
+                  onClick={() => {
+                    setShowMessageSearch(!showMessageSearch);
+                    if (showMessageSearch) setMessageSearch('');
+                  }} 
+                  style={{ minWidth: '44px', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="Search in conversation"
+                >
+                  <Search size={16} />
+                </button>
                 {whatsappSettings.ai_auto_reply && (
                   <span className="admin-wa-autopilot-badge">
                     <span className="admin-wa-autopilot-dot" aria-hidden />
@@ -401,8 +451,32 @@ export default function WhatsAppInbox({
               </div>
             </div>
 
+            {showMessageSearch && (
+              <div style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <Search size={14} color="#64748b" />
+                <input 
+                  type="search"
+                  value={messageSearch}
+                  onChange={e => setMessageSearch(e.target.value)}
+                  placeholder="Search in this conversation..."
+                  style={{ flex: 1, background: '#0a1120', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem', outline: 'none' }}
+                  autoFocus
+                />
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setShowMessageSearch(false);
+                    setMessageSearch('');
+                  }}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+
             <div className="admin-wa-messages">
-              {activeChatMessages.map((msg, index) => {
+              {displayChatMessages.map((msg, index) => {
                 const isInbound = msg.direction === 'inbound';
                 const isAi = msg.display_name === 'AI Copilot';
 
