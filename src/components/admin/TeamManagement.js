@@ -425,33 +425,41 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       </div>
 
       {/* Sub-tab Toggle buttons */}
-      <div className="admin-team-subtabs" style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px' }}>
+      <div className="admin-team-subtabs" style={{ display: 'flex', gap: '12px', marginBottom: '24px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '16px' }}>
         <button 
           onClick={() => setActiveSubTab('members')}
-          className="admin-btn"
           style={{ 
-            background: activeSubTab === 'members' ? '#38bdf8' : 'rgba(255,255,255,0.02)', 
-            color: activeSubTab === 'members' ? '#0e1626' : '#94a3b8',
-            border: '1px solid rgba(255,255,255,0.05)',
-            fontWeight: 'bold',
-            padding: '8px 16px',
-            borderRadius: '8px',
-            cursor: 'pointer'
+            background: activeSubTab === 'members' ? 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)' : 'rgba(255,255,255,0.03)', 
+            color: activeSubTab === 'members' ? '#ffffff' : '#94a3b8',
+            border: activeSubTab === 'members' ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(255,255,255,0.05)',
+            boxShadow: activeSubTab === 'members' ? '0 4px 12px rgba(56, 189, 248, 0.25)' : 'none',
+            fontWeight: '600',
+            padding: '10px 20px',
+            borderRadius: '10px',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease-in-out',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
           }}
         >
           👥 Manage Members & Rates
         </button>
         <button 
           onClick={() => setActiveSubTab('payouts')}
-          className="admin-btn"
           style={{ 
-            background: activeSubTab === 'payouts' ? '#38bdf8' : 'rgba(255,255,255,0.02)', 
-            color: activeSubTab === 'payouts' ? '#0e1626' : '#94a3b8',
-            border: '1px solid rgba(255,255,255,0.05)',
-            fontWeight: 'bold',
-            padding: '8px 16px',
-            borderRadius: '8px',
-            cursor: 'pointer'
+            background: activeSubTab === 'payouts' ? 'linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)' : 'rgba(255,255,255,0.03)', 
+            color: activeSubTab === 'payouts' ? '#ffffff' : '#94a3b8',
+            border: activeSubTab === 'payouts' ? '1px solid rgba(168, 85, 247, 0.4)' : '1px solid rgba(255,255,255,0.05)',
+            boxShadow: activeSubTab === 'payouts' ? '0 4px 12px rgba(168, 85, 247, 0.25)' : 'none',
+            fontWeight: '600',
+            padding: '10px 20px',
+            borderRadius: '10px',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease-in-out',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
           }}
         >
           💰 Commission Payouts
@@ -462,24 +470,24 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
         loading ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading team members...</div>
         ) : (
-          <div className="table-responsive" style={{ background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="table-responsive" style={{ background: 'linear-gradient(145deg, rgba(14, 22, 38, 0.8) 0%, rgba(10, 15, 28, 0.9) 100%)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', overflow: 'hidden' }}>
             <table className="spreadsheet-table responsive-table">
-              <thead>
+              <thead style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                 <tr>
-                  <th style={{ padding: '16px' }}>Name</th>
-                  <th style={{ padding: '16px' }}>Email</th>
-                  <th style={{ padding: '16px' }}>Role</th>
-                  <th style={{ padding: '16px' }}>Base Salary</th>
-                  <th style={{ padding: '16px' }}>Commission</th>
-                  <th style={{ padding: '16px' }}>Access</th>
-                  <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
+                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Name</th>
+                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Email</th>
+                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Role</th>
+                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Base Salary</th>
+                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Commission</th>
+                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Access</th>
+                  <th style={{ padding: '18px 16px', textAlign: 'right', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map(u => (
-                  <tr key={u.id}>
-                    <td data-label="Name" style={{ padding: '16px', fontWeight: 'bold' }}>{u.name || 'N/A'}</td>
-                    <td data-label="Email" style={{ padding: '16px', wordBreak: 'break-all' }}>{u.email}</td>
+                  <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s', ':hover': { background: 'rgba(255,255,255,0.01)' } }}>
+                    <td data-label="Name" style={{ padding: '16px', fontWeight: 'bold', color: '#f8fafc' }}>{u.name || 'N/A'}</td>
+                    <td data-label="Email" style={{ padding: '16px', wordBreak: 'break-all', color: '#cbd5e1' }}>{u.email}</td>
                     <td data-label="Role" style={{ padding: '16px' }}>
                       {u.is_superadmin ? (
                         <span className="status-badge" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
