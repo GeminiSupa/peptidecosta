@@ -45,13 +45,20 @@ export default function ManualOrderModal({ open, onClose, products = [], onCreat
     const price = form.currency === 'USD'
       ? parseFloat(String(p.priceUsd || '0').replace(/[^0-9.]/g, '')) || 0
       : parseFloat(String(p.priceCrc || '0').replace(/[^0-9.]/g, '')) || 0;
-    updateItem(idx, 'product', name);
-    updateItem(idx, 'price', price);
+    const items = [...form.items];
+    items[idx] = { ...items[idx], product: name, price: price };
+    setForm({ ...form, items });
   };
 
   const itemsSubtotal = form.items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 1), 0);
+  const vialCount = form.items.reduce((s, i) => s + (Number(i.qty) || 1), 0);
+  let discountPct = 0;
+  if (vialCount >= 10) discountPct = 20;
+  else if (vialCount >= 5) discountPct = 15;
+  const discountedSubtotal = discountPct > 0 ? itemsSubtotal * (1 - discountPct / 100) : itemsSubtotal;
+
   const shipping = form.currency === 'USD' ? Number(form.shipping_cost_usd) || 0 : Number(form.shipping_cost_crc) || 0;
-  const total = itemsSubtotal + shipping;
+  const total = discountedSubtotal + shipping;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -173,7 +180,12 @@ export default function ManualOrderModal({ open, onClose, products = [], onCreat
                 [form.currency === 'USD' ? 'shipping_cost_usd' : 'shipping_cost_crc']: e.target.value,
               })}
             />
-            <div style={{ display: 'flex', alignItems: 'center', fontWeight: 800, fontSize: '1.1rem', color: '#38bdf8' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', fontWeight: 800, fontSize: '1.1rem', color: '#38bdf8' }}>
+              {discountPct > 0 && (
+                <div style={{ fontSize: '0.8rem', color: '#16a34a', fontWeight: 'bold' }}>
+                  Volume discount: {discountPct}% off
+                </div>
+              )}
               Total: {form.currency === 'USD' ? `$${total.toFixed(2)}` : `₡${Math.round(total).toLocaleString()}`}
             </div>
           </div>

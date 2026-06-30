@@ -112,7 +112,14 @@ export default function OrderDetailPanel({
     ? Number(shippingUsd) || 0
     : Number(shippingCrc) || 0;
   const itemsSubtotal = getItemsSubtotal(editItems);
-  const orderTotal = itemsSubtotal + shipping;
+  
+  const vialCount = editItems.reduce((sum, item) => sum + (Number(item.qty) || 1), 0);
+  let discountPct = 0;
+  if (vialCount >= 10) discountPct = 20;
+  else if (vialCount >= 5) discountPct = 15;
+  const discountedSubtotal = discountPct > 0 ? itemsSubtotal * (1 - discountPct / 100) : itemsSubtotal;
+  
+  const orderTotal = discountedSubtotal + shipping;
 
   const patchOrder = async (updates, activityEntry) => {
     const res = await adminFetch('/api/admin/orders/update', {
@@ -139,7 +146,7 @@ export default function OrderDetailPanel({
     const nextShippingCrc = Number(shippingCrc) || 0;
     const nextShippingUsd = Number(shippingUsd) || 0;
     const nextShipping = order.currency === 'USD' ? nextShippingUsd : nextShippingCrc;
-    const nextTotal = itemsSubtotal + nextShipping;
+    const nextTotal = discountedSubtotal + nextShipping;
     const totalUsd = order.currency === 'USD'
       ? Number(nextTotal.toFixed(2))
       : Number((nextTotal / FALLBACK_EXCHANGE_RATE).toFixed(2));
@@ -215,11 +222,17 @@ export default function OrderDetailPanel({
     }));
 
     const subtotal = normalizedItems.reduce((s, i) => s + i.price * i.qty, 0);
+    const vc = normalizedItems.reduce((s, i) => s + i.qty, 0);
+    let disc = 0;
+    if (vc >= 10) disc = 20;
+    else if (vc >= 5) disc = 15;
+    const discSubtotal = disc > 0 ? subtotal * (1 - disc / 100) : subtotal;
+
     const ship = order.currency === 'USD'
       ? Number(shippingUsd) || 0
       : Number(shippingCrc) || 0;
-    const total = subtotal + ship;
-    const totalUsd = order.currency === 'USD' ? total : Math.round(total / FALLBACK_EXCHANGE_RATE);
+    const total = discSubtotal + ship;
+    const totalUsd = order.currency === 'USD' ? Number(total.toFixed(2)) : Number((total / FALLBACK_EXCHANGE_RATE).toFixed(2));
     const totalCrc = order.currency === 'CRC' ? Math.round(total) : Math.round(total * FALLBACK_EXCHANGE_RATE);
 
     try {
@@ -419,6 +432,12 @@ export default function OrderDetailPanel({
 
           <div className="order-detail-totals">
             <div><span>Items subtotal</span><span>{order.currency === 'USD' ? `$${itemsSubtotal.toFixed(2)}` : `₡${itemsSubtotal.toLocaleString()}`}</span></div>
+            {discountPct > 0 && (
+              <div style={{ color: '#16a34a' }}>
+                <span>Volume discount ({discountPct}%)</span>
+                <span>{order.currency === 'USD' ? `-$${(itemsSubtotal - discountedSubtotal).toFixed(2)}` : `-₡${Math.round(itemsSubtotal - discountedSubtotal).toLocaleString()}`}</span>
+              </div>
+            )}
             <div><span>Shipping</span><span>₡{shippingCrc || 0} / ${shippingUsd || 0}</span></div>
             <div className="order-detail-total-line">
               <span>Total (preview)</span>
