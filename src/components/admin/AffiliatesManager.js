@@ -339,6 +339,10 @@ export default function AffiliatesManager({ products = [] }) {
                     <option value={0.10}>10% Customer Discount</option>
                     <option value={0.15}>15% Customer Discount</option>
                     <option value={0.20}>20% Customer Discount</option>
+                    <option value={0.25}>25% Customer Discount</option>
+                    <option value={0.30}>30% Customer Discount</option>
+                    <option value={0.40}>40% Customer Discount</option>
+                    <option value={0.50}>50% Customer Discount</option>
                   </select>
                   <button type="submit" style={btnStyle('#059669')}><Plus size={16} /> Create Code</button>
                 </div>
@@ -565,6 +569,9 @@ export default function AffiliatesManager({ products = [] }) {
                   <option value={0.15}>15% Off</option>
                   <option value={0.20}>20% Off</option>
                   <option value={0.25}>25% Off</option>
+                  <option value={0.30}>30% Off</option>
+                  <option value={0.40}>40% Off</option>
+                  <option value={0.50}>50% Off</option>
                 </select>
               </div>
 

@@ -295,6 +295,9 @@ export default function BroadcastsPanel({ products = [] }) {
               <option value="0.15">15% Off</option>
               <option value="0.20">20% Off</option>
               <option value="0.25">25% Off</option>
+              <option value="0.30">30% Off</option>
+              <option value="0.40">40% Off</option>
+              <option value="0.50">50% Off</option>
             </select>
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
