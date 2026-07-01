@@ -75,6 +75,28 @@ export async function POST(request) {
 
           console.log(`[WhatsApp Webhook] 📩 Message from ${waId} (${displayName || 'Unknown'}): "${messageText.substring(0, 100)}..."`);
 
+          // ── Forward notification to admin (+50684046973) ──
+          if (ACCESS_TOKEN && PHONE_NUMBER_ID && waId !== '50684046973') {
+            const adminNotificationText = `🚨 *New Inbound Message*\n\n*From:* ${displayName || 'Unknown'} (+${waId})\n*Message:* ${messageText}`;
+            fetch(
+              `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${ACCESS_TOKEN}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  messaging_product: 'whatsapp',
+                  to: '50684046973',
+                  type: 'text',
+                  text: { body: adminNotificationText },
+                }),
+              }
+            ).catch(err => console.error('[WhatsApp Webhook] Failed to send admin notification:', err));
+          }
+
+
           // ── Try to match to an existing order ──
           let matchedOrderId = null;
 
