@@ -95,11 +95,8 @@ export async function POST(request) {
         target_tags: target_tags || null,
         design_json, 
         html_content,
-        from_name: from_name || null,
-        from_email: from_email || null,
-        reply_to: reply_to || null,
         preview_text: preview_text || null,
-        scheduled_at: scheduled_at || null,
+        scheduled_for: scheduled_at || null,
         status
       }])
       .select()
@@ -110,7 +107,7 @@ export async function POST(request) {
     return NextResponse.json({ campaign: data });
   } catch (err) {
     console.error('Error saving campaign:', err);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }
 
@@ -149,12 +146,9 @@ export async function PUT(request) {
     if (target_tags !== undefined) updates.target_tags = target_tags || null;
     if (design_json !== undefined) updates.design_json = design_json;
     if (html_content !== undefined) updates.html_content = html_content;
-    if (from_name !== undefined) updates.from_name = from_name || null;
-    if (from_email !== undefined) updates.from_email = from_email || null;
-    if (reply_to !== undefined) updates.reply_to = reply_to || null;
     if (preview_text !== undefined) updates.preview_text = preview_text || null;
     if (scheduled_at !== undefined) {
-      updates.scheduled_at = scheduled_at || null;
+      updates.scheduled_for = scheduled_at || null;
       updates.status = scheduled_at ? 'scheduled' : 'draft';
     }
 
@@ -170,7 +164,7 @@ export async function PUT(request) {
     return NextResponse.json({ campaign: data });
   } catch (err) {
     console.error('Error updating campaign:', err);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }
 
