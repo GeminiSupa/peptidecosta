@@ -241,42 +241,41 @@ export async function POST(request) {
     } // Close the else block
 
     const contacts = Array.from(targets.values());
-    let queuedCount = 0;
     
-    // Batching logic for large broadcasts
-    const BATCH_SIZE = 200;
-    let contactsToProcessNow = contacts;
+    // IF MORE THAN 10 CONTACTS, SCHEDULE IT TO PREVENT VERCEL TIMEOUT
+    if (contacts.length > 10) {
+      const allContactStrs = contacts.map(c => {
+        if (c.phone && c.email) return `${c.phone}|${c.email}`;
+        if (c.phone) return `${c.phone}`;
+        if (c.email) return `${c.email}`;
+        return '';
+      }).filter(Boolean).join(',');
 
-    if (enableBatching && contacts.length > BATCH_SIZE) {
-      contactsToProcessNow = contacts.slice(0, BATCH_SIZE);
-      const remainingContacts = contacts.slice(BATCH_SIZE);
-      
-      // Chunk remaining into daily schedules
-      const chunks = [];
-      for (let i = 0; i < remainingContacts.length; i += BATCH_SIZE) {
-        chunks.push(remainingContacts.slice(i, i + BATCH_SIZE));
-      }
+      const { data: inserted, error: insertError } = await supabase.from('scheduled_broadcasts').insert({
+        audience: 'custom',
+        custom_contacts: allContactStrs,
+        channels: { ...channels, whatsappTemplateName, whatsappTemplateLanguage },
+        message: message || '',
+        scheduled_at: new Date().toISOString(),
+        status: 'pending'
+      }).select().single();
 
-      const schedulePromises = chunks.map(async (chunk, index) => {
-        const scheduleDate = scheduledAt ? new Date(scheduledAt) : new Date();
-        scheduleDate.setDate(scheduleDate.getDate() + index + 1); // Add 1 day for each chunk
-        
-        const chunkCustomList = chunk.map(c => c.phone || c.email).join(',');
-        
-        await supabase.from('scheduled_broadcasts').insert({
-          audience: 'custom',
-          custom_contacts: chunkCustomList,
-          channels,
-          message,
-          scheduled_at: scheduleDate.toISOString(),
-          status: 'pending'
-        });
-      });
-      await Promise.all(schedulePromises);
+      if (insertError) throw insertError;
+
+      // Trigger the processor asynchronously
+      const host = request.headers.get('host') || 'localhost:3000';
+      const protocol = host.includes('localhost') ? 'http' : 'https';
+      fetch(`${protocol}://${host}/api/cron/process-broadcasts`, {
+        method: 'GET',
+        headers: { authorization: `Bearer ${process.env.CRON_SECRET || ''}` }
+      }).catch(() => {});
+
+      return NextResponse.json({ success: true, queuedCount: contacts.length, text: `Queued ${contacts.length} recipients for immediate background sending.` });
     }
 
-    // Send the broadcasts for the current batch
-    const promises = contactsToProcessNow.map(async (contact, i) => {
+    let queuedCount = 0;
+
+    const promises = contacts.map(async (contact, i) => {
       // Add artificial delay to avoid hitting rate limits instantly
       await new Promise(r => setTimeout(r, i * 20)); 
       

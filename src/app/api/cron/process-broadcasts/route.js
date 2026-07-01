@@ -141,25 +141,55 @@ export async function GET(request) {
       }
 
       const contacts = Array.from(targets.values());
+      const BATCH_SIZE = 30;
+      const batchContacts = contacts.slice(0, BATCH_SIZE);
+      const remainingContacts = contacts.slice(BATCH_SIZE);
+
       let queuedCount = 0;
 
-      for (let i = 0; i < contacts.length; i++) {
-        const contact = contacts[i];
-        await new Promise(r => setTimeout(r, 150)); 
+      for (let i = 0; i < batchContacts.length; i++) {
+        const contact = batchContacts[i];
+        await new Promise(r => setTimeout(r, 20)); 
         let sentWhatsapp = false;
         let sentEmail = false;
 
         if (channels.whatsapp && contact.phone) {
-          sentWhatsapp = await sendWhatsApp(contact.phone, message);
+          sentWhatsapp = await sendWhatsApp(contact.phone, message, channels.whatsappTemplateName, contact.name, channels.whatsappTemplateLanguage);
         }
-        if (channels.email && contact.email) {
+        if (channels.email && contact.email && message) {
           sentEmail = await sendEmail(contact.email, message, channels.emailSubject);
         }
         if (sentWhatsapp || sentEmail) queuedCount++;
       }
 
       totalSent += queuedCount;
-      await supabase.from('scheduled_broadcasts').update({ status: 'completed' }).eq('id', broadcast.id);
+
+      if (remainingContacts.length > 0) {
+        // Re-queue the remaining contacts
+        const remainingStr = remainingContacts.map(c => {
+          if (c.phone && c.email) return `${c.phone}|${c.email}`;
+          if (c.phone) return `${c.phone}`;
+          if (c.email) return `${c.email}`;
+          return '';
+        }).filter(Boolean).join(',');
+
+        await supabase.from('scheduled_broadcasts').update({ 
+          status: 'pending',
+          audience: 'custom',
+          custom_contacts: remainingStr
+        }).eq('id', broadcast.id);
+
+        // Immediately trigger the next run asynchronously
+        const host = request.headers.get('host') || 'localhost:3000';
+        const protocol = host.includes('localhost') ? 'http' : 'https';
+        fetch(`${protocol}://${host}/api/cron/process-broadcasts`, {
+          method: 'GET',
+          headers: { authorization: `Bearer ${process.env.CRON_SECRET || ''}` }
+        }).catch(() => {});
+
+      } else {
+        await supabase.from('scheduled_broadcasts').update({ status: 'completed' }).eq('id', broadcast.id);
+      }
     }
 
     return NextResponse.json({ success: true, processed: broadcasts.length, totalSent });
