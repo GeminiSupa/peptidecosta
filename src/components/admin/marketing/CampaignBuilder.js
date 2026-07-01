@@ -628,7 +628,21 @@ export default function CampaignBuilder() {
             <p style={{ margin: 0, fontSize: '14px' }}>Loading Email Editor…</p>
           </div>
         )}
-        <div className="mkt-email-editor">
+        <div 
+          className="mkt-email-editor"
+          style={{ 
+            maxWidth: deviceMode === 'mobile' ? '400px' : '100%', 
+            margin: '0 auto', 
+            transition: 'max-width 0.3s ease',
+            border: deviceMode === 'mobile' ? '8px solid #1e293b' : 'none',
+            borderTopWidth: deviceMode === 'mobile' ? '24px' : 'none',
+            borderBottomWidth: deviceMode === 'mobile' ? '24px' : 'none',
+            borderRadius: deviceMode === 'mobile' ? '32px' : '0',
+            overflow: 'hidden',
+            boxShadow: deviceMode === 'mobile' ? '0 20px 40px -10px rgba(0,0,0,0.5)' : 'none',
+            background: '#fff'
+          }}
+        >
           <EmailEditor
             ref={emailEditorRef}
             onReady={() => setIsReady(true)}
