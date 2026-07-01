@@ -26,6 +26,8 @@ export function formatPayoutPeriod(startDate, endDate) {
   return `${fmt(start, !sameYear)} – ${fmt(end, true)}`;
 }
 
+import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
+
 export function recalcPayoutAmounts({
   usdSales = 0,
   crcSales = 0,
@@ -36,11 +38,14 @@ export function recalcPayoutAmounts({
   const rate = Number(commissionRate || 0);
   const usdCommission = Number(usdSales || 0) * (rate / 100);
   const crcCommission = Number(crcSales || 0) * (rate / 100);
-  let totalPayoutUsd = usdCommission;
-  let totalPayoutCrc = crcCommission;
+  
   const salary = Number(weeklySalary || 0);
-  if (salaryCurrency === 'USD') totalPayoutUsd += salary;
-  else totalPayoutCrc += salary;
+  const salaryUsd = salaryCurrency === 'USD' ? salary : salary / FALLBACK_EXCHANGE_RATE;
+  const salaryCrc = salaryCurrency === 'CRC' ? salary : salary * FALLBACK_EXCHANGE_RATE;
+
+  const totalPayoutUsd = usdCommission + (crcCommission / FALLBACK_EXCHANGE_RATE) + salaryUsd;
+  const totalPayoutCrc = crcCommission + (usdCommission * FALLBACK_EXCHANGE_RATE) + salaryCrc;
+
   return {
     usd_commission: usdCommission,
     crc_commission: crcCommission,

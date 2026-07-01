@@ -642,7 +642,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                         <span className="label">Commission</span>
                         <span className="value accent">
                           {formatMoneyUI(displayedPayout.usd_commission, 'USD')}
-                          {displayedPayout.crc_commission > 0 ? ` OR ${formatMoneyUI(displayedPayout.crc_commission, 'CRC')}` : ''}
+                          {displayedPayout.crc_commission > 0 ? ` AND ${formatMoneyUI(displayedPayout.crc_commission, 'CRC')}` : ''}
                         </span>
                       </div>
                       {(p.weekly_salary_paid > 0 || displayedPayout.total_payout_usd > 0 || displayedPayout.total_payout_crc > 0) && (
@@ -788,7 +788,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   <div style={{ background: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.2)', borderRadius: '8px', padding: '12px', marginBottom: '16px', fontSize: '0.85rem' }}>
                     <div style={{ color: '#c084fc', fontWeight: 'bold' }}>
                       Commission: {formatMoneyUI(preview.usd_commission, 'USD')}
-                      {preview.crc_commission > 0 ? ` OR ${formatMoneyUI(preview.crc_commission, 'CRC')}` : ''}
+                      {preview.crc_commission > 0 ? ` AND ${formatMoneyUI(preview.crc_commission, 'CRC')}` : ''}
                     </div>
                     <div style={{ color: '#e2e8f0', marginTop: '4px' }}>
                       Total payout: {formatMoneyUI(preview.total_payout_usd, 'USD')}

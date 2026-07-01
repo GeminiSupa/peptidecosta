@@ -232,6 +232,7 @@ export default function CampaignBuilder() {
   const [subscribers,       setSubscribers]       = useState([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
   const [subject,           setSubject]           = useState('');
+  const [previewText,       setPreviewText]       = useState('');
   const [campaignName,      setCampaignName]      = useState('New Campaign ' + new Date().toLocaleDateString());
   const [selectedTemplate,  setSelectedTemplate]  = useState('blank');
   const [showTemplates,     setShowTemplates]     = useState(true);
@@ -253,6 +254,13 @@ export default function CampaignBuilder() {
 
     const parsedDesign = typeof design === 'string' ? JSON.parse(design) : design;
     editor.loadDesign(parsedDesign);
+    
+    if (parsedDesign?.body?.values?.preheaderText) {
+      setPreviewText(parsedDesign.body.values.preheaderText);
+    } else {
+      setPreviewText('');
+    }
+    
     return true;
   }, [isReady]);
 
@@ -363,6 +371,17 @@ export default function CampaignBuilder() {
     if (!subject || (isABTest && !subjectB)) { alert('Please enter subject line(s).'); return; }
     setIsSaving(true);
     emailEditorRef.current.editor.exportHtml(async ({ design, html }) => {
+      if (design && design.body) {
+        design.body.values = design.body.values || {};
+        if (previewText) design.body.values.preheaderText = previewText;
+      }
+      
+      let finalHtml = html;
+      if (previewText) {
+        const hiddenPreview = `<div style="display:none;font-size:1px;color:#333333;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${previewText}&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;</div>`;
+        finalHtml = finalHtml.replace(/<body[^>]*>/i, `$&${hiddenPreview}`);
+      }
+      
       try {
         const res  = await adminFetch('/api/admin/campaigns', {
           method: 'POST',
@@ -371,7 +390,7 @@ export default function CampaignBuilder() {
             subject_line_b: isABTest ? subjectB : null,
             is_ab_test: isABTest,
             target_tags: targetSegment ? [targetSegment] : null,
-            design_json: design, html_content: html,
+            design_json: design, html_content: finalHtml,
           }),
         });
         const data = await res.json();
@@ -482,6 +501,10 @@ export default function CampaignBuilder() {
                 <input type="text" value={subjectB} onChange={e => setSubjectB(e.target.value)} placeholder="Don't miss this, [FIRST_NAME]!" className="mkt-input" />
               </div>
             )}
+            <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px', marginBottom: 0 }}>
+              <label className="mkt-label">Preview Line</label>
+              <input type="text" value={previewText} onChange={e => setPreviewText(e.target.value)} placeholder="A short preheader text..." className="mkt-input" />
+            </div>
           </div>
           <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginTop: '8px', marginBottom: 0 }}>
             Tip: Use <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>[FIRST_NAME]</code> for personalisation.
@@ -577,7 +600,13 @@ export default function CampaignBuilder() {
             ref={emailEditorRef}
             onReady={() => setIsReady(true)}
             minHeight="640px"
-            options={{ appearance: { theme: 'dark' } }}
+            options={{ 
+              appearance: { theme: 'dark' },
+              features: { 
+                preheaderText: true, 
+                textEditor: { backgroundColor: true, textColor: true },
+              } 
+            }}
           />
         </div>
       </div>
