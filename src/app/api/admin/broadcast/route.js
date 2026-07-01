@@ -72,23 +72,30 @@ async function sendWhatsApp(to, message, templateName = null, firstName = 'Custo
   }
 }
 
+let globalTransporter = null;
+
 // Helper for sending Emails
 async function sendEmail(to, message, subject) {
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return false;
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
+    if (!globalTransporter) {
+      globalTransporter = nodemailer.createTransport({
+        pool: true,
+        maxConnections: 5,
+        maxMessages: 200,
+        host: SMTP_HOST,
+        port: SMTP_PORT,
+        secure: SMTP_SECURE,
+        auth: {
+          user: SMTP_USER,
+          pass: SMTP_PASS,
+        },
+        tls: {
+          rejectUnauthorized: false
+        }
+      });
+    }
 
     const htmlMessage = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
@@ -106,8 +113,8 @@ async function sendEmail(to, message, subject) {
       </div>
     `;
 
-    const res = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+    const res = await globalTransporter.sendMail({
+      bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
       from: `Peptides Costa Rica <info@peptidescostarica.net>`,
       to: to.trim(),
       subject: subject || 'Flash Sale! Exclusive Offer Inside',
@@ -116,6 +123,7 @@ async function sendEmail(to, message, subject) {
     });
     return !!res.messageId;
   } catch (err) {
+    console.error('Email send failed:', err);
     return false;
   }
 }
@@ -270,7 +278,7 @@ export async function POST(request) {
     // Send the broadcasts for the current batch
     const promises = contactsToProcessNow.map(async (contact, i) => {
       // Add artificial delay to avoid hitting rate limits instantly
-      await new Promise(r => setTimeout(r, i * 150)); 
+      await new Promise(r => setTimeout(r, i * 20)); 
       
       let sentWhatsapp = false;
       let sentEmail = false;
