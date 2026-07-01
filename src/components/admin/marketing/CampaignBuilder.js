@@ -219,7 +219,9 @@ const TEMPLATES = [
   <tr><td style="padding: 10px 16px; background: #ffffff; border-radius: 0 0 8px 8px;"><strong style="color: #059669;">✅ NAD+ 1000mg</strong></td></tr>
 </table>
 
-<p>All products are <strong>third-party tested</strong> and ship directly from Costa Rica. Stock is limited on first batches — grab yours before they run out!</p>`,
+<p>All products are <strong>third-party tested</strong> and ship directly from Costa Rica. Stock is limited on first batches — grab yours before they run out!</p>
+
+<p>You can view all our products and place your order directly on our <a href="https://www.costapeptides.com/catalog" style="color: #059669; font-weight: bold; text-decoration: underline;">online catalog here</a>.</p>`,
       cta: 'Shop New Arrivals →',
       footerNote: '<p>Want more info on any of these products? Just reply to this email and our team will send you everything you need.</p>',
       accent: '#059669',
