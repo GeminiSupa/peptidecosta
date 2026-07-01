@@ -601,6 +601,7 @@ export default function CampaignBuilder() {
             onReady={() => setIsReady(true)}
             minHeight="640px"
             options={{ 
+              devices: ['desktop', 'mobile'],
               appearance: { theme: 'dark' },
               features: { 
                 preheaderText: true, 
