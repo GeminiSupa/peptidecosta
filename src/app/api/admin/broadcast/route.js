@@ -13,9 +13,9 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 
 // Helper for sending WhatsApp via the official graph API
-async function sendWhatsApp(to, message) {
+async function sendWhatsApp(to, message, templateName = null, firstName = 'Customer') {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.PHONE_NUMBER_ID;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   if (!token || !phoneNumberId) {
     console.warn('[Broadcast] WhatsApp credentials missing');
     return false;
@@ -28,18 +28,43 @@ async function sendWhatsApp(to, message) {
   }
 
   try {
+    let payload = {
+      messaging_product: 'whatsapp',
+      to: formatted,
+      type: 'text',
+      text: { body: message }
+    };
+
+    if (templateName) {
+      payload = {
+        messaging_product: 'whatsapp',
+        to: formatted,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: 'en_US' },
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                {
+                  type: 'text',
+                  text: firstName || 'Customer'
+                }
+              ]
+            }
+          ]
+        }
+      };
+    }
+
     const res = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: formatted,
-        type: 'text',
-        text: { body: message }
-      })
+      body: JSON.stringify(payload)
     });
     return res.ok;
   } catch (err) {
@@ -113,18 +138,18 @@ export async function DELETE(request) {
 
 export async function POST(request) {
   try {
-    const { audience, channels, message, testContact, customContacts, scheduledAt, enableBatching } = await request.json();
+    const { audience, channels, message, testContact, customContacts, scheduledAt, enableBatching, whatsappTemplateName } = await request.json();
 
-    if (!message) {
-      return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+    if (!message && !whatsappTemplateName) {
+      return NextResponse.json({ error: 'Message or Template Name is required' }, { status: 400 });
     }
 
     if (scheduledAt && audience !== 'test') {
       const { error } = await supabase.from('scheduled_broadcasts').insert({
         audience,
         custom_contacts: customContacts || null,
-        channels,
-        message,
+        channels: { ...channels, whatsappTemplateName },
+        message: message || '',
         scheduled_at: scheduledAt,
         status: 'pending'
       });
@@ -143,7 +168,7 @@ export async function POST(request) {
     } else {
 
     if (audience === 'all_customers' || audience === 'all_leads' || audience === 'leads_7_days') {
-      let query = supabase.from('orders').select('customer_phone, customer_email').neq('status', 'cancelled');
+      let query = supabase.from('orders').select('customer_phone, customer_email, customer_name').neq('status', 'cancelled');
       if (audience === 'leads_7_days') {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -153,13 +178,14 @@ export async function POST(request) {
       orders?.forEach(o => {
         const key = o.customer_phone || o.customer_email;
         if (key && !targets.has(key)) {
-          targets.set(key, { phone: o.customer_phone, email: o.customer_email });
+          const name = o.customer_name ? o.customer_name.split(' ')[0] : 'Customer';
+          targets.set(key, { phone: o.customer_phone, email: o.customer_email, name });
         }
       });
     }
 
     if (audience === 'abandoned_carts' || audience === 'all_leads' || audience === 'leads_7_days') {
-      let query = supabase.from('abandoned_carts').select('phone, email').eq('status', 'active');
+      let query = supabase.from('abandoned_carts').select('phone, email, name').eq('status', 'active');
       if (audience === 'leads_7_days') {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -169,7 +195,8 @@ export async function POST(request) {
       carts?.forEach(c => {
         const key = c.phone || c.email;
         if (key && !targets.has(key)) {
-          targets.set(key, { phone: c.phone, email: c.email });
+          const fname = c.name ? c.name.split(' ')[0] : 'Customer';
+          targets.set(key, { phone: c.phone, email: c.email, name: fname });
         }
       });
 
@@ -185,7 +212,8 @@ export async function POST(request) {
         if (!targets.has(cl.contact_value)) {
           targets.set(cl.contact_value, {
             phone: cl.contact_method === 'whatsapp' ? cl.contact_value : null,
-            email: cl.contact_method === 'email' ? cl.contact_value : null
+            email: cl.contact_method === 'email' ? cl.contact_value : null,
+            name: cl.name ? cl.name.split(' ')[0] : 'Customer'
           });
         }
       });
@@ -248,10 +276,10 @@ export async function POST(request) {
       let sentEmail = false;
 
       if (channels.whatsapp && contact.phone) {
-        sentWhatsapp = await sendWhatsApp(contact.phone, message);
+        sentWhatsapp = await sendWhatsApp(contact.phone, message, whatsappTemplateName, contact.name);
       }
       
-      if (channels.email && contact.email) {
+      if (channels.email && contact.email && message) {
         sentEmail = await sendEmail(contact.email, message, channels.emailSubject);
       }
 

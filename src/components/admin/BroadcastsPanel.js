@@ -161,7 +161,8 @@ export default function BroadcastsPanel({ products = [] }) {
           audience: 'test',
           testContact: testNumber,
           channels: { ...channels, emailSubject },
-          message: `[TEST BROADCAST]\n${message}`
+          message: `[TEST BROADCAST]\n${message}`,
+          whatsappTemplateName: channels.whatsappTemplateName || undefined
         })
       });
       const data = await res.json();
@@ -192,6 +193,7 @@ export default function BroadcastsPanel({ products = [] }) {
           customContacts: audience === 'custom' ? customContacts : undefined,
           channels: { ...channels, emailSubject }, 
           message,
+          whatsappTemplateName: channels.whatsappTemplateName || undefined,
           scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
           enableBatching: channels.whatsapp // Automatically batch whatsapp to avoid limits
         })
@@ -481,6 +483,21 @@ export default function BroadcastsPanel({ products = [] }) {
               value={emailSubject}
               onChange={e => setEmailSubject(e.target.value)}
             />
+          </div>
+        )}
+
+        {channels.whatsapp && (
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Meta WhatsApp Template (Optional)</label>
+            <input 
+              type="text"
+              className="admin-input"
+              style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '12px 16px', borderRadius: '8px', fontSize: '0.95rem' }}
+              placeholder="e.g. new_products_launch (if blank, sends as raw text)"
+              value={channels.whatsappTemplateName || ''}
+              onChange={e => setChannels({ ...channels, whatsappTemplateName: e.target.value })}
+            />
+            <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Use an approved template name to bypass the 24-hour window restriction and reach all leads.</p>
           </div>
         )}
         
