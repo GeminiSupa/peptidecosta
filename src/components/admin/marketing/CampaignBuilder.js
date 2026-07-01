@@ -5,7 +5,7 @@ import EmailEditor from 'react-email-editor';
 import {
   AlertTriangle, CheckCircle2, Copy, Eye, Loader2, Save, Send,
   Users, ChevronDown, ChevronUp, Smartphone, LayoutTemplate,
-  Tag, Layers, Monitor
+  Tag, Layers, Monitor, X
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
@@ -243,6 +243,7 @@ export default function CampaignBuilder() {
   const [subjectB,    setSubjectB]    = useState('');
   const [targetSegment, setTargetSegment] = useState('');
   const [deviceMode,  setDeviceMode]  = useState('desktop');
+  const [previewHtml, setPreviewHtml] = useState(null);
 
   useEffect(() => {
     fetchCampaigns();
@@ -428,11 +429,10 @@ export default function CampaignBuilder() {
     }
   };
 
-  const exportHtml = () => {
+  const openPreview = () => {
     emailEditorRef.current.editor.exportHtml(({ html }) => {
-      const win = window.open('', '_blank');
-      win.document.write(html);
-      win.document.close();
+      setPreviewHtml(html);
+      setDeviceMode('desktop');
     });
   };
 
@@ -563,7 +563,7 @@ export default function CampaignBuilder() {
 
             {/* Action buttons */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '14px' }}>
-              <button onClick={exportHtml} className="mkt-btn" style={{ flex: '1 1 auto' }}>
+              <button onClick={openPreview} disabled={!isReady} className="mkt-btn" style={{ flex: '1 1 auto' }}>
                 <Eye size={14} /> Preview
               </button>
               <button onClick={saveCampaign} disabled={!isReady || isSaving} className="mkt-btn mkt-btn-primary" style={{ flex: '1 1 auto' }}>
@@ -590,59 +590,13 @@ export default function CampaignBuilder() {
 
       {/* ══ EMAIL EDITOR ══ */}
       <div className="mkt-email-editor-frame">
-        <div style={{ display: 'flex', gap: '8px', padding: '12px 16px', background: '#0f172a', borderBottom: '1px solid rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.8rem', color: '#64748b', marginRight: '8px', fontWeight: 'bold', textTransform: 'uppercase' }}>Preview Layout:</span>
-          <button 
-            type="button"
-            onClick={() => {
-              setDeviceMode('desktop');
-              try { emailEditorRef.current?.editor?.setDevice?.('desktop'); } catch(e){}
-            }}
-            style={{ 
-              background: deviceMode === 'desktop' ? 'rgba(56, 189, 248, 0.15)' : 'transparent', 
-              border: deviceMode === 'desktop' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid transparent',
-              color: deviceMode === 'desktop' ? '#38bdf8' : '#94a3b8', 
-              display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '6px 16px', borderRadius: '8px', fontWeight: 'bold', transition: 'all 0.2s'
-            }}>
-            <Monitor size={16} /> Desktop
-          </button>
-          <button 
-            type="button"
-            onClick={() => {
-              setDeviceMode('mobile');
-              try { emailEditorRef.current?.editor?.setDevice?.('mobile'); } catch(e){}
-            }}
-            style={{ 
-              background: deviceMode === 'mobile' ? 'rgba(56, 189, 248, 0.15)' : 'transparent', 
-              border: deviceMode === 'mobile' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid transparent',
-              color: deviceMode === 'mobile' ? '#38bdf8' : '#94a3b8', 
-              display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '6px 16px', borderRadius: '8px', fontWeight: 'bold', transition: 'all 0.2s'
-            }}>
-            <Smartphone size={16} /> Mobile
-          </button>
-        </div>
-
         {!isReady && (
           <div className="mkt-email-editor-loading">
             <Loader2 className="animate-spin" size={30} style={{ color: '#34d399' }} />
             <p style={{ margin: 0, fontSize: '14px' }}>Loading Email Editor…</p>
           </div>
         )}
-        <div 
-          className="mkt-email-editor"
-          style={{ 
-            maxWidth: deviceMode === 'mobile' ? '400px' : '100%', 
-            margin: '0 auto', 
-            transition: 'max-width 0.3s ease',
-            border: deviceMode === 'mobile' ? '8px solid #1e293b' : 'none',
-            borderTopWidth: deviceMode === 'mobile' ? '24px' : 'none',
-            borderBottomWidth: deviceMode === 'mobile' ? '24px' : 'none',
-            borderRadius: deviceMode === 'mobile' ? '32px' : '0',
-            overflow: 'hidden',
-            boxShadow: deviceMode === 'mobile' ? '0 20px 40px -10px rgba(0,0,0,0.5)' : 'none',
-            background: '#fff'
-          }}
-        >
+        <div className="mkt-email-editor">
           <EmailEditor
             ref={emailEditorRef}
             onReady={() => setIsReady(true)}
@@ -658,6 +612,73 @@ export default function CampaignBuilder() {
           />
         </div>
       </div>
+
+      {/* ══ PREVIEW MODAL ══ */}
+      {previewHtml && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {/* Header bar */}
+          <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '16px 24px', background: '#0f172a', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Preview:</span>
+            <button 
+              type="button"
+              onClick={() => setDeviceMode('desktop')}
+              style={{ 
+                background: deviceMode === 'desktop' ? 'rgba(56, 189, 248, 0.15)' : 'transparent', 
+                border: deviceMode === 'desktop' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(255,255,255,0.1)',
+                color: deviceMode === 'desktop' ? '#38bdf8' : '#94a3b8', 
+                display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 20px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.85rem', transition: 'all 0.2s'
+              }}>
+              <Monitor size={16} /> Desktop
+            </button>
+            <button 
+              type="button"
+              onClick={() => setDeviceMode('mobile')}
+              style={{ 
+                background: deviceMode === 'mobile' ? 'rgba(56, 189, 248, 0.15)' : 'transparent', 
+                border: deviceMode === 'mobile' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(255,255,255,0.1)',
+                color: deviceMode === 'mobile' ? '#38bdf8' : '#94a3b8', 
+                display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 20px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.85rem', transition: 'all 0.2s'
+              }}>
+              <Smartphone size={16} /> Mobile
+            </button>
+            <div style={{ flex: 1 }} />
+            <span style={{ fontSize: '0.75rem', color: '#475569' }}>{deviceMode === 'mobile' ? '375 × 667 px' : '600 px wide'}</span>
+            <button 
+              type="button"
+              onClick={() => setPreviewHtml(null)}
+              style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', cursor: 'pointer', padding: '8px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+          {/* Preview iframe */}
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '32px 16px', overflow: 'auto', width: '100%' }}>
+            <div style={{
+              width: deviceMode === 'mobile' ? '375px' : '600px',
+              height: deviceMode === 'mobile' ? '667px' : '80vh',
+              border: deviceMode === 'mobile' ? '12px solid #1e293b' : '2px solid #1e293b',
+              borderRadius: deviceMode === 'mobile' ? '40px' : '12px',
+              overflow: 'hidden',
+              boxShadow: '0 25px 60px -15px rgba(0,0,0,0.6)',
+              background: '#fff',
+              transition: 'all 0.3s ease',
+              position: 'relative',
+              flexShrink: 0,
+            }}>
+              {/* Phone notch */}
+              {deviceMode === 'mobile' && (
+                <div style={{ position: 'absolute', top: '0', left: '50%', transform: 'translateX(-50%)', width: '120px', height: '24px', background: '#1e293b', borderRadius: '0 0 16px 16px', zIndex: 2 }} />
+              )}
+              <iframe
+                title="Email Preview"
+                srcDoc={previewHtml}
+                style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+                sandbox="allow-same-origin"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
