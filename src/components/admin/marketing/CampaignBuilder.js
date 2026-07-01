@@ -5,7 +5,8 @@ import EmailEditor from 'react-email-editor';
 import {
   AlertTriangle, CheckCircle2, Copy, Eye, Loader2, Save, Send,
   Users, ChevronDown, ChevronUp, Smartphone, LayoutTemplate,
-  Tag, Layers, Monitor, X
+  Tag, Layers, Monitor, X, Clock, Trash2, Mail, AtSign, SendHorizonal,
+  CalendarClock, TestTube2, CopyPlus
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
@@ -245,6 +246,19 @@ export default function CampaignBuilder() {
   const [deviceMode,  setDeviceMode]  = useState('desktop');
   const [previewHtml, setPreviewHtml] = useState(null);
 
+  // Sender settings (Mailchimp-style)
+  const [fromName,    setFromName]    = useState('Costa Peptides');
+  const [fromEmail,   setFromEmail]   = useState('');
+  const [replyTo,     setReplyTo]     = useState('');
+
+  // Schedule
+  const [scheduleMode, setScheduleMode] = useState('now'); // 'now' | 'scheduled'
+  const [scheduledAt,  setScheduledAt]  = useState('');
+
+  // Test email
+  const [testEmail,      setTestEmail]      = useState('');
+  const [isSendingTest,  setIsSendingTest]  = useState(false);
+
   useEffect(() => {
     fetchCampaigns();
     fetchSubscribers();
@@ -320,6 +334,17 @@ export default function CampaignBuilder() {
     setSubjectB(selectedCampaign.subject_line_b || '');
     setIsABTest(Boolean(selectedCampaign.is_ab_test));
     setTargetSegment(selectedCampaign.target_tags?.[0] || '');
+    setFromName(selectedCampaign.from_name || 'Costa Peptides');
+    setFromEmail(selectedCampaign.from_email || '');
+    setReplyTo(selectedCampaign.reply_to || '');
+    setPreviewText(selectedCampaign.preview_text || '');
+    if (selectedCampaign.scheduled_at) {
+      setScheduleMode('scheduled');
+      setScheduledAt(new Date(selectedCampaign.scheduled_at).toISOString().slice(0, 16));
+    } else {
+      setScheduleMode('now');
+      setScheduledAt('');
+    }
 
     if (selectedCampaign.design_json) {
       try {
@@ -371,6 +396,7 @@ export default function CampaignBuilder() {
 
   const saveCampaign = async () => {
     if (!subject || (isABTest && !subjectB)) { alert('Please enter subject line(s).'); return; }
+    if (scheduleMode === 'scheduled' && !scheduledAt) { alert('Please pick a scheduled date/time.'); return; }
     setIsSaving(true);
     emailEditorRef.current.editor.exportHtml(async ({ design, html }) => {
       if (design && design.body) {
@@ -385,15 +411,21 @@ export default function CampaignBuilder() {
       }
       
       try {
+        const payload = {
+          title: campaignName, subject_line: subject,
+          subject_line_b: isABTest ? subjectB : null,
+          is_ab_test: isABTest,
+          target_tags: targetSegment ? [targetSegment] : null,
+          design_json: design, html_content: finalHtml,
+          from_name: fromName || null,
+          from_email: fromEmail || null,
+          reply_to: replyTo || null,
+          preview_text: previewText || null,
+          scheduled_at: scheduleMode === 'scheduled' && scheduledAt ? new Date(scheduledAt).toISOString() : null,
+        };
         const res  = await adminFetch('/api/admin/campaigns', {
           method: 'POST',
-          body: JSON.stringify({
-            title: campaignName, subject_line: subject,
-            subject_line_b: isABTest ? subjectB : null,
-            is_ab_test: isABTest,
-            target_tags: targetSegment ? [targetSegment] : null,
-            design_json: design, html_content: finalHtml,
-          }),
+          body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Failed to save campaign');
@@ -426,6 +458,78 @@ export default function CampaignBuilder() {
       alert('Failed to send: ' + err.message);
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const sendTestEmail = async () => {
+    if (!testEmail.trim()) { alert('Enter a test email address.'); return; }
+    setIsSendingTest(true);
+    emailEditorRef.current.editor.exportHtml(async ({ html }) => {
+      try {
+        const res = await adminFetch('/api/admin/campaigns/test', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: testEmail.trim(),
+            subject: subject || 'Test Campaign',
+            html_content: html,
+            from_name: fromName,
+            from_email: fromEmail,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Failed to send test');
+        alert(`✅ Test email sent to ${testEmail}!`);
+      } catch (err) {
+        alert('Failed to send test: ' + err.message);
+      } finally {
+        setIsSendingTest(false);
+      }
+    });
+  };
+
+  const duplicateCampaign = async () => {
+    if (!selectedCampaign) return;
+    try {
+      const res = await adminFetch('/api/admin/campaigns', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: selectedCampaign.title + ' (Copy)',
+          subject_line: selectedCampaign.subject_line,
+          subject_line_b: selectedCampaign.subject_line_b,
+          is_ab_test: selectedCampaign.is_ab_test,
+          target_tags: selectedCampaign.target_tags,
+          design_json: selectedCampaign.design_json,
+          html_content: selectedCampaign.html_content,
+          from_name: selectedCampaign.from_name,
+          from_email: selectedCampaign.from_email,
+          reply_to: selectedCampaign.reply_to,
+          preview_text: selectedCampaign.preview_text,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to duplicate');
+      setSelectedCampaignId(data.campaign.id);
+      fetchCampaigns();
+      alert('✅ Campaign duplicated!');
+    } catch (err) {
+      alert('Failed to duplicate: ' + err.message);
+    }
+  };
+
+  const deleteCampaign = async () => {
+    if (!selectedCampaignId) return;
+    if (!confirm('Are you sure you want to delete this campaign? This cannot be undone.')) return;
+    try {
+      const res = await adminFetch(`/api/admin/campaigns?id=${selectedCampaignId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to delete');
+      setSelectedCampaignId('');
+      fetchCampaigns();
+      alert('Campaign deleted.');
+    } catch (err) {
+      alert('Failed to delete: ' + err.message);
     }
   };
 
@@ -469,7 +573,7 @@ export default function CampaignBuilder() {
         </Section>
 
         {/* Campaign settings */}
-        <Section title="2. Campaign Settings" icon={Layers} defaultOpen>
+        <Section title="2. Content Settings" icon={Layers} defaultOpen>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
             <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
               <label className="mkt-label">Campaign Name (Internal)</label>
@@ -502,14 +606,96 @@ export default function CampaignBuilder() {
                 <input type="text" value={subjectB} onChange={e => setSubjectB(e.target.value)} placeholder="Don't miss this, [FIRST_NAME]!" className="mkt-input" />
               </div>
             )}
-            <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px', marginBottom: 0 }}>
-              <label className="mkt-label">Preview Line</label>
-              <input type="text" value={previewText} onChange={e => setPreviewText(e.target.value)} placeholder="A short preheader text..." className="mkt-input" />
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '12px' }}>
+            <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '280px', marginBottom: 0 }}>
+              <label className="mkt-label">📧 Preview Text <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(shown next to subject in inbox)</span></label>
+              <input type="text" value={previewText} onChange={e => setPreviewText(e.target.value)} placeholder="A short preheader summary that appears in the inbox…" className="mkt-input" />
             </div>
           </div>
           <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginTop: '8px', marginBottom: 0 }}>
             Tip: Use <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px' }}>[FIRST_NAME]</code> for personalisation.
           </p>
+        </Section>
+
+        {/* Sender & Delivery settings (Mailchimp-style) */}
+        <Section title="3. Sender & Delivery" icon={Mail} defaultOpen={false}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+            <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
+              <label className="mkt-label">From Name</label>
+              <input type="text" value={fromName} onChange={e => setFromName(e.target.value)} placeholder="Costa Peptides" className="mkt-input" />
+            </div>
+            <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
+              <label className="mkt-label">From Email <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
+              <div style={{ position: 'relative' }}>
+                <AtSign size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
+                <input type="email" value={fromEmail} onChange={e => setFromEmail(e.target.value)} placeholder="Uses default sender" className="mkt-input" style={{ paddingLeft: '32px' }} />
+              </div>
+            </div>
+            <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
+              <label className="mkt-label">Reply-To Email <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
+              <div style={{ position: 'relative' }}>
+                <AtSign size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
+                <input type="email" value={replyTo} onChange={e => setReplyTo(e.target.value)} placeholder="Same as from email" className="mkt-input" style={{ paddingLeft: '32px' }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Schedule */}
+          <div style={{ marginTop: '16px', padding: '14px', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <label className="mkt-label" style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CalendarClock size={14} style={{ color: '#34d399' }} /> Send Timing
+            </label>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: scheduleMode === 'now' ? '#34d399' : 'rgba(255,255,255,0.5)' }}>
+                <input type="radio" name="scheduleMode" value="now" checked={scheduleMode === 'now'} onChange={() => setScheduleMode('now')} style={{ accentColor: '#10b981' }} />
+                Send immediately
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: scheduleMode === 'scheduled' ? '#38bdf8' : 'rgba(255,255,255,0.5)' }}>
+                <input type="radio" name="scheduleMode" value="scheduled" checked={scheduleMode === 'scheduled'} onChange={() => setScheduleMode('scheduled')} style={{ accentColor: '#38bdf8' }} />
+                Schedule for later
+              </label>
+              {scheduleMode === 'scheduled' && (
+                <input
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={e => setScheduledAt(e.target.value)}
+                  className="mkt-input"
+                  style={{ maxWidth: '240px', margin: 0 }}
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Send Test Email */}
+          <div style={{ marginTop: '16px', padding: '14px', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <label className="mkt-label" style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <TestTube2 size={14} style={{ color: '#f59e0b' }} /> Send Test Email
+            </label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
+              <input
+                type="email"
+                value={testEmail}
+                onChange={e => setTestEmail(e.target.value)}
+                placeholder="your@email.com"
+                className="mkt-input"
+                style={{ flex: 1, margin: 0 }}
+              />
+              <button
+                onClick={sendTestEmail}
+                disabled={isSendingTest || !isReady || !testEmail.trim()}
+                className="mkt-btn mkt-btn-warning"
+                style={{ whiteSpace: 'nowrap', margin: 0 }}
+              >
+                {isSendingTest ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                Send Test
+              </button>
+            </div>
+            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', margin: '8px 0 0' }}>
+              Sends a preview with [TEST] prefix. Use commas for multiple addresses.
+            </p>
+          </div>
         </Section>
 
         {/* Preflight + actions */}
@@ -532,8 +718,21 @@ export default function CampaignBuilder() {
             {selectedCampaign && (
               <div className="mkt-selected-campaign">
                 <div style={{ fontWeight: '700', fontSize: '13px', color: '#fff', marginBottom: '4px' }}>{selectedCampaign.subject_line}</div>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)' }}>
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', marginBottom: '8px' }}>
                   {selectedCampaign.target_tags?.length ? `Segment: ${selectedCampaign.target_tags.join(', ')}` : 'Audience: all subscribers'}
+                  {selectedCampaign.scheduled_at && (
+                    <span style={{ marginLeft: '8px', color: '#38bdf8' }}>
+                      📅 Scheduled: {new Date(selectedCampaign.scheduled_at).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button onClick={duplicateCampaign} className="mkt-btn" style={{ flex: '1 1 auto', padding: '6px 10px', fontSize: '11px' }}>
+                    <CopyPlus size={12} /> Duplicate
+                  </button>
+                  <button onClick={deleteCampaign} className="mkt-btn" style={{ flex: '1 1 auto', padding: '6px 10px', fontSize: '11px', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
+                    <Trash2 size={12} /> Delete
+                  </button>
                 </div>
               </div>
             )}

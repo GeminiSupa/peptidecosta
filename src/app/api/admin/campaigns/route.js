@@ -71,12 +71,19 @@ export async function POST(request) {
       is_ab_test, 
       target_tags, 
       design_json, 
-      html_content 
+      html_content,
+      from_name,
+      from_email,
+      reply_to,
+      preview_text,
+      scheduled_at
     } = await request.json();
     
     if (!title || !subject_line) {
       return NextResponse.json({ error: 'Title and Subject Line are required' }, { status: 400 });
     }
+
+    const status = scheduled_at ? 'scheduled' : 'draft';
 
     const { data, error } = await supabaseAdmin
       .from('email_campaigns')
@@ -88,7 +95,12 @@ export async function POST(request) {
         target_tags: target_tags || null,
         design_json, 
         html_content,
-        status: 'draft'
+        from_name: from_name || null,
+        from_email: from_email || null,
+        reply_to: reply_to || null,
+        preview_text: preview_text || null,
+        scheduled_at: scheduled_at || null,
+        status
       }])
       .select()
       .single();
@@ -98,6 +110,94 @@ export async function POST(request) {
     return NextResponse.json({ campaign: data });
   } catch (err) {
     console.error('Error saving campaign:', err);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+export async function PUT(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
+  const supabaseAdmin = getSupabaseAdmin();
+
+  try {
+    const { 
+      id,
+      title, 
+      subject_line, 
+      subject_line_b, 
+      is_ab_test, 
+      target_tags, 
+      design_json, 
+      html_content,
+      from_name,
+      from_email,
+      reply_to,
+      preview_text,
+      scheduled_at
+    } = await request.json();
+
+    if (!id) {
+      return NextResponse.json({ error: 'Campaign ID is required' }, { status: 400 });
+    }
+
+    const updates = {};
+    if (title !== undefined) updates.title = title;
+    if (subject_line !== undefined) updates.subject_line = subject_line;
+    if (subject_line_b !== undefined) updates.subject_line_b = subject_line_b || null;
+    if (is_ab_test !== undefined) updates.is_ab_test = is_ab_test;
+    if (target_tags !== undefined) updates.target_tags = target_tags || null;
+    if (design_json !== undefined) updates.design_json = design_json;
+    if (html_content !== undefined) updates.html_content = html_content;
+    if (from_name !== undefined) updates.from_name = from_name || null;
+    if (from_email !== undefined) updates.from_email = from_email || null;
+    if (reply_to !== undefined) updates.reply_to = reply_to || null;
+    if (preview_text !== undefined) updates.preview_text = preview_text || null;
+    if (scheduled_at !== undefined) {
+      updates.scheduled_at = scheduled_at || null;
+      updates.status = scheduled_at ? 'scheduled' : 'draft';
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('email_campaigns')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return NextResponse.json({ campaign: data });
+  } catch (err) {
+    console.error('Error updating campaign:', err);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
+  const supabaseAdmin = getSupabaseAdmin();
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'Campaign ID is required' }, { status: 400 });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('email_campaigns')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting campaign:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

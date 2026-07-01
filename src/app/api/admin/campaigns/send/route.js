@@ -161,10 +161,11 @@ async function processBatch(transporter, campaign, subscribers, is_test_batch, s
 
       await transporter.sendMail({
             bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
-        from: `"Costa Peptides" <${process.env.EMAIL_USER}>`,
+        from: `"${campaign.from_name || 'Costa Peptides'}" <${campaign.from_email || process.env.EMAIL_USER}>`,
         to: sub.email,
         subject: personalizedSubject,
         html: finalHtml,
+        replyTo: campaign.reply_to || undefined,
       });
 
       await supabaseAdmin.from('campaign_sends').insert([{
