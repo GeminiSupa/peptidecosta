@@ -156,6 +156,34 @@ export async function POST(request) {
 
     const supabase = getSupabaseAdmin();
 
+    if (order.promo_code) {
+      const { data: promoData } = await supabase
+        .from('promo_codes')
+        .select('is_active, valid_from, valid_until, usage_limit, usage_count')
+        .eq('code', order.promo_code.toUpperCase())
+        .single();
+        
+      if (!promoData) {
+        return NextResponse.json({ error: 'Invalid promo code' }, { status: 400 });
+      }
+      if (!promoData.is_active) {
+        return NextResponse.json({ error: 'Promo code is inactive' }, { status: 400 });
+      }
+      
+      const now = new Date();
+      if (promoData.valid_from && now < new Date(promoData.valid_from)) {
+        return NextResponse.json({ error: 'Promo code is not yet active' }, { status: 400 });
+      }
+      if (promoData.valid_until && now > new Date(promoData.valid_until)) {
+        // Auto-deactivate expired code
+        await supabase.from('promo_codes').update({ is_active: false }).eq('code', order.promo_code.toUpperCase());
+        return NextResponse.json({ error: 'Promo code has expired' }, { status: 400 });
+      }
+      if (promoData.usage_limit !== null && promoData.usage_count >= promoData.usage_limit) {
+        return NextResponse.json({ error: 'Promo code has reached its usage limit' }, { status: 400 });
+      }
+    }
+
     let { data, error } = await supabase
       .from('orders')
       .insert(order)

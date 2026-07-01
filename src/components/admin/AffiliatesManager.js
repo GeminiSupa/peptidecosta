@@ -374,12 +374,16 @@ export default function AffiliatesManager({ products = [] }) {
                     {statsUI}
                     {filteredCodes.map(promo => {
                       const isUsed = promo.usage_count >= 1;
+                      const isExpired = promo.valid_until && new Date(promo.valid_until) < new Date();
+                      const isCurrentlyActive = promo.is_active && !isExpired;
                       return (
-                        <div key={promo.id} style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: promo.is_active ? 1 : 0.5, transition: 'opacity 0.2s' }}>
+                        <div key={promo.id} style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: isCurrentlyActive ? 1 : 0.5, transition: 'opacity 0.2s' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                      <div style={{ fontWeight: '900', color: '#f8fafc', fontSize: '1.2rem', letterSpacing: '1px' }}>{promo.code}</div>
-                      {promo.is_flash_sale ? (
+                      <div style={{ fontWeight: '900', color: '#f8fafc', fontSize: '1.2rem', letterSpacing: '1px', textDecoration: isExpired ? 'line-through' : 'none' }}>{promo.code}</div>
+                      {isExpired ? (
+                        <span style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' }}>EXPIRED</span>
+                      ) : promo.is_flash_sale ? (
                         <span style={{ background: 'rgba(249, 115, 22, 0.15)', color: '#fb923c', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' }}>⚡ FLASH SALE</span>
                       ) : promo.affiliate_id ? (
                         <span style={{ background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' }}>🤝 AFFILIATE</span>
