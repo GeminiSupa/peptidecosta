@@ -147,7 +147,7 @@ export default function BroadcastsPanel({ products = [] }) {
   };
 
   const handleSendTest = async () => {
-    if (!message) return alert("Please enter a message first.");
+    if (!message && !channels.whatsappTemplateName) return alert("Please enter a message or template name first.");
     const testNumber = window.prompt("Enter your test phone number (e.g., 50688888888) or email:");
     if (!testNumber) return;
     
@@ -161,7 +161,7 @@ export default function BroadcastsPanel({ products = [] }) {
           audience: 'test',
           testContact: testNumber,
           channels: { ...channels, emailSubject },
-          message: `[TEST BROADCAST]\n${message}`,
+          message: message ? `[TEST BROADCAST]\n${message}` : '',
           whatsappTemplateName: channels.whatsappTemplateName || undefined
         })
       });
@@ -178,7 +178,7 @@ export default function BroadcastsPanel({ products = [] }) {
   };
 
   const handleBroadcast = async () => {
-    if (!message) return alert("Please enter a message first.");
+    if (!message && !channels.whatsappTemplateName) return alert("Please enter a message or template name first.");
     if (audience === 'custom' && !customContacts.trim()) return alert("Please enter custom contacts.");
     if (!window.confirm(`Are you sure you want to broadcast this to ${audience === 'custom' ? 'your custom list' : audience}?`)) return;
     
@@ -526,7 +526,7 @@ export default function BroadcastsPanel({ products = [] }) {
         <button 
           className="admin-btn" 
           onClick={handleSendTest}
-          disabled={isSending || !message}
+          disabled={isSending || (!message && !channels.whatsappTemplateName)}
           style={{ background: 'rgba(51, 65, 85, 0.8)', color: '#f8fafc', border: '1px solid #475569', padding: '12px 24px', fontSize: '0.95rem', borderRadius: '8px' }}
         >
           {isSending ? 'Sending...' : 'Send Test To Admin'}
@@ -534,7 +534,7 @@ export default function BroadcastsPanel({ products = [] }) {
         <button 
           className="admin-btn" 
           onClick={handleBroadcast}
-          disabled={isSending || !message || (!channels.whatsapp && !channels.email)}
+          disabled={isSending || (!message && !channels.whatsappTemplateName) || (!channels.whatsapp && !channels.email)}
           style={{ background: '#0ea5e9', color: '#fff', border: 'none', padding: '12px 32px', fontSize: '1rem', fontWeight: 'bold', borderRadius: '8px', boxShadow: '0 4px 14px rgba(14, 165, 233, 0.3)' }}
         >
           {isSending ? (scheduledAt ? 'Scheduling...' : 'Broadcasting...') : (scheduledAt ? 'Schedule Broadcast' : 'Blast Broadcast Now')}
