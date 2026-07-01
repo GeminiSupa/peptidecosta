@@ -707,7 +707,7 @@ export default function WhatsAppInbox({
                   <button
                     type="button"
                     className="admin-wa-btn admin-wa-btn--send"
-                    onClick={handleSendLiveWhatsappMessage}
+                    onClick={() => handleSendLiveWhatsappMessage()}
                     disabled={!chatInputText.trim()}
                   >
                     <Send size={16} aria-hidden />
