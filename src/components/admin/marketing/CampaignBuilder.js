@@ -5,7 +5,7 @@ import EmailEditor from 'react-email-editor';
 import {
   AlertTriangle, CheckCircle2, Copy, Eye, Loader2, Save, Send,
   Users, ChevronDown, ChevronUp, Smartphone, LayoutTemplate,
-  Tag, Layers,
+  Tag, Layers, Monitor
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
@@ -242,6 +242,7 @@ export default function CampaignBuilder() {
   const [isABTest,    setIsABTest]    = useState(false);
   const [subjectB,    setSubjectB]    = useState('');
   const [targetSegment, setTargetSegment] = useState('');
+  const [deviceMode,  setDeviceMode]  = useState('desktop');
 
   useEffect(() => {
     fetchCampaigns();
@@ -589,6 +590,38 @@ export default function CampaignBuilder() {
 
       {/* ══ EMAIL EDITOR ══ */}
       <div className="mkt-email-editor-frame">
+        <div style={{ display: 'flex', gap: '8px', padding: '12px 16px', background: '#0f172a', borderBottom: '1px solid rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.8rem', color: '#64748b', marginRight: '8px', fontWeight: 'bold', textTransform: 'uppercase' }}>Preview Layout:</span>
+          <button 
+            type="button"
+            onClick={() => {
+              setDeviceMode('desktop');
+              try { emailEditorRef.current?.editor?.setDevice?.('desktop'); } catch(e){}
+            }}
+            style={{ 
+              background: deviceMode === 'desktop' ? 'rgba(56, 189, 248, 0.15)' : 'transparent', 
+              border: deviceMode === 'desktop' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid transparent',
+              color: deviceMode === 'desktop' ? '#38bdf8' : '#94a3b8', 
+              display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '6px 16px', borderRadius: '8px', fontWeight: 'bold', transition: 'all 0.2s'
+            }}>
+            <Monitor size={16} /> Desktop
+          </button>
+          <button 
+            type="button"
+            onClick={() => {
+              setDeviceMode('mobile');
+              try { emailEditorRef.current?.editor?.setDevice?.('mobile'); } catch(e){}
+            }}
+            style={{ 
+              background: deviceMode === 'mobile' ? 'rgba(56, 189, 248, 0.15)' : 'transparent', 
+              border: deviceMode === 'mobile' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid transparent',
+              color: deviceMode === 'mobile' ? '#38bdf8' : '#94a3b8', 
+              display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '6px 16px', borderRadius: '8px', fontWeight: 'bold', transition: 'all 0.2s'
+            }}>
+            <Smartphone size={16} /> Mobile
+          </button>
+        </div>
+
         {!isReady && (
           <div className="mkt-email-editor-loading">
             <Loader2 className="animate-spin" size={30} style={{ color: '#34d399' }} />
