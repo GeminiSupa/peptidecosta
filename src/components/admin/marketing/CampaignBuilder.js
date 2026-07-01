@@ -195,6 +195,37 @@ const TEMPLATES = [
     }),
   },
   {
+    id: 'launch',
+    icon: '🚀',
+    name: 'New Products',
+    desc: 'Announce new arrivals',
+    subject: '🚀 New Products Just Landed — Check What\'s In Stock, [FIRST_NAME]!',
+    design: createTemplateDesign({
+      headline: '🚀 New Products Just Landed!',
+      eyebrow: 'We have been expanding our catalog — here is what just arrived.',
+      body: `<p>Hi [FIRST_NAME],</p>
+<p>Exciting news! We just stocked up on <strong>brand new products</strong> that our community has been asking for. These are now available and ready to ship:</p>
+
+<table width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0;">
+  <tr><td style="padding: 10px 16px; background: #ecfdf5; border-radius: 8px 8px 0 0; border-bottom: 1px solid #d1fae5;"><strong style="color: #059669;">✅ Glutathione 1500mg</strong></td></tr>
+  <tr><td style="padding: 10px 16px; background: #ffffff; border-bottom: 1px solid #f0fdf4;"><strong style="color: #059669;">✅ Cartalax 20mg</strong></td></tr>
+  <tr><td style="padding: 10px 16px; background: #ecfdf5; border-bottom: 1px solid #d1fae5;"><strong style="color: #059669;">✅ Fat Blaster Aminos 10ml</strong></td></tr>
+  <tr><td style="padding: 10px 16px; background: #ffffff; border-bottom: 1px solid #f0fdf4;"><strong style="color: #059669;">✅ CJC-1295 with DAC</strong></td></tr>
+  <tr><td style="padding: 10px 16px; background: #ecfdf5; border-bottom: 1px solid #d1fae5;"><strong style="color: #059669;">✅ Epithalon 50mg</strong></td></tr>
+  <tr><td style="padding: 10px 16px; background: #ffffff; border-bottom: 1px solid #f0fdf4;"><strong style="color: #059669;">✅ DSIP 10mg</strong></td></tr>
+  <tr><td style="padding: 10px 16px; background: #ecfdf5; border-bottom: 1px solid #d1fae5;"><strong style="color: #059669;">✅ Tesamorelin 10mg</strong></td></tr>
+  <tr><td style="padding: 10px 16px; background: #ffffff; border-bottom: 1px solid #f0fdf4;"><strong style="color: #059669;">✅ Thymalin 10mg</strong></td></tr>
+  <tr><td style="padding: 10px 16px; background: #ecfdf5; border-bottom: 1px solid #d1fae5;"><strong style="color: #059669;">✅ Mots-C 40mg</strong></td></tr>
+  <tr><td style="padding: 10px 16px; background: #ffffff; border-radius: 0 0 8px 8px;"><strong style="color: #059669;">✅ NAD+ 1000mg</strong></td></tr>
+</table>
+
+<p>All products are <strong>third-party tested</strong> and ship directly from Costa Rica. Stock is limited on first batches — grab yours before they run out!</p>`,
+      cta: 'Shop New Arrivals →',
+      footerNote: '<p>Want more info on any of these products? Just reply to this email and our team will send you everything you need.</p>',
+      accent: '#059669',
+    }),
+  },
+  {
     id: 'blank',
     icon: '✏️',
     name: 'Blank Canvas',
