@@ -304,9 +304,6 @@ export async function POST(request) {
     await Promise.all(promises);
 
     let resMessage = 'Broadcast completed successfully.';
-    if (enableBatching && contacts.length > BATCH_SIZE) {
-      resMessage = `Sent 200 immediately. Auto-scheduled remaining ${contacts.length - 200} over upcoming days to protect Meta API limits.`;
-    }
 
     return NextResponse.json({ success: true, queuedCount, text: resMessage });
   } catch (err) {
