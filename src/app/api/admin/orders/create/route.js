@@ -54,11 +54,13 @@ export async function POST(request) {
 
     const updatePromises = [];
     if (row.customer_phone) {
+      const cleanPhone = row.customer_phone.replace(/\D/g, '');
+      const phoneSearch = cleanPhone.length >= 8 ? cleanPhone.slice(-8) : cleanPhone;
       updatePromises.push(
         supabase
           .from('abandoned_carts')
           .delete()
-          .eq('customer_phone', row.customer_phone)
+          .ilike('customer_phone', `%${phoneSearch}%`)
       );
     }
     if (row.customer_email) {

@@ -218,11 +218,13 @@ export async function POST(req) {
   // Convert any abandoned carts for this user
   const updatePromises = [];
   if (customerPhone) {
+    const cleanPhone = customerPhone.replace(/\D/g, '');
+    const phoneSearch = cleanPhone.length >= 8 ? cleanPhone.slice(-8) : cleanPhone;
     updatePromises.push(
       supabase
         .from('abandoned_carts')
         .delete()
-        .eq('customer_phone', customerPhone)
+        .ilike('customer_phone', `%${phoneSearch}%`)
     );
   }
   if (customerEmail) {

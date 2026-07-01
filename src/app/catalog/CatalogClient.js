@@ -985,7 +985,7 @@ export default function CatalogClient({
   useEffect(() => {
     localStorage.setItem('cart', JSON.stringify(cart));
 
-    if (sessionId && isSupabaseConfigured && supabase) {
+    if (sessionId && isSupabaseConfigured && supabase && !orderSubmitting) {
       const timeoutId = setTimeout(async () => {
         try {
           if (cart.length === 0) {

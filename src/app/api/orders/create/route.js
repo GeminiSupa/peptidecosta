@@ -271,11 +271,13 @@ export async function POST(request) {
       );
     }
     if (order.customer_phone) {
+      const cleanPhone = order.customer_phone.replace(/\D/g, '');
+      const phoneSearch = cleanPhone.length >= 8 ? cleanPhone.slice(-8) : cleanPhone;
       updatePromises.push(
         supabase
           .from('abandoned_carts')
           .delete()
-          .eq('customer_phone', order.customer_phone)
+          .ilike('customer_phone', `%${phoneSearch}%`)
       );
     }
     if (order.customer_email) {

@@ -105,7 +105,7 @@ Guidelines:
 - Mention shipping in Costa Rica is via Correos de Costa Rica (takes 1-3 days, free for orders over 30,000 CRC or $200). 
 - Always refer to catalog prices in Costa Rican Colones or US Dollars based on their preference.
 - Always be polite, using terms like 'con gusto' or 'Pura vida' if appropriate but remain professional.
-- CRITICAL: Never invent products or prices. If a product is not in the active catalog context above, say we don't currently carry it.
+- CRITICAL: Never invent products, prices, or guess answers. If a product is not in the active catalog context above, or if you do not know the answer to a question, politely inform the customer that you are an AI assistant and tell them to contact our human support directly at +506 8404-6973.
 - Keep answers concise and readable. Use short paragraphs and bullet points. Do not output raw JSON or internal code.
 
 Customer Query:
@@ -158,6 +158,22 @@ Instructions:
 7. End the email warmly from "El equipo de Peptides Costa Rica" or "The Peptides Costa Rica Team".
 
 Output ONLY the clean email reply text ready to be sent to the customer.`;
+    } else if (mode === 'generate_email_template') {
+      const { prompt: userPrompt } = context;
+      finalPrompt = `You are an elite biotech e-commerce copywriter and email marketer.
+Write a highly engaging, persuasive, and professional email campaign template based on the following request:
+"${userPrompt}"
+
+You must strictly output your response as a valid JSON object with the following keys:
+- "subject": The email subject line.
+- "previewText": A short preview text (preheader) for the inbox.
+- "headline": The main H1 headline inside the email.
+- "eyebrow": A short pre-headline or contextual note.
+- "body": The main email body written in HTML (use <p>, <strong>, <ul>, <li>). Keep it concise, engaging, and professional.
+- "cta": The text for the main call-to-action button.
+- "footerNote": A short closing note or disclaimer in HTML format (e.g. <p>Disclaimer...</p>).
+
+Do NOT wrap the output in markdown code blocks like \`\`\`json or add any preamble/postscript. Output ONLY the raw JSON string.`;
     } else if (mode === 'draft_broadcast') {
       const { prompt: userPrompt } = context;
       finalPrompt = `You are an elite biotech e-commerce copywriter.

@@ -6,7 +6,7 @@ import {
   AlertTriangle, CheckCircle2, Copy, Eye, Loader2, Save, Send,
   Users, ChevronDown, ChevronUp, Smartphone, LayoutTemplate,
   Tag, Layers, Monitor, X, Clock, Trash2, Mail, AtSign, SendHorizonal,
-  CalendarClock, TestTube2, CopyPlus
+  CalendarClock, TestTube2, CopyPlus, Sparkles
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
@@ -271,6 +271,8 @@ export default function CampaignBuilder() {
   const [selectedTemplate,  setSelectedTemplate]  = useState('blank');
   const [showTemplates,     setShowTemplates]     = useState(true);
   const [pendingDesign,     setPendingDesign]     = useState(null);
+  const [aiPrompt,          setAiPrompt]          = useState('');
+  const [isGeneratingAI,    setIsGeneratingAI]    = useState(false);
 
   // A/B test
   const [isABTest,    setIsABTest]    = useState(false);
@@ -291,6 +293,44 @@ export default function CampaignBuilder() {
   // Test email
   const [testEmail,      setTestEmail]      = useState('');
   const [isSendingTest,  setIsSendingTest]  = useState(false);
+
+  const generateAITemplate = async () => {
+    if (!aiPrompt.trim()) return;
+    setIsGeneratingAI(true);
+    try {
+      const res = await adminFetch('/api/ai', {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'generate_email_template',
+          context: { prompt: aiPrompt }
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to generate');
+      
+      const parsed = JSON.parse(data.text);
+      
+      setPreviewText(parsed.previewText || '');
+      
+      const newDesign = createTemplateDesign({
+        headline: parsed.headline || 'New Campaign',
+        eyebrow: parsed.eyebrow || '',
+        body: parsed.body || '<p>Start typing here...</p>',
+        cta: parsed.cta || 'Click Here',
+        footerNote: parsed.footerNote || '',
+        accent: '#8b5cf6'
+      });
+      
+      applyTemplate({ id: 'ai-generated', name: 'AI Template', design: newDesign, subject: parsed.subject });
+      setAiPrompt('');
+      alert('✨ AI template generated successfully!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to generate template with AI: ' + err.message);
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
 
   useEffect(() => {
     fetchCampaigns();
@@ -589,6 +629,46 @@ export default function CampaignBuilder() {
 
         {/* Template picker */}
         <Section title="1. Choose a Template" icon={LayoutTemplate} defaultOpen={showTemplates}>
+          {/* AI Generator */}
+          <div style={{ marginBottom: '20px', padding: '16px', background: 'linear-gradient(145deg, rgba(139,92,246,0.08) 0%, rgba(139,92,246,0.02) 100%)', borderRadius: '12px', border: '1px solid rgba(139,92,246,0.3)', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '120px', height: '120px', background: 'radial-gradient(circle, rgba(139,92,246,0.15) 0%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }} />
+            
+            <label className="mkt-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#c084fc', fontSize: '14px', marginBottom: '12px' }}>
+              <Sparkles size={16} /> AI Template Assistant
+            </label>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+              <textarea 
+                className="mkt-input"
+                style={{ flex: 1, minHeight: '60px', margin: 0, resize: 'vertical', backgroundColor: 'rgba(0,0,0,0.2)' }}
+                placeholder="E.g., Write a promotional email for BPC-157 highlighting its joint recovery benefits..."
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+              />
+              <button 
+                className="mkt-btn" 
+                onClick={generateAITemplate}
+                disabled={isGeneratingAI || !aiPrompt.trim()}
+                style={{ 
+                  margin: 0, 
+                  background: isGeneratingAI || !aiPrompt.trim() ? 'rgba(255,255,255,0.05)' : 'linear-gradient(to right, #8b5cf6, #7c3aed)',
+                  color: isGeneratingAI || !aiPrompt.trim() ? 'rgba(255,255,255,0.3)' : '#fff',
+                  border: isGeneratingAI || !aiPrompt.trim() ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                  whiteSpace: 'nowrap',
+                  height: '60px',
+                  padding: '0 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontWeight: '600',
+                  borderRadius: '8px'
+                }}
+              >
+                {isGeneratingAI ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                {isGeneratingAI ? 'Generating...' : 'Generate'}
+              </button>
+            </div>
+          </div>
+
           <div className="mkt-template-grid">
             {TEMPLATES.map(tpl => (
               <button
@@ -701,33 +781,85 @@ export default function CampaignBuilder() {
             </div>
           </div>
 
-          {/* Send Test Email */}
-          <div style={{ marginTop: '16px', padding: '14px', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <label className="mkt-label" style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <TestTube2 size={14} style={{ color: '#f59e0b' }} /> Send Test Email
-            </label>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
-              <input
-                type="email"
-                value={testEmail}
-                onChange={e => setTestEmail(e.target.value)}
-                placeholder="your@email.com"
-                className="mkt-input"
-                style={{ flex: 1, margin: 0 }}
-              />
+          {/* Send Test Email - Enhanced UI */}
+          <div style={{ 
+            marginTop: '20px', 
+            padding: '18px', 
+            background: 'linear-gradient(145deg, rgba(245,158,11,0.05) 0%, rgba(245,158,11,0.01) 100%)', 
+            borderRadius: '12px', 
+            border: '1px solid rgba(245,158,11,0.2)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            {/* Background accent glow */}
+            <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '100px', height: '100px', background: 'radial-gradient(circle, rgba(245,158,11,0.1) 0%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }} />
+
+            <div style={{ marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label className="mkt-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontSize: '14px', fontWeight: '600' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(245,158,11,0.15)' }}>
+                  <TestTube2 size={16} style={{ color: '#f59e0b' }} />
+                </div>
+                Send Test Email
+              </label>
+              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: '10px' }}>
+                Preview Mode
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Mail size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)', pointerEvents: 'none' }} />
+                <input
+                  type="email"
+                  value={testEmail}
+                  onChange={e => setTestEmail(e.target.value)}
+                  placeholder="tester@costapeptides.com, team@costapeptides.com"
+                  className="mkt-input"
+                  style={{ 
+                    margin: 0, 
+                    width: '100%', 
+                    paddingLeft: '40px',
+                    backgroundColor: 'rgba(0,0,0,0.2)',
+                    borderColor: 'rgba(245,158,11,0.3)',
+                    color: '#fff',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = '#f59e0b'}
+                  onBlur={(e) => e.target.style.borderColor = 'rgba(245,158,11,0.3)'}
+                />
+              </div>
               <button
                 onClick={sendTestEmail}
                 disabled={isSendingTest || !isReady || !testEmail.trim()}
-                className="mkt-btn mkt-btn-warning"
-                style={{ whiteSpace: 'nowrap', margin: 0 }}
+                className="mkt-btn"
+                style={{ 
+                  margin: 0,
+                  whiteSpace: 'nowrap',
+                  background: isSendingTest || (!isReady) || !testEmail.trim() ? 'rgba(255,255,255,0.05)' : 'linear-gradient(to right, #f59e0b, #d97706)',
+                  color: isSendingTest || (!isReady) || !testEmail.trim() ? 'rgba(255,255,255,0.3)' : '#fff',
+                  border: isSendingTest || (!isReady) || !testEmail.trim() ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                  boxShadow: isSendingTest || (!isReady) || !testEmail.trim() ? 'none' : '0 4px 12px rgba(245,158,11,0.3)',
+                  fontWeight: '600',
+                  padding: '0 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s ease',
+                  cursor: isSendingTest || (!isReady) || !testEmail.trim() ? 'not-allowed' : 'pointer',
+                  borderRadius: '8px'
+                }}
+                onMouseOver={(e) => { if (!isSendingTest && isReady && testEmail.trim()) e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseOut={(e) => { if (!isSendingTest && isReady && testEmail.trim()) e.currentTarget.style.transform = 'translateY(0)'; }}
               >
-                {isSendingTest ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                Send Test
+                {isSendingTest ? <Loader2 size={16} className="animate-spin" /> : <SendHorizonal size={16} />}
+                {isSendingTest ? 'Sending...' : 'Send Test'}
               </button>
             </div>
-            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', margin: '8px 0 0' }}>
-              Sends a preview with [TEST] prefix. Use commas for multiple addresses.
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '12px', fontSize: '12px', color: 'rgba(255,255,255,0.45)' }}>
+              <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#f59e0b' }} />
+              <span>Sends a real preview with a <strong>[TEST]</strong> prefix. Separate multiple emails with commas.</span>
+            </div>
           </div>
         </Section>
 

@@ -272,7 +272,11 @@ ${matchedOrderId ? `- Matched Order ID: ${matchedOrderId}` : ''}
 New Inbound Customer Message:
 "${messageText}"
 
-Reply in the same language the customer used (Spanish or English). If they have an active abandoned cart in context, you may share their recovery link when helpful. Please reply naturally, keeping the tone warm, professional, helpful, and highly scientific yet accessible. Output ONLY the response text to send back. Do not include any JSON wrapping or markdown preamble. Keep under 1000 characters if possible.
+Reply in the same language the customer used (Spanish or English). If they have an active abandoned cart in context, you may share their recovery link when helpful. Please reply naturally, keeping the tone warm, professional, helpful, and highly scientific yet accessible. 
+
+CRITICAL INSTRUCTION: If the customer asks a question that you do not know the answer to, or if the information is not explicitly provided in the context above, do NOT guess or invent an answer. Instead, politely inform them that you are an AI assistant and tell them to contact our human support directly at +506 8404-6973.
+
+Output ONLY the response text to send back. Do not include any JSON wrapping or markdown preamble. Keep under 1000 characters if possible.
 `;
 
                   const response = await fetch(
@@ -310,8 +314,8 @@ Reply in the same language the customer used (Spanish or English). If they have 
                 const greetingEs = displayName ? `¡Hola ${displayName}!` : '¡Hola!';
                 const greetingEn = displayName ? `Hi ${displayName}!` : 'Hi!';
                 replyText = matchedOrderId
-                  ? `${greetingEs} 👋 Hemos recibido tu pedido. Te contactaremos pronto para coordinar el envío. 🚀\n\n${greetingEn} 👋 We've received your order. We'll be in touch shortly to coordinate delivery. 🚀`
-                  : `${greetingEs} 👋 Gracias por contactarnos. Un agente te responderá pronto.\n\n${greetingEn} 👋 Thanks for reaching out. An agent will reply shortly.`;
+                  ? `${greetingEs} 👋 Hemos recibido tu pedido. Te contactaremos pronto para coordinar el envío. Para hablar con un agente real, contáctanos al +506 8404-6973. 🚀\n\n${greetingEn} 👋 We've received your order. We'll be in touch shortly to coordinate delivery. For a real agent, contact +506 8404-6973. 🚀`
+                  : `${greetingEs} 👋 Gracias por contactarnos. Un agente te responderá pronto. Si es urgente, puedes contactar a un agente real al +506 8404-6973.\n\n${greetingEn} 👋 Thanks for reaching out. An agent will reply shortly. For immediate assistance from a real agent, contact +506 8404-6973.`;
               }
 
               // Send the reply via WhatsApp Cloud API
