@@ -97,7 +97,7 @@ export async function GET(request) {
     const { data: broadcasts, error: fetchError } = await supabase
       .from('scheduled_broadcasts')
       .select('*')
-      .eq('status', 'pending')
+      .in('status', ['pending', 'processing'])
       .lte('scheduled_at', new Date().toISOString());
 
     if (fetchError) throw fetchError;
@@ -141,7 +141,7 @@ export async function GET(request) {
       }
 
       const contacts = Array.from(targets.values());
-      const BATCH_SIZE = 30;
+      const BATCH_SIZE = 10;
       const batchContacts = contacts.slice(0, BATCH_SIZE);
       const remainingContacts = contacts.slice(BATCH_SIZE);
 
