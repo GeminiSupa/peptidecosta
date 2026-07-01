@@ -156,7 +156,11 @@ export async function POST(request) {
       const { error } = await supabase.from('scheduled_broadcasts').insert({
         audience,
         custom_contacts: customContacts || null,
-        channels: { ...channels, whatsappTemplateName, whatsappTemplateLanguage },
+        channels: { 
+          ...channels, 
+          whatsappTemplateName: whatsappTemplateName || null, 
+          whatsappTemplateLanguage: whatsappTemplateLanguage || null 
+        },
         message: message || '',
         scheduled_at: scheduledAt,
         status: 'pending'
@@ -254,7 +258,11 @@ export async function POST(request) {
       const { data: inserted, error: insertError } = await supabase.from('scheduled_broadcasts').insert({
         audience: 'custom',
         custom_contacts: allContactStrs,
-        channels: { ...channels, whatsappTemplateName, whatsappTemplateLanguage },
+        channels: { 
+          ...channels, 
+          whatsappTemplateName: whatsappTemplateName || null, 
+          whatsappTemplateLanguage: whatsappTemplateLanguage || null 
+        },
         message: message || '',
         scheduled_at: new Date().toISOString(),
         status: 'pending'
