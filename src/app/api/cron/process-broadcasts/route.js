@@ -135,8 +135,13 @@ export async function GET(request) {
       if (audience === 'custom' && custom_contacts) {
         const contactsList = custom_contacts.split(/[\n,]+/).map(c => c.trim()).filter(Boolean);
         contactsList.forEach(c => {
-          const isEmail = c.includes('@');
-          targets.set(c, { phone: isEmail ? null : c, email: isEmail ? c : null });
+          if (c.includes('|')) {
+            const [phone, email] = c.split('|');
+            targets.set(c, { phone: phone || null, email: email || null });
+          } else {
+            const isEmail = c.includes('@');
+            targets.set(c, { phone: isEmail ? null : c, email: isEmail ? c : null });
+          }
         });
       }
 
