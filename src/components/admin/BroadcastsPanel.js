@@ -162,7 +162,8 @@ export default function BroadcastsPanel({ products = [] }) {
           testContact: testNumber,
           channels: { ...channels, emailSubject },
           message: message ? `[TEST BROADCAST]\n${message}` : '',
-          whatsappTemplateName: channels.whatsappTemplateName || undefined
+          whatsappTemplateName: channels.whatsappTemplateName || undefined,
+          whatsappTemplateLanguage: channels.whatsappTemplateLanguage || 'es'
         })
       });
       const data = await res.json();
@@ -194,6 +195,7 @@ export default function BroadcastsPanel({ products = [] }) {
           channels: { ...channels, emailSubject }, 
           message,
           whatsappTemplateName: channels.whatsappTemplateName || undefined,
+          whatsappTemplateLanguage: channels.whatsappTemplateLanguage || 'es',
           scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
           enableBatching: channels.whatsapp // Automatically batch whatsapp to avoid limits
         })
@@ -489,14 +491,25 @@ export default function BroadcastsPanel({ products = [] }) {
         {channels.whatsapp && (
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Meta WhatsApp Template (Optional)</label>
-            <input 
-              type="text"
-              className="admin-input"
-              style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '12px 16px', borderRadius: '8px', fontSize: '0.95rem' }}
-              placeholder="e.g. new_products_launch (if blank, sends as raw text)"
-              value={channels.whatsappTemplateName || ''}
-              onChange={e => setChannels({ ...channels, whatsappTemplateName: e.target.value })}
-            />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <input 
+                type="text"
+                className="admin-input"
+                style={{ flex: 1, background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '12px 16px', borderRadius: '8px', fontSize: '0.95rem' }}
+                placeholder="e.g. nuevos_productos_lanzamiento (if blank, sends as raw text)"
+                value={channels.whatsappTemplateName || ''}
+                onChange={e => setChannels({ ...channels, whatsappTemplateName: e.target.value })}
+              />
+              <select 
+                className="admin-input"
+                style={{ width: '120px', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: '8px' }}
+                value={channels.whatsappTemplateLanguage || 'es'}
+                onChange={e => setChannels({ ...channels, whatsappTemplateLanguage: e.target.value })}
+              >
+                <option value="es">ES (Spanish)</option>
+                <option value="en_US">EN (English)</option>
+              </select>
+            </div>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Use an approved template name to bypass the 24-hour window restriction and reach all leads.</p>
           </div>
         )}

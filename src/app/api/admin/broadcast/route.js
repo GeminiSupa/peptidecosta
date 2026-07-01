@@ -13,7 +13,7 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 
 // Helper for sending WhatsApp via the official graph API
-async function sendWhatsApp(to, message, templateName = null, firstName = 'Customer') {
+async function sendWhatsApp(to, message, templateName = null, firstName = 'Customer', languageCode = 'es') {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   if (!token || !phoneNumberId) {
@@ -42,7 +42,7 @@ async function sendWhatsApp(to, message, templateName = null, firstName = 'Custo
         type: 'template',
         template: {
           name: templateName,
-          language: { code: 'en_US' },
+          language: { code: languageCode || 'es' },
           components: [
             {
               type: 'body',
@@ -138,7 +138,7 @@ export async function DELETE(request) {
 
 export async function POST(request) {
   try {
-    const { audience, channels, message, testContact, customContacts, scheduledAt, enableBatching, whatsappTemplateName } = await request.json();
+    const { audience, channels, message, testContact, customContacts, scheduledAt, enableBatching, whatsappTemplateName, whatsappTemplateLanguage } = await request.json();
 
     if (!message && !whatsappTemplateName) {
       return NextResponse.json({ error: 'Message or Template Name is required' }, { status: 400 });
@@ -148,7 +148,7 @@ export async function POST(request) {
       const { error } = await supabase.from('scheduled_broadcasts').insert({
         audience,
         custom_contacts: customContacts || null,
-        channels: { ...channels, whatsappTemplateName },
+        channels: { ...channels, whatsappTemplateName, whatsappTemplateLanguage },
         message: message || '',
         scheduled_at: scheduledAt,
         status: 'pending'
@@ -276,7 +276,7 @@ export async function POST(request) {
       let sentEmail = false;
 
       if (channels.whatsapp && contact.phone) {
-        sentWhatsapp = await sendWhatsApp(contact.phone, message, whatsappTemplateName, contact.name);
+        sentWhatsapp = await sendWhatsApp(contact.phone, message, whatsappTemplateName, contact.name, whatsappTemplateLanguage);
       }
       
       if (channels.email && contact.email && message) {
