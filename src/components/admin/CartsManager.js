@@ -35,11 +35,16 @@ export default function CartsManager({
 
   const calculateCartTotal = (cartData) => {
     if (!cartData) return 0;
-    if (typeof cartData.total === 'number') return cartData.total;
-    if (Array.isArray(cartData)) {
-      return cartData.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0);
+    const items = Array.isArray(cartData) ? cartData : (Array.isArray(cartData?.items) ? cartData.items : []);
+    if (items.length === 0) {
+      if (typeof cartData.total === 'number') return cartData.total;
+      return 0;
     }
-    return 0;
+    return items.reduce((sum, item) => {
+      const price = parseFloat((item.price_usd || item.priceUsd || item.price || '0').toString().replace(/[^0-9.]/g, '')) || 0;
+      const qty = item.qty || item.quantity || 1;
+      return sum + (price * qty);
+    }, 0);
   };
 
   const getCartItems = (cartData) => {
@@ -239,8 +244,8 @@ export default function CartsManager({
                     {items.slice(0, 3).map((item, idx) => (
                       <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#cbd5e1' }}>
                         <div style={{ background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '6px', color: '#64748b' }}><Package size={12}/></div>
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.quantity}x {item.name || item.product_name || 'Product'}</span>
-                        <span style={{ color: '#94a3b8' }}>${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</span>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.qty || item.quantity || 1}x {item.product || item.name || item.product_name || 'Product'}</span>
+                        <span style={{ color: '#94a3b8' }}>${((parseFloat((item.price_usd || item.priceUsd || item.price || '0').toString().replace(/[^0-9.]/g, '')) || 0) * (item.qty || item.quantity || 1)).toFixed(2)}</span>
                       </div>
                     ))}
                     {items.length > 3 && (
