@@ -40,24 +40,25 @@ export default function LeadsManager({
   leadsPerPage = 50
 }) {
 
-  const uniqueAreas = Array.from(new Set(leads.map(l => l.region || l.city).filter(Boolean))).sort();
+  const uniqueAreas = Array.from(new Set((leads || []).map(l => l.region || l.city).filter(Boolean))).sort();
 
   // Stats
-  const totalLeads = leads.length;
-  const waLeads = leads.filter(l => l.contact_method === 'whatsapp').length;
-  const convertedLeads = leads.filter(l => getLeadConversion(l).converted).length;
+  const safeLeads = leads || [];
+  const totalLeads = safeLeads.length;
+  const waLeads = safeLeads.filter(l => l.contact_method === 'whatsapp').length;
+  const convertedLeads = safeLeads.filter(l => getLeadConversion(l).converted).length;
   const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0.0';
-  const adsLeads = leads.filter(l => l.utm_source || l.utm_medium || l.utm_campaign || (l.source && l.source.toLowerCase().includes('facebook'))).length;
+  const adsLeads = safeLeads.filter(l => l.utm_source || l.utm_medium || l.utm_campaign || (l.source && l.source.toLowerCase().includes('facebook'))).length;
   const organicLeads = totalLeads - adsLeads;
 
   // Filtering
-  const filteredLeads = leads.filter(l => {
+  const filteredLeads = safeLeads.filter(l => {
     if (leadsSearch) {
       const q = leadsSearch.toLowerCase();
       const match = (
         (l.first_name || '').toLowerCase().includes(q) ||
         (l.last_name || '').toLowerCase().includes(q) ||
-        (l.contact_value || '').toLowerCase().includes(q)
+        (l.contact_value || l.phone || l.email || '').toLowerCase().includes(q)
       );
       if (!match) return false;
     }
@@ -73,13 +74,16 @@ export default function LeadsManager({
     return true;
   });
 
+  const safePage = page || 1;
   const totalPages = Math.ceil(filteredLeads.length / leadsPerPage);
-  const currentLeads = filteredLeads.slice((page - 1) * leadsPerPage, page * leadsPerPage);
+  const currentLeads = filteredLeads.slice((safePage - 1) * leadsPerPage, safePage * leadsPerPage);
 
-  const isAllCurrentSelected = currentLeads.length > 0 && currentLeads.every(l => selectedLeads.includes(l.id));
+  const safeSelectedLeads = selectedLeads || [];
+  const isAllCurrentSelected = currentLeads.length > 0 && currentLeads.every(l => safeSelectedLeads.includes(l.id));
 
   // Temperature Logic
   const getLeadTemperature = (lead) => {
+    if (!lead) return { color: '#38bdf8', label: 'Warm (Organic)', icon: <Snowflake size={12}/> };
     const isConverted = getLeadConversion(lead).converted;
     if (isConverted) return { color: '#10b981', label: 'Converted', icon: <Target size={12}/> };
     if (lead.tags && lead.tags.includes('VIP')) return { color: '#8b5cf6', label: 'VIP', icon: <Sparkles size={12}/> };

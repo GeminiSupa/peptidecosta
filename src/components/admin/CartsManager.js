@@ -59,12 +59,12 @@ export default function CartsManager({
           </div>
           <div>
             <h2 className="admin-section-title" style={{ margin: 0 }}>Abandoned Carts</h2>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>{abandonedCarts.length} active carts awaiting recovery</p>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>{(abandonedCarts || []).length} active carts awaiting recovery</p>
           </div>
         </div>
         
         <div className="admin-toolbar-actions">
-          {abandonedCarts.length > 0 && (
+          {(abandonedCarts || []).length > 0 && (
             <>
               <button
                 onClick={() => setExportModalType('carts')}
@@ -175,7 +175,7 @@ export default function CartsManager({
       )}
 
       {/* CARTS GRID - MOBILE FIRST CARDS */}
-      {abandonedCarts.length === 0 ? (
+      {!(abandonedCarts || []).length ? (
         <div className="admin-empty-state" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)' }}>
           <div className="empty-icon" style={{ opacity: 0.5 }}><ShoppingCart size={48} /></div>
           <h3>No Abandoned Carts</h3>
@@ -183,7 +183,7 @@ export default function CartsManager({
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '20px' }}>
-          {abandonedCarts.map((cart) => {
+          {(abandonedCarts || []).map((cart) => {
             const urgency = getUrgency(cart.created_at);
             const total = calculateCartTotal(cart.cart_data);
             const items = getCartItems(cart.cart_data);

@@ -885,7 +885,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   const getLeadConversion = (lead) => {
     if (!lead || !lead.contact_value) return { converted: false };
-    const val = lead.contact_value.trim().toLowerCase();
+    const val = String(lead.contact_value).trim().toLowerCase();
     const isEmail = val.includes('@');
     
     if (isEmail) {
