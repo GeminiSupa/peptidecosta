@@ -29,19 +29,39 @@ export default function CartsManager({
 
   // Sorting & Filtering State
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState('date'); // 'date', 'value'
+  const [sortField, setSortField] = useState('date'); // 'date', 'value', 'items'
   const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
+  const [urgencyFilter, setUrgencyFilter] = useState('all'); // 'all', 'fresh', 'warm', 'cold'
+  const [contactFilter, setContactFilter] = useState('all'); // 'all', 'has_phone', 'has_email'
 
   const filteredAndSortedCarts = useMemo(() => {
     let result = [...(abandonedCarts || [])];
     
-    // Filter
+    // Filter by search
     if (searchTerm) {
       const lowerQ = searchTerm.toLowerCase();
       result = result.filter(c => 
         (c.user_email || c.customer_email || '').toLowerCase().includes(lowerQ) ||
         (c.user_phone || c.customer_phone || '').includes(searchTerm)
       );
+    }
+
+    // Filter by urgency
+    if (urgencyFilter !== 'all') {
+      result = result.filter(c => {
+        const hours = (new Date() - new Date(c.created_at)) / 3600000;
+        if (urgencyFilter === 'fresh') return hours < 1;
+        if (urgencyFilter === 'warm') return hours >= 1 && hours < 24;
+        if (urgencyFilter === 'cold') return hours >= 24;
+        return true;
+      });
+    }
+
+    // Filter by contact info
+    if (contactFilter === 'has_phone') {
+      result = result.filter(c => !!(c.user_phone || c.customer_phone));
+    } else if (contactFilter === 'has_email') {
+      result = result.filter(c => !!(c.user_email || c.customer_email));
     }
     
     // Sort
@@ -53,12 +73,16 @@ export default function CartsManager({
         const totalA = calculateCartTotal(a.cart_data);
         const totalB = calculateCartTotal(b.cart_data);
         comparison = totalA - totalB;
+      } else if (sortField === 'items') {
+        const itemsA = getCartItems(a.cart_data).length;
+        const itemsB = getCartItems(b.cart_data).length;
+        comparison = itemsA - itemsB;
       }
       return sortDir === 'asc' ? comparison : -comparison;
     });
     
     return result;
-  }, [abandonedCarts, searchTerm, sortField, sortDir]);
+  }, [abandonedCarts, searchTerm, sortField, sortDir, urgencyFilter, contactFilter]);
 
   // Visual Urgency Calculation
   const getUrgency = (createdAt) => {
@@ -70,19 +94,32 @@ export default function CartsManager({
 
   const calculateCartTotal = (cartData) => {
     if (!cartData) return 0;
+    
+    if (typeof cartData === 'string') {
+      try { cartData = JSON.parse(cartData); } catch (e) { return 0; }
+    }
+
     const items = Array.isArray(cartData) ? cartData : (Array.isArray(cartData?.items) ? cartData.items : []);
     if (items.length === 0) {
-      if (typeof cartData.total === 'number') return cartData.total;
+      if (cartData && typeof cartData.total !== 'undefined') {
+        return parseFloat((cartData.total || '0').toString().replace(/[^0-9.]/g, '')) || 0;
+      }
       return 0;
     }
     return items.reduce((sum, item) => {
-      const price = parseFloat((item.price_usd || item.priceUsd || item.price || '0').toString().replace(/[^0-9.]/g, '')) || 0;
-      const qty = item.qty || item.quantity || 1;
+      if (!item) return sum;
+      const priceVal = item.price_usd || item.priceUsd || item.price || '0';
+      const price = parseFloat(priceVal.toString().replace(/[^0-9.]/g, '')) || 0;
+      const qty = parseInt(item.qty || item.quantity || 1) || 1;
       return sum + (price * qty);
     }, 0);
   };
 
   const getCartItems = (cartData) => {
+    if (!cartData) return [];
+    if (typeof cartData === 'string') {
+      try { cartData = JSON.parse(cartData); } catch (e) { return []; }
+    }
     if (Array.isArray(cartData)) return cartData;
     if (cartData && Array.isArray(cartData.items)) return cartData.items;
     return [];
@@ -217,7 +254,7 @@ export default function CartsManager({
       
       {/* Search and Sort Toolbar */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        <div style={{ flex: '1 1 250px', position: 'relative' }}>
+        <div style={{ flex: '1 1 200px', position: 'relative' }}>
           <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
           <input 
             type="text" 
@@ -227,6 +264,32 @@ export default function CartsManager({
             style={{ width: '100%', background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', padding: '10px 10px 10px 36px', borderRadius: '8px', fontSize: '0.9rem' }}
           />
         </div>
+        
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '0 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <select 
+            value={urgencyFilter} 
+            onChange={(e) => setUrgencyFilter(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+          >
+            <option value="all" style={{background: '#0f172a'}}>All Ages</option>
+            <option value="fresh" style={{background: '#0f172a'}}>Fresh (&lt; 1h)</option>
+            <option value="warm" style={{background: '#0f172a'}}>Warm (1-24h)</option>
+            <option value="cold" style={{background: '#0f172a'}}>Cold (24h+)</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '0 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <select 
+            value={contactFilter} 
+            onChange={(e) => setContactFilter(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+          >
+            <option value="all" style={{background: '#0f172a'}}>All Contacts</option>
+            <option value="has_phone" style={{background: '#0f172a'}}>Has Phone</option>
+            <option value="has_email" style={{background: '#0f172a'}}>Has Email</option>
+          </select>
+        </div>
+
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '0 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
           <ArrowDownUp size={14} color="#94a3b8" />
           <select 
@@ -236,6 +299,7 @@ export default function CartsManager({
           >
             <option value="date" style={{background: '#0f172a'}}>Sort by Date</option>
             <option value="value" style={{background: '#0f172a'}}>Sort by Value</option>
+            <option value="items" style={{background: '#0f172a'}}>Sort by Items</option>
           </select>
           <select 
             value={sortDir} 
