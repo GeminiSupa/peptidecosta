@@ -12,7 +12,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
 import { adminFetch } from '@/lib/adminApi';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 
 export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [] }) {
   const [explainerTopic, setExplainerTopic] = useState(null);
@@ -212,6 +212,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [dbProductViews, setDbProductViews] = useState([]);
   const [dbOrders, setDbOrders] = useState([]);
   const [dbCarts, setDbCarts] = useState([]);
+  const [dbCampaigns, setDbCampaigns] = useState([]);
   const [dbClickEvents, setDbClickEvents] = useState([]);
 
   // Heatmap UI States
@@ -264,6 +265,15 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             .select('*')
             .eq('is_mobile', true)
             .order('created_at', { ascending: false });
+
+          // 6. Fetch marketing campaigns for analytics
+          try {
+            const campRes = await fetch('/api/admin/campaigns');
+            if (campRes.ok) {
+              const campData = await campRes.json();
+              if (campData.campaigns) setDbCampaigns(campData.campaigns);
+            }
+          } catch(e) { console.error("Error fetching campaigns for analytics", e); }
 
           if (!sErr && sessions) setDbSessions(sessions);
           if (!vErr && views) setDbProductViews(views);
@@ -647,6 +657,41 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     value: p.purchases,
     color: COLORS[index % COLORS.length]
   }));
+
+  // --- NEW MARKETING ANALYTICS ---
+  // 1. Email Campaign Performance
+  const campaignChartData = (dbCampaigns || []).slice(0, 5).map(c => {
+    const sent = c.recipient_count || 1;
+    const opens = c.campaign_opens?.[0]?.count || 0;
+    const clicks = c.campaign_clicks?.[0]?.count || 0;
+    return {
+      name: c.subject ? c.subject.substring(0, 15) + '...' : 'Campaign',
+      openRate: Math.round((opens / sent) * 100),
+      clickRate: Math.round((clicks / sent) * 100)
+    };
+  });
+
+  // 2. UTM Source/Traffic Channels
+  const sourceMap = {};
+  filteredOrders.forEach(o => {
+    const src = o.tracking_source || 'direct/unknown';
+    sourceMap[src] = (sourceMap[src] || 0) + 1;
+  });
+  const trafficChartData = Object.entries(sourceMap).map(([name, value], index) => ({
+    name,
+    value,
+    color: COLORS[index % COLORS.length]
+  })).sort((a,b) => b.value - a.value);
+
+  // 3. Cart Abandonment Funnel
+  const totalViews = filteredProductViews.length;
+  const totalCarts = filteredCarts.length + filteredOrders.length; 
+  const totalCheckouts = filteredOrders.length;
+  const funnelChartData = [
+    { name: 'Views', value: totalViews, fill: '#3b82f6' },
+    { name: 'Carts', value: totalCarts, fill: '#f59e0b' },
+    { name: 'Purchased', value: totalCheckouts, fill: '#10b981' }
+  ];
 
   const handleExport = (format) => {
     setExportLoading(true);
@@ -1411,7 +1456,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         /* ─── KPI metric cards ──────────────────────────── */
         .metrics-grid-4 {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: 1fr;
           gap: 10px;
           margin-bottom: 20px;
           align-items: flex-start;
@@ -2487,6 +2532,90 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           </div>
         </div>
 
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* MARKETING & ACQUISITION FUNNEL SECTION */}
+      {/* ------------------------------------------------------------- */}
+      <div className="analytics-double-panel">
+        
+        {/* Email Campaign Performance */}
+        <div className="dashboard-section-card" style={{ overflowX: 'auto' }}>
+          <div className="section-card-title">
+            <MessageCircle size={16} style={{ color: '#ec4899' }} />
+            <span>Email Marketing Performance</span>
+          </div>
+          <div style={{ width: '100%', minWidth: '400px', height: '260px' }}>
+            {campaignChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={campaignChartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} dy={10} />
+                  <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                  <RechartsTooltip 
+                    cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
+                  />
+                  <Legend verticalAlign="top" wrapperStyle={{ fontSize: '11px', color: '#94a3b8' }} />
+                  <Bar dataKey="openRate" name="Open Rate %" fill="#ec4899" radius={[4, 4, 0, 0]} barSize={30} />
+                  <Bar dataKey="clickRate" name="Click Rate %" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={30} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: '0.85rem' }}>No campaign data available</div>
+            )}
+          </div>
+        </div>
+
+        {/* Traffic Channels & Funnel */}
+        <div className="dashboard-section-card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          <div style={{ flex: 1 }}>
+            <div className="section-card-title">
+              <Target size={16} style={{ color: '#0ea5e9' }} />
+              <span>Conversion Funnel (Current Range)</span>
+            </div>
+            <div style={{ width: '100%', height: '140px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={funnelChartData} layout="vertical" margin={{ top: 0, right: 30, left: 10, bottom: 0 }}>
+                  <XAxis type="number" hide />
+                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#e2e8f0', fontSize: 12, fontWeight: 'bold' }} width={80} />
+                  <RechartsTooltip cursor={{ fill: 'rgba(255,255,255,0.02)' }} contentStyle={{ borderRadius: '8px', border: '1px solid #334155', background: '#0f172a' }} />
+                  <Bar dataKey="value" name="Count" radius={[0, 4, 4, 0]} barSize={24}>
+                    {funnelChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div style={{ flex: 1, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px' }}>
+            <div className="section-card-title">
+              <MapPin size={16} style={{ color: '#facc15' }} />
+              <span>UTM Acquisition Channels</span>
+            </div>
+            <div style={{ width: '100%', height: '160px', display: 'flex', alignItems: 'center' }}>
+               {trafficChartData.length > 0 ? (
+                 <ResponsiveContainer width="100%" height="100%">
+                   <PieChart>
+                     <Pie data={trafficChartData} cx="50%" cy="50%" innerRadius={40} outerRadius={65} paddingAngle={2} dataKey="value" stroke="none">
+                       {trafficChartData.map((entry, index) => (
+                         <Cell key={`cell-${index}`} fill={entry.color} />
+                       ))}
+                     </Pie>
+                     <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', background: '#0f172a', color: '#fff', fontSize: '12px' }} />
+                     <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" wrapperStyle={{ fontSize: '11px', color: '#94a3b8' }} />
+                   </PieChart>
+                 </ResponsiveContainer>
+               ) : (
+                 <div style={{ width: '100%', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>No UTM tracking data</div>
+               )}
+            </div>
+          </div>
+
+        </div>
       </div>
 
       {/* ------------------------------------------------------------- */}

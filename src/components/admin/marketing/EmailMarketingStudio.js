@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { BarChart2, Mail, Users, Zap, TrendingUp, Send } from 'lucide-react';
 import SubscriberManager from './SubscriberManager';
-import CampaignAnalytics from './CampaignAnalytics';
+
 import AutomationStudio from './AutomationStudio';
 import { adminFetch } from '@/lib/adminApi';
 
