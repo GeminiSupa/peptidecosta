@@ -4898,6 +4898,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             page={leadsCurrentPage}
             setPage={setLeadsCurrentPage}
             leadsPerPage={leadsPerPage}
+            productViews={productViews}
+            setSelectedLeadDetails={setSelectedLeadDetails}
           />
           </ErrorBoundary>
         )}

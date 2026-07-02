@@ -37,7 +37,9 @@ export default function LeadsManager({
   setLeadsAreaFilter,
   page,
   setPage,
-  leadsPerPage = 50
+  leadsPerPage = 50,
+  productViews = [],
+  setSelectedLeadDetails
 }) {
 
   const uniqueAreas = Array.from(new Set((leads || []).map(l => l.region || l.city).filter(Boolean))).sort();
@@ -269,7 +271,7 @@ export default function LeadsManager({
           <p>Try adjusting your search filters.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
           {/* "Select All Current Page" Utility Card */}
           {currentLeads.length > 0 && (
             <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '10px', padding: '0 10px' }}>
@@ -363,11 +365,29 @@ export default function LeadsManager({
 
                 {/* FOOTER ACTIONS */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                    {new Date(lead.created_at).toLocaleDateString()}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      {new Date(lead.created_at).toLocaleDateString()}
+                    </div>
+                    {(() => {
+                      const views = productViews.filter(v => v.contact_value === lead.contact_value);
+                      if (views.length > 0) {
+                        return (
+                          <button 
+                            onClick={() => setSelectedLeadDetails?.(lead)}
+                            style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', color: '#10b981', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            title="Click to view browsing history"
+                          >
+                            👀 {views.length} {views.length === 1 ? 'View' : 'Views'}
+                          </button>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                   
                   <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => setSelectedLeadDetails?.(lead)} className="admin-btn admin-btn-primary" style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '8px', border: '1px solid #3b82f6' }}>Details</button>
                     <button 
                       onClick={() => {
                         const val = lead.contact_value || lead.phone;
