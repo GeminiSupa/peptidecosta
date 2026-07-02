@@ -4901,6 +4901,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             productViews={productViews}
             setSelectedLeadDetails={setSelectedLeadDetails}
             openLeadOutreachComposer={openLeadOutreachComposer}
+            getReferralLabel={getReferralLabel}
+            getReferralBadgeStyles={getReferralBadgeStyles}
+            formatRelativeTime={formatRelativeTime}
+            setSelectedOrderDetails={setSelectedOrderDetails}
           />
           </ErrorBoundary>
         )}

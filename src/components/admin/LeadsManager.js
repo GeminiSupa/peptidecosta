@@ -3,7 +3,7 @@
 import React from 'react';
 import { 
   Users, Trash2, Upload, Brain, Sparkles, 
-  Clock, Mail, MessageCircle, Target, Flame, Snowflake, Globe, ChevronLeft, ChevronRight
+  Mail, MessageCircle, Globe, Target, Flame, Snowflake
 } from 'lucide-react';
 
 const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) => (
@@ -27,7 +27,6 @@ export default function LeadsManager({
   handleBulkLeadsEmail,
   handleBulkLeadsWhatsApp,
   handleBulkDeleteLeads,
-  handleLeadUpdate,
   handleLeadDelete,
   leadsSearch,
   setLeadsSearch,
@@ -40,7 +39,11 @@ export default function LeadsManager({
   leadsPerPage = 50,
   productViews = [],
   setSelectedLeadDetails,
-  openLeadOutreachComposer
+  openLeadOutreachComposer,
+  getReferralLabel,
+  getReferralBadgeStyles,
+  formatRelativeTime,
+  setSelectedOrderDetails
 }) {
 
   const uniqueAreas = Array.from(new Set((leads || []).map(l => l.region || l.city).filter(Boolean))).sort();
@@ -48,7 +51,6 @@ export default function LeadsManager({
   // Stats
   const safeLeads = leads || [];
   const totalLeads = safeLeads.length;
-  const waLeads = safeLeads.filter(l => l.contact_method === 'whatsapp').length;
   const convertedLeads = safeLeads.filter(l => getLeadConversion(l).converted).length;
   const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0.0';
   const adsLeads = safeLeads.filter(l => l.utm_source || l.utm_medium || l.utm_campaign || (l.source && l.source.toLowerCase().includes('facebook'))).length;
@@ -79,70 +81,13 @@ export default function LeadsManager({
 
   const safePage = page || 1;
   const totalPages = Math.ceil(filteredLeads.length / leadsPerPage);
-  const currentLeads = filteredLeads.slice((safePage - 1) * leadsPerPage, safePage * leadsPerPage);
+  const paginatedLeads = filteredLeads.slice((safePage - 1) * leadsPerPage, safePage * leadsPerPage);
 
   const safeSelectedLeads = selectedLeads || [];
-  const isAllCurrentSelected = currentLeads.length > 0 && currentLeads.every(l => safeSelectedLeads.includes(l.id));
-
-  // Temperature Logic
-  const getLeadTemp = (lead) => {
-    if (!lead) return { color: '#38bdf8', label: 'Warm', icon: '❄️' };
-    const isConverted = getLeadConversion(lead).converted;
-    if (isConverted) return { color: '#10b981', label: 'Converted', icon: '✅' };
-    if (lead.tags && lead.tags.includes('VIP')) return { color: '#8b5cf6', label: 'VIP', icon: '⭐' };
-    if (lead.utm_source || lead.utm_medium || (lead.source && String(lead.source).toLowerCase().includes('facebook'))) {
-      return { color: '#f97316', label: 'Hot', icon: '🔥' };
-    }
-    return { color: '#38bdf8', label: 'Warm', icon: '❄️' };
-  };
-
-  const getViews = (lead) => {
-    return productViews.filter(v => v.contact_value === lead.contact_value).length;
-  };
-
-  // Styles
-  const rowStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '12px 16px',
-    borderBottom: '1px solid rgba(255,255,255,0.04)',
-    transition: 'background 0.15s',
-    flexWrap: 'wrap',
-  };
-
-  const pillStyle = (color) => ({
-    background: `${color}18`,
-    color: color,
-    padding: '2px 8px',
-    borderRadius: '6px',
-    fontSize: '0.7rem',
-    fontWeight: '700',
-    whiteSpace: 'nowrap',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '3px',
-  });
-
-  const iconBtnStyle = (bg) => ({
-    width: '30px',
-    height: '30px',
-    borderRadius: '8px',
-    background: bg,
-    color: '#fff',
-    border: 'none',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    transition: 'all 0.15s',
-    flexShrink: 0,
-  });
 
   return (
     <div className="admin-tab-panel">
       
-      {/* HEADER */}
       <div className="admin-section-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', padding: '10px', borderRadius: '12px', color: '#fff', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)' }}>
@@ -169,7 +114,6 @@ export default function LeadsManager({
         </div>
       </div>
 
-      {/* QUICK STATS ROW */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 120px', background: 'rgba(30, 41, 59, 0.4)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
           <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ads</div>
@@ -185,7 +129,6 @@ export default function LeadsManager({
         </div>
       </div>
 
-      {/* AI ANALYSIS - COMPACT */}
       <div style={{ marginBottom: '20px' }}>
         {generatingLeadsAi ? (
           <div style={{ background: 'rgba(14, 22, 38, 0.9)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -224,7 +167,6 @@ export default function LeadsManager({
         )}
       </div>
 
-      {/* SEARCH AND FILTERS */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
         <input
           type="text"
@@ -259,181 +201,322 @@ export default function LeadsManager({
         </select>
       </div>
 
-      {/* BULK ACTIONS */}
       {selectedLeads && selectedLeads.length > 0 && (
         <div style={{ marginBottom: '12px', padding: '10px 16px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.15)', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '0.85rem' }}>
           <span style={{ fontWeight: 'bold', color: '#38bdf8' }}>{selectedLeads.length} Selected</span>
           <span style={{ color: '#334155' }}>|</span>
-          <button onClick={handleBulkLeadsEmail} style={{ ...iconBtnStyle('#3b82f6'), width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', gap: '4px', display: 'inline-flex' }}>
+          <button onClick={handleBulkLeadsEmail} style={{ width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', gap: '4px', display: 'inline-flex', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}>
             <Mail size={12} /> Email
           </button>
-          <button onClick={handleBulkLeadsWhatsApp} style={{ ...iconBtnStyle('#10b981'), width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', gap: '4px', display: 'inline-flex' }}>
+          <button onClick={handleBulkLeadsWhatsApp} style={{ width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', gap: '4px', display: 'inline-flex', background: '#10b981', color: '#fff', border: 'none', cursor: 'pointer' }}>
             <MessageCircle size={12} /> WhatsApp
           </button>
-          <button onClick={handleBulkDeleteLeads} style={{ ...iconBtnStyle('rgba(239,68,68,0.15)'), width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', gap: '4px', display: 'inline-flex' }}>
+          <button onClick={handleBulkDeleteLeads} style={{ width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', gap: '4px', display: 'inline-flex', cursor: 'pointer' }}>
             <Trash2 size={12} /> Delete
           </button>
         </div>
       )}
 
-      {/* LEADS LIST */}
-      {currentLeads.length === 0 ? (
+      {paginatedLeads.length === 0 ? (
         <div style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '12px', padding: '40px 20px', border: '1px dashed rgba(255,255,255,0.1)', textAlign: 'center' }}>
           <Users size={36} style={{ color: '#334155', marginBottom: '10px' }} />
           <h3 style={{ color: '#94a3b8', margin: 0, fontSize: '1rem' }}>No Leads Found</h3>
           <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: '0.85rem' }}>Try adjusting your search filters.</p>
         </div>
       ) : (
-        <div style={{ background: 'rgba(30, 41, 59, 0.3)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-          
-          {/* Select All Row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.15)' }}>
-            <input 
-              type="checkbox"
-              checked={isAllCurrentSelected}
-              onChange={() => handleSelectAllLeads(currentLeads.map(l => l.id), isAllCurrentSelected)}
-              style={{ width: '15px', height: '15px', accentColor: '#38bdf8', cursor: 'pointer' }}
-            />
-            <span style={{ color: '#64748b', fontSize: '0.8rem' }}>Select all {currentLeads.length} on this page</span>
-            <span style={{ marginLeft: 'auto', color: '#475569', fontSize: '0.75rem' }}>{filteredLeads.length} total</span>
-          </div>
-
-          {/* Lead Rows */}
-          {currentLeads.map((lead) => {
-            const isSelected = selectedLeads && selectedLeads.includes(lead.id);
-            const temp = getLeadTemp(lead);
-            const views = getViews(lead);
-            const name = (lead.first_name || lead.last_name) 
-              ? `${lead.first_name || ''} ${lead.last_name || ''}`.trim() 
-              : 'Unknown';
-            const contact = lead.contact_value || lead.phone || lead.email || '';
-            const location = [lead.city, lead.region].filter(Boolean).join(', ');
-
-            return (
-              <div 
-                key={lead.id} 
-                style={{
-                  ...rowStyle,
-                  background: isSelected ? 'rgba(56, 189, 248, 0.04)' : 'transparent',
-                }}
-              >
-                {/* Checkbox */}
-                <input 
-                  type="checkbox" 
-                  checked={isSelected}
-                  onChange={() => handleSelectLead && handleSelectLead(lead.id)}
-                  style={{ width: '15px', height: '15px', accentColor: '#38bdf8', cursor: 'pointer', flexShrink: 0 }}
-                />
-
-                {/* Name + Contact - clickable to open details */}
-                <div 
-                  onClick={() => setSelectedLeadDetails?.(lead)}
-                  style={{ flex: '1 1 180px', minWidth: 0, cursor: 'pointer' }}
-                >
-                  <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {name}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {contact}
-                  </div>
-                </div>
-
-                {/* Pills row */}
-                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', flex: '0 1 auto', alignItems: 'center' }}>
-                  {/* Temperature */}
-                  <span style={pillStyle(temp.color)}>
-                    {temp.icon} {temp.label}
-                  </span>
-
-                  {/* Location */}
-                  {location && (
-                    <span style={pillStyle('#64748b')}>
-                      📍 {location.length > 18 ? location.substring(0, 18) + '…' : location}
-                    </span>
-                  )}
-
-                  {/* Product Views */}
-                  {views > 0 && (
-                    <span 
-                      onClick={() => setSelectedLeadDetails?.(lead)}
-                      style={{ ...pillStyle('#10b981'), cursor: 'pointer' }}
-                    >
-                      👀 {views}
-                    </span>
-                  )}
-
-                  {/* Source */}
-                  {lead.utm_source && (
-                    <span style={pillStyle('#f97316')}>
-                      📢 {String(lead.utm_source).length > 12 ? String(lead.utm_source).substring(0, 12) + '…' : lead.utm_source}
-                    </span>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
-                  <button 
-                    onClick={() => {
-                      if (openLeadOutreachComposer) {
-                        openLeadOutreachComposer(lead, 'whatsapp');
-                      } else {
-                        const val = lead.contact_value || lead.phone;
-                        if (val) window.open(`https://wa.me/${String(val).replace(/\D/g, '')}?text=Hi ${lead.first_name || ''}!`, '_blank');
-                      }
-                    }}
-                    style={iconBtnStyle('#10b981')}
-                    title="WhatsApp"
-                  >
-                    <MessageCircle size={13} />
-                  </button>
-                  {(lead.email || (lead.contact_value && lead.contact_value.includes('@'))) && (
-                    <button 
-                      onClick={() => {
-                        if (openLeadOutreachComposer) {
-                          openLeadOutreachComposer(lead, 'email');
-                        } else {
-                          window.location.href = `mailto:${lead.email || lead.contact_value}`;
+        <div className="table-responsive admin-table-wrap" style={{ background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <table className="spreadsheet-table responsive-table">
+            <thead>
+              <tr>
+                <th style={{ padding: '10px 12px', width: '40px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={paginatedLeads.length > 0 && paginatedLeads.every(l => safeSelectedLeads.includes(l.id))}
+                    onChange={(e) => handleSelectAllLeads(paginatedLeads.map(l => l.id), e.target.checked)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                </th>
+                <th style={{ padding: '10px 12px' }}>Date</th>
+                <th style={{ padding: '10px 12px' }}>Contact Details</th>
+                <th style={{ padding: '10px 12px', minWidth: '150px' }}>Location</th>
+                <th style={{ padding: '10px 12px' }}>Attribution</th>
+                <th style={{ padding: '10px 12px' }}>Last Contacted</th>
+                <th style={{ padding: '10px 12px' }}>Browsing History</th>
+                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedLeads.map((lead, index) => (
+              <tr key={lead.id}>
+                <td data-label="Select" style={{ padding: '10px 12px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={safeSelectedLeads.includes(lead.id)}
+                    onChange={() => handleSelectLead(lead.id)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                </td>
+                <td data-label="Date" style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                  {new Date(lead.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
+                </td>
+                <td data-label="Contact Details" style={{ padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ 
+                          background: lead.contact_method === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)', 
+                          color: lead.contact_method === 'whatsapp' ? '#4ade80' : '#38bdf8', 
+                          padding: '4px 8px', 
+                          borderRadius: '6px', 
+                          fontSize: '0.7rem', 
+                          fontWeight: 'bold',
+                          textTransform: 'uppercase',
+                          border: lead.contact_method === 'whatsapp' ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(56, 189, 248, 0.3)'
+                        }}>
+                          {lead.contact_method === 'whatsapp' ? '💬 WA' : '✉️ Email'}
+                        </span>
+                        <span 
+                          onClick={() => setSelectedLeadDetails?.(lead)}
+                          style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem', cursor: 'pointer' }}
+                        >
+                          {lead.contact_value || lead.phone || lead.email}
+                        </span>
+                        <span style={{ padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 'bold' }}>
+                          {lead.language ? lead.language.toUpperCase() : 'EN'}
+                        </span>
+                        {lead.contact_method === 'whatsapp' ? (
+                          <button 
+                            onClick={() => openLeadOutreachComposer(lead, 'whatsapp')}
+                            style={{
+                              color: '#4ade80',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              background: 'rgba(34, 197, 94, 0.1)',
+                              borderRadius: '50%',
+                              width: '22px',
+                              height: '22px',
+                              fontSize: '0.75rem',
+                              border: '1px solid rgba(34, 197, 94, 0.2)',
+                              cursor: 'pointer'
+                            }}
+                            title="Open AI WhatsApp Outreach Composer"
+                          >
+                            💬
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => openLeadOutreachComposer(lead, 'email')}
+                            style={{
+                              color: '#38bdf8',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              background: 'rgba(56, 189, 248, 0.1)',
+                              borderRadius: '50%',
+                              width: '22px',
+                              height: '22px',
+                              fontSize: '0.75rem',
+                              border: '1px solid rgba(56, 189, 248, 0.2)',
+                              cursor: 'pointer'
+                            }}
+                            title="Open AI Email Outreach Composer"
+                          >
+                            ✉️
+                          </button>
+                        )}
+                      </div>
+                          {(() => {
+                            const conv = getLeadConversion(lead);
+                            if (conv.converted) {
+                              return (
+                                <span 
+                                  onClick={() => setSelectedOrderDetails && setSelectedOrderDetails(conv.order)}
+                                  style={{ 
+                                    padding: '2px 6px', 
+                                    background: 'rgba(34, 197, 94, 0.15)', 
+                                    borderRadius: '4px', 
+                                    fontSize: '0.68rem', 
+                                    color: '#4ade80', 
+                                    fontWeight: 'bold', 
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                    border: '1px solid rgba(34, 197, 94, 0.2)',
+                                    alignSelf: 'flex-start',
+                                    marginTop: '2px'
+                                  }}
+                                  title={`Matches Order #${conv.order.order_number || conv.order.id}`}
+                                >
+                                  🎉 Converted (Order #{conv.order.order_number || conv.order.id?.substring(0, 6)})
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+                    </td>
+                    <td data-label="Location" style={{ padding: '10px 12px', minWidth: '150px', whiteSpace: 'nowrap' }}>
+                      {lead.city || lead.country ? (
+                        <span style={{ color: '#f8fafc', fontSize: '0.85rem' }}>
+                          {[lead.city, lead.country].filter(Boolean).join(', ')}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#64748b', fontSize: '0.85rem' }}>—</span>
+                      )}
+                    </td>
+                    <td data-label="Attribution" style={{ padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                        <span style={{ 
+                          ...(getReferralBadgeStyles ? getReferralBadgeStyles(getReferralLabel(lead)) : {}),
+                          padding: '4px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold',
+                          display: 'inline-block'
+                        }}>
+                          {getReferralLabel ? getReferralLabel(lead) : 'Organic'}
+                        </span>
+                        {lead.utm_campaign && (
+                          <span style={{ 
+                            fontSize: '0.7rem', 
+                            color: '#38bdf8', 
+                            fontWeight: '800', 
+                            background: 'rgba(56, 189, 248, 0.1)', 
+                            padding: '2px 6px', 
+                            borderRadius: '4px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            border: '1px solid rgba(56, 189, 248, 0.15)'
+                          }}>
+                            📢 {lead.utm_campaign}
+                          </span>
+                        )}
+                        {lead.utm_medium && (
+                          <span style={{ 
+                            fontSize: '0.65rem', 
+                            color: '#94a3b8',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            display: 'inline-block'
+                          }}>
+                            medium: <span style={{ color: '#cbd5e1', fontWeight: 'bold' }}>{lead.utm_medium}</span>
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td data-label="Last Contacted" style={{ padding: '10px 12px' }}>
+                      {(() => {
+                        if (!lead.last_contacted_at) {
+                          return (
+                            <span style={{ 
+                              background: 'rgba(255,255,255,0.03)', 
+                              color: '#64748b', 
+                              padding: '4px 8px', 
+                              borderRadius: '6px', 
+                              fontSize: '0.75rem', 
+                              fontWeight: 'bold',
+                              border: '1px solid rgba(255,255,255,0.06)'
+                            }}>
+                              Never
+                            </span>
+                          );
                         }
-                      }}
-                      style={iconBtnStyle('#3b82f6')}
-                      title="Email"
-                    >
-                      <Mail size={13} />
-                    </button>
-                  )}
-                  <button 
-                    onClick={() => handleLeadDelete && handleLeadDelete(lead.id)}
-                    style={{ ...iconBtnStyle('transparent'), color: '#ef4444', border: '1px solid rgba(239,68,68,0.15)' }}
-                    title="Delete"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+                        const contactedDate = new Date(lead.last_contacted_at);
+                        const isRecent = (new Date() - contactedDate) < 259200000;
+                        return (
+                          <span style={{ 
+                            background: isRecent ? 'rgba(245, 158, 11, 0.15)' : 'rgba(34, 197, 94, 0.15)', 
+                            color: isRecent ? '#fbbf24' : '#4ade80', 
+                            padding: '4px 8px', 
+                            borderRadius: '6px', 
+                            fontSize: '0.75rem', 
+                            fontWeight: 'bold',
+                            border: isRecent ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(34, 197, 94, 0.3)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }} title={`Last contacted on: ${contactedDate.toLocaleString()}`}>
+                            {isRecent ? '⚠️ ' : ''}{formatRelativeTime ? formatRelativeTime(lead.last_contacted_at) : lead.last_contacted_at}
+                          </span>
+                        );
+                      })()}
+                    </td>
+
+                    <td data-label="Browsing History" style={{ padding: '10px 12px' }}>
+                      {(() => {
+                        const views = productViews.filter(v => v.contact_value === lead.contact_value);
+                        if (views.length === 0) return <span style={{ color: '#64748b', fontSize: '0.8rem' }}>No views</span>;
+                        return (
+                          <button 
+                            onClick={() => setSelectedLeadDetails?.(lead)}
+                            style={{
+                              background: 'rgba(56, 189, 248, 0.1)',
+                              color: '#38bdf8',
+                              border: '1px solid rgba(56, 189, 248, 0.2)',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                              fontWeight: 'bold',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <Target size={12} /> {views.length} product{views.length !== 1 ? 's' : ''}
+                          </button>
+                        );
+                      })()}
+                    </td>
+                    
+                    <td data-label="Actions" style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                        <button 
+                          onClick={() => setSelectedLeadDetails?.(lead)}
+                          className="admin-btn admin-btn-secondary"
+                          style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '6px', border: 'none', background: 'rgba(255,255,255,0.05)' }}
+                        >
+                          Details
+                        </button>
+                        <button 
+                          onClick={() => handleLeadDelete && handleLeadDelete(lead.id)}
+                          className="admin-btn admin-btn-danger"
+                          style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '6px', border: 'none' }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {/* PAGINATION */}
       {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '20px' }}>
           <button 
             disabled={page === 1} 
             onClick={() => setPage(page - 1)}
-            style={{ ...iconBtnStyle('rgba(255,255,255,0.05)'), color: page === 1 ? '#334155' : '#94a3b8', border: '1px solid rgba(255,255,255,0.05)', cursor: page === 1 ? 'not-allowed' : 'pointer' }}
+            className="admin-btn"
+            style={{ padding: '6px 12px', fontSize: '0.85rem', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.5 : 1 }}
           >
-            <ChevronLeft size={16} />
+            Previous
           </button>
           <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-            {page} / {totalPages}
+            Page {page} of {totalPages}
           </span>
           <button 
             disabled={page === totalPages} 
             onClick={() => setPage(page + 1)}
-            style={{ ...iconBtnStyle('rgba(255,255,255,0.05)'), color: page === totalPages ? '#334155' : '#94a3b8', border: '1px solid rgba(255,255,255,0.05)', cursor: page === totalPages ? 'not-allowed' : 'pointer' }}
+            className="admin-btn"
+            style={{ padding: '6px 12px', fontSize: '0.85rem', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.5 : 1 }}
           >
-            <ChevronRight size={16} />
+            Next
           </button>
         </div>
       )}
