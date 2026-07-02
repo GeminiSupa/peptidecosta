@@ -50,6 +50,7 @@ const OrdersManager = dynamic(() => import('@/components/admin/OrdersManager'), 
 const ProductsManager = dynamic(() => import('@/components/admin/ProductsManager'), { ssr: false });
 const EmailMarketingStudio = dynamic(() => import('@/components/admin/marketing/EmailMarketingStudio'), { ssr: false });
 const WhatsAppSession = dynamic(() => import('@/components/admin/marketing/WhatsAppSession'), { ssr: false });
+import ErrorBoundary from "@/components/ErrorBoundary";
 const CartsManager = dynamic(() => import('@/components/admin/CartsManager'), { ssr: false });
 const LeadsManager = dynamic(() => import('@/components/admin/LeadsManager'), { ssr: false });
 
@@ -4857,7 +4858,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         )}
 
         {activeTab === 'leads' && (
-          <LeadsManager 
+          <ErrorBoundary><LeadsManager 
             leads={leads}
             loadAdminData={loadAdminData}
             setExportModalType={setExportModalType}
@@ -4884,6 +4885,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             setPage={setLeadsCurrentPage}
             leadsPerPage={leadsPerPage}
           />
+          </ErrorBoundary>
         )}
 
         {activeTab === 'team' && (
