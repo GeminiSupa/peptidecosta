@@ -3276,6 +3276,20 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     setSelectedLeads(checked ? paginatedLeads.map(l => l.id) : []);
   };
 
+  const handleBulkLeadsEmail = () => {
+    const selected = leads.filter(l => selectedLeads.includes(l.id));
+    const emails = selected.map(l => l.email || (l.contact_method === 'email' ? l.contact_value : null)).filter(Boolean);
+    if (emails.length === 0) return alert('No selected leads have email addresses.');
+    window.location.href = `mailto:?bcc=${emails.join(',')}`;
+  };
+
+  const handleBulkLeadsWhatsApp = () => {
+    const selected = leads.filter(l => selectedLeads.includes(l.id));
+    const phones = selected.map(l => l.phone || (l.contact_method === 'whatsapp' ? l.contact_value : null)).filter(Boolean);
+    if (phones.length === 0) return alert('No selected leads have phone numbers.');
+    alert(`Bulk WhatsApp is limited by browser. To contact ${phones.length} leads, please use a broadcast tool or message them individually.`);
+  };
+
   const handleBulkDeleteLeads = async () => {
     if (selectedLeads.length === 0) return;
     if (!window.confirm(`Are you sure you want to delete ${selectedLeads.length} leads?`)) return;
