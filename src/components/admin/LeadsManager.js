@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from 'react';
+import React from 'react';
 import { 
-  Users, Trash2, Upload, Brain, Sparkles, AlertCircle, 
-  Clock, Mail, MessageCircle, ArrowRight, Target, Flame, Snowflake, Globe
+  Users, Trash2, Upload, Brain, Sparkles, 
+  Clock, Mail, MessageCircle, Target, Flame, Snowflake, Globe, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) => (
@@ -85,28 +85,64 @@ export default function LeadsManager({
   const isAllCurrentSelected = currentLeads.length > 0 && currentLeads.every(l => safeSelectedLeads.includes(l.id));
 
   // Temperature Logic
-  const getLeadTemperature = (lead) => {
-    if (!lead) return { color: '#38bdf8', label: 'Warm (Organic)', icon: <Snowflake size={12}/> };
+  const getLeadTemp = (lead) => {
+    if (!lead) return { color: '#38bdf8', label: 'Warm', icon: '❄️' };
     const isConverted = getLeadConversion(lead).converted;
-    if (isConverted) return { color: '#10b981', label: 'Converted', icon: <Target size={12}/> };
-    if (lead.tags && lead.tags.includes('VIP')) return { color: '#8b5cf6', label: 'VIP', icon: <Sparkles size={12}/> };
+    if (isConverted) return { color: '#10b981', label: 'Converted', icon: '✅' };
+    if (lead.tags && lead.tags.includes('VIP')) return { color: '#8b5cf6', label: 'VIP', icon: '⭐' };
     if (lead.utm_source || lead.utm_medium || (lead.source && String(lead.source).toLowerCase().includes('facebook'))) {
-      return { color: '#f97316', label: 'Hot (Ads)', icon: <Flame size={12}/> };
+      return { color: '#f97316', label: 'Hot', icon: '🔥' };
     }
-    return { color: '#38bdf8', label: 'Warm (Organic)', icon: <Snowflake size={12}/> };
+    return { color: '#38bdf8', label: 'Warm', icon: '❄️' };
   };
 
-  const getSourceIcon = (lead) => {
-    if (lead.source && String(lead.source).toLowerCase().includes('facebook')) {
-      return <FacebookIcon size={14} color="#1877f2" />;
-    }
-    return <Globe size={14} color="#94a3b8" />;
+  const getViews = (lead) => {
+    return productViews.filter(v => v.contact_value === lead.contact_value).length;
   };
+
+  // Styles
+  const rowStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '12px 16px',
+    borderBottom: '1px solid rgba(255,255,255,0.04)',
+    transition: 'background 0.15s',
+    flexWrap: 'wrap',
+  };
+
+  const pillStyle = (color) => ({
+    background: `${color}18`,
+    color: color,
+    padding: '2px 8px',
+    borderRadius: '6px',
+    fontSize: '0.7rem',
+    fontWeight: '700',
+    whiteSpace: 'nowrap',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+  });
+
+  const iconBtnStyle = (bg) => ({
+    width: '30px',
+    height: '30px',
+    borderRadius: '8px',
+    background: bg,
+    color: '#fff',
+    border: 'none',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+    flexShrink: 0,
+  });
 
   return (
     <div className="admin-tab-panel">
       
-      {/* HEADER ACTIONS */}
+      {/* HEADER */}
       <div className="admin-section-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', padding: '10px', borderRadius: '12px', color: '#fff', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)' }}>
@@ -122,9 +158,9 @@ export default function LeadsManager({
           {leads.length > 0 && (
             <button
               onClick={() => setExportModalType('leads')}
-              style={{ padding: '8px 16px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }}
+              style={{ padding: '8px 16px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              <Upload size={14} /> Export CRM
+              <Upload size={14} /> Export
             </button>
           )}
           <button className="admin-btn" onClick={loadAdminData} style={{ padding: '8px 16px', fontSize: '0.85rem', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>
@@ -133,110 +169,88 @@ export default function LeadsManager({
         </div>
       </div>
 
-      {/* MARKETING METRICS GRID */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '25px' }}>
-        <div style={{ background: 'rgba(30, 41, 59, 0.4)', padding: '15px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Paid Traffic (Ads)</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f8fafc' }}>{adsLeads}</div>
+      {/* QUICK STATS ROW */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 120px', background: 'rgba(30, 41, 59, 0.4)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ads</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#f97316' }}>{adsLeads}</div>
         </div>
-        <div style={{ background: 'rgba(30, 41, 59, 0.4)', padding: '15px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Organic / Direct</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f8fafc' }}>{organicLeads}</div>
+        <div style={{ flex: '1 1 120px', background: 'rgba(30, 41, 59, 0.4)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Organic</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#38bdf8' }}>{organicLeads}</div>
         </div>
-        <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '15px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-          <div style={{ fontSize: '0.75rem', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Converted to Sale</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>{convertedLeads}</div>
+        <div style={{ flex: '1 1 120px', background: 'rgba(16, 185, 129, 0.08)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
+          <div style={{ fontSize: '0.7rem', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Converted</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#10b981' }}>{convertedLeads}</div>
         </div>
       </div>
 
-      {/* AI ANALYSIS MODULE */}
-      <div style={{ marginBottom: '30px' }}>
+      {/* AI ANALYSIS - COMPACT */}
+      <div style={{ marginBottom: '20px' }}>
         {generatingLeadsAi ? (
-          <div style={{ background: 'linear-gradient(135deg, rgba(14, 22, 38, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', padding: '24px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div className="sync-spinner" style={{ color: '#38bdf8' }}><Brain size={32} /></div>
-              <div>
-                <h4 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0' }}>🧬 AI is analyzing CRM Lead Quality...</h4>
-                <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: 0 }}>Evaluating geographic clusters, conversion likelihood, and drafting personalized outreach scripts...</p>
-              </div>
-            </div>
+          <div style={{ background: 'rgba(14, 22, 38, 0.9)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="sync-spinner" style={{ color: '#38bdf8' }}><Brain size={24} /></div>
+            <span style={{ fontSize: '0.9rem', color: '#94a3b8' }}>AI analyzing leads...</span>
           </div>
         ) : leadsAiText ? (
-          <div style={{ background: 'linear-gradient(135deg, rgba(14, 26, 51, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px -10px rgba(56, 189, 248, 0.2)', position: 'relative' }}>
+          <div style={{ background: 'rgba(14, 26, 51, 0.95)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '12px', padding: '20px', position: 'relative' }}>
             <button 
               onClick={() => setLeadsAiText('')}
-              style={{ position: 'absolute', top: '16px', right: '16px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#94a3b8', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+              style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#94a3b8', borderRadius: '50%', width: '28px', height: '28px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               &times;
             </button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '16px' }}>
-              <div style={{ background: 'rgba(56, 189, 248, 0.15)', padding: '10px', borderRadius: '12px', color: '#38bdf8' }}>
-                <Sparkles size={22} />
-              </div>
-              <div>
-                <h4 style={{ fontSize: '1.15rem', fontWeight: 'bold', color: '#f8fafc', margin: 0 }}>🧬 Deep CRM Lead Intelligence</h4>
-                <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Generated by Gemini • Geo-Targeted Outreach Scripts</span>
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <Sparkles size={18} style={{ color: '#38bdf8' }}/>
+              <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#f8fafc' }}>AI Lead Intelligence</span>
             </div>
-            
             <div 
-              style={{ fontSize: '0.9rem', color: '#cbd5e1', lineHeight: '1.7', whiteSpace: 'pre-wrap' }}
+              style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}
               dangerouslySetInnerHTML={{
                 __html: leadsAiText
                   .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #38bdf8">$1</strong>')
-                  .replace(/^- (.*)$/gm, '<li style="margin-left: 12px; margin-bottom: 8px; list-style-type: square">$1</li>')
+                  .replace(/^- (.*)$/gm, '<li style="margin-left: 12px; margin-bottom: 6px; list-style-type: square">$1</li>')
               }}
             />
           </div>
         ) : (
-          <div 
+          <button 
             onClick={handleGenerateLeadsAi}
-            className="admin-ai-insight-card"
-            style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px 24px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.3s', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)' }}
+            style={{ width: '100%', background: 'rgba(30, 41, 59, 0.4)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '14px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', transition: 'all 0.2s', color: '#f8fafc' }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '12px', borderRadius: '14px', color: '#38bdf8' }}>
-                <Brain size={24} />
-              </div>
-              <div>
-                <h4 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0' }}>✨ Generate Real-Time Lead Intelligence</h4>
-                <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: 0 }}>Audits your entire CRM pipeline, identifies geographic hot-zones, and writes personalized scripts.</p>
-              </div>
-            </div>
-            <button className="admin-btn admin-btn-primary" style={{ padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '10px', fontSize: '0.9rem', cursor: 'pointer', fontWeight: '600' }}>
-              <Sparkles size={16} /> Analyze Leads
-            </button>
-          </div>
+            <Brain size={20} style={{ color: '#38bdf8' }}/>
+            <span style={{ fontSize: '0.9rem', fontWeight: '600' }}>✨ Analyze Leads with AI</span>
+          </button>
         )}
       </div>
 
       {/* SEARCH AND FILTERS */}
-      <div className="admin-filters-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px', background: 'rgba(30, 41, 59, 0.3)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
         <input
           type="text"
           className="admin-input"
           placeholder="Search name, phone, email..."
           value={leadsSearch}
           onChange={(e) => setLeadsSearch(e.target.value)}
-          style={{ flex: '1 1 250px' }}
+          style={{ flex: '1 1 200px', padding: '8px 12px', fontSize: '0.85rem' }}
         />
         <select 
           className="admin-select"
           value={leadsSourceFilter}
           onChange={(e) => setLeadsSourceFilter(e.target.value)}
-          style={{ flex: '1 1 150px' }}
+          style={{ flex: '0 1 140px', padding: '8px', fontSize: '0.85rem' }}
         >
           <option value="All">All Sources</option>
           <option value="whatsapp">WhatsApp</option>
           <option value="email">Email</option>
           <option value="facebook">Facebook Ads</option>
-          <option value="converted">Converted Only</option>
+          <option value="converted">Converted</option>
         </select>
         <select
           className="admin-select"
           value={leadsAreaFilter}
           onChange={(e) => setLeadsAreaFilter(e.target.value)}
-          style={{ flex: '1 1 150px' }}
+          style={{ flex: '0 1 140px', padding: '8px', fontSize: '0.85rem' }}
         >
           <option value="All">All Regions</option>
           {uniqueAreas.map(a => (
@@ -245,189 +259,156 @@ export default function LeadsManager({
         </select>
       </div>
 
-      {/* BULK ACTIONS BAR */}
+      {/* BULK ACTIONS */}
       {selectedLeads && selectedLeads.length > 0 && (
-        <div style={{ marginBottom: '20px', padding: '12px 20px', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontWeight: 'bold', color: '#38bdf8' }}>{selectedLeads.length} Selected</span>
-            <span style={{ color: '#64748b' }}>|</span>
-            <button onClick={handleBulkLeadsEmail} className="admin-btn admin-btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Mail size={12} /> Bulk Email
-            </button>
-            <button onClick={handleBulkLeadsWhatsApp} className="admin-btn" style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#10b981', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <MessageCircle size={12} /> Bulk WhatsApp
-            </button>
-          </div>
-          <button onClick={handleBulkDeleteLeads} className="admin-btn" style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Trash2 size={12} /> Delete Selected
+        <div style={{ marginBottom: '12px', padding: '10px 16px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.15)', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+          <span style={{ fontWeight: 'bold', color: '#38bdf8' }}>{selectedLeads.length} Selected</span>
+          <span style={{ color: '#334155' }}>|</span>
+          <button onClick={handleBulkLeadsEmail} style={{ ...iconBtnStyle('#3b82f6'), width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', gap: '4px', display: 'inline-flex' }}>
+            <Mail size={12} /> Email
+          </button>
+          <button onClick={handleBulkLeadsWhatsApp} style={{ ...iconBtnStyle('#10b981'), width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', gap: '4px', display: 'inline-flex' }}>
+            <MessageCircle size={12} /> WhatsApp
+          </button>
+          <button onClick={handleBulkDeleteLeads} style={{ ...iconBtnStyle('rgba(239,68,68,0.15)'), width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', gap: '4px', display: 'inline-flex' }}>
+            <Trash2 size={12} /> Delete
           </button>
         </div>
       )}
 
-      {/* LEADS GRID - MOBILE FIRST CARDS */}
+      {/* LEADS LIST */}
       {currentLeads.length === 0 ? (
-        <div className="admin-empty-state" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)' }}>
-          <div className="empty-icon" style={{ opacity: 0.5 }}><Users size={48} /></div>
-          <h3>No Leads Found</h3>
-          <p>Try adjusting your search filters.</p>
+        <div style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '12px', padding: '40px 20px', border: '1px dashed rgba(255,255,255,0.1)', textAlign: 'center' }}>
+          <Users size={36} style={{ color: '#334155', marginBottom: '10px' }} />
+          <h3 style={{ color: '#94a3b8', margin: 0, fontSize: '1rem' }}>No Leads Found</h3>
+          <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: '0.85rem' }}>Try adjusting your search filters.</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-          {/* "Select All Current Page" Utility Card */}
-          {currentLeads.length > 0 && (
-            <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '10px', padding: '0 10px' }}>
-              <input 
-                type="checkbox"
-                checked={isAllCurrentSelected}
-                onChange={() => handleSelectAllLeads(currentLeads.map(l => l.id), isAllCurrentSelected)}
-                style={{ width: '16px', height: '16px', accentColor: '#38bdf8', cursor: 'pointer' }}
-                id="selectAllLeads"
-              />
-              <label htmlFor="selectAllLeads" style={{ color: '#94a3b8', fontSize: '0.9rem', cursor: 'pointer' }}>
-                Select all {currentLeads.length} leads on this page
-              </label>
-            </div>
-          )}
+        <div style={{ background: 'rgba(30, 41, 59, 0.3)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+          
+          {/* Select All Row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.15)' }}>
+            <input 
+              type="checkbox"
+              checked={isAllCurrentSelected}
+              onChange={() => handleSelectAllLeads(currentLeads.map(l => l.id), isAllCurrentSelected)}
+              style={{ width: '15px', height: '15px', accentColor: '#38bdf8', cursor: 'pointer' }}
+            />
+            <span style={{ color: '#64748b', fontSize: '0.8rem' }}>Select all {currentLeads.length} on this page</span>
+            <span style={{ marginLeft: 'auto', color: '#475569', fontSize: '0.75rem' }}>{filteredLeads.length} total</span>
+          </div>
 
+          {/* Lead Rows */}
           {currentLeads.map((lead) => {
             const isSelected = selectedLeads && selectedLeads.includes(lead.id);
-            const temp = getLeadTemperature(lead);
-            const { converted } = getLeadConversion(lead);
-            
+            const temp = getLeadTemp(lead);
+            const views = getViews(lead);
+            const name = (lead.first_name || lead.last_name) 
+              ? `${lead.first_name || ''} ${lead.last_name || ''}`.trim() 
+              : 'Unknown';
+            const contact = lead.contact_value || lead.phone || lead.email || '';
+            const location = [lead.city, lead.region].filter(Boolean).join(', ');
+
             return (
               <div 
                 key={lead.id} 
-                style={{ 
-                  background: isSelected ? 'rgba(56, 189, 248, 0.05)' : 'rgba(30, 41, 59, 0.4)', 
-                  border: isSelected ? '1px solid rgba(56, 189, 248, 0.3)' : (converted ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(255,255,255,0.05)'), 
-                  borderRadius: '16px', 
-                  padding: '20px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  transition: 'all 0.2s',
-                  boxShadow: converted ? '0 4px 20px rgba(16, 185, 129, 0.05)' : '0 4px 15px rgba(0,0,0,0.1)'
+                style={{
+                  ...rowStyle,
+                  background: isSelected ? 'rgba(56, 189, 248, 0.04)' : 'transparent',
                 }}
               >
-                {/* CARD HEADER */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={isSelected}
-                      onChange={() => handleSelectLead && handleSelectLead(lead.id)}
-                      style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#38bdf8', marginTop: '4px' }}
-                    />
-                    <div>
-                      <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {lead.first_name || lead.last_name ? `${lead.first_name || ''} ${lead.last_name || ''}` : 'Unknown Lead'}
-                        {getSourceIcon(lead)}
-                      </div>
-                      <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '2px', wordBreak: 'break-all' }}>
-                        {lead.contact_value || lead.phone || lead.email}
-                      </div>
-                    </div>
+                {/* Checkbox */}
+                <input 
+                  type="checkbox" 
+                  checked={isSelected}
+                  onChange={() => handleSelectLead && handleSelectLead(lead.id)}
+                  style={{ width: '15px', height: '15px', accentColor: '#38bdf8', cursor: 'pointer', flexShrink: 0 }}
+                />
+
+                {/* Name + Contact - clickable to open details */}
+                <div 
+                  onClick={() => setSelectedLeadDetails?.(lead)}
+                  style={{ flex: '1 1 180px', minWidth: 0, cursor: 'pointer' }}
+                >
+                  <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#f1f5f9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {name}
                   </div>
-                  <div style={{ background: `${temp.color}15`, color: temp.color, border: `1px solid ${temp.color}30`, padding: '4px 8px', borderRadius: '20px', fontSize: '0.7rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {contact}
+                  </div>
+                </div>
+
+                {/* Pills row */}
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', flex: '0 1 auto', alignItems: 'center' }}>
+                  {/* Temperature */}
+                  <span style={pillStyle(temp.color)}>
                     {temp.icon} {temp.label}
-                  </div>
-                </div>
+                  </span>
 
-                {/* LEAD DETAILS */}
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                  {(lead.city || lead.region) && (
-                    <div style={{ fontSize: '0.8rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Globe size={12} style={{ color: '#64748b' }}/> 
-                      {lead.city}{lead.city && lead.region ? ', ' : ''}{lead.region}
-                    </div>
+                  {/* Location */}
+                  {location && (
+                    <span style={pillStyle('#64748b')}>
+                      📍 {location.length > 18 ? location.substring(0, 18) + '…' : location}
+                    </span>
                   )}
+
+                  {/* Product Views */}
+                  {views > 0 && (
+                    <span 
+                      onClick={() => setSelectedLeadDetails?.(lead)}
+                      style={{ ...pillStyle('#10b981'), cursor: 'pointer' }}
+                    >
+                      👀 {views}
+                    </span>
+                  )}
+
+                  {/* Source */}
                   {lead.utm_source && (
-                    <div style={{ fontSize: '0.8rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Target size={12} style={{ color: '#f97316' }}/> 
-                      {lead.utm_source} {lead.utm_campaign ? ` / ${lead.utm_campaign}` : ''}
-                    </div>
-                  )}
-                  {lead.notes && (
-                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic', background: 'rgba(0,0,0,0.2)', padding: '6px 10px', borderRadius: '6px', marginTop: '4px' }}>
-                      "{lead.notes}"
-                    </div>
+                    <span style={pillStyle('#f97316')}>
+                      📢 {String(lead.utm_source).length > 12 ? String(lead.utm_source).substring(0, 12) + '…' : lead.utm_source}
+                    </span>
                   )}
                 </div>
 
-                {/* TAGS */}
-                {lead.tags && lead.tags.length > 0 && (
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
-                    {lead.tags.map(t => (
-                      <span key={t} style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: '600' }}>
-                        #{t}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* FOOTER ACTIONS */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                      {new Date(lead.created_at).toLocaleDateString()}
-                    </div>
-                    {(() => {
-                      const views = productViews.filter(v => v.contact_value === lead.contact_value);
-                      if (views.length > 0) {
-                        return (
-                          <button 
-                            onClick={() => setSelectedLeadDetails?.(lead)}
-                            style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)', color: '#10b981', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            title="Click to view browsing history"
-                          >
-                            👀 {views.length} {views.length === 1 ? 'View' : 'Views'}
-                          </button>
-                        );
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
+                  <button 
+                    onClick={() => {
+                      if (openLeadOutreachComposer) {
+                        openLeadOutreachComposer(lead, 'whatsapp');
+                      } else {
+                        const val = lead.contact_value || lead.phone;
+                        if (val) window.open(`https://wa.me/${String(val).replace(/\D/g, '')}?text=Hi ${lead.first_name || ''}!`, '_blank');
                       }
-                      return null;
-                    })()}
-                  </div>
-                  
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => setSelectedLeadDetails?.(lead)} className="admin-btn admin-btn-primary" style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '8px', border: '1px solid #3b82f6' }}>Details</button>
+                    }}
+                    style={iconBtnStyle('#10b981')}
+                    title="WhatsApp"
+                  >
+                    <MessageCircle size={13} />
+                  </button>
+                  {(lead.email || (lead.contact_value && lead.contact_value.includes('@'))) && (
                     <button 
                       onClick={() => {
                         if (openLeadOutreachComposer) {
-                          openLeadOutreachComposer(lead, 'whatsapp');
+                          openLeadOutreachComposer(lead, 'email');
                         } else {
-                          const val = lead.contact_value || lead.phone;
-                          if (val) window.open(`https://wa.me/${String(val).replace(/\D/g, '')}?text=Hi ${lead.first_name || ''}!`, '_blank');
+                          window.location.href = `mailto:${lead.email || lead.contact_value}`;
                         }
                       }}
-                      style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#10b981', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)' }}
-                      title="Send WhatsApp"
+                      style={iconBtnStyle('#3b82f6')}
+                      title="Email"
                     >
-                      <MessageCircle size={14} />
+                      <Mail size={13} />
                     </button>
-                    {(lead.email || lead.contact_value?.includes('@')) && (
-                      <button 
-                        onClick={() => {
-                          if (openLeadOutreachComposer) {
-                            openLeadOutreachComposer(lead, 'email');
-                          } else {
-                            window.location.href = `mailto:${lead.email || lead.contact_value}`;
-                          }
-                        }}
-                        style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#3b82f6', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.4)' }}
-                        title="Send Email"
-                      >
-                        <Mail size={14} />
-                      </button>
-                    )}
-                    <button 
-                      onClick={() => handleLeadDelete && handleLeadDelete(lead.id)}
-                      style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
-                      title="Delete Lead"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  )}
+                  <button 
+                    onClick={() => handleLeadDelete && handleLeadDelete(lead.id)}
+                    style={{ ...iconBtnStyle('transparent'), color: '#ef4444', border: '1px solid rgba(239,68,68,0.15)' }}
+                    title="Delete"
+                  >
+                    <Trash2 size={13} />
+                  </button>
                 </div>
-
               </div>
             );
           })}
@@ -436,25 +417,23 @@ export default function LeadsManager({
 
       {/* PAGINATION */}
       {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '30px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginTop: '20px' }}>
           <button 
             disabled={page === 1} 
             onClick={() => setPage(page - 1)}
-            className="admin-btn"
-            style={{ padding: '8px 16px', borderRadius: '8px', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.5 : 1 }}
+            style={{ ...iconBtnStyle('rgba(255,255,255,0.05)'), color: page === 1 ? '#334155' : '#94a3b8', border: '1px solid rgba(255,255,255,0.05)', cursor: page === 1 ? 'not-allowed' : 'pointer' }}
           >
-            Prev
+            <ChevronLeft size={16} />
           </button>
-          <span style={{ color: '#94a3b8', display: 'flex', alignItems: 'center', fontSize: '0.9rem' }}>
-            Page {page} of {totalPages}
+          <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
+            {page} / {totalPages}
           </span>
           <button 
             disabled={page === totalPages} 
             onClick={() => setPage(page + 1)}
-            className="admin-btn"
-            style={{ padding: '8px 16px', borderRadius: '8px', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.5 : 1 }}
+            style={{ ...iconBtnStyle('rgba(255,255,255,0.05)'), color: page === totalPages ? '#334155' : '#94a3b8', border: '1px solid rgba(255,255,255,0.05)', cursor: page === totalPages ? 'not-allowed' : 'pointer' }}
           >
-            Next
+            <ChevronRight size={16} />
           </button>
         </div>
       )}
