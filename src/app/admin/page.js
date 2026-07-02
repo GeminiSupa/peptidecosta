@@ -4267,7 +4267,16 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         )}
 
         {activeTab === 'carts' && (
-          <CartsManager 
+          
+          loadingAbandonedCarts ? (
+            <div style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '12px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)', textAlign: 'center', marginTop: '20px' }}>
+              <div className="sync-spinner" style={{ color: '#38bdf8', marginBottom: '15px' }}><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg></div>
+              <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '1.1rem' }}>Loading Carts...</h3>
+              <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: '0.85rem' }}>Fetching the latest abandoned carts.</p>
+            </div>
+          ) : (
+            <CartsManager 
+
             abandonedCarts={abandonedCarts}
             handleClearAllCarts={handleClearAllCarts}
             loadAdminData={loadAdminData}
@@ -4285,10 +4294,19 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             handleSendRecoveryEmail={handleSendRecoveryEmail}
             handleDeleteCart={handleDeleteCart}
           />
+          )
         )}
 
+        
         {activeTab === 'reviews' && (
-          <div className="admin-orders-tab">
+          loadingReviews ? (
+            <div style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '12px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)', textAlign: 'center', marginTop: '20px' }}>
+              <div className="sync-spinner" style={{ color: '#fbbf24', marginBottom: '15px' }}><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></div>
+              <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '1.1rem' }}>Loading Reviews...</h3>
+            </div>
+          ) : (
+            <div className="admin-orders-tab">
+          
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
               <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0 }}>⭐ Product Reviews Moderation</h2>
               <button className="admin-btn" onClick={loadAdminData} style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}>
@@ -4364,6 +4382,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             )}
           </div>
+          )
         )}
 
         {/* TAB: Facebook Notifications */}
@@ -4856,18 +4875,38 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {/* TAB: ANALYTICS */}
         {activeTab === 'analytics' && (
           <div className="admin-orders-tab admin-tab-panel">
-            <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} productViews={productViews} />
+            
+            {(loadingOrders || loadingProducts || loadingAbandonedCarts) ? (
+              <div style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '12px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)', textAlign: 'center', marginTop: '20px' }}>
+                <div className="sync-spinner" style={{ color: '#38bdf8', marginBottom: '15px' }}><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg></div>
+                <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '1.1rem' }}>Loading Analytics...</h3>
+                <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: '0.85rem' }}>Crunching numbers and fetching the latest data.</p>
+              </div>
+            ) : (
+              <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} productViews={productViews} />
+            )}
+
           </div>
         )}
 
         {/* TAB: CUSTOMERS CRM */}
         {activeTab === 'customers' && (
           <div className="admin-orders-tab admin-tab-panel">
-            <CustomersCRM 
+            
+            {loadingOrders ? (
+              <div style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '12px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)', textAlign: 'center', marginTop: '20px' }}>
+                <div className="sync-spinner" style={{ color: '#38bdf8', marginBottom: '15px' }}><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></div>
+                <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '1.1rem' }}>Loading Customers...</h3>
+                <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: '0.85rem' }}>Fetching customer data from orders.</p>
+              </div>
+            ) : (
+              <CustomersCRM 
+
               orders={orders} 
               abandonedCarts={abandonedCarts} 
               onWhatsAppClick={(recipient) => openWhatsAppComposer(recipient)} 
             />
+            )}
           </div>
         )}
 
