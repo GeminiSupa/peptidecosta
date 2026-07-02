@@ -41,8 +41,8 @@ export default function CartsManager({
     if (searchTerm) {
       const lowerQ = searchTerm.toLowerCase();
       result = result.filter(c => 
-        (c.user_email || c.customer_email || '').toLowerCase().includes(lowerQ) ||
-        (c.user_phone || c.customer_phone || '').includes(searchTerm)
+        String(c.user_email || c.customer_email || '').toLowerCase().includes(lowerQ) ||
+        String(c.user_phone || c.customer_phone || '').includes(searchTerm)
       );
     }
 
