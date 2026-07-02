@@ -4276,7 +4276,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             </div>
           ) : (
             <CartsManager 
-
+            setSelectedCartDetails={setSelectedCartDetails}
             abandonedCarts={abandonedCarts}
             handleClearAllCarts={handleClearAllCarts}
             loadAdminData={loadAdminData}

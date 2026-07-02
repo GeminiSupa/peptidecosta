@@ -229,10 +229,12 @@ export async function POST(request) {
         : '¿Necesita ayuda? Contacte a soporte al +506 8404-6973 o responda a este correo.'
     ].join('\n');
 
+    const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
+
     const mailInfo = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
-      from: `Peptides Costa Rica <omerforce@gmail.com>`,
-      replyTo: 'omerforce@gmail.com',
+      bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+      from: NOTIFICATION_FROM,
+      replyTo: SMTP_USER || 'info@peptidescostarica.net',
       to: customer_email.trim(),
       subject: customerSubject,
       html: recoveryHtml,
