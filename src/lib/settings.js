@@ -5,7 +5,7 @@ const DEFAULT_BUSINESS_LINKS = {
   whatsappDisplay: "+506 8404-6973 (CR) / +1 831-471-5559 (US AI)",
   apiWhatsAppNumber: "18314715559",
   apiWhatsAppDisplay: "+1 831-471-5559",
-  googleMapsUrl: "https://maps.app.goo.gl/AgpzEd8NNRKYNbJj9",
+  googleMapsUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
   facebookUrl: "",
   instagramUrl: "",
   supportEmail: "support@peptidescostarica.net"

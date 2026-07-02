@@ -310,6 +310,7 @@ export default function AdminPage() {
 
   // Spreadsheet product editor states
   const [products, setProducts] = useState([]);
+  const [hiddenProductNames, setHiddenProductNames] = useState([]); // names of products hidden from the public catalog (not deleted)
   const [orders, setOrders] = useState([]);
   const [abandonedCarts, setAbandonedCarts] = useState([]);
   const [cartSort, setCartSort] = useState('date_desc');
@@ -1700,6 +1701,16 @@ Core Rules:
         }
 
         if (!error && data) {
+          // Load which products are currently hidden from the public catalog
+          let hiddenNames = [];
+          try {
+            const { data: hp } = await supabase.from('site_settings').select('value').eq('id', 'hidden_products').maybeSingle();
+            if (Array.isArray(hp?.value?.names)) hiddenNames = hp.value.names;
+          } catch (hpErr) {
+            console.warn('Could not load hidden products list:', hpErr);
+          }
+          setHiddenProductNames(hiddenNames);
+
           loadedProducts = data.map(item => ({
             id: item.id,
             product: item.product || '',
@@ -1718,7 +1729,8 @@ Core Rules:
             descriptionEs: item.description_es || '',
             inventoryCount: item.inventory_count !== undefined ? item.inventory_count : null,
             lowStockThreshold: item.low_stock_threshold !== undefined ? item.low_stock_threshold : 5,
-            priority: item.priority || 0
+            priority: item.priority || 0,
+            hidden: hiddenNames.includes(item.product)
           }));
           setIsDbConnected(true);
         }
@@ -1953,7 +1965,7 @@ Core Rules:
           setBusinessLinks({
             whatsappNumber: "50684046973",
             whatsappDisplay: "+506 8404-6973",
-            googleMapsUrl: "https://maps.app.goo.gl/AgpzEd8NNRKYNbJj9",
+            googleMapsUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
             facebookUrl: "",
             instagramUrl: "",
             supportEmail: "support@peptidescostarica.net"
@@ -2120,9 +2132,44 @@ Core Rules:
 
   // Spreadsheet Cell modification helper
   const handleCellChange = (productId, fieldName, val) => {
-    setProducts(prev => prev.map(p => 
+    setProducts(prev => prev.map(p =>
       p.id === productId ? { ...p, [fieldName]: val } : p
     ));
+  };
+
+  // Toggle a product's visibility on the public catalog.
+  // Hidden products stay in the database (so they can be restocked / un-hidden later);
+  // the list of hidden product names lives in site_settings 'hidden_products'.
+  const handleToggleHidden = async (productId) => {
+    const target = products.find(p => p.id === productId);
+    if (!target) return;
+    const nextHidden = !target.hidden;
+
+    // Optimistically update the row
+    setProducts(prev => prev.map(p => p.id === productId ? { ...p, hidden: nextHidden } : p));
+
+    // Recompute the full list of hidden product names (keyed by product name, matching how the catalog identifies products)
+    const names = Array.from(new Set(
+      products
+        .map(p => p.id === productId ? { ...p, hidden: nextHidden } : p)
+        .filter(p => p.hidden && p.product && p.product.trim())
+        .map(p => p.product.trim())
+    ));
+    setHiddenProductNames(names);
+
+    // Persist immediately so hiding/showing takes effect without needing "Save Changes"
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from('site_settings').upsert({ id: 'hidden_products', value: { names } });
+        if (error) throw error;
+        setSaveStatus(nextHidden ? `Hidden "${target.product}" from catalog` : `"${target.product}" is now visible in catalog`);
+      } catch (err) {
+        console.error('Failed to update hidden products:', err);
+        setSaveStatus('Failed to update catalog visibility. Please try again.');
+        // Roll back optimistic update on failure
+        setProducts(prev => prev.map(p => p.id === productId ? { ...p, hidden: target.hidden } : p));
+      }
+    }
   };
 
   // Add Product row
@@ -4110,6 +4157,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             setEditDescProduct={setEditDescProduct} setEditDescEn={setEditDescEn} 
             setEditDescEs={setEditDescEs} setEditDescModalOpen={setEditDescModalOpen}
             handleMoveRow={handleMoveRow} handleDeleteRow={handleDeleteRow}
+            handleToggleHidden={handleToggleHidden}
           />
           </ErrorBoundary>
         )}

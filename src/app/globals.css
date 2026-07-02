@@ -702,6 +702,33 @@ body {
     letter-spacing: 0.5px;
 }
 
+/* List view: center the info column contents to match the centered Add-to-Cart button */
+.product-grid.list-view .product-info {
+    align-items: center;
+    text-align: center;
+}
+
+.product-grid.list-view .product-category,
+.product-grid.list-view .product-name {
+    padding-right: 0;
+}
+
+.product-grid.list-view .product-rating-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.product-grid.list-view .product-pricing {
+    justify-content: center;
+    width: 100%;
+}
+
+.product-grid.list-view .stock-badges-slot {
+    justify-content: center !important;
+}
+
 .discount-badge {
     font-size: 0.75rem;
     color: var(--primary);

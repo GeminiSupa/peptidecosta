@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, Trash2, FileText } from 'lucide-react';
+import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, Trash2, FileText, Eye, EyeOff } from 'lucide-react';
 
 const CATEGORY_TRANSLATIONS = {
   'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
@@ -33,7 +33,8 @@ export default function ProductsManager({
   getCategoryIcon,
   handleImageCellUpload,
   setEditDescProduct, setEditDescEn, setEditDescEs, setEditDescModalOpen,
-  handleMoveRow, handleDeleteRow
+  handleMoveRow, handleDeleteRow,
+  handleToggleHidden
 }) {
   return (
     <div>
@@ -161,6 +162,7 @@ export default function ProductsManager({
                 <th style={{ minWidth: '200px' }}>Image URL / Physical Upload</th>
                 <th style={{ minWidth: '220px' }}>COA URL Link</th>
                 <th style={{ width: '120px', textAlign: 'center' }}>Info/Blog</th>
+                <th style={{ width: '110px', textAlign: 'center' }}>Catalog Visibility</th>
                 <th style={{ width: '100px', textAlign: 'center' }}>Action</th>
               </tr>
             </thead>
@@ -168,10 +170,11 @@ export default function ProductsManager({
               {products.filter(p => !productSearch || p.product.toLowerCase().includes(productSearch.toLowerCase()) || (p.category && p.category.toLowerCase().includes(productSearch.toLowerCase()))).map((p, filteredIdx) => {
                 const idx = products.findIndex(prod => prod.id === p.id);
                 return (
-                <tr 
+                <tr
                   key={p.id}
                   id={`product-row-${p.id}`}
                   className={highlightedProductId === p.id ? 'row-highlight' : ''}
+                  style={p.hidden ? { opacity: 0.5 } : undefined}
                 >
                   <td data-label="#" style={{ color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>{idx + 1}</td>
                   
@@ -466,6 +469,33 @@ export default function ProductsManager({
                     >
                       <FileText size={12} />
                       <span>Edit Info</span>
+                    </button>
+                  </td>
+
+                  {/* Catalog Visibility toggle — hide/show on public catalog without deleting */}
+                  <td data-label="Catalog Visibility" style={{ textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleHidden(p.id)}
+                      title={p.hidden ? 'Hidden from catalog — click to show' : 'Visible in catalog — click to hide'}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        padding: '5px 10px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        borderRadius: '6px',
+                        border: p.hidden ? '1px solid rgba(248,113,113,0.35)' : '1px solid rgba(74,222,128,0.35)',
+                        background: p.hidden ? 'rgba(248,113,113,0.12)' : 'rgba(74,222,128,0.12)',
+                        color: p.hidden ? '#f87171' : '#4ade80',
+                        transition: 'all 0.15s',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {p.hidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                      <span>{p.hidden ? 'Hidden' : 'Visible'}</span>
                     </button>
                   </td>
 

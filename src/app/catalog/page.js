@@ -192,6 +192,7 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState(true);
   const [isDbBacked, setIsDbBacked] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(FALLBACK_EXCHANGE_RATE);
+  const [hiddenProducts, setHiddenProducts] = useState([]); // product names hidden from catalog by admin (not deleted)
 
   // Search & Filtering States
   const [searchQuery, setSearchQuery] = useState('');
@@ -346,6 +347,15 @@ export default function CatalogPage() {
         }
 
         setCmsSettings(prev => ({ ...prev, bannerActive, bannerTextEn, bannerTextEs }));
+
+        // Load list of products hidden from the catalog by admin (hidden, not deleted)
+        try {
+          const { data: hp } = await supabase.from('site_settings').select('value').eq('id', 'hidden_products').maybeSingle();
+          const names = hp?.value?.names;
+          if (Array.isArray(names)) setHiddenProducts(names);
+        } catch (hpErr) {
+          console.warn('Could not load hidden products list:', hpErr);
+        }
       } catch (err) {
         console.error('Error loading site settings:', err);
       }
@@ -2252,6 +2262,9 @@ export default function CatalogPage() {
 
   // Filtering + Sorting Logic
   let filteredProducts = products.filter(p => {
+    // 0. Hidden by admin — kept in the database (can be restocked) but removed from the storefront
+    if (hiddenProducts.includes(p.product)) return false;
+
     // 1. Search Query
     const nameMatch = (p.product || '').toLowerCase().includes(searchQuery.toLowerCase());
     const catMatch = (p.category || '').toLowerCase().includes(searchQuery.toLowerCase());

@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 const DEFAULT_BUSINESS_LINKS = {
   whatsappNumber: "50684046973",
   whatsappDisplay: "+506 8404-6973",
-  googleMapsUrl: "https://maps.app.goo.gl/AgpzEd8NNRKYNbJj9",
+  googleMapsUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
   facebookUrl: "",
   instagramUrl: "",
   supportEmail: "support@peptidescostarica.net"

@@ -181,7 +181,16 @@ export async function GET(req) {
 
   if (include.has('products')) {
     const rows = results.products.data || [];
-    payload.products = rows.map(p => shapeProduct(p, exchangeRate));
+    let shaped = rows.map(p => shapeProduct(p, exchangeRate));
+    // Exclude products the admin has hidden from the public catalog (hidden, not deleted)
+    try {
+      const { data: hp } = await supabase.from('site_settings').select('value').eq('id', 'hidden_products').maybeSingle();
+      const hiddenNames = Array.isArray(hp?.value?.names) ? hp.value.names : [];
+      if (hiddenNames.length) shaped = shaped.filter(p => !hiddenNames.includes(p.name));
+    } catch (e) {
+      console.warn('[bot/catalog] could not load hidden_products list:', e.message);
+    }
+    payload.products = shaped;
     payload.meta.productCount = payload.products.length;
   }
   if (include.has('reviews')) {
