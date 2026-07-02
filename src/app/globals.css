@@ -757,9 +757,24 @@ body {
     width: 100%;
 }
 
-/* Cap the button width on wide desktop cards so 80% of a large info column doesn't become oversized */
+/* Cap the button width on wide desktop cards so 80% of a large info column doesn't become oversized.
+   Slightly taller with a larger, more readable label. */
 .product-grid.list-view .add-to-cart-btn {
     max-width: 240px;
+    padding: 10px 18px;
+    font-size: 0.82rem;
+}
+
+/* Desktop: cluster the vial and the info block toward the center instead of leaving a wide
+   empty gap between a far-left vial and centered text. */
+@media (min-width: 1000px) {
+    .product-grid.list-view .product-card {
+        justify-content: center;
+        gap: 32px;
+    }
+    .product-grid.list-view .product-info {
+        flex: 0 1 380px;
+    }
 }
 
 .discount-badge {
