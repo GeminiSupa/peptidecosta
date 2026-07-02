@@ -59,21 +59,10 @@ export async function POST(request) {
       }
     }
 
-    // Generate unique promo code
-    const promoCode = 'WELCOME-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+    // NOTE: The automatic 15%-off new-customer discount has been disabled.
+    // We no longer generate a WELCOME- promo code or advertise a discount to new leads.
 
     if (supabase) {
-      // Insert into promo_codes
-      const { error: promoErr } = await supabase.from('promo_codes').insert([{
-        code: promoCode,
-        discount_pct: 0.15, // 15% off
-        usage_limit: 1,
-        usage_count: 0,
-        is_active: true
-      }]);
-
-      if (promoErr) console.error('[Leads Capture] Error saving promo code:', promoErr);
-
       // Insert into catalog_leads
       const { error: leadErr } = await supabase.from('catalog_leads').insert([{
         contact_method,
@@ -107,25 +96,17 @@ export async function POST(request) {
           tls: { rejectUnauthorized: false }
         });
 
-        const subject = language === 'en' 
-          ? 'Welcome to Peptides Costa Rica! Here is your 15% off code.' 
-          : '¡Bienvenido a Péptidos Costa Rica! Aquí tienes tu código de 15% de descuento.';
+        const subject = language === 'en'
+          ? 'Welcome to Peptides Costa Rica!'
+          : '¡Bienvenido a Péptidos Costa Rica!';
 
         const html = `
           <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
             <h1 style="color:#0f172a;font-size:24px;">${language === 'en' ? 'Welcome to our Catalog!' : '¡Bienvenido a nuestro Catálogo!'}</h1>
             <p style="color:#334155;font-size:16px;">
-              ${language === 'en' 
-                ? 'Thank you for signing up. As a special gift, here is a one-time use promo code for 15% off your first purchase:' 
-                : 'Gracias por registrarte. Como regalo especial, aquí tienes un código de descuento de un solo uso para obtener un 15% de descuento en tu primera compra:'}
-            </p>
-            <div style="background:#e0f2fe;padding:20px;text-align:center;border-radius:8px;margin:20px 0;">
-              <span style="font-size:24px;font-weight:bold;color:#0284c7;letter-spacing:2px;">${promoCode}</span>
-            </div>
-            <p style="color:#334155;font-size:14px;">
-              ${language === 'en' 
-                ? 'You can apply this code during checkout. Valid for one purchase only.' 
-                : 'Puedes aplicar este código durante el pago. Válido para una sola compra.'}
+              ${language === 'en'
+                ? 'Thank you for signing up. Explore our full catalog of research peptides, live prices, and real-time availability.'
+                : 'Gracias por registrarte. Explora nuestro catálogo completo de péptidos de investigación, precios en vivo y disponibilidad en tiempo real.'}
             </p>
             <a href="${links.catalogUrl}" style="display:inline-block;margin-top:20px;background:#059669;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">
               ${language === 'en' ? 'Shop Now' : 'Comprar Ahora'}
@@ -147,65 +128,15 @@ export async function POST(request) {
         }
       }
     } 
-    // Send WhatsApp Message
+    // WhatsApp welcome disabled: the only approved Meta template (welcome_promo1)
+    // advertises the 15% new-customer discount, so we no longer send it. New WhatsApp
+    // leads are still captured above; a plain (no-discount) welcome would require a new
+    // approved Meta template.
     else if (contact_method === 'whatsapp') {
-      if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
-        console.warn('[Leads Capture] WhatsApp API credentials missing.');
-      } else {
-        try {
-          const metaResponse = await fetch(
-            `https://graph.facebook.com/v25.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                messaging_product: 'whatsapp',
-                to: cleanContact,
-                type: 'template',
-                template: {
-                  name: 'welcome_promo1', // Matches the exact name the user created in Meta
-                  language: { code: 'es' }, // Updated to 'es' to match Meta API
-                  components: [
-                    {
-                      type: 'body',
-                      parameters: [
-                        { type: 'text', text: promoCode }
-                      ]
-                    }
-                  ]
-                }
-              }),
-            }
-          );
-          const metaData = await metaResponse.json();
-          if (!metaResponse.ok) {
-            console.error('[Leads Capture] Meta API error:', metaData);
-          } else {
-            console.log('[Leads Capture] WhatsApp welcome sent:', metaData.messages?.[0]?.id);
-            if (supabase) {
-              const metaMessageId = metaData?.messages?.[0]?.id || null;
-              await supabase.from('whatsapp_messages').insert([{
-                wa_id: cleanContact,
-                display_name: 'Catalog Lead',
-                message_text: `¡Bienvenido a Peptides Costa Rica! Gracias por registrarte. Como regalo especial, aquí tienes un código promocional de un solo uso para obtener un 15% de descuento en tu primera compra: ${promoCode}\n\nPuedes aplicar este código durante el proceso de pago. Válido únicamente para una compra.`,
-                message_type: 'template',
-                direction: 'outbound',
-                raw_payload: metaData,
-                meta_message_id: metaMessageId,
-                delivery_status: 'sent'
-              }]);
-            }
-          }
-        } catch (waErr) {
-          console.error('[Leads Capture] WhatsApp message failed:', waErr);
-        }
-      }
+      console.log(`[Leads Capture] WhatsApp lead captured (promo welcome disabled): ${cleanContact}`);
     }
 
-    return NextResponse.json({ success: true, promoCode });
+    return NextResponse.json({ success: true });
   } catch (err) {
     console.error('[Leads Capture] Unexpected error:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
