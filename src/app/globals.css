@@ -729,6 +729,13 @@ body {
     justify-content: center !important;
 }
 
+/* Keep the action row full-width so the button's width:80% is measured against the whole card,
+   not the shrink-to-content box that align-items:center would otherwise create */
+.product-grid.list-view .product-actions,
+.product-grid.list-view .inline-qty-selector {
+    width: 100%;
+}
+
 .discount-badge {
     font-size: 0.75rem;
     color: var(--primary);
