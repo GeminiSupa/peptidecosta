@@ -10,7 +10,7 @@ import fs from 'fs';
 import os from 'os';
 
 // ── Lazy imports (Baileys is ESM-only, load dynamically) ──────────────────
-let makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, downloadMediaMessage;
+let makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore, downloadMediaMessage, initAuthCreds, BufferJSON, proto;
 import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase service client for background inserts
@@ -29,6 +29,9 @@ async function loadBaileys() {
   DisconnectReason          = mod.DisconnectReason;
   makeCacheableSignalKeyStore = mod.makeCacheableSignalKeyStore;
   downloadMediaMessage      = mod.downloadMediaMessage;
+  initAuthCreds             = mod.initAuthCreds;
+  BufferJSON                = mod.BufferJSON;
+  proto                     = mod.proto;
 }
 
 // ── Global singleton (survives hot reload) ────────────────────────────────
@@ -43,11 +46,92 @@ if (!g.__waSession) {
   };
 }
 
-const SESSION_DIR = process.env.WA_SESSION_DIR || path.join(os.tmpdir(), '.wa-session');
+const SESSION_DIR = process.env.WA_SESSION_DIR || path.join(process.cwd(), '.wa-session');
 
 export function getSessionStatus() {
   const { state, qrDataUrl, number, error } = g.__waSession;
   return { state, qrDataUrl, number, error };
+}
+
+// ── Custom Supabase Auth State Adapter ────────────────────────────────────
+async function useSupabaseAuthState(supabaseClient, sessionId = 'default') {
+  const writeData = async (data, key) => {
+    try {
+      await supabaseClient.from('wa_auth_state').upsert({
+        id: `${sessionId}-${key}`,
+        value: JSON.parse(JSON.stringify(data, BufferJSON.replacer))
+      });
+    } catch (err) {
+      console.error('[waSession] Supabase Write Error:', err);
+    }
+  };
+
+  const readData = async (key) => {
+    try {
+      const { data, error } = await supabaseClient
+        .from('wa_auth_state')
+        .select('value')
+        .eq('id', `${sessionId}-${key}`)
+        .single();
+      
+      if (data && data.value) {
+        return JSON.parse(JSON.stringify(data.value), BufferJSON.reviver);
+      }
+    } catch (err) {
+      // Ignore if not found
+    }
+    return null;
+  };
+
+  const removeData = async (key) => {
+    try {
+      await supabaseClient
+        .from('wa_auth_state')
+        .delete()
+        .eq('id', `${sessionId}-${key}`);
+    } catch (err) {
+      console.error('[waSession] Supabase Remove Error:', err);
+    }
+  };
+
+  const creds = await readData('creds') || initAuthCreds();
+
+  return {
+    state: {
+      creds,
+      keys: {
+        get: async (type, ids) => {
+          const data = {};
+          await Promise.all(
+            ids.map(async id => {
+              let value = await readData(`${type}-${id}`);
+              if (type === 'app-state-sync-key' && value) {
+                value = proto.Message.AppStateSyncKeyData.fromObject(value);
+              }
+              data[id] = value;
+            })
+          );
+          return data;
+        },
+        set: async (data) => {
+          const tasks = [];
+          for (const category in data) {
+            for (const id in data[category]) {
+              const value = data[category][id];
+              const key = `${category}-${id}`;
+              if (value) {
+                tasks.push(writeData(value, key));
+              } else {
+                tasks.push(removeData(key));
+              }
+            }
+          }
+          await Promise.all(tasks);
+        }
+      }
+    },
+    saveCreds: () => writeData(creds, 'creds')
+  };
 }
 
 export async function startSession() {
@@ -63,8 +147,7 @@ export async function startSession() {
   g.__waSession.error     = null;
 
   try {
-    fs.mkdirSync(SESSION_DIR, { recursive: true });
-    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+    const { state, saveCreds } = await useSupabaseAuthState(supabase, 'default');
 
     const sock = makeWASocket({
       auth: {
@@ -114,8 +197,10 @@ export async function startSession() {
         g.__waSession.number = null;
 
         if (loggedOut) {
-          // Clear saved credentials so fresh QR is shown
-          fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+          // Clear saved credentials from Supabase so fresh QR is shown
+          if (supabase) {
+            await supabase.from('wa_auth_state').delete().like('id', 'default-%');
+          }
           g.__waSession.state = 'disconnected';
           g.__waSession.error = 'Logged out. Please scan QR again.';
         } else {
@@ -230,7 +315,9 @@ export async function disconnectSession() {
   if (sock) {
     try { await sock.logout(); } catch (_) {}
   }
-  fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+  if (supabase) {
+    await supabase.from('wa_auth_state').delete().like('id', 'default-%');
+  }
   g.__waSession = {
     sock:      null,
     state:     'disconnected',
