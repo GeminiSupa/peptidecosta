@@ -16,8 +16,8 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
-const ADMIN_CC_EMAILS = 'info@peptidescostarica.net, info@peptidescostarica.net';
+const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
+const ADMIN_CC_EMAILS = 'info@peptidescostarica.net, omerforce@gmail.com';
 
 export async function POST(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
@@ -144,7 +144,7 @@ export async function POST(request) {
         try {
           const subject = `Weekly Commissions Invoice - ${payout.agent_name || payout.agent_email} [${payout.commission_rate}%]`;
           await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
             from: NOTIFICATION_FROM,
             to: payout.agent_email.trim(),
             cc: ADMIN_CC_EMAILS,

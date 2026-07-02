@@ -20,9 +20,9 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
+const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
 const ADMIN_CC_EMAILS = process.env.COMMISSION_REPORT_ADMIN_EMAILS
-  || 'info@peptidescostarica.net, info@peptidescostarica.net';
+  || 'info@peptidescostarica.net, omerforce@gmail.com';
 
 const formatMoney = (value, currency) => {
   const amount = Number(value || 0);
@@ -306,7 +306,7 @@ export async function GET(request) {
       if (transporter && agent.email && !saveError) {
         try {
           await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
             from: NOTIFICATION_FROM,
             to: agent.email,
             subject: `Your weekly pay report · ${periodDisplay}`,
@@ -394,7 +394,7 @@ export async function GET(request) {
         `;
 
         await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
           from: NOTIFICATION_FROM,
           to: ADMIN_CC_EMAILS,
           subject: `Weekly team pay report · ${periodDisplay}`,

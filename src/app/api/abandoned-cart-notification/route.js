@@ -8,7 +8,7 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
+const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -230,9 +230,9 @@ export async function POST(request) {
     ].join('\n');
 
     const mailInfo = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
-      from: `Peptides Costa Rica <info@peptidescostarica.net>`,
-      replyTo: 'info@peptidescostarica.net',
+            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+      from: `Peptides Costa Rica <omerforce@gmail.com>`,
+      replyTo: 'omerforce@gmail.com',
       to: customer_email.trim(),
       subject: customerSubject,
       html: recoveryHtml,
