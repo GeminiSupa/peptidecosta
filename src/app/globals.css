@@ -702,15 +702,24 @@ body {
     letter-spacing: 0.5px;
 }
 
-/* List view: center the info column contents to match the centered Add-to-Cart button */
+/* List view: center the info column contents and vertically center the group in the card */
 .product-grid.list-view .product-info {
     align-items: center;
     text-align: center;
+    justify-content: center;
 }
 
-.product-grid.list-view .product-category,
+/* Even vertical rhythm between name, rating, price, badge, and button.
+   Gaps are set as margins on always-present rows so rated/unrated cards match. */
+.product-grid.list-view .product-category {
+    padding-right: 0;
+    margin-bottom: 4px;
+}
+
 .product-grid.list-view .product-name {
     padding-right: 0;
+    min-height: 0;          /* don't reserve two lines for single-line names */
+    margin-bottom: 6px;
 }
 
 .product-grid.list-view .product-rating-slot {
@@ -718,15 +727,27 @@ body {
     align-items: center;
     justify-content: center;
     width: 100%;
+    margin: 0;              /* empty (unrated) slot collapses to zero */
+}
+
+.product-grid.list-view .product-rating-slot:not(:empty) {
+    margin-bottom: 6px;
 }
 
 .product-grid.list-view .product-pricing {
     justify-content: center;
     width: 100%;
+    margin-bottom: 8px;
 }
 
 .product-grid.list-view .stock-badges-slot {
     justify-content: center !important;
+    margin-bottom: 12px !important;   /* consistent gap before the button (overrides inline 8px) */
+}
+
+/* Sit the button right after the badge instead of being pushed to the card bottom */
+.product-grid.list-view .product-actions {
+    margin-top: 0;
 }
 
 /* Keep the action row full-width so the button's width:80% is measured against the whole card,
