@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Users, Trash2, Upload, Brain, Sparkles, 
-  Mail, MessageCircle, Globe, Target, Flame, Snowflake
+  Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp
 } from 'lucide-react';
 
 const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) => (

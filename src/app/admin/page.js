@@ -46,13 +46,26 @@ import {
 } from '@/lib/adminModules';
 import dynamic from 'next/dynamic';
 
-const OrdersManager = dynamic(() => import('@/components/admin/OrdersManager'), { ssr: false });
-const ProductsManager = dynamic(() => import('@/components/admin/ProductsManager'), { ssr: false });
-const EmailMarketingStudio = dynamic(() => import('@/components/admin/marketing/EmailMarketingStudio'), { ssr: false });
-const WhatsAppSession = dynamic(() => import('@/components/admin/marketing/WhatsAppSession'), { ssr: false });
-import ErrorBoundary from "@/components/ErrorBoundary";
-const CartsManager = dynamic(() => import('@/components/admin/CartsManager'), { ssr: false });
-const LeadsManager = dynamic(() => import('@/components/admin/LeadsManager'), { ssr: false });
+import ErrorBoundary from '@/components/ErrorBoundary';
+
+function AdminTabLoading({ label = 'Loading tab…' }) {
+  return (
+    <div className="loader" style={{ padding: '48px 16px' }}>
+      <div className="sync-spinner" style={{ marginBottom: '16px' }} />
+      <div>{label}</div>
+    </div>
+  );
+}
+
+const dynamicTab = (loader, label) =>
+  dynamic(loader, { ssr: false, loading: () => <AdminTabLoading label={label} /> });
+
+const OrdersManager = dynamicTab(() => import('@/components/admin/OrdersManager'), 'Loading orders…');
+const ProductsManager = dynamicTab(() => import('@/components/admin/ProductsManager'), 'Loading products…');
+const EmailMarketingStudio = dynamicTab(() => import('@/components/admin/marketing/EmailMarketingStudio'), 'Loading marketing studio…');
+const WhatsAppSession = dynamicTab(() => import('@/components/admin/marketing/WhatsAppSession'), 'Loading WhatsApp session…');
+const CartsManager = dynamicTab(() => import('@/components/admin/CartsManager'), 'Loading carts…');
+const LeadsManager = dynamicTab(() => import('@/components/admin/LeadsManager'), 'Loading leads…');
 
 const FacebookIcon = ({ size = 14, style, ...props }) => (
   <svg 
@@ -1360,11 +1373,19 @@ Core Rules:
 
   useEffect(() => {
     if (!mounted) return;
-    const activeBtn = document.querySelector('.admin-tab-btn.active');
-    activeBtn?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    const frame = requestAnimationFrame(() => {
+      try {
+        const activeBtn = document.querySelector('.admin-tab-btn.active');
+        activeBtn?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'auto' });
+      } catch (err) {
+        console.warn('Admin tab scroll skipped:', err);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   }, [activeTab, mounted]);
 
   useEffect(() => {
+    if (!activeTab) return undefined;
     const cls = `admin-tab-${activeTab}`;
     document.body.classList.add(cls);
     return () => document.body.classList.remove(cls);
@@ -4068,6 +4089,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         )}
 
         {activeTab === 'spreadsheet' && (
+          <ErrorBoundary>
           <ProductsManager 
             products={products}
             productSearch={productSearch} setProductSearch={setProductSearch}
@@ -4089,10 +4111,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             setEditDescEs={setEditDescEs} setEditDescModalOpen={setEditDescModalOpen}
             handleMoveRow={handleMoveRow} handleDeleteRow={handleDeleteRow}
           />
+          </ErrorBoundary>
         )}
 
         {/* TAB 2: ORDERS LEDGER HISTORY */}
         {activeTab === 'orders' && (
+          <ErrorBoundary>
           <OrdersManager 
             visibleOrders={visibleOrders}
             orderStatusFilter={orderStatusFilter} setOrderStatusFilter={setOrderStatusFilter}
@@ -4113,6 +4137,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             formatCustomerIdType={formatCustomerIdType}
             loggedInEmailRef={loggedInEmail}
           />
+          </ErrorBoundary>
         )}
 
         {/* TAB 3: SHARE LINKS GENERATOR */}
@@ -4275,6 +4300,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: '0.85rem' }}>Fetching the latest abandoned carts.</p>
             </div>
           ) : (
+            <ErrorBoundary>
             <CartsManager 
             setSelectedCartDetails={setSelectedCartDetails}
             abandonedCarts={abandonedCarts}
@@ -4294,6 +4320,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             handleSendRecoveryEmail={handleSendRecoveryEmail}
             handleDeleteCart={handleDeleteCart}
           />
+            </ErrorBoundary>
           )
         )}
 
@@ -4883,7 +4910,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: '0.85rem' }}>Crunching numbers and fetching the latest data.</p>
               </div>
             ) : (
+              <ErrorBoundary>
               <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} productViews={productViews} />
+              </ErrorBoundary>
             )}
 
           </div>
@@ -4900,12 +4929,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: '0.85rem' }}>Fetching customer data from orders.</p>
               </div>
             ) : (
+              <ErrorBoundary>
               <CustomersCRM 
 
               orders={orders} 
               abandonedCarts={abandonedCarts} 
               onWhatsAppClick={(recipient) => openWhatsAppComposer(recipient)} 
             />
+              </ErrorBoundary>
             )}
           </div>
         )}
@@ -4958,7 +4989,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {/* TAB: AFFILIATES */}
         {activeTab === 'marketing' && (
           <div className="admin-orders-tab admin-tab-panel">
+            <ErrorBoundary>
             <EmailMarketingStudio />
+            </ErrorBoundary>
           </div>
         )}
 
