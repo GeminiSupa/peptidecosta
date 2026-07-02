@@ -5,6 +5,7 @@ import { adminFetch } from '@/lib/adminApi';
 import {
   Activity, CalendarClock, Loader2, Play, RefreshCw,
   ShoppingCart, Sparkles, Users, Zap, Clock, CheckCircle2,
+  Eye, X
 } from 'lucide-react';
 
 const STAT_CONFIG = {
@@ -25,6 +26,7 @@ export default function AutomationStudio() {
   const [summary,     setSummary]     = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [schedulingId, setSchedulingId] = useState('');
+  const [previewFlow,  setPreviewFlow]  = useState(null);
 
   useEffect(() => { fetchSummary(); }, []);
 
@@ -134,14 +136,20 @@ export default function AutomationStudio() {
                   <span>📡 {flow.channel}</span>
                 </div>
                 <p>{flow.message.split('\n').find(Boolean)}</p>
-                <button
-                  onClick={() => scheduleFlow(flow)}
-                  disabled={schedulingId === flow.id || !isReady}
-                  className={`mkt-btn ${isReady ? 'mkt-btn-primary' : ''} mkt-w-full`}
-                >
-                  {schedulingId === flow.id ? <Loader2 className="animate-spin" size={15} /> : <Play size={15} />}
-                  {isReady ? 'Schedule Flow' : 'Waiting for opportunities'}
-                </button>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                  <button onClick={() => setPreviewFlow(flow)} className="mkt-btn" style={{ flex: '1 1 auto', padding: '8px', fontSize: '12px' }}>
+                    <Eye size={14} /> Preview Message
+                  </button>
+                  <button
+                    onClick={() => scheduleFlow(flow)}
+                    disabled={schedulingId === flow.id || !isReady}
+                    className={`mkt-btn ${isReady ? 'mkt-btn-primary' : ''}`}
+                    style={{ flex: '1 1 auto', padding: '8px', fontSize: '12px' }}
+                  >
+                    {schedulingId === flow.id ? <Loader2 className="animate-spin" size={14} /> : <Play size={14} />}
+                    {isReady ? 'Schedule' : 'Waiting'}
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -192,6 +200,48 @@ export default function AutomationStudio() {
             </table>
           </div>
         </>
+      )}
+      {/* ── Preview Modal ── */}
+      {previewFlow && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(6px)', padding: '20px' }}
+          onClick={() => setPreviewFlow(null)}
+        >
+          <div
+            style={{ background: '#111827', borderRadius: '16px', width: '100%', maxWidth: '500px', padding: '28px', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 16px 48px rgba(0,0,0,0.4)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 className="mkt-title" style={{ fontSize: '1.1rem', margin: 0 }}>
+                {previewFlow.name} Preview
+              </h3>
+              <button onClick={() => setPreviewFlow(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Subject Line:</div>
+              <div style={{ fontWeight: '700', fontSize: '15px', color: '#fff', marginBottom: '16px' }}>{previewFlow.subject}</div>
+              
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>Message Body:</div>
+              <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.85)', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                {previewFlow.message}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setPreviewFlow(null)} className="mkt-btn mkt-flex-1">Close</button>
+              <button 
+                onClick={() => { scheduleFlow(previewFlow); setPreviewFlow(null); }} 
+                className="mkt-btn mkt-btn-primary mkt-flex-1"
+                disabled={previewFlow.status !== 'ready' || previewFlow.opportunities === 0}
+              >
+                Schedule Flow
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

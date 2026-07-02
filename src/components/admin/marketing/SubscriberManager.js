@@ -18,6 +18,7 @@ export default function SubscriberManager() {
   const [loading,     setLoading]     = useState(true);
   const [search,      setSearch]      = useState('');
   const [filterStatus, setFilterStatus] = useState('all'); // all | subscribed | unsubscribed
+  const [filterTag,    setFilterTag]    = useState('all'); // all | specific tag
 
   // Add modal
   const [showAddModal,  setShowAddModal]  = useState(false);
@@ -66,22 +67,19 @@ export default function SubscriberManager() {
 
   const startEdit = (sub) => {
     setEditingId(sub.id);
-    setEditForm({ ...sub, tags_raw: sub.tags ? sub.tags.join(', ') : '' });
+    setEditForm({ ...sub, tags: sub.tags || [] });
   };
 
   const cancelEdit = () => setEditingId(null);
 
   const saveEdit = async () => {
     try {
-      const tagsArray = editForm.tags_raw
-        ? editForm.tags_raw.split(',').map(t => t.trim()).filter(Boolean)
-        : [];
       const res  = await adminFetch('/api/admin/subscribers', {
         method: 'PUT',
         body: JSON.stringify({
           id: editingId, email: editForm.email,
           first_name: editForm.first_name, last_name: editForm.last_name,
-          status: editForm.status, tags: tagsArray,
+          status: editForm.status, tags: editForm.tags,
         }),
       });
       const data = await res.json();
@@ -142,6 +140,13 @@ export default function SubscriberManager() {
   const active      = subscribers.filter(s => s.status === 'subscribed').length;
   const unsub       = subscribers.filter(s => s.status === 'unsubscribed').length;
 
+  // Unique tags for filter
+  const allTags = useMemo(() => {
+    const tags = new Set();
+    subscribers.forEach(s => (s.tags || []).forEach(t => tags.add(t)));
+    return Array.from(tags).sort();
+  }, [subscribers]);
+
   const filtered = useMemo(() => subscribers.filter(s => {
     const q = search.toLowerCase();
     const matchSearch = !q ||
@@ -149,8 +154,9 @@ export default function SubscriberManager() {
       (s.first_name || '').toLowerCase().includes(q) ||
       (s.last_name  || '').toLowerCase().includes(q);
     const matchStatus = filterStatus === 'all' || s.status === filterStatus;
-    return matchSearch && matchStatus;
-  }), [subscribers, search, filterStatus]);
+    const matchTag    = filterTag === 'all' || (s.tags || []).includes(filterTag);
+    return matchSearch && matchStatus && matchTag;
+  }), [subscribers, search, filterStatus, filterTag]);
 
   return (
     <div>
@@ -201,6 +207,18 @@ export default function SubscriberManager() {
           <option value="unsubscribed">Unsubscribed</option>
         </select>
 
+        {/* Tag filter */}
+        <select
+          value={filterTag}
+          onChange={e => setFilterTag(e.target.value)}
+          className="mkt-input"
+          style={{ flex: '0 0 auto', width: 'auto', minWidth: '130px' }}
+          aria-label="Filter by tag"
+        >
+          <option value="all">All Tags</option>
+          {allTags.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginLeft: 'auto' }}>
           <button className="mkt-btn" onClick={fetchSubscribers} disabled={loading} title="Refresh" aria-label="Refresh subscribers">
@@ -240,65 +258,110 @@ export default function SubscriberManager() {
           <p>{search ? 'Try a different search term.' : 'Add your first subscriber to get started.'}</p>
         </div>
       ) : (
-        <div className="mkt-sub-card-grid">
-          {filtered.map((sub) => (
-            <div key={sub.id} className="mkt-sub-card">
-              {editingId === sub.id ? (
-                /* ── Edit mode ── */
-                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <input type="email" className="mkt-input" style={{ flex: '2 1 180px' }} value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} placeholder="Email" />
-                    <input type="text"  className="mkt-input" style={{ flex: '1 1 100px' }} value={editForm.first_name || ''} onChange={e => setEditForm({ ...editForm, first_name: e.target.value })} placeholder="First" />
-                    <input type="text"  className="mkt-input" style={{ flex: '1 1 100px' }} value={editForm.last_name  || ''} onChange={e => setEditForm({ ...editForm, last_name:  e.target.value })} placeholder="Last" />
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <div style={{ position: 'relative', flex: '1 1 160px' }}>
-                      <Tag size={13} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
-                      <input type="text" className="mkt-input" style={{ paddingLeft: '28px' }} value={editForm.tags_raw || ''} onChange={e => setEditForm({ ...editForm, tags_raw: e.target.value })} placeholder="Tags (comma separated)" />
-                    </div>
-                    <select className="mkt-input" style={{ flex: '0 0 auto', width: 'auto' }} value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value })}>
-                      <option value="subscribed">Subscribed</option>
-                      <option value="unsubscribed">Unsubscribed</option>
-                    </select>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button onClick={cancelEdit} className="mkt-btn mkt-btn-ghost mkt-btn-icon" aria-label="Cancel edit"><X size={16} /></button>
-                      <button onClick={saveEdit}   className="mkt-btn mkt-btn-primary mkt-btn-icon" aria-label="Save changes"><Check size={16} /></button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* ── View mode ── */
-                <>
-                  <div className="mkt-sub-card-avatar">{getInitials(sub)}</div>
-                  <div className="mkt-sub-card-body">
-                    <div className="mkt-sub-card-email">{sub.email}</div>
-                    <div className="mkt-sub-card-meta">
-                      {sub.first_name || sub.last_name ? `${sub.first_name || ''} ${sub.last_name || ''}`.trim() : 'No name'}
-                      {' · '}
-                      {new Date(sub.created_at).toLocaleDateString()}
-                    </div>
-                    {sub.tags && sub.tags.length > 0 && (
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '6px' }}>
-                        {sub.tags.map(t => (
-                          <span key={t} style={{ background: 'rgba(96,165,250,0.12)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.18)', padding: '2px 7px', borderRadius: '4px', fontSize: '10px', fontWeight: '700' }}>
-                            {t}
-                          </span>
-                        ))}
+        <div className="mkt-table-wrapper">
+          <table className="mkt-table responsive-table">
+            <thead>
+              <tr>
+                <th>Subscriber</th>
+                <th>Status</th>
+                <th>Tags</th>
+                <th>Added</th>
+                <th className="mkt-text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((sub) => (
+                <tr key={sub.id}>
+                  {editingId === sub.id ? (
+                    /* ── Edit mode ── */
+                    <td colSpan="5">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <input type="email" className="mkt-input" style={{ flex: '2 1 180px' }} value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} placeholder="Email" />
+                          <input type="text"  className="mkt-input" style={{ flex: '1 1 100px' }} value={editForm.first_name || ''} onChange={e => setEditForm({ ...editForm, first_name: e.target.value })} placeholder="First" />
+                          <input type="text"  className="mkt-input" style={{ flex: '1 1 100px' }} value={editForm.last_name  || ''} onChange={e => setEditForm({ ...editForm, last_name:  e.target.value })} placeholder="Last" />
+                          <select className="mkt-input" style={{ flex: '0 0 auto', width: 'auto' }} value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value })}>
+                            <option value="subscribed">Subscribed</option>
+                            <option value="unsubscribed">Unsubscribed</option>
+                          </select>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                          <div style={{ flex: '1 1 auto', display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '6px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            {editForm.tags.map(t => (
+                              <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(96,165,250,0.15)', color: '#60a5fa', padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700' }}>
+                                {t}
+                                <button onClick={() => setEditForm({ ...editForm, tags: editForm.tags.filter(tag => tag !== t) })} style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: 0, display: 'flex' }}><X size={10} /></button>
+                              </span>
+                            ))}
+                            <input 
+                              type="text" 
+                              placeholder={editForm.tags.length === 0 ? "Add tags (press Enter)..." : "Add more..."}
+                              style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '12px', outline: 'none', minWidth: '120px', flex: '1 1 auto' }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ',') {
+                                  e.preventDefault();
+                                  const val = e.target.value.trim().replace(/^,|,$/g, '');
+                                  if (val && !editForm.tags.includes(val)) {
+                                    setEditForm({ ...editForm, tags: [...editForm.tags, val] });
+                                    e.target.value = '';
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                            <button onClick={cancelEdit} className="mkt-btn" aria-label="Cancel edit">Cancel</button>
+                            <button onClick={saveEdit}   className="mkt-btn mkt-btn-primary" aria-label="Save changes">Save</button>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  <div className="mkt-sub-card-actions">
-                    <span className={`mkt-badge ${sub.status === 'subscribed' ? 'mkt-badge-success' : 'mkt-badge-warning'}`}>
-                      {sub.status === 'subscribed' ? 'Active' : 'Unsub'}
-                    </span>
-                    <button onClick={() => startEdit(sub)} className="mkt-btn mkt-btn-ghost mkt-btn-icon" aria-label="Edit subscriber">
-                      <Edit2 size={16} />
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
+                    </td>
+                  ) : (
+                    /* ── View mode ── */
+                    <>
+                      <td data-label="Subscriber">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div className="mkt-sub-card-avatar" style={{ flexShrink: 0 }}>{getInitials(sub)}</div>
+                          <div>
+                            <div className="mkt-font-medium" style={{ fontSize: '13px' }}>{sub.email}</div>
+                            {(sub.first_name || sub.last_name) && (
+                              <div className="mkt-text-xs mkt-text-muted">{sub.first_name} {sub.last_name}</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td data-label="Status">
+                        <span className={`mkt-badge ${sub.status === 'subscribed' ? 'mkt-badge-success' : 'mkt-badge-warning'}`}>
+                          {sub.status === 'subscribed' ? 'Active' : 'Unsub'}
+                        </span>
+                      </td>
+                      <td data-label="Tags">
+                        {sub.tags && sub.tags.length > 0 ? (
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            {sub.tags.map(t => (
+                              <span key={t} style={{ background: 'rgba(96,165,250,0.12)', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.18)', padding: '2px 7px', borderRadius: '4px', fontSize: '10px', fontWeight: '700' }}>
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="mkt-text-xs mkt-text-muted">—</span>
+                        )}
+                      </td>
+                      <td data-label="Added">
+                        <span className="mkt-text-xs mkt-text-muted">{new Date(sub.created_at).toLocaleDateString()}</span>
+                      </td>
+                      <td data-label="Actions" className="mkt-text-right">
+                        <button onClick={() => startEdit(sub)} className="mkt-btn" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                          Edit
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
