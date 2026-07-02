@@ -33,7 +33,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Campaign must have a subject and saved email body before sending' }, { status: 400 });
     }
 
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS || !process.env.SMTP_HOST) {
       return NextResponse.json({ error: 'Email sender credentials are not configured' }, { status: 500 });
     }
 
@@ -87,11 +87,16 @@ export async function POST(request) {
     }).eq('id', campaign_id);
 
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 465),
+      secure: process.env.SMTP_SECURE !== 'false',
       auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
       },
+      tls: {
+        rejectUnauthorized: false
+      }
     });
 
     // Fire and forget batch process
@@ -161,7 +166,7 @@ async function processBatch(transporter, campaign, subscribers, is_test_batch, s
 
       await transporter.sendMail({
             bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
-        from: `"${campaign.from_name || 'Costa Peptides'}" <${campaign.from_email || process.env.EMAIL_USER}>`,
+        from: `"${campaign.from_name || 'Costa Peptides'}" <${campaign.from_email || process.env.SMTP_FROM || process.env.SMTP_USER}>`,
         to: sub.email,
         subject: personalizedSubject,
         html: finalHtml,
