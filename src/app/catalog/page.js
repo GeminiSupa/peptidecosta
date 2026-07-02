@@ -398,9 +398,10 @@ export default function CatalogPage() {
       const productParam = urlParams.get('product');
       if (productParam) {
         const decodedParam = decodeURIComponent(productParam);
-        const matchingProduct = products.find(p => 
-          p.product.toLowerCase() === decodedParam.toLowerCase() || 
-          p.id === decodedParam
+        const matchingProduct = products.find(p =>
+          !hiddenProducts.includes(p.product) &&
+          (p.product.toLowerCase() === decodedParam.toLowerCase() ||
+          p.id === decodedParam)
         );
         if (matchingProduct) {
           setSelectedProduct(matchingProduct);
@@ -1297,10 +1298,12 @@ export default function CatalogPage() {
 
   const getSearchSuggestions = () => {
     const query = searchQuery.toLowerCase().trim();
+    // Exclude products hidden from the catalog by admin
+    const visible = products.filter(p => !hiddenProducts.includes(p.product));
     if (!query) {
-      return products.slice(0, 3);
+      return visible.slice(0, 3);
     }
-    return products.filter(p => 
+    return visible.filter(p =>
       p.product.toLowerCase().includes(query) ||
       (p.category && p.category.toLowerCase().includes(query))
     ).slice(0, 5);
@@ -1462,18 +1465,20 @@ export default function CatalogPage() {
     const cartProductNames = new Set(cart.map(c => c.product));
     const cartCategories = new Set(cart.map(c => c.category).filter(Boolean));
     
-    // Find in-stock products from same categories, not already in cart
-    let suggestions = products.filter(p => 
-      !cartProductNames.has(p.product) && 
-      isInStock(p.status) && 
+    // Find in-stock products from same categories, not already in cart (exclude admin-hidden)
+    let suggestions = products.filter(p =>
+      !cartProductNames.has(p.product) &&
+      !hiddenProducts.includes(p.product) &&
+      isInStock(p.status) &&
       cartCategories.has(p.category)
     );
-    
+
     // If not enough, add other in-stock products
     if (suggestions.length < 3) {
-      const more = products.filter(p => 
-        !cartProductNames.has(p.product) && 
-        isInStock(p.status) && 
+      const more = products.filter(p =>
+        !cartProductNames.has(p.product) &&
+        !hiddenProducts.includes(p.product) &&
+        isInStock(p.status) &&
         !cartCategories.has(p.category)
       );
       suggestions = [...suggestions, ...more];
@@ -2257,8 +2262,8 @@ export default function CatalogPage() {
     setReviewSubmitting(false);
   };
 
-  // Categories
-  const categoriesList = ['all', ...Array.from(new Set(products.map(p => p.category))).filter(Boolean).sort()];
+  // Categories (exclude categories that only exist on admin-hidden products)
+  const categoriesList = ['all', ...Array.from(new Set(products.filter(p => !hiddenProducts.includes(p.product)).map(p => p.category))).filter(Boolean).sort()];
 
   // Filtering + Sorting Logic
   let filteredProducts = products.filter(p => {
