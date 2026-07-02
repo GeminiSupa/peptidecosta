@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 // 1x1 transparent GIF base64 encoded
 const TRANSPARENT_GIF = Buffer.from(
@@ -19,7 +19,8 @@ export async function GET(request) {
       const user_agent = request.headers.get('user-agent') || 'unknown';
 
       // Fire and forget insert
-      supabase
+      const supabaseAdmin = getSupabaseAdmin();
+      supabaseAdmin
         .from('campaign_opens')
         .insert([{ campaign_id, subscriber_id, ip_address, user_agent }])
         .then(({ error }) => {

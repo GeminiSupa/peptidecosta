@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function GET(request) {
   const url = new URL(request.url);
@@ -17,7 +17,8 @@ export async function GET(request) {
       const user_agent = request.headers.get('user-agent') || 'unknown';
 
       // Fire and forget insert
-      supabase
+      const supabaseAdmin = getSupabaseAdmin();
+      supabaseAdmin
         .from('campaign_clicks')
         .insert([{ campaign_id, subscriber_id, target_url, ip_address, user_agent }])
         .then(({ error }) => {

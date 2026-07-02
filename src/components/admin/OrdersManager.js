@@ -1,0 +1,412 @@
+import React from 'react';
+import { Database, Plus, Download } from 'lucide-react';
+
+export default function OrdersManager({
+  visibleOrders,
+  orderStatusFilter, setOrderStatusFilter,
+  orderSearch, setOrderSearch,
+  ordersPerPage, setOrdersPerPage,
+  ordersCurrentPage, setOrdersCurrentPage,
+  isStaffAgent,
+  setManualOrderOpen,
+  orders,
+  setExportModalType,
+  loadingOrders,
+  handleOrderStatusUpdate,
+  handleOrderSalesAgentUpdate,
+  setSelectedOrderDetails,
+  openWhatsAppComposer,
+  handleDeleteOrder,
+  agents,
+  formatCustomerIdType,
+  loggedInEmailRef
+}) {
+  const scopedOrders = visibleOrders;
+  const filteredOrders = scopedOrders.filter(o => {
+    if (orderStatusFilter !== 'All' && o.status !== orderStatusFilter) return false;
+    if (orderSearch) {
+      const s = orderSearch.toLowerCase();
+      return (
+        o.customer_name?.toLowerCase().includes(s) || 
+        o.customer_phone?.toLowerCase().includes(s) ||
+        o.customer_email?.toLowerCase().includes(s) ||
+        o.id?.toLowerCase().includes(s) ||
+        o.order_number?.toLowerCase().includes(s) ||
+        o.customer_id_number?.toLowerCase().includes(s) ||
+        o.tracking_number?.toLowerCase().includes(s)
+      );
+    }
+    return true;
+  });
+
+  const totalOrdersPages = Math.ceil(filteredOrders.length / ordersPerPage);
+  const paginatedOrders = filteredOrders.slice(
+    (ordersCurrentPage - 1) * ordersPerPage,
+    ordersCurrentPage * ordersPerPage
+  );
+
+  return (
+    <div className="admin-tab-panel admin-tab-orders-panel">
+      <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+          <h3>{isStaffAgent ? 'My Orders' : 'Customer Orders Log Ledger'}</h3>
+          <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 12px 0' }}>
+            {isStaffAgent
+              ? 'You see orders assigned to you and unassigned orders. Assign yourself on an order to claim it for commission.'
+              : 'A secure listing of all catalog order intents placed by customers. Double check entries here before coordinating dispatches on WhatsApp.'}
+          </p>
+          <div className="admin-toolbar-filters">
+            <input 
+              className="admin-input admin-filter-input"
+              type="text" 
+              placeholder="Search by name, phone, email, or tracking..." 
+              value={orderSearch}
+              onChange={(e) => {
+                setOrderSearch(e.target.value);
+                setOrdersCurrentPage(1);
+              }}
+            />
+            <select
+              className="admin-select"
+              value={orderStatusFilter}
+              onChange={(e) => {
+                setOrderStatusFilter(e.target.value);
+                setOrdersCurrentPage(1);
+              }}
+            >
+              <option value="All">All Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Payment Pending">Payment Pending</option>
+              <option value="Processing">Processing</option>
+              <option value="Order Complete">Order Complete</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
+        </div>
+        <div className="admin-toolbar-actions">
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary"
+            onClick={() => setManualOrderOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            <Plus size={14} />
+            Manual Order
+          </button>
+          {orders.length > 0 && (
+            <button
+              className="admin-btn admin-btn-primary"
+              onClick={() => setExportModalType('orders')}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <Download size={14} />
+              Export Orders
+            </button>
+          )}
+        </div>
+      </div>
+
+      {loadingOrders ? (
+        <div className="loader">
+          <div className="sync-spinner" style={{ marginBottom: '16px' }}></div>
+          <div>Fetching logs from database...</div>
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="loader" style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+          <Database size={32} style={{ margin: '0 auto 16px auto', opacity: 0.3, display: 'block' }} />
+          No orders registered in the system yet.
+        </div>
+      ) : (
+        <div className="table-responsive admin-table-wrap" style={{ background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <table className="spreadsheet-table responsive-table admin-orders-table">
+            <thead>
+              <tr>
+                <th style={{ padding: '10px 12px' }}>Date</th>
+                <th style={{ padding: '10px 12px' }}>Order Info</th>
+                <th style={{ padding: '10px 12px' }}>Customer Details</th>
+                <th style={{ padding: '10px 12px' }}>Total Amount</th>
+                <th style={{ padding: '10px 12px' }}>Payment</th>
+                <th style={{ padding: '10px 12px' }}>Status</th>
+                <th style={{ padding: '10px 12px' }}>Agent</th>
+                <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedOrders.map(order => {
+                  const items = Array.isArray(order.items) ? order.items : [];
+                  const orderDate = new Date(order.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+
+                  const _vialCount = items.reduce((s, i) => s + (Number(i.qty) || 1), 0);
+                  let _discountPct = 0;
+                  if (_vialCount >= 10) _discountPct = 20;
+                  else if (_vialCount >= 5) _discountPct = 15;
+                  
+                  const _storedTotal = order.currency === 'USD' ? Number(order.total_usd || 0) : Number(order.total_crc || 0);
+                  const _displayTotal = _storedTotal;
+                  
+                  return (
+                    <tr key={order.id}>
+                      <td data-label="Date" style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                        {orderDate}
+                      </td>
+                      <td data-label="Order Info" style={{ padding: '10px 12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ fontWeight: 'bold', color: '#fbbf24', fontSize: '0.85rem' }}>
+                            #{order.order_number || order.id.slice(0, 8)}
+                          </span>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                            {items.length} {items.length === 1 ? 'item' : 'items'}
+                          </span>
+                        </div>
+                      </td>
+                      <td data-label="Customer Details" style={{ padding: '10px 12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '0.85rem' }}>
+                            {order.customer_name}
+                          </span>
+                          <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                            💬 {order.customer_phone}
+                          </span>
+                          {order.customer_id_number && (
+                            <span style={{ fontSize: '0.75rem', color: '#cbd5e1', fontFamily: 'monospace' }}>
+                              🪪 {order.customer_id_number}
+                              {order.customer_id_type ? ` (${formatCustomerIdType(order.customer_id_type)})` : ''}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td data-label="Total Amount" style={{ padding: '10px 12px', fontWeight: 'bold', color: '#38bdf8', fontSize: '0.9rem' }}>
+                        {order.currency === 'USD'
+                          ? `$${_displayTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+                          : `₡${Math.round(_displayTotal).toLocaleString('en-US')}`
+                        }
+                        {_discountPct > 0 && (
+                          <span style={{ display: 'block', fontSize: '0.65rem', color: '#4ade80', fontWeight: '700', marginTop: '2px' }}>
+                            -{_discountPct}% vol. discount
+                          </span>
+                        )}
+                      </td>
+                      <td data-label="Payment" style={{ padding: '10px 12px' }}>
+                        <span style={{ 
+                          padding: '4px 8px', 
+                          borderRadius: '6px', 
+                          background: 'rgba(255,255,255,0.05)', 
+                          color: '#94a3b8',
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold'
+                        }}>
+                          {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE' : order.payment_method === 'tilopay' ? '💳 Card' : '💬 WA'}
+                        </span>
+                      </td>
+                      <td data-label="Status" style={{ padding: '10px 12px' }}>
+                        <select 
+                          className="cell-select"
+                          value={order.status || 'Pending'}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleOrderStatusUpdate(order.id, e.target.value);
+                          }}
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            width: '120px',
+                            background: order.status === 'Order Complete' ? 'rgba(34, 197, 94, 0.15)' : order.status === 'Processing' ? 'rgba(56, 189, 248, 0.15)' : order.status === 'Cancelled' ? 'rgba(239, 68, 68, 0.15)' : order.status === 'Payment Pending' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                            color: order.status === 'Order Complete' ? '#4ade80' : order.status === 'Processing' ? '#38bdf8' : order.status === 'Cancelled' ? '#f87171' : order.status === 'Payment Pending' ? '#fb7185' : '#f59e0b',
+                            fontWeight: 'bold',
+                            border: order.status === 'Order Complete' ? '1px solid rgba(34, 197, 94, 0.3)' : order.status === 'Processing' ? '1px solid rgba(56, 189, 248, 0.3)' : order.status === 'Cancelled' ? '1px solid rgba(239, 68, 68, 0.3)' : order.status === 'Payment Pending' ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                            textAlign: 'center',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="Pending">Pending</option>
+                          <option value="Payment Pending">Payment Pending</option>
+                          <option value="Processing">Processing</option>
+                          <option value="Order Complete">Order Complete</option>
+                          <option value="Cancelled">Cancelled</option>
+                        </select>
+                      </td>
+                      <td data-label="Agent" style={{ padding: '10px 12px' }}>
+                        <select 
+                          className="cell-select"
+                          value={order.sales_agent || ''}
+                          onChange={(e) => handleOrderSalesAgentUpdate(order.id, e.target.value)}
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            fontSize: '0.75rem',
+                            width: '120px',
+                            background: order.sales_agent ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                            color: order.sales_agent ? '#c084fc' : '#94a3b8',
+                            fontWeight: 'bold',
+                            border: order.sales_agent ? '1px solid rgba(168, 85, 247, 0.3)' : '1px solid rgba(255,255,255,0.05)',
+                            textAlign: 'center',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <option value="">-- Unassigned --</option>
+                          {agents.map(agent => (
+                            <option key={agent} value={agent}>{agent}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td data-label="Actions" style={{ padding: '10px 12px' }}>
+                        <div className="admin-card-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'flex-end' }}>
+                          <button 
+                            className="admin-btn" 
+                            onClick={() => setSelectedOrderDetails(order)}
+                            style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                          >
+                            Details
+                          </button>
+                          
+                          {/* Quick CTAs based on status */}
+                          {(order.status || 'Pending') === 'Pending' && (
+                            <>
+                              <button 
+                                className="admin-btn admin-cta-btn" 
+                                onClick={() => handleOrderStatusUpdate(order.id, 'Processing')}
+                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                              >
+                                🚚 Process
+                              </button>
+                              <button 
+                                className="admin-btn admin-cta-btn" 
+                                onClick={() => handleOrderStatusUpdate(order.id, 'Order Complete')}
+                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                              >
+                                ✅ Complete
+                              </button>
+                            </>
+                          )}
+
+                          {(order.status || 'Pending') === 'Payment Pending' && (
+                            <button 
+                              className="admin-btn admin-cta-btn" 
+                              onClick={() => openWhatsAppComposer({ 
+                                name: order.customer_name, 
+                                phone: order.customer_phone, 
+                                orderNumber: order.order_number, 
+                                orderDbId: order.id, 
+                                cartItems: order.cart_data || [] 
+                              }, 'payment')}
+                              style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              💬 Ask Payment
+                            </button>
+                          )}
+
+                          {/* Quick Agent Claim CTA */}
+                          {!order.sales_agent && (
+                            <button 
+                              className="admin-btn admin-cta-btn" 
+                              onClick={() => {
+                                const claimEmail = loggedInEmailRef?.current || localStorage.getItem('admin_email') || 'info@peptidescostarica.net';
+                                handleOrderSalesAgentUpdate(order.id, claimEmail);
+                              }}
+                              style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#a855f7', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                              title="Assign this order to yourself"
+                            >
+                              👤 Claim
+                            </button>
+                          )}
+
+                           <button 
+                            onClick={() => openWhatsAppComposer({ 
+                              name: order.customer_name, 
+                              phone: order.customer_phone, 
+                              orderNumber: order.order_number, 
+                              orderDbId: order.id, 
+                              cartItems: order.cart_data || [] 
+                            })}
+                            className="admin-btn"
+                            style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: '#4ade80', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            WhatsApp
+                          </button>
+                          <button
+                            className="admin-btn"
+                            onClick={() => handleDeleteOrder(order.id)}
+                            style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', borderRadius: '6px' }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      
+      {filteredOrders.length > 0 && (
+        <div className="admin-pagination-bar">
+          <div className="admin-pagination-info">
+            Showing {Math.min(filteredOrders.length, (ordersCurrentPage - 1) * ordersPerPage + 1)} to {Math.min(filteredOrders.length, ordersCurrentPage * ordersPerPage)} of {filteredOrders.length} orders
+          </div>
+          <div className="admin-pagination-controls">
+            <button 
+              className="admin-pagination-btn"
+              onClick={() => setOrdersCurrentPage(p => Math.max(1, p - 1))}
+              disabled={ordersCurrentPage === 1}
+            >
+              &laquo; Prev
+            </button>
+            {Array.from({ length: totalOrdersPages }, (_, i) => i + 1)
+              .filter(page => {
+                return page === 1 || 
+                       page === totalOrdersPages || 
+                       Math.abs(page - ordersCurrentPage) <= 1;
+              })
+              .map((page, index, array) => {
+                const elements = [];
+                if (index > 0 && page - array[index - 1] > 1) {
+                  elements.push(
+                    <span key={`ell-${page}`} style={{ padding: '0 8px', color: '#64748b', fontSize: '0.8rem' }}>
+                      ...
+                    </span>
+                  );
+                }
+                elements.push(
+                  <button
+                    key={page}
+                    className={`admin-pagination-btn ${ordersCurrentPage === page ? 'active' : ''}`}
+                    onClick={() => setOrdersCurrentPage(page)}
+                  >
+                    {page}
+                  </button>
+                );
+                return elements;
+              })
+            }
+            <button 
+              className="admin-pagination-btn"
+              onClick={() => setOrdersCurrentPage(p => Math.min(totalOrdersPages, p + 1))}
+              disabled={ordersCurrentPage === totalOrdersPages}
+            >
+              Next &raquo;
+            </button>
+          </div>
+          <div>
+            <select
+              className="admin-pagination-limit"
+              value={ordersPerPage}
+              onChange={(e) => {
+                setOrdersPerPage(Number(e.target.value));
+                setOrdersCurrentPage(1);
+              }}
+            >
+              <option value={10}>Show 10</option>
+              <option value={25}>Show 25</option>
+              <option value={50}>Show 50</option>
+              <option value={100}>Show 100</option>
+            </select>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
