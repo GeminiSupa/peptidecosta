@@ -14,6 +14,7 @@ const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) =>
 
 export default function LeadsManager({
   leads,
+  loadingLeads,
   loadAdminData,
   setExportModalType,
   generatingLeadsAi,
@@ -217,7 +218,13 @@ export default function LeadsManager({
         </div>
       )}
 
-      {paginatedLeads.length === 0 ? (
+      {loadingLeads ? (
+        <div style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '12px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)', textAlign: 'center' }}>
+          <div className="sync-spinner" style={{ color: '#38bdf8', marginBottom: '15px' }}><Sparkles size={36} /></div>
+          <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '1.1rem' }}>Loading Leads Pipeline...</h3>
+          <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: '0.85rem' }}>Fetching the latest data from the CRM.</p>
+        </div>
+      ) : paginatedLeads.length === 0 ? (
         <div style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '12px', padding: '40px 20px', border: '1px dashed rgba(255,255,255,0.1)', textAlign: 'center' }}>
           <Users size={36} style={{ color: '#334155', marginBottom: '10px' }} />
           <h3 style={{ color: '#94a3b8', margin: 0, fontSize: '1rem' }}>No Leads Found</h3>
