@@ -20,7 +20,7 @@ function RateBar({ value, max = 100, className }) {
   );
 }
 
-export default function CampaignAnalytics() {
+export default function CampaignDashboard({ onEdit, onCreate }) {
   const [campaigns, setCampaigns] = useState([]);
   const [loading,   setLoading]   = useState(true);
 
@@ -55,6 +55,17 @@ export default function CampaignAnalytics() {
     }
   };
 
+  const deleteCampaign = async (campaignId) => {
+    if (!confirm('Are you sure you want to delete this campaign?')) return;
+    try {
+      const res = await adminFetch(`/api/admin/campaigns?id=${campaignId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete campaign');
+      fetchCampaigns();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   // Aggregate summary stats
   const totalSent    = campaigns.reduce((sum, c) => sum + (c.campaign_sends?.[0]?.count || 0), 0);
   const totalOpens   = campaigns.reduce((sum, c) => sum + (c.campaign_opens?.[0]?.count || 0), 0);
@@ -68,12 +79,17 @@ export default function CampaignAnalytics() {
       {/* ── Header ── */}
       <div className="mkt-flex mkt-justify-between mkt-items-center mkt-mb-4">
         <h3 className="mkt-title" style={{ fontSize: '1rem' }}>
-          <BarChart2 size={18} /> Campaign Performance
+          <BarChart2 size={18} /> Campaign Dashboard
         </h3>
-        <button onClick={fetchCampaigns} className="mkt-btn" disabled={loading} aria-label="Refresh data">
-          {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-          <span className="mkt-hide-xs">Refresh</span>
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={fetchCampaigns} className="mkt-btn" disabled={loading} aria-label="Refresh data">
+            {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+            <span className="mkt-hide-xs">Refresh</span>
+          </button>
+          <button onClick={onCreate} className="mkt-btn mkt-btn-primary">
+            + Create New Campaign
+          </button>
+        </div>
       </div>
 
       {/* ── Aggregate KPIs ── */}
@@ -109,6 +125,7 @@ export default function CampaignAnalytics() {
               <th>Open Rate</th>
               <th>Click Rate</th>
               <th className="mkt-text-right">Revenue</th>
+              <th className="mkt-text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -195,6 +212,16 @@ export default function CampaignAnalytics() {
                         ) : (
                           <span className="mkt-text-xs mkt-text-muted">—</span>
                         )}
+                      </td>
+                      <td data-label="Actions" className="mkt-text-right">
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                          <button onClick={() => onEdit(camp.id)} className="mkt-btn" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                            Edit
+                          </button>
+                          <button onClick={() => deleteCampaign(camp.id)} className="mkt-btn" style={{ padding: '6px 12px', fontSize: '12px', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
 

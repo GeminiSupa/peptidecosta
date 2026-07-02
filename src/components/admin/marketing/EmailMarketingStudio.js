@@ -8,22 +8,13 @@ import CampaignAnalytics from './CampaignAnalytics';
 import AutomationStudio from './AutomationStudio';
 import { adminFetch } from '@/lib/adminApi';
 
-// We dynamically import the campaign builder because react-email-editor is heavy
-const CampaignBuilder = dynamic(() => import('./CampaignBuilder'), { 
-  ssr: false,
-  loading: () => (
-    <div className="mkt-loading-state">
-      <div style={{ width: '32px', height: '32px', border: '3px solid rgba(16,185,129,0.2)', borderTopColor: '#10b981', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-      <span>Loading Drag &amp; Drop Builder…</span>
-    </div>
-  )
-});
+// We dynamically import the campaign manager to handle the list/builder views
+const CampaignManager = dynamic(() => import('./CampaignManager'), { ssr: false });
 
 const TABS = [
   { id: 'subscribers', label: 'Subscribers', icon: Users },
   { id: 'campaigns',   label: 'Campaigns',   icon: Mail },
   { id: 'automations', label: 'Automations', icon: Zap },
-  { id: 'analytics',   label: 'Analytics',   icon: BarChart2 },
 ];
 
 export default function EmailMarketingStudio() {
@@ -99,9 +90,8 @@ export default function EmailMarketingStudio() {
       {/* ── Panel ── */}
       <div className="mkt-container mkt-fade-in" key={activeTab}>
         {activeTab === 'subscribers' && <SubscriberManager />}
-        {activeTab === 'campaigns'   && <CampaignBuilder />}
+        {activeTab === 'campaigns'   && <CampaignManager />}
         {activeTab === 'automations' && <AutomationStudio />}
-        {activeTab === 'analytics'   && <CampaignAnalytics />}
       </div>
     </div>
   );

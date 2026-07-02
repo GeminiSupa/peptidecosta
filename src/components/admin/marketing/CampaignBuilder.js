@@ -257,14 +257,14 @@ function Section({ title, icon: Icon, defaultOpen = true, children }) {
   );
 }
 
-export default function CampaignBuilder() {
+export default function CampaignBuilder({ editingCampaignId }) {
   const emailEditorRef      = useRef(null);
   const [isReady,           setIsReady]           = useState(false);
   const [isSaving,          setIsSaving]          = useState(false);
   const [isSending,         setIsSending]         = useState(false);
   const [campaigns,         setCampaigns]         = useState([]);
   const [subscribers,       setSubscribers]       = useState([]);
-  const [selectedCampaignId, setSelectedCampaignId] = useState('');
+  const [selectedCampaignId, setSelectedCampaignId] = useState(editingCampaignId || '');
   const [subject,           setSubject]           = useState('');
   const [previewText,       setPreviewText]       = useState('');
   const [campaignName,      setCampaignName]      = useState('New Campaign ' + new Date().toLocaleDateString());
@@ -865,43 +865,7 @@ export default function CampaignBuilder() {
 
         {/* Preflight + actions */}
         <div className="mkt-command-grid" style={{ marginBottom: 0 }}>
-          {/* Library */}
-          <div className="mkt-panel">
-            <div className="mkt-panel-header">
-              <div>
-                <div className="mkt-panel-kicker">Campaign Library</div>
-                <h3 className="mkt-panel-title">Select a saved campaign</h3>
-              </div>
-              <Copy size={16} style={{ color: 'rgba(255,255,255,0.3)' }} />
-            </div>
-            <select className="mkt-input" value={selectedCampaignId} onChange={e => setSelectedCampaignId(e.target.value)}>
-              <option value="">Choose draft or sent campaign…</option>
-              {campaigns.map(c => (
-                <option key={c.id} value={c.id}>{c.title} · {c.status}</option>
-              ))}
-            </select>
-            {selectedCampaign && (
-              <div className="mkt-selected-campaign">
-                <div style={{ fontWeight: '700', fontSize: '13px', color: '#fff', marginBottom: '4px' }}>{selectedCampaign.subject_line}</div>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', marginBottom: '8px' }}>
-                  {selectedCampaign.target_tags?.length ? `Segment: ${selectedCampaign.target_tags.join(', ')}` : 'Audience: all subscribers'}
-                  {selectedCampaign.scheduled_at && (
-                    <span style={{ marginLeft: '8px', color: '#38bdf8' }}>
-                      📅 Scheduled: {new Date(selectedCampaign.scheduled_at).toLocaleString()}
-                    </span>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button onClick={duplicateCampaign} className="mkt-btn" style={{ flex: '1 1 auto', padding: '6px 10px', fontSize: '11px' }}>
-                    <CopyPlus size={12} /> Duplicate
-                  </button>
-                  <button onClick={deleteCampaign} className="mkt-btn" style={{ flex: '1 1 auto', padding: '6px 10px', fontSize: '11px', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
-                    <Trash2 size={12} /> Delete
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Removed Library Panel */}
 
           {/* Preflight */}
           <div className="mkt-panel">
