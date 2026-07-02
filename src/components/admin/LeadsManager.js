@@ -225,7 +225,7 @@ export default function LeadsManager({
           onChange={(e) => setLeadsSourceFilter(e.target.value)}
           style={{ flex: '1 1 150px' }}
         >
-          <option value="">All Sources</option>
+          <option value="All">All Sources</option>
           <option value="whatsapp">WhatsApp</option>
           <option value="email">Email</option>
           <option value="facebook">Facebook Ads</option>
