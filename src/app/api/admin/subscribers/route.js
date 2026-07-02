@@ -132,3 +132,31 @@ export async function PUT(request) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+export async function DELETE(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
+  const supabaseAdmin = getSupabaseAdmin();
+
+  try {
+    const url = new URL(request.url);
+    const id = url.searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID is required' }, { status: 400 });
+    }
+
+    const { error } = await supabaseAdmin
+      .from('email_subscribers')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting subscriber:', err);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}

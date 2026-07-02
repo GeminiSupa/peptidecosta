@@ -83,12 +83,19 @@ export default function SubscriberManager() {
         }),
       });
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed to update subscriber');
+      if (data.error) throw new Error(data.error);
+      setSubscribers(subscribers.map(s => s.id === editingId ? data.subscriber : s));
       setEditingId(null);
-      fetchSubscribers();
-    } catch (err) {
-      alert('Failed to update: ' + err.message);
-    }
+    } catch(err) { alert(err.message); }
+  };
+
+  const deleteSubscriber = async (id) => {
+    if (!confirm('Are you sure you want to delete this subscriber?')) return;
+    try {
+      const res = await adminFetch(`/api/admin/subscribers?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete subscriber');
+      setSubscribers(subscribers.filter(s => s.id !== id));
+    } catch(err) { alert(err.message); }
   };
 
   const handleBulkImport = (e) => {
@@ -352,9 +359,14 @@ export default function SubscriberManager() {
                         <span className="mkt-text-xs mkt-text-muted">{new Date(sub.created_at).toLocaleDateString()}</span>
                       </td>
                       <td data-label="Actions" className="mkt-text-right">
-                        <button onClick={() => startEdit(sub)} className="mkt-btn" style={{ padding: '6px 12px', fontSize: '12px' }}>
-                          Edit
-                        </button>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                          <button onClick={() => startEdit(sub)} className="mkt-btn" style={{ padding: '6px 12px', fontSize: '12px' }}>
+                            Edit
+                          </button>
+                          <button onClick={() => deleteSubscriber(sub.id)} className="mkt-btn" style={{ padding: '6px 12px', fontSize: '12px', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' }}>
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </>
                   )}

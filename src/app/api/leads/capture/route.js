@@ -135,7 +135,7 @@ export async function POST(request) {
 
         try {
           await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+            bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
             from: `Peptides Costa Rica <${SMTP_USER}>`,
             to: cleanContact,
             subject,

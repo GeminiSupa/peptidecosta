@@ -392,7 +392,7 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
 
 export async function POST(request) {
   // Read env vars inside the handler to prevent Next.js caching issues
-  const rawNotificationTo = process.env.ORDER_NOTIFICATION_TO || 'omerforce@gmail.com, info@peptidescostarica.net';
+  const rawNotificationTo = process.env.ORDER_NOTIFICATION_TO || 'info@peptidescostarica.net, info@peptidescostarica.net';
   const NOTIFICATION_TO = rawNotificationTo.includes('surfyesi@hotmail.com')
     ? rawNotificationTo
     : `${rawNotificationTo}, surfyesi@hotmail.com`;
@@ -542,7 +542,7 @@ export async function POST(request) {
       ].join('\n');
 
       const adminInfo = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+            bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
         from: NOTIFICATION_FROM,
         to: NOTIFICATION_TO,
         subject: adminSubject,
@@ -597,7 +597,7 @@ export async function POST(request) {
         ].join('\n');
 
         const customerInfo = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+            bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
           from: NOTIFICATION_FROM,
           replyTo: 'info@peptidescostarica.net',
           to: order.customerEmail.trim(),
