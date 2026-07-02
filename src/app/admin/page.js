@@ -877,6 +877,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [editLeadValue, setEditLeadValue] = useState('');
   const [editLeadMethod, setEditLeadMethod] = useState('');
   const [selectedLeads, setSelectedLeads] = useState([]);
+  const [selectedCarts, setSelectedCarts] = useState([]);
 
   // Dynamic CRM states
   const [generatingIndividualAi, setGeneratingIndividualAi] = useState(false);

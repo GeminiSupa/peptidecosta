@@ -673,7 +673,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   // 2. UTM Source/Traffic Channels
   const sourceMap = {};
-  filteredOrders.forEach(o => {
+  orders.forEach(o => {
     const src = o.tracking_source || 'direct/unknown';
     sourceMap[src] = (sourceMap[src] || 0) + 1;
   });
@@ -684,9 +684,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   })).sort((a,b) => b.value - a.value);
 
   // 3. Cart Abandonment Funnel
-  const totalViews = filteredProductViews.length;
-  const totalCarts = filteredCarts.length + filteredOrders.length; 
-  const totalCheckouts = filteredOrders.length;
+  const totalViews = productViews.length;
+  const totalCarts = carts.length + orders.length; 
+  const totalCheckouts = orders.length;
   const funnelChartData = [
     { name: 'Views', value: totalViews, fill: '#3b82f6' },
     { name: 'Carts', value: totalCarts, fill: '#f59e0b' },
