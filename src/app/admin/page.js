@@ -889,14 +889,14 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     const isEmail = val.includes('@');
     
     if (isEmail) {
-      const match = orders.find(o => o.customer_email && o.customer_email.trim().toLowerCase() === val);
+      const match = (orders || []).find(o => o.customer_email && String(o.customer_email).trim().toLowerCase() === val);
       if (match) return { converted: true, order: match };
     } else {
       const cleanLeadPhone = val.replace(/[^0-9]/g, '');
       if (cleanLeadPhone.length >= 6) {
-        const match = orders.find(o => {
+        const match = (orders || []).find(o => {
           if (!o.customer_phone) return false;
-          const cleanOrderPhone = o.customer_phone.replace(/[^0-9]/g, '');
+          const cleanOrderPhone = String(o.customer_phone).replace(/[^0-9]/g, '');
           return cleanOrderPhone.endsWith(cleanLeadPhone) || cleanLeadPhone.endsWith(cleanOrderPhone);
         });
         if (match) return { converted: true, order: match };

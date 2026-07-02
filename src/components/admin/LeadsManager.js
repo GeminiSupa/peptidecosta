@@ -56,9 +56,9 @@ export default function LeadsManager({
     if (leadsSearch) {
       const q = leadsSearch.toLowerCase();
       const match = (
-        (l.first_name || '').toLowerCase().includes(q) ||
-        (l.last_name || '').toLowerCase().includes(q) ||
-        (l.contact_value || l.phone || l.email || '').toLowerCase().includes(q)
+        String(l.first_name || '').toLowerCase().includes(q) ||
+        String(l.last_name || '').toLowerCase().includes(q) ||
+        String(l.contact_value || l.phone || l.email || '').toLowerCase().includes(q)
       );
       if (!match) return false;
     }
@@ -66,7 +66,7 @@ export default function LeadsManager({
       if (leadsSourceFilter === 'whatsapp' && l.contact_method !== 'whatsapp') return false;
       if (leadsSourceFilter === 'email' && l.contact_method !== 'email') return false;
       if (leadsSourceFilter === 'converted' && !getLeadConversion(l).converted) return false;
-      if (leadsSourceFilter === 'facebook' && !(l.source && l.source.toLowerCase().includes('facebook'))) return false;
+      if (leadsSourceFilter === 'facebook' && !(l.source && String(l.source).toLowerCase().includes('facebook'))) return false;
     }
     if (leadsAreaFilter) {
       if (l.region !== leadsAreaFilter && l.city !== leadsAreaFilter) return false;
@@ -87,14 +87,14 @@ export default function LeadsManager({
     const isConverted = getLeadConversion(lead).converted;
     if (isConverted) return { color: '#10b981', label: 'Converted', icon: <Target size={12}/> };
     if (lead.tags && lead.tags.includes('VIP')) return { color: '#8b5cf6', label: 'VIP', icon: <Sparkles size={12}/> };
-    if (lead.utm_source || lead.utm_medium || (lead.source && lead.source.toLowerCase().includes('facebook'))) {
+    if (lead.utm_source || lead.utm_medium || (lead.source && String(lead.source).toLowerCase().includes('facebook'))) {
       return { color: '#f97316', label: 'Hot (Ads)', icon: <Flame size={12}/> };
     }
     return { color: '#38bdf8', label: 'Warm (Organic)', icon: <Snowflake size={12}/> };
   };
 
   const getSourceIcon = (lead) => {
-    if (lead.source && lead.source.toLowerCase().includes('facebook')) {
+    if (lead.source && String(lead.source).toLowerCase().includes('facebook')) {
       return <FacebookIcon size={14} color="#1877f2" />;
     }
     return <Globe size={14} color="#94a3b8" />;
@@ -371,7 +371,7 @@ export default function LeadsManager({
                     <button 
                       onClick={() => {
                         const val = lead.contact_value || lead.phone;
-                        if (val) window.open(`https://wa.me/${val.replace(/\D/g, '')}?text=Hi ${lead.first_name || ''}!`, '_blank');
+                        if (val) window.open(`https://wa.me/${String(val).replace(/\D/g, '')}?text=Hi ${lead.first_name || ''}!`, '_blank');
                       }}
                       style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#10b981', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)' }}
                       title="Quick WhatsApp"
