@@ -765,12 +765,11 @@ body {
     font-size: 0.82rem;
 }
 
-/* Desktop: cluster the vial and the info block toward the center instead of leaving a wide
-   empty gap between a far-left vial and centered text. */
+/* Desktop: spread the vial and the info block apart with equal spacing (equal gap on the
+   left of the vial, between them, and to the right of the info) so the row looks balanced. */
 @media (min-width: 1000px) {
     .product-grid.list-view .product-card {
-        justify-content: center;
-        gap: 32px;
+        justify-content: space-evenly;
     }
     .product-grid.list-view .product-info {
         flex: 0 1 380px;
