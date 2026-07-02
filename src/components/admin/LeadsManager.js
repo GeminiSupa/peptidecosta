@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Users, Trash2, Upload, Brain, Sparkles, 
   Mail, MessageCircle, Globe, Target, Flame, Snowflake
