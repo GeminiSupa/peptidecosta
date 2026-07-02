@@ -736,6 +736,11 @@ body {
     width: 100%;
 }
 
+/* Cap the button width on wide desktop cards so 80% of a large info column doesn't become oversized */
+.product-grid.list-view .add-to-cart-btn {
+    max-width: 240px;
+}
+
 .discount-badge {
     font-size: 0.75rem;
     color: var(--primary);
