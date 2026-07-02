@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Search, User, Users, Crown, Mail, MessageCircle, MapPin, DollarSign, Calendar, ShoppingBag, Edit2, X, Save, Phone, BadgeCheck, Upload, Sparkles, Brain, Send } from 'lucide-react';
+import { 
+  Users, Mail, MessageCircle, Download, ExternalLink, Activity, DollarSign, Package, Calendar, AlertCircle, ArrowDownUp
+} from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -77,6 +78,11 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
   const [exportLoading, setExportLoading] = useState(false);
   const [generatingPitchId, setGeneratingPitchId] = useState(null);
   const [filterTab, setFilterTab] = useState('all');
+  
+  // Sorting State
+  const [sortField, setSortField] = useState('date'); // 'date', 'ltv', 'orders'
+  const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
+
 
   const [selectedCustomerIds, setSelectedCustomerIds] = useState([]);
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
@@ -206,9 +212,10 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
     return { totalContacts, activeCustomers, totalLtv };
   }, [customers]);
 
+
   // Filter based on search and selected tab
   const filteredCustomers = useMemo(() => {
-    return customers.filter(c => {
+    let result = customers.filter(c => {
       // Search term filter
       const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -220,7 +227,24 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
       if (filterTab === 'leads') return c.isLead;
       return true;
     });
-  }, [customers, searchTerm, filterTab]);
+
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'date') {
+        const timeA = new Date(a.lastActive).getTime();
+        const timeB = new Date(b.lastActive).getTime();
+        comparison = timeA - timeB;
+      } else if (sortField === 'ltv') {
+        comparison = (a.totalSpentUsd || 0) - (b.totalSpentUsd || 0);
+      } else if (sortField === 'orders') {
+        comparison = (a.orderCount || 0) - (b.orderCount || 0);
+      }
+      return sortDir === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [customers, searchTerm, filterTab, sortField, sortDir]);
+
 
 
   const totalCustomersPages = Math.ceil(filteredCustomers.length / customersPerPage);
@@ -889,30 +913,54 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
         </div>
       </div>
 
+
       {/* Tab Filter Row */}
-      <div className="crm-tabs-row">
-        <button 
-          className={`crm-tab ${filterTab === 'all' ? 'active' : ''}`}
-          onClick={() => { setFilterTab('all'); setCurrentPage(1); }}
-        >
-          All Contacts
-          <span className="crm-tab-badge">{customers.length}</span>
-        </button>
-        <button 
-          className={`crm-tab ${filterTab === 'customers' ? 'active' : ''}`}
-          onClick={() => { setFilterTab('customers'); setCurrentPage(1); }}
-        >
-          Customers
-          <span className="crm-tab-badge">{customers.filter(c => !c.isLead).length}</span>
-        </button>
-        <button 
-          className={`crm-tab ${filterTab === 'leads' ? 'active' : ''}`}
-          onClick={() => { setFilterTab('leads'); setCurrentPage(1); }}
-        >
-          Cart Leads
-          <span className="crm-tab-badge">{customers.filter(c => c.isLead).length}</span>
-        </button>
+      <div className="crm-tabs-row" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '4px', overflowX: 'auto' }}>
+          <button 
+            className={`crm-tab ${filterTab === 'all' ? 'active' : ''}`}
+            onClick={() => { setFilterTab('all'); setCurrentPage(1); }}
+          >
+            All Contacts
+            <span className="crm-tab-badge">{customers.length}</span>
+          </button>
+          <button 
+            className={`crm-tab ${filterTab === 'customers' ? 'active' : ''}`}
+            onClick={() => { setFilterTab('customers'); setCurrentPage(1); }}
+          >
+            Customers
+            <span className="crm-tab-badge">{customers.filter(c => !c.isLead).length}</span>
+          </button>
+          <button 
+            className={`crm-tab ${filterTab === 'leads' ? 'active' : ''}`}
+            onClick={() => { setFilterTab('leads'); setCurrentPage(1); }}
+          >
+            Cart Leads
+            <span className="crm-tab-badge">{customers.filter(c => c.isLead).length}</span>
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '4px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <ArrowDownUp size={14} color="#94a3b8" />
+          <select 
+            value={sortField} 
+            onChange={(e) => setSortField(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+          >
+            <option value="date" style={{background: '#0f172a'}}>Sort by Date</option>
+            <option value="ltv" style={{background: '#0f172a'}}>Sort by Value</option>
+            <option value="orders" style={{background: '#0f172a'}}>Sort by Orders</option>
+          </select>
+          <select 
+            value={sortDir} 
+            onChange={(e) => setSortDir(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+          >
+            <option value="desc" style={{background: '#0f172a'}}>Desc</option>
+            <option value="asc" style={{background: '#0f172a'}}>Asc</option>
+          </select>
+        </div>
       </div>
+
 
       {filteredCustomers.length === 0 ? (
         <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>

@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   ShoppingCart, Trash2, Upload, Brain, Sparkles, AlertCircle, 
-  Clock, Mail, MessageCircle, ArrowRight, Package, CreditCard, Eye
+  Clock, Mail, MessageCircle, ArrowRight, Package, CreditCard, Eye, Search, ArrowDownUp
 } from 'lucide-react';
 
 export default function CartsManager({
@@ -25,6 +25,40 @@ export default function CartsManager({
   handleDeleteCart,
   setSelectedCartDetails
 }) {
+
+
+  // Sorting & Filtering State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortField, setSortField] = useState('date'); // 'date', 'value'
+  const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
+
+  const filteredAndSortedCarts = useMemo(() => {
+    let result = [...(abandonedCarts || [])];
+    
+    // Filter
+    if (searchTerm) {
+      const lowerQ = searchTerm.toLowerCase();
+      result = result.filter(c => 
+        (c.user_email || c.customer_email || '').toLowerCase().includes(lowerQ) ||
+        (c.user_phone || c.customer_phone || '').includes(searchTerm)
+      );
+    }
+    
+    // Sort
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'date') {
+        comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      } else if (sortField === 'value') {
+        const totalA = calculateCartTotal(a.cart_data);
+        const totalB = calculateCartTotal(b.cart_data);
+        comparison = totalA - totalB;
+      }
+      return sortDir === 'asc' ? comparison : -comparison;
+    });
+    
+    return result;
+  }, [abandonedCarts, searchTerm, sortField, sortDir]);
 
   // Visual Urgency Calculation
   const getUrgency = (createdAt) => {
@@ -180,8 +214,43 @@ export default function CartsManager({
         </div>
       )}
 
-      {/* CARTS GRID - MOBILE FIRST CARDS */}
-      {!(abandonedCarts || []).length ? (
+      
+      {/* Search and Sort Toolbar */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 250px', position: 'relative' }}>
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+          <input 
+            type="text" 
+            placeholder="Search email or phone..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ width: '100%', background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', padding: '10px 10px 10px 36px', borderRadius: '8px', fontSize: '0.9rem' }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '0 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <ArrowDownUp size={14} color="#94a3b8" />
+          <select 
+            value={sortField} 
+            onChange={(e) => setSortField(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+          >
+            <option value="date" style={{background: '#0f172a'}}>Sort by Date</option>
+            <option value="value" style={{background: '#0f172a'}}>Sort by Value</option>
+          </select>
+          <select 
+            value={sortDir} 
+            onChange={(e) => setSortDir(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+          >
+            <option value="desc" style={{background: '#0f172a'}}>Desc</option>
+            <option value="asc" style={{background: '#0f172a'}}>Asc</option>
+          </select>
+        </div>
+      </div>
+
+      {/* CARTS TABLE */}
+
+      {!filteredAndSortedCarts.length ? (
         <div className="admin-empty-state" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)' }}>
           <div className="empty-icon" style={{ opacity: 0.5 }}><ShoppingCart size={48} /></div>
           <h3>No Abandoned Carts</h3>
@@ -196,7 +265,7 @@ export default function CartsManager({
                 <th style={{ padding: '12px 16px', width: '40px' }}>
                   <input 
                     type="checkbox" 
-                    checked={(abandonedCarts || []).length > 0 && selectedCarts && selectedCarts.length === (abandonedCarts || []).length}
+                    checked={filteredAndSortedCarts.length > 0 && selectedCarts && selectedCarts.length === filteredAndSortedCarts.length}
                     onChange={(e) => {
                       // Note: We don't have a handleSelectAllCarts prop passed directly, but the logic 
                       // can be handled if we map all ids manually. For now, since handleSelectCart only takes one, 
@@ -213,7 +282,7 @@ export default function CartsManager({
               </tr>
             </thead>
             <tbody>
-              {(abandonedCarts || []).map((cart, index) => {
+              {filteredAndSortedCarts.map((cart, index) => {
                 const urgency = getUrgency(cart.created_at);
                 const total = calculateCartTotal(cart.cart_data);
                 const items = getCartItems(cart.cart_data);
