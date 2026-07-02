@@ -70,8 +70,8 @@ export async function POST(request) {
 
     const info = await transporter.sendMail({
             bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
-      from: `Peptides Costa Rica <omerforce@gmail.com>`,
-      replyTo: 'omerforce@gmail.com',
+      from: NOTIFICATION_FROM,
+      replyTo: SMTP_USER,
       to: to.trim(),
       subject: subject,
       html: formattedHtml,
