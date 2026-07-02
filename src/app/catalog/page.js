@@ -14,7 +14,8 @@ import {
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
   Plus, Minus, Trash2, Check, AlertCircle, ArrowLeft,
-  Dna, FlaskConical, Syringe, TestTubes, Atom, 
+  ChevronLeft, ChevronRight,
+  Dna, FlaskConical, Syringe, TestTubes, Atom,
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
   CreditCard, Smartphone, MessageCircle, Lock, Share2
 } from 'lucide-react';
@@ -198,6 +199,8 @@ export default function CatalogPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const searchRef = useRef(null);
+  const categoryScrollRef = useRef(null);
+  const [catArrows, setCatArrows] = useState({ left: false, right: false });
   const [activeCategory, setActiveCategory] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [priceFilter, setPriceFilter] = useState('all');
@@ -411,6 +414,46 @@ export default function CatalogPage() {
       }
     }
   }, [products]);
+
+  // Category bar: show/enable horizontal scroll arrows on desktop based on scroll position
+  const updateCatArrows = useCallback(() => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setCatArrows({
+      left: scrollLeft > 4,
+      right: scrollLeft + clientWidth < scrollWidth - 4,
+    });
+  }, []);
+
+  useEffect(() => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    updateCatArrows();
+    el.addEventListener('scroll', updateCatArrows, { passive: true });
+    window.addEventListener('resize', updateCatArrows);
+    return () => {
+      el.removeEventListener('scroll', updateCatArrows);
+      window.removeEventListener('resize', updateCatArrows);
+    };
+  }, [updateCatArrows, products, activeCategory]);
+
+  const scrollCategories = (dir) => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const start = el.scrollLeft;
+    const dist = dir * 260;
+    const duration = 260;
+    let startTime = null;
+    const step = (ts) => {
+      if (startTime === null) startTime = ts;
+      const p = Math.min((ts - startTime) / duration, 1);
+      const ease = 0.5 - Math.cos(p * Math.PI) / 2; // easeInOutSine
+      el.scrollLeft = start + dist * ease;
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
 
   const handleContactSubmit = async (e) => {
     e.preventDefault();
@@ -2789,21 +2832,39 @@ export default function CatalogPage() {
           </div>
         </div>
 
-        <nav className="category-nav">
-          <div className="category-scroll container">
+        <nav className="category-nav container">
+          <button
+            type="button"
+            className="cat-scroll-arrow"
+            onClick={() => scrollCategories(-1)}
+            disabled={!catArrows.left}
+            aria-label={lang === 'en' ? 'Scroll categories left' : 'Desplazar categorías a la izquierda'}
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <div className="category-scroll" ref={categoryScrollRef}>
             {categoriesList.map(cat => (
-              <button 
+              <button
                 key={cat}
                 className={`cat-chip ${activeCategory === cat ? 'active' : ''}`}
                 onClick={() => setActiveCategory(cat)}
               >
-                {cat === 'all' 
+                {cat === 'all'
                   ? (lang === 'en' ? 'All Products' : 'Todos los Productos')
                   : translateCategory(cat)
                 }
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            className="cat-scroll-arrow"
+            onClick={() => scrollCategories(1)}
+            disabled={!catArrows.right}
+            aria-label={lang === 'en' ? 'Scroll categories right' : 'Desplazar categorías a la derecha'}
+          >
+            <ChevronRight size={18} />
+          </button>
         </nav>
       </div>
 

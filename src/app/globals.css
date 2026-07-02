@@ -390,20 +390,54 @@ body {
 .category-nav {
     padding-bottom: 8px;
     overflow: visible;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .category-scroll {
+    flex: 1;
+    min-width: 0;
     display: flex;
     gap: 8px;
     overflow-x: auto;
     white-space: nowrap;
     scrollbar-width: none;
-    padding: 4px 20px;
-    mask-image: linear-gradient(to right, black 90%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
+    padding: 4px 2px;
+    mask-image: linear-gradient(to right, black 94%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, black 94%, transparent 100%);
 }
 
 .category-scroll::-webkit-scrollbar { display: none; }
+
+/* Desktop horizontal scroll controls for the category bar (mobile uses touch swipe) */
+.cat-scroll-arrow {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+}
+
+.cat-scroll-arrow:hover:not(:disabled) {
+    background: var(--bg-secondary);
+}
+
+.cat-scroll-arrow:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+@media (max-width: 767px) {
+    .cat-scroll-arrow { display: none; }
+}
 
 .cat-chip {
     white-space: nowrap;
@@ -4844,8 +4878,8 @@ body:has(.product-grid.grid-view) {
     }
 
     .category-scroll {
-        padding-left: 14px;
-        padding-right: 14px;
+        padding-left: 0;
+        padding-right: 0;
     }
 
     .cat-chip {
