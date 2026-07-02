@@ -39,7 +39,8 @@ export default function LeadsManager({
   setPage,
   leadsPerPage = 50,
   productViews = [],
-  setSelectedLeadDetails
+  setSelectedLeadDetails,
+  openLeadOutreachComposer
 }) {
 
   const uniqueAreas = Array.from(new Set((leads || []).map(l => l.region || l.city).filter(Boolean))).sort();
@@ -390,17 +391,27 @@ export default function LeadsManager({
                     <button onClick={() => setSelectedLeadDetails?.(lead)} className="admin-btn admin-btn-primary" style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '8px', border: '1px solid #3b82f6' }}>Details</button>
                     <button 
                       onClick={() => {
-                        const val = lead.contact_value || lead.phone;
-                        if (val) window.open(`https://wa.me/${String(val).replace(/\D/g, '')}?text=Hi ${lead.first_name || ''}!`, '_blank');
+                        if (openLeadOutreachComposer) {
+                          openLeadOutreachComposer(lead, 'whatsapp');
+                        } else {
+                          const val = lead.contact_value || lead.phone;
+                          if (val) window.open(`https://wa.me/${String(val).replace(/\D/g, '')}?text=Hi ${lead.first_name || ''}!`, '_blank');
+                        }
                       }}
                       style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#10b981', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.4)' }}
-                      title="Quick WhatsApp"
+                      title="Send WhatsApp"
                     >
                       <MessageCircle size={14} />
                     </button>
                     {(lead.email || lead.contact_value?.includes('@')) && (
                       <button 
-                        onClick={() => window.location.href = `mailto:${lead.email || lead.contact_value}`}
+                        onClick={() => {
+                          if (openLeadOutreachComposer) {
+                            openLeadOutreachComposer(lead, 'email');
+                          } else {
+                            window.location.href = `mailto:${lead.email || lead.contact_value}`;
+                          }
+                        }}
                         style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#3b82f6', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(59, 130, 246, 0.4)' }}
                         title="Send Email"
                       >

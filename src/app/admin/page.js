@@ -4900,6 +4900,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             leadsPerPage={leadsPerPage}
             productViews={productViews}
             setSelectedLeadDetails={setSelectedLeadDetails}
+            openLeadOutreachComposer={openLeadOutreachComposer}
           />
           </ErrorBoundary>
         )}
