@@ -62,13 +62,13 @@ export default function LeadsManager({
       );
       if (!match) return false;
     }
-    if (leadsSourceFilter) {
+    if (leadsSourceFilter && leadsSourceFilter !== 'All') {
       if (leadsSourceFilter === 'whatsapp' && l.contact_method !== 'whatsapp') return false;
       if (leadsSourceFilter === 'email' && l.contact_method !== 'email') return false;
       if (leadsSourceFilter === 'converted' && !getLeadConversion(l).converted) return false;
       if (leadsSourceFilter === 'facebook' && !(l.source && String(l.source).toLowerCase().includes('facebook'))) return false;
     }
-    if (leadsAreaFilter) {
+    if (leadsAreaFilter && leadsAreaFilter !== 'All') {
       if (l.region !== leadsAreaFilter && l.city !== leadsAreaFilter) return false;
     }
     return true;
@@ -235,7 +235,7 @@ export default function LeadsManager({
           onChange={(e) => setLeadsAreaFilter(e.target.value)}
           style={{ flex: '1 1 150px' }}
         >
-          <option value="">All Regions</option>
+          <option value="All">All Regions</option>
           {uniqueAreas.map(a => (
             <option key={a} value={a}>{a}</option>
           ))}
