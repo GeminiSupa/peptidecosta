@@ -23,6 +23,7 @@ export default function LeadsManager({
   handleGenerateLeadsAi,
   getLeadConversion,
   handleSelectLead,
+  handleSelectMultipleLeads,
   handleSelectAllLeads,
   selectedLeads,
   handleBulkLeadsEmail,
@@ -64,6 +65,7 @@ export default function LeadsManager({
   // Local Sorting State
   const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
   const [localContactedFilter, setLocalContactedFilter] = useState('All');
+  const [lastSelectedLeadIndex, setLastSelectedLeadIndex] = useState(null);
 
   const filteredAndSortedLeads = useMemo(() => {
     const safeLeads = leads || [];
@@ -114,6 +116,22 @@ export default function LeadsManager({
   const paginatedLeads = filteredLeads.slice((safePage - 1) * leadsPerPage, safePage * leadsPerPage);
 
   const safeSelectedLeads = selectedLeads || [];
+
+  const handleLocalSelectLead = (id, checked, shiftKey, index) => {
+    if (shiftKey && lastSelectedLeadIndex !== null && handleSelectMultipleLeads) {
+      const start = Math.min(lastSelectedLeadIndex, index);
+      const end = Math.max(lastSelectedLeadIndex, index);
+      const idsInRange = paginatedLeads.slice(start, end + 1).map(l => l.id);
+      handleSelectMultipleLeads(idsInRange, checked);
+    } else {
+      if (handleSelectMultipleLeads) {
+        handleSelectMultipleLeads([id], checked);
+      } else if (handleSelectLead) {
+        handleSelectLead(id, checked, shiftKey, index);
+      }
+    }
+    setLastSelectedLeadIndex(index);
+  };
 
   return (
     <div className="admin-tab-panel">
@@ -292,7 +310,7 @@ export default function LeadsManager({
                   <input 
                     type="checkbox" 
                     checked={paginatedLeads.length > 0 && paginatedLeads.every(l => safeSelectedLeads.includes(l.id))}
-                    onChange={(e) => handleSelectAllLeads(paginatedLeads.map(l => l.id), e.target.checked)}
+                    onChange={(e) => handleSelectMultipleLeads ? handleSelectMultipleLeads(paginatedLeads.map(l => l.id), e.target.checked) : handleSelectAllLeads(e.target.checked)}
                     style={{ cursor: 'pointer' }}
                   />
                 </th>
@@ -312,7 +330,7 @@ export default function LeadsManager({
                   <input 
                     type="checkbox" 
                     checked={safeSelectedLeads.includes(lead.id)}
-                    onChange={() => handleSelectLead(lead.id)}
+                    onChange={(e) => handleLocalSelectLead(lead.id, e.target.checked, e.nativeEvent.shiftKey, index)}
                     style={{ cursor: 'pointer' }}
                   />
                 </td>

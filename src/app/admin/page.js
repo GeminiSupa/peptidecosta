@@ -3263,6 +3263,16 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     setLastSelectedLeadIndex(index);
   };
 
+  const handleSelectMultipleLeads = (ids, checked) => {
+    setSelectedLeads(prev => {
+      if (checked) {
+        return Array.from(new Set([...prev, ...ids]));
+      } else {
+        return prev.filter(leadId => !ids.includes(leadId));
+      }
+    });
+  };
+
   const handleSelectCart = (id, checked, shiftKey, index) => {
     if (shiftKey && lastSelectedCartIndex !== null) {
       const start = Math.min(lastSelectedCartIndex, index);
@@ -5012,6 +5022,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             handleGenerateLeadsAi={handleGenerateLeadsAi}
             getLeadConversion={getLeadConversion}
             handleSelectLead={handleSelectLead}
+            handleSelectMultipleLeads={handleSelectMultipleLeads}
             handleSelectAllLeads={handleSelectAllLeads}
             selectedLeads={selectedLeads}
             handleBulkLeadsEmail={handleBulkLeadsEmail}
