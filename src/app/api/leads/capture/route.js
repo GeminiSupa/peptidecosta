@@ -128,12 +128,53 @@ export async function POST(request) {
         }
       }
     } 
-    // WhatsApp welcome disabled: the only approved Meta template (welcome_promo1)
-    // advertises the 15% new-customer discount, so we no longer send it. New WhatsApp
-    // leads are still captured above; a plain (no-discount) welcome would require a new
-    // approved Meta template.
     else if (contact_method === 'whatsapp') {
-      console.log(`[Leads Capture] WhatsApp lead captured (promo welcome disabled): ${cleanContact}`);
+      if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
+        console.warn('[Leads Capture] WhatsApp API credentials missing.');
+      } else {
+        try {
+          const metaResponse = await fetch(
+            `https://graph.facebook.com/v25.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                to: cleanContact,
+                type: 'template',
+                template: {
+                  name: 'hello_world', // A generic approved template. Replace with 'catalog_welcome' when approved in Meta.
+                  language: { code: 'en_US' }
+                }
+              }),
+            }
+          );
+          const metaData = await metaResponse.json();
+          if (!metaResponse.ok) {
+            console.error('[Leads Capture] Meta API error:', metaData);
+          } else {
+            console.log('[Leads Capture] WhatsApp welcome sent:', metaData.messages?.[0]?.id);
+            if (supabase) {
+              const metaMessageId = metaData?.messages?.[0]?.id || null;
+              await supabase.from('whatsapp_messages').insert([{
+                wa_id: cleanContact,
+                display_name: 'Catalog Lead',
+                message_text: `Welcome to Peptides Costa Rica! Explore our catalog.`,
+                message_type: 'template',
+                direction: 'outbound',
+                raw_payload: metaData,
+                meta_message_id: metaMessageId,
+                delivery_status: 'sent'
+              }]);
+            }
+          }
+        } catch (waErr) {
+          console.error('[Leads Capture] WhatsApp message failed:', waErr);
+        }
+      }
     }
 
     return NextResponse.json({ success: true });
