@@ -84,6 +84,20 @@ export default function CartsManager({
     return result;
   }, [abandonedCarts, searchTerm, sortField, sortDir, urgencyFilter, contactFilter]);
 
+  // Contact / recovery status shown in its own column
+  const getRecoveryStatus = (cart) => {
+    if (cart.status === 'recovered' || cart.status === 'converted') {
+      return { label: 'Recovered', color: '#10b981', icon: <Sparkles size={11} /> };
+    }
+    if (cart.recovery_whatsapp_sent) {
+      return { label: 'Contacted (WhatsApp)', color: '#22c55e', icon: <MessageCircle size={11} /> };
+    }
+    if (cart.recovery_email_sent) {
+      return { label: 'Contacted (Email)', color: '#3b82f6', icon: <Mail size={11} /> };
+    }
+    return { label: 'Not Contacted', color: '#94a3b8', icon: <AlertCircle size={11} /> };
+  };
+
   // Visual Urgency Calculation
   const getUrgency = (createdAt) => {
     const hours = (new Date() - new Date(createdAt)) / 3600000;
@@ -342,6 +356,7 @@ export default function CartsManager({
                 <th style={{ padding: '12px 16px', color: '#94a3b8', fontSize: '0.85rem' }}>Date & Urgency</th>
                 <th style={{ padding: '12px 16px', color: '#94a3b8', fontSize: '0.85rem' }}>Cart Value</th>
                 <th style={{ padding: '12px 16px', color: '#94a3b8', fontSize: '0.85rem' }}>Items</th>
+                <th style={{ padding: '12px 16px', color: '#94a3b8', fontSize: '0.85rem' }}>Status</th>
                 <th style={{ padding: '12px 16px', color: '#94a3b8', fontSize: '0.85rem', textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
@@ -404,6 +419,16 @@ export default function CartsManager({
                           </div>
                         )}
                       </div>
+                    </td>
+                    <td data-label="Status" style={{ padding: '12px 16px' }}>
+                      {(() => {
+                        const rs = getRecoveryStatus(cart);
+                        return (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: `${rs.color}15`, color: rs.color, border: `1px solid ${rs.color}30`, padding: '3px 9px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                            {rs.icon} {rs.label}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td data-label="Actions" style={{ padding: '12px 16px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
