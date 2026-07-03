@@ -35,6 +35,8 @@ export default function LeadsManager({
   setLeadsSourceFilter,
   leadsAreaFilter,
   setLeadsAreaFilter,
+  contactedFilter,
+  setContactedFilter,
   page,
   setPage,
   leadsPerPage = 50,
@@ -61,6 +63,7 @@ export default function LeadsManager({
 
   // Local Sorting State
   const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
+  const [localContactedFilter, setLocalContactedFilter] = useState('All');
 
   const filteredAndSortedLeads = useMemo(() => {
     const safeLeads = leads || [];
@@ -78,10 +81,15 @@ export default function LeadsManager({
         if (!match) return false;
       }
       if (leadsSourceFilter && leadsSourceFilter !== 'All') {
-        if (leadsSourceFilter === 'whatsapp' && l.contact_method !== 'whatsapp') return false;
-        if (leadsSourceFilter === 'email' && l.contact_method !== 'email') return false;
+        if (leadsSourceFilter === 'whatsapp' && l.contact_method !== 'whatsapp' && !(l.phone) && !(l.contact_value && !String(l.contact_value).includes('@'))) return false;
+        if (leadsSourceFilter === 'email' && l.contact_method !== 'email' && !(l.email) && !(l.contact_value && String(l.contact_value).includes('@'))) return false;
         if (leadsSourceFilter === 'converted' && !getLeadConversion(l).converted) return false;
         if (leadsSourceFilter === 'facebook' && !(l.source && String(l.source).toLowerCase().includes('facebook'))) return false;
+      }
+      if (localContactedFilter && localContactedFilter !== 'All') {
+        const isContacted = !!l.last_contacted_at;
+        if (localContactedFilter === 'contacted' && !isContacted) return false;
+        if (localContactedFilter === 'not_contacted' && isContacted) return false;
       }
       if (leadsAreaFilter && leadsAreaFilter !== 'All') {
         if (l.region !== leadsAreaFilter && l.city !== leadsAreaFilter) return false;
@@ -96,7 +104,7 @@ export default function LeadsManager({
     });
 
     return result;
-  }, [leads, leadsSearch, leadsSourceFilter, leadsAreaFilter, sortDir]);
+  }, [leads, leadsSearch, leadsSourceFilter, leadsAreaFilter, localContactedFilter, sortDir]);
 
   const filteredLeads = filteredAndSortedLeads;
 
@@ -221,6 +229,17 @@ export default function LeadsManager({
           {uniqueAreas.map((area, i) => (
             <option key={i} value={area}>{area}</option>
           ))}
+        </select>
+
+        <select
+          className="admin-select"
+          value={localContactedFilter}
+          onChange={(e) => setLocalContactedFilter(e.target.value)}
+          style={{ flex: '0 1 140px', padding: '8px', fontSize: '0.85rem' }}
+        >
+          <option value="All">All Status</option>
+          <option value="contacted">Contacted</option>
+          <option value="not_contacted">Not Contacted</option>
         </select>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '0 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
           <ArrowDownUp size={14} color="#94a3b8" />

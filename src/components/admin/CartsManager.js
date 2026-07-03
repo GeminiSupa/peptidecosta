@@ -33,6 +33,7 @@ export default function CartsManager({
   const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
   const [urgencyFilter, setUrgencyFilter] = useState('all'); // 'all', 'fresh', 'warm', 'cold'
   const [contactFilter, setContactFilter] = useState('all'); // 'all', 'has_phone', 'has_email'
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'contacted', 'not_contacted'
 
   const filteredAndSortedCarts = useMemo(() => {
     let result = [...(abandonedCarts || [])];
@@ -64,6 +65,13 @@ export default function CartsManager({
       result = result.filter(c => !!(c.user_email || c.customer_email));
     }
     
+    // Filter by status (contacted)
+    if (statusFilter === 'contacted') {
+      result = result.filter(c => c.recovery_whatsapp_sent || c.recovery_email_sent || c.status === 'recovered' || c.status === 'converted');
+    } else if (statusFilter === 'not_contacted') {
+      result = result.filter(c => !c.recovery_whatsapp_sent && !c.recovery_email_sent && c.status !== 'recovered' && c.status !== 'converted');
+    }
+    
     // Sort
     result.sort((a, b) => {
       let comparison = 0;
@@ -82,7 +90,7 @@ export default function CartsManager({
     });
     
     return result;
-  }, [abandonedCarts, searchTerm, sortField, sortDir, urgencyFilter, contactFilter]);
+  }, [abandonedCarts, searchTerm, sortField, sortDir, urgencyFilter, contactFilter, statusFilter]);
 
   // Contact / recovery status shown in its own column
   const getRecoveryStatus = (cart) => {
@@ -301,6 +309,18 @@ export default function CartsManager({
             <option value="all" style={{background: '#0f172a'}}>All Contacts</option>
             <option value="has_phone" style={{background: '#0f172a'}}>Has Phone</option>
             <option value="has_email" style={{background: '#0f172a'}}>Has Email</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '0 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <select 
+            value={statusFilter} 
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+          >
+            <option value="all" style={{background: '#0f172a'}}>All Status</option>
+            <option value="contacted" style={{background: '#0f172a'}}>Contacted</option>
+            <option value="not_contacted" style={{background: '#0f172a'}}>Not Contacted</option>
           </select>
         </div>
 
