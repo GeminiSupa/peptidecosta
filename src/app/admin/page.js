@@ -3267,7 +3267,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     if (shiftKey && lastSelectedCartIndex !== null) {
       const start = Math.min(lastSelectedCartIndex, index);
       const end = Math.max(lastSelectedCartIndex, index);
-      const idsInRange = abandonedCarts.slice(start, end + 1).map(c => c.session_id);
+      const idsInRange = abandonedCarts.slice(start, end + 1).map(c => c.session_id || c.id);
       
       setSelectedCartIds(prev => {
         if (checked) {
@@ -3283,6 +3283,16 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       );
     }
     setLastSelectedCartIndex(index);
+  };
+
+  const handleSelectMultipleCarts = (ids, checked) => {
+    setSelectedCartIds(prev => {
+      if (checked) {
+        return Array.from(new Set([...prev, ...ids]));
+      } else {
+        return prev.filter(cartId => !ids.includes(cartId));
+      }
+    });
   };
 
   useEffect(() => {
@@ -4364,6 +4374,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             handleBulkWhatsApp={handleBulkWhatsApp}
             handleBulkDelete={handleBulkDelete}
             handleSelectCart={handleSelectCart}
+            handleSelectMultipleCarts={handleSelectMultipleCarts}
             selectedCarts={selectedCartIds}
             handleSendRecoveryEmail={handleSendRecoveryEmail}
             handleDeleteCart={handleDeleteCart}

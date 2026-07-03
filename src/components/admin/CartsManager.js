@@ -20,6 +20,7 @@ export default function CartsManager({
   handleBulkWhatsApp,
   handleBulkDelete,
   handleSelectCart,
+  handleSelectMultipleCarts,
   selectedCarts,
   handleSendRecoveryEmail,
   handleDeleteCart,
@@ -31,7 +32,8 @@ export default function CartsManager({
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState('date'); // 'date', 'value', 'items'
   const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
-  const [urgencyFilter, setUrgencyFilter] = useState('all'); // 'all', 'fresh', 'warm', 'cold'
+  
+  const [lastSelectedCartIndex, setLastSelectedCartIndex] = useState(null);
   const [contactFilter, setContactFilter] = useState('all'); // 'all', 'has_phone', 'has_email'
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'contacted', 'not_contacted'
 
@@ -45,17 +47,6 @@ export default function CartsManager({
         String(c.user_email || c.customer_email || '').toLowerCase().includes(lowerQ) ||
         String(c.user_phone || c.customer_phone || '').includes(searchTerm)
       );
-    }
-
-    // Filter by urgency
-    if (urgencyFilter !== 'all') {
-      result = result.filter(c => {
-        const hours = (new Date() - new Date(c.created_at)) / 3600000;
-        if (urgencyFilter === 'fresh') return hours < 1;
-        if (urgencyFilter === 'warm') return hours >= 1 && hours < 24;
-        if (urgencyFilter === 'cold') return hours >= 24;
-        return true;
-      });
     }
 
     // Filter by contact info
@@ -90,7 +81,7 @@ export default function CartsManager({
     });
     
     return result;
-  }, [abandonedCarts, searchTerm, sortField, sortDir, urgencyFilter, contactFilter, statusFilter]);
+  }, [abandonedCarts, searchTerm, sortField, sortDir, contactFilter, statusFilter]);
 
   // Contact / recovery status shown in its own column
   const getRecoveryStatus = (cart) => {
@@ -106,12 +97,27 @@ export default function CartsManager({
     return { label: 'Not Contacted', color: '#94a3b8', icon: <AlertCircle size={11} /> };
   };
 
-  // Visual Urgency Calculation
-  const getUrgency = (createdAt) => {
-    const hours = (new Date() - new Date(createdAt)) / 3600000;
-    if (hours < 1) return { color: '#10b981', label: 'Fresh (< 1h)', icon: <Sparkles size={12}/> };
-    if (hours < 24) return { color: '#f59e0b', label: 'Warm (< 24h)', icon: <Clock size={12}/> };
-    return { color: '#ef4444', label: 'Cold (24h+)', icon: <AlertCircle size={12}/> };
+  const handleLocalSelectCart = (id, checked, shiftKey, index) => {
+    if (shiftKey && lastSelectedCartIndex !== null && handleSelectMultipleCarts) {
+      const start = Math.min(lastSelectedCartIndex, index);
+      const end = Math.max(lastSelectedCartIndex, index);
+      const idsInRange = filteredAndSortedCarts.slice(start, end + 1).map(c => c.session_id || c.id);
+      handleSelectMultipleCarts(idsInRange, checked);
+    } else {
+      if (handleSelectMultipleCarts) {
+        handleSelectMultipleCarts([id], checked);
+      } else if (handleSelectCart) {
+        handleSelectCart(id, checked, shiftKey, index);
+      }
+    }
+    setLastSelectedCartIndex(index);
+  };
+
+  const handleSelectAllCartsLocal = (e) => {
+    const checked = e.target.checked;
+    if (handleSelectMultipleCarts) {
+      handleSelectMultipleCarts(filteredAndSortedCarts.map(c => c.session_id || c.id), checked);
+    }
   };
 
   const calculateCartTotal = (cartData) => {
@@ -289,19 +295,6 @@ export default function CartsManager({
         
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '0 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
           <select 
-            value={urgencyFilter} 
-            onChange={(e) => setUrgencyFilter(e.target.value)}
-            style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
-          >
-            <option value="all" style={{background: '#0f172a'}}>All Ages</option>
-            <option value="fresh" style={{background: '#0f172a'}}>Fresh (&lt; 1h)</option>
-            <option value="warm" style={{background: '#0f172a'}}>Warm (1-24h)</option>
-            <option value="cold" style={{background: '#0f172a'}}>Cold (24h+)</option>
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '0 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <select 
             value={contactFilter} 
             onChange={(e) => setContactFilter(e.target.value)}
             style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
@@ -364,16 +357,12 @@ export default function CartsManager({
                   <input 
                     type="checkbox" 
                     checked={filteredAndSortedCarts.length > 0 && selectedCarts && selectedCarts.length === filteredAndSortedCarts.length}
-                    onChange={(e) => {
-                      // Note: We don't have a handleSelectAllCarts prop passed directly, but the logic 
-                      // can be handled if we map all ids manually. For now, since handleSelectCart only takes one, 
-                      // this checkbox might be mostly visual or require passing a new prop if we wanted bulk select all.
-                    }}
+                    onChange={handleSelectAllCartsLocal}
                     style={{ cursor: 'pointer', accentColor: '#38bdf8' }}
                   />
                 </th>
                 <th style={{ padding: '12px 16px', color: '#94a3b8', fontSize: '0.85rem' }}>Customer</th>
-                <th style={{ padding: '12px 16px', color: '#94a3b8', fontSize: '0.85rem' }}>Date & Urgency</th>
+                <th style={{ padding: '12px 16px', color: '#94a3b8', fontSize: '0.85rem' }}>Date</th>
                 <th style={{ padding: '12px 16px', color: '#94a3b8', fontSize: '0.85rem' }}>Cart Value</th>
                 <th style={{ padding: '12px 16px', color: '#94a3b8', fontSize: '0.85rem' }}>Items</th>
                 <th style={{ padding: '12px 16px', color: '#94a3b8', fontSize: '0.85rem' }}>Status</th>
@@ -382,7 +371,6 @@ export default function CartsManager({
             </thead>
             <tbody>
               {filteredAndSortedCarts.map((cart, index) => {
-                const urgency = getUrgency(cart.created_at);
                 const total = calculateCartTotal(cart.cart_data);
                 const items = getCartItems(cart.cart_data);
                 const isSelected = selectedCarts && selectedCarts.includes(cart.session_id || cart.id);
@@ -400,7 +388,7 @@ export default function CartsManager({
                       <input 
                         type="checkbox" 
                         checked={isSelected}
-                        onChange={(e) => handleSelectCart && handleSelectCart(cart.session_id || cart.id, e.target.checked, e.nativeEvent.shiftKey, index)}
+                        onChange={(e) => handleLocalSelectCart(cart.session_id || cart.id, e.target.checked, e.nativeEvent.shiftKey, index)}
                         style={{ cursor: 'pointer', accentColor: '#38bdf8' }}
                       />
                     </td>
@@ -414,12 +402,9 @@ export default function CartsManager({
                         </div>
                       )}
                     </td>
-                    <td data-label="Date & Urgency" style={{ padding: '12px 16px' }}>
+                    <td data-label="Date" style={{ padding: '12px 16px' }}>
                       <div style={{ fontSize: '0.85rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
                         <Clock size={12} /> {new Date(cart.created_at).toLocaleDateString()} {new Date(cart.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </div>
-                      <div style={{ display: 'inline-flex', background: `${urgency.color}15`, color: urgency.color, border: `1px solid ${urgency.color}30`, padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: '700', alignItems: 'center', gap: '4px' }}>
-                        {urgency.icon} {urgency.label}
                       </div>
                     </td>
                     <td data-label="Cart Value" style={{ padding: '12px 16px' }}>
