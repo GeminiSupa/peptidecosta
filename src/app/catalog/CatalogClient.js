@@ -2812,8 +2812,8 @@ export default function CatalogClient({
               </h2>
               <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.5 }}>
                 {lang === 'en' 
-                  ? 'Add your real WhatsApp number or email to view our premium catalog and instantly receive a promo code for 15% off your first purchase on all products.' 
-                  : 'Agrega tu número de WhatsApp o correo electrónico real para ver nuestro catálogo premium y recibir al instante un código de descuento del 15% para tu primera compra en todos los productos.'}
+                  ? 'Add your real WhatsApp number or email to view our premium catalog.' 
+                  : 'Agrega tu número de WhatsApp o correo electrónico real para ver nuestro catálogo premium.'}
               </p>
               <form onSubmit={handleGateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <input 
