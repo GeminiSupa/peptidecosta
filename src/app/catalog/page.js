@@ -2309,10 +2309,9 @@ export default function CatalogPage() {
   const categoriesList = ['all', ...Array.from(new Set(products.filter(p => !hiddenProducts.includes(p.product)).map(p => p.category))).filter(Boolean).sort()];
 
   // Filtering + Sorting Logic
-  let filteredProducts = products.filter(p => {
+  const baseFilteredProducts = products.filter(p => {
     // 0. Hidden by admin — kept in the database (can be restocked) but removed from the storefront
     if (hiddenProducts.includes(p.product)) return false;
-
     // 1. Search Query
     const nameMatch = (p.product || '').toLowerCase().includes(searchQuery.toLowerCase());
     const catMatch = (p.category || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -2342,8 +2341,9 @@ export default function CatalogPage() {
   });
 
   // Sorting — always put in-stock items first, out-of-stock at bottom
+  let filteredProducts;
   if (sortOrder === 'pop') {
-    filteredProducts = [...filteredProducts].sort((a, b) => {
+    filteredProducts = [...baseFilteredProducts].sort((a, b) => {
       const stockA = isInStock(a.status);
       const stockB = isInStock(b.status);
       if (stockA && !stockB) return -1;
@@ -2352,7 +2352,7 @@ export default function CatalogPage() {
     });
   } else {
     // Price sort, but still group in-stock first
-    filteredProducts = [...filteredProducts].sort((a, b) => {
+    filteredProducts = [...baseFilteredProducts].sort((a, b) => {
       const stockA = isInStock(a.status);
       const stockB = isInStock(b.status);
       if (stockA && !stockB) return -1;

@@ -2221,7 +2221,7 @@ export default function CatalogClient({
 
   const filteredProducts = useMemo(() => {
     const query = deferredSearchQuery.toLowerCase();
-    let list = products.filter((p) => {
+    const filteredList = products.filter((p) => {
       const nameMatch = (p.product || '').toLowerCase().includes(query);
       const catMatch = (p.category || '').toLowerCase().includes(query);
       if (!nameMatch && !catMatch) return false;
@@ -2243,7 +2243,7 @@ export default function CatalogClient({
     });
 
     if (sortOrder === 'pop') {
-      list = [...list].sort((a, b) => {
+      return [...filteredList].sort((a, b) => {
         const stockA = isInStock(a.status);
         const stockB = isInStock(b.status);
         if (stockA && !stockB) return -1;
@@ -2251,7 +2251,7 @@ export default function CatalogClient({
         return 0;
       });
     } else {
-      list = [...list].sort((a, b) => {
+      return [...filteredList].sort((a, b) => {
         const stockA = isInStock(a.status);
         const stockB = isInStock(b.status);
         if (stockA && !stockB) return -1;
@@ -2261,7 +2261,6 @@ export default function CatalogClient({
         return sortOrder === 'lowToHigh' ? priceA - priceB : priceB - priceA;
       });
     }
-    return list;
   }, [products, deferredSearchQuery, activeCategory, inStockOnly, priceFilter, sortOrder, currency]);
 
   const isSearchStale = searchQuery !== deferredSearchQuery;
