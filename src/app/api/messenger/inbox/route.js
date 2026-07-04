@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+// Messenger inbox: live Graph API fetch (no DB). Redeploy marker: 2026-07-04.
 // ─── Meta Credentials ───
 const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 const PAGE_ID = process.env.FACEBOOK_PAGE_ID || process.env.MESSENGER_PAGE_ID || '';
