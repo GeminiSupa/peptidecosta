@@ -8,6 +8,9 @@ export default function UTMTracker() {
 
     const params = new URLSearchParams(window.location.search);
     const campaignId = params.get('utm_campaign');
+    const medium = params.get('utm_medium');
+    const enrollmentId = params.get('journey_enrollment');
+    const stepId = params.get('utm_content');
 
     if (campaignId) {
       // Save campaign_id to localStorage with an expiration date (30 days)
@@ -15,7 +18,9 @@ export default function UTMTracker() {
       expirationDate.setDate(expirationDate.getDate() + 30);
       
       const attributionData = {
-        campaign_id: campaignId,
+        ...(medium === 'email' && params.get('utm_source') === 'journey'
+          ? { journey_id: campaignId, journey_enrollment_id: enrollmentId, journey_step_id: stepId }
+          : { campaign_id: campaignId }),
         expires: expirationDate.getTime()
       };
       

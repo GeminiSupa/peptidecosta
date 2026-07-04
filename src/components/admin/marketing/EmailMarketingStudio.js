@@ -2,23 +2,26 @@
 
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { BarChart2, Mail, Users, Zap, TrendingUp, Send } from 'lucide-react';
+import { Mail, ShieldCheck, Users, Zap, TrendingUp, Send } from 'lucide-react';
 import SubscriberManager from './SubscriberManager';
-
 import AutomationStudio from './AutomationStudio';
+import RevenueOpportunities from './RevenueOpportunities';
+import MarketingSafetyCenter from './MarketingSafetyCenter';
 import { adminFetch } from '@/lib/adminApi';
 
 // We dynamically import the campaign manager to handle the list/builder views
 const CampaignManager = dynamic(() => import('./CampaignManager'), { ssr: false });
 
 const TABS = [
+  { id: 'opportunities', label: 'Opportunities', icon: TrendingUp },
   { id: 'subscribers', label: 'Subscribers', icon: Users },
   { id: 'campaigns',   label: 'Campaigns',   icon: Mail },
   { id: 'automations', label: 'Automations', icon: Zap },
+  { id: 'safety', label: 'Safety', icon: ShieldCheck },
 ];
 
 export default function EmailMarketingStudio() {
-  const [activeTab, setActiveTab] = useState('subscribers');
+  const [activeTab, setActiveTab] = useState('opportunities');
   const [headerStats, setHeaderStats] = useState({ subscribers: '—', campaigns: '—', sent: '—' });
 
   // Pull quick KPIs for the stats strip
@@ -52,7 +55,7 @@ export default function EmailMarketingStudio() {
             <Mail size={22} />
             Marketing Studio
           </h2>
-          <p className="mkt-subtitle">Manage subscribers, build campaigns, and track analytics.</p>
+          <p className="mkt-subtitle">Turn customer intent into coordinated revenue campaigns.</p>
           {/* Stats strip */}
           <div className="mkt-stats-strip">
             <span className="mkt-stat-pill">
@@ -89,9 +92,11 @@ export default function EmailMarketingStudio() {
 
       {/* ── Panel ── */}
       <div className="mkt-container mkt-fade-in" key={activeTab}>
+        {activeTab === 'opportunities' && <RevenueOpportunities />}
         {activeTab === 'subscribers' && <SubscriberManager />}
         {activeTab === 'campaigns'   && <CampaignManager />}
         {activeTab === 'automations' && <AutomationStudio />}
+        {activeTab === 'safety' && <MarketingSafetyCenter />}
       </div>
     </div>
   );

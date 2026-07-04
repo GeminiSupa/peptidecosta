@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/adminApi';
+import JourneyManager from './JourneyManager';
 import {
   Activity, CalendarClock, Loader2, Play, RefreshCw,
   ShoppingCart, Sparkles, Users, Zap, Clock, CheckCircle2,
@@ -28,7 +29,19 @@ export default function AutomationStudio() {
   const [schedulingId, setSchedulingId] = useState('');
   const [previewFlow,  setPreviewFlow]  = useState(null);
 
-  useEffect(() => { fetchSummary(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    adminFetch('/api/admin/automations')
+      .then(async res => ({ res, data: await res.json() }))
+      .then(({ res, data }) => {
+        if (cancelled) return;
+        if (!res.ok || data.error) throw new Error(data.error || 'Failed to load');
+        setSummary(data);
+      })
+      .catch(err => { if (!cancelled) console.error('Failed to load automations:', err); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const fetchSummary = async () => {
     try {
@@ -76,6 +89,8 @@ export default function AutomationStudio() {
 
   return (
     <div className="mkt-automation mkt-fade-in">
+      <JourneyManager />
+      <hr className="mkt-divider" />
       {/* ── Header ── */}
       <div className="mkt-flex mkt-justify-between mkt-items-center mkt-mb-4">
         <div>

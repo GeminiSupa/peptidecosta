@@ -55,25 +55,37 @@ export async function POST(request) {
       query = query.contains('tags', [campaign.target_tags[0]]);
     }
 
-    const { data: subscribers, error: subError } = await query;
+    const [{ data: subscribers, error: subError }, { data: suppressionRows, error: suppressionError }] = await Promise.all([
+      query,
+      supabaseAdmin.from('marketing_suppressions').select('identity,channel').eq('active', true).in('channel', ['email', 'all']),
+    ]);
 
     if (subError || !subscribers || subscribers.length === 0) {
       return NextResponse.json({ error: 'No active subscribers found for this segment' }, { status: 400 });
     }
+    if (suppressionError) {
+      return NextResponse.json({ error: 'Marketing suppression checks are unavailable; send cancelled for safety.' }, { status: 503 });
+    }
+
+    const suppressedEmails = new Set((suppressionRows || []).map(item => String(item.identity || '').trim().toLowerCase()));
+    const eligibleSubscribers = subscribers.filter(subscriber => !suppressedEmails.has(String(subscriber.email || '').trim().toLowerCase()));
+    if (eligibleSubscribers.length === 0) {
+      return NextResponse.json({ error: 'Every subscriber in this segment is suppressed.' }, { status: 400 });
+    }
 
     // Handle A/B Test Logic
-    let targetSubscribers = [...subscribers];
+    let targetSubscribers = [...eligibleSubscribers];
     let newStatus = 'sending';
     
     if (is_test_batch && campaign.is_ab_test) {
       // Pick 20% random for testing
-      targetSubscribers = targetSubscribers.sort(() => 0.5 - Math.random()).slice(0, Math.max(2, Math.floor(subscribers.length * 0.2)));
+      targetSubscribers = targetSubscribers.sort(() => 0.5 - Math.random()).slice(0, Math.max(2, Math.floor(eligibleSubscribers.length * 0.2)));
       newStatus = 'testing';
     } else if (send_winner) {
       // If sending winner, we must exclude people who already received it
       const { data: previousSends } = await supabaseAdmin.from('campaign_sends').select('subscriber_id').eq('campaign_id', campaign_id);
       const sentIds = new Set(previousSends?.map(s => s.subscriber_id) || []);
-      targetSubscribers = subscribers.filter(s => !sentIds.has(s.id));
+      targetSubscribers = eligibleSubscribers.filter(s => !sentIds.has(s.id));
       newStatus = 'sending';
     }
 

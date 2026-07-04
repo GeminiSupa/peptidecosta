@@ -191,6 +191,44 @@ Guidelines:
 5. End with a clear Call to Action (e.g. link to website or tell them to reply).
 
 Output ONLY the final drafted message text.`;
+    } else if (mode === 'generate_journey') {
+      const goal = String(context.goal || prompt || '').trim().slice(0, 1500);
+      if (!goal) return NextResponse.json({ error: 'Describe the journey goal' }, { status: 400 });
+      finalPrompt = `You are the lifecycle automation strategist for Costa Peptides, a research-products e-commerce business in Costa Rica.
+Create a practical customer journey for this administrator goal:
+"${goal}"
+
+Return ONLY a strict JSON object matching this schema:
+{
+  "name": "short journey name",
+  "description": "one sentence purpose",
+  "trigger": { "type": "new_subscriber|abandoned_cart|catalog_lead|reorder_due", "days": 30 },
+  "steps": [
+    {
+      "type": "action",
+      "channel": "email|whatsapp",
+      "delay_hours": 0,
+      "subject": "required for email, null for whatsapp",
+      "message": "plain text message using [FIRST_NAME] when useful"
+    },
+    {
+      "type": "condition",
+      "condition": "has_active_cart|email_engaged|no_order_since_enrollment",
+      "on_false": "stop|skip_next|continue",
+      "delay_hours": 0
+    }
+  ],
+  "strategy_note": "one sentence explaining the timing and logic"
+}
+
+Rules:
+- Use 1 to 6 steps and no more than 3 messages in seven days.
+- Use WhatsApp sparingly and only when commercially justified.
+- Stop irrelevant follow-ups through a decision gate where useful.
+- Messages must be concise, professional, and suitable for research products.
+- Do not make medical, therapeutic, diagnostic, treatment, dosage, or human-use claims.
+- Do not invent discounts, prices, inventory, certifications, or test results.
+- Do not wrap JSON in markdown or include commentary outside the JSON.`;
     } else {
       // Default fallback
       finalPrompt = prompt || text;

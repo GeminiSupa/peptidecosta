@@ -1585,14 +1585,14 @@ export default function CatalogClient({
   const saveOrderToDatabase = async (orderRow) => {
     try {
       // E-commerce attribution: attach campaign_id if user came from an email
-      let campaignId = null;
+      let attribution = {};
       try {
         const attr = JSON.parse(localStorage.getItem('costa_attribution') || '{}');
-        if (attr.campaign_id && attr.expires > Date.now()) {
-          campaignId = attr.campaign_id;
-        }
+        if (attr.expires > Date.now()) attribution = attr;
       } catch {}
-      const orderPayload = campaignId ? { ...orderRow, campaign_id: campaignId } : orderRow;
+      const orderPayload = attribution.journey_id
+        ? { ...orderRow, journey_id: attribution.journey_id, journey_enrollment_id: attribution.journey_enrollment_id || null, journey_step_id: attribution.journey_step_id || null }
+        : attribution.campaign_id ? { ...orderRow, campaign_id: attribution.campaign_id } : orderRow;
 
       const res = await fetch('/api/orders/create', {
         method: 'POST',

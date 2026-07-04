@@ -15,6 +15,14 @@
     {
       "path": "/api/cron/reorder-reminders",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/process-journeys",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/process-broadcasts",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

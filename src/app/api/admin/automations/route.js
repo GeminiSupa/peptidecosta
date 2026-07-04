@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 
 export const dynamic = 'force-dynamic';

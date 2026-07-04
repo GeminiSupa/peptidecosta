@@ -246,8 +246,9 @@ export async function POST(request) {
 
     const contacts = Array.from(targets.values());
     
-    // IF MORE THAN 10 CONTACTS, SCHEDULE IT TO PREVENT VERCEL TIMEOUT
-    if (contacts.length > 10) {
+    // Queue every non-test marketing send so suppression, idempotency, retries,
+    // and per-recipient delivery events are enforced in one durable path.
+    if (contacts.length > 0 && audience !== 'test') {
       const allContactStrs = contacts.map(c => {
         if (c.phone && c.email) return `${c.phone}|${c.email}`;
         if (c.phone) return `${c.phone}`;
@@ -278,7 +279,7 @@ export async function POST(request) {
         headers: { authorization: `Bearer ${process.env.CRON_SECRET || ''}` }
       }).catch(() => {});
 
-      return NextResponse.json({ success: true, queuedCount: contacts.length, text: `Queued ${contacts.length} recipients for immediate background sending.` });
+      return NextResponse.json({ success: true, queuedCount: contacts.length, text: `Queued ${contacts.length} recipients for safe background delivery.` });
     }
 
     let queuedCount = 0;

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { canRetryDelivery, isMarketingSuppressed, normalizeMarketingIdentity } from '@/lib/marketingDelivery.mjs';
+import { createJourneyTrackingToken } from '@/lib/marketingTokens';
 
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
@@ -13,6 +15,11 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
+
+function escapeHtml(value) {
+  return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
 
 async function sendWhatsApp(to, message) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -38,13 +45,14 @@ async function sendWhatsApp(to, message) {
         text: { body: message }
       })
     });
-    return res.ok;
+    const responseBody = await res.json().catch(() => ({}));
+    return { sent: res.ok, providerId: responseBody.messages?.[0]?.id || null };
   } catch (err) {
-    return false;
+    return { sent: false, providerId: null };
   }
 }
 
-async function sendEmail(to, message, subject) {
+async function sendEmail(to, message, subject, tracking = null) {
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return false;
 
   try {
@@ -56,19 +64,26 @@ async function sendEmail(to, message, subject) {
       tls: { rejectUnauthorized: false }
     });
 
+    const trackingToken = tracking ? createJourneyTrackingToken(tracking) : null;
+    const trackedHref = url => trackingToken
+      ? `${BASE_URL}/api/tracking/journey/click?t=${encodeURIComponent(trackingToken)}&url=${encodeURIComponent(url)}`
+      : url;
+    const escapedMessage = escapeHtml(message).replace(/https?:\/\/[^\s<]+/g, url => `<a href="${trackedHref(url.replace(/&amp;/g, '&'))}" style="color:#059669;text-decoration:underline;">${url}</a>`).replace(/\n/g, '<br>');
+    const trackingPixel = trackingToken ? `<img src="${BASE_URL}/api/tracking/journey/open?t=${encodeURIComponent(trackingToken)}" width="1" height="1" alt="" style="display:block" />` : '';
     const htmlMessage = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
         <div style="text-align: center; margin-bottom: 24px;">
           <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height: 60px; border-radius: 8px; background: #0f172a; padding: 8px;" />
         </div>
         <div style="color: #334155; line-height: 1.6; font-size: 16px; margin-bottom: 32px; white-space: pre-wrap;">
-          ${message.replace(/\n/g, '<br>')}
+          ${escapedMessage}
         </div>
         <div style="text-align: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
-          <a href="https://catalog.peptidescostarica.net/catalog" style="display: inline-block; background-color: #059669; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px rgba(5, 150, 105, 0.2);">
+          <a href="${trackedHref('https://catalog.peptidescostarica.net/catalog')}" style="display: inline-block; background-color: #059669; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px rgba(5, 150, 105, 0.2);">
             View Catalog / Ver Catálogo
           </a>
         </div>
+        ${trackingPixel}
       </div>
     `;
 
@@ -80,9 +95,77 @@ async function sendEmail(to, message, subject) {
       text: message,
       html: htmlMessage
     });
-    return !!res.messageId;
+    return { sent: Boolean(res.messageId), providerId: res.messageId || null };
   } catch (err) {
-    return false;
+    return { sent: false, providerId: null };
+  }
+}
+
+async function recordSuppressed(broadcastId, identity, channel) {
+  await supabase.from('marketing_delivery_events').upsert({
+    broadcast_id: broadcastId,
+    contact_key: identity,
+    channel,
+    status: 'suppressed',
+    attempt_count: 0,
+    error: 'Global marketing suppression',
+    last_attempt_at: new Date().toISOString(),
+  }, { onConflict: 'broadcast_id,contact_key,channel' });
+}
+
+async function guardedSend({ broadcastId, identity, channel, send, suppressions }) {
+  if (!identity) return { sent: false, retryable: false };
+  if (isMarketingSuppressed(suppressions, identity, channel)) {
+    await recordSuppressed(broadcastId, identity, channel);
+    return { sent: false, retryable: false };
+  }
+
+  const { data: existing } = await supabase
+    .from('marketing_delivery_events')
+    .select('*')
+    .eq('broadcast_id', broadcastId)
+    .eq('contact_key', identity)
+    .eq('channel', channel)
+    .maybeSingle();
+
+  if (!canRetryDelivery(existing)) {
+    return { sent: false, retryable: false };
+  }
+  if (existing?.status === 'processing' && Date.now() - new Date(existing.last_attempt_at).getTime() < 10 * 60 * 1000) {
+    return { sent: false, retryable: false };
+  }
+
+  const attemptCount = Number(existing?.attempt_count || 0) + 1;
+  const timestamp = new Date().toISOString();
+  const { error: claimError } = await supabase.from('marketing_delivery_events').upsert({
+    broadcast_id: broadcastId,
+    contact_key: identity,
+    channel,
+    status: 'processing',
+    attempt_count: attemptCount,
+    error: null,
+    first_attempt_at: existing?.first_attempt_at || timestamp,
+    last_attempt_at: timestamp,
+  }, { onConflict: 'broadcast_id,contact_key,channel' });
+  if (claimError) throw claimError;
+
+  try {
+    const sendResult = await send();
+    const sent = typeof sendResult === 'object' ? Boolean(sendResult.sent) : Boolean(sendResult);
+    const providerId = typeof sendResult === 'object' ? sendResult.providerId : null;
+    await supabase.from('marketing_delivery_events').update({
+      status: sent ? 'delivered' : 'failed',
+      error: sent ? null : `${channel} provider rejected the message`,
+      provider_id: providerId || existing?.provider_id || null,
+      delivered_at: sent ? new Date().toISOString() : null,
+      last_attempt_at: new Date().toISOString(),
+    }).eq('broadcast_id', broadcastId).eq('contact_key', identity).eq('channel', channel);
+    return { sent, retryable: !sent && attemptCount < 3 };
+  } catch (error) {
+    await supabase.from('marketing_delivery_events').update({
+      status: 'failed', error: String(error.message || error).slice(0, 500), last_attempt_at: new Date().toISOString(),
+    }).eq('broadcast_id', broadcastId).eq('contact_key', identity).eq('channel', channel);
+    return { sent: false, retryable: attemptCount < 3 };
   }
 }
 
@@ -104,6 +187,13 @@ export async function GET(request) {
     if (!broadcasts || broadcasts.length === 0) {
       return NextResponse.json({ message: 'No pending broadcasts' });
     }
+
+    const { data: suppressionRows, error: suppressionError } = await supabase
+      .from('marketing_suppressions')
+      .select('identity,channel')
+      .eq('active', true);
+    if (suppressionError) throw suppressionError;
+    const suppressions = new Set((suppressionRows || []).map(item => `${item.identity}:${item.channel}`));
 
     // 2. Mark as processing to prevent duplicate runs
     const ids = broadcasts.map(b => b.id);
@@ -151,27 +241,54 @@ export async function GET(request) {
       const remainingContacts = contacts.slice(BATCH_SIZE);
 
       let queuedCount = 0;
+      const retryContacts = [];
 
       for (let i = 0; i < batchContacts.length; i++) {
         const contact = batchContacts[i];
         await new Promise(r => setTimeout(r, 20)); 
         let sentWhatsapp = false;
         let sentEmail = false;
+        let retryWhatsapp = false;
+        let retryEmail = false;
 
         if (channels.whatsapp && contact.phone) {
-          sentWhatsapp = await sendWhatsApp(contact.phone, message, channels.whatsappTemplateName, contact.name, channels.whatsappTemplateLanguage);
+          const result = await guardedSend({
+            broadcastId: broadcast.id,
+            identity: normalizeMarketingIdentity(contact.phone, 'whatsapp'),
+            channel: 'whatsapp',
+            suppressions,
+            send: () => sendWhatsApp(contact.phone, message, channels.whatsappTemplateName, contact.name, channels.whatsappTemplateLanguage),
+          });
+          sentWhatsapp = result.sent;
+          retryWhatsapp = result.retryable;
         }
         if (channels.email && contact.email && message) {
-          sentEmail = await sendEmail(contact.email, message, channels.emailSubject);
+          const result = await guardedSend({
+            broadcastId: broadcast.id,
+            identity: normalizeMarketingIdentity(contact.email, 'email'),
+            channel: 'email',
+            suppressions,
+            send: () => sendEmail(contact.email, message, channels.emailSubject, broadcast.journey_id ? {
+              journeyId: broadcast.journey_id,
+              enrollmentId: broadcast.journey_enrollment_id,
+              broadcastId: broadcast.id,
+              stepId: broadcast.journey_step_id,
+              contactKey: normalizeMarketingIdentity(contact.email, 'email'),
+            } : null),
+          });
+          sentEmail = result.sent;
+          retryEmail = result.retryable;
         }
         if (sentWhatsapp || sentEmail) queuedCount++;
+        if (retryWhatsapp || retryEmail) retryContacts.push(contact);
       }
 
       totalSent += queuedCount;
 
-      if (remainingContacts.length > 0) {
+      const contactsToRequeue = [...remainingContacts, ...retryContacts];
+      if (contactsToRequeue.length > 0) {
         // Re-queue the remaining contacts
-        const remainingStr = remainingContacts.map(c => {
+        const remainingStr = contactsToRequeue.map(c => {
           if (c.phone && c.email) return `${c.phone}|${c.email}`;
           if (c.phone) return `${c.phone}`;
           if (c.email) return `${c.email}`;
@@ -181,16 +298,21 @@ export async function GET(request) {
         await supabase.from('scheduled_broadcasts').update({ 
           status: 'pending',
           audience: 'custom',
-          custom_contacts: remainingStr
+          custom_contacts: remainingStr,
+          scheduled_at: retryContacts.length && remainingContacts.length === 0
+            ? new Date(Date.now() + 5 * 60 * 1000).toISOString()
+            : new Date().toISOString()
         }).eq('id', broadcast.id);
 
         // Immediately trigger the next run asynchronously
-        const host = request.headers.get('host') || 'localhost:3000';
-        const protocol = host.includes('localhost') ? 'http' : 'https';
-        fetch(`${protocol}://${host}/api/cron/process-broadcasts`, {
-          method: 'GET',
-          headers: { authorization: `Bearer ${process.env.CRON_SECRET || ''}` }
-        }).catch(() => {});
+        if (remainingContacts.length > 0) {
+          const host = request.headers.get('host') || 'localhost:3000';
+          const protocol = host.includes('localhost') ? 'http' : 'https';
+          fetch(`${protocol}://${host}/api/cron/process-broadcasts`, {
+            method: 'GET',
+            headers: { authorization: `Bearer ${process.env.CRON_SECRET || ''}` }
+          }).catch(() => {});
+        }
 
       } else {
         await supabase.from('scheduled_broadcasts').update({ status: 'completed' }).eq('id', broadcast.id);
