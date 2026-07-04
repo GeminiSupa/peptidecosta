@@ -45,8 +45,9 @@ export async function GET(request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const convLimit = Math.min(parseInt(searchParams.get('limit') || '25', 10) || 25, 50);
-    const msgLimit = Math.min(parseInt(searchParams.get('messages') || '25', 10) || 25, 50);
+    // How many conversations to pull in total (paginated), and messages per thread.
+    const convLimit = Math.min(parseInt(searchParams.get('limit') || '120', 10) || 120, 300);
+    const msgLimit = Math.min(parseInt(searchParams.get('messages') || '20', 10) || 20, 50);
 
     // Resolve the page id (prefer env, fall back to /me)
     let pageId = PAGE_ID;
@@ -60,15 +61,29 @@ export async function GET(request) {
     }
 
     const fields = `id,updated_time,unread_count,participants,messages.limit(${msgLimit}){message,from,created_time,attachments}`;
-    const url = `${GRAPH}/${pageId}/conversations?platform=messenger&fields=${fields}&limit=${convLimit}&access_token=${PAGE_ACCESS_TOKEN}`;
+    const perPage = 50;
 
-    const res = await fetch(url, { cache: 'no-store' });
-    const json = await res.json();
-    if (json.error) {
-      return NextResponse.json({ error: json.error.message, code: json.error.code }, { status: 502 });
+    // Paginate through conversations so we surface more DMs and older history,
+    // not just the most recent 25 threads.
+    let next = `${GRAPH}/${pageId}/conversations?platform=messenger&fields=${fields}&limit=${perPage}&access_token=${PAGE_ACCESS_TOKEN}`;
+    const rawConvs = [];
+    let pageCount = 0;
+    const maxPages = Math.ceil(convLimit / perPage) + 1;
+    while (next && pageCount < maxPages && rawConvs.length < convLimit) {
+      const res = await fetch(next, { cache: 'no-store' });
+      const json = await res.json();
+      if (json.error) {
+        if (rawConvs.length === 0) {
+          return NextResponse.json({ error: json.error.message, code: json.error.code }, { status: 502 });
+        }
+        break; // keep what we already have
+      }
+      rawConvs.push(...(json.data || []));
+      next = json.paging && json.paging.next;
+      pageCount += 1;
     }
 
-    const conversations = (json.data || []).map((conv) => {
+    const conversations = rawConvs.slice(0, convLimit).map((conv) => {
       const participants = (conv.participants && conv.participants.data) || [];
       const contact = participants.find((p) => p.id !== pageId) || participants[0] || {};
 

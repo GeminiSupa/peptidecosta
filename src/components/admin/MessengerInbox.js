@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, MessageCircle, RefreshCw, Search, Send } from 'lucide-react';
 
-const POLL_MS = 20000;
+const POLL_MS = 30000;
 const SEEN_KEY = 'messenger_inbox_seen';
 
 function getInitials(name) {
@@ -20,6 +20,25 @@ function formatConversationTime(value) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+// Facebook injects a noisy auto-message when a thread comes from a post comment,
+// e.g. "Estás respondiendo el comentario… Ver comentario(https://facebook.com/…)".
+// Detect it so we can render a clean clickable link instead of the raw URL wall.
+const COMMENT_NOTICE_RE = /(responding to (a|the)[^.]*comment|respondiendo[^.]*comentario|created this chat because|cre[oó] este chat porque|ha creado este chat|comment(ó|ed)\s)/i;
+
+function isCommentNotice(text) {
+  return COMMENT_NOTICE_RE.test(String(text || ''));
+}
+
+function extractUrl(text) {
+  const m = String(text || '').match(/https?:\/\/[^\s)]+/);
+  return m ? m[0] : null;
+}
+
+function cleanPreview(text) {
+  if (isCommentNotice(text)) return '💬 Comment thread';
+  return text;
 }
 
 function formatFullTimestamp(value) {
@@ -291,7 +310,7 @@ export default function MessengerInbox() {
                         <span className="admin-wa-chat-item-time">{formatConversationTime(conv.lastMessageAt)}</span>
                       </div>
                       <div className="admin-wa-chat-item-bottom">
-                        <span className="admin-wa-chat-item-preview">{conv.lastMessageText || '[Attachment]'}</span>
+                        <span className="admin-wa-chat-item-preview">{cleanPreview(conv.lastMessageText) || '[Attachment]'}</span>
                         {unread && <span className="admin-wa-unread-dot" aria-label="New message" />}
                       </div>
                     </div>
@@ -355,7 +374,34 @@ export default function MessengerInbox() {
                       <div className={`admin-wa-bubble admin-wa-bubble--${isInbound ? 'inbound' : 'human'}`}>
                         <span className="admin-wa-bubble-sender">{isInbound ? activeConv.contactName : 'You'}</span>
                         <div className="admin-wa-bubble-text">
-                          {msg.text || (msg.hasAttachment ? '📎 Attachment' : '')}
+                          {isCommentNotice(msg.text) ? (
+                            (() => {
+                              const url = extractUrl(msg.text);
+                              return (
+                                <span style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <span style={{ fontStyle: 'italic', opacity: 0.85 }}>💬 This chat started from a post comment</span>
+                                  {url && (
+                                    <a
+                                      href={url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                        marginTop: '2px', padding: '4px 10px', borderRadius: '6px',
+                                        background: 'rgba(255,255,255,0.15)', color: '#fff',
+                                        fontWeight: 600, fontSize: '0.8rem', textDecoration: 'none',
+                                        width: 'fit-content',
+                                      }}
+                                    >
+                                      View comment on Facebook ↗
+                                    </a>
+                                  )}
+                                </span>
+                              );
+                            })()
+                          ) : (
+                            msg.text || (msg.hasAttachment ? '📎 Attachment' : '')
+                          )}
                         </div>
                         <div className="admin-wa-bubble-footer">
                           <span className="admin-wa-bubble-time">

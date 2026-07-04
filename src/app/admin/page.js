@@ -3966,7 +3966,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   onClick={() => navigateToTab('facebook')}
                 >
                   <FacebookIcon size={14} style={{ color: activeTab === 'facebook' ? 'inherit' : '#1877f2' }} />
-                  <span className="tab-label">Facebook</span>
+                  <span className="tab-label">FB Alerts</span>
                   {facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
                     <span className="tab-count badge-info">
                       {facebookNotifications.filter(n => n.status === 'unread').length}
@@ -3979,8 +3979,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   className={`admin-tab-btn ${activeTab === 'messenger' ? 'active' : ''}`}
                   onClick={() => navigateToTab('messenger')}
                 >
-                  <MessageCircle size={14} style={{ color: activeTab === 'messenger' ? 'inherit' : '#0ea5e9' }} />
-                  <span className="tab-label">Messenger</span>
+                  <FacebookIcon size={14} style={{ color: activeTab === 'messenger' ? 'inherit' : '#1877f2' }} />
+                  <span className="tab-label">Facebook</span>
                 </button>
               )}
               {hasAccess('marketing') && (
