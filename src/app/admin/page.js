@@ -66,6 +66,7 @@ const EmailMarketingStudio = dynamicTab(() => import('@/components/admin/marketi
 const WhatsAppSession = dynamicTab(() => import('@/components/admin/marketing/WhatsAppSession'), 'Loading WhatsApp session…');
 const CartsManager = dynamicTab(() => import('@/components/admin/CartsManager'), 'Loading carts…');
 const LeadsManager = dynamicTab(() => import('@/components/admin/LeadsManager'), 'Loading leads…');
+const MessengerInbox = dynamicTab(() => import('@/components/admin/MessengerInbox'), 'Loading messenger…');
 
 const FacebookIcon = ({ size = 14, style, ...props }) => (
   <svg 
@@ -3973,6 +3974,15 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   )}
                 </button>
               )}
+              {hasAccess('messenger') && (
+                <button
+                  className={`admin-tab-btn ${activeTab === 'messenger' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('messenger')}
+                >
+                  <MessageCircle size={14} style={{ color: activeTab === 'messenger' ? 'inherit' : '#0ea5e9' }} />
+                  <span className="tab-label">Messenger</span>
+                </button>
+              )}
               {hasAccess('marketing') && (
                 <button 
                   className={`admin-tab-btn ${activeTab === 'marketing' ? 'active' : ''}`}
@@ -4484,6 +4494,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {/* TAB: Facebook Notifications */}
         {activeTab === 'broadcasts' && (
           <BroadcastsPanel products={products} />
+        )}
+
+        {activeTab === 'messenger' && (
+          <div className="admin-orders-tab">
+            <MessengerInbox />
+          </div>
         )}
 
         {activeTab === 'facebook' && (

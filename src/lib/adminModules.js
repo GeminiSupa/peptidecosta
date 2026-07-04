@@ -9,6 +9,7 @@ export const ADMIN_MODULES = [
   { id: 'share', label: 'Share Links', title: 'Share Links', group: 'Sales & Marketing' },
   { id: 'reviews', label: 'Reviews', title: 'Reviews', group: 'Sales & Marketing' },
   { id: 'facebook', label: 'Facebook Alerts', title: 'Facebook', group: 'Sales & Marketing' },
+  { id: 'messenger', label: 'Messenger Inbox', title: 'Messenger', group: 'Sales & Marketing', alwaysAvailable: true },
   { id: 'marketing', label: 'Marketing Studio', title: 'Marketing Studio', group: 'Sales & Marketing' },
   { id: 'affiliates', label: 'Affiliates & Promotions', title: 'Affiliates', group: 'Sales & Marketing' },
   { id: 'broadcasts', label: 'Broadcasts', title: 'Broadcasts', group: 'Sales & Marketing' },
