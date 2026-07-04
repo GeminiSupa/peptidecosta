@@ -931,9 +931,9 @@ export default function CampaignBuilder({ editingCampaignId }) {
             minHeight="640px"
             options={{ 
               devices: ['desktop', 'mobile'],
-              appearance: { theme: 'dark' },
               features: { 
                 preheaderText: true, 
+                colorPicker: true,
                 textEditor: { backgroundColor: true, textColor: true },
               } 
             }}
