@@ -162,7 +162,7 @@ export async function POST(request) {
               await supabase.from('whatsapp_messages').insert([{
                 wa_id: cleanContact,
                 display_name: 'Catalog Lead',
-                message_text: `Welcome to Peptides Costa Rica! Explore our catalog.`,
+                message_text: `¡Bienvenido a Péptidos Costa Rica! Explora nuestro catálogo. Para consultas 24/7 contáctanos al +506 8404-6973.`,
                 message_type: 'template',
                 direction: 'outbound',
                 raw_payload: metaData,
