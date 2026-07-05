@@ -252,7 +252,7 @@ export async function POST(request) {
               let replyText = "";
               let isAiGenerated = false;
 
-              if (aiAutoReply && process.env.GEMINI_API_KEY) {
+              if (aiAutoReply && (process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY)) {
                 try {
                   const prompt = `
 System Instructions:
@@ -279,30 +279,57 @@ CRITICAL INSTRUCTION: If the customer asks a question that you do not know the a
 Output ONLY the response text to send back. Do not include any JSON wrapping or markdown preamble. Keep under 1000 characters if possible.
 `;
 
-                  const response = await fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
-                    {
+                  if (process.env.OPENAI_API_KEY) {
+                    const response = await fetch('https://api.openai.com/v1/chat/completions', {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                      },
                       body: JSON.stringify({
-                        contents: [
-                          { parts: [{ text: prompt }] }
-                        ]
-                      })
-                    }
-                  );
+                        model: 'gpt-4o-mini',
+                        messages: [{ role: 'user', content: prompt }],
+                      }),
+                    });
 
-                  if (response.ok) {
-                    const resData = await response.json();
-                    const aiText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
-                    if (aiText) {
-                      replyText = aiText.trim();
-                      isAiGenerated = true;
-                      console.log('[WhatsApp Webhook] ✅ Gemini generated response successfully!');
+                    if (response.ok) {
+                      const resData = await response.json();
+                      const aiText = resData.choices?.[0]?.message?.content;
+                      if (aiText) {
+                        replyText = aiText.trim();
+                        isAiGenerated = true;
+                        console.log('[WhatsApp Webhook] ✅ OpenAI generated response successfully!');
+                      }
+                    } else {
+                      const errData = await response.json();
+                      console.error('[WhatsApp Webhook] OpenAI API failed with error status:', response.status, errData);
                     }
                   } else {
-                    const errData = await response.json();
-                    console.error('[WhatsApp Webhook] Gemini API failed with error status:', response.status, errData);
+                    const response = await fetch(
+                      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
+                      {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          contents: [
+                            { parts: [{ text: prompt }] }
+                          ]
+                        })
+                      }
+                    );
+
+                    if (response.ok) {
+                      const resData = await response.json();
+                      const aiText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+                      if (aiText) {
+                        replyText = aiText.trim();
+                        isAiGenerated = true;
+                        console.log('[WhatsApp Webhook] ✅ Gemini generated response successfully!');
+                      }
+                    } else {
+                      const errData = await response.json();
+                      console.error('[WhatsApp Webhook] Gemini API failed with error status:', response.status, errData);
+                    }
                   }
                 } catch (aiErr) {
                   console.error('[WhatsApp Webhook] Failed to generate AI reply:', aiErr);

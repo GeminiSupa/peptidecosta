@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { verifyAdminSession, PUBLIC_AI_MODES } from '@/lib/adminAuth';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 export async function POST(request) {
   try {
@@ -234,38 +235,73 @@ Rules:
       finalPrompt = prompt || text;
     }
 
-    console.log(`[AI API] Sending request to Gemini for mode "${mode}"...`);
+    console.log(`[AI API] Sending request to ${mode} mode...`);
 
-    const response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-      {
+    const openAiModes = new Set([
+      'chat',
+      'generate_email_template',
+      'draft_broadcast',
+      'generate_journey',
+      'cross_sell'
+    ]);
+
+    let responseText = '';
+
+    if (openAiModes.has(mode) && OPENAI_API_KEY) {
+      console.log(`[AI API] Using OpenAI for mode "${mode}"`);
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-goog-api-key': GEMINI_API_KEY,
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: finalPrompt,
-                },
-              ],
-            },
-          ],
+          model: 'gpt-4o-mini', // or whatever model is preferred
+          messages: [{ role: 'user', content: finalPrompt }],
         }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('[AI API] OpenAI API error:', data);
+        return NextResponse.json({ error: data.error?.message || 'OpenAI API call failed' }, { status: response.status });
       }
-    );
 
-    const data = await response.json();
+      responseText = data.choices?.[0]?.message?.content || '';
+    } else {
+      console.log(`[AI API] Using Gemini for mode "${mode}"`);
+      const response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-goog-api-key': GEMINI_API_KEY,
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: finalPrompt,
+                  },
+                ],
+              },
+            ],
+          }),
+        }
+      );
 
-    if (!response.ok) {
-      console.error('[AI API] Google Gemini API error:', data);
-      return NextResponse.json({ error: data.error?.message || 'Gemini API call failed' }, { status: response.status });
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('[AI API] Google Gemini API error:', data);
+        return NextResponse.json({ error: data.error?.message || 'Gemini API call failed' }, { status: response.status });
+      }
+
+      responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     }
-
-    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     
     return NextResponse.json({ success: true, text: responseText });
   } catch (error) {
