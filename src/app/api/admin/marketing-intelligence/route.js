@@ -26,6 +26,10 @@ function daysSince(value, now) {
   return Math.max(0, Math.floor((now - date.getTime()) / DAY));
 }
 
+function engagementDate(row) {
+  return row?.created_at || row?.clicked_at || row?.opened_at || row?.event_at || row?.timestamp || null;
+}
+
 async function safeRows(label, query, warnings) {
   const { data, error } = await query;
   if (error) {
@@ -45,13 +49,15 @@ export async function GET(request) {
 
   try {
     const [subscribers, orders, carts, catalogLeads, productViews, clicks, opens] = await Promise.all([
-      safeRows('subscribers', supabase.from('email_subscribers').select('*').limit(5000), warnings),
-      safeRows('orders', supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(5000), warnings),
-      safeRows('carts', supabase.from('abandoned_carts').select('*').order('created_at', { ascending: false }).limit(2500), warnings),
-      safeRows('catalog leads', supabase.from('catalog_leads').select('*').order('created_at', { ascending: false }).limit(2500), warnings),
-      safeRows('product views', supabase.from('product_views').select('*').order('created_at', { ascending: false }).limit(5000), warnings),
-      safeRows('campaign clicks', supabase.from('campaign_clicks').select('*').order('created_at', { ascending: false }).limit(5000), warnings),
-      safeRows('campaign opens', supabase.from('campaign_opens').select('*').order('created_at', { ascending: false }).limit(5000), warnings),
+      safeRows('subscribers', supabase.from('email_subscribers').select('id,email,first_name,last_name,source,created_at').limit(5000), warnings),
+      safeRows('orders', supabase.from('orders').select('customer_email,customer_phone,customer_name,total_usd,created_at,status').order('created_at', { ascending: false }).limit(5000), warnings),
+      safeRows('carts', supabase.from('abandoned_carts').select('customer_email,customer_phone,customer_name,status,created_at,last_updated').order('created_at', { ascending: false }).limit(2500), warnings),
+      safeRows('catalog leads', supabase.from('catalog_leads').select('contact_method,contact_value,created_at').order('created_at', { ascending: false }).limit(2500), warnings),
+      safeRows('product views', supabase.from('product_views').select('contact_value,product_name,created_at').not('contact_value', 'is', null).order('created_at', { ascending: false }).limit(3000), warnings),
+      // These legacy tables do not consistently expose `created_at`. Avoid an
+      // invalid order clause and normalize whichever provider timestamp exists.
+      safeRows('campaign clicks', supabase.from('campaign_clicks').select('*').limit(1000), warnings),
+      safeRows('campaign opens', supabase.from('campaign_opens').select('*').limit(1000), warnings),
     ]);
 
     const contacts = new Map();
@@ -144,8 +150,8 @@ export async function GET(request) {
       const reasons = [];
       const activeCarts = contact.carts.filter(cart => String(cart.status || 'active').toLowerCase() === 'active');
       const recentViews = contact.views.filter(view => (daysSince(view.created_at, now) ?? 999) <= 30);
-      const recentClicks = contact.clicks.filter(click => (daysSince(click.created_at, now) ?? 999) <= 30);
-      const recentOpens = contact.opens.filter(open => (daysSince(open.created_at, now) ?? 999) <= 30);
+      const recentClicks = contact.clicks.filter(click => (daysSince(engagementDate(click), now) ?? 999) <= 30);
+      const recentOpens = contact.opens.filter(open => (daysSince(engagementDate(open), now) ?? 999) <= 30);
       const recentLeads = contact.leads.filter(lead => (daysSince(lead.created_at, now) ?? 999) <= 30);
       const latestOrder = contact.orders[0];
       const orderAge = daysSince(latestOrder?.created_at, now);
@@ -168,8 +174,8 @@ export async function GET(request) {
       if (!contact.orders.length && (recentLeads.length || activeCarts.length)) segments.push('new_prospect');
 
       const activityDates = [
-        ...contact.views.map(row => row.created_at), ...contact.clicks.map(row => row.created_at),
-        ...contact.opens.map(row => row.created_at), ...contact.orders.map(row => row.created_at),
+        ...contact.views.map(row => row.created_at), ...contact.clicks.map(engagementDate),
+        ...contact.opens.map(engagementDate), ...contact.orders.map(row => row.created_at),
         ...contact.carts.map(row => row.last_updated || row.created_at), ...contact.leads.map(row => row.created_at),
       ].filter(Boolean).sort().reverse();
 

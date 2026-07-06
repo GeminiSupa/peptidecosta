@@ -4936,3 +4936,90 @@ body:has(.product-grid.grid-view) {
         font-size: 0.66rem;
     }
 }
+
+/* Reference-inspired editorial storefront shell */
+.landing-layout {
+    --primary: #1c2f6d;
+    --primary-alt: #17234d;
+    --accent: #ba1526;
+    --bg-main: #ffffff;
+    --bg-card: #ffffff;
+    --bg-secondary: #f5f6f8;
+    --text-main: #17234d;
+    --text-muted: #606b82;
+    --text-primary: #1c2f6d;
+    --border: #e2e5eb;
+    background: #fff;
+}
+
+.landing-layout .site-shipping-bar { background: #1c2f6d; color: #fff; }
+.landing-layout .site-shipping-inner { width: min(1180px, 100%); min-height: 48px; margin: auto; padding: 10px 24px; display: flex; align-items: center; gap: 12px; font-size: 12px; font-weight: 700; }
+.landing-layout .lp-header { position: sticky; top: 0; pointer-events: auto; background: #fff; border-bottom: 1px solid #e2e5eb; }
+.landing-layout .lp-header-inner,
+.landing-layout .lp-header--scrolled .lp-header-inner { max-width: 1180px; min-height: 78px; margin: 0 auto; padding: 12px 24px; border: 0; border-radius: 0; background: #fff; box-shadow: none; backdrop-filter: none; }
+.landing-layout .lp-logo img { height: auto; width: 112px; max-height: none !important; padding: 0; border-radius: 0 !important; background: transparent; box-shadow: none; }
+.landing-layout .lp-nav a { color: #17234d; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .035em; }
+.landing-layout .lp-nav a:hover { color: #ba1526; }
+.landing-layout .lp-nav-cta { width: 42px; height: 42px; justify-content: center; padding: 0; border-radius: 4px; background: #ba1526; box-shadow: none; font-size: 0; }
+.landing-layout .lp-nav-cta:hover { background: #97101e; transform: none; }
+.landing-layout .lang-selector { border: 1px solid #d9dde7; border-radius: 4px; background: #fff; padding: 0; }
+.landing-layout .lang-selector button { border-radius: 0; padding: 8px 9px; font-size: 11px; }
+.landing-layout .lang-selector button.active { background: #1c2f6d; }
+.landing-layout .lp-menu-btn { border-radius: 4px; border-color: #d9dde7; }
+.landing-layout .lp-hero { padding: 76px 24px 70px; background: #fff; }
+.landing-layout .lp-hero-bg-image { opacity: .025 !important; background-position: right center !important; }
+.landing-layout .lp-hero-glow { display: none; }
+.landing-layout .lp-hero-grid { max-width: 1120px; text-align: left; }
+.landing-layout .lp-hero-text-block { align-items: flex-start; }
+.landing-layout .hero-badge { align-self: flex-start; margin-bottom: 18px; padding: 7px 15px; border: 0; border-radius: 999px; background: #ba1526; color: #fff; }
+.landing-layout .hero-title { color: #17234d; font-size: clamp(2.55rem, 5vw, 4.6rem); line-height: 1.04; letter-spacing: -.045em; }
+.landing-layout .hero-sub { color: #31394b; font-family: var(--font-inter), sans-serif; font-size: 1.06rem; line-height: 1.7; }
+.landing-layout .btn-hero-primary { border-radius: 4px; background: #ba1526; box-shadow: none; }
+.landing-layout .btn-hero-primary:hover { background: #97101e; box-shadow: none; }
+.landing-layout .btn-hero-wa { border-radius: 4px; }
+.landing-layout .hero-features-row { margin-top: 8px; color: #39445a; }
+.landing-layout .hero-features-row svg { color: #ba1526 !important; }
+.landing-layout .lp-hero-main-img { border-radius: 0; box-shadow: none; }
+.landing-layout .lp-trust-section,
+.landing-layout .lp-how-section,
+.landing-layout .lp-story-section,
+.landing-layout .lp-section { padding-top: 76px; padding-bottom: 76px; }
+.landing-layout .lp-trust-section { border: 0; background: #f5f6f8; }
+.landing-layout .lp-trust-card,
+.landing-layout .lp-step-card,
+.landing-layout .lp-founder-card,
+.landing-layout .lp-product-card { border-radius: 0; box-shadow: none; border-color: #dfe3ea; }
+.landing-layout .lp-trust-card:hover,
+.landing-layout .lp-step-card:hover,
+.landing-layout .lp-founder-card:hover { box-shadow: 0 16px 34px rgba(24,40,83,.09); }
+.landing-layout .lp-trust-icon,
+.landing-layout .lp-founder-icon { border-radius: 4px; color: #ba1526; background: #f9e9eb; }
+.landing-layout .lp-step-number { border-radius: 4px; background: #ba1526; box-shadow: none; }
+.landing-layout .lp-about-badge,
+.landing-layout .lp-section-badge { color: #ba1526; }
+.landing-layout .lp-about-heading,
+.landing-layout .lp-section-header h2,
+.landing-layout .lp-cta-content h2 { color: #17234d; letter-spacing: -.035em; }
+.landing-layout .lp-cta-section { background: #1c2f6d; }
+.landing-layout .lp-cta-section .lp-cta-content h2 { color: #fff; }
+.landing-layout .footer { background: #17234d; color: #fff; }
+.landing-layout .footer h4 { color: #fff !important; text-transform: uppercase; letter-spacing: .05em; font-size: .78rem !important; }
+.landing-layout .footer-col-link { color: #cbd2e1; }
+
+@media (max-width: 768px) {
+    .landing-layout .site-shipping-inner { min-height: 48px; padding: 9px 20px; font-size: 11px; }
+    .landing-layout .lp-header-inner,
+    .landing-layout .lp-header--scrolled .lp-header-inner { min-height: 70px; padding: 10px 20px; gap: 10px; }
+    .landing-layout .lp-logo img { width: 94px; }
+    .landing-layout .lp-controls { gap: 0; }
+    .landing-layout .lp-hero { padding: 58px 20px 52px; }
+    .landing-layout .lp-hero-grid { text-align: left; }
+    .landing-layout .hero-title { font-size: 2.55rem; }
+    .landing-layout .hero-actions { align-items: stretch; }
+    .landing-layout .hero-features-row { justify-content: flex-start; }
+    .landing-layout .lp-nav { top: 118px; border-radius: 0; background: #fff; }
+    .landing-layout .lp-trust-section,
+    .landing-layout .lp-how-section,
+    .landing-layout .lp-story-section,
+    .landing-layout .lp-section { padding-top: 54px; padding-bottom: 54px; }
+}

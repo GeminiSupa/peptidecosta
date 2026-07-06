@@ -83,11 +83,11 @@ export default function LandingPage() {
   useEffect(() => {
     const sv = localStorage.getItem('theme') || 'light';
     const sl = localStorage.getItem('lang') || 'es';
-    setTheme(sv); setLang(sl);
+    const frame = requestAnimationFrame(() => { setTheme(sv); setLang(sl); });
     document.documentElement.setAttribute('data-theme', sv);
     const onScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', onScroll);
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('scroll', onScroll); };
   }, []);
 
   useEffect(() => {
@@ -176,11 +176,15 @@ export default function LandingPage() {
         </div>
       )}
 
+      <div className="site-shipping-bar">
+        <div className="site-shipping-inner"><Truck size={17}/><span>{lang==='en'?'FREE SHIPPING ON ORDERS ABOVE ₡90,896':'ENVÍO GRATIS EN PEDIDOS MAYORES A ₡90,896'}</span></div>
+      </div>
+
       {/* HEADER */}
       <header className={`lp-header${scrolled?' lp-header--scrolled':''}`}>
         <div className="lp-header-inner">
           <Link href="/" className="lp-logo" onClick={closeMobileMenu}>
-            <img src="/logo.webp" alt="Peptides Costa Rica" className="logo-img-custom" style={{maxHeight:'34px',width:'auto',borderRadius:'4px'}} loading="eager"/>
+            <img src="/logo.webp" alt="Peptides Costa Rica" className="logo-img-custom" loading="eager"/>
           </Link>
           <button
             type="button"
@@ -208,10 +212,6 @@ export default function LandingPage() {
           </nav>
           <div className="lp-header-actions">
             <div className="lp-controls">
-              <div className="theme-toggle">
-                <button onClick={()=>handleTheme('light')} className={theme==='light'?'active':''} title="Light"><Sun size={14} strokeWidth={2.5}/></button>
-                <button onClick={()=>handleTheme('dark')} className={theme==='dark'?'active':''} title="Dark"><Moon size={14} strokeWidth={2.5}/></button>
-              </div>
               <div className="lang-selector">
                 <button onClick={()=>handleLang('es')} className={lang==='es'?'active':''}>ES</button>
                 <button onClick={()=>handleLang('en')} className={lang==='en'?'active':''}>EN</button>
