@@ -21,9 +21,9 @@ function escapeHtml(value) {
   return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
-async function sendWhatsApp(to, message) {
+async function sendWhatsApp(to, message, templateName = null, firstName = 'Customer', languageCode = 'es') {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.PHONE_NUMBER_ID;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   if (!token || !phoneNumberId) return false;
   
   let formatted = to.replace(/[^0-9]/g, '');
@@ -32,18 +32,32 @@ async function sendWhatsApp(to, message) {
   }
 
   try {
+    const payload = templateName ? {
+      messaging_product: 'whatsapp',
+      to: formatted,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: languageCode || 'es' },
+        components: [{
+          type: 'body',
+          parameters: [{ type: 'text', text: firstName || 'Customer' }],
+        }],
+      },
+    } : {
+      messaging_product: 'whatsapp',
+      to: formatted,
+      type: 'text',
+      text: { body: message },
+    };
+
     const res = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: formatted,
-        type: 'text',
-        text: { body: message }
-      })
+      body: JSON.stringify(payload)
     });
     const responseBody = await res.json().catch(() => ({}));
     return { sent: res.ok, providerId: responseBody.messages?.[0]?.id || null };
@@ -172,7 +186,10 @@ async function guardedSend({ broadcastId, identity, channel, send, suppressions 
 export async function GET(request) {
   try {
     const authHeader = request.headers.get('authorization');
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (!process.env.CRON_SECRET) {
+      return NextResponse.json({ error: 'Cron is not configured' }, { status: 503 });
+    }
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

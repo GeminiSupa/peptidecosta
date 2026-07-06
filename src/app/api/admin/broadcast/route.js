@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -129,6 +130,8 @@ async function sendEmail(to, message, subject) {
 }
 
 export async function DELETE(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -145,6 +148,8 @@ export async function DELETE(request) {
 }
 
 export async function POST(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
   try {
     const { audience, channels, message, testContact, customContacts, scheduledAt, enableBatching, whatsappTemplateName, whatsappTemplateLanguage } = await request.json();
 

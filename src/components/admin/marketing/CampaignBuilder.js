@@ -411,9 +411,9 @@ export default function CampaignBuilder({ editingCampaignId }) {
     setFromEmail(selectedCampaign.from_email || '');
     setReplyTo(selectedCampaign.reply_to || '');
     setPreviewText(selectedCampaign.preview_text || '');
-    if (selectedCampaign.scheduled_at) {
+    if (selectedCampaign.scheduled_for) {
       setScheduleMode('scheduled');
-      setScheduledAt(new Date(selectedCampaign.scheduled_at).toISOString().slice(0, 16));
+      setScheduledAt(new Date(selectedCampaign.scheduled_for).toISOString().slice(0, 16));
     } else {
       setScheduleMode('now');
       setScheduledAt('');

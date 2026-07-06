@@ -166,7 +166,11 @@ export async function POST(request) {
     // Trigger the broadcast immediately — no scheduledAt so it sends right away
     const broadcastRes = await fetch(broadcastUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: request.headers.get('cookie') || '',
+        authorization: request.headers.get('authorization') || '',
+      },
       body: JSON.stringify({
         audience: flow.audience,
         channels,

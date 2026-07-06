@@ -96,6 +96,9 @@ export async function POST(request) {
         design_json, 
         html_content,
         preview_text: preview_text || null,
+        from_name: from_name || null,
+        from_email: from_email || null,
+        reply_to: reply_to || null,
         scheduled_for: scheduled_at || null,
         status
       }])
@@ -147,6 +150,9 @@ export async function PUT(request) {
     if (design_json !== undefined) updates.design_json = design_json;
     if (html_content !== undefined) updates.html_content = html_content;
     if (preview_text !== undefined) updates.preview_text = preview_text || null;
+    if (from_name !== undefined) updates.from_name = from_name || null;
+    if (from_email !== undefined) updates.from_email = from_email || null;
+    if (reply_to !== undefined) updates.reply_to = reply_to || null;
     if (scheduled_at !== undefined) {
       updates.scheduled_for = scheduled_at || null;
       updates.status = scheduled_at ? 'scheduled' : 'draft';
