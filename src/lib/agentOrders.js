@@ -46,7 +46,9 @@ export function filterOrdersForAgent(orders, profile) {
   return (orders || []).filter((o) => orderBelongsToAgent(o, profile));
 }
 
-export function getOrderSalesAmounts(order) {
+import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
+
+export function getOrderSalesAmounts(order, exchangeRate = FALLBACK_EXCHANGE_RATE) {
   let usd = Number(order.total_usd || 0);
   let crc = Number(order.total_crc || 0);
   if (!usd && !crc && order.total != null) {
@@ -54,6 +56,14 @@ export function getOrderSalesAmounts(order) {
     if (order.currency === 'USD') usd = total;
     else crc = total;
   }
+  
+  // Ensure both currencies are populated symmetrically
+  if (usd > 0 && crc === 0) {
+    crc = usd * exchangeRate;
+  } else if (crc > 0 && usd === 0) {
+    usd = crc / exchangeRate;
+  }
+  
   return { usd, crc };
 }
 

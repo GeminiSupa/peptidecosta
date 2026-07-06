@@ -9,6 +9,7 @@ import {
 } from '@/lib/agentOrders';
 import { formatPayoutPeriod, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
+import { getUsdToCrcRate } from '@/lib/pricing';
 
 // Email Configuration from Environment variables
 const SMTP_HOST = process.env.SMTP_HOST;
@@ -32,6 +33,7 @@ export async function POST(request) {
     }
 
     const supabaseAdmin = getSupabaseAdmin();
+    const currentExchangeRate = await getUsdToCrcRate();
 
     // 1. Fetch the payout record
     const { data: payout, error: fetchError } = await supabaseAdmin
@@ -94,7 +96,7 @@ export async function POST(request) {
     let usdSales = 0;
     let crcSales = 0;
     for (const order of eligibleOrders) {
-      const amounts = getOrderSalesAmounts(order);
+      const amounts = getOrderSalesAmounts(order, currentExchangeRate);
       usdSales += amounts.usd;
       crcSales += amounts.crc;
     }
@@ -105,6 +107,7 @@ export async function POST(request) {
       commissionRate: payout.commission_rate,
       weeklySalary: payout.weekly_salary_paid,
       salaryCurrency: payout.salary_currency,
+      exchangeRate: currentExchangeRate,
     });
     const periodDisplay = formatPayoutPeriod(payout.start_date, payout.end_date);
     const { html: refreshedEmailHtml, text: refreshedEmailText } = buildAgentCommissionEmail({

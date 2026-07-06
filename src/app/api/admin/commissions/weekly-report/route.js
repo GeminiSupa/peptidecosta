@@ -9,6 +9,7 @@ import {
 } from '@/lib/agentOrders';
 import { getPeriodLabel, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
+import { getUsdToCrcRate } from '@/lib/pricing';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,6 +57,7 @@ export async function GET(request) {
   try {
     // 1. Initialize Supabase Admin Client
     const supabaseAdmin = getSupabaseAdmin();
+    const currentExchangeRate = await getUsdToCrcRate();
 
     // 2. Parse query parameters to support period selection
     const { searchParams } = new URL(request.url);
@@ -207,7 +209,7 @@ export async function GET(request) {
       let crcSales = 0;
 
       for (const order of agentOrders) {
-        const amounts = getOrderSalesAmounts(order);
+        const amounts = getOrderSalesAmounts(order, currentExchangeRate);
         usdSales += amounts.usd;
         crcSales += amounts.crc;
       }
@@ -224,6 +226,7 @@ export async function GET(request) {
         commissionRate: rate,
         weeklySalary,
         salaryCurrency,
+        exchangeRate: currentExchangeRate,
       });
 
       // Individual report: Outlook-safe, light, and limited to this agent.
