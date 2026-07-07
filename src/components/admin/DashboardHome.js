@@ -5,8 +5,17 @@ import {
   ClipboardList, ShoppingCart, Target, DollarSign, Package,
   AlertTriangle, Inbox, MessageSquare, TrendingUp, ChevronRight,
 } from 'lucide-react';
+import { COMMISSION_ELIGIBLE_ORDER_STATUSES } from '@/lib/agentOrders';
 
 const FALLBACK_RATE = 454.48;
+
+// Statuses that count as recognized revenue. Mirrors the commission logic so the
+// Today dashboard and the commission report always agree on what "earned" means.
+const REVENUE_STATUSES = new Set(COMMISSION_ELIGIBLE_ORDER_STATUSES);
+
+// Matches the status_change log messages written when an order is marked
+// paid/complete (e.g. "Status changed to Order Complete").
+const COMPLETION_MESSAGE_RE = /paid|complet/i;
 
 function isOutOfStock(status) {
   const s = (status || '').toLowerCase();
@@ -18,18 +27,45 @@ function isComingSoon(status) {
   return s.includes('coming soon') || s.includes('próximamente');
 }
 
+// Costa Rica is UTC−6 year-round (no daylight saving), so we anchor "today" and
+// "this week" to Costa Rica time — every admin sees the same day regardless of
+// their own machine's timezone.
+const CR_OFFSET_MS = 6 * 60 * 60 * 1000;
+
+// Start of "today" in Costa Rica, returned as an absolute instant (real Date).
 function startOfDay(d = new Date()) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+  const cr = new Date(d.getTime() - CR_OFFSET_MS); // shift into CR wall-clock frame
+  cr.setUTCHours(0, 0, 0, 0);                       // midnight, CR time
+  return new Date(cr.getTime() + CR_OFFSET_MS);     // back to the real UTC instant
 }
 
+// Start of the week (Monday) in Costa Rica, as an absolute instant.
 function startOfWeek(d = new Date()) {
-  const x = startOfDay(d);
-  const day = x.getDay();
+  const cr = new Date(d.getTime() - CR_OFFSET_MS);
+  cr.setUTCHours(0, 0, 0, 0);
+  const day = cr.getUTCDay();                        // 0 = Sunday, in CR time
   const diff = day === 0 ? 6 : day - 1;
-  x.setDate(x.getDate() - diff);
-  return x;
+  cr.setUTCDate(cr.getUTCDate() - diff);
+  return new Date(cr.getTime() + CR_OFFSET_MS);
+}
+
+// The date revenue should be recognized on: the moment the order was marked
+// paid/complete, not when it was created. Derived from the order's activity_log
+// (falling back to created_at for orders with no completion event logged).
+// Mirrors the commission weekly-report so both features agree.
+function getRevenueDate(order) {
+  let when = new Date(order.created_at);
+  if (Array.isArray(order.activity_log)) {
+    const completionLogs = order.activity_log.filter(
+      (log) => log?.type === 'status_change' && COMPLETION_MESSAGE_RE.test(log?.message || '')
+    );
+    if (completionLogs.length > 0) {
+      // activity_log is newest-first, so the last match is the FIRST time the
+      // order reached completion — the correct recognition date.
+      when = new Date(completionLogs[completionLogs.length - 1].at);
+    }
+  }
+  return when;
 }
 
 function cartValue(cart) {
@@ -55,12 +91,11 @@ export default function DashboardHome({
     const todayStart = startOfDay(now);
     const weekStart = startOfWeek(now);
 
-    const paidStatuses = new Set(['Paid', 'Completed', 'Order Complete', 'Processing']);
     const pendingOrders = orders.filter((o) => (o.status || 'Pending') === 'Pending');
 
     const revenueInRange = (start) =>
       orders
-        .filter((o) => paidStatuses.has(o.status) && new Date(o.created_at) >= start)
+        .filter((o) => REVENUE_STATUSES.has(o.status) && getRevenueDate(o) >= start)
         .reduce((sum, o) => sum + Number(o.total_usd || 0), 0);
 
     const revenueToday = revenueInRange(todayStart);
