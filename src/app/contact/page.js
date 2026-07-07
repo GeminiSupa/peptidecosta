@@ -2,14 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
-import { Sun, Moon, ArrowRight, MessageCircle, Mail, MapPin, Send, CheckCircle, User, AtSign, FileText, Loader2 } from 'lucide-react';
+import { ArrowRight, MessageCircle, Mail, Send, CheckCircle, User, AtSign, FileText, Loader2 } from 'lucide-react';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
+import './contact.css';
 
 export default function ContactPage() {
   const { links } = useBusinessLinks();
-  const [theme, setTheme] = useState('light');
   const [lang, setLang] = useState('es');
   const [scrolled, setScrolled] = useState(false);
 
@@ -23,26 +24,23 @@ export default function ContactPage() {
   const [formError, setFormError] = useState('');
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') || 'light';
+    const requestedLang = new URLSearchParams(window.location.search).get('lang');
     const savedLang = localStorage.getItem('lang') || 'es';
-    setTheme(savedTheme);
-    setLang(savedLang);
-    document.documentElement.setAttribute('data-theme', savedTheme);
+    const initialLang = requestedLang === 'en' || requestedLang === 'es' ? requestedLang : savedLang;
+    const frame = requestAnimationFrame(() => setLang(initialLang));
+    localStorage.setItem('lang', initialLang);
+    document.documentElement.lang = initialLang;
 
     const onScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener('scroll', onScroll);
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('scroll', onScroll); };
   }, []);
-
-  const handleTheme = (t) => {
-    setTheme(t);
-    localStorage.setItem('theme', t);
-    document.documentElement.setAttribute('data-theme', t);
-  };
 
   const handleLang = (l) => {
     setLang(l);
     localStorage.setItem('lang', l);
+    document.documentElement.lang = l;
+    window.history.replaceState(null, '', `${window.location.pathname}?lang=${l}`);
   };
 
   const handleSubmit = async (e) => {
@@ -106,12 +104,12 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="landing-layout min-h-screen">
+    <div className="landing-layout min-h-screen contact-page">
       {/* ── HEADER ────────────────────────────────────────── */}
       <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`}>
         <div className="lp-header-inner">
           <Link href="/" className="lp-logo">
-            <img src="/logo.png" alt="Peptides Costa Rica" className="logo-img-custom" style={{ maxHeight: '34px', width: 'auto', borderRadius: '4px' }} />
+            <Image src="/logo.png" alt="Peptides Costa Rica" width={416} height={205} priority className="logo-img-custom" style={{ maxHeight: '34px', width: 'auto', borderRadius: '4px' }} />
           </Link>
 
           <nav className="lp-nav">
@@ -121,15 +119,9 @@ export default function ContactPage() {
           </nav>
 
           <div className="lp-header-actions">
-            <div className="lp-controls">
-              <div className="theme-toggle">
-                <button onClick={() => handleTheme('light')} className={theme === 'light' ? 'active' : ''} title="Light"><Sun size={14} strokeWidth={2.5} /></button>
-                <button onClick={() => handleTheme('dark')} className={theme === 'dark' ? 'active' : ''} title="Dark"><Moon size={14} strokeWidth={2.5} /></button>
-              </div>
-              <div className="lang-selector">
-                <button onClick={() => handleLang('es')} className={lang === 'es' ? 'active' : ''}>ES</button>
-                <button onClick={() => handleLang('en')} className={lang === 'en' ? 'active' : ''}>EN</button>
-              </div>
+            <div className="lang-selector">
+              <button onClick={() => handleLang('es')} className={lang === 'es' ? 'active' : ''}>ES</button>
+              <button onClick={() => handleLang('en')} className={lang === 'en' ? 'active' : ''}>EN</button>
             </div>
             <Link href={`/catalog?lang=${lang}`} className="lp-nav-cta">
               {lang === 'en' ? 'Shop Now' : 'Comprar'} <ArrowRight size={15} />
@@ -138,9 +130,9 @@ export default function ContactPage() {
         </div>
       </header>
 
-      <main style={{ paddingTop: '120px', paddingBottom: '80px' }}>
-        <div className="container" style={{ maxWidth: '800px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+      <main className="contact-main" style={{ paddingTop: '120px', paddingBottom: '80px' }}>
+        <div className="container contact-content" style={{ maxWidth: '800px', margin: '0 auto' }}>
+          <div className="contact-hero" style={{ textAlign: 'center', marginBottom: '48px' }}>
             <h1 style={{ fontSize: '3rem', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>
               {lang === 'en' ? 'Contact Us' : 'Contáctanos'}
             </h1>
@@ -152,13 +144,13 @@ export default function ContactPage() {
           </div>
 
           {/* ── CONTACT FORM ────────────────────────────────── */}
-          <div style={{
+          <div className="contact-form-card" style={{
             background: 'var(--card-bg)', borderRadius: '20px',
             border: '1px solid var(--border-color)', padding: '40px 32px',
             marginBottom: '40px', boxShadow: '0 8px 32px rgba(0,0,0,0.06)'
           }}>
             {formSuccess ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <div role="status" style={{ textAlign: 'center', padding: '40px 20px' }}>
                 <div style={{
                   width: '72px', height: '72px', borderRadius: '50%',
                   background: 'rgba(16, 185, 129, 0.12)', display: 'flex',
@@ -188,12 +180,13 @@ export default function ContactPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '20px' }}>
                   {/* Name Field */}
                   <div>
-                    <label style={labelStyle}>
+                    <label htmlFor="contact-name" style={labelStyle}>
                       {lang === 'en' ? 'Full Name' : 'Nombre Completo'} <span style={{ color: '#ef4444' }}>*</span>
                     </label>
                     <div style={{ position: 'relative' }}>
                       <span style={inputIconStyle}><User size={16} /></span>
                       <input
+                        id="contact-name" autoComplete="name"
                         type="text" value={formName} onChange={(e) => setFormName(e.target.value)}
                         placeholder={lang === 'en' ? 'John Doe' : 'Juan Pérez'}
                         style={inputStyle} required
@@ -205,12 +198,13 @@ export default function ContactPage() {
 
                   {/* Email Field */}
                   <div>
-                    <label style={labelStyle}>
+                    <label htmlFor="contact-email" style={labelStyle}>
                       {lang === 'en' ? 'Email Address' : 'Correo Electrónico'} <span style={{ color: '#ef4444' }}>*</span>
                     </label>
                     <div style={{ position: 'relative' }}>
                       <span style={inputIconStyle}><AtSign size={16} /></span>
                       <input
+                        id="contact-email" autoComplete="email"
                         type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)}
                         placeholder={lang === 'en' ? 'you@example.com' : 'tu@correo.com'}
                         style={inputStyle} required
@@ -223,12 +217,13 @@ export default function ContactPage() {
 
                 {/* Subject Field */}
                 <div>
-                  <label style={labelStyle}>
+                  <label htmlFor="contact-subject" style={labelStyle}>
                     {lang === 'en' ? 'Subject (Optional)' : 'Asunto (Opcional)'}
                   </label>
                   <div style={{ position: 'relative' }}>
                     <span style={inputIconStyle}><FileText size={16} /></span>
                     <input
+                      id="contact-subject"
                       type="text" value={formSubject} onChange={(e) => setFormSubject(e.target.value)}
                       placeholder={lang === 'en' ? 'e.g. Question about BPC-157' : 'ej. Pregunta sobre BPC-157'}
                       style={inputStyle}
@@ -240,10 +235,11 @@ export default function ContactPage() {
 
                 {/* Message Field */}
                 <div>
-                  <label style={labelStyle}>
+                  <label htmlFor="contact-message" style={labelStyle}>
                     {lang === 'en' ? 'Your Message' : 'Tu Mensaje'} <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <textarea
+                    id="contact-message"
                     value={formMessage} onChange={(e) => setFormMessage(e.target.value)}
                     placeholder={lang === 'en' 
                       ? 'Tell us how we can help you...' 
@@ -259,7 +255,7 @@ export default function ContactPage() {
 
                 {/* Error */}
                 {formError && (
-                  <div style={{
+                  <div role="alert" style={{
                     background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)',
                     borderRadius: '10px', padding: '12px 16px', color: '#f87171', fontSize: '13px', fontWeight: '600'
                   }}>
@@ -290,16 +286,16 @@ export default function ContactPage() {
           </div>
 
           {/* ── ALTERNATIVE CONTACT METHODS ────────────────── */}
-          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+          <div className="contact-direct-label" style={{ textAlign: 'center', marginBottom: '24px' }}>
             <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>
               {lang === 'en' ? 'Or reach us directly' : 'O contáctanos directamente'}
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
+          <div className="contact-direct-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
             
             {/* WhatsApp Card */}
-            <div style={{ background: 'var(--card-bg)', padding: '40px 24px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div className="contact-method-card" style={{ background: 'var(--card-bg)', padding: '40px 24px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{ background: '#25D36615', color: '#25D366', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
                 <MessageCircle size={32} />
               </div>
@@ -323,7 +319,7 @@ export default function ContactPage() {
             </div>
 
             {/* Email Card */}
-            <div style={{ background: 'var(--card-bg)', padding: '40px 24px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div className="contact-method-card" style={{ background: 'var(--card-bg)', padding: '40px 24px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{ background: 'rgba(0, 39, 102, 0.1)', color: 'var(--text-primary)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
                 <Mail size={32} />
               </div>
@@ -343,7 +339,7 @@ export default function ContactPage() {
       {/* ── FOOTER ───────────────────────────────────────── */}
       <footer className="footer" style={{ marginTop: 0 }}>
         <div className="container">
-          <img src="/logo.png" alt="Logo" style={{ height: '36px', marginBottom: '16px', opacity: 0.95, borderRadius: '8px' }} />
+          <Image src="/logo.png" alt="Peptides Costa Rica" width={416} height={205} style={{ width: 'auto', height: '36px', marginBottom: '16px', opacity: 0.95, borderRadius: '8px' }} />
           <p>{lang === 'en' ? 'Peptides Costa Rica offers premium, research backed peptides with trusted quality.' : 'Peptides Costa Rica ofrece péptidos premium respaldados por ciencia, con calidad garantizada.'}</p>
           <div className="footer-links" style={{ marginBottom: '24px' }}>
             <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Shop Catalog' : 'Catálogo'}</Link>

@@ -2,7 +2,6 @@ import { Montserrat, Inter } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import UTMTracker from "@/components/UTMTracker";
-import DeferredClientWidgets from "@/components/DeferredClientWidgets";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
@@ -22,13 +21,21 @@ const inter = Inter({
 
 export const metadata = {
   metadataBase: new URL('https://peptidescostarica.net'),
-  title: "Peptides Costa Rica | Catálogo Premium",
-  description: "Descubra nuestra selección premium de péptidos de investigación en Costa Rica. Alta pureza, descuentos por volumen y envíos garantizados. ¡Optimice hoy mismo!",
+  title: {
+    default: "Péptidos de Investigación en Costa Rica | Peptides Costa Rica",
+    template: "%s | Peptides Costa Rica",
+  },
+  description: "Péptidos para investigación disponibles localmente en Costa Rica, con documentación de lote, precios claros y entrega coordinada dentro del país.",
   openGraph: {
-    title: "Peptides Costa Rica | Catálogo Premium",
-    description: "Descubra nuestra selección premium de péptidos de investigación en Costa Rica. Alta pureza, descuentos por volumen y envíos garantizados. ¡Optimice hoy mismo!",
+    title: "Péptidos de Investigación en Costa Rica",
+    description: "Inventario local, documentación de lote y entrega dentro de Costa Rica.",
+    url: '/',
+    siteName: 'Peptides Costa Rica',
+    locale: 'es_CR',
+    type: 'website',
     images: ['/logo.png'],
   },
+  robots: { index: true, follow: true },
   icons: {
     icon: '/favicon.png',
     shortcut: '/favicon.png',
@@ -118,7 +125,6 @@ export default async function RootLayout({ children }) {
           />
         </noscript>
         {children}
-        <DeferredClientWidgets />
         <UTMTracker />
         {/* Google Tag Manager */}
         <Script id="gtm" strategy="lazyOnload">

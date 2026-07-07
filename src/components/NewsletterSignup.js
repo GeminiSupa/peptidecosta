@@ -1,7 +1,6 @@
 "use client";
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, CheckCircle, ArrowRight, AlertCircle } from 'lucide-react';
+import { CheckCircle, AlertCircle } from 'lucide-react';
 
 export default function NewsletterSignup({ lang = 'es' }) {
   const [email, setEmail] = useState('');
@@ -10,23 +9,25 @@ export default function NewsletterSignup({ lang = 'es' }) {
 
   const t = {
     en: {
-      title: 'Join Our Research Community',
-      desc: 'Get exclusive updates, early access to new peptides, and special discounts.',
-      placeholder: 'Enter your email address',
-      btn: 'Subscribe',
-      loading: 'Subscribing...',
-      success: 'Thank you for subscribing!',
+      title: 'Get restock alerts',
+      desc: 'We’ll email you when sold-out products return or a new COA is published.',
+      placeholder: 'Email address',
+      btn: 'Notify me',
+      loading: 'Saving...',
+      success: 'You’re on the alert list.',
+      privacy: 'Usually 1–2 emails per month. Unsubscribe anytime.',
       error: 'An error occurred. Please try again.',
       invalid: 'Please enter a valid email.',
       exists: 'This email is already subscribed.'
     },
     es: {
-      title: 'Únete a Nuestra Comunidad',
-      desc: 'Recibe actualizaciones exclusivas, acceso anticipado a nuevos péptidos y descuentos especiales.',
-      placeholder: 'Ingresa tu correo electrónico',
-      btn: 'Suscribirme',
-      loading: 'Suscribiendo...',
-      success: '¡Gracias por suscribirte!',
+      title: 'Recibe alertas de inventario',
+      desc: 'Te avisamos cuando regrese un producto agotado o publiquemos un nuevo COA.',
+      placeholder: 'Correo electrónico',
+      btn: 'Avísenme',
+      loading: 'Guardando...',
+      success: 'Ya estás en la lista de alertas.',
+      privacy: 'Normalmente 1–2 correos al mes. Cancela cuando quieras.',
       error: 'Ocurrió un error. Por favor intenta de nuevo.',
       invalid: 'Por favor ingresa un correo válido.',
       exists: 'Este correo ya está suscrito.'
@@ -78,90 +79,47 @@ export default function NewsletterSignup({ lang = 'es' }) {
 
   return (
     <div className="nl-container">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "-50px" }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="nl-wrapper">
-          
-          <div className="nl-text-block">
-            <h3 className="nl-title">
-              {text.title}
-            </h3>
-            <p className="nl-desc">
-              {text.desc}
-            </p>
-          </div>
+      <div className="nl-text-block">
+        <h3 className="nl-title">{text.title}</h3>
+        <p className="nl-desc">{text.desc}</p>
+      </div>
 
-          <div className="nl-form-block">
-            <AnimatePresence mode="wait">
-              {status === 'success' ? (
-                <motion.div
-                  key="success"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="nl-success"
-                >
-                  <CheckCircle size={22} />
-                  {text.success}
-                </motion.div>
-              ) : (
-                <motion.form 
-                  key="form"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onSubmit={handleSubmit} 
-                >
-                  <div className="nl-form">
-                    <div className="nl-input-wrapper">
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => {
-                          setEmail(e.target.value);
-                          if (status === 'error') setStatus('idle');
-                        }}
-                        placeholder={text.placeholder}
-                        disabled={status === 'loading'}
-                        className="nl-input"
-                        required
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={status === 'loading'}
-                      className="nl-button"
-                    >
-                      {status === 'loading' ? (
-                        <span style={{ animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }}>{text.loading}</span>
-                      ) : (
-                        <>
-                          {text.btn}
-                          <ArrowRight size={18} />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  
-                  {status === 'error' && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: -5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="nl-error"
-                    >
-                      <AlertCircle size={14} />
-                      {message}
-                    </motion.div>
-                  )}
-                </motion.form>
-              )}
-            </AnimatePresence>
+      <div className="nl-form-block">
+        {status === 'success' ? (
+          <div className="nl-success" role="status">
+            <CheckCircle size={20} /> {text.success}
           </div>
-        </div>
-      </motion.div>
+        ) : (
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="nl-form">
+              <label className="sr-only" htmlFor="newsletter-email">{text.placeholder}</label>
+              <input
+                id="newsletter-email"
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (status === 'error') setStatus('idle');
+                }}
+                placeholder={text.placeholder}
+                disabled={status === 'loading'}
+                className="nl-input"
+                aria-describedby="newsletter-note newsletter-error"
+                required
+              />
+              <button type="submit" disabled={status === 'loading'} className="nl-button">
+                {status === 'loading' ? text.loading : text.btn}
+              </button>
+            </div>
+            {status === 'error' && (
+              <div id="newsletter-error" className="nl-error" role="alert">
+                <AlertCircle size={14} /> {message}
+              </div>
+            )}
+            <p id="newsletter-note" className="nl-note">{text.privacy}</p>
+          </form>
+        )}
+      </div>
     </div>
   );
 }

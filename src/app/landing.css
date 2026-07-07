@@ -1,5 +1,124 @@
 /* Landing page sections — mobile-first, loaded only on homepage */
 
+/* Editorial founder note — intentionally quiet after the evidence row. */
+.lp-founder-note {
+    padding: 84px 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-main);
+}
+
+.lp-founder-note-inner {
+    max-width: 920px;
+}
+
+.lp-founder-note-kicker {
+    margin: 0 0 18px;
+    color: var(--primary);
+    font-size: .7rem;
+    font-weight: 800;
+    letter-spacing: .16em;
+}
+
+.lp-founder-note h2 {
+    max-width: 780px;
+    margin: 0 0 22px;
+    font-size: clamp(2rem, 4vw, 3.8rem);
+    line-height: 1.06;
+    letter-spacing: -.045em;
+}
+
+.lp-founder-note-inner > p:not(.lp-founder-note-kicker) {
+    max-width: 720px;
+    margin: 0 0 26px;
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    line-height: 1.8;
+}
+
+.lp-founder-note-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-main);
+    font-size: .9rem;
+    font-weight: 800;
+    text-decoration: none;
+    border-bottom: 1px solid var(--primary);
+    padding-bottom: 5px;
+}
+
+/* A plain, specific email form. No floating card, icon, or entrance animation. */
+.nl-container {
+    display: grid;
+    grid-template-columns: minmax(0, .9fr) minmax(320px, 1.1fr);
+    gap: 46px;
+    align-items: center;
+    padding: 44px 0 0;
+    text-align: left;
+}
+
+.nl-title {
+    margin: 0 0 8px;
+    color: #fff;
+    font-size: 1.45rem;
+    letter-spacing: -.02em;
+}
+
+.nl-desc {
+    margin: 0;
+    color: rgba(255, 255, 255, .72);
+    font-size: .92rem;
+    line-height: 1.6;
+}
+
+.nl-form {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    border-bottom: 1px solid rgba(255, 255, 255, .55);
+}
+
+.nl-input {
+    min-width: 0;
+    padding: 14px 4px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #fff;
+    font: inherit;
+}
+
+.nl-input::placeholder { color: rgba(255, 255, 255, .55); }
+.nl-input:focus { box-shadow: inset 0 -2px 0 #fff; }
+
+.nl-button {
+    border: 0;
+    background: transparent;
+    color: #fff;
+    padding: 12px 4px 12px 20px;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.nl-button:hover:not(:disabled) { color: #ffb0b2; }
+.nl-button:disabled { opacity: .55; cursor: wait; }
+.nl-note { margin: 10px 0 0; color: rgba(255, 255, 255, .55); font-size: .72rem; }
+.nl-error, .nl-success { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: .8rem; }
+.nl-error { color: #ffd1d2; }
+.nl-success { color: #fff; font-weight: 700; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+@media (max-width: 720px) {
+    .lp-founder-note { padding: 62px 0; }
+    .nl-container { grid-template-columns: 1fr; gap: 24px; padding-top: 34px; }
+}
+
+@media (max-width: 460px) {
+    .nl-form { grid-template-columns: 1fr; border-bottom: 0; gap: 10px; }
+    .nl-input { border-bottom: 1px solid rgba(255, 255, 255, .55); }
+    .nl-button { padding: 12px 16px; background: #fff; color: #14265d; border-radius: 4px; }
+}
+
 .lp-trust-section {
     background: var(--bg-main);
     padding: 48px 16px;

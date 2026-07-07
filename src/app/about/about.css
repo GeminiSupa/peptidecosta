@@ -1,0 +1,55 @@
+.about-page { background: var(--bg-main); color: var(--text-main); min-height: 100vh; }
+.about-page .container { max-width: 1180px; }
+.about-page .logo-img-custom { max-height: 34px; width: auto; border-radius: 4px; }
+.about-hero { padding: 160px 0 82px; border-bottom: 1px solid var(--border); }
+.about-hero-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, .75fr); gap: 72px; align-items: end; }
+.about-eyebrow, .about-section-number { color: var(--primary); font-size: .72rem; font-weight: 800; letter-spacing: .16em; margin: 0 0 20px; }
+.about-hero h1 { font-size: clamp(3rem, 5.25vw, 5.25rem); line-height: 1; letter-spacing: -.055em; margin: 0; max-width: 780px; text-wrap: balance; }
+.about-intro { max-width: 390px; font-size: 1.08rem; line-height: 1.75; color: var(--text-muted); margin: 0; }
+.about-story { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, .55fr); gap: 100px; padding-top: 96px; padding-bottom: 96px; }
+.about-story-copy { max-width: 700px; }
+.about-story h2, .about-chapters h2, .about-cta h2 { font-size: clamp(2rem, 3.5vw, 3.4rem); line-height: 1.08; letter-spacing: -.04em; margin: 0 0 24px; }
+.about-story-copy > p:last-child, .about-chapters article > p:last-child { color: var(--text-muted); font-size: 1.05rem; line-height: 1.85; }
+.about-founders { border-top: 1px solid var(--border); }
+.about-founder { display: flex; gap: 18px; align-items: center; padding: 24px 0; border-bottom: 1px solid var(--border); }
+.about-founder > span { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; background: var(--text-main); color: var(--bg-main); font-size: .76rem; font-weight: 800; }
+.about-founder div { display: grid; gap: 5px; }
+.about-founder strong { font-size: .96rem; }
+.about-founder small { color: var(--text-muted); line-height: 1.4; }
+.about-quote { margin: 0; padding: 84px 0; background: #14265d; color: white; font-size: clamp(2rem, 3.6vw, 3.75rem); font-weight: 700; line-height: 1.16; letter-spacing: -.04em; }
+.about-quote .container { max-width: 1050px; }
+.about-quote cite { display: block; margin-top: 32px; font-size: .8rem; font-style: normal; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+.about-chapters { padding-top: 96px; padding-bottom: 96px; display: grid; grid-template-columns: 1fr 1fr; gap: 120px; }
+.about-principles { display: grid; grid-template-columns: repeat(4, 1fr); padding-bottom: 110px; }
+.about-principles > div { border-top: 1px solid var(--border); padding: 22px 24px 0 0; }
+.about-principles span { color: var(--primary); font-size: .7rem; font-weight: 800; }
+.about-principles p { font-weight: 700; line-height: 1.45; max-width: 190px; }
+.about-cta { background: var(--bg-secondary); border-top: 1px solid var(--border); padding: 90px 0; }
+.about-cta-inner { display: flex; justify-content: space-between; gap: 50px; align-items: center; }
+.about-cta h2 { margin-bottom: 12px; }
+.about-cta p { color: var(--text-muted); margin: 0; }
+.about-cta-actions { display: flex; gap: 12px; flex-shrink: 0; }
+.about-primary, .about-secondary { display: inline-flex; align-items: center; gap: 8px; padding: 14px 20px; border-radius: 4px; font-weight: 800; text-decoration: none; }
+.about-primary { background: var(--primary); color: white; }
+.about-secondary { border: 1px solid var(--border); color: var(--text-main); }
+.about-footer { padding: 28px 0; color: var(--text-muted); font-size: .76rem; border-top: 1px solid var(--border); }
+@media (max-width: 800px) {
+  .about-nav { display: none; }
+  .about-hero { padding: 140px 0 70px; }
+  .about-hero-grid, .about-story { grid-template-columns: 1fr; gap: 38px; }
+  .about-story, .about-chapters { padding-top: 72px; padding-bottom: 72px; }
+  .about-chapters { grid-template-columns: 1fr; gap: 64px; }
+  .about-quote { padding: 72px 0; }
+  .about-principles { grid-template-columns: 1fr 1fr; gap: 36px 20px; padding-bottom: 72px; }
+  .about-cta-inner { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 520px) {
+  .about-page .lp-header-inner { gap: 10px; }
+  .about-page .lp-header-actions { gap: 8px; }
+  .about-page .lp-nav-cta { display: inline-flex; padding: 9px 11px; font-size: .72rem; }
+  .about-page .lp-nav-cta svg { display: none; }
+  .about-hero h1 { font-size: 3.1rem; }
+  .about-principles { grid-template-columns: 1fr; }
+  .about-cta-actions { width: 100%; flex-direction: column; }
+  .about-primary, .about-secondary { justify-content: center; }
+}
