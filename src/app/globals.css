@@ -4583,16 +4583,16 @@ body:has(.product-grid.grid-view) {
     max-width: 130px;
     padding: 6px 8px;
     border-radius: 8px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    color: #0f172a;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-main);
     text-decoration: none;
     box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
     transition: transform 0.2s;
 }
 .trust-badge:hover {
     transform: translateY(-1px);
-    background: #f1f5f9;
+    background: var(--bg-card);
 }
 
 .trust-text {
@@ -4742,7 +4742,7 @@ body:has(.product-grid.grid-view) {
 .product-grid.grid-view .price-main {
     font-size: 0.82rem;
     font-weight: 900;
-    color: #002766;
+    color: var(--text-primary);
 }
 
 .product-grid.grid-view .price-sub {

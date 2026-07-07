@@ -75,7 +75,7 @@ export default function CustomerFeedbackPage() {
 
       <main style={{ paddingTop: '120px', paddingBottom: '80px' }}>
         <div className="container" style={{ maxWidth: '1000px', margin: '0 auto', textAlign: 'center' }}>
-          <div style={{ background: 'rgba(0, 39, 102, 0.1)', color: '#002766', width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+          <div style={{ background: 'rgba(0, 39, 102, 0.1)', color: 'var(--text-primary)', width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
             <MessageSquareQuote size={40} />
           </div>
           <h1 style={{ fontSize: '3rem', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>

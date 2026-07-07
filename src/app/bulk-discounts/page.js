@@ -87,9 +87,9 @@ export default function BulkDiscountsPage() {
               <div style={{ fontSize: '2.5rem', fontWeight: '800', color: '#C8530C', marginBottom: '16px' }}>10% OFF</div>
               <p style={{ color: 'var(--text-muted)' }}>{lang === 'en' ? 'Automatic discount at checkout.' : 'Descuento automático en caja.'}</p>
             </div>
-            <div style={{ background: 'var(--card-bg)', padding: '32px', borderRadius: '16px', border: '2px solid #002766', textAlign: 'center', transform: 'scale(1.05)', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+            <div style={{ background: 'var(--card-bg)', padding: '32px', borderRadius: '16px', border: '2px solid var(--text-primary)', textAlign: 'center', transform: 'scale(1.05)', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
               <h3 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>10+ Vials</h3>
-              <div style={{ fontSize: '2.5rem', fontWeight: '800', color: '#002766', marginBottom: '16px' }}>15% OFF</div>
+              <div style={{ fontSize: '2.5rem', fontWeight: '800', color: 'var(--text-primary)', marginBottom: '16px' }}>15% OFF</div>
               <p style={{ color: 'var(--text-muted)' }}>{lang === 'en' ? 'Best value for active researchers.' : 'Mejor valor para investigadores activos.'}</p>
             </div>
             <div style={{ background: 'var(--card-bg)', padding: '32px', borderRadius: '16px', border: '1px solid var(--border-color)', textAlign: 'center' }}>

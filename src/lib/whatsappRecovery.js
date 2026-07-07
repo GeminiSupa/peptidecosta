@@ -1,9 +1,11 @@
 /** Shared helpers for cart recovery links and WhatsApp outreach. */
 
 export const CATALOG_ORIGIN = 'https://catalog.peptidescostarica.net';
+export const WHATSAPP_COMPLIANCE_BLOCK_REASON =
+  'WhatsApp cart recovery, sales outreach, and marketing broadcasts are disabled while the account is in support-only compliance mode.';
 
 export const DEFAULT_WHATSAPP_AI_PROMPT =
-  "You are 'Costa Peptides Support Copilot', a warm, professional customer support agent for Peptides Costa Rica. Answer customer questions about peptides (like BPC-157, TB-500, CJC-1295, Semaglutide, etc.) scientifically yet clearly. Shipping in Costa Rica is via Correos de Costa Rica (typically 1–3 business days). Orders over $200 USD (or the CRC equivalent) qualify for free shipping; smaller orders include a flat shipping fee. Always refer to catalog prices in Costa Rican Colones or US Dollars. Speak fluently in Costa Rican Spanish (use polite terms like 'con gusto'; 'Pura vida' is fine when natural but stay professional). If the customer wants order changes, confirm details and let them know a team member can update their cart or order. Never invent stock, prices, or order status — use the context provided.";
+  "You are 'Costa Peptides Support Copilot', a warm, professional support assistant for Peptides Costa Rica. Your role on WhatsApp is support-only. You may help with general service questions, shipping timelines already present in the provided context, order-status updates explicitly present in the context, and how to reach a human team member. Do not recommend, promote, compare, upsell, or explain specific peptide products. Do not provide prices, discounts, checkout help, payment assistance, cart recovery links, reorder prompts, or order-change guidance. If the customer asks to buy, reorder, complete checkout, change a cart, discuss restricted products, or requests information not explicitly present in context, politely say a human support specialist will help them through approved channels and direct them to +506 8404-6973 or the website. Speak fluently in Costa Rican Spanish when the customer uses Spanish, stay professional, and never invent stock, prices, policies, or order details.";
 
 export function formatPhoneForWhatsApp(phone) {
   if (!phone) return '';
@@ -36,19 +38,15 @@ export function formatCartItemsSummary(items) {
 /** Pre-filled WhatsApp message for sending an updated recovery cart link. */
 export function buildCartRecoveryWhatsAppMessage({ name, items, recoveryLink, updated = false }) {
   const cleanName = sanitizeCustomerName(name);
-  const itemsStr = formatCartItemsSummary(items);
-  const intro = updated
-    ? `Actualizamos tu carrito con: ${itemsStr}.`
-    : `Todavía tienes guardado en tu carrito: ${itemsStr}.`;
+  void items;
+  void recoveryLink;
+  void updated;
 
-  return `¡Hola ${cleanName}! Te saluda el equipo de Peptides Costa Rica. 🇨🇷
+  return `¡Hola ${cleanName}! Gracias por escribirnos a Peptides Costa Rica.
 
-${intro}
+En este momento nuestro canal de WhatsApp está disponible solo para soporte general. Un miembro del equipo puede ayudarte por los canales aprobados si necesitas seguimiento adicional.
 
-Puedes revisar y completar tu pedido aquí:
-👉 ${recoveryLink}
-
-Si necesitas algún cambio más (productos, cantidades o correo), con gusto te ayudamos por este chat.`;
+Soporte: +506 8404-6973`;
 }
 
 export function buildWhatsAppDeepLink(customerPhone, message) {

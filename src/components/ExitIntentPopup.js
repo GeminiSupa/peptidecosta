@@ -154,7 +154,7 @@ export default function ExitIntentPopup() {
           }} 
         />
 
-        <h2 style={{ fontSize: '1.3rem', fontWeight: '800', marginBottom: '8px', color: '#002766' }}>
+        <h2 style={{ fontSize: '1.3rem', fontWeight: '800', marginBottom: '8px', color: 'var(--text-primary)' }}>
           {lang === 'en' ? 'Wait! Before you go...' : '¡Espera! Antes de irte...'}
         </h2>
         

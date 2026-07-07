@@ -324,7 +324,7 @@ export default function ContactPage() {
 
             {/* Email Card */}
             <div style={{ background: 'var(--card-bg)', padding: '40px 24px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <div style={{ background: 'rgba(0, 39, 102, 0.1)', color: '#002766', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
+              <div style={{ background: 'rgba(0, 39, 102, 0.1)', color: 'var(--text-primary)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
                 <Mail size={32} />
               </div>
               <h3 style={{ fontSize: '1.5rem', marginBottom: '12px' }}>Email</h3>
