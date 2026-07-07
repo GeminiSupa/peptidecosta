@@ -120,15 +120,27 @@ export async function GET(request) {
     );
     const periodDisplay = `${formatCrDate(startDateStr)} – ${formatCrDate(endDateStr, { year: 'numeric' })}`;
 
-    // 4. Only paid/completed orders earn commission. Pending and processing
-    // orders remain outside the payout until a future completed-week scan.
-    const { data: orders, error: ordersError } = await supabaseAdmin
+    // 4. Fetch all orders that are completed, then filter in JavaScript based on when they were marked complete.
+    // This ensures that orders created last week but paid this week show up in this week's report.
+    const { data: rawOrders, error: ordersError } = await supabaseAdmin
       .from('orders')
       .select('*')
-      .gte('created_at', startDateStr)
-      .lte('created_at', endDateStr)
       .in('status', COMMISSION_ELIGIBLE_ORDER_STATUSES)
       .order('created_at', { ascending: false });
+
+    const orders = (rawOrders || []).filter(order => {
+      let completedAt = new Date(order.created_at);
+      if (order.activity_log && Array.isArray(order.activity_log)) {
+        const completionLogs = order.activity_log.filter(log => 
+          log.type === 'status_change' && 
+          (log.message.includes('Paid') || log.message.includes('Complet'))
+        );
+        if (completionLogs.length > 0) {
+          completedAt = new Date(completionLogs[completionLogs.length - 1].at);
+        }
+      }
+      return completedAt >= startDate && completedAt <= endDate;
+    });
 
     if (ordersError) {
       console.error('Error fetching orders for weekly commissions:', ordersError);
