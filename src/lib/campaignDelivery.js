@@ -3,6 +3,7 @@ import { createUnsubscribeToken } from '@/lib/marketingTokens';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
+const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${process.env.SMTP_USER || 'omerforce@gmail.com'}>`;
 
 export class CampaignDeliveryError extends Error {
   constructor(message, status = 500) {
@@ -97,7 +98,7 @@ export async function deliverCampaign(campaignId, options = {}) {
         const subject = personalize(useVariantB ? campaign.subject_line_b : campaign.subject_line, subscriber);
         await transporter.sendMail({
           bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
-          from: `"${campaign.from_name || 'Costa Peptides'}" <${campaign.from_email || process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+          from: NOTIFICATION_FROM,
           to: subscriber.email,
           subject,
           html: trackedHtml(campaign, subscriber),

@@ -780,14 +780,14 @@ export default function CampaignBuilder({ editingCampaignId }) {
         <Section title="3. Sender & Delivery" icon={Mail} defaultOpen={false}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
             <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
-              <label className="mkt-label">From Name</label>
-              <input type="text" value={fromName} onChange={e => setFromName(e.target.value)} placeholder="Costa Peptides" className="mkt-input" />
+              <label className="mkt-label">From Name <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(verified)</span></label>
+              <input type="text" value="Peptides Costa Rica" disabled className="mkt-input" style={{ opacity: 0.65 }} />
             </div>
             <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
-              <label className="mkt-label">From Email <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
+              <label className="mkt-label">From Email <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(verified system sender)</span></label>
               <div style={{ position: 'relative' }}>
                 <AtSign size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
-                <input type="email" value={fromEmail} onChange={e => setFromEmail(e.target.value)} placeholder="Uses default sender" className="mkt-input" style={{ paddingLeft: '32px' }} />
+                <input type="text" value="Uses the same verified sender as order emails" disabled className="mkt-input" style={{ paddingLeft: '32px', opacity: 0.65 }} />
               </div>
             </div>
             <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
