@@ -44,7 +44,7 @@ async function dismissKeys(supabase, adminUserId, keys) {
 async function buildNotifications(supabase, profile = null) {
   const since = new Date(Date.now() - 7 * 24 * 3600000).toISOString();
 
-  const [notifRes, ordersRes, inquiriesRes, waRes] = await Promise.all([
+  const [notifRes, ordersRes, inquiriesRes, waRes, facebookRes] = await Promise.all([
     supabase
       .from('admin_notifications')
       .select('*')
@@ -65,8 +65,15 @@ async function buildNotifications(supabase, profile = null) {
       .limit(20),
     supabase
       .from('whatsapp_messages')
-      .select('id, display_name, message_text, created_at, direction')
+      .select('id, wa_id, display_name, message_text, created_at, direction')
       .eq('direction', 'inbound')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(15),
+    supabase
+      .from('facebook_notifications')
+      .select('id, type, sender_name, content, external_link, status, created_at')
+      .eq('status', 'unread')
       .gte('created_at', since)
       .order('created_at', { ascending: false })
       .limit(15),
@@ -109,8 +116,23 @@ async function buildNotifications(supabase, profile = null) {
       title: `WhatsApp from ${m.display_name || 'Customer'}`,
       body: (m.message_text || '').slice(0, 80),
       link_tab: 'whatsapp_ai',
-      link_ref: m.id,
+      link_ref: String(m.wa_id || '').replace(/\D/g, ''),
       created_at: m.created_at,
+      dynamic: true,
+    });
+  }
+
+  for (const item of facebookRes.data || []) {
+    const typeLabel = item.type === 'message' ? 'Messenger' : item.type === 'comment' ? 'Facebook comment' : 'Facebook lead';
+    dynamic.push({
+      id: `facebook-${item.id}`,
+      type: 'facebook',
+      title: `${typeLabel} from ${item.sender_name || 'Facebook user'}`,
+      body: (item.content || '').slice(0, 100),
+      link_tab: 'facebook',
+      link_ref: item.id,
+      link_url: item.external_link || null,
+      created_at: item.created_at,
       dynamic: true,
     });
   }
@@ -182,6 +204,14 @@ export async function PATCH(request) {
     }
 
     if (isDynamicNotificationId(id)) {
+      if (String(id).startsWith('facebook-')) {
+        const facebookId = String(id).slice('facebook-'.length);
+        const { error: facebookError } = await supabase
+          .from('facebook_notifications')
+          .update({ status: 'read' })
+          .eq('id', facebookId);
+        if (facebookError) console.warn('[admin/notifications] Facebook mark read:', facebookError.message);
+      }
       await dismissKeys(supabase, adminUserId, [id]);
       return NextResponse.json({ ok: true });
     }

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell, X, ClipboardList, Inbox, MessageSquare, AlertCircle } from 'lucide-react';
+import { Bell, X, ClipboardList, Inbox, MessageSquare, AlertCircle, MessageCircle } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import {
   dismissNotificationIds,
@@ -13,6 +13,7 @@ const TYPE_ICON = {
   pending_order: ClipboardList,
   inquiry: Inbox,
   whatsapp: MessageSquare,
+  facebook: MessageCircle,
   order_save_failed: AlertCircle,
 };
 
@@ -120,7 +121,12 @@ export default function NotificationCenter({ onNavigate, refreshKey = 0, adminUs
   }, [open]);
 
   const handleClick = async (n) => {
+    if (n.link_tab) onNavigate(n.link_tab, n.link_ref || null);
+    setOpen(false);
+
     if (n.id) {
+      setItems((prev) => prev.filter((item) => item.id !== n.id));
+      setUnreadCount((c) => Math.max(0, c - 1));
       try {
         await adminFetch('/api/admin/notifications', {
           method: 'PATCH',
@@ -130,11 +136,7 @@ export default function NotificationCenter({ onNavigate, refreshKey = 0, adminUs
       } catch {
         dismissNotificationIds(adminUserId, [n.id]);
       }
-      setItems((prev) => prev.filter((item) => item.id !== n.id));
-      setUnreadCount((c) => Math.max(0, c - 1));
     }
-    if (n.link_tab) onNavigate(n.link_tab);
-    setOpen(false);
     fetchNotifications();
   };
 

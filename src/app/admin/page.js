@@ -358,6 +358,7 @@ export default function AdminPage() {
   const [fbReplyId, setFbReplyId] = useState(null);
   const [fbReplyText, setFbReplyText] = useState('');
   const [fbReplyLoading, setFbReplyLoading] = useState(false);
+  const [focusedFacebookNotificationId, setFocusedFacebookNotificationId] = useState(null);
   
   // Pagination States
   const [leadsCurrentPage, setLeadsCurrentPage] = useState(1);
@@ -1366,12 +1367,31 @@ Core Rules:
     [orders, adminProfile, isStaffAgent]
   );
 
-  const navigateToTab = useCallback((tabId) => {
+  const navigateToTab = useCallback((tabId, linkRef = null) => {
     if (!ADMIN_TAB_IDS.has(tabId)) return;
+    if (tabId === 'whatsapp_ai' && linkRef) {
+      const waId = String(linkRef).replace(/\D/g, '');
+      if (waId) setActiveChatWaId(waId);
+    }
+    if (tabId === 'facebook' && linkRef) {
+      setFbFilter('All');
+      setFocusedFacebookNotificationId(String(linkRef));
+    }
     setActiveTab(tabId);
     setMobileMoreOpen(false);
-    router.replace(`/admin?tab=${encodeURIComponent(tabId)}`, { scroll: false });
+    const query = new URLSearchParams({ tab: tabId });
+    if (linkRef) query.set('ref', String(linkRef));
+    router.replace(`/admin?${query.toString()}`, { scroll: false });
   }, [router]);
+
+  useEffect(() => {
+    if (activeTab !== 'facebook' || !focusedFacebookNotificationId) return;
+    const frame = requestAnimationFrame(() => {
+      const target = document.getElementById(`facebook-notification-${focusedFacebookNotificationId}`);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab, facebookNotifications, focusedFacebookNotificationId]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -1399,6 +1419,7 @@ Core Rules:
 
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
+    const linkRef = params.get('ref');
     let targetTab = tabParam && ADMIN_TAB_IDS.has(tabParam) ? tabParam : getDefaultTab(adminProfile);
 
     if (!resolveTabAccess(targetTab, adminProfile)) {
@@ -1406,6 +1427,11 @@ Core Rules:
     }
 
     setActiveTab(targetTab);
+    if (targetTab === 'whatsapp_ai' && linkRef) setActiveChatWaId(String(linkRef).replace(/\D/g, ''));
+    if (targetTab === 'facebook' && linkRef) {
+      setFbFilter('All');
+      setFocusedFacebookNotificationId(linkRef);
+    }
 
     if (tabParam !== targetTab) {
       router.replace(`/admin?tab=${encodeURIComponent(targetTab)}`, { scroll: false });
@@ -4633,6 +4659,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     return (
                       <div
                         key={item.id}
+                        id={`facebook-notification-${item.id}`}
+                        className={focusedFacebookNotificationId === String(item.id) ? 'facebook-notification-focused' : ''}
                         style={{
                           background: isUnread ? 'rgba(14, 165, 233, 0.05)' : '#0e1626',
                           borderRadius: '12px',

@@ -4,7 +4,8 @@ export function isDynamicNotificationId(id) {
   return (
     s.startsWith('order-pending-') ||
     s.startsWith('inquiry-') ||
-    s.startsWith('wa-')
+    s.startsWith('wa-') ||
+    s.startsWith('facebook-')
   );
 }
 

@@ -3328,6 +3328,17 @@
 
 .notification-item-time { font-size: 0.65rem; color: #64748b; margin-top: 4px; }
 
+.facebook-notification-focused {
+    border-color: rgba(56, 189, 248, 0.65) !important;
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14), 0 14px 36px rgba(2, 132, 199, 0.16);
+    animation: facebook-notification-focus 1.2s ease-out;
+}
+
+@keyframes facebook-notification-focus {
+    from { transform: translateY(-4px); background: rgba(56, 189, 248, 0.16); }
+    to { transform: translateY(0); }
+}
+
 .notification-empty {
     padding: 24px 16px;
     text-align: center;
