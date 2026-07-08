@@ -42,10 +42,9 @@ export default function CampaignManager() {
         <div className="mkt-fade-in">
           <button 
             onClick={handleBack} 
-            className="mkt-btn" 
-            style={{ marginBottom: '16px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            className="mkt-builder-back"
           >
-            &larr; Back to Campaigns
+            <span aria-hidden="true">&larr;</span> Campaigns
           </button>
           <CampaignBuilder editingCampaignId={editingId} />
         </div>

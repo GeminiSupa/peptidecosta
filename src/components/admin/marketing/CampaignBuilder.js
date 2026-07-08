@@ -240,20 +240,21 @@ const TEMPLATES = [
 function Section({ title, icon: Icon, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', overflow: 'hidden', marginBottom: '12px' }}>
+    <section className={`mkt-builder-section ${open ? 'is-open' : ''}`}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'none', border: 'none', color: '#fff', cursor: 'pointer', gap: '10px' }}
+        className="mkt-builder-section-toggle"
+        aria-expanded={open}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'rgba(255,255,255,0.7)' }}>
-          {Icon && <Icon size={14} style={{ color: '#34d399' }} />}
+        <span>
+          {Icon && <Icon size={16} />}
           {title}
         </span>
-        {open ? <ChevronUp size={15} style={{ color: 'rgba(255,255,255,0.35)', flexShrink: 0 }} /> : <ChevronDown size={15} style={{ color: 'rgba(255,255,255,0.35)', flexShrink: 0 }} />}
+        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
-      {open && <div style={{ padding: '0 16px 16px' }}>{children}</div>}
-    </div>
+      {open && <div className="mkt-builder-section-body">{children}</div>}
+    </section>
   );
 }
 
@@ -273,6 +274,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
   const [pendingDesign,     setPendingDesign]     = useState(null);
   const [aiPrompt,          setAiPrompt]          = useState('');
   const [isGeneratingAI,    setIsGeneratingAI]    = useState(false);
+  const [showAiAssistant,   setShowAiAssistant]   = useState(false);
 
   // A/B test
   const [isABTest,    setIsABTest]    = useState(false);
@@ -618,30 +620,23 @@ export default function CampaignBuilder({ editingCampaignId }) {
       <div className="mkt-mobile-editor-notice">
         <Smartphone size={18} />
         <div>
-          <strong>Tip for mobile:</strong> The drag &amp; drop builder works best on a tablet or desktop.
-          On mobile, configure your campaign settings below and use "Save Draft" — then open on a larger screen to design the email body.
+          <strong>Mobile setup mode</strong>
+          <span>Choose a template and prepare the campaign here. Use a larger screen for drag-and-drop design.</span>
         </div>
       </div>
 
       {/* ══ CONFIG PANEL ══ */}
       <div className="mkt-builder-config">
 
-        {/* Always-visible actions for the most common editing workflow */}
+        {/* Keep test sending obvious without duplicating the save/preview actions below. */}
         <div className="mkt-builder-quick-actions">
           <div className="mkt-builder-quick-copy">
-            <span className="mkt-builder-quick-kicker">Quick actions</span>
-            <strong>{selectedTemplate === 'welcome' ? 'Welcome email' : campaignName || 'Email campaign'}</strong>
-            <small>Preview, save, or send yourself a test before publishing.</small>
+            <span className="mkt-builder-quick-kicker"><TestTube2 size={13} /> Test before sending</span>
+            <strong>Send a private preview</strong>
+            <small>Check the real inbox layout before sending to subscribers.</small>
           </div>
 
           <div className="mkt-builder-quick-controls">
-            <button onClick={openPreview} disabled={!isReady} className="mkt-btn mkt-quick-secondary">
-              <Eye size={15} /> Preview
-            </button>
-            <button onClick={saveCampaign} disabled={!isReady || isSaving} className="mkt-btn mkt-quick-secondary">
-              {isSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-              {isSaving ? 'Saving…' : 'Save draft'}
-            </button>
             <div className="mkt-quick-test">
               <Mail size={15} aria-hidden="true" />
               <input
@@ -652,7 +647,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
                 onKeyDown={e => {
                   if (e.key === 'Enter' && isReady && testEmail.trim() && !isSendingTest) sendTestEmail();
                 }}
-                placeholder="Your email address"
+                placeholder="name@example.com"
                 aria-label="Test email recipients"
               />
               <button
@@ -661,30 +656,37 @@ export default function CampaignBuilder({ editingCampaignId }) {
                 disabled={isSendingTest || !isReady || !testEmail.trim()}
               >
                 {isSendingTest ? <Loader2 size={15} className="animate-spin" /> : <SendHorizonal size={15} />}
-                {isSendingTest ? 'Sending…' : 'Send test'}
+                {isSendingTest ? 'Sending…' : 'Send test email'}
               </button>
             </div>
           </div>
 
           <p className="mkt-builder-quick-help">
-            <TestTube2 size={13} /> Test emails are sent immediately with <strong>[TEST]</strong> in the subject. Use commas for multiple recipients.
+            Sent immediately with <strong>[TEST]</strong> in the subject. Separate multiple addresses with commas.
           </p>
         </div>
 
         {/* Template picker */}
         <Section title="1. Choose a Template" icon={LayoutTemplate} defaultOpen={showTemplates}>
-          {/* AI Generator */}
-          <div style={{ marginBottom: '20px', padding: '16px', background: 'linear-gradient(145deg, rgba(139,92,246,0.08) 0%, rgba(139,92,246,0.02) 100%)', borderRadius: '12px', border: '1px solid rgba(139,92,246,0.3)', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '120px', height: '120px', background: 'radial-gradient(circle, rgba(139,92,246,0.15) 0%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }} />
-            
-            <label className="mkt-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#c084fc', fontSize: '14px', marginBottom: '12px' }}>
-              <Sparkles size={16} /> AI Template Assistant
+          <div className="mkt-template-toolbar">
+            <div>
+              <strong>Start with a proven layout</strong>
+              <span>You can change every block in the editor.</span>
+            </div>
+            <button type="button" className="mkt-ai-toggle" onClick={() => setShowAiAssistant(value => !value)} aria-expanded={showAiAssistant}>
+              <Sparkles size={15} /> {showAiAssistant ? 'Hide AI writer' : 'Create with AI'}
+            </button>
+          </div>
+
+          {showAiAssistant && (
+          <div className="mkt-ai-assistant">
+            <label className="mkt-label">
+              <Sparkles size={15} /> Describe the email you want
             </label>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+            <div className="mkt-ai-assistant-controls">
               <textarea 
                 className="mkt-input"
-                style={{ flex: 1, minHeight: '60px', margin: 0, resize: 'vertical', backgroundColor: 'rgba(0,0,0,0.2)' }}
-                placeholder="E.g., Write a promotional email for BPC-157 highlighting its joint recovery benefits..."
+                placeholder="Example: A friendly BPC-157 promotion focused on recovery, with one clear catalog button."
                 value={aiPrompt}
                 onChange={(e) => setAiPrompt(e.target.value)}
               />
@@ -692,26 +694,13 @@ export default function CampaignBuilder({ editingCampaignId }) {
                 className="mkt-btn" 
                 onClick={generateAITemplate}
                 disabled={isGeneratingAI || !aiPrompt.trim()}
-                style={{ 
-                  margin: 0, 
-                  background: isGeneratingAI || !aiPrompt.trim() ? 'rgba(255,255,255,0.05)' : 'linear-gradient(to right, #8b5cf6, #7c3aed)',
-                  color: isGeneratingAI || !aiPrompt.trim() ? 'rgba(255,255,255,0.3)' : '#fff',
-                  border: isGeneratingAI || !aiPrompt.trim() ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                  whiteSpace: 'nowrap',
-                  height: '60px',
-                  padding: '0 20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  fontWeight: '600',
-                  borderRadius: '8px'
-                }}
               >
                 {isGeneratingAI ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                {isGeneratingAI ? 'Generating...' : 'Generate'}
+                {isGeneratingAI ? 'Creating…' : 'Create template'}
               </button>
             </div>
           </div>
+          )}
 
           <div className="mkt-template-grid">
             {TEMPLATES.map(tpl => (
@@ -731,16 +720,16 @@ export default function CampaignBuilder({ editingCampaignId }) {
 
         {/* Campaign settings */}
         <Section title="2. Content Settings" icon={Layers} defaultOpen>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-            <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
-              <label className="mkt-label">Campaign Name (Internal)</label>
+          <div className="mkt-content-grid">
+            <div className="mkt-input-group">
+              <label className="mkt-label">Campaign name <span>Only your team sees this</span></label>
               <input type="text" value={campaignName} onChange={e => setCampaignName(e.target.value)} className="mkt-input" />
             </div>
-            <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
-              <label className="mkt-label">Audience Segment Tag</label>
+            <div className="mkt-input-group">
+              <label className="mkt-label">Audience tag <span>Optional · blank sends to all subscribers</span></label>
               <div style={{ position: 'relative' }}>
                 <Tag size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
-                <input type="text" value={targetSegment} onChange={e => setTargetSegment(e.target.value)} placeholder="Leave blank for all" className="mkt-input" style={{ paddingLeft: '32px' }} />
+                <input type="text" value={targetSegment} onChange={e => setTargetSegment(e.target.value)} placeholder="All subscribers" className="mkt-input" style={{ paddingLeft: '32px' }} />
               </div>
             </div>
           </div>
@@ -749,10 +738,10 @@ export default function CampaignBuilder({ editingCampaignId }) {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-start' }}>
             <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px', marginBottom: 0 }}>
               <label className="mkt-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>Subject Line {isABTest ? '(A) *' : '*'}</span>
+                <span>Email subject {isABTest ? '(version A) *' : '*'}</span>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'normal', fontSize: '11px', color: '#34d399', cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
                   <input type="checkbox" checked={isABTest} onChange={e => setIsABTest(e.target.checked)} style={{ accentColor: '#10b981' }} />
-                  A/B Test
+                  Test two subjects
                 </label>
               </label>
               <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Hi [FIRST_NAME], big news…" className="mkt-input" />
@@ -766,7 +755,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '12px' }}>
             <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '280px', marginBottom: 0 }}>
-              <label className="mkt-label">📧 Preview Text <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(shown next to subject in inbox)</span></label>
+              <label className="mkt-label">Inbox preview text <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(appears beside the subject)</span></label>
               <input type="text" value={previewText} onChange={e => setPreviewText(e.target.value)} placeholder="A short preheader summary that appears in the inbox…" className="mkt-input" />
             </div>
           </div>
@@ -828,17 +817,17 @@ export default function CampaignBuilder({ editingCampaignId }) {
         </Section>
 
         {/* Preflight + actions */}
-        <div className="mkt-command-grid" style={{ marginBottom: 0 }}>
+        <div className="mkt-command-grid mkt-builder-preflight" style={{ marginBottom: 0 }}>
           {/* Removed Library Panel */}
 
           {/* Preflight */}
           <div className="mkt-panel">
             <div className="mkt-panel-header">
               <div>
-                <div className="mkt-panel-kicker">Preflight</div>
+                <div className="mkt-panel-kicker">Final check</div>
                 <h3 className="mkt-panel-title">
                   <span className="mkt-audience-count" style={{ marginBottom: 0 }}>
-                    <span>{estimatedAudience.length}</span> eligible
+                    <span>{estimatedAudience.length}</span> eligible subscriber{estimatedAudience.length === 1 ? '' : 's'}
                   </span>
                 </h3>
               </div>
@@ -854,12 +843,12 @@ export default function CampaignBuilder({ editingCampaignId }) {
             </div>
 
             {/* Action buttons */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '14px' }}>
-              <button onClick={openPreview} disabled={!isReady} className="mkt-btn" style={{ flex: '1 1 auto' }}>
-                <Eye size={14} /> Preview
+            <div className="mkt-preflight-actions">
+              <button onClick={openPreview} disabled={!isReady} className="mkt-btn mkt-review-action" style={{ flex: '1 1 auto' }}>
+                <Eye size={14} /> Review email
               </button>
-              <button onClick={saveCampaign} disabled={!isReady || isSaving} className="mkt-btn mkt-btn-primary" style={{ flex: '1 1 auto' }}>
-                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save Draft
+              <button onClick={saveCampaign} disabled={!isReady || isSaving} className="mkt-btn mkt-btn-primary mkt-save-action" style={{ flex: '1 1 auto' }}>
+                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save draft
               </button>
               {activeCampaignIsABTest && (
                 <button onClick={() => sendCampaign(true)} disabled={!isReady || isSending || !selectedCampaign?.is_ab_test} className="mkt-btn mkt-btn-warning" style={{ flex: '1 1 auto' }}>
@@ -873,7 +862,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
                 style={{ flex: '1 1 auto' }}
                 title={selectedCampaign?.status === 'testing' ? 'Pick A/B winner from Analytics first.' : 'Send to full list'}
               >
-                {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Send
+                {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Send campaign
               </button>
             </div>
           </div>
@@ -881,6 +870,10 @@ export default function CampaignBuilder({ editingCampaignId }) {
       </div>
 
       {/* ══ EMAIL EDITOR ══ */}
+      <div className="mkt-editor-heading">
+        <div><span>4</span><div><strong>Design your email</strong><small>Drag blocks into the canvas and edit the content directly.</small></div></div>
+        <button type="button" onClick={openPreview} disabled={!isReady} className="mkt-btn"><Eye size={14} /> Preview</button>
+      </div>
       <div className="mkt-email-editor-frame">
         {!isReady && (
           <div className="mkt-email-editor-loading">
@@ -903,6 +896,13 @@ export default function CampaignBuilder({ editingCampaignId }) {
             }}
           />
         </div>
+      </div>
+
+      <div className="mkt-mobile-actions" aria-label="Campaign actions">
+        <button onClick={openPreview} disabled={!isReady} className="mkt-btn"><Eye size={15} /> Preview</button>
+        <button onClick={saveCampaign} disabled={!isReady || isSaving} className="mkt-btn mkt-btn-primary">
+          {isSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Save draft
+        </button>
       </div>
 
       {/* ══ PREVIEW MODAL ══ */}
