@@ -15,11 +15,11 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   try {
-    const { to, subject, message } = await request.json();
+    const { to, subject, message, html_content, test_mode = false } = await request.json();
     const links = await getBusinessLinks();
 
-    if (!to || !subject || !message) {
-      return NextResponse.json({ error: 'Missing required fields: to, subject, message' }, { status: 400 });
+    if (!to || !subject || (!message && !html_content)) {
+      return NextResponse.json({ error: 'Missing required fields: to, subject, and email content' }, { status: 400 });
     }
 
     if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
@@ -40,7 +40,7 @@ export async function POST(request) {
     });
 
     // Make the message body render beautifully with paragraphs
-    const formattedHtml = `
+    const formattedHtml = html_content || `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.6;max-width:600px;margin:0 auto;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.03);">
         <!-- Header Banner -->
         <div style="background:linear-gradient(135deg, #0f172a, #022c22);padding:28px 24px;text-align:center;">
@@ -73,9 +73,9 @@ export async function POST(request) {
       from: NOTIFICATION_FROM,
       replyTo: SMTP_USER,
       to: to.trim(),
-      subject: subject,
+      subject: test_mode ? `[TEST] ${subject}` : subject,
       html: formattedHtml,
-      text: message,
+      text: message || undefined,
     });
 
     console.log(`[Admin Outbound Email] Outreach dispatched successfully to ${to}. MessageId: ${info.messageId}`);

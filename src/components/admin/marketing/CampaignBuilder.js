@@ -539,18 +539,17 @@ export default function CampaignBuilder({ editingCampaignId }) {
     setIsSendingTest(true);
     emailEditorRef.current.editor.exportHtml(async ({ html }) => {
       try {
-        const res = await adminFetch('/api/admin/campaigns/test', {
+        const res = await adminFetch('/api/admin/send-email', {
           method: 'POST',
           body: JSON.stringify({
-            email: testEmail.trim(),
+            to: testEmail.trim(),
             subject: subject || 'Test Campaign',
             html_content: html,
-            from_name: fromName,
-            from_email: fromEmail,
+            test_mode: true,
           }),
         });
         const data = await res.json();
-        if (!res.ok || data.error) throw new Error(data.error || 'Failed to send test');
+        if (!res.ok || data.error) throw new Error(data.details || data.error || 'Failed to send test');
         alert(`✅ Test email sent to ${testEmail}!`);
       } catch (err) {
         alert('Failed to send test: ' + err.message);
