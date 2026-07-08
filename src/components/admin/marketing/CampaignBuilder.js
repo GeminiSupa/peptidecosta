@@ -295,6 +295,23 @@ export default function CampaignBuilder({ editingCampaignId }) {
   // Test email
   const [testEmail,      setTestEmail]      = useState('');
   const [isSendingTest,  setIsSendingTest]  = useState(false);
+  const [draftRevision,  setDraftRevision]  = useState(0);
+  const [autosaveStatus, setAutosaveStatus] = useState('idle');
+  const [lastSavedAt,    setLastSavedAt]    = useState(null);
+  const autosaveTimerRef = useRef(null);
+  const saveInFlightRef  = useRef(false);
+  const pendingSaveRef   = useRef(false);
+  const suppressEditorUpdatesRef = useRef(false);
+
+  const markDraftDirty = () => {
+    setAutosaveStatus('pending');
+    setDraftRevision(revision => revision + 1);
+  };
+
+  const updateDraftField = (setter, value) => {
+    setter(value);
+    markDraftDirty();
+  };
 
   const generateAITemplate = async () => {
     if (!aiPrompt.trim()) return;
@@ -344,7 +361,9 @@ export default function CampaignBuilder({ editingCampaignId }) {
     if (!editor || !isReady || !design) return false;
 
     const parsedDesign = typeof design === 'string' ? JSON.parse(design) : design;
+    suppressEditorUpdatesRef.current = true;
     editor.loadDesign(parsedDesign);
+    setTimeout(() => { suppressEditorUpdatesRef.current = false; }, 800);
     
     if (parsedDesign?.body?.values?.preheaderText) {
       setPreviewText(parsedDesign.body.values.preheaderText);
@@ -362,6 +381,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
 
     if (tpl.subject) setSubject(tpl.subject);
     if (tpl.id !== 'blank') setCampaignName(`${tpl.name} Campaign ${new Date().toLocaleDateString()}`);
+    markDraftDirty();
 
     if (!tpl.design) {
       emailEditorRef.current?.editor?.loadBlank?.();
@@ -469,24 +489,40 @@ export default function CampaignBuilder({ editingCampaignId }) {
   const canSend = preflightItems.every(item => item.ok);
   const activeCampaignIsABTest = Boolean(selectedCampaign?.is_ab_test || isABTest);
 
-  const saveCampaign = async () => {
-    if (!subject || (isABTest && !subjectB)) { alert('Please enter subject line(s).'); return; }
-    if (scheduleMode === 'scheduled' && !scheduledAt) { alert('Please pick a scheduled date/time.'); return; }
+  const persistCampaign = async ({ silent = false } = {}) => {
+    if (!isReady || !emailEditorRef.current?.editor || !campaignName.trim() || !subject.trim() || (isABTest && !subjectB.trim())) return false;
+    if (scheduleMode === 'scheduled' && !scheduledAt) return false;
+    if (saveInFlightRef.current) {
+      pendingSaveRef.current = true;
+      return false;
+    }
+
+    saveInFlightRef.current = true;
     setIsSaving(true);
-    emailEditorRef.current.editor.exportHtml(async ({ design, html }) => {
-      if (design && design.body) {
+    setAutosaveStatus('saving');
+
+    try {
+      const exported = await new Promise((resolve, reject) => {
+        try {
+          emailEditorRef.current.editor.exportHtml(resolve);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      const { design, html } = exported;
+      if (design?.body) {
         design.body.values = design.body.values || {};
         if (previewText) design.body.values.preheaderText = previewText;
       }
-      
+
       let finalHtml = html;
       if (previewText) {
         const hiddenPreview = `<div style="display:none;font-size:1px;color:#333333;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${previewText}&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;</div>`;
         finalHtml = finalHtml.replace(/<body[^>]*>/i, `$&${hiddenPreview}`);
       }
-      
-      try {
+
         const payload = {
+          ...(selectedCampaignId ? { id: selectedCampaignId } : {}),
           title: campaignName, subject_line: subject,
           subject_line_b: isABTest ? subjectB : null,
           is_ab_test: isABTest,
@@ -499,18 +535,51 @@ export default function CampaignBuilder({ editingCampaignId }) {
           scheduled_at: scheduleMode === 'scheduled' && scheduledAt ? new Date(scheduledAt).toISOString() : null,
         };
         const res  = await adminFetch('/api/admin/campaigns', {
-          method: 'POST',
+          method: selectedCampaignId ? 'PUT' : 'POST',
           body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Failed to save campaign');
         setSelectedCampaignId(data.campaign.id);
+        setAutosaveStatus('saved');
+        setLastSavedAt(new Date());
         fetchCampaigns();
-      } catch (err) {
-        alert('Failed to save campaign: ' + err.message);
-      } finally {
-        setIsSaving(false);
+        return true;
+    } catch (err) {
+      setAutosaveStatus('error');
+      if (!silent) alert('Failed to save campaign: ' + err.message);
+      return false;
+    } finally {
+      setIsSaving(false);
+      saveInFlightRef.current = false;
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        setDraftRevision(revision => revision + 1);
       }
+    }
+  };
+
+  const saveCampaign = async () => {
+    if (!subject || (isABTest && !subjectB)) { alert('Please enter subject line(s).'); return; }
+    if (scheduleMode === 'scheduled' && !scheduledAt) { alert('Please pick a scheduled date/time.'); return; }
+    await persistCampaign({ silent: false });
+  };
+
+  useEffect(() => {
+    if (!draftRevision || !isReady || !campaignName.trim() || !subject.trim()) return;
+    clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      persistCampaign({ silent: true });
+    }, 1400);
+    return () => clearTimeout(autosaveTimerRef.current);
+    // A revision is emitted only by explicit field/editor changes; the save closure is from that render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftRevision, isReady]);
+
+  const handleEditorReady = (editor) => {
+    setIsReady(true);
+    editor.addEventListener('design:updated', () => {
+      if (!suppressEditorUpdatesRef.current) markDraftDirty();
     });
   };
 
@@ -634,6 +703,18 @@ export default function CampaignBuilder({ editingCampaignId }) {
             <span className="mkt-builder-quick-kicker"><TestTube2 size={13} /> Test before sending</span>
             <strong>Send a private preview</strong>
             <small>Check the real inbox layout before sending to subscribers.</small>
+            <span className={`mkt-autosave-status ${autosaveStatus}`} role="status" aria-live="polite">
+              {autosaveStatus === 'saving' || isSaving ? <Loader2 size={12} className="animate-spin" /> : autosaveStatus === 'error' ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />}
+              {autosaveStatus === 'saving' || isSaving
+                ? 'Saving changes…'
+                : autosaveStatus === 'error'
+                  ? 'Autosave failed — use Save draft'
+                  : autosaveStatus === 'pending'
+                    ? 'Changes will save automatically'
+                    : lastSavedAt
+                      ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : 'Autosave is on'}
+            </span>
           </div>
 
           <div className="mkt-builder-quick-controls">
@@ -723,13 +804,13 @@ export default function CampaignBuilder({ editingCampaignId }) {
           <div className="mkt-content-grid">
             <div className="mkt-input-group">
               <label className="mkt-label">Campaign name <span>Only your team sees this</span></label>
-              <input type="text" value={campaignName} onChange={e => setCampaignName(e.target.value)} className="mkt-input" />
+              <input type="text" value={campaignName} onChange={e => updateDraftField(setCampaignName, e.target.value)} className="mkt-input" />
             </div>
             <div className="mkt-input-group">
               <label className="mkt-label">Audience tag <span>Optional · blank sends to all subscribers</span></label>
               <div style={{ position: 'relative' }}>
                 <Tag size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
-                <input type="text" value={targetSegment} onChange={e => setTargetSegment(e.target.value)} placeholder="All subscribers" className="mkt-input" style={{ paddingLeft: '32px' }} />
+                <input type="text" value={targetSegment} onChange={e => updateDraftField(setTargetSegment, e.target.value)} placeholder="All subscribers" className="mkt-input" style={{ paddingLeft: '32px' }} />
               </div>
             </div>
           </div>
@@ -740,23 +821,23 @@ export default function CampaignBuilder({ editingCampaignId }) {
               <label className="mkt-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>Email subject {isABTest ? '(version A) *' : '*'}</span>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'normal', fontSize: '11px', color: '#34d399', cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
-                  <input type="checkbox" checked={isABTest} onChange={e => setIsABTest(e.target.checked)} style={{ accentColor: '#10b981' }} />
+                  <input type="checkbox" checked={isABTest} onChange={e => updateDraftField(setIsABTest, e.target.checked)} style={{ accentColor: '#10b981' }} />
                   Test two subjects
                 </label>
               </label>
-              <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Hi [FIRST_NAME], big news…" className="mkt-input" />
+              <input type="text" value={subject} onChange={e => updateDraftField(setSubject, e.target.value)} placeholder="Hi [FIRST_NAME], big news…" className="mkt-input" />
             </div>
             {isABTest && (
               <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px', marginBottom: 0 }}>
                 <label className="mkt-label">Subject Line B *</label>
-                <input type="text" value={subjectB} onChange={e => setSubjectB(e.target.value)} placeholder="Don't miss this, [FIRST_NAME]!" className="mkt-input" />
+                <input type="text" value={subjectB} onChange={e => updateDraftField(setSubjectB, e.target.value)} placeholder="Don't miss this, [FIRST_NAME]!" className="mkt-input" />
               </div>
             )}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '12px' }}>
             <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '280px', marginBottom: 0 }}>
               <label className="mkt-label">Inbox preview text <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(appears beside the subject)</span></label>
-              <input type="text" value={previewText} onChange={e => setPreviewText(e.target.value)} placeholder="A short preheader summary that appears in the inbox…" className="mkt-input" />
+              <input type="text" value={previewText} onChange={e => updateDraftField(setPreviewText, e.target.value)} placeholder="A short preheader summary that appears in the inbox…" className="mkt-input" />
             </div>
           </div>
           <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginTop: '8px', marginBottom: 0 }}>
@@ -782,7 +863,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
               <label className="mkt-label">Reply-To Email <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
               <div style={{ position: 'relative' }}>
                 <AtSign size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
-                <input type="email" value={replyTo} onChange={e => setReplyTo(e.target.value)} placeholder="Same as from email" className="mkt-input" style={{ paddingLeft: '32px' }} />
+                <input type="email" value={replyTo} onChange={e => updateDraftField(setReplyTo, e.target.value)} placeholder="Same as from email" className="mkt-input" style={{ paddingLeft: '32px' }} />
               </div>
             </div>
           </div>
@@ -794,18 +875,18 @@ export default function CampaignBuilder({ editingCampaignId }) {
             </label>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: scheduleMode === 'now' ? '#34d399' : 'rgba(255,255,255,0.5)' }}>
-                <input type="radio" name="scheduleMode" value="now" checked={scheduleMode === 'now'} onChange={() => setScheduleMode('now')} style={{ accentColor: '#10b981' }} />
+                <input type="radio" name="scheduleMode" value="now" checked={scheduleMode === 'now'} onChange={() => updateDraftField(setScheduleMode, 'now')} style={{ accentColor: '#10b981' }} />
                 Send immediately
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px', color: scheduleMode === 'scheduled' ? '#38bdf8' : 'rgba(255,255,255,0.5)' }}>
-                <input type="radio" name="scheduleMode" value="scheduled" checked={scheduleMode === 'scheduled'} onChange={() => setScheduleMode('scheduled')} style={{ accentColor: '#38bdf8' }} />
+                <input type="radio" name="scheduleMode" value="scheduled" checked={scheduleMode === 'scheduled'} onChange={() => updateDraftField(setScheduleMode, 'scheduled')} style={{ accentColor: '#38bdf8' }} />
                 Schedule for later
               </label>
               {scheduleMode === 'scheduled' && (
                 <input
                   type="datetime-local"
                   value={scheduledAt}
-                  onChange={e => setScheduledAt(e.target.value)}
+                  onChange={e => updateDraftField(setScheduledAt, e.target.value)}
                   className="mkt-input"
                   style={{ maxWidth: '240px', margin: 0 }}
                   min={new Date().toISOString().slice(0, 16)}
@@ -884,7 +965,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
         <div className="mkt-email-editor">
           <EmailEditor
             ref={emailEditorRef}
-            onReady={() => setIsReady(true)}
+            onReady={handleEditorReady}
             minHeight="640px"
             options={{ 
               devices: ['desktop', 'mobile'],
