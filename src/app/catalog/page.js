@@ -3896,11 +3896,11 @@ export default function CatalogPage() {
 
       {/* Product Detail Modal */}
       {selectedProduct && (
-        <div className="modal active" onClick={closeProductModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <button className="close-modal" onClick={closeProductModal}>&times;</button>
+        <div className="modal active product-detail-overlay" onClick={closeProductModal}>
+          <div className="modal-content product-detail-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="product-detail-title">
+            <button className="close-modal product-detail-close" onClick={closeProductModal} aria-label={lang === 'en' ? 'Close product details' : 'Cerrar detalles del producto'}><X size={20} /></button>
             
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <div className="product-detail-hero">
               <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}>
                 <div className="product-image" style={{ width: '120px', height: '120px', fontSize: '60px' }}>
                   {selectedProduct.imageUrl ? (
@@ -3916,7 +3916,7 @@ export default function CatalogPage() {
                 {translateCategory(selectedProduct.category)}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-                <h2 style={{ fontSize: '1.5rem', color: 'var(--text-main)', fontWeight: '800', margin: 0 }}>
+                <h2 id="product-detail-title" style={{ fontSize: '1.5rem', color: 'var(--text-main)', fontWeight: '800', margin: 0 }}>
                   {selectedProduct.product}
                 </h2>
                 <button 
@@ -3929,7 +3929,7 @@ export default function CatalogPage() {
               </div>
             </div>
             
-            <div style={{ background: 'var(--bg-secondary)', padding: '20px', borderRadius: '16px', marginBottom: '24px', border: '1px solid var(--border)' }}>
+            <div className="product-detail-price">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignProps: 'center', marginProps: '4px' }}>
                 <span style={{ fontWeight: '700', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                   {lang === 'en' ? 'PRICE' : 'PRECIO'}
@@ -3946,12 +3946,12 @@ export default function CatalogPage() {
             </div>
 
             {((lang === 'en' && selectedProduct.descriptionEn) || (lang === 'es' && selectedProduct.descriptionEs)) && (
-              <div style={{ marginBottom: '24px', lineHeight: '1.6', fontSize: '0.88rem', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', paddingBottom: '20px', whiteSpace: 'pre-line' }}>
+              <div className="product-detail-description">
                 {lang === 'en' ? selectedProduct.descriptionEn : selectedProduct.descriptionEs}
               </div>
             )}
 
-            <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="product-detail-status">
               <span style={{ fontSize: '0.75rem', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                 {lang === 'en' ? 'Status' : 'Estado'}
               </span>
@@ -3970,7 +3970,7 @@ export default function CatalogPage() {
                 href={selectedProduct.coa.startsWith('http') ? selectedProduct.coa : '#'} 
                 target="_blank" 
                 rel="noreferrer"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', color: 'var(--text-primary)', fontWeight: '800', marginBottom: '24px', textDecoration: 'none', fontSize: '0.85rem' }}
+                className="product-detail-coa"
               >
                 <FileText size={16} />
                 {lang === 'en' ? 'View Certificate of Analysis' : 'Ver Certificado de Análisis'}
@@ -3989,8 +3989,7 @@ export default function CatalogPage() {
               </div>
             ) : isInStock(selectedProduct.status) && (
               <button 
-                className="whatsapp-btn" 
-                style={{ border: 'none', cursor: 'pointer' }}
+                className="whatsapp-btn product-detail-cart-button"
                 onClick={() => addToCart(selectedProduct)}
               >
                 {lang === 'en' ? 'Add to Cart' : 'Añadir al Carrito'}
@@ -4002,8 +4001,7 @@ export default function CatalogPage() {
               <div className="reviews-header">
                 <h3>{lang === 'en' ? 'Customer Reviews' : 'Reseñas de Clientes'}</h3>
                 <button 
-                  className="btn-outline" 
-                  style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                  className="review-toggle-button"
                   onClick={() => setReviewFormOpen(!reviewFormOpen)}
                 >
                   {reviewFormOpen ? (lang === 'en' ? 'Cancel' : 'Cancelar') : (lang === 'en' ? 'Write a Review' : 'Escribir Reseña')}
@@ -4019,36 +4017,47 @@ export default function CatalogPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="star-rating-input">
-                        {[1, 2, 3, 4, 5].map(star => (
-                          <button 
-                            type="button" 
-                            key={star} 
-                            onClick={() => setReviewRating(star)}
-                          >
-                            <Star size={24} fill={star <= reviewRating ? '#fbbf24' : 'transparent'} color="#fbbf24" strokeWidth={1.5} />
-                          </button>
-                        ))}
+                      <div className="review-rating-field">
+                        <span className="review-field-label">{lang === 'en' ? 'Your rating' : 'Su calificación'}</span>
+                        <div className="star-rating-input" role="radiogroup" aria-label={lang === 'en' ? 'Review rating' : 'Calificación de la reseña'}>
+                          {[1, 2, 3, 4, 5].map(star => (
+                            <button
+                              type="button"
+                              key={star}
+                              onClick={() => setReviewRating(star)}
+                              role="radio"
+                              aria-checked={star === reviewRating}
+                              aria-label={`${star} ${star === 1 ? 'star' : 'stars'}`}
+                            >
+                              <Star size={26} fill={star <= reviewRating ? '#fbbf24' : 'transparent'} color="#fbbf24" strokeWidth={1.5} />
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <input 
-                        type="text" 
-                        className="review-input" 
-                        placeholder={lang === 'en' ? 'Your Name' : 'Su Nombre'} 
-                        value={reviewName}
-                        onChange={e => setReviewName(e.target.value)}
-                        required
-                      />
-                      <textarea 
-                        className="review-textarea" 
-                        placeholder={lang === 'en' ? 'Share your experience...' : 'Comparta su experiencia...'}
-                        value={reviewComment}
-                        onChange={e => setReviewComment(e.target.value)}
-                        required
-                      />
+                      <label className="review-field">
+                        <span className="review-field-label">{lang === 'en' ? 'Your name' : 'Su nombre'}</span>
+                        <input
+                          type="text"
+                          className="review-input"
+                          placeholder={lang === 'en' ? 'Enter your name' : 'Ingrese su nombre'}
+                          value={reviewName}
+                          onChange={e => setReviewName(e.target.value)}
+                          required
+                        />
+                      </label>
+                      <label className="review-field">
+                        <span className="review-field-label">{lang === 'en' ? 'Your review' : 'Su reseña'}</span>
+                        <textarea
+                          className="review-textarea"
+                          placeholder={lang === 'en' ? 'What was your experience?' : '¿Cómo fue su experiencia?'}
+                          value={reviewComment}
+                          onChange={e => setReviewComment(e.target.value)}
+                          required
+                        />
+                      </label>
                       <button 
                         type="submit" 
-                        className="whatsapp-btn" 
-                        style={{ border: 'none', padding: '10px' }}
+                        className="review-submit-button"
                         disabled={reviewSubmitting}
                       >
                         {reviewSubmitting ? <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div> : (lang === 'en' ? 'Submit Review' : 'Enviar Reseña')}
@@ -4059,7 +4068,7 @@ export default function CatalogPage() {
               )}
 
               {reviews.filter(r => r.product_name === selectedProduct.product).length === 0 ? (
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', margin: '20px 0' }}>
+                <p className="reviews-empty-state">
                   {lang === 'en' ? 'No reviews yet. Be the first!' : 'Aún no hay reseñas. ¡Sé el primero!'}
                 </p>
               ) : (
