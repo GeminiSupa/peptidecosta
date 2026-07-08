@@ -627,6 +627,51 @@ export default function CampaignBuilder({ editingCampaignId }) {
       {/* ══ CONFIG PANEL ══ */}
       <div className="mkt-builder-config">
 
+        {/* Always-visible actions for the most common editing workflow */}
+        <div className="mkt-builder-quick-actions">
+          <div className="mkt-builder-quick-copy">
+            <span className="mkt-builder-quick-kicker">Quick actions</span>
+            <strong>{selectedTemplate === 'welcome' ? 'Welcome email' : campaignName || 'Email campaign'}</strong>
+            <small>Preview, save, or send yourself a test before publishing.</small>
+          </div>
+
+          <div className="mkt-builder-quick-controls">
+            <button onClick={openPreview} disabled={!isReady} className="mkt-btn mkt-quick-secondary">
+              <Eye size={15} /> Preview
+            </button>
+            <button onClick={saveCampaign} disabled={!isReady || isSaving} className="mkt-btn mkt-quick-secondary">
+              {isSaving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+              {isSaving ? 'Saving…' : 'Save draft'}
+            </button>
+            <div className="mkt-quick-test">
+              <Mail size={15} aria-hidden="true" />
+              <input
+                type="text"
+                inputMode="email"
+                value={testEmail}
+                onChange={e => setTestEmail(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && isReady && testEmail.trim() && !isSendingTest) sendTestEmail();
+                }}
+                placeholder="Your email address"
+                aria-label="Test email recipients"
+              />
+              <button
+                type="button"
+                onClick={sendTestEmail}
+                disabled={isSendingTest || !isReady || !testEmail.trim()}
+              >
+                {isSendingTest ? <Loader2 size={15} className="animate-spin" /> : <SendHorizonal size={15} />}
+                {isSendingTest ? 'Sending…' : 'Send test'}
+              </button>
+            </div>
+          </div>
+
+          <p className="mkt-builder-quick-help">
+            <TestTube2 size={13} /> Test emails are sent immediately with <strong>[TEST]</strong> in the subject. Use commas for multiple recipients.
+          </p>
+        </div>
+
         {/* Template picker */}
         <Section title="1. Choose a Template" icon={LayoutTemplate} defaultOpen={showTemplates}>
           {/* AI Generator */}
@@ -781,86 +826,6 @@ export default function CampaignBuilder({ editingCampaignId }) {
             </div>
           </div>
 
-          {/* Send Test Email - Enhanced UI */}
-          <div style={{ 
-            marginTop: '20px', 
-            padding: '18px', 
-            background: 'linear-gradient(145deg, rgba(245,158,11,0.05) 0%, rgba(245,158,11,0.01) 100%)', 
-            borderRadius: '12px', 
-            border: '1px solid rgba(245,158,11,0.2)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-            position: 'relative',
-            overflow: 'hidden'
-          }}>
-            {/* Background accent glow */}
-            <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '100px', height: '100px', background: 'radial-gradient(circle, rgba(245,158,11,0.1) 0%, rgba(255,255,255,0) 70%)', pointerEvents: 'none' }} />
-
-            <div style={{ marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label className="mkt-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontSize: '14px', fontWeight: '600' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(245,158,11,0.15)' }}>
-                  <TestTube2 size={16} style={{ color: '#f59e0b' }} />
-                </div>
-                Send Test Email
-              </label>
-              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: '10px' }}>
-                Preview Mode
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch' }}>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <Mail size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)', pointerEvents: 'none' }} />
-                <input
-                  type="email"
-                  value={testEmail}
-                  onChange={e => setTestEmail(e.target.value)}
-                  placeholder="tester@costapeptides.com, team@costapeptides.com"
-                  className="mkt-input"
-                  style={{ 
-                    margin: 0, 
-                    width: '100%', 
-                    paddingLeft: '40px',
-                    backgroundColor: 'rgba(0,0,0,0.2)',
-                    borderColor: 'rgba(245,158,11,0.3)',
-                    color: '#fff',
-                    transition: 'all 0.2s ease'
-                  }}
-                  onFocus={(e) => e.target.style.borderColor = '#f59e0b'}
-                  onBlur={(e) => e.target.style.borderColor = 'rgba(245,158,11,0.3)'}
-                />
-              </div>
-              <button
-                onClick={sendTestEmail}
-                disabled={isSendingTest || !isReady || !testEmail.trim()}
-                className="mkt-btn"
-                style={{ 
-                  margin: 0,
-                  whiteSpace: 'nowrap',
-                  background: isSendingTest || (!isReady) || !testEmail.trim() ? 'rgba(255,255,255,0.05)' : 'linear-gradient(to right, #f59e0b, #d97706)',
-                  color: isSendingTest || (!isReady) || !testEmail.trim() ? 'rgba(255,255,255,0.3)' : '#fff',
-                  border: isSendingTest || (!isReady) || !testEmail.trim() ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                  boxShadow: isSendingTest || (!isReady) || !testEmail.trim() ? 'none' : '0 4px 12px rgba(245,158,11,0.3)',
-                  fontWeight: '600',
-                  padding: '0 20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  transition: 'all 0.2s ease',
-                  cursor: isSendingTest || (!isReady) || !testEmail.trim() ? 'not-allowed' : 'pointer',
-                  borderRadius: '8px'
-                }}
-                onMouseOver={(e) => { if (!isSendingTest && isReady && testEmail.trim()) e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                onMouseOut={(e) => { if (!isSendingTest && isReady && testEmail.trim()) e.currentTarget.style.transform = 'translateY(0)'; }}
-              >
-                {isSendingTest ? <Loader2 size={16} className="animate-spin" /> : <SendHorizonal size={16} />}
-                {isSendingTest ? 'Sending...' : 'Send Test'}
-              </button>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '12px', fontSize: '12px', color: 'rgba(255,255,255,0.45)' }}>
-              <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#f59e0b' }} />
-              <span>Sends a real preview with a <strong>[TEST]</strong> prefix. Separate multiple emails with commas.</span>
-            </div>
-          </div>
         </Section>
 
         {/* Preflight + actions */}

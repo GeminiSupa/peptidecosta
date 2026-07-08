@@ -183,6 +183,52 @@
 .mkt-journey-attribution strong { margin-top: 2px; color: #34d399; font-size: 14px; }
 .mkt-journey-attribution small { color: rgba(255,255,255,.34); font-size: 8px; }
 .mkt-template-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Campaign builder: keep the everyday actions visible and easy to scan. */
+.mkt-builder-quick-actions {
+  position: sticky;
+  top: 12px;
+  z-index: 12;
+  display: grid;
+  grid-template-columns: minmax(180px, .65fr) minmax(420px, 1.35fr);
+  gap: 12px 18px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid rgba(245, 158, 11, .3);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(35, 27, 14, .97), rgba(20, 22, 27, .98));
+  box-shadow: 0 14px 35px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(16px);
+}
+.mkt-builder-quick-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.mkt-builder-quick-copy strong { overflow: hidden; color: #fff; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.mkt-builder-quick-copy small { color: rgba(255,255,255,.5); font-size: 11px; line-height: 1.4; }
+.mkt-builder-quick-kicker { color: #fbbf24; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.mkt-builder-quick-controls { display: flex; justify-content: flex-end; gap: 8px; }
+.mkt-builder-quick-controls .mkt-btn { min-height: 42px; margin: 0; white-space: nowrap; }
+.mkt-quick-secondary { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.12); }
+.mkt-quick-test {
+  display: flex;
+  flex: 1 1 330px;
+  align-items: center;
+  min-width: 280px;
+  max-width: 480px;
+  min-height: 42px;
+  padding-left: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(245,158,11,.35);
+  border-radius: 9px;
+  background: rgba(0,0,0,.22);
+  color: rgba(255,255,255,.38);
+}
+.mkt-quick-test:focus-within { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.12); }
+.mkt-quick-test input { min-width: 80px; flex: 1; align-self: stretch; border: 0; outline: 0; background: transparent; color: #fff; padding: 0 10px; }
+.mkt-quick-test input::placeholder { color: rgba(255,255,255,.32); }
+.mkt-quick-test button { align-self: stretch; display: inline-flex; align-items: center; gap: 7px; border: 0; background: linear-gradient(135deg,#f59e0b,#d97706); color: #fff; padding: 0 15px; font-weight: 750; cursor: pointer; }
+.mkt-quick-test button:disabled { background: rgba(255,255,255,.07); color: rgba(255,255,255,.28); cursor: not-allowed; }
+.mkt-builder-quick-help { grid-column: 2; display: flex; align-items: center; gap: 6px; margin: -5px 0 0; color: rgba(255,255,255,.42); font-size: 11px; }
+.mkt-builder-quick-help svg { flex: 0 0 auto; color: #fbbf24; }
 .mkt-modal-backdrop { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(2,6,23,.82); backdrop-filter: blur(7px); }
 .mkt-journey-editor { width: min(860px, 100%); max-height: calc(100dvh - 40px); overflow-y: auto; padding: 22px; border-radius: 16px; background: #111827; border: 1px solid rgba(255,255,255,.11); box-shadow: 0 24px 80px rgba(0,0,0,.55); }
 .mkt-editor-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
@@ -962,6 +1008,17 @@
    RESPONSIVE — MOBILE (max 640px)
 ══════════════════════════════════════ */
 @media (max-width: 640px) {
+  .mkt-builder-quick-actions {
+    position: static;
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+  .mkt-builder-quick-controls { flex-wrap: wrap; justify-content: stretch; }
+  .mkt-builder-quick-controls > .mkt-btn { flex: 1 1 calc(50% - 4px); }
+  .mkt-quick-test { order: 3; flex-basis: 100%; min-width: 100%; max-width: none; }
+  .mkt-quick-test button { padding: 0 12px; }
+  .mkt-builder-quick-help { grid-column: 1; margin-top: -2px; align-items: flex-start; }
+
   .mkt-modal-backdrop { padding: 0; align-items: stretch; }
   .mkt-journey-editor { max-height: 100dvh; border-radius: 0; padding: 16px; }
   .mkt-editor-fields, .mkt-step-settings { grid-template-columns: 1fr; }
