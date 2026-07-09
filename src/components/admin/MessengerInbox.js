@@ -1,7 +1,15 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, MessageCircle, RefreshCw, Search, Send } from 'lucide-react';
+import { ChevronLeft, MessageCircle, RefreshCw, Search, Send, Sparkles } from 'lucide-react';
+
+// Canned replies (Spanish-first) for one-tap common answers.
+const QUICK_REPLIES = [
+  { label: '👋 Saludo', text: '¡Hola! Gracias por escribirnos. ¿En qué le podemos ayudar?' },
+  { label: '🛒 Catálogo', text: 'Puede ver nuestro catálogo completo aquí: https://catalog.peptidescostarica.net/catalog' },
+  { label: '🚚 Envío', text: 'Realizamos envíos a todo Costa Rica por Correos de Costa Rica (1 a 3 días). Envío gratis en pedidos superiores a ₡30,000.' },
+  { label: '💳 Pago', text: 'Aceptamos tarjeta, SINPE Móvil y PayPal. ¿Cómo prefiere pagar?' },
+];
 
 const POLL_MS = 30000;
 const SEEN_KEY = 'messenger_inbox_seen';
@@ -81,7 +89,10 @@ export default function MessengerInbox() {
   const [replyText, setReplyText] = useState('');
   const [sending, setSending] = useState(false);
   const [seenMap, setSeenMap] = useState({});
+  const [profilePics, setProfilePics] = useState({}); // contactId -> photo url
+  const [drafting, setDrafting] = useState(false);
   const messagesEndRef = useRef(null);
+  const typingThrottleRef = useRef(null);
 
   useEffect(() => setSeenMap(loadSeen()), []);
 
@@ -156,6 +167,54 @@ export default function MessengerInbox() {
     });
     return () => cancelAnimationFrame(t);
   }, [activeConv, activeConv?.messages?.length]);
+
+  // When a conversation opens: mark it seen on Facebook and fetch the real photo.
+  const activeContactId = activeConv?.contactId;
+  useEffect(() => {
+    if (!activeContactId) return;
+    fetch('/api/messenger/sender-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipientId: activeContactId, action: 'mark_seen' }),
+    }).catch(() => {});
+    if (!profilePics[activeContactId]) {
+      fetch(`/api/messenger/profile?psid=${activeContactId}`)
+        .then((r) => r.json())
+        .then((d) => { if (d.profilePic) setProfilePics((p) => ({ ...p, [activeContactId]: d.profilePic })); })
+        .catch(() => {});
+    }
+  }, [activeContactId, profilePics]);
+
+  // Show a typing indicator to the customer while an agent writes (throttled).
+  const handleReplyChange = (e) => {
+    setReplyText(e.target.value);
+    if (!activeContactId || typingThrottleRef.current) return;
+    fetch('/api/messenger/sender-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipientId: activeContactId, action: 'typing_on' }),
+    }).catch(() => {});
+    typingThrottleRef.current = setTimeout(() => { typingThrottleRef.current = null; }, 4000);
+  };
+
+  const handleAiDraft = async () => {
+    if (!activeConv || drafting) return;
+    setDrafting(true);
+    try {
+      const res = await fetch('/api/messenger/ai-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: activeConv.messages, contactName: activeConv.contactName }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) setReplyText(data.text || '');
+      else alert('AI draft failed: ' + (data.error || 'Unknown error'));
+    } catch (e) {
+      alert('AI draft error: ' + e.message);
+    } finally {
+      setDrafting(false);
+    }
+  };
 
   const handleSend = async () => {
     const text = replyText.trim();
@@ -303,7 +362,11 @@ export default function MessengerInbox() {
                       markSeen(conv.id, conv.lastInboundAt);
                     }}
                   >
-                    <span className="admin-wa-chat-avatar" aria-hidden>{getInitials(conv.contactName)}</span>
+                    <span className="admin-wa-chat-avatar" aria-hidden>
+                      {profilePics[conv.contactId]
+                        ? <img src={profilePics[conv.contactId]} alt="" style={{ width: '100%', height: '100%', borderRadius: 'inherit', objectFit: 'cover' }} />
+                        : getInitials(conv.contactName)}
+                    </span>
                     <div className="admin-wa-chat-item-content">
                       <div className="admin-wa-chat-item-top">
                         <span className="admin-wa-chat-item-name">{conv.contactName}</span>
@@ -337,7 +400,11 @@ export default function MessengerInbox() {
                 </button>
                 <div className="admin-wa-chat-header-text">
                   <span className="admin-wa-chat-title-row">
-                    <span className="admin-wa-header-avatar" aria-hidden>{getInitials(activeConv.contactName)}</span>
+                    <span className="admin-wa-header-avatar" aria-hidden>
+                      {profilePics[activeConv.contactId]
+                        ? <img src={profilePics[activeConv.contactId]} alt="" style={{ width: '100%', height: '100%', borderRadius: 'inherit', objectFit: 'cover' }} />
+                        : getInitials(activeConv.contactName)}
+                    </span>
                     <span>
                       <span className="admin-wa-chat-title">{activeConv.contactName}</span>
                       <span className="admin-wa-chat-phone">
@@ -417,18 +484,52 @@ export default function MessengerInbox() {
             </div>
 
             <div className="admin-wa-composer">
+              {activeConv.contactId && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                  {QUICK_REPLIES.map((qr) => (
+                    <button
+                      key={qr.label}
+                      type="button"
+                      onClick={() => setReplyText(qr.text)}
+                      style={{
+                        fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                        padding: '5px 10px', borderRadius: '999px',
+                        border: '1px solid rgba(148,163,184,0.35)', background: 'transparent',
+                        color: '#94a3b8', whiteSpace: 'nowrap',
+                      }}
+                      title={qr.text}
+                    >
+                      {qr.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="admin-wa-composer-row">
                 <textarea
                   className="admin-wa-composer-input"
                   value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
+                  onChange={handleReplyChange}
                   onKeyDown={handleComposerKeyDown}
                   placeholder={activeConv.contactId ? 'Type a reply… (sends via Messenger)' : 'Cannot reply to this thread'}
                   rows={2}
                   enterKeyHint="send"
                   disabled={!activeConv.contactId}
                 />
-                <div className="admin-wa-composer-actions">
+                <div className="admin-wa-composer-actions" style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="admin-wa-btn"
+                    onClick={handleAiDraft}
+                    disabled={drafting || !activeConv.contactId || !activeConv.messages?.length}
+                    title="Draft a reply with AI"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      border: '1px solid #0ea5e9', background: 'transparent', color: '#38bdf8',
+                    }}
+                  >
+                    <Sparkles size={15} aria-hidden />
+                    {drafting ? 'Drafting…' : 'AI Draft'}
+                  </button>
                   <button
                     type="button"
                     className="admin-wa-btn admin-wa-btn--send"
