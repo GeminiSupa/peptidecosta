@@ -216,7 +216,12 @@ async function processDueSteps(supabase, journeyMap) {
     }
 
     const channels = step.channel === 'email'
-      ? { email: true, whatsapp: false, emailSubject: personalize(step.subject, contact) }
+      ? {
+        email: true,
+        whatsapp: false,
+        emailSubject: personalize(step.subject, contact),
+        emailHtmlContent: step.html_content ? personalize(step.html_content, contact) : null,
+      }
       : { email: false, whatsapp: true };
     const { error: queueError } = await supabase.from('scheduled_broadcasts').insert({
       audience: 'custom',

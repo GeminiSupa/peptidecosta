@@ -25,7 +25,7 @@ function validateJourney(body) {
       continue;
     }
     if (!CHANNELS.has(step.channel)) return 'Every step needs a supported channel';
-    if (!String(step.message || '').trim()) return 'Every step needs a message';
+    if (!String(step.message || '').trim() && !String(step.html_content || '').trim()) return 'Every step needs a message';
     if (step.channel === 'email' && !String(step.subject || '').trim()) return 'Email steps need a subject';
   }
   return null;
@@ -46,9 +46,12 @@ function cleanJourney(body) {
         condition: step.condition,
         on_false: step.on_false || 'stop',
       } : {
-      channel: step.channel,
-      subject: step.channel === 'email' ? String(step.subject || '').trim().slice(0, 180) : null,
-      message: String(step.message).trim().slice(0, 5000),
+        channel: step.channel,
+        subject: step.channel === 'email' ? String(step.subject || '').trim().slice(0, 180) : null,
+        message: String(step.message || '').trim().slice(0, 5000),
+        html_content: step.channel === 'email' && step.html_content ? String(step.html_content).slice(0, 300000) : null,
+        template_campaign_id: step.template_campaign_id || null,
+        template_campaign_title: step.template_campaign_title ? String(step.template_campaign_title).slice(0, 180) : null,
       }),
       delay_hours: Math.max(0, Number(step.delay_hours || 0)),
     })),

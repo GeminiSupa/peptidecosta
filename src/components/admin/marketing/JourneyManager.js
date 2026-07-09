@@ -131,8 +131,23 @@ export default function JourneyManager() {
   };
 
   const applyCampaignTemplateToStep = (stepIndex, campaignId) => {
+    if (!campaignId) {
+      setEditor(current => ({
+        ...current,
+        steps: current.steps.map((step, index) => index === stepIndex
+          ? {
+            ...step,
+            html_content: null,
+            template_campaign_id: null,
+            template_campaign_title: null,
+          }
+          : step),
+      }));
+      return;
+    }
     const campaign = campaignTemplates.find(item => item.id === campaignId);
     if (!campaign) return;
+    const htmlContent = String(campaign.html_content || '').trim();
     setEditor(current => ({
       ...current,
       steps: current.steps.map((step, index) => index === stepIndex
@@ -142,6 +157,7 @@ export default function JourneyManager() {
           channel: 'email',
           subject: campaign.subject_line || step.subject || '',
           message: campaignToPlainMessage(campaign) || step.message || '',
+          html_content: htmlContent || null,
           template_campaign_id: campaign.id,
           template_campaign_title: campaign.title,
         }
@@ -440,6 +456,7 @@ export default function JourneyManager() {
                             <option key={campaign.id} value={campaign.id}>{campaign.title || campaign.subject_line}</option>
                           ))}
                         </select>
+                        {step.html_content && <small className="mkt-muted">This step will send the saved drag-and-drop email layout.</small>}
                       </div>
                     )}
                     {step.channel === 'email' && <label className="mkt-editor-label"><span>Subject</span><input className="mkt-input" value={step.subject || ''} onChange={event => updateStep(index, 'subject', event.target.value)} placeholder="Hi [FIRST_NAME], a quick follow-up" /></label>}

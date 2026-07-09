@@ -66,7 +66,21 @@ async function sendWhatsApp(to, message, templateName = null, firstName = 'Custo
   }
 }
 
-async function sendEmail(to, message, subject, tracking = null) {
+function addTrackingToHtml(html, tracking) {
+  if (!tracking) return html;
+  const trackingToken = createJourneyTrackingToken(tracking);
+  const trackedHtml = String(html || '').replace(/href="([^"]+)"/g, (match, url) => {
+    if (!url.startsWith('http') && !url.startsWith('/')) return match;
+    const absoluteUrl = url.startsWith('/') ? `${BASE_URL}${url}` : url;
+    return `href="${BASE_URL}/api/tracking/journey/click?t=${encodeURIComponent(trackingToken)}&url=${encodeURIComponent(absoluteUrl)}"`;
+  });
+  const trackingPixel = `<img src="${BASE_URL}/api/tracking/journey/open?t=${encodeURIComponent(trackingToken)}" width="1" height="1" alt="" style="display:block" />`;
+  return trackedHtml.includes('</body>')
+    ? trackedHtml.replace(/<\/body>/i, `${trackingPixel}</body>`)
+    : `${trackedHtml}${trackingPixel}`;
+}
+
+async function sendEmail(to, message, subject, tracking = null, htmlContent = null) {
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return false;
 
   try {
@@ -84,7 +98,7 @@ async function sendEmail(to, message, subject, tracking = null) {
       : url;
     const escapedMessage = escapeHtml(message).replace(/https?:\/\/[^\s<]+/g, url => `<a href="${trackedHref(url.replace(/&amp;/g, '&'))}" style="color:#059669;text-decoration:underline;">${url}</a>`).replace(/\n/g, '<br>');
     const trackingPixel = trackingToken ? `<img src="${BASE_URL}/api/tracking/journey/open?t=${encodeURIComponent(trackingToken)}" width="1" height="1" alt="" style="display:block" />` : '';
-    const htmlMessage = `
+    const htmlMessage = htmlContent ? addTrackingToHtml(htmlContent, tracking) : `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
         <div style="text-align: center; margin-bottom: 24px;">
           <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height: 60px; border-radius: 8px; background: #0f172a; padding: 8px;" />
@@ -106,7 +120,7 @@ async function sendEmail(to, message, subject, tracking = null) {
       from: `Peptides Costa Rica <info@peptidescostarica.net>`,
       to: to.trim(),
       subject: subject || 'Flash Sale! Exclusive Offer Inside',
-      text: message,
+      text: message || '',
       html: htmlMessage
     });
     return { sent: Boolean(res.messageId), providerId: res.messageId || null };
@@ -279,19 +293,25 @@ export async function GET(request) {
           sentWhatsapp = result.sent;
           retryWhatsapp = result.retryable;
         }
-        if (channels.email && contact.email && message) {
+        if (channels.email && contact.email && (message || channels.emailHtmlContent)) {
           const result = await guardedSend({
             broadcastId: broadcast.id,
             identity: normalizeMarketingIdentity(contact.email, 'email'),
             channel: 'email',
             suppressions,
-            send: () => sendEmail(contact.email, message, channels.emailSubject, broadcast.journey_id ? {
-              journeyId: broadcast.journey_id,
-              enrollmentId: broadcast.journey_enrollment_id,
-              broadcastId: broadcast.id,
-              stepId: broadcast.journey_step_id,
-              contactKey: normalizeMarketingIdentity(contact.email, 'email'),
-            } : null),
+            send: () => sendEmail(
+              contact.email,
+              message,
+              channels.emailSubject,
+              broadcast.journey_id ? {
+                journeyId: broadcast.journey_id,
+                enrollmentId: broadcast.journey_enrollment_id,
+                broadcastId: broadcast.id,
+                stepId: broadcast.journey_step_id,
+                contactKey: normalizeMarketingIdentity(contact.email, 'email'),
+              } : null,
+              channels.emailHtmlContent || null
+            ),
           });
           sentEmail = result.sent;
           retryEmail = result.retryable;
