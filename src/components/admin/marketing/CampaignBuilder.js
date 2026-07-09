@@ -10,6 +10,9 @@ import {
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
+const LOCAL_DRAFT_KEY = 'marketing_studio_local_email_draft_v1';
+const ACTUAL_SMTP_SENDER = 'info@peptidescostarica.net';
+
 // ── Template Library ─────────────────────────────────────────────────
 const brandButton = {
   href: { name: 'web', values: { href: 'https://www.costapeptides.com/catalog', target: '_blank' } },
@@ -298,13 +301,75 @@ export default function CampaignBuilder({ editingCampaignId }) {
   const [draftRevision,  setDraftRevision]  = useState(0);
   const [autosaveStatus, setAutosaveStatus] = useState('idle');
   const [lastSavedAt,    setLastSavedAt]    = useState(null);
+  const [statusDetail,   setStatusDetail]   = useState('');
+  const [lastTestedSignature, setLastTestedSignature] = useState('');
+  const [lastTestSentAt, setLastTestSentAt] = useState(null);
   const autosaveTimerRef = useRef(null);
+  const localSnapshotTimerRef = useRef(null);
   const saveInFlightRef  = useRef(false);
   const pendingSaveRef   = useRef(false);
+  const recoveryCheckedRef = useRef(false);
   const suppressEditorUpdatesRef = useRef(false);
+
+  const buildCampaignSignature = useCallback((html = '') => JSON.stringify({
+    title: campaignName,
+    subject,
+    subjectB: isABTest ? subjectB : '',
+    isABTest,
+    targetSegment,
+    previewText,
+    replyTo,
+    scheduleMode,
+    scheduledAt,
+    html
+  }), [campaignName, isABTest, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
+
+  const writeLocalSnapshot = useCallback(async ({ unsaved = true, source = 'local' } = {}) => {
+    const editor = emailEditorRef.current?.editor;
+    if (typeof window === 'undefined' || !editor || !isReady) return false;
+
+    try {
+      const exported = await new Promise((resolve, reject) => {
+        try {
+          editor.exportHtml(resolve);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      const snapshot = {
+        version: 1,
+        source,
+        unsaved,
+        savedAt: new Date().toISOString(),
+        selectedCampaignId,
+        campaignName,
+        subject,
+        subjectB,
+        isABTest,
+        targetSegment,
+        previewText,
+        fromName,
+        fromEmail,
+        replyTo,
+        scheduleMode,
+        scheduledAt,
+        design: exported.design,
+        html: exported.html,
+        signature: buildCampaignSignature(exported.html),
+      };
+      window.localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify(snapshot));
+      return true;
+    } catch (error) {
+      console.warn('Local campaign draft snapshot failed:', error);
+      return false;
+    }
+  }, [buildCampaignSignature, campaignName, fromEmail, fromName, isABTest, isReady, previewText, replyTo, scheduleMode, scheduledAt, selectedCampaignId, subject, subjectB, targetSegment]);
 
   const markDraftDirty = () => {
     setAutosaveStatus('pending');
+    setStatusDetail('Changes captured locally; server save will retry automatically.');
+    setLastTestedSignature('');
+    setLastTestSentAt(null);
     setDraftRevision(revision => revision + 1);
   };
 
@@ -373,6 +438,33 @@ export default function CampaignBuilder({ editingCampaignId }) {
     
     return true;
   }, [isReady]);
+
+  const restoreLocalSnapshot = useCallback((snapshot) => {
+    if (!snapshot) return;
+    setSelectedCampaignId(snapshot.selectedCampaignId || '');
+    setCampaignName(snapshot.campaignName || 'Recovered Campaign');
+    setSubject(snapshot.subject || '');
+    setSubjectB(snapshot.subjectB || '');
+    setIsABTest(Boolean(snapshot.isABTest));
+    setTargetSegment(snapshot.targetSegment || '');
+    setPreviewText(snapshot.previewText || '');
+    setFromName(snapshot.fromName || 'Costa Peptides');
+    setFromEmail(snapshot.fromEmail || '');
+    setReplyTo(snapshot.replyTo || '');
+    setScheduleMode(snapshot.scheduleMode || 'now');
+    setScheduledAt(snapshot.scheduledAt || '');
+    setLastTestedSignature('');
+    setLastTestSentAt(null);
+    if (snapshot.design) {
+      try {
+        if (!loadEditorDesign(snapshot.design)) setPendingDesign(snapshot.design);
+      } catch (error) {
+        console.error('Failed to restore local email draft:', error);
+      }
+    }
+    setAutosaveStatus('recovered');
+    setStatusDetail(`Recovered local draft from ${new Date(snapshot.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Save it to store it on the server.`);
+  }, [loadEditorDesign]);
 
   const applyTemplate = (tpl) => {
     setSelectedTemplate(tpl.id);
@@ -462,6 +554,27 @@ export default function CampaignBuilder({ editingCampaignId }) {
     }
   }, [loadEditorDesign, pendingDesign, isReady]);
 
+  useEffect(() => {
+    if (!isReady || recoveryCheckedRef.current || typeof window === 'undefined') return;
+    recoveryCheckedRef.current = true;
+    try {
+      const raw = window.localStorage.getItem(LOCAL_DRAFT_KEY);
+      if (!raw) return;
+      const snapshot = JSON.parse(raw);
+      if (!snapshot?.unsaved || !snapshot.design) return;
+      const savedLabel = snapshot.savedAt
+        ? new Date(snapshot.savedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : 'recently';
+      if (window.confirm(`Recovered an unsaved Marketing Studio draft from ${savedLabel}. Restore it now?`)) {
+        restoreLocalSnapshot(snapshot);
+      } else {
+        setStatusDetail('Local recovery draft kept in this browser until your next successful save.');
+      }
+    } catch (error) {
+      console.warn('Unable to inspect local campaign draft recovery:', error);
+    }
+  }, [isReady, restoreLocalSnapshot]);
+
   const estimatedAudience = useMemo(() => {
     const tags = selectedCampaign?.target_tags || (targetSegment ? [targetSegment] : []);
     return subscribers.filter(sub => {
@@ -483,8 +596,9 @@ export default function CampaignBuilder({ editingCampaignId }) {
       { label: 'Tracking enabled',               ok: true },
       { label: 'Saved campaign selected',        ok: Boolean(selectedCampaignId) },
       { label: 'Email body saved',               ok: Boolean(selectedCampaign?.html_content || selectedCampaignId) },
+      { label: 'Current version test email sent', ok: Boolean(lastTestedSignature && lastTestSentAt) },
     ];
-  }, [campaignName, estimatedAudience.length, selectedCampaign, selectedCampaignId, subject]);
+  }, [campaignName, estimatedAudience.length, lastTestSentAt, lastTestedSignature, selectedCampaign, selectedCampaignId, subject]);
 
   const canSend = preflightItems.every(item => item.ok);
   const activeCampaignIsABTest = Boolean(selectedCampaign?.is_ab_test || isABTest);
@@ -543,11 +657,14 @@ export default function CampaignBuilder({ editingCampaignId }) {
         setSelectedCampaignId(data.campaign.id);
         setAutosaveStatus('saved');
         setLastSavedAt(new Date());
+        setStatusDetail(`Saved to server at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`);
+        writeLocalSnapshot({ unsaved: false, source: 'server-save' });
         fetchCampaigns();
         return true;
     } catch (err) {
       setAutosaveStatus('error');
-      if (!silent) alert('Failed to save campaign: ' + err.message);
+      setStatusDetail(`Save failed: ${err.message}. Your draft is still saved locally in this browser and will retry.`);
+      writeLocalSnapshot({ unsaved: true, source: 'server-save-failed' });
       return false;
     } finally {
       setIsSaving(false);
@@ -576,6 +693,15 @@ export default function CampaignBuilder({ editingCampaignId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftRevision, isReady]);
 
+  useEffect(() => {
+    if (!draftRevision || !isReady) return;
+    clearTimeout(localSnapshotTimerRef.current);
+    localSnapshotTimerRef.current = setTimeout(() => {
+      writeLocalSnapshot({ unsaved: true, source: 'local-autosave' });
+    }, 600);
+    return () => clearTimeout(localSnapshotTimerRef.current);
+  }, [draftRevision, isReady, writeLocalSnapshot]);
+
   const handleEditorReady = (editor) => {
     setIsReady(true);
     editor.addEventListener('design:updated', () => {
@@ -584,8 +710,27 @@ export default function CampaignBuilder({ editingCampaignId }) {
   };
 
   const sendCampaign = async (isTestBatch = false) => {
-    if (!selectedCampaignId) { alert('Select a saved campaign first.'); return; }
-    if (!canSend) { alert('Resolve the preflight checks before sending.'); return; }
+    if (!selectedCampaignId) {
+      setStatusDetail('Save this campaign before sending.');
+      return;
+    }
+    if (!canSend) {
+      setStatusDetail('Resolve the final checklist before sending. The current version must be test-emailed first.');
+      return;
+    }
+    const currentHtml = await new Promise((resolve, reject) => {
+      try {
+        emailEditorRef.current.editor.exportHtml(({ html }) => resolve(html));
+      } catch (error) {
+        reject(error);
+      }
+    });
+    const currentSignature = buildCampaignSignature(currentHtml);
+    if (!lastTestedSignature || currentSignature !== lastTestedSignature) {
+      setAutosaveStatus('pending');
+      setStatusDetail('Send blocked: send a test email for this exact version before sending to subscribers.');
+      return;
+    }
     const label = isTestBatch ? 'A/B test batch' : 'full campaign';
     if (!confirm(`Send ${label} to ${estimatedAudience.length} subscriber${estimatedAudience.length === 1 ? '' : 's'}?`)) return;
     try {
@@ -606,10 +751,14 @@ export default function CampaignBuilder({ editingCampaignId }) {
   };
 
   const sendTestEmail = async () => {
-    if (!testEmail.trim()) { alert('Enter a test email address.'); return; }
+    if (!testEmail.trim()) {
+      setStatusDetail('Enter a test email address before sending a private preview.');
+      return;
+    }
     setIsSendingTest(true);
     emailEditorRef.current.editor.exportHtml(async ({ html }) => {
       try {
+        const signature = buildCampaignSignature(html);
         const res = await adminFetch('/api/admin/send-email', {
           method: 'POST',
           body: JSON.stringify({
@@ -621,9 +770,11 @@ export default function CampaignBuilder({ editingCampaignId }) {
         });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.details || data.error || 'Failed to send test');
-        alert(`✅ Test email sent to ${testEmail}!`);
+        setLastTestedSignature(signature);
+        setLastTestSentAt(new Date());
+        setStatusDetail(`Test email sent to ${testEmail.trim()} at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Full send is now unlocked for this version.`);
       } catch (err) {
-        alert('Failed to send test: ' + err.message);
+        setStatusDetail(`Test email failed: ${err.message}`);
       } finally {
         setIsSendingTest(false);
       }
@@ -708,13 +859,21 @@ export default function CampaignBuilder({ editingCampaignId }) {
               {autosaveStatus === 'saving' || isSaving
                 ? 'Saving changes…'
                 : autosaveStatus === 'error'
-                  ? 'Autosave failed — use Save draft'
-                  : autosaveStatus === 'pending'
-                    ? 'Changes will save automatically'
-                    : lastSavedAt
-                      ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                      : 'Autosave is on'}
+                  ? 'Save failed, retrying'
+                  : autosaveStatus === 'recovered'
+                    ? 'Recovered local draft'
+                    : autosaveStatus === 'pending'
+                      ? 'Saved locally, server save queued'
+                      : lastSavedAt
+                        ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        : 'Autosave is on'}
             </span>
+            {statusDetail && <small>{statusDetail}</small>}
+            {lastTestSentAt && (
+              <small style={{ color: '#34d399' }}>
+                Current version tested {lastTestSentAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </small>
+            )}
           </div>
 
           <div className="mkt-builder-quick-controls">
@@ -849,14 +1008,14 @@ export default function CampaignBuilder({ editingCampaignId }) {
         <Section title="3. Sender & Delivery" icon={Mail} defaultOpen={false}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
             <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
-              <label className="mkt-label">From Name <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(verified)</span></label>
-              <input type="text" value="Peptides Costa Rica" disabled className="mkt-input" style={{ opacity: 0.65 }} />
+              <label className="mkt-label">Display name <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(shown to subscribers)</span></label>
+              <input type="text" value={fromName} onChange={e => updateDraftField(setFromName, e.target.value)} placeholder="Costa Peptides" className="mkt-input" />
             </div>
             <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
-              <label className="mkt-label">From Email <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(verified system sender)</span></label>
+              <label className="mkt-label">Actual SMTP sender <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(verified)</span></label>
               <div style={{ position: 'relative' }}>
                 <AtSign size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
-                <input type="text" value="Uses the same verified sender as order emails" disabled className="mkt-input" style={{ paddingLeft: '32px', opacity: 0.65 }} />
+                <input type="text" value={ACTUAL_SMTP_SENDER} disabled className="mkt-input" style={{ paddingLeft: '32px', opacity: 0.65 }} />
               </div>
             </div>
             <div className="mkt-input-group mkt-flex-1" style={{ minWidth: '180px' }}>
@@ -866,6 +1025,11 @@ export default function CampaignBuilder({ editingCampaignId }) {
                 <input type="email" value={replyTo} onChange={e => updateDraftField(setReplyTo, e.target.value)} placeholder="Same as from email" className="mkt-input" style={{ paddingLeft: '32px' }} />
               </div>
             </div>
+          </div>
+          <div className="mkt-sender-clarity" style={{ marginTop: '12px', padding: '12px 14px', border: '1px solid rgba(56,189,248,0.18)', borderRadius: '8px', background: 'rgba(56,189,248,0.06)', color: '#cbd5e1', fontSize: '12px', lineHeight: 1.6 }}>
+            <div><strong style={{ color: '#fff' }}>Display name:</strong> {fromName || 'Costa Peptides'}</div>
+            <div><strong style={{ color: '#fff' }}>Reply-to:</strong> {replyTo || ACTUAL_SMTP_SENDER}</div>
+            <div><strong style={{ color: '#fff' }}>Actual SMTP sender:</strong> {ACTUAL_SMTP_SENDER}</div>
           </div>
 
           {/* Schedule */}

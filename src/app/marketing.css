@@ -219,6 +219,7 @@
 .mkt-autosave-status.pending { color: #fbbf24; }
 .mkt-autosave-status.saving { color: #38bdf8; }
 .mkt-autosave-status.error { color: #f87171; }
+.mkt-autosave-status.recovered { color: #a78bfa; }
 .mkt-builder-quick-controls { display: flex; justify-content: flex-end; gap: 8px; }
 .mkt-quick-test {
   display: flex;
