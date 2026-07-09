@@ -1383,6 +1383,8 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
               You are about to send a message to <strong>{selectedCustomerIds.length}</strong> selected contacts.
               <br/><br/>
               <span style={{ color: '#fbbf24' }}>⚠️ IMPORTANT:</span> Meta requires you to use an approved Message Template if you are initiating the conversation outside the 24-hour window. Make sure your message exactly matches an approved template in your WhatsApp Manager.
+              <br/><br/>
+              Include: <strong>Para dejar de recibir promociones, responda BAJA.</strong>
             </div>
 
             <textarea 
@@ -1398,7 +1400,8 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                 <h4 style={{ margin: '0 0 8px 0', color: broadcastResults.success ? '#4ade80' : '#f87171' }}>Broadcast Results</h4>
                 <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
                   Success: <strong>{broadcastResults.successCount}</strong><br/>
-                  Failed: <strong>{broadcastResults.failCount}</strong>
+                  Failed: <strong>{broadcastResults.failCount}</strong><br/>
+                  Suppressed: <strong>{broadcastResults.suppressedCount || 0}</strong>
                 </div>
                 {broadcastResults.errors && broadcastResults.errors.length > 0 && (
                   <div style={{ marginTop: '8px', maxHeight: '100px', overflowY: 'auto', fontSize: '0.75rem', color: '#f87171' }}>

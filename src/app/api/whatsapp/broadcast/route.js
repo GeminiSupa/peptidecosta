@@ -15,6 +15,28 @@ const supabase = supabaseUrl && (supabaseServiceKey || supabaseAnonKey)
   ? createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey)
   : null;
 
+const MAX_DIRECT_BROADCAST_RECIPIENTS = Number(process.env.WHATSAPP_DIRECT_BROADCAST_LIMIT || 25);
+const OPTOUT_PATTERN = /\b(baja|stop|unsubscribe|desuscribir|dejar de recibir|no recibir promociones)\b/i;
+const UNSAFE_CONTENT_PATTERNS = [
+  /\b(cura|curar|cura[rn]?|trata|tratamiento|previene|reversa|diagn[oó]stic[oa])\b/i,
+  /\b(dosis|dosificaci[oó]n|inyectar|inyecci[oó]n|uso humano|prescripci[oó]n|receta)\b/i,
+  /\b(p[eé]rdida de peso|bajar de peso|adelgazar|quema grasa|quemar grasa|anti[-\s]?obesidad)\b/i,
+  /\b(glp[-\s]?1|gip|agonista|terap[eé]utico|cl[ií]nico comprobado)\b/i,
+];
+
+function getBroadcastSafetyError(message, recipientCount) {
+  if (recipientCount > MAX_DIRECT_BROADCAST_RECIPIENTS) {
+    return `Direct WhatsApp broadcasts are capped at ${MAX_DIRECT_BROADCAST_RECIPIENTS} recipients. Use scheduled template broadcasts for larger sends.`;
+  }
+  if (!OPTOUT_PATTERN.test(message)) {
+    return 'Add an opt-out line before sending, e.g. "Para dejar de recibir promociones, responda BAJA."';
+  }
+  if (UNSAFE_CONTENT_PATTERNS.some((pattern) => pattern.test(message))) {
+    return 'Message contains high-risk medical, dosage, body-outcome, or therapeutic claims. Keep WhatsApp broadcasts neutral and service-oriented.';
+  }
+  return null;
+}
+
 export async function POST(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
@@ -25,6 +47,11 @@ export async function POST(request) {
 
     if (!recipients || !Array.isArray(recipients) || recipients.length === 0 || !message) {
       return NextResponse.json({ error: 'Missing required parameters: "recipients" (array) and "message" are required' }, { status: 400 });
+    }
+
+    const safetyError = getBroadcastSafetyError(message, recipients.length);
+    if (safetyError) {
+      return NextResponse.json({ error: safetyError }, { status: 400 });
     }
 
     if (!ACCESS_TOKEN || !PHONE_NUMBER_ID) {
@@ -116,6 +143,7 @@ export async function POST(request) {
       success: true, 
       successCount: results.successCount,
       failCount: results.failCount,
+      suppressedCount: results.suppressedCount,
       errors: results.errors 
     });
 

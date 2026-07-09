@@ -186,10 +186,14 @@ Instructions provided by the user for this broadcast:
 
 Guidelines:
 1. Make it punchy, exciting, but scientifically grounded. No cheesy buzzwords.
-2. If it's a flash sale, emphasize urgency (e.g. "Solo este fin de semana", "Stock limitado").
+2. Avoid aggressive urgency, pressure tactics, or language that may trigger spam reports.
 3. Use bullet points and basic formatting (like *bold*) for readability.
 4. Include variables like {{name}} if appropriate, so the system can personalize it.
-5. End with a clear Call to Action (e.g. link to website or tell them to reply).
+5. End with a clear service-oriented Call to Action, such as asking them to reply if they want assistance.
+6. For WhatsApp safety, do not make medical, therapeutic, diagnostic, treatment, dosage, injection, human-use, weight-loss, or prescription-style claims.
+7. Do not imply a peptide treats, cures, prevents, reverses, or produces body outcomes.
+8. Do not invent inventory, certifications, lab results, prices, discounts, or claims not provided by the admin.
+9. Include a short opt-out footer in Spanish, e.g. "Para dejar de recibir promociones, responda BAJA."
 
 Output ONLY the final drafted message text.`;
     } else if (mode === 'generate_journey') {
