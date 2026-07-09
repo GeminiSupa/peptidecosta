@@ -78,6 +78,16 @@ function loadSeen() {
   }
 }
 
+// Merge two seen-maps, keeping the latest timestamp per conversation. Used to
+// combine this browser's cache with the shared team state from the server.
+function mergeSeen(a, b) {
+  const out = { ...(a || {}) };
+  for (const k in (b || {})) {
+    if (!out[k] || new Date(b[k]) > new Date(out[k])) out[k] = b[k];
+  }
+  return out;
+}
+
 export default function MessengerInbox() {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -94,14 +104,28 @@ export default function MessengerInbox() {
   const messagesEndRef = useRef(null);
   const typingThrottleRef = useRef(null);
 
-  useEffect(() => setSeenMap(loadSeen()), []);
+  useEffect(() => {
+    // Instant from this browser's cache, then merge the shared team state.
+    setSeenMap(loadSeen());
+    fetch('/api/messenger/seen')
+      .then((r) => r.json())
+      .then((d) => { if (d && d.seen) setSeenMap((prev) => mergeSeen(prev, d.seen)); })
+      .catch(() => {});
+  }, []);
 
   const markSeen = useCallback((convId, ts) => {
+    const at = ts || new Date().toISOString();
     setSeenMap((prev) => {
-      const next = { ...prev, [convId]: ts || new Date().toISOString() };
+      const next = { ...prev, [convId]: at };
       try { localStorage.setItem(SEEN_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
+    // Share with the rest of the team.
+    fetch('/api/messenger/seen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId: convId, at }),
+    }).catch(() => {});
   }, []);
 
   const fetchInbox = useCallback(async (isManual = false) => {
@@ -114,6 +138,11 @@ export default function MessengerInbox() {
       } else {
         setError('');
         setConversations(data.conversations || []);
+        // Keep shared team read-state in sync on each poll.
+        fetch('/api/messenger/seen')
+          .then((r) => r.json())
+          .then((d) => { if (d && d.seen) setSeenMap((prev) => mergeSeen(prev, d.seen)); })
+          .catch(() => {});
       }
     } catch (e) {
       setError(e.message || 'Failed to load inbox');

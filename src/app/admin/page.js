@@ -710,17 +710,20 @@ Please draft a perfect next response to this customer. Match their language (Spa
     if (!fbReplyText.trim()) return;
     setFbReplyLoading(true);
     try {
-      const res = await adminFetch('/api/facebook/reply', {
+      // Comments get a private reply (DM to the commenter); messages get a normal reply.
+      const isComment = notification.type === 'comment';
+      const endpoint = isComment ? '/api/facebook/private-reply' : '/api/facebook/reply';
+      const body = isComment
+        ? { commentId: notification.sender_id, message: fbReplyText.trim() }
+        : { recipientId: notification.sender_id, messageText: fbReplyText.trim() };
+      const res = await adminFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recipientId: notification.sender_id,
-          messageText: fbReplyText.trim()
-        })
+        body: JSON.stringify(body)
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setToastMessage('Reply sent successfully!');
+        setToastMessage(isComment ? 'Private DM sent to commenter!' : 'Reply sent successfully!');
         setFbReplyText('');
         setFbReplyId(null);
         handleMarkNotificationRead(notification.id);
@@ -4779,11 +4782,20 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             </button>
                           )}
                           {item.type === 'message' && (
-                            <button 
-                              onClick={() => setFbReplyId(fbReplyId === item.id ? null : item.id)} 
+                            <button
+                              onClick={() => setFbReplyId(fbReplyId === item.id ? null : item.id)}
                               style={{ padding: '6px 12px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' }}
                             >
                               {fbReplyId === item.id ? 'Cancel' : 'Reply'}
+                            </button>
+                          )}
+                          {item.type === 'comment' && (
+                            <button
+                              onClick={() => setFbReplyId(fbReplyId === item.id ? null : item.id)}
+                              title="Send a private message to the person who commented"
+                              style={{ padding: '6px 12px', background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6', border: '1px solid rgba(236, 72, 153, 0.3)', borderRadius: '8px', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold' }}
+                            >
+                              {fbReplyId === item.id ? 'Cancel' : 'Send DM'}
                             </button>
                           )}
                           <button 
