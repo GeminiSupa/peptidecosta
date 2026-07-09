@@ -3727,6 +3727,12 @@
     min-width: 0;
 }
 
+/* Facebook Messenger inbox gets a taller transcript area than the WhatsApp inbox. */
+.admin-whatsapp-inbox.fb-messenger-skin {
+    height: min(840px, calc(100dvh - 140px));
+    min-height: 520px;
+}
+
 .admin-wa-list-pane {
     display: flex;
     flex-direction: column;

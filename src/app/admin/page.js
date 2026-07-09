@@ -68,6 +68,7 @@ const WhatsAppSession = dynamicTab(() => import('@/components/admin/marketing/Wh
 const CartsManager = dynamicTab(() => import('@/components/admin/CartsManager'), 'Loading carts…');
 const LeadsManager = dynamicTab(() => import('@/components/admin/LeadsManager'), 'Loading leads…');
 const MessengerInbox = dynamicTab(() => import('@/components/admin/MessengerInbox'), 'Loading messenger…');
+const MessengerPosts = dynamicTab(() => import('@/components/admin/MessengerPosts'), 'Loading posts…');
 
 const FacebookIcon = ({ size = 14, style, ...props }) => (
   <svg 
@@ -351,6 +352,7 @@ export default function AdminPage() {
   // Facebook Notifications States
   const [facebookNotifications, setFacebookNotifications] = useState([]);
   const [loadingFbNotifications, setLoadingFbNotifications] = useState(true);
+  const [fbView, setFbView] = useState('inbox'); // 'inbox' | 'posts' — Facebook tab sub-view
   const [fbFilter, setFbFilter] = useState('All');
   const [toastMessage, setToastMessage] = useState('');
   const [leadsSearch, setLeadsSearch] = useState('');
@@ -4528,7 +4530,27 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {activeTab === 'messenger' && (
           <div className="admin-orders-tab">
-            <MessengerInbox />
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+              {[
+                { id: 'inbox', label: '💬 Inbox' },
+                { id: 'posts', label: '📊 Post Comments' },
+              ].map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => setFbView(v.id)}
+                  style={{
+                    padding: '9px 18px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer',
+                    border: '1px solid ' + (fbView === v.id ? '#1877f2' : 'rgba(255,255,255,0.1)'),
+                    background: fbView === v.id ? '#1877f2' : 'transparent',
+                    color: fbView === v.id ? '#fff' : '#94a3b8',
+                  }}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            {fbView === 'posts' ? <MessengerPosts /> : <MessengerInbox />}
           </div>
         )}
 
