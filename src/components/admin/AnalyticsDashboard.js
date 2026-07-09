@@ -431,6 +431,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   // Top Cities by Placed Orders
   const orderCityCounts = {};
+  const getWhatsAppAttributionSource = (order) => {
+    if (order.whatsapp_source) return order.whatsapp_source;
+    if (order.campaign_id) return 'Marketing Studio campaigns';
+    if (order.journey_id) return 'Marketing journeys';
+    return 'organic';
+  };
+
   orders.forEach(o => {
     // Check inside location_data JSON or parse address
     let city = 'Unknown';
@@ -613,7 +620,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     }
     
     // WhatsApp sources
-    const source = o.whatsapp_source || 'organic';
+    const source = getWhatsAppAttributionSource(o);
     if (!whatsappSourceBreakdown[source]) {
       whatsappSourceBreakdown[source] = { count: 0, revenue: 0 };
     }

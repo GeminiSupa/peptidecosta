@@ -1676,17 +1676,34 @@ export default function CatalogPage() {
     setPromoLoading(false);
   };
 
+  const getStoredAttribution = () => {
+    try {
+      const attr = JSON.parse(localStorage.getItem('costa_attribution') || '{}');
+      return attr.expires > Date.now() ? attr : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const applyStoredAttribution = (orderRow) => {
+    const attribution = getStoredAttribution();
+    if (attribution.journey_id) {
+      return {
+        ...orderRow,
+        journey_id: attribution.journey_id,
+        journey_enrollment_id: attribution.journey_enrollment_id || null,
+        journey_step_id: attribution.journey_step_id || null,
+      };
+    }
+    if (attribution.campaign_id) {
+      return { ...orderRow, campaign_id: attribution.campaign_id };
+    }
+    return orderRow;
+  };
+
   const saveOrderToDatabase = async (orderRow) => {
     try {
-      // E-commerce attribution: attach campaign_id if user came from an email
-      let attribution = {};
-      try {
-        const attr = JSON.parse(localStorage.getItem('costa_attribution') || '{}');
-        if (attr.expires > Date.now()) attribution = attr;
-      } catch {}
-      const orderPayload = attribution.journey_id
-        ? { ...orderRow, journey_id: attribution.journey_id, journey_enrollment_id: attribution.journey_enrollment_id || null, journey_step_id: attribution.journey_step_id || null }
-        : attribution.campaign_id ? { ...orderRow, campaign_id: attribution.campaign_id } : orderRow;
+      const orderPayload = applyStoredAttribution(orderRow);
 
       const res = await fetch('/api/orders/create', {
         method: 'POST',
@@ -2150,7 +2167,7 @@ export default function CatalogPage() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                order: {
+                order: applyStoredAttribution({
                   order_number: paypalOrderNum,
                   customer_name: cName || 'PayPal Customer',
                   customer_phone: cPhone || '',
@@ -2177,7 +2194,7 @@ export default function CatalogPage() {
                   affiliate_id: pData?.valid ? pData.affiliate_id : null,
                   affiliate_commission_usd: pData?.valid ? parseFloat(((usdTotal - (cur === 'USD' ? shippingFee : shippingFee/rate)) * pData.commission_rate).toFixed(2)) : 0,
                   affiliate_commission_crc: pData?.valid ? Math.round(((cur === 'CRC' ? (totalVal - shippingFee) : (totalVal - shippingFee) * rate)) * pData.commission_rate) : 0,
-                },
+                }),
                 sessionId: sid || null,
               }),
             });
