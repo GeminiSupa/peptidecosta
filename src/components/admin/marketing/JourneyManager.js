@@ -40,6 +40,7 @@ const EMPTY_JOURNEY = {
 
 export default function JourneyManager() {
   const [journeys, setJourneys] = useState([]);
+  const [campaignTemplates, setCampaignTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [setupRequired, setSetupRequired] = useState(false);
@@ -70,11 +71,31 @@ export default function JourneyManager() {
     }
   };
 
+  const loadCampaignTemplates = async () => {
+    try {
+      const response = await adminFetch('/api/admin/campaigns');
+      const payload = await response.json();
+      if (response.ok) {
+        setCampaignTemplates((payload.campaigns || []).filter(campaign => campaign.subject_line && (campaign.html_content || campaign.design_json)));
+      }
+    } catch (templateError) {
+      console.error('Unable to load saved email templates:', templateError);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
-    adminFetch('/api/admin/journeys')
-      .then(async response => ({ response, payload: await response.json() }))
-      .then(({ response, payload }) => {
+    Promise.all([
+      adminFetch('/api/admin/journeys'),
+      adminFetch('/api/admin/campaigns'),
+    ])
+      .then(async ([journeyResponse, campaignResponse]) => ({
+        response: journeyResponse,
+        payload: await journeyResponse.json(),
+        campaignPayload: await campaignResponse.json().catch(() => ({})),
+        campaignsOk: campaignResponse.ok,
+      }))
+      .then(({ response, payload, campaignPayload, campaignsOk }) => {
         if (cancelled) return;
         if (!response.ok) {
           setSetupRequired(Boolean(payload.setupRequired));
@@ -82,12 +103,51 @@ export default function JourneyManager() {
           return;
         }
         setJourneys(payload.journeys || []);
+        if (campaignsOk) setCampaignTemplates((campaignPayload.campaigns || []).filter(campaign => campaign.subject_line && (campaign.html_content || campaign.design_json)));
         setSetupRequired(false);
       })
       .catch(initialError => { if (!cancelled) setError(initialError.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  const campaignToPlainMessage = campaign => {
+    const html = String(campaign.html_content || '');
+    if (typeof window !== 'undefined' && html) {
+      const container = document.createElement('div');
+      container.innerHTML = html
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<\/li>/gi, '\n');
+      return (container.textContent || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+        .slice(0, 5000);
+    }
+    return String(campaign.preview_text || campaign.subject_line || '').slice(0, 5000);
+  };
+
+  const applyCampaignTemplateToStep = (stepIndex, campaignId) => {
+    const campaign = campaignTemplates.find(item => item.id === campaignId);
+    if (!campaign) return;
+    setEditor(current => ({
+      ...current,
+      steps: current.steps.map((step, index) => index === stepIndex
+        ? {
+          ...step,
+          type: 'action',
+          channel: 'email',
+          subject: campaign.subject_line || step.subject || '',
+          message: campaignToPlainMessage(campaign) || step.message || '',
+          template_campaign_id: campaign.id,
+          template_campaign_title: campaign.title,
+        }
+        : step),
+    }));
+  };
 
   const createTemplate = async template => {
     setWorkingId(template.id);
@@ -145,6 +205,7 @@ export default function JourneyManager() {
     setAiOpen(false);
     setAiGoal('');
     setStrategyNote('');
+    loadCampaignTemplates();
   };
 
   const updateStep = (index, field, value) => {
@@ -370,6 +431,17 @@ export default function JourneyManager() {
                     <label className="mkt-editor-label"><span>Continue only when</span><select className="mkt-select" value={step.condition} onChange={event => updateStep(index, 'condition', event.target.value)}>{Object.entries(CONDITION_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
                     <label className="mkt-editor-label"><span>If condition is false</span><select className="mkt-select" value={step.on_false} onChange={event => updateStep(index, 'on_false', event.target.value)}><option value="stop">Stop the journey</option><option value="skip_next">Skip the next step</option><option value="continue">Continue anyway</option></select></label>
                   </div> : <>
+                    {step.channel === 'email' && (
+                      <div className="mkt-editor-label">
+                        <span>Use saved email template</span>
+                        <select className="mkt-select" value={step.template_campaign_id || ''} onChange={event => applyCampaignTemplateToStep(index, event.target.value)}>
+                          <option value="">Choose a Marketing Studio email...</option>
+                          {campaignTemplates.map(campaign => (
+                            <option key={campaign.id} value={campaign.id}>{campaign.title || campaign.subject_line}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     {step.channel === 'email' && <label className="mkt-editor-label"><span>Subject</span><input className="mkt-input" value={step.subject || ''} onChange={event => updateStep(index, 'subject', event.target.value)} placeholder="Hi [FIRST_NAME], a quick follow-up" /></label>}
                     <label className="mkt-editor-label"><span>Message</span><textarea className="mkt-textarea" rows="5" value={step.message} onChange={event => updateStep(index, 'message', event.target.value)} placeholder="Write the message. Use [FIRST_NAME] for personalization." /></label>
                   </>}

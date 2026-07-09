@@ -309,6 +309,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
   const saveInFlightRef  = useRef(false);
   const pendingSaveRef   = useRef(false);
   const recoveryCheckedRef = useRef(false);
+  const selectedCampaignIdRef = useRef(editingCampaignId || '');
   const suppressEditorUpdatesRef = useRef(false);
 
   const buildCampaignSignature = useCallback((html = '') => JSON.stringify({
@@ -341,7 +342,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
         source,
         unsaved,
         savedAt: new Date().toISOString(),
-        selectedCampaignId,
+        selectedCampaignId: selectedCampaignIdRef.current,
         campaignName,
         subject,
         subjectB,
@@ -363,7 +364,11 @@ export default function CampaignBuilder({ editingCampaignId }) {
       console.warn('Local campaign draft snapshot failed:', error);
       return false;
     }
-  }, [buildCampaignSignature, campaignName, fromEmail, fromName, isABTest, isReady, previewText, replyTo, scheduleMode, scheduledAt, selectedCampaignId, subject, subjectB, targetSegment]);
+  }, [buildCampaignSignature, campaignName, fromEmail, fromName, isABTest, isReady, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
+
+  useEffect(() => {
+    selectedCampaignIdRef.current = selectedCampaignId;
+  }, [selectedCampaignId]);
 
   const markDraftDirty = () => {
     setAutosaveStatus('pending');
@@ -441,6 +446,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
 
   const restoreLocalSnapshot = useCallback((snapshot) => {
     if (!snapshot) return;
+    selectedCampaignIdRef.current = snapshot.selectedCampaignId || '';
     setSelectedCampaignId(snapshot.selectedCampaignId || '');
     setCampaignName(snapshot.campaignName || 'Recovered Campaign');
     setSubject(snapshot.subject || '');
@@ -469,6 +475,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
   const applyTemplate = (tpl) => {
     setSelectedTemplate(tpl.id);
     setShowTemplates(false);
+    selectedCampaignIdRef.current = '';
     setSelectedCampaignId('');
 
     if (tpl.subject) setSubject(tpl.subject);
@@ -636,7 +643,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
       }
 
         const payload = {
-          ...(selectedCampaignId ? { id: selectedCampaignId } : {}),
+          ...(selectedCampaignIdRef.current ? { id: selectedCampaignIdRef.current } : {}),
           title: campaignName, subject_line: subject,
           subject_line_b: isABTest ? subjectB : null,
           is_ab_test: isABTest,
@@ -654,6 +661,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
         });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Failed to save campaign');
+        selectedCampaignIdRef.current = data.campaign.id;
         setSelectedCampaignId(data.campaign.id);
         setAutosaveStatus('saved');
         setLastSavedAt(new Date());
@@ -802,6 +810,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to duplicate');
+      selectedCampaignIdRef.current = data.campaign.id;
       setSelectedCampaignId(data.campaign.id);
       fetchCampaigns();
       alert('✅ Campaign duplicated!');
@@ -819,6 +828,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to delete');
+      selectedCampaignIdRef.current = '';
       setSelectedCampaignId('');
       fetchCampaigns();
       alert('Campaign deleted.');
