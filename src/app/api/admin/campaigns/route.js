@@ -4,6 +4,59 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
+const OPTIONAL_CAMPAIGN_COLUMNS = ['preview_text', 'from_name', 'from_email', 'reply_to'];
+
+function isSchemaCacheColumnError(error) {
+  const message = String(error?.message || '');
+  return message.includes('schema cache') && OPTIONAL_CAMPAIGN_COLUMNS.some(column => message.includes(`'${column}'`) || message.includes(`"${column}"`) || message.includes(column));
+}
+
+function stripOptionalCampaignColumns(row) {
+  const safeRow = { ...row };
+  for (const column of OPTIONAL_CAMPAIGN_COLUMNS) delete safeRow[column];
+  return safeRow;
+}
+
+async function insertCampaignWithSchemaFallback(supabaseAdmin, row) {
+  let result = await supabaseAdmin
+    .from('email_campaigns')
+    .insert([row])
+    .select()
+    .single();
+
+  if (result.error && isSchemaCacheColumnError(result.error)) {
+    console.warn('[Campaigns] Sender/preview columns missing from schema cache; retrying draft save without optional fields.');
+    result = await supabaseAdmin
+      .from('email_campaigns')
+      .insert([stripOptionalCampaignColumns(row)])
+      .select()
+      .single();
+  }
+
+  return result;
+}
+
+async function updateCampaignWithSchemaFallback(supabaseAdmin, id, updates) {
+  let result = await supabaseAdmin
+    .from('email_campaigns')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (result.error && isSchemaCacheColumnError(result.error)) {
+    console.warn('[Campaigns] Sender/preview columns missing from schema cache; retrying draft update without optional fields.');
+    result = await supabaseAdmin
+      .from('email_campaigns')
+      .update(stripOptionalCampaignColumns(updates))
+      .eq('id', id)
+      .select()
+      .single();
+  }
+
+  return result;
+}
+
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
@@ -85,25 +138,21 @@ export async function POST(request) {
 
     const status = scheduled_at ? 'scheduled' : 'draft';
 
-    const { data, error } = await supabaseAdmin
-      .from('email_campaigns')
-      .insert([{ 
-        title, 
-        subject_line, 
-        subject_line_b: subject_line_b || null,
-        is_ab_test: is_ab_test || false,
-        target_tags: target_tags || null,
-        design_json, 
-        html_content,
-        preview_text: preview_text || null,
-        from_name: from_name || null,
-        from_email: from_email || null,
-        reply_to: reply_to || null,
-        scheduled_for: scheduled_at || null,
-        status
-      }])
-      .select()
-      .single();
+    const { data, error } = await insertCampaignWithSchemaFallback(supabaseAdmin, {
+      title,
+      subject_line,
+      subject_line_b: subject_line_b || null,
+      is_ab_test: is_ab_test || false,
+      target_tags: target_tags || null,
+      design_json,
+      html_content,
+      preview_text: preview_text || null,
+      from_name: from_name || null,
+      from_email: from_email || null,
+      reply_to: reply_to || null,
+      scheduled_for: scheduled_at || null,
+      status
+    });
 
     if (error) throw error;
 
@@ -158,12 +207,7 @@ export async function PUT(request) {
       updates.status = scheduled_at ? 'scheduled' : 'draft';
     }
 
-    const { data, error } = await supabaseAdmin
-      .from('email_campaigns')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    const { data, error } = await updateCampaignWithSchemaFallback(supabaseAdmin, id, updates);
 
     if (error) throw error;
 
