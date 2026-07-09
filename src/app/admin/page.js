@@ -36,6 +36,7 @@ import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
 import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
 import WhatsAppInbox from '@/components/admin/WhatsAppInbox';
+import WhatsAppAnalyticsPanel from '@/components/admin/WhatsAppAnalyticsPanel';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 import {
   ADMIN_NAV_GROUPS,
@@ -5292,6 +5293,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {/* TAB: WHATSAPP AI INBOX */}
         {activeTab === 'whatsapp_ai' && (
+          <>
+          <WhatsAppAnalyticsPanel />
           <WhatsAppInbox
             whatsappMessages={whatsappMessages}
             orders={orders}
@@ -5315,6 +5318,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             uploadingWaImage={uploadingWaImage}
             handleWaImageUpload={handleWaImageUpload}
           />
+          </>
         )}
       </div>
 

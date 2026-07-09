@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
+import { isWhatsAppSuppressed } from '@/lib/whatsappCompliance';
 
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -34,6 +35,7 @@ export async function POST(request) {
     const results = {
       successCount: 0,
       failCount: 0,
+      suppressedCount: 0,
       errors: []
     };
 
@@ -52,6 +54,12 @@ export async function POST(request) {
       if (!cleanPhone || cleanPhone.length < 8 || cleanPhone.length > 15) {
         results.failCount++;
         results.errors.push({ phone: phone, error: 'Invalid format' });
+        continue;
+      }
+
+      // Compliance: never send marketing to a number that has opted out.
+      if (await isWhatsAppSuppressed(supabase, cleanPhone)) {
+        results.suppressedCount++;
         continue;
       }
 

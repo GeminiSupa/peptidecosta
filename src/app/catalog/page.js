@@ -265,6 +265,7 @@ export default function CatalogPage() {
   const [gateInput, setGateInput] = useState('');
   const [gateSubmitting, setGateSubmitting] = useState(false);
   const [gateError, setGateError] = useState('');
+  const [gateConsent, setGateConsent] = useState(true); // WhatsApp marketing opt-in
 
   // PayPal States
   const [paypalReady, setPaypalReady] = useState(false);
@@ -566,6 +567,7 @@ export default function CatalogPage() {
           body: JSON.stringify({
             contact_method: isEmail ? 'email' : 'whatsapp',
             contact_value: cleanContact,
+            whatsapp_consent: gateConsent,
             language: lang,
             ip_address: ip,
             city: city,
@@ -2927,10 +2929,23 @@ export default function CatalogPage() {
                     : 'Nota: Usa + y tu código de país (ej. +506 para CR, +1 para US) para asegurar que recibas el código en WhatsApp.'}
                 </div>
                 {gateError && <div style={{ color: '#ef4444', fontSize: '0.8rem', fontWeight: 'bold' }}>{gateError}</div>}
-                <button 
-                  type="submit" 
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'left', cursor: 'pointer', lineHeight: 1.4 }}>
+                  <input
+                    type="checkbox"
+                    checked={gateConsent}
+                    onChange={(e) => setGateConsent(e.target.checked)}
+                    style={{ marginTop: '3px', flexShrink: 0, width: '16px', height: '16px' }}
+                  />
+                  <span>
+                    {lang === 'en'
+                      ? 'Yes, send me offers and updates from Peptides Costa Rica on WhatsApp. Reply STOP anytime to opt out.'
+                      : 'Sí, deseo recibir ofertas y novedades de Peptides Costa Rica por WhatsApp. Responda BAJA en cualquier momento para cancelar.'}
+                  </span>
+                </label>
+                <button
+                  type="submit"
                   disabled={gateSubmitting}
-                  className="whatsapp-btn" 
+                  className="whatsapp-btn"
                   style={{ padding: '14px', fontSize: '1rem', border: 'none', borderRadius: '12px', marginTop: '8px' }}
                 >
                   {gateSubmitting ? (

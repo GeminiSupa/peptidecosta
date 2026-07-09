@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 import { buildWhatsAppCustomerContext } from '@/lib/whatsappAiContext';
+import {
+  detectWhatsAppIntent,
+  setWhatsAppSuppression,
+  OPT_OUT_CONFIRMATION,
+  OPT_IN_CONFIRMATION,
+} from '@/lib/whatsappCompliance';
 
 // ─── Supabase client (server-side with service role for writes) ───
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -172,6 +178,53 @@ export async function POST(request) {
             if (insertError) {
               console.error('[WhatsApp Webhook] Failed to log message:', insertError);
             }
+          }
+
+          // ── Honor opt-out (STOP/BAJA) and opt-in (ALTA) requests ──
+          // Meta requires opt-out requests to be respected. When detected, we
+          // update the marketing suppression list, send a Spanish confirmation,
+          // and skip the AI auto-reply for this message.
+          const intent = detectWhatsAppIntent(messageText);
+          if (intent && supabase) {
+            const isOptOut = intent === 'opt_out';
+            await setWhatsAppSuppression(supabase, waId, isOptOut, {
+              reason: isOptOut ? 'user_optout' : 'user_optin',
+              source: 'whatsapp_inbound',
+            });
+            const confirmation = isOptOut ? OPT_OUT_CONFIRMATION : OPT_IN_CONFIRMATION;
+
+            if (ACCESS_TOKEN && PHONE_NUMBER_ID) {
+              try {
+                await fetch(`https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${ACCESS_TOKEN}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    messaging_product: 'whatsapp',
+                    to: waId,
+                    type: 'text',
+                    text: { body: confirmation },
+                  }),
+                });
+                if (supabase) {
+                  await supabase.from('whatsapp_messages').insert({
+                    wa_id: waId,
+                    display_name: 'System',
+                    message_text: confirmation,
+                    message_type: 'text',
+                    direction: 'outbound',
+                    raw_payload: { compliance: intent },
+                  });
+                }
+              } catch (confirmErr) {
+                console.error('[WhatsApp Webhook] Failed to send opt-out confirmation:', confirmErr);
+              }
+            }
+
+            console.log(`[WhatsApp Webhook] 🔕 Handled ${intent} for ${waId}; skipping AI reply.`);
+            continue; // do not run AI auto-reply for opt-out/opt-in messages
           }
 
           // ── Send auto-reply (within 24h service window — FREE) ──

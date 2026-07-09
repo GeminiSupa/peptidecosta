@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
+import { isWhatsAppSuppressed } from '@/lib/whatsappCompliance';
 
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -30,9 +31,14 @@ export async function POST(request) {
     const cleanPhone = cleanPhoneNumber(customer_phone);
 
     if (!cleanPhone || cleanPhone.length < 8 || cleanPhone.length > 15) {
-      return NextResponse.json({ 
-        error: `Invalid phone number: "${customer_phone}". WhatsApp numbers must be between 8 and 15 digits, including the country code (e.g. 50684046973 or 84046973).` 
+      return NextResponse.json({
+        error: `Invalid phone number: "${customer_phone}". WhatsApp numbers must be between 8 and 15 digits, including the country code (e.g. 50684046973 or 84046973).`
       }, { status: 400 });
+    }
+
+    // Compliance: skip if this number opted out of WhatsApp marketing.
+    if (await isWhatsAppSuppressed(supabase, cleanPhone)) {
+      return NextResponse.json({ success: false, skipped: true, reason: 'suppressed' });
     }
 
     // Dynamic checkout URL to allow recovery

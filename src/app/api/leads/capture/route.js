@@ -26,6 +26,7 @@ export async function POST(request) {
     const {
       contact_method,
       contact_value,
+      whatsapp_consent = false,
       language = 'es',
       ip_address,
       city,
@@ -67,6 +68,10 @@ export async function POST(request) {
       const { error: leadErr } = await supabase.from('catalog_leads').insert([{
         contact_method,
         contact_value: cleanContact,
+        whatsapp_consent: contact_method === 'whatsapp' ? !!whatsapp_consent : false,
+        marketing_consent: !!whatsapp_consent,
+        consent_at: whatsapp_consent ? new Date().toISOString() : null,
+        consent_source: 'catalog_gate',
         language,
         ip_address,
         city,
