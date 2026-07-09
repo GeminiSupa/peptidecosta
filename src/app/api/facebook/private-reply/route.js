@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 
 // Sends a private reply (a DM) to someone who commented on a Page post.
-// Meta rule: one private reply per comment, within 7 days of the comment.
+// Uses the current Meta Send API method: POST /me/messages with
+// recipient.comment_id (me resolves to the Page via the Page token).
+// Meta rule: one private reply per comment.
 export async function POST(request) {
   try {
     const { commentId, message } = await request.json();
@@ -16,11 +18,14 @@ export async function POST(request) {
     }
 
     const res = await fetch(
-      `https://graph.facebook.com/v25.0/${commentId}/private_replies?access_token=${PAGE_ACCESS_TOKEN}`,
+      `https://graph.facebook.com/v25.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({
+          recipient: { comment_id: commentId },
+          message: { text: message },
+        }),
       }
     );
     const data = await res.json();

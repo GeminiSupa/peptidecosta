@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request) {
   try {
-    const { recipientId, messageText } = await request.json();
+    const { recipientId, messageText, imageUrl } = await request.json();
 
-    if (!recipientId || !messageText) {
-      return NextResponse.json({ error: 'recipientId and messageText are required' }, { status: 400 });
+    if (!recipientId || (!messageText && !imageUrl)) {
+      return NextResponse.json({ error: 'recipientId and either messageText or imageUrl are required' }, { status: 400 });
     }
 
     const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
@@ -17,7 +17,9 @@ export async function POST(request) {
     const payload = {
       recipient: { id: recipientId },
       messaging_type: 'RESPONSE',
-      message: { text: messageText }
+      message: imageUrl
+        ? { attachment: { type: 'image', payload: { url: imageUrl, is_reusable: true } } }
+        : { text: messageText },
     };
 
     const response = await fetch(fbUrl, {

@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, MessageCircle, RefreshCw, Search, Send, Sparkles } from 'lucide-react';
+import { ChevronLeft, MessageCircle, RefreshCw, Search, Send, Sparkles, Paperclip } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 // Canned replies (Spanish-first) for one-tap common answers.
 const QUICK_REPLIES = [
@@ -101,6 +102,7 @@ export default function MessengerInbox() {
   const [seenMap, setSeenMap] = useState({});
   const [profilePics, setProfilePics] = useState({}); // contactId -> photo url
   const [drafting, setDrafting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const messagesEndRef = useRef(null);
   const typingThrottleRef = useRef(null);
 
@@ -245,6 +247,55 @@ export default function MessengerInbox() {
     }
   };
 
+  const handleImageUpload = async (file) => {
+    if (!file || !activeConv || !activeConv.contactId) return;
+    setUploadingImage(true);
+    try {
+      if (!isSupabaseConfigured || !supabase) throw new Error('Storage not configured');
+      const ext = file.name.split('.').pop();
+      const fileName = `fb-attach-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('whatsapp-media').upload(fileName, file);
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from('whatsapp-media').getPublicUrl(fileName);
+
+      const res = await fetch('/api/facebook/reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipientId: activeConv.contactId, imageUrl: publicUrl }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === activeConv.id
+              ? {
+                  ...c,
+                  messages: [...c.messages, {
+                    id: `local-img-${Date.now()}`,
+                    text: '',
+                    imageUrl: publicUrl,
+                    direction: 'outbound',
+                    senderName: 'Page',
+                    createdTime: new Date().toISOString(),
+                    hasAttachment: true,
+                  }],
+                  lastMessageText: '[Photo]',
+                  lastMessageAt: new Date().toISOString(),
+                }
+              : c
+          )
+        );
+        setTimeout(() => fetchInbox(), 2500);
+      } else {
+        alert('Failed to send image: ' + (data.error || 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Image upload failed: ' + e.message);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleSend = async () => {
     const text = replyText.trim();
     if (!text || !activeConv || !activeConv.contactId) return;
@@ -300,7 +351,25 @@ export default function MessengerInbox() {
   };
 
   return (
-    <div className={`admin-split-layout admin-whatsapp-inbox${activeId ? ' admin-wa-chat-open' : ''}`}>
+    <div className={`admin-split-layout admin-whatsapp-inbox fb-messenger-skin${activeId ? ' admin-wa-chat-open' : ''}`}>
+      {/* Facebook-blue reskin, scoped to this component only (WhatsApp inbox untouched) */}
+      <style>{`
+        .fb-messenger-skin .admin-wa-bubble--human {
+          background: linear-gradient(135deg, #0a7cff, #0064e0) !important;
+          color: #fff !important;
+        }
+        .fb-messenger-skin .admin-wa-bubble--human .admin-wa-bubble-sender,
+        .fb-messenger-skin .admin-wa-bubble--human .admin-wa-bubble-time { color: rgba(255,255,255,0.85) !important; }
+        .fb-messenger-skin .admin-wa-chat-avatar,
+        .fb-messenger-skin .admin-wa-header-avatar,
+        .fb-messenger-skin .admin-wa-message-avatar {
+          background: linear-gradient(135deg, #0a7cff, #0064e0) !important;
+          color: #fff !important;
+          overflow: hidden;
+        }
+        .fb-messenger-skin .admin-wa-chat-item.active { border-left: 3px solid #0084ff !important; }
+        .fb-messenger-skin .admin-wa-unread-dot { background: #0084ff !important; }
+      `}</style>
       <div className="admin-wa-list-pane">
         <div className="admin-wa-conversations-panel">
           <div className="admin-wa-conversations-header">
@@ -495,6 +564,12 @@ export default function MessengerInbox() {
                                 </span>
                               );
                             })()
+                          ) : msg.imageUrl ? (
+                            <img
+                              src={msg.imageUrl}
+                              alt="Sent attachment"
+                              style={{ maxWidth: '220px', width: '100%', borderRadius: '10px', display: 'block' }}
+                            />
                           ) : (
                             msg.text || (msg.hasAttachment ? '📎 Attachment' : '')
                           )}
@@ -545,6 +620,26 @@ export default function MessengerInbox() {
                   disabled={!activeConv.contactId}
                 />
                 <div className="admin-wa-composer-actions" style={{ display: 'flex', gap: '8px' }}>
+                  <label
+                    className="admin-wa-btn"
+                    title="Send a photo"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '6px',
+                      border: '1px solid rgba(148,163,184,0.4)', background: 'transparent',
+                      color: uploadingImage ? '#64748b' : '#94a3b8',
+                      cursor: activeConv.contactId && !uploadingImage ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    <Paperclip size={15} aria-hidden />
+                    {uploadingImage ? 'Sending…' : 'Photo'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      disabled={!activeConv.contactId || uploadingImage}
+                      onChange={(e) => { if (e.target.files?.[0]) handleImageUpload(e.target.files[0]); e.target.value = ''; }}
+                    />
+                  </label>
                   <button
                     type="button"
                     className="admin-wa-btn"
@@ -553,7 +648,7 @@ export default function MessengerInbox() {
                     title="Draft a reply with AI"
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: '6px',
-                      border: '1px solid #0ea5e9', background: 'transparent', color: '#38bdf8',
+                      border: '1px solid #0084ff', background: 'transparent', color: '#3b9dff',
                     }}
                   >
                     <Sparkles size={15} aria-hidden />
