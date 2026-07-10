@@ -36,13 +36,19 @@ export default function ProductsManager({
   handleMoveRow, handleDeleteRow,
   handleToggleHidden
 }) {
+  const formatDerivedCrc = (usdPrice) => {
+    const usdNum = parseFloat(String(usdPrice || '').replace(/[^0-9.]/g, '')) || 0;
+    if (!usdNum) return 'Auto';
+    return `₡${Math.round(usdNum * exchangeRate).toLocaleString('en-US')}`;
+  };
+
   return (
     <div>
       <div className="admin-toolbar">
         <div>
           <h3>Master Inventory Products</h3>
           <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
-            Edit details in place exactly like Excel. Changes will sync live to customers once you click <strong>Save Changes</strong>.
+            Edit USD prices as the source of truth. CRC is a live estimate using 1 USD = ₡{Math.round(exchangeRate).toLocaleString('en-US')}.
           </p>
         </div>
         <div className="admin-actions-row">
@@ -150,9 +156,9 @@ export default function ProductsManager({
                 <th style={{ minWidth: '220px' }}>Product Peptide Name</th>
                 <th style={{ minWidth: '180px' }}>Category</th>
                 <th style={{ width: '100px' }}>Price (USD)</th>
-                <th style={{ width: '100px' }}>Price (CRC)</th>
+                <th style={{ width: '100px' }}>CRC Auto</th>
                 <th style={{ width: '110px' }}>Orig. Price (USD)</th>
-                <th style={{ width: '110px' }}>Orig. Price (CRC)</th>
+                <th style={{ width: '110px' }}>Orig. CRC Auto</th>
                 <th style={{ width: '130px' }}>Sale Start</th>
                 <th style={{ width: '130px' }}>Sale End</th>
                 <th style={{ minWidth: '180px' }}>Stock Status</th>
@@ -240,13 +246,12 @@ export default function ProductsManager({
 
                   {/* CRC Price */}
                   <td data-label="Price (CRC)">
-                    <div 
-                      contentEditable 
-                      suppressContentEditableWarning
+                    <div
                       className="cell-editable"
-                      onBlur={(e) => handleCellChange(p.id, 'priceCrc', e.target.innerText)}
+                      title="Auto-calculated from the USD price using the current exchange rate"
+                      style={{ background: '#f8fafc', color: '#475569', cursor: 'default' }}
                     >
-                      {p.priceCrc}
+                      {formatDerivedCrc(p.priceUsd)}
                     </div>
                   </td>
 
@@ -272,13 +277,12 @@ export default function ProductsManager({
 
                   {/* Orig CRC Price */}
                   <td data-label="Orig. Price (CRC)">
-                    <div 
-                      contentEditable 
-                      suppressContentEditableWarning
+                    <div
                       className="cell-editable"
-                      onBlur={(e) => handleCellChange(p.id, 'originalPriceCrc', e.target.innerText)}
+                      title="Auto-calculated from the original USD price using the current exchange rate"
+                      style={{ background: '#f8fafc', color: '#475569', cursor: 'default' }}
                     >
-                      {p.originalPriceCrc}
+                      {formatDerivedCrc(p.originalPriceUsd)}
                     </div>
                   </td>
 

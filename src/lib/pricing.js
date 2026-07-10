@@ -27,9 +27,6 @@ export function getUnitPrice(product, currency, exchangeRate = FALLBACK_EXCHANGE
   if (currency === 'USD') {
     return parsePrice(product.price_usd);
   }
-  if (product.price_crc) {
-    return parsePrice(product.price_crc);
-  }
   return Math.round(parsePrice(product.price_usd) * exchangeRate);
 }
 

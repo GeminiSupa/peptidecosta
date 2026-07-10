@@ -1202,13 +1202,24 @@ export default function CatalogClient({
     return `₡${Math.round(val).toLocaleString('en-US')}`;
   };
 
-  const getPriceAsNumber = (prod, cur) => {
+  const getPriceAsNumber = (prod, cur, rate = exchangeRate) => {
     if (cur === 'USD') {
       return parsePrice(prod.priceUsd);
     } else {
-      if (prod.priceCrc) return parsePrice(prod.priceCrc);
-      return Math.round(parsePrice(prod.priceUsd) * exchangeRate);
+      return Math.round(parsePrice(prod.priceUsd) * rate);
     }
+  };
+
+  const getPriceLabel = (prod, cur, rate = exchangeRate) => (
+    formatPriceVal(getPriceAsNumber(prod, cur, rate), cur)
+  );
+
+  const getOriginalPriceLabel = (prod, cur, rate = exchangeRate) => {
+    const originalUsd = parsePrice(prod.originalPriceUsd);
+    if (!originalUsd) return '';
+    return cur === 'USD'
+      ? formatPriceVal(originalUsd, 'USD')
+      : formatPriceVal(Math.round(originalUsd * rate), 'CRC');
   };
 
   const renderRatingSummary = (productName) => {
@@ -1957,9 +1968,7 @@ export default function CatalogClient({
       createOrder: async () => {
         const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, customerEmail: cEmail, shippingAddress: sAddress, lang: cLang } = checkoutDataRef.current;
         const subtotalVal = currentCart.reduce((sum, item) => {
-          let p = item.priceCrc;
-          if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
-          if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
+          const p = getPriceAsNumber(item, cur, rate);
           return sum + (p * item.qty);
         }, 0);
         
@@ -1975,9 +1984,7 @@ export default function CatalogClient({
         const totalVal = itemsTotal + shippingFee;
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
         const orderItems = currentCart.map(item => {
-          let p = item.priceCrc;
-          if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
-          if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
+          const p = getPriceAsNumber(item, cur, rate);
           return {
             product: item.product,
             qty: item.qty,
@@ -2009,9 +2016,7 @@ export default function CatalogClient({
         const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, customerEmail: cEmail, shippingAddress: sAddress, lang: cLang, sessionId: sid, customerMetadata } = checkoutDataRef.current;
         
         const subtotalVal = currentCart.reduce((sum, item) => {
-          let p = item.priceCrc;
-          if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
-          if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
+          const p = getPriceAsNumber(item, cur, rate);
           return sum + (p * item.qty);
         }, 0);
         
@@ -2028,9 +2033,7 @@ export default function CatalogClient({
               return targets.some(target => item.product.toLowerCase().includes(target));
             })
             .reduce((sum, item) => {
-              let p = item.priceCrc;
-              if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
-              if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
+              const p = getPriceAsNumber(item, cur, rate);
               return sum + (p * item.qty);
             }, 0);
           targetTotalForPromo = pct > 0 ? Math.round(rawTargetSum * (1 - pct / 100)) : rawTargetSum;
@@ -2046,9 +2049,7 @@ export default function CatalogClient({
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
         const paypalShippingUsd = cur === 'USD' ? shippingFee : shippingFee / rate;
         const orderItems = currentCart.map(item => {
-          let p = item.priceCrc;
-          if (cur === 'USD' && item.priceUsd) p = item.priceUsd;
-          if (typeof p === 'string') p = parseFloat(p.replace(/[^0-9.]/g, ''));
+          const p = getPriceAsNumber(item, cur, rate);
           return {
             product: item.product,
             qty: item.qty,
@@ -2923,8 +2924,8 @@ export default function CatalogClient({
               const comingSoon = isComingSoon(p.status) && !isBac;
               const cardClass = inStock ? 'product-card' : 'product-card card-out-of-stock';
               
-              const pMain = currency === 'USD' ? p.priceUsd : p.priceCrc;
-              const pSub = currency === 'USD' ? p.priceCrc : p.priceUsd;
+              const pMain = getPriceLabel(p, currency);
+              const pSub = currency === 'USD' ? getPriceLabel(p, 'CRC') : getPriceLabel(p, 'USD');
 
               return (
                 <div 
@@ -2979,7 +2980,7 @@ export default function CatalogClient({
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
                           <span className="price-main" style={{ color: '#ef4444' }}>{pMain}</span>
                           <span style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '0.8rem', fontWeight: '500' }}>
-                            {currency === 'USD' ? p.originalPriceUsd : p.originalPriceCrc}
+                            {getOriginalPriceLabel(p, currency)}
                           </span>
                         </div>
                       ) : (
@@ -3397,7 +3398,7 @@ export default function CatalogClient({
                   </div>
                   <div className="suggestion-info">
                     <span className="suggestion-name">{sug.product}</span>
-                    <span className="suggestion-price">{currency === 'USD' ? sug.priceUsd : sug.priceCrc}</span>
+                    <span className="suggestion-price">{getPriceLabel(sug, currency)}</span>
                   </div>
                   <button className="suggestion-add-btn" title={lang === 'en' ? 'Add To Cart' : 'Añadir'}>
                     <Plus size={14} />
@@ -3871,7 +3872,7 @@ export default function CatalogClient({
                   {lang === 'en' ? 'PRICE' : 'PRECIO'}
                 </span>
                 <span style={{ fontSize: '1.4rem', color: 'var(--text-primary)', fontWeight: '700' }}>
-                  {currency === 'USD' ? selectedProduct.priceUsd : selectedProduct.priceCrc}
+                  {getPriceLabel(selectedProduct, currency)}
                 </span>
               </div>
               {selectedProduct.discount && (

@@ -26,14 +26,43 @@ export const metadata = {
     template: "%s | Peptides Costa Rica",
   },
   description: "Péptidos para investigación disponibles localmente en Costa Rica, con documentación de lote, precios claros y entrega coordinada dentro del país.",
+  keywords: [
+    "péptidos Costa Rica",
+    "research peptides Costa Rica",
+    "peptide catalog Costa Rica",
+    "COA peptides",
+    "laboratory research peptides",
+    "Peptides Costa Rica",
+  ],
+  alternates: {
+    canonical: '/',
+    languages: {
+      'es-CR': '/?lang=es',
+      'en-US': '/?lang=en',
+    },
+  },
   openGraph: {
     title: "Péptidos de Investigación en Costa Rica",
     description: "Inventario local, documentación de lote y entrega dentro de Costa Rica.",
     url: '/',
     siteName: 'Peptides Costa Rica',
     locale: 'es_CR',
+    alternateLocale: ['en_US'],
     type: 'website',
-    images: ['/logo.png'],
+    images: [
+      {
+        url: '/catalog-promo-banner.webp',
+        width: 1200,
+        height: 630,
+        alt: 'Peptides Costa Rica catalog preview',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Péptidos de Investigación en Costa Rica',
+    description: 'Inventario local, documentación de lote y entrega dentro de Costa Rica.',
+    images: ['/catalog-promo-banner.webp'],
   },
   robots: { index: true, follow: true },
   icons: {
@@ -88,17 +117,48 @@ export default async function RootLayout({ children }) {
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",
-              "@type": "Organization",
-              "name": "Peptides Costa Rica",
-              "url": "https://peptidescostarica.net",
-              "logo": "https://peptidescostarica.net/logo.png",
-              "contactPoint": {
-                "@type": "ContactPoint",
-                "telephone": businessLinks.whatsappDisplay,
-                "contactType": "customer service",
-                "areaServed": "CR",
-                "availableLanguage": ["es", "en"]
-              }
+              "@graph": [
+                {
+                  "@type": "Organization",
+                  "@id": "https://peptidescostarica.net/#organization",
+                  "name": "Peptides Costa Rica",
+                  "url": "https://peptidescostarica.net",
+                  "logo": "https://peptidescostarica.net/logo.png",
+                  "contactPoint": {
+                    "@type": "ContactPoint",
+                    "telephone": businessLinks.whatsappDisplay,
+                    "contactType": "customer service",
+                    "areaServed": "CR",
+                    "availableLanguage": ["es", "en"]
+                  }
+                },
+                {
+                  "@type": "WebSite",
+                  "@id": "https://peptidescostarica.net/#website",
+                  "url": "https://peptidescostarica.net",
+                  "name": "Peptides Costa Rica",
+                  "publisher": {
+                    "@id": "https://peptidescostarica.net/#organization"
+                  },
+                  "inLanguage": ["es-CR", "en-US"]
+                },
+                {
+                  "@type": "Store",
+                  "@id": "https://peptidescostarica.net/#store",
+                  "name": "Peptides Costa Rica",
+                  "url": "https://peptidescostarica.net/catalog",
+                  "image": "https://peptidescostarica.net/catalog-promo-banner.webp",
+                  "telephone": businessLinks.whatsappDisplay,
+                  "areaServed": {
+                    "@type": "Country",
+                    "name": "Costa Rica"
+                  },
+                  "availableLanguage": ["Spanish", "English"],
+                  "parentOrganization": {
+                    "@id": "https://peptidescostarica.net/#organization"
+                  }
+                }
+              ]
             })
           }}
         />

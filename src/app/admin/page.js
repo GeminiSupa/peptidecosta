@@ -3442,16 +3442,16 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       return;
     }
 
-    // Auto-fill missing CRC prices from USD before saving
+    // Keep legacy CRC columns synced from USD, while USD remains the source of truth.
     const filled = products.map(p => {
       let newP = { ...p };
-      if (newP.priceUsd && (!newP.priceCrc || newP.priceCrc.trim() === '')) {
+      if (newP.priceUsd) {
         const usdNum = parseFloat(String(newP.priceUsd).replace(/[^0-9.]/g, '')) || 0;
         if (usdNum > 0) {
           newP.priceCrc = `₡${Math.round(usdNum * exchangeRate).toLocaleString('en-US')}`;
         }
       }
-      if (newP.originalPriceUsd && (!newP.originalPriceCrc || newP.originalPriceCrc.trim() === '')) {
+      if (newP.originalPriceUsd) {
         const origUsdNum = parseFloat(String(newP.originalPriceUsd).replace(/[^0-9.]/g, '')) || 0;
         if (origUsdNum > 0) {
           newP.originalPriceCrc = `₡${Math.round(origUsdNum * exchangeRate).toLocaleString('en-US')}`;

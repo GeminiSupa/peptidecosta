@@ -35,7 +35,7 @@ function parseInclude(searchParams) {
 
 function shapeProduct(p, exchangeRate) {
   const priceUsd = parsePrice(p.price_usd);
-  const priceCrc = p.price_crc ? parsePrice(p.price_crc) : Math.round(priceUsd * exchangeRate);
+  const priceCrc = Math.round(priceUsd * exchangeRate);
   return {
     id: p.id,
     name: p.product,

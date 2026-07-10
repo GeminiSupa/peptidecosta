@@ -50,9 +50,23 @@ if (supabase && typeof window !== 'undefined') {
   const _originalConsoleError = console.error.bind(console);
   console.error = (...args) => {
     const msg = args[0]?.message || args[0] || '';
+    const fullMessage = args
+      .map((arg) => {
+        if (typeof arg === 'string') return arg;
+        if (arg?.message) return arg.message;
+        try {
+          return JSON.stringify(arg);
+        } catch {
+          return String(arg || '');
+        }
+      })
+      .join(' ');
     if (
       isBenignSupabaseAuthNoise(msg) || 
-      (typeof msg === 'string' && msg.includes('bis_skin_checked'))
+      (
+        fullMessage.includes('bis_skin_checked') &&
+        fullMessage.includes('hydration-mismatch')
+      )
     ) {
       return;
     }
@@ -80,4 +94,3 @@ if (supabase && typeof window !== 'undefined') {
     }
   });
 }
-

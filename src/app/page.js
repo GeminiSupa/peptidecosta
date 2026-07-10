@@ -8,6 +8,7 @@ import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { ArrowRight, ArrowUpRight, Truck, MessageCircle, ChevronDown, ChevronUp, FlaskConical, Lock, Dna, Atom, Zap, Brain, Sparkles, CheckCircle, ExternalLink, Menu, X } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import NewsletterSignup from '@/components/NewsletterSignup';
+import PromoTicker from '@/components/PromoTicker';
 import './landing.css';
 
 const T = {
@@ -152,17 +153,30 @@ export default function LandingPage() {
     { icon:<MessageCircle size={30} strokeWidth={1.6}/>,t:t.tr3_t,d:t.tr3_d },
   ];
 
+  const quickStartSteps = [
+    {
+      icon:<FlaskConical size={20} strokeWidth={1.8}/>,
+      t:lang==='en'?'Pick from live stock':'Elige del inventario',
+      d:lang==='en'?'Open the catalog and see currently available research products.':'Abre el catálogo y revisa productos de investigación disponibles.'
+    },
+    {
+      icon:<CheckCircle size={20} strokeWidth={1.8}/>,
+      t:lang==='en'?'Review batch details':'Revisa el lote',
+      d:lang==='en'?'Check pricing, availability, and COA information before ordering.':'Consulta precio, disponibilidad e información COA antes de ordenar.'
+    },
+    {
+      icon:<Truck size={20} strokeWidth={1.8}/>,
+      t:lang==='en'?'Coordinate locally':'Coordina localmente',
+      d:lang==='en'?'Confirm through WhatsApp and arrange delivery inside Costa Rica.':'Confirma por WhatsApp y coordina entrega dentro de Costa Rica.'
+    },
+  ];
+
   return (
     <div className="landing-layout min-h-screen">
-      {cmsSettings?.bannerActive && (
-        <div style={{background:'#38bdf8',color:'#050b18',textAlign:'center',padding:'8px 16px',fontSize:'0.85rem',fontWeight:'bold'}}>
-          {lang==='en'?cmsSettings.bannerTextEn:cmsSettings.bannerTextEs}
-        </div>
-      )}
-
-      <div className="site-shipping-bar">
-        <div className="site-shipping-inner"><Truck size={17}/><span>{lang==='en'?'FREE SHIPPING ON ORDERS ABOVE ₡90,896':'ENVÍO GRATIS EN PEDIDOS MAYORES A ₡90,896'}</span></div>
-      </div>
+      <PromoTicker
+        active={cmsSettings?.bannerActive}
+        text={lang==='en' ? cmsSettings?.bannerTextEn : cmsSettings?.bannerTextEs}
+      />
 
       {/* HEADER */}
       <header className={`lp-header${scrolled?' lp-header--scrolled':''}`}>
@@ -243,6 +257,38 @@ export default function LandingPage() {
               <div className="lp-hero-image-glow"/>
               <img src="/catalog-promo-banner.webp" alt="Peptides Costa Rica" className="lp-hero-main-img" width={900} height={400} fetchPriority="high" decoding="async"/>
             </motion.div>
+          </div>
+        </section>
+
+        <section className="lp-quick-start" aria-labelledby="quick-start-title">
+          <div className="container lp-quick-start-inner">
+            <div className="lp-quick-start-copy">
+              <span className="lp-quick-start-kicker">{lang==='en'?'START WITH CONFIDENCE':'EMPIEZA CON CONFIANZA'}</span>
+              <h2 id="quick-start-title">{lang==='en'?'Current stock, clear details, local coordination.':'Inventario actual, detalles claros y coordinación local.'}</h2>
+              <p>{lang==='en'
+                ? 'See what is available, review the batch information, and talk with a real person before arranging delivery.'
+                : 'Consulta qué está disponible, revisa la información del lote y habla con una persona antes de coordinar la entrega.'}</p>
+              <div className="lp-quick-start-actions">
+                <Link href={`/catalog?lang=${lang}`} className="lp-quick-start-primary" aria-label={lang==='en'?'Open the product catalog':'Abrir el catálogo de productos'}>
+                  {t.hero_cta} <ArrowUpRight size={17}/>
+                </Link>
+                <button type="button" onClick={()=>handleWA('quick_start')} className="lp-quick-start-secondary" aria-label={lang==='en'?'Ask us on WhatsApp':'Preguntar por WhatsApp'}>
+                  <WaIcon/> {t.hero_cta2}
+                </button>
+              </div>
+            </div>
+            <div className="lp-quick-start-steps">
+              {quickStartSteps.map((step,i)=>(
+                <div key={i} className="lp-quick-start-step">
+                  <div className="lp-quick-start-number">{i+1}</div>
+                  <div className="lp-quick-start-icon">{step.icon}</div>
+                  <div>
+                    <h3>{step.t}</h3>
+                    <p>{step.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -424,7 +470,7 @@ export default function LandingPage() {
             <p>{t.cta_s}</p>
             <div className="lp-cta-actions">
               <Link href={`/catalog?lang=${lang}`} className="lp-cta-primary">{t.cta_btn} <ArrowUpRight size={18}/></Link>
-              <button onClick={()=>handleWA('cta')} className="lp-cta-secondary" style={{cursor:'pointer',border:'none'}}>
+              <button onClick={()=>handleWA('cta')} className="lp-cta-secondary" style={{cursor:'pointer'}} aria-label={lang==='en'?'Ask us on WhatsApp':'Preguntar por WhatsApp'}>
                 <WaIcon/> {t.cta_wa}
               </button>
             </div>
@@ -484,6 +530,15 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      <div className="lp-mobile-actions" aria-label={lang==='en'?'Quick actions':'Acciones rápidas'}>
+        <Link href={`/catalog?lang=${lang}`} className="lp-mobile-action lp-mobile-action--catalog" aria-label={lang==='en'?'Open catalog':'Abrir catálogo'}>
+          {lang==='en'?'Catalog':'Catálogo'} <ArrowUpRight size={15}/>
+        </Link>
+        <button type="button" onClick={()=>handleWA('mobile_sticky')} className="lp-mobile-action lp-mobile-action--wa" aria-label={lang==='en'?'Ask us on WhatsApp':'Preguntar por WhatsApp'}>
+          <WaIcon/> WhatsApp
+        </button>
+      </div>
     </div>
   );
 }

@@ -34,15 +34,17 @@ const formatMoney = (value, currency) => {
 const buildItemsRows = (items = [], currency, exchangeRate = 454.48) => items.map((item) => {
   // Parse item price
   let price = 0;
-  const rawPrice = item.priceUsd || item.price_usd || item.price;
+  const usdPrice = item.priceUsd || item.price_usd;
+  const rawPrice = usdPrice || item.price;
   if (rawPrice) {
     price = parseFloat(String(rawPrice).replace(/[^0-9.]/g, '')) || 0;
   }
   
-  if (currency === 'CRC' && (item.priceCrc || item.price_crc)) {
+  if (currency === 'CRC' && usdPrice) {
+    price = Math.round(price * exchangeRate);
+  } else if (currency === 'CRC' && (item.priceCrc || item.price_crc)) {
     price = parseFloat(String(item.priceCrc || item.price_crc).replace(/[^0-9.]/g, '')) || 0;
   } else if (currency === 'CRC') {
-    // Fallback if price is only USD
     price = Math.round(price * exchangeRate);
   }
 

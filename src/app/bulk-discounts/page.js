@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { Sun, Moon, ArrowRight, Percent, Package, ShieldCheck } from 'lucide-react';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
+import PromoTicker from '@/components/PromoTicker';
 
 export default function BulkDiscountsPage() {
   const { links } = useBusinessLinks();
@@ -37,6 +38,11 @@ export default function BulkDiscountsPage() {
 
   return (
     <div className="landing-layout min-h-screen">
+      <PromoTicker text={lang === 'en'
+        ? 'Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed.'
+        : 'Descuento por Volumen: compra 5+ viales y recibe 15%, compra 10+ y recibe 20%. Puedes combinar productos.'}
+      />
+
       {/* ── HEADER ────────────────────────────────────────── */}
       <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`}>
         <div className="lp-header-inner">

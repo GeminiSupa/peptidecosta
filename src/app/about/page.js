@@ -3,9 +3,10 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, ArrowUpRight } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, CheckCircle, MessageCircle, ShieldCheck, Truck } from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
+import PromoTicker from '@/components/PromoTicker';
 import '../landing.css';
 import './about.css';
 
@@ -28,6 +29,16 @@ const COPY = {
     ctaText: 'Browse the catalog or send us a message if you want to ask something first.',
     catalog: 'View the catalog',
     contact: 'Ask on WhatsApp',
+    promo: 'Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed. Free shipping on qualifying orders.',
+    proofKicker: 'LOCAL MODEL',
+    proofTitle: 'Built for the local reality',
+    proofText: 'This is not an anonymous overseas storefront. It is a Costa Rica business built around availability, documentation, and direct communication.',
+    processTitle: 'How the local model works',
+    process: [
+      ['Visible stock', 'See what is currently available before you spend time asking.'],
+      ['Batch clarity', 'Review COA and product details from the catalog flow.'],
+      ['Direct coordination', 'Ask questions and coordinate delivery with a real person.'],
+    ],
   },
   es: {
     eyebrow: 'JOEY, SEAN Y UNA IDEA LOCAL',
@@ -47,6 +58,16 @@ const COPY = {
     ctaText: 'Explora el catálogo o escríbenos si prefieres preguntar algo primero.',
     catalog: 'Ver el catálogo',
     contact: 'Preguntar por WhatsApp',
+    promo: 'Descuento por Volumen: compra 5+ viales y recibe 15%, compra 10+ y recibe 20%. Puedes combinar productos. Envío gratis en pedidos calificados.',
+    proofKicker: 'MODELO LOCAL',
+    proofTitle: 'Creado para la realidad local',
+    proofText: 'Esto no es una tienda anónima del exterior. Es un negocio en Costa Rica basado en disponibilidad, documentación y comunicación directa.',
+    processTitle: 'Cómo funciona el modelo local',
+    process: [
+      ['Inventario visible', 'Revisa qué está disponible antes de perder tiempo preguntando.'],
+      ['Claridad de lote', 'Consulta COA y detalles del producto desde el flujo del catálogo.'],
+      ['Coordinación directa', 'Haz preguntas y coordina la entrega con una persona real.'],
+    ],
   },
 };
 
@@ -77,11 +98,14 @@ export default function AboutPage() {
 
   return (
     <div className="landing-layout about-page">
+      <PromoTicker text={t.promo} />
+
       <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`}>
         <div className="lp-header-inner">
           <Link href="/" className="lp-logo"><Image src="/logo.webp" alt="Peptides Costa Rica" width={416} height={205} className="logo-img-custom" priority /></Link>
           <nav className="lp-nav about-nav">
             <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Catalog' : 'Catálogo'}</Link>
+            <Link href={`/about?lang=${lang}`}>{lang === 'en' ? 'About Us' : 'Sobre Nosotros'}</Link>
             <Link href={`/blog?lang=${lang}`}>Blog</Link>
             <Link href={`/contact?lang=${lang}`}>{lang === 'en' ? 'Contact' : 'Contacto'}</Link>
           </nav>
@@ -98,11 +122,26 @@ export default function AboutPage() {
       <main>
         <section className="about-hero">
           <div className="container about-hero-grid">
-            <div>
+            <div className="about-hero-copy">
               <p className="about-eyebrow">{t.eyebrow}</p>
               <h1>{t.title}</h1>
+              <p className="about-intro">{t.intro}</p>
+              <div className="about-hero-points" aria-label={lang === 'en' ? 'Peptides Costa Rica trust points' : 'Puntos de confianza de Peptides Costa Rica'}>
+                {t.principles.slice(0, 3).map((principle) => (
+                  <span key={principle}><CheckCircle size={15} /> {principle}</span>
+                ))}
+              </div>
             </div>
-            <p className="about-intro">{t.intro}</p>
+          </div>
+        </section>
+
+        <section className="about-proof-band">
+          <div className="container about-proof-grid">
+            <div>
+              <p className="about-section-number">{t.proofKicker}</p>
+              <h2>{t.proofTitle}</h2>
+            </div>
+            <p>{t.proofText}</p>
           </div>
         </section>
 
@@ -118,11 +157,33 @@ export default function AboutPage() {
           </aside>
         </section>
 
-        <blockquote className="about-quote"><div className="container">“{t.quote}”<cite>— Joey & Sean</cite></div></blockquote>
+        <blockquote className="about-quote"><div className="container"><span>“</span>{t.quote}<cite>— Joey & Sean</cite></div></blockquote>
 
         <section className="about-chapters container">
           <article><p className="about-section-number">02</p><h2>{t.problemTitle}</h2><p>{t.problem}</p></article>
           <article><p className="about-section-number">03</p><h2>{t.todayTitle}</h2><p>{t.today}</p></article>
+        </section>
+
+        <section className="about-process">
+          <div className="container">
+            <div className="about-process-header">
+              <p className="about-section-number">04</p>
+              <h2>{t.processTitle}</h2>
+            </div>
+            <div className="about-process-grid">
+              {t.process.map(([title, text], index) => {
+                const Icon = index === 0 ? ShieldCheck : index === 1 ? CheckCircle : Truck;
+                return (
+                  <article key={title}>
+                    <Icon size={24} strokeWidth={1.8} />
+                    <span>{String(index + 1).padStart(2, '0')}</span>
+                    <h3>{title}</h3>
+                    <p>{text}</p>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
         </section>
 
         <section className="about-principles container" aria-label={lang === 'en' ? 'How we work' : 'Cómo trabajamos'}>
@@ -134,13 +195,22 @@ export default function AboutPage() {
             <div><h2>{t.ctaTitle}</h2><p>{t.ctaText}</p></div>
             <div className="about-cta-actions">
               <Link href={`/catalog?lang=${lang}`} className="about-primary">{t.catalog} <ArrowUpRight size={17} /></Link>
-              <a href={`https://wa.me/${links.whatsappNumber}`} className="about-secondary" target="_blank" rel="noopener noreferrer">{t.contact}</a>
+              <a href={`https://wa.me/${links.whatsappNumber}`} className="about-secondary" target="_blank" rel="noopener noreferrer"><MessageCircle size={17} /> {t.contact}</a>
             </div>
           </div>
         </section>
       </main>
 
       <footer className="about-footer"><div className="container">© {new Date().getFullYear()} Peptides Costa Rica · {lang === 'en' ? 'For research use only.' : 'Solo para fines de investigación.'}</div></footer>
+
+      <div className="lp-mobile-actions" aria-label={lang === 'en' ? 'Quick actions' : 'Acciones rápidas'}>
+        <Link href={`/catalog?lang=${lang}`} className="lp-mobile-action lp-mobile-action--catalog" aria-label={lang === 'en' ? 'Open catalog' : 'Abrir catálogo'}>
+          {lang === 'en' ? 'Catalog' : 'Catálogo'} <ArrowUpRight size={15} />
+        </Link>
+        <a href={`https://wa.me/${links.whatsappNumber}`} className="lp-mobile-action lp-mobile-action--wa" target="_blank" rel="noopener noreferrer" aria-label={lang === 'en' ? 'Ask us on WhatsApp' : 'Preguntar por WhatsApp'}>
+          <MessageCircle size={16} /> WhatsApp
+        </a>
+      </div>
     </div>
   );
 }

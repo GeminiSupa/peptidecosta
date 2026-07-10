@@ -3656,14 +3656,14 @@ body {
     position: absolute;
     top: 10px;
     left: 15px;
-    background: #dc2626;
+    background: #f58220;
     color: white;
     padding: 4px 10px;
     border-radius: 6px;
     font-size: 0.72rem;
     font-weight: 800;
     z-index: 2;
-    box-shadow: 0 4px 10px rgba(220, 38, 38, 0.25);
+    box-shadow: 0 4px 10px rgba(245, 130, 32, 0.25);
 }
 
 .lp-stock-badge {
@@ -3728,13 +3728,13 @@ body {
 }
 
 .price-sale {
-    color: #dc2626;
+    color: #f58220;
     font-size: 1.1rem;
     font-weight: 800;
 }
 
 [data-theme="dark"] .price-sale {
-    color: #f87171;
+    color: #ffb36d;
 }
 
 .lp-product-price {
@@ -4220,9 +4220,9 @@ body {
     gap: 8px;
     width: 100%;
     box-sizing: border-box;
-    background: rgba(255, 255, 255, 0.08);
+    background: #25D366;
     color: white;
-    border: 1px solid rgba(255, 255, 255, 0.20);
+    border: 1px solid rgba(37, 211, 102, 0.35);
     padding: 15px 28px;
     border-radius: 50px;
     font-weight: 700;
@@ -4232,8 +4232,9 @@ body {
 }
 
 .lp-cta-secondary:hover {
-    background: rgba(255, 255, 255, 0.16);
+    background: #22c35e;
     transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(37, 211, 102, 0.28);
 }
 
 /* ── Landing tiny-phone & header polish ──────────────────── */
@@ -5254,7 +5255,7 @@ body:has(.product-grid.grid-view) {
 .landing-layout {
     --primary: #1c2f6d;
     --primary-alt: #17234d;
-    --accent: #ba1526;
+    --accent: #f58220;
     --bg-main: #ffffff;
     --bg-card: #ffffff;
     --bg-secondary: #f5f6f8;
@@ -5272,9 +5273,9 @@ body:has(.product-grid.grid-view) {
 .landing-layout .lp-header--scrolled .lp-header-inner { max-width: 1180px; min-height: 78px; margin: 0 auto; padding: 12px 24px; border: 0; border-radius: 0; background: #fff; box-shadow: none; backdrop-filter: none; }
 .landing-layout .lp-logo img { height: auto; width: 112px; max-height: none !important; padding: 0; border-radius: 0 !important; background: transparent; box-shadow: none; }
 .landing-layout .lp-nav a { color: #17234d; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .035em; }
-.landing-layout .lp-nav a:hover { color: #ba1526; }
-.landing-layout .lp-nav-cta { width: 42px; height: 42px; justify-content: center; padding: 0; border-radius: 4px; background: #ba1526; box-shadow: none; font-size: 0; }
-.landing-layout .lp-nav-cta:hover { background: #97101e; transform: none; }
+.landing-layout .lp-nav a:hover { color: #f58220; }
+.landing-layout .lp-nav-cta { width: 42px; height: 42px; justify-content: center; padding: 0; border-radius: 4px; background: #f58220; box-shadow: none; font-size: 0; }
+.landing-layout .lp-nav-cta:hover { background: #dc6f12; transform: none; }
 .landing-layout .lang-selector { border: 1px solid #d9dde7; border-radius: 4px; background: #fff; padding: 0; }
 .landing-layout .lang-selector button { border-radius: 0; padding: 8px 9px; font-size: 11px; }
 .landing-layout .lang-selector button.active { background: #1c2f6d; }
@@ -5284,14 +5285,22 @@ body:has(.product-grid.grid-view) {
 .landing-layout .lp-hero-glow { display: none; }
 .landing-layout .lp-hero-grid { max-width: 1120px; text-align: left; }
 .landing-layout .lp-hero-text-block { align-items: flex-start; }
-.landing-layout .hero-badge { align-self: flex-start; margin-bottom: 18px; padding: 7px 15px; border: 0; border-radius: 999px; background: #ba1526; color: #fff; }
+.landing-layout .hero-badge { align-self: flex-start; margin-bottom: 18px; padding: 7px 15px; border: 0; border-radius: 999px; background: #f58220; color: #fff; }
 .landing-layout .hero-title { color: #17234d; font-size: clamp(2.55rem, 5vw, 4.6rem); line-height: 1.04; letter-spacing: -.045em; }
 .landing-layout .hero-sub { color: #31394b; font-family: var(--font-inter), sans-serif; font-size: 1.06rem; line-height: 1.7; }
-.landing-layout .btn-hero-primary { border-radius: 4px; background: #ba1526; box-shadow: none; }
-.landing-layout .btn-hero-primary:hover { background: #97101e; box-shadow: none; }
+.landing-layout .btn-hero-primary {
+    border-radius: 4px;
+    background: #f58220;
+    box-shadow: none;
+}
+.landing-layout .btn-hero-primary:hover,
+.landing-layout .btn-hero-primary:focus-visible {
+    background: #dc6f12;
+    box-shadow: none;
+}
 .landing-layout .btn-hero-wa { border-radius: 4px; }
 .landing-layout .hero-features-row { margin-top: 8px; color: #39445a; }
-.landing-layout .hero-features-row svg { color: #ba1526 !important; }
+.landing-layout .hero-features-row svg { color: #f58220 !important; }
 .landing-layout .lp-hero-main-img { border-radius: 0; box-shadow: none; }
 .landing-layout .lp-trust-section,
 .landing-layout .lp-how-section,
@@ -5306,10 +5315,10 @@ body:has(.product-grid.grid-view) {
 .landing-layout .lp-step-card:hover,
 .landing-layout .lp-founder-card:hover { box-shadow: 0 16px 34px rgba(24,40,83,.09); }
 .landing-layout .lp-trust-icon,
-.landing-layout .lp-founder-icon { border-radius: 4px; color: #ba1526; background: #f9e9eb; }
-.landing-layout .lp-step-number { border-radius: 4px; background: #ba1526; box-shadow: none; }
+.landing-layout .lp-founder-icon { border-radius: 4px; color: #f58220; background: #fff0e5; }
+.landing-layout .lp-step-number { border-radius: 4px; background: #f58220; box-shadow: none; }
 .landing-layout .lp-about-badge,
-.landing-layout .lp-section-badge { color: #ba1526; }
+.landing-layout .lp-section-badge { color: #f58220; }
 .landing-layout .lp-about-heading,
 .landing-layout .lp-section-header h2,
 .landing-layout .lp-cta-content h2 { color: #17234d; letter-spacing: -.035em; }

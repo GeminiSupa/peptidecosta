@@ -1,13 +1,15 @@
 "use client";
 
 import Link from 'next/link';
-import { ArrowRight, Truck } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import PromoTicker from '@/components/PromoTicker';
 
 export function EditorialHeader({ lang, onLanguage }) {
   return <>
-    <div className="site-shipping-bar">
-      <div className="site-shipping-inner"><Truck size={17}/><span>{lang === 'en' ? 'FREE SHIPPING ON ORDERS ABOVE ₡90,896' : 'ENVÍO GRATIS EN PEDIDOS MAYORES A ₡90,896'}</span></div>
-    </div>
+    <PromoTicker text={lang === 'en'
+      ? 'Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed.'
+      : 'Descuento por Volumen: compra 5+ viales y recibe 15%, compra 10+ y recibe 20%. Puedes combinar productos.'}
+    />
     <header className="editorial-header">
       <div className="editorial-header-inner">
         <Link href="/" className="editorial-logo"><img src="/logo.webp" alt="Peptides Costa Rica"/></Link>
