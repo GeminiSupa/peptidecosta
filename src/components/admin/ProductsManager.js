@@ -29,6 +29,7 @@ export default function ProductsManager({
   highlightedProductId,
   handleCellChange,
   exchangeRate,
+  exchangeRateUpdatedAt,
   bucketImages,
   getCategoryIcon,
   handleImageCellUpload,
@@ -42,13 +43,17 @@ export default function ProductsManager({
     return `₡${Math.round(usdNum * exchangeRate).toLocaleString('en-US')}`;
   };
 
+  const exchangeUpdatedLabel = exchangeRateUpdatedAt
+    ? new Date(exchangeRateUpdatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : 'loading';
+
   return (
     <div>
       <div className="admin-toolbar">
         <div>
           <h3>Master Inventory Products</h3>
           <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
-            Edit USD prices as the source of truth. CRC is a live estimate using 1 USD = ₡{Math.round(exchangeRate).toLocaleString('en-US')}.
+            Edit USD prices as the source of truth. CRC is automatic using 1 USD = ₡{Math.round(exchangeRate).toLocaleString('en-US')} · refreshed {exchangeUpdatedLabel}.
           </p>
         </div>
         <div className="admin-actions-row">
@@ -232,12 +237,6 @@ export default function ProductsManager({
                       onBlur={(e) => {
                         const v = e.target.innerText;
                         handleCellChange(p.id, 'priceUsd', v);
-                        // Auto calculate CRC price whenever USD changes
-                        const usdNum = parseFloat(v.replace(/[^0-9.]/g, '')) || 0;
-                        if (usdNum > 0) {
-                          const calc = Math.round(usdNum * exchangeRate);
-                          handleCellChange(p.id, 'priceCrc', `₡${calc.toLocaleString('en-US')}`);
-                        }
                       }}
                     >
                       {p.priceUsd}
@@ -264,11 +263,6 @@ export default function ProductsManager({
                       onBlur={(e) => {
                         const v = e.target.innerText;
                         handleCellChange(p.id, 'originalPriceUsd', v);
-                        const origUsdNum = parseFloat(v.replace(/[^0-9.]/g, '')) || 0;
-                        if (origUsdNum > 0) {
-                          const calc = Math.round(origUsdNum * exchangeRate);
-                          handleCellChange(p.id, 'originalPriceCrc', `₡${calc.toLocaleString('en-US')}`);
-                        }
                       }}
                     >
                       {p.originalPriceUsd}

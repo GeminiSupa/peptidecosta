@@ -372,6 +372,7 @@ export default function AdminPage() {
   const [productViews, setProductViews] = useState([]);
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(FALLBACK_EXCHANGE_RATE);
+  const [exchangeRateUpdatedAt, setExchangeRateUpdatedAt] = useState(null);
   
   // Storage Bucket States
   const [bucketImages, setBucketImages] = useState([]);
@@ -1559,18 +1560,22 @@ Core Rules:
         const cachedTime = localStorage.getItem('exchangeRate_USDCRC_time');
         if (cached && cachedTime && (Date.now() - parseInt(cachedTime)) < 3600000) {
           setExchangeRate(parseFloat(cached));
+          setExchangeRateUpdatedAt(parseInt(cachedTime));
           return;
         }
         const res = await fetch('/api/exchange-rate');
         const data = await res.json();
         if (data.rate) {
           const rate = data.rate;
+          const now = Date.now();
           setExchangeRate(rate);
+          setExchangeRateUpdatedAt(now);
           localStorage.setItem('exchangeRate_USDCRC', rate.toString());
-          localStorage.setItem('exchangeRate_USDCRC_time', Date.now().toString());
+          localStorage.setItem('exchangeRate_USDCRC_time', now.toString());
         }
       } catch (err) {
         console.error('Admin: Live exchange rate fetch failed:', err);
+        setExchangeRateUpdatedAt(Date.now());
       }
     };
     fetchRate();
@@ -4213,6 +4218,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             highlightedProductId={highlightedProductId}
             handleCellChange={handleCellChange}
             exchangeRate={exchangeRate}
+            exchangeRateUpdatedAt={exchangeRateUpdatedAt}
             bucketImages={bucketImages}
             getCategoryIcon={getCategoryIcon}
             handleImageCellUpload={handleImageCellUpload}

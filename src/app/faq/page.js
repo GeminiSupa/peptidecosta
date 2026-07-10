@@ -7,6 +7,7 @@ import { Sun, Moon, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import PromoTicker from '@/components/PromoTicker';
+import MobileActionBar from '@/components/MobileActionBar';
 
 export default function FAQPage() {
   const { links } = useBusinessLinks();
@@ -162,6 +163,7 @@ export default function FAQPage() {
           </div>
         </div>
       </footer>
+      <MobileActionBar lang={lang} whatsappHref={buildWhatsAppLink(links.whatsappNumber)} />
     </div>
   );
 }

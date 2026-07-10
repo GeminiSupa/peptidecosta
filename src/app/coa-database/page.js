@@ -6,6 +6,7 @@ import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { Sun, Moon, ArrowRight, FlaskConical, Search, CheckCircle } from 'lucide-react';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import PromoTicker from '@/components/PromoTicker';
+import MobileActionBar from '@/components/MobileActionBar';
 
 export default function CoaDatabasePage() {
   const { links } = useBusinessLinks();
@@ -135,6 +136,7 @@ export default function CoaDatabasePage() {
           </div>
         </div>
       </footer>
+      <MobileActionBar lang={lang} whatsappHref={`https://wa.me/${links.whatsappNumber}`} />
     </div>
   );
 }

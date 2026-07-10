@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import PromoTicker from '@/components/PromoTicker';
+import TrustFlowBand from '@/components/TrustFlowBand';
 
 export function EditorialHeader({ lang, onLanguage }) {
   return <>
@@ -27,6 +28,7 @@ export function EditorialHeader({ lang, onLanguage }) {
         </div>
       </div>
     </header>
+    <TrustFlowBand lang={lang} compact />
   </>;
 }
 

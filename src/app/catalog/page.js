@@ -193,6 +193,7 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState(true);
   const [isDbBacked, setIsDbBacked] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(FALLBACK_EXCHANGE_RATE);
+  const [exchangeRateUpdatedAt, setExchangeRateUpdatedAt] = useState(null);
   const [hiddenProducts, setHiddenProducts] = useState([]); // product names hidden from catalog by admin (not deleted)
 
   // Search & Filtering States
@@ -1008,18 +1009,22 @@ export default function CatalogPage() {
       const cachedTime = localStorage.getItem('exchangeRate_USDCRC_time');
       if (cached && cachedTime && (Date.now() - parseInt(cachedTime)) < 3600000) {
         setExchangeRate(parseFloat(cached));
+        setExchangeRateUpdatedAt(parseInt(cachedTime));
         return;
       }
       const res = await fetch('/api/exchange-rate');
       const data = await res.json();
       if (data.rate) {
         const rate = data.rate;
+        const now = Date.now();
         setExchangeRate(rate);
+        setExchangeRateUpdatedAt(now);
         localStorage.setItem('exchangeRate_USDCRC', rate.toString());
-        localStorage.setItem('exchangeRate_USDCRC_time', Date.now().toString());
+        localStorage.setItem('exchangeRate_USDCRC_time', now.toString());
       }
     } catch (err) {
       console.error('Live exchange rate fetch failed, using fallback:', err);
+      setExchangeRateUpdatedAt(Date.now());
     }
   };
 
@@ -1329,6 +1334,21 @@ export default function CatalogPage() {
     return cur === 'USD'
       ? formatPriceVal(originalUsd, 'USD')
       : formatPriceVal(Math.round(originalUsd * rate), 'CRC');
+  };
+
+  const getExchangeRateNote = () => {
+    const updated = exchangeRateUpdatedAt
+      ? new Date(exchangeRateUpdatedAt).toLocaleTimeString(lang === 'en' ? 'en-US' : 'es-CR', { hour: 'numeric', minute: '2-digit' })
+      : null;
+    const rateLabel = `1 USD = ₡${Math.round(exchangeRate).toLocaleString('en-US')}`;
+    if (lang === 'en') {
+      return updated
+        ? `CRC prices update with the live exchange rate. ${rateLabel}, refreshed ${updated}.`
+        : `CRC prices update with the live exchange rate. ${rateLabel}.`;
+    }
+    return updated
+      ? `Los precios CRC se actualizan con el tipo de cambio en vivo. ${rateLabel}, actualizado ${updated}.`
+      : `Los precios CRC se actualizan con el tipo de cambio en vivo. ${rateLabel}.`;
   };
 
   const renderRatingSummary = (productName) => {
@@ -2609,6 +2629,9 @@ export default function CatalogPage() {
               CRC
             </button>
           </div>
+          <div className="fx-rate-note" title={getExchangeRateNote()}>
+            {getExchangeRateNote()}
+          </div>
         </div>
 
         <div className="header-content container">
@@ -3095,6 +3118,13 @@ export default function CatalogPage() {
                           {isBac ? (lang === 'en' ? 'Auto-Added' : 'Auto-Agregado') : translateStatus(p.status)}
                         </span>
                       </div>
+                    </div>
+                    <div className="product-trust-chips" aria-label={lang === 'en' ? 'Product trust details' : 'Detalles de confianza del producto'}>
+                      {p.coa && p.coa !== '—' && <span>{lang === 'en' ? 'COA available' : 'COA disponible'}</span>}
+                      {inStock && !isBac && <span>{lang === 'en' ? 'In Costa Rica' : 'En Costa Rica'}</span>}
+                      {inStock && !isBac && p.inventoryCount !== null && p.inventoryCount <= (p.lowStockThreshold || 5) && p.inventoryCount > 0 && (
+                        <span>{lang === 'en' ? 'Low stock' : 'Pocas unidades'}</span>
+                      )}
                     </div>
 
                     <div className="product-actions">

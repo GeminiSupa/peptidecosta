@@ -8,6 +8,7 @@ import { ArrowRight, MessageCircle, Mail, Send, CheckCircle, User, AtSign, FileT
 import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import PromoTicker from '@/components/PromoTicker';
+import MobileActionBar from '@/components/MobileActionBar';
 import './contact.css';
 
 export default function ContactPage() {
@@ -111,17 +112,17 @@ export default function ContactPage() {
         : 'Descuento por Volumen: compra 5+ viales y recibe 15%, compra 10+ y recibe 20%. Puedes combinar productos.'}
       />
 
-      {/* ── HEADER ────────────────────────────────────────── */}
       <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`}>
         <div className="lp-header-inner">
           <Link href="/" className="lp-logo">
-            <Image src="/logo.png" alt="Peptides Costa Rica" width={416} height={205} priority className="logo-img-custom" style={{ maxHeight: '34px', width: 'auto', borderRadius: '4px' }} />
+            <Image src="/logo.webp" alt="Peptides Costa Rica" width={416} height={205} priority className="logo-img-custom" style={{ maxHeight: '34px', width: 'auto', borderRadius: '4px' }} />
           </Link>
 
-          <nav className="lp-nav">
+          <nav className="lp-nav contact-nav" aria-label="Main navigation">
             <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Catalog' : 'Catálogo'}</Link>
-            <Link href={`/about`}>{lang === 'en' ? 'About' : 'Nosotros'}</Link>
-            <Link href="/faq">{lang === 'en' ? 'FAQ' : 'Preguntas'}</Link>
+            <Link href={`/about?lang=${lang}`}>{lang === 'en' ? 'About Us' : 'Sobre Nosotros'}</Link>
+            <Link href={`/blog?lang=${lang}`}>Blog</Link>
+            <Link href={`/contact?lang=${lang}`} className="active">{lang === 'en' ? 'Contact' : 'Contacto'}</Link>
           </nav>
 
           <div className="lp-header-actions">
@@ -130,26 +131,31 @@ export default function ContactPage() {
               <button onClick={() => handleLang('en')} className={lang === 'en' ? 'active' : ''}>EN</button>
             </div>
             <Link href={`/catalog?lang=${lang}`} className="lp-nav-cta">
-              {lang === 'en' ? 'Shop Now' : 'Comprar'} <ArrowRight size={15} />
+              {lang === 'en' ? 'Catalog' : 'Catálogo'} <ArrowRight size={15} />
             </Link>
           </div>
         </div>
       </header>
 
-      <main className="contact-main" style={{ paddingTop: '120px', paddingBottom: '80px' }}>
-        <div className="container contact-content" style={{ maxWidth: '800px', margin: '0 auto' }}>
-          <div className="contact-hero" style={{ textAlign: 'center', marginBottom: '48px' }}>
-            <h1 style={{ fontSize: '3rem', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>
-              {lang === 'en' ? 'Contact Us' : 'Contáctanos'}
+      <main className="contact-main">
+        <div className="container contact-content">
+          <div className="contact-hero">
+            <span className="contact-kicker">{lang === 'en' ? 'DIRECT SUPPORT' : 'SOPORTE DIRECTO'}</span>
+            <h1>
+              {lang === 'en' ? 'Contact Peptides Costa Rica' : 'Contacta Peptides Costa Rica'}
             </h1>
-            <p style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>
+            <p>
               {lang === 'en' 
-                ? 'Have questions about our peptides or need help with your order? Send us a message below.' 
-                : '¿Tienes preguntas sobre nuestros péptidos o necesitas ayuda con tu pedido? Envíanos un mensaje.'}
+                ? 'Ask about current availability, COA documentation, local delivery, or an existing order. We respond in English or Spanish.'
+                : 'Pregunta por disponibilidad, documentación COA, entrega local o un pedido existente. Respondemos en español o inglés.'}
             </p>
+            <div className="contact-hero-points">
+              <span><CheckCircle size={15} /> {lang === 'en' ? 'Real human support' : 'Atención humana'}</span>
+              <span><CheckCircle size={15} /> {lang === 'en' ? 'Local Costa Rica delivery' : 'Entrega local en Costa Rica'}</span>
+              <span><CheckCircle size={15} /> {lang === 'en' ? 'COA questions welcome' : 'Consultas COA bienvenidas'}</span>
+            </div>
           </div>
 
-          {/* ── CONTACT FORM ────────────────────────────────── */}
           <div className="contact-form-card" style={{
             background: 'var(--card-bg)', borderRadius: '20px',
             border: '1px solid var(--border-color)', padding: '40px 32px',
@@ -175,8 +181,8 @@ export default function ContactPage() {
                 </p>
                 <button 
                   onClick={() => setFormSuccess(false)}
-                  className="btn-hero-primary"
-                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+                  className="contact-button contact-button--primary"
+                  style={{ background: '#f58220' }}
                 >
                   {lang === 'en' ? 'Send Another Message' : 'Enviar Otro Mensaje'}
                 </button>
@@ -196,7 +202,7 @@ export default function ContactPage() {
                         type="text" value={formName} onChange={(e) => setFormName(e.target.value)}
                         placeholder={lang === 'en' ? 'John Doe' : 'Juan Pérez'}
                         style={inputStyle} required
-                        onFocus={(e) => { e.target.style.borderColor = '#10b981'; e.target.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1)'; }}
+                        onFocus={(e) => { e.target.style.borderColor = '#f58220'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
                         onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
                       />
                     </div>
@@ -214,7 +220,7 @@ export default function ContactPage() {
                         type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)}
                         placeholder={lang === 'en' ? 'you@example.com' : 'tu@correo.com'}
                         style={inputStyle} required
-                        onFocus={(e) => { e.target.style.borderColor = '#10b981'; e.target.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1)'; }}
+                        onFocus={(e) => { e.target.style.borderColor = '#f58220'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
                         onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
                       />
                     </div>
@@ -233,7 +239,7 @@ export default function ContactPage() {
                       type="text" value={formSubject} onChange={(e) => setFormSubject(e.target.value)}
                       placeholder={lang === 'en' ? 'e.g. Question about BPC-157' : 'ej. Pregunta sobre BPC-157'}
                       style={inputStyle}
-                      onFocus={(e) => { e.target.style.borderColor = '#10b981'; e.target.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1)'; }}
+                      onFocus={(e) => { e.target.style.borderColor = '#f58220'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
                       onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
                     />
                   </div>
@@ -254,7 +260,7 @@ export default function ContactPage() {
                     style={{
                       ...inputStyle, paddingLeft: '16px', minHeight: '140px', resize: 'vertical', lineHeight: '1.6'
                     }}
-                    onFocus={(e) => { e.target.style.borderColor = '#10b981'; e.target.style.boxShadow = '0 0 0 3px rgba(16,185,129,0.1)'; }}
+                    onFocus={(e) => { e.target.style.borderColor = '#f58220'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
                     onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
                   />
                 </div>
@@ -272,9 +278,9 @@ export default function ContactPage() {
                 {/* Submit Button */}
                 <button
                   type="submit" disabled={formLoading}
-                  className="btn-hero-primary"
+                  className="contact-button contact-button--primary"
                   style={{
-                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    background: '#f58220',
                     width: '100%', padding: '16px', fontSize: '15px', fontWeight: '700',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                     borderRadius: '12px', border: 'none', color: '#fff', cursor: formLoading ? 'wait' : 'pointer',
@@ -291,17 +297,14 @@ export default function ContactPage() {
             )}
           </div>
 
-          {/* ── ALTERNATIVE CONTACT METHODS ────────────────── */}
-          <div className="contact-direct-label" style={{ textAlign: 'center', marginBottom: '24px' }}>
-            <p style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>
-              {lang === 'en' ? 'Or reach us directly' : 'O contáctanos directamente'}
-            </p>
+          <div className="contact-direct-label">
+            <span>{lang === 'en' ? 'FAST OPTIONS' : 'OPCIONES RÁPIDAS'}</span>
+            <h2>{lang === 'en' ? 'Reach us directly' : 'Contáctanos directamente'}</h2>
           </div>
 
           <div className="contact-direct-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '24px' }}>
             
-            {/* WhatsApp Card */}
-            <div className="contact-method-card" style={{ background: 'var(--card-bg)', padding: '40px 24px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div className="contact-method-card contact-method-card--whatsapp" style={{ background: 'var(--card-bg)', padding: '40px 24px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{ background: '#25D36615', color: '#25D366', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
                 <MessageCircle size={32} />
               </div>
@@ -317,14 +320,13 @@ export default function ContactPage() {
                   e.preventDefault();
                   window.open(buildWhatsAppLink(links.whatsappNumber), '_blank');
                 }}
-                className="btn-hero-primary" 
+                className="contact-button contact-button--wa"
                 style={{ background: '#25D366', width: '100%' }}
               >
-                {lang === 'en' ? 'Chat Now' : 'Chatear Ahora'}
+                <MessageCircle size={17} /> {lang === 'en' ? 'Chat on WhatsApp' : 'Chatear por WhatsApp'}
               </a>
             </div>
 
-            {/* Email Card */}
             <div className="contact-method-card" style={{ background: 'var(--card-bg)', padding: '40px 24px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <div style={{ background: 'rgba(0, 39, 102, 0.1)', color: 'var(--text-primary)', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
                 <Mail size={32} />
@@ -333,8 +335,8 @@ export default function ContactPage() {
               <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>
                 {lang === 'en' ? 'For bulk inquiries or general questions.' : 'Para consultas por volumen o preguntas generales.'}
               </p>
-              <a href={`mailto:${links.supportEmail}`} className="btn-outline" style={{ width: '100%' }}>
-                {links.supportEmail}
+              <a href={`mailto:${links.supportEmail}`} className="contact-button contact-button--secondary" style={{ width: '100%' }}>
+                <Mail size={17} /> {lang === 'en' ? 'Email Us' : 'Enviar Email'}
               </a>
             </div>
 
@@ -345,7 +347,7 @@ export default function ContactPage() {
       {/* ── FOOTER ───────────────────────────────────────── */}
       <footer className="footer" style={{ marginTop: 0 }}>
         <div className="container">
-          <Image src="/logo.png" alt="Peptides Costa Rica" width={416} height={205} style={{ width: 'auto', height: '36px', marginBottom: '16px', opacity: 0.95, borderRadius: '8px' }} />
+          <Image src="/logo.webp" alt="Peptides Costa Rica" width={416} height={205} style={{ width: 'auto', height: '36px', marginBottom: '16px', opacity: 0.95, borderRadius: '8px' }} />
           <p>{lang === 'en' ? 'Peptides Costa Rica offers premium, research backed peptides with trusted quality.' : 'Peptides Costa Rica ofrece péptidos premium respaldados por ciencia, con calidad garantizada.'}</p>
           <div className="footer-links" style={{ marginBottom: '24px' }}>
             <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Shop Catalog' : 'Catálogo'}</Link>
@@ -360,6 +362,7 @@ export default function ContactPage() {
           </div>
         </div>
       </footer>
+      <MobileActionBar lang={lang} whatsappHref={buildWhatsAppLink(links.whatsappNumber)} />
     </div>
   );
 }

@@ -51,8 +51,13 @@ export default function BlogPostPage() {
         <h1>{title}</h1>
         <div className="editorial-article-meta"><Calendar size={14}/>{new Date(blog.created_at).toLocaleDateString(lang === 'en' ? 'en-US' : 'es-CR', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
       </header>
-      {blog.image_url && <figure className="editorial-cover"><img src={blog.image_url} alt={title}/></figure>}
+      {blog.image_url && <figure className="editorial-cover"><img src={blog.image_url} alt={title} loading="eager" decoding="async"/></figure>}
       <div className="editorial-content" dangerouslySetInnerHTML={{ __html: String(content || '').replace(/\n/g, '<br/>') }}/>
+      <nav className="editorial-topic-links editorial-topic-links--article" aria-label={lang === 'en' ? 'Related catalog links' : 'Enlaces relacionados del catálogo'}>
+        <Link href={`/catalog?category=${encodeURIComponent('Recovery & Healing')}&lang=${lang}`}>{lang === 'en' ? 'Browse recovery products' : 'Ver productos de recuperación'}</Link>
+        <Link href={`/catalog?category=${encodeURIComponent('Anti-Aging & Longevity')}&lang=${lang}`}>{lang === 'en' ? 'Longevity products' : 'Productos de longevidad'}</Link>
+        <Link href={`/coa-database?lang=${lang}`}>{lang === 'en' ? 'Check COA documentation' : 'Revisar documentación COA'}</Link>
+      </nav>
       <div className="editorial-share"><strong>{lang === 'en' ? 'Share this article' : 'Compartir este artículo'}</strong><button onClick={copyLink}><LinkIcon size={15}/>{shareCopied ? (lang === 'en' ? 'Copied' : 'Copiado') : (lang === 'en' ? 'Copy link' : 'Copiar enlace')}</button></div>
       <aside className="editorial-article-cta"><span className="editorial-kicker">{lang === 'en' ? 'Explore the collection' : 'Explora la colección'}</span><h3>{lang === 'en' ? 'Research-grade products, available locally.' : 'Productos de investigación, disponibles localmente.'}</h3><p>{lang === 'en' ? 'Browse transparent product information and current availability in our Costa Rica catalog.' : 'Consulta información transparente y disponibilidad actual en nuestro catálogo de Costa Rica.'}</p><Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'View products' : 'Ver productos'} <ArrowRight size={17}/></Link></aside>
     </main>

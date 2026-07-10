@@ -9,6 +9,8 @@ import { ArrowRight, ArrowUpRight, Truck, MessageCircle, ChevronDown, ChevronUp,
 import { motion, useReducedMotion } from 'framer-motion';
 import NewsletterSignup from '@/components/NewsletterSignup';
 import PromoTicker from '@/components/PromoTicker';
+import TrustFlowBand from '@/components/TrustFlowBand';
+import MobileActionBar from '@/components/MobileActionBar';
 import './landing.css';
 
 const T = {
@@ -171,6 +173,29 @@ export default function LandingPage() {
     },
   ];
 
+  const localAdvantages = [
+    {
+      icon:<Truck size={24} strokeWidth={1.8}/>,
+      t:lang==='en'?'No customs delay':'Sin demora de aduana',
+      d:lang==='en'?'Inventory is already in Costa Rica, so orders do not depend on international customs timing.':'El inventario ya está en Costa Rica, así que los pedidos no dependen de tiempos de aduana internacional.'
+    },
+    {
+      icon:<FlaskConical size={24} strokeWidth={1.8}/>,
+      t:lang==='en'?'Local Costa Rica stock':'Inventario local',
+      d:lang==='en'?'The catalog is built around products we can coordinate locally, not vague overseas availability.':'El catálogo se basa en productos que podemos coordinar localmente, no en disponibilidad vaga del exterior.'
+    },
+    {
+      icon:<MessageCircle size={24} strokeWidth={1.8}/>,
+      t:lang==='en'?'Direct bilingual support':'Soporte bilingüe directo',
+      d:lang==='en'?'Ask product, COA, payment, and delivery questions before placing an order.':'Pregunta sobre productos, COA, pago y entrega antes de ordenar.'
+    },
+    {
+      icon:<CheckCircle size={24} strokeWidth={1.8}/>,
+      t:lang==='en'?'COA documentation':'Documentación COA',
+      d:lang==='en'?'Batch information is part of the buying flow so customers can verify details first.':'La información de lote forma parte del flujo de compra para verificar detalles primero.'
+    },
+  ];
+
   return (
     <div className="landing-layout min-h-screen">
       <PromoTicker
@@ -260,6 +285,8 @@ export default function LandingPage() {
           </div>
         </section>
 
+        <TrustFlowBand lang={lang} />
+
         <section className="lp-quick-start" aria-labelledby="quick-start-title">
           <div className="container lp-quick-start-inner">
             <div className="lp-quick-start-copy">
@@ -287,6 +314,27 @@ export default function LandingPage() {
                     <p>{step.d}</p>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="lp-local-advantage" aria-labelledby="local-advantage-title">
+          <div className="container lp-local-advantage-grid">
+            <div className="lp-local-advantage-copy">
+              <span>{lang==='en'?'LOCAL ADVANTAGE':'VENTAJA LOCAL'}</span>
+              <h2 id="local-advantage-title">{lang==='en'?'Built around Costa Rica logistics.':'Creado para la logística de Costa Rica.'}</h2>
+              <p>{lang==='en'
+                ? 'The best customer experience is practical: clear stock, clear documentation, direct answers, and local coordination.'
+                : 'La mejor experiencia es práctica: inventario claro, documentación clara, respuestas directas y coordinación local.'}</p>
+            </div>
+            <div className="lp-local-advantage-list">
+              {localAdvantages.map((item)=>(
+                <article key={item.t} className="lp-local-advantage-card">
+                  {item.icon}
+                  <h3>{item.t}</h3>
+                  <p>{item.d}</p>
+                </article>
               ))}
             </div>
           </div>
@@ -354,7 +402,7 @@ export default function LandingPage() {
                 {featuredProducts.map((p,i)=>(
                   <div key={i} className="lp-product-card">
                     {p.original_price_usd&&p.original_price_usd!==p.price_usd&&<div className="sale-badge">{lang==='en'?'SALE':'OFERTA'}</div>}
-                    {p.image_url?<img src={p.image_url} alt={p.product} className="lp-product-img"/>:<div className="lp-product-img-placeholder"><FlaskConical size={40} strokeWidth={1.5}/></div>}
+                    {p.image_url?<img src={p.image_url} alt={p.product} className="lp-product-img" loading="lazy" decoding="async"/>:<div className="lp-product-img-placeholder"><FlaskConical size={40} strokeWidth={1.5}/></div>}
                     <div className="lp-product-body">
                       <span className={`lp-stock-badge${p.status?.toLowerCase()==='in stock'?' in-stock':' out-stock'}`}>
                         {p.status?.toLowerCase()==='in stock'?t.in_stock:t.out_stock}
@@ -531,14 +579,7 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      <div className="lp-mobile-actions" aria-label={lang==='en'?'Quick actions':'Acciones rápidas'}>
-        <Link href={`/catalog?lang=${lang}`} className="lp-mobile-action lp-mobile-action--catalog" aria-label={lang==='en'?'Open catalog':'Abrir catálogo'}>
-          {lang==='en'?'Catalog':'Catálogo'} <ArrowUpRight size={15}/>
-        </Link>
-        <button type="button" onClick={()=>handleWA('mobile_sticky')} className="lp-mobile-action lp-mobile-action--wa" aria-label={lang==='en'?'Ask us on WhatsApp':'Preguntar por WhatsApp'}>
-          <WaIcon/> WhatsApp
-        </button>
-      </div>
+      <MobileActionBar lang={lang} onWhatsapp={()=>handleWA('mobile_sticky')} />
     </div>
   );
 }

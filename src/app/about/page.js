@@ -7,6 +7,8 @@ import { ArrowRight, ArrowUpRight, CheckCircle, MessageCircle, ShieldCheck, Truc
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import PromoTicker from '@/components/PromoTicker';
+import TrustFlowBand from '@/components/TrustFlowBand';
+import MobileActionBar from '@/components/MobileActionBar';
 import '../landing.css';
 import './about.css';
 
@@ -135,6 +137,8 @@ export default function AboutPage() {
           </div>
         </section>
 
+        <TrustFlowBand lang={lang} compact />
+
         <section className="about-proof-band">
           <div className="container about-proof-grid">
             <div>
@@ -203,14 +207,7 @@ export default function AboutPage() {
 
       <footer className="about-footer"><div className="container">© {new Date().getFullYear()} Peptides Costa Rica · {lang === 'en' ? 'For research use only.' : 'Solo para fines de investigación.'}</div></footer>
 
-      <div className="lp-mobile-actions" aria-label={lang === 'en' ? 'Quick actions' : 'Acciones rápidas'}>
-        <Link href={`/catalog?lang=${lang}`} className="lp-mobile-action lp-mobile-action--catalog" aria-label={lang === 'en' ? 'Open catalog' : 'Abrir catálogo'}>
-          {lang === 'en' ? 'Catalog' : 'Catálogo'} <ArrowUpRight size={15} />
-        </Link>
-        <a href={`https://wa.me/${links.whatsappNumber}`} className="lp-mobile-action lp-mobile-action--wa" target="_blank" rel="noopener noreferrer" aria-label={lang === 'en' ? 'Ask us on WhatsApp' : 'Preguntar por WhatsApp'}>
-          <MessageCircle size={16} /> WhatsApp
-        </a>
-      </div>
+      <MobileActionBar lang={lang} whatsappHref={`https://wa.me/${links.whatsappNumber}`} />
     </div>
   );
 }

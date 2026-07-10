@@ -38,10 +38,15 @@ export default function BlogListPage() {
     </section>
     <main className="editorial-main">
       <Link href="/" className="editorial-back"><ArrowLeft size={16}/>{lang === 'en' ? 'Back to home' : 'Volver al inicio'}</Link>
+      <nav className="editorial-topic-links" aria-label={lang === 'en' ? 'Research product links' : 'Enlaces de productos de investigación'}>
+        <Link href={`/catalog?category=${encodeURIComponent('Recovery & Healing')}&lang=${lang}`}>{lang === 'en' ? 'Recovery products' : 'Productos de recuperación'}</Link>
+        <Link href={`/catalog?category=${encodeURIComponent('Weight Loss & Metabolism')}&lang=${lang}`}>{lang === 'en' ? 'Metabolism products' : 'Productos metabólicos'}</Link>
+        <Link href={`/coa-database?lang=${lang}`}>{lang === 'en' ? 'COA database' : 'Base de datos COA'}</Link>
+      </nav>
       {loading ? <div className="editorial-empty">{lang === 'en' ? 'Loading articles…' : 'Cargando artículos…'}</div>
         : blogs.length === 0 ? <div className="editorial-empty">{lang === 'en' ? 'No articles published yet.' : 'Aún no hay artículos publicados.'}</div>
         : <div className="editorial-blog-grid">{blogs.map(blog => <Link href={`/blog/${blog.slug}`} key={blog.id} className="editorial-blog-card">
-          <div className="editorial-blog-image">{blog.image_url ? <img src={blog.image_url} alt={lang === 'en' ? blog.title_en : blog.title_es}/> : <div className="editorial-blog-placeholder"><BookOpen size={46}/></div>}</div>
+          <div className="editorial-blog-image">{blog.image_url ? <img src={blog.image_url} alt={lang === 'en' ? blog.title_en : blog.title_es} loading="lazy" decoding="async"/> : <div className="editorial-blog-placeholder"><BookOpen size={46}/></div>}</div>
           <div className="editorial-blog-body">
             <div className="editorial-blog-meta"><Calendar size={13}/>{new Date(blog.created_at).toLocaleDateString(lang === 'en' ? 'en-US' : 'es-CR')}</div>
             <h2>{lang === 'en' ? blog.title_en : blog.title_es}</h2>
