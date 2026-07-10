@@ -4,7 +4,14 @@ import { verifyUnsubscribeToken } from '@/lib/marketingTokens';
 
 export async function POST(request) {
   try {
-    const { token } = await request.json();
+    // Token can arrive two ways:
+    //  1. JSON body { token } — from our /unsubscribe page.
+    //  2. ?t= query param — RFC 8058 one-click unsubscribe (Gmail/Yahoo POST a
+    //     form body here directly from the "Unsubscribe" button in the mail UI).
+    let token = new URL(request.url).searchParams.get('t');
+    if (!token) {
+      try { ({ token } = await request.json()); } catch { /* non-JSON one-click body */ }
+    }
     const subscriberId = verifyUnsubscribeToken(token);
 
     if (!subscriberId) {

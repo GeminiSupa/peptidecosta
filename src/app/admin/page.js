@@ -2595,7 +2595,7 @@ Core Rules:
     
     setSendingRecoveryWhatsApp(prev => ({ ...prev, [acart.session_id]: true }));
     try {
-      const response = await fetch('/api/abandoned-cart-whatsapp', {
+      const response = await adminFetch('/api/abandoned-cart-whatsapp', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -2722,7 +2722,7 @@ Core Rules:
       const acart = cartsToProcess[i];
       setBulkProgressText(`Sending WhatsApp ${i + 1}/${cartsToProcess.length} to ${acart.customer_name || 'Customer'}...`);
       try {
-        const response = await fetch('/api/abandoned-cart-whatsapp', {
+        const response = await adminFetch('/api/abandoned-cart-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

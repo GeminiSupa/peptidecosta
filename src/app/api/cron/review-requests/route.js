@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { verifyCronRequest } from '@/lib/cronAuth';
 import nodemailer from 'nodemailer';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
 export async function GET(request) {
+  const denied = verifyCronRequest(request);
+  if (denied) return denied;
+
   try {
     const supabase = getSupabaseAdmin();
 
@@ -46,8 +50,7 @@ export async function GET(request) {
       host: SMTP_HOST,
       port: SMTP_PORT,
       secure: SMTP_SECURE,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-      tls: { rejectUnauthorized: false }
+      auth: { user: SMTP_USER, pass: SMTP_PASS }
     });
 
     let sentCount = 0;

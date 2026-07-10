@@ -84,7 +84,6 @@ export async function deliverCampaign(campaignId, options = {}) {
     port: Number(process.env.SMTP_PORT || 465),
     secure: process.env.SMTP_SECURE !== 'false',
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    tls: { rejectUnauthorized: false },
   });
   let sent = 0;
   let failed = 0;
@@ -96,6 +95,9 @@ export async function deliverCampaign(campaignId, options = {}) {
         const useVariantB = campaign.is_ab_test && ((isTestBatch && (offset + index) % 2 !== 0) || (sendWinner && winnerVariant === 'B'));
         const variant = useVariantB ? 'B' : 'A';
         const subject = personalize(useVariantB ? campaign.subject_line_b : campaign.subject_line, subscriber);
+        // Gmail/Yahoo bulk-sender rules REQUIRE one-click unsubscribe headers —
+        // without them, campaigns land in spam and the domain gets rate-limited.
+        const unsubscribeUrl = `${DOMAIN}/api/unsubscribe?t=${encodeURIComponent(createUnsubscribeToken(subscriber.id))}`;
         await transporter.sendMail({
           bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
           from: NOTIFICATION_FROM,
@@ -103,6 +105,10 @@ export async function deliverCampaign(campaignId, options = {}) {
           subject,
           html: trackedHtml(campaign, subscriber),
           replyTo: campaign.reply_to || undefined,
+          headers: {
+            'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:${process.env.SMTP_USER}?subject=unsubscribe>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          },
         });
         const { error } = await supabase.from('campaign_sends').insert({ campaign_id: campaign.id, subscriber_id: subscriber.id, subject_variant: variant });
         if (error) throw error;

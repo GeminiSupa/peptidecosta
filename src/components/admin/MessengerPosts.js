@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw, MessageSquare, ThumbsUp, Share2, Send, ExternalLink, CheckCircle2 } from 'lucide-react';
+import { adminFetch } from '@/lib/adminApi';
 
 function initials(name) {
   const w = String(name || 'FB').trim().split(/\s+/).filter(Boolean);
@@ -36,7 +37,7 @@ export default function MessengerPosts() {
   const fetchPosts = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
     try {
-      const res = await fetch('/api/messenger/posts', { cache: 'no-store' });
+      const res = await adminFetch('/api/messenger/posts', { cache: 'no-store' });
       const json = await res.json();
       if (json.error) setError(json.error);
       else { setError(''); setData(json); }
@@ -58,10 +59,11 @@ export default function MessengerPosts() {
     if (!text || dmSending) return;
     setDmSending(true);
     try {
-      const res = await fetch('/api/facebook/private-reply', {
+      const res = await adminFetch('/api/facebook/private-reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commentId: comment.id, message: text }),
+        // created_time lets the server enforce Meta's 7-day private-reply limit cleanly.
+        body: JSON.stringify({ commentId: comment.id, message: text, commentCreatedAt: comment.createdTime || comment.created_time }),
       });
       const json = await res.json();
       if (res.ok && json.success) {

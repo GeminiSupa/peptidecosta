@@ -43,6 +43,7 @@ export default function WhatsAppSessionTab() {
   const [testMsg,    setTestMsg]    = useState('');
   const [sending,    setSending]    = useState(false);
   const [testResult, setTestResult] = useState(null); // { ok, text }
+  const [allowCold,  setAllowCold]  = useState(false);
   const pollRef = useRef(null);
 
   // ── Polling ──────────────────────────────────────────────────────────────
@@ -87,7 +88,7 @@ export default function WhatsAppSessionTab() {
     try {
       const res  = await adminFetch('/api/admin/whatsapp-session/send', {
         method: 'POST',
-        body: JSON.stringify({ phone: testPhone, message: testMsg }),
+        body: JSON.stringify({ phone: testPhone, message: testMsg, allowColdSend: allowCold }),
       });
       const data = await res.json();
       setTestResult({ ok: res.ok && !data.error, text: data.error || data.text || 'Message sent!' });
@@ -261,6 +262,24 @@ export default function WhatsAppSessionTab() {
                 style={{ resize: 'vertical', lineHeight: '1.5' }}
               />
             </div>
+
+            <label style={{
+              display: 'flex', alignItems: 'flex-start', gap: '8px',
+              fontSize: '12px', color: 'rgba(255,255,255,0.55)',
+              cursor: 'pointer', lineHeight: '1.5',
+            }}>
+              <input
+                type="checkbox"
+                checked={allowCold}
+                onChange={e => setAllowCold(e.target.checked)}
+                style={{ marginTop: '2px', accentColor: '#fbbf24' }}
+              />
+              <span>
+                <strong style={{ color: '#fbbf24' }}>Allow new number</strong> — this contact has never
+                messaged us. Cold sends raise ban risk and are capped per day; leave off unless the
+                person genuinely expects your message.
+              </span>
+            </label>
 
             {testResult && (
               <div style={{

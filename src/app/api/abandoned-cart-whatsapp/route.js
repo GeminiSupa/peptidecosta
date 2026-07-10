@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAdminSession } from '@/lib/adminAuth';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { isWhatsAppSuppressed } from '@/lib/whatsappCompliance';
 
@@ -15,6 +16,11 @@ const supabase = supabaseUrl && (supabaseServiceKey || supabaseAnonKey)
   : null;
 
 export async function POST(request) {
+  // Was public: anyone could blast WhatsApp messages to arbitrary numbers,
+  // driving spam reports and Meta cost. Recovery sends are an admin action.
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   try {
     const payload = await request.json();
     const { session_id, customer_name, customer_phone, lang = 'es' } = payload;

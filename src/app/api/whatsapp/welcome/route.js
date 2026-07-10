@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAdminSession } from '@/lib/adminAuth';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { isWhatsAppSuppressed } from '@/lib/whatsappCompliance';
 
@@ -14,6 +15,11 @@ const supabase = supabaseUrl && supabaseServiceKey
   : null;
 
 export async function POST(request) {
+  // Was public: anyone could send WhatsApp template messages to arbitrary
+  // numbers. Restricted to admins to prevent spam/ban and API cost abuse.
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   try {
     const payload = await request.json();
     const { phone, lang = 'es' } = payload;

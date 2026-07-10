@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 // Live Facebook Post + Comments feed for the admin dashboard.
 // Requires the page token to have `pages_read_user_content` (Standard Access is
@@ -9,6 +10,9 @@ const PAGE_ID = process.env.FACEBOOK_PAGE_ID || process.env.MESSENGER_PAGE_ID ||
 const GRAPH = 'https://graph.facebook.com/v25.0';
 
 export async function GET(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   try {
     if (!PAGE_ACCESS_TOKEN) {
       return NextResponse.json({ error: 'FACEBOOK_PAGE_ACCESS_TOKEN is not configured.' }, { status: 500 });

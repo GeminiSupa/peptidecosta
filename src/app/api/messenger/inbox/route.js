@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 // Messenger inbox: live Graph API fetch (no DB). Redeploy marker: 2026-07-04.
 // ─── Meta Credentials ───
@@ -36,6 +37,10 @@ function isCommentText(text) {
  * Optional query: ?limit=25 (conversations), ?messages=25 (per conversation)
  */
 export async function GET(request) {
+  // Customer conversations are sensitive — admin session required.
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   try {
     if (!PAGE_ACCESS_TOKEN) {
       return NextResponse.json(

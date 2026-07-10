@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 // Fetches a Messenger user's real name + profile photo for a single conversation
 // (called lazily when a thread is opened, so we avoid one lookup per contact).
 const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 
 export async function GET(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   try {
     const { searchParams } = new URL(request.url);
     const psid = searchParams.get('psid');

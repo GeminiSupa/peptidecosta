@@ -1,23 +1,42 @@
 import { NextResponse } from 'next/server';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
+// Tilopay payment callback.
+//
+// SECURITY: this endpoint moves orders to "Paid", so it is a fraud target. Two
+// defenses are layered here:
+//   1. Shared-secret gate — set TILOPAY_WEBHOOK_SECRET and append it to the
+//      callback URL you configure in Tilopay (…/api/tilopay/webhook?secret=XXX).
+//      When the env var is set we REQUIRE it, so forged calls are rejected.
+//      (Left optional so enabling it is a deliberate, non-breaking step.)
+//   2. Forward-only status + order-exists check — a webhook can never regress an
+//      order that is already Paid/Completed, and can only act on a real order.
+//
+// It still does NOT prove the amount was paid in full — for that, re-query the
+// transaction against Tilopay's API. Flagged to the owner as a follow-up.
+
+const FINAL_PAID = new Set(['Paid', 'Completed', 'Shipped', 'Delivered']);
+
 export async function POST(req) {
   try {
-    const payload = await req.json();
+    // ── 1. Shared-secret gate (enforced only when configured) ──────────────
+    const configuredSecret = process.env.TILOPAY_WEBHOOK_SECRET;
+    if (configuredSecret) {
+      const url = new URL(req.url);
+      const provided = url.searchParams.get('secret') || req.headers.get('x-webhook-secret');
+      if (provided !== configuredSecret) {
+        console.warn('[Tilopay webhook] Rejected: missing/invalid secret');
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    }
 
+    const payload = await req.json();
     console.log('[Tilopay webhook] payload:', payload);
 
-    // Typically Tilopay sends an orderNumber or similar identifier.
-    // Example: { orderNumber: 'TPCR-XYZ123', status: 'APPROVED', code: 1, ... }
-    // Please verify the exact payload structure in your Tilopay dashboard docs or logs.
-    
-    // Fallbacks based on common Tilopay integrations
     const orderNumber = payload.orderNumber || payload.reference || payload.order_number;
-    
-    // code: 1 usually means approved, 2 is rejected, 3 is error, etc.
     const statusCode = payload.code || payload.status;
+
     let statusText = 'Pending';
-    
     if (statusCode === 1 || statusCode === 'APPROVED' || statusCode === 'approved') {
       statusText = 'Paid';
     } else if (statusCode === 2 || statusCode === 'REJECTED' || statusCode === 'rejected') {
@@ -25,7 +44,6 @@ export async function POST(req) {
     } else if (statusCode === 3 || statusCode === 'ERROR' || statusCode === 'error') {
       statusText = 'Error';
     } else {
-      // Just keep whatever status they send if we don't recognize it
       statusText = statusCode ? `Status: ${statusCode}` : 'Pending';
     }
 
@@ -34,15 +52,54 @@ export async function POST(req) {
     }
 
     if (isSupabaseConfigured && supabase) {
-      // Find the order by order_number and update it
+      // ── 2. Order must exist; read its current status first ───────────────
+      const { data: existing, error: lookupErr } = await supabase
+        .from('orders')
+        .select('id, status')
+        .eq('order_number', orderNumber)
+        .maybeSingle();
+
+      if (lookupErr) {
+        console.error('[Tilopay webhook] Lookup failed:', lookupErr);
+        return NextResponse.json({ error: 'Lookup failed' }, { status: 500 });
+      }
+      if (!existing) {
+        // Unknown order number — likely a probe/forgery. Acknowledge without acting.
+        console.warn('[Tilopay webhook] Unknown order number, ignoring:', orderNumber);
+        return NextResponse.json({ received: true, ignored: 'unknown_order' });
+      }
+
+      // Forward-only: never move a settled/paid order backward on a later callback.
+      if (FINAL_PAID.has(existing.status) && statusText !== 'Paid') {
+        console.warn(`[Tilopay webhook] Ignoring "${statusText}" for already-settled order ${orderNumber} (${existing.status})`);
+        return NextResponse.json({ received: true, ignored: 'already_settled' });
+      }
+      // Idempotent: nothing to do if the status is unchanged.
+      if (existing.status === statusText) {
+        return NextResponse.json({ received: true, unchanged: true });
+      }
+
       const { error } = await supabase
         .from('orders')
         .update({ status: statusText })
         .eq('order_number', orderNumber);
-        
+
       if (error) {
         console.error('[Tilopay webhook] Error updating Supabase:', error);
         return NextResponse.json({ error: 'Database update failed' }, { status: 500 });
+      }
+
+      // Notify admins of a payment so it can be human-verified against Tilopay.
+      if (statusText === 'Paid') {
+        try {
+          await supabase.from('admin_notifications').insert({
+            type: 'payment_received',
+            title: `Payment received: ${orderNumber}`,
+            body: `Tilopay reported this order as Paid. Verify the amount in the Tilopay dashboard before fulfilling.`,
+            link_tab: 'orders',
+            link_ref: orderNumber,
+          });
+        } catch { /* notifications table may not exist yet */ }
       }
     }
 

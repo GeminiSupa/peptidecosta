@@ -132,8 +132,7 @@ export async function GET(request) {
       host: SMTP_HOST,
       port: SMTP_PORT,
       secure: SMTP_SECURE,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-      tls: { rejectUnauthorized: false }
+      auth: { user: SMTP_USER, pass: SMTP_PASS }
     }) : null;
 
     for (const aff of affiliates) {

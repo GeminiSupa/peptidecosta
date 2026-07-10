@@ -88,8 +88,7 @@ async function sendEmail(to, message, subject, tracking = null, htmlContent = nu
       host: SMTP_HOST,
       port: SMTP_PORT,
       secure: SMTP_SECURE,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-      tls: { rejectUnauthorized: false }
+      auth: { user: SMTP_USER, pass: SMTP_PASS }
     });
 
     const trackingToken = tracking ? createJourneyTrackingToken(tracking) : null;

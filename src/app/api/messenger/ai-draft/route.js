@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 // Drafts a suggested Messenger reply using the live catalog as context.
 // Self-contained: the admin UI only sends the conversation, everything else is
@@ -9,6 +10,10 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 export async function POST(request) {
+  // AI drafting burns paid API tokens and sees customer messages — admin only.
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   try {
     const { messages = [], contactName = 'Customer' } = await request.json();
 

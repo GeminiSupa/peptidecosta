@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getBusinessLinks } from '@/lib/settings';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { createUnsubscribeToken } from '@/lib/marketingTokens';
+
+const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
@@ -15,7 +19,7 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   try {
-    const { to, subject, message, html_content, test_mode = false } = await request.json();
+    const { to, subject, message, html_content, test_mode = false, ignoreSuppression = false } = await request.json();
     const links = await getBusinessLinks();
 
     if (!to || !subject || (!message && !html_content)) {
@@ -26,6 +30,31 @@ export async function POST(request) {
       return NextResponse.json({ error: 'SMTP settings are not configured in system environment' }, { status: 500 });
     }
 
+    const recipient = to.trim().toLowerCase();
+
+    // Look up subscriber (for the unsubscribe token) and any active suppression.
+    let subscriberId = null;
+    try {
+      const supabaseAdmin = getSupabaseAdmin();
+      const [{ data: sub }, { data: suppressed }] = await Promise.all([
+        supabaseAdmin.from('email_subscribers').select('id').eq('email', recipient).maybeSingle(),
+        supabaseAdmin.from('marketing_suppressions').select('id')
+          .eq('active', true).eq('identity', recipient).in('channel', ['email', 'all']).limit(1),
+      ]);
+      subscriberId = sub?.id || null;
+
+      // Respect unsubscribes. ignoreSuppression is for genuine 1-on-1 support
+      // replies the customer asked for — never for outreach.
+      if (!ignoreSuppression && Array.isArray(suppressed) && suppressed.length > 0) {
+        return NextResponse.json({
+          error: `${recipient} has unsubscribed from emails. Emailing them anyway risks spam complaints that hurt deliverability for ALL your mail. Only override for a support reply they explicitly requested.`,
+          suppressed: true,
+        }, { status: 422 });
+      }
+    } catch (err) {
+      console.warn('[Admin Outbound Email] Suppression lookup failed (continuing):', err.message);
+    }
+
     const transporter = nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
@@ -34,9 +63,6 @@ export async function POST(request) {
         user: SMTP_USER,
         pass: SMTP_PASS,
       },
-      tls: {
-        rejectUnauthorized: false
-      }
     });
 
     // Make the message body render beautifully with paragraphs
@@ -68,14 +94,28 @@ export async function POST(request) {
       </div>
     `;
 
+    // Unsubscribe headers keep us aligned with Gmail/Yahoo sender rules and give
+    // recipients a clean exit instead of the "Report spam" button.
+    const unsubscribeUrl = subscriberId
+      ? `${DOMAIN}/api/unsubscribe?t=${encodeURIComponent(createUnsubscribeToken(subscriberId))}`
+      : null;
+    const listUnsubscribe = [
+      ...(unsubscribeUrl ? [`<${unsubscribeUrl}>`] : []),
+      `<mailto:${SMTP_USER}?subject=unsubscribe>`,
+    ].join(', ');
+
     const info = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+      bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
       from: NOTIFICATION_FROM,
       replyTo: SMTP_USER,
       to: to.trim(),
       subject: test_mode ? `[TEST] ${subject}` : subject,
       html: formattedHtml,
       text: message || undefined,
+      headers: {
+        'List-Unsubscribe': listUnsubscribe,
+        ...(unsubscribeUrl ? { 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' } : {}),
+      },
     });
 
     console.log(`[Admin Outbound Email] Outreach dispatched successfully to ${to}. MessageId: ${info.messageId}`);

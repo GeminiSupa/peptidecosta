@@ -97,8 +97,7 @@ export async function POST(request) {
           host: SMTP_HOST,
           port: SMTP_PORT,
           secure: SMTP_SECURE,
-          auth: { user: SMTP_USER, pass: SMTP_PASS },
-          tls: { rejectUnauthorized: false }
+          auth: { user: SMTP_USER, pass: SMTP_PASS }
         });
 
         const subject = language === 'en'

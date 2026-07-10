@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 // Shared "read" state for the Messenger inbox so unread status is the same for
 // the whole team (instead of living only in one admin's browser). Stored as a
@@ -10,7 +11,10 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 
 const SETTING_ID = 'messenger_seen';
 
-export async function GET() {
+export async function GET(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   if (!supabase) return NextResponse.json({ seen: {} });
   try {
     const { data } = await supabase.from('site_settings').select('value').eq('id', SETTING_ID).single();
@@ -21,6 +25,9 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   if (!supabase) return NextResponse.json({ success: false }, { status: 500 });
   try {
     const { conversationId, at } = await request.json();

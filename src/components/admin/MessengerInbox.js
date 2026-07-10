@@ -3,6 +3,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, MessageCircle, RefreshCw, Search, Send, Sparkles, Paperclip } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { adminFetch } from '@/lib/adminApi';
+
+// Meta only allows standard replies within 24h of the customer's last message.
+const REPLY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Hours left in the Meta 24h reply window; null when unknown, <=0 when closed. */
+function replyWindowHoursLeft(conv) {
+  if (!conv?.lastInboundAt) return null;
+  const elapsed = Date.now() - new Date(conv.lastInboundAt).getTime();
+  if (!Number.isFinite(elapsed)) return null;
+  return (REPLY_WINDOW_MS - elapsed) / (60 * 60 * 1000);
+}
 
 // Canned replies (Spanish-first) for one-tap common answers.
 const QUICK_REPLIES = [
@@ -109,7 +121,7 @@ export default function MessengerInbox() {
   useEffect(() => {
     // Instant from this browser's cache, then merge the shared team state.
     setSeenMap(loadSeen());
-    fetch('/api/messenger/seen')
+    adminFetch('/api/messenger/seen')
       .then((r) => r.json())
       .then((d) => { if (d && d.seen) setSeenMap((prev) => mergeSeen(prev, d.seen)); })
       .catch(() => {});
@@ -123,7 +135,7 @@ export default function MessengerInbox() {
       return next;
     });
     // Share with the rest of the team.
-    fetch('/api/messenger/seen', {
+    adminFetch('/api/messenger/seen', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ conversationId: convId, at }),
@@ -133,7 +145,7 @@ export default function MessengerInbox() {
   const fetchInbox = useCallback(async (isManual = false) => {
     if (isManual) setRefreshing(true);
     try {
-      const res = await fetch('/api/messenger/inbox', { cache: 'no-store' });
+      const res = await adminFetch('/api/messenger/inbox', { cache: 'no-store' });
       const data = await res.json();
       if (data.error) {
         setError(data.error);
@@ -141,7 +153,7 @@ export default function MessengerInbox() {
         setError('');
         setConversations(data.conversations || []);
         // Keep shared team read-state in sync on each poll.
-        fetch('/api/messenger/seen')
+        adminFetch('/api/messenger/seen')
           .then((r) => r.json())
           .then((d) => { if (d && d.seen) setSeenMap((prev) => mergeSeen(prev, d.seen)); })
           .catch(() => {});
@@ -203,13 +215,13 @@ export default function MessengerInbox() {
   const activeContactId = activeConv?.contactId;
   useEffect(() => {
     if (!activeContactId) return;
-    fetch('/api/messenger/sender-action', {
+    adminFetch('/api/messenger/sender-action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recipientId: activeContactId, action: 'mark_seen' }),
     }).catch(() => {});
     if (!profilePics[activeContactId]) {
-      fetch(`/api/messenger/profile?psid=${activeContactId}`)
+      adminFetch(`/api/messenger/profile?psid=${activeContactId}`)
         .then((r) => r.json())
         .then((d) => { if (d.profilePic) setProfilePics((p) => ({ ...p, [activeContactId]: d.profilePic })); })
         .catch(() => {});
@@ -220,7 +232,7 @@ export default function MessengerInbox() {
   const handleReplyChange = (e) => {
     setReplyText(e.target.value);
     if (!activeContactId || typingThrottleRef.current) return;
-    fetch('/api/messenger/sender-action', {
+    adminFetch('/api/messenger/sender-action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recipientId: activeContactId, action: 'typing_on' }),
@@ -232,7 +244,7 @@ export default function MessengerInbox() {
     if (!activeConv || drafting) return;
     setDrafting(true);
     try {
-      const res = await fetch('/api/messenger/ai-draft', {
+      const res = await adminFetch('/api/messenger/ai-draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: activeConv.messages, contactName: activeConv.contactName }),
@@ -258,10 +270,10 @@ export default function MessengerInbox() {
       if (upErr) throw upErr;
       const { data: { publicUrl } } = supabase.storage.from('whatsapp-media').getPublicUrl(fileName);
 
-      const res = await fetch('/api/facebook/reply', {
+      const res = await adminFetch('/api/facebook/reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipientId: activeConv.contactId, imageUrl: publicUrl }),
+        body: JSON.stringify({ recipientId: activeConv.contactId, imageUrl: publicUrl, lastInboundAt: activeConv.lastInboundAt }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -301,10 +313,10 @@ export default function MessengerInbox() {
     if (!text || !activeConv || !activeConv.contactId) return;
     setSending(true);
     try {
-      const res = await fetch('/api/facebook/reply', {
+      const res = await adminFetch('/api/facebook/reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipientId: activeConv.contactId, messageText: text }),
+        body: JSON.stringify({ recipientId: activeConv.contactId, messageText: text, lastInboundAt: activeConv.lastInboundAt }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -588,6 +600,35 @@ export default function MessengerInbox() {
             </div>
 
             <div className="admin-wa-composer">
+              {/* Meta 24h reply-window status — sends outside it are blocked to protect the Page */}
+              {activeConv.contactId && (() => {
+                const hoursLeft = replyWindowHoursLeft(activeConv);
+                if (hoursLeft === null) return null;
+                if (hoursLeft <= 0) {
+                  return (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px',
+                      background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)',
+                      borderRadius: '8px', padding: '8px 12px', fontSize: '0.78rem', color: '#fca5a5',
+                    }}>
+                      ⛔ Reply window closed (24h passed since their last message). Meta blocks sends now —
+                      wait for the customer to write again. This protects the Page from restrictions.
+                    </div>
+                  );
+                }
+                const urgent = hoursLeft < 4;
+                return (
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '8px',
+                    fontSize: '0.72rem', fontWeight: 600, padding: '3px 10px', borderRadius: '999px',
+                    background: urgent ? 'rgba(251,191,36,0.12)' : 'rgba(52,211,153,0.1)',
+                    border: `1px solid ${urgent ? 'rgba(251,191,36,0.3)' : 'rgba(52,211,153,0.25)'}`,
+                    color: urgent ? '#fbbf24' : '#34d399',
+                  }}>
+                    ⏱ Reply window: {hoursLeft < 1 ? `${Math.max(1, Math.round(hoursLeft * 60))}m` : `${Math.floor(hoursLeft)}h`} left
+                  </div>
+                );
+              })()}
               {activeConv.contactId && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
                   {QUICK_REPLIES.map((qr) => (

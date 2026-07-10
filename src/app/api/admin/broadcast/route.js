@@ -91,9 +91,6 @@ async function sendEmail(to, message, subject) {
         auth: {
           user: SMTP_USER,
           pass: SMTP_PASS,
-        },
-        tls: {
-          rejectUnauthorized: false
         }
       });
     }
