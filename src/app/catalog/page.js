@@ -1351,6 +1351,22 @@ export default function CatalogPage() {
       : `Los precios CRC se actualizan con el tipo de cambio en vivo. ${rateLabel}.`;
   };
 
+  const getExchangeRateMeta = () => {
+    const updated = exchangeRateUpdatedAt
+      ? new Date(exchangeRateUpdatedAt).toLocaleTimeString(lang === 'en' ? 'en-US' : 'es-CR', { hour: 'numeric', minute: '2-digit' })
+      : null;
+    return {
+      label: lang === 'en' ? 'Live CRC rate' : 'Tipo CRC en vivo',
+      rate: `1 USD = ₡${Math.round(exchangeRate).toLocaleString('en-US')}`,
+      updated: updated
+        ? (lang === 'en' ? `Updated ${updated}` : `Actualizado ${updated}`)
+        : (lang === 'en' ? 'Live conversion' : 'Conversión en vivo'),
+      note: lang === 'en'
+        ? 'CRC prices are calculated automatically from the USD price.'
+        : 'Los precios CRC se calculan automáticamente desde el precio USD.',
+    };
+  };
+
   const renderRatingSummary = (productName) => {
     const prodReviews = reviews.filter(r => r.product_name === productName);
     if (prodReviews.length === 0) return null;
@@ -2629,9 +2645,6 @@ export default function CatalogPage() {
               CRC
             </button>
           </div>
-          <div className="fx-rate-note" title={getExchangeRateNote()}>
-            {getExchangeRateNote()}
-          </div>
         </div>
 
         <div className="header-content container">
@@ -2922,6 +2935,17 @@ export default function CatalogPage() {
               ? 'Browse available peptides, prices, and real-time availability.' 
               : 'Explora péptidos disponibles, precios y disponibilidad en tiempo real.'}
           </p>
+          {(() => {
+            const fx = getExchangeRateMeta();
+            return (
+              <div className="catalog-fx-card" title={getExchangeRateNote()}>
+                <span className="catalog-fx-label">{fx.label}</span>
+                <strong>{fx.rate}</strong>
+                <span>{fx.updated}</span>
+                <small>{fx.note}</small>
+              </div>
+            );
+          })()}
         </div>
         {gateLoading ? (
           <div className="loader">
@@ -3119,14 +3143,6 @@ export default function CatalogPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="product-trust-chips" aria-label={lang === 'en' ? 'Product trust details' : 'Detalles de confianza del producto'}>
-                      {p.coa && p.coa !== '—' && <span>{lang === 'en' ? 'COA available' : 'COA disponible'}</span>}
-                      {inStock && !isBac && <span>{lang === 'en' ? 'In Costa Rica' : 'En Costa Rica'}</span>}
-                      {inStock && !isBac && p.inventoryCount !== null && p.inventoryCount <= (p.lowStockThreshold || 5) && p.inventoryCount > 0 && (
-                        <span>{lang === 'en' ? 'Low stock' : 'Pocas unidades'}</span>
-                      )}
-                    </div>
-
                     <div className="product-actions">
                       {isBac ? (
                         <button className="add-to-cart-btn" style={{ background: 'var(--bg-secondary)', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'default', boxShadow: 'none' }} disabled>
