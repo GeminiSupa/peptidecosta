@@ -15,7 +15,7 @@ import './landing.css';
 
 const T = {
   en: {
-    nav_shop:'Shop',hero_title:'Research peptides, already in Costa Rica.',hero_sub:'See the batch documentation, know the price, and order locally without international customs delays.',hero_cta:'View the Catalog',hero_cta2:'Ask Us on WhatsApp',t1:'COAs available',t2:'Local delivery',t3:'Real human support',tr1_t:'See the documentation',tr1_d:'Review the available Certificate of Analysis before you decide what to order.',tr2_t:'Skip international customs',tr2_d:'Stock is already in Costa Rica, with delivery coordinated locally.',tr3_t:'Talk to a real person',tr3_d:'Joey and Sean answer questions directly in Spanish or English.',how_t:'From catalog to delivery',how_s:'A straightforward local ordering process.',cats_t:'Browse by Category',cats_s:'Research-grade peptides organized by application area.',feat_t:'Currently in demand',feat_s:'Frequently requested products from our local inventory.',feat_btn:'View Product',in_stock:'In Stock',out_stock:'Out of Stock',res_t:'Customer Experience Highlights',res_s:'Feedback shared by our research community in Costa Rica.',res_disc:'Results may vary. Products are intended strictly for research use only and are not intended to diagnose, treat, cure, or prevent any disease.',faq_t:'Frequently Asked Questions',faq_s:'The practical details before you order.',faq_q1:'Are your peptides lab-tested?',faq_a1:'Yes. Every product comes with a Certificate of Analysis (COA) from independent third-party HPLC labs, guaranteeing ≥98% purity.',faq_q2:'How do I order?',faq_a2:'Browse our catalog, add items to your cart, and confirm via WhatsApp. We send payment details and dispatch within 24-48 hours.',faq_q3:'Do you deliver throughout Costa Rica?',faq_a3:'Yes. We ship to all provinces. Delivery takes 1–3 business days after payment confirmation.',faq_q4:'Can I contact you on WhatsApp?',faq_a4:'Absolutely. Message us at +506 8404-6973. We reply in both Spanish and English.',faq_q5:'Are products for research use only?',faq_a5:'Yes. All products are strictly for laboratory research. Not for human or veterinary consumption.',    cta_t:'Ready to see what is available?',cta_s:'Browse current stock and batch information, or ask us a question before ordering.',cta_btn:'View the Catalog',cta_wa:'Ask on WhatsApp',f_desc:'Research peptides stocked locally in Costa Rica, with clear documentation and direct support.',f_copy:'All rights reserved. For research purposes only. Not for human consumption.',
+    nav_shop:'Shop',hero_title:'Research peptides, already in Costa Rica.',hero_sub:'See the batch documentation, know the price, and order locally without international customs delays.',hero_cta:'Shop Now',hero_cta2:'Talk to Expert',t1:'COAs available',t2:'Local delivery',t3:'Real human support',tr1_t:'See the documentation',tr1_d:'Review the available Certificate of Analysis before you decide what to order.',tr2_t:'Skip international customs',tr2_d:'Stock is already in Costa Rica, with delivery coordinated locally.',tr3_t:'Talk to a real person',tr3_d:'Joey and Sean answer questions directly in Spanish or English.',how_t:'From catalog to delivery',how_s:'A straightforward local ordering process.',cats_t:'Browse by Category',cats_s:'Research-grade peptides organized by application area.',feat_t:'Best sellers',feat_s:'Frequently requested products from our local inventory.',feat_btn:'See Details',in_stock:'In Stock',out_stock:'Out of Stock',res_t:'Customer Experience Highlights',res_s:'Feedback shared by our research community in Costa Rica.',res_disc:'Results may vary. Products are intended strictly for research use only and are not intended to diagnose, treat, cure, or prevent any disease.',faq_t:'Frequently Asked Questions',faq_s:'The practical details before you order.',faq_q1:'Are your peptides lab-tested?',faq_a1:'Yes. Every product comes with a Certificate of Analysis (COA) from independent third-party HPLC labs, guaranteeing ≥98% purity.',faq_q2:'How do I order?',faq_a2:'Browse our catalog, add items to your cart, and confirm via WhatsApp. We send payment details and dispatch within 24-48 hours.',faq_q3:'Do you deliver throughout Costa Rica?',faq_a3:'Yes. We ship to all provinces. Delivery takes 1–3 business days after payment confirmation.',faq_q4:'Can I contact you on WhatsApp?',faq_a4:'Absolutely. Message us at +506 8404-6973. We reply in both Spanish and English.',faq_q5:'Are products for research use only?',faq_a5:'Yes. All products are strictly for laboratory research. Not for human or veterinary consumption.',    cta_t:'Ready to order?',cta_s:'Browse 300+ research products with current Costa Rica stock and batch details.',cta_btn:'See Inventory',cta_wa:'WhatsApp Us',f_desc:'Research peptides stocked locally in Costa Rica, with clear documentation and direct support.',f_copy:'All rights reserved. For research purposes only. Not for human consumption.',
     story_badge:'OUR STORY',story_t:'Built on Real Experience in Costa Rica',story_intro:'Peptides Costa Rica was founded by two longtime friends and training partners with deep roots in combat sports and high-performance training. Our business began not in an office, but in gyms, fight camps, and recovery rooms — after years of pushing ourselves to the limit.',
     story_origin_t:'From the Fight World to Peptides Costa Rica',story_origin_d:'More than 15 years ago, Joey Webster and Sean McCully moved from California to Costa Rica searching for a better lifestyle. They soon found a shared mission: helping others perform better, recover faster, and stay healthy for the long term.',
     sean_t:'Sean McCully',sean_role:'Combat Sports Pioneer',sean_d:'World champion in Muay Thai and kickboxing, early MMA pioneer, and founder of LA Boxing. Today he runs McCully\'s Fight Club in Costa Rica, coaching fighters at every level. Decades of competitive fighting shaped his vision for recovery and performance.',
@@ -30,7 +30,7 @@ const T = {
     story_bulk_t:'Bulk Savings Program',story_bulk_d:'Purchase five or more vials of the same product to receive 15% off. No confusing levels or hidden rules — simple and easy to understand.',story_bulk_btn:'Learn About Bulk Savings',story_shop_btn:'Browse All Products',
   },
   es: {
-    nav_shop:'Tienda',hero_title:'Péptidos de investigación, ya en Costa Rica.',hero_sub:'Consulta la documentación del lote, conoce el precio y ordena localmente sin demoras de aduana internacional.',hero_cta:'Ver el Catálogo',hero_cta2:'Preguntar por WhatsApp',t1:'COAs disponibles',t2:'Entrega local',t3:'Atención humana',tr1_t:'Consulta la documentación',tr1_d:'Revisa el Certificado de Análisis disponible antes de decidir qué ordenar.',tr2_t:'Evita la aduana internacional',tr2_d:'El inventario ya está en Costa Rica y coordinamos la entrega localmente.',tr3_t:'Habla con una persona',tr3_d:'Joey y Sean responden tus preguntas directamente en español o inglés.',how_t:'Del catálogo a la entrega',how_s:'Un proceso local, claro y directo.',cats_t:'Explorar por Categoría',cats_s:'Péptidos de grado investigación organizados por área de aplicación.',feat_t:'Los más solicitados',feat_s:'Productos pedidos con frecuencia de nuestro inventario local.',feat_btn:'Ver Producto',in_stock:'Disponible',out_stock:'Agotado',res_t:'Experiencias de Clientes',res_s:'Comentarios compartidos por nuestra comunidad de investigación en Costa Rica.',res_disc:'Los resultados pueden variar. Los productos son estrictamente para uso de investigación y no están destinados a diagnosticar, tratar o prevenir enfermedades.',faq_t:'Preguntas Frecuentes',faq_s:'Los detalles prácticos antes de ordenar.',faq_q1:'¿Sus péptidos están probados en laboratorio?',faq_a1:'Sí. Cada producto incluye un COA de laboratorios HPLC independientes, garantizando ≥98% de pureza.',faq_q2:'¿Cómo ordeno?',faq_a2:'Navega el catálogo, agrega al carrito y confirma por WhatsApp. Te enviamos los detalles de pago y despachamos en 24-48 horas.',faq_q3:'¿Hacen entrega en toda Costa Rica?',faq_a3:'Sí. Enviamos a todas las provincias. La entrega toma 1-3 días hábiles tras confirmar el pago.',faq_q4:'¿Puedo contactarlos por WhatsApp?',faq_a4:'Claro. Escríbenos al +506 8404-6973. Respondemos en español e inglés.',faq_q5:'¿Estos productos son solo para investigación?',faq_a5:'Sí. Todos los productos son estrictamente para investigación de laboratorio. No aptos para consumo humano ni veterinario.',    cta_t:'¿Quieres ver qué hay disponible?',cta_s:'Consulta el inventario y la información de cada lote, o escríbenos antes de ordenar.',cta_btn:'Ver el Catálogo',cta_wa:'Preguntar por WhatsApp',f_desc:'Péptidos de investigación disponibles localmente en Costa Rica, con documentación clara y atención directa.',f_copy:'Todos los derechos reservados. Uso exclusivo de investigación. No apto para consumo humano.',
+    nav_shop:'Tienda',hero_title:'Péptidos de investigación, ya en Costa Rica.',hero_sub:'Consulta la documentación del lote, conoce el precio y ordena localmente sin demoras de aduana internacional.',hero_cta:'Comprar ahora',hero_cta2:'Hablar con experto',t1:'COAs disponibles',t2:'Entrega local',t3:'Atención humana',tr1_t:'Consulta la documentación',tr1_d:'Revisa el Certificado de Análisis disponible antes de decidir qué ordenar.',tr2_t:'Evita la aduana internacional',tr2_d:'El inventario ya está en Costa Rica y coordinamos la entrega localmente.',tr3_t:'Habla con una persona',tr3_d:'Joey y Sean responden tus preguntas directamente en español o inglés.',how_t:'Del catálogo a la entrega',how_s:'Un proceso local, claro y directo.',cats_t:'Explorar por Categoría',cats_s:'Péptidos de grado investigación organizados por área de aplicación.',feat_t:'Los más solicitados',feat_s:'Productos pedidos con frecuencia de nuestro inventario local.',feat_btn:'Ver detalles',in_stock:'Disponible',out_stock:'Agotado',res_t:'Experiencias de Clientes',res_s:'Comentarios compartidos por nuestra comunidad de investigación en Costa Rica.',res_disc:'Los resultados pueden variar. Los productos son estrictamente para uso de investigación y no están destinados a diagnosticar, tratar o prevenir enfermedades.',faq_t:'Preguntas Frecuentes',faq_s:'Los detalles prácticos antes de ordenar.',faq_q1:'¿Sus péptidos están probados en laboratorio?',faq_a1:'Sí. Cada producto incluye un COA de laboratorios HPLC independientes, garantizando ≥98% de pureza.',faq_q2:'¿Cómo ordeno?',faq_a2:'Navega el catálogo, agrega al carrito y confirma por WhatsApp. Te enviamos los detalles de pago y despachamos en 24-48 horas.',faq_q3:'¿Hacen entrega en toda Costa Rica?',faq_a3:'Sí. Enviamos a todas las provincias. La entrega toma 1-3 días hábiles tras confirmar el pago.',faq_q4:'¿Puedo contactarlos por WhatsApp?',faq_a4:'Claro. Escríbenos al +506 8404-6973. Respondemos en español e inglés.',faq_q5:'¿Estos productos son solo para investigación?',faq_a5:'Sí. Todos los productos son estrictamente para investigación de laboratorio. No aptos para consumo humano ni veterinario.',    cta_t:'¿Listo para ordenar?',cta_s:'Explora más de 300 productos de investigación con inventario local y detalles de lote.',cta_btn:'Ver inventario',cta_wa:'Escríbenos',f_desc:'Péptidos de investigación disponibles localmente en Costa Rica, con documentación clara y atención directa.',f_copy:'Todos los derechos reservados. Uso exclusivo de investigación. No apto para consumo humano.',
     story_badge:'NUESTRA HISTORIA',story_t:'Construido con Experiencia Real en Costa Rica',story_intro:'Peptides Costa Rica fue fundado por dos amigos y compañeros de entrenamiento con profundas raíces en deportes de combate y entrenamiento de alto rendimiento. Nuestro negocio comenzó no en una oficina, sino en gimnasios, campamentos de pelea y salas de recuperación.',
     story_origin_t:'Del Mundo del Combate a Peptides Costa Rica',story_origin_d:'Hace más de 15 años, Joey Webster y Sean McCully se mudaron de California a Costa Rica buscando un mejor estilo de vida. Pronto encontraron una misión compartida: ayudar a otros a rendir mejor, recuperarse más rápido y mantenerse saludables a largo plazo.',
     sean_t:'Sean McCully',sean_role:'Pionero en Deportes de Combate',sean_d:'Campeón mundial de Muay Thai y kickboxing, pionero del MMA temprano y fundador de LA Boxing. Hoy dirige McCully\'s Fight Club en Costa Rica, entrenando peleadores de todos los niveles. Décadas de experiencia competitiva moldearon su visión de recuperación y rendimiento.',
@@ -285,6 +285,51 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* BEST-SELLING PRODUCTS */}
+        {featuredProducts.length>0&&(
+          <section className="lp-section lp-featured-section lp-featured-section--early">
+            <div className="container">
+              <div className="lp-section-header lp-section-header--split">
+                <div>
+                  <span className="lp-section-eyebrow">{lang==='en'?'LIVE LOCAL STOCK':'INVENTARIO LOCAL'}</span>
+                  <h2>{t.feat_t}</h2>
+                  <p>{t.feat_s}</p>
+                </div>
+                <Link href={`/catalog?lang=${lang}`} className="btn-outline lp-header-link">
+                  {lang==='en'?'Browse Products':'Ver productos'} <ExternalLink size={15}/>
+                </Link>
+              </div>
+              <div className="lp-products-grid lp-products-grid--featured">
+                {featuredProducts.map((p,i)=>(
+                  <div key={i} className="lp-product-card">
+                    {p.original_price_usd&&p.original_price_usd!==p.price_usd&&<div className="sale-badge">{lang==='en'?'SALE':'OFERTA'}</div>}
+                    <div className="lp-product-image-stage">
+                      {p.image_url?<img src={p.image_url} alt={p.product} className="lp-product-img" loading="lazy" decoding="async"/>:<div className="lp-product-img-placeholder"><FlaskConical size={40} strokeWidth={1.5}/></div>}
+                    </div>
+                    <div className="lp-product-body">
+                      <span className={`lp-stock-badge${p.status?.toLowerCase()==='in stock'?' in-stock':' out-stock'}`}>
+                        {p.status?.toLowerCase()==='in stock'?t.in_stock:t.out_stock}
+                      </span>
+                      <h4>{p.product}</h4>
+                      <div className="lp-product-price">
+                        {p.original_price_usd&&p.original_price_usd!==p.price_usd?(
+                          <div className="lp-price-stack">
+                            <span className="price-original">{lang==='en'?p.original_price_usd:p.original_price_crc||p.original_price_usd}</span>
+                            <span className="price-sale">{lang==='en'?p.price_usd:p.price_crc||p.price_usd}</span>
+                          </div>
+                        ):(lang==='en'?p.price_usd:p.price_crc||p.price_usd)}
+                      </div>
+                      <Link href={`/catalog?product=${encodeURIComponent(p.product)}&lang=${lang}`} className="lp-product-btn">
+                        {t.feat_btn} <ArrowUpRight size={15}/>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
         <TrustFlowBand lang={lang} />
 
         <section className="lp-quick-start" aria-labelledby="quick-start-title">
@@ -297,10 +342,10 @@ export default function LandingPage() {
                 : 'Consulta qué está disponible, revisa la información del lote y habla con una persona antes de coordinar la entrega.'}</p>
               <div className="lp-quick-start-actions">
                 <Link href={`/catalog?lang=${lang}`} className="lp-quick-start-primary" aria-label={lang==='en'?'Open the product catalog':'Abrir el catálogo de productos'}>
-                  {t.hero_cta} <ArrowUpRight size={17}/>
+                  {lang==='en'?'Browse Products':'Ver productos'} <ArrowUpRight size={17}/>
                 </Link>
                 <button type="button" onClick={()=>handleWA('quick_start')} className="lp-quick-start-secondary" aria-label={lang==='en'?'Ask us on WhatsApp':'Preguntar por WhatsApp'}>
-                  <WaIcon/> {t.hero_cta2}
+                  <WaIcon/> {lang==='en'?'Ask on WhatsApp':'Preguntar'}
                 </button>
               </div>
             </div>
@@ -389,50 +434,6 @@ export default function LandingPage() {
             </div>
           </div>
         </section>
-
-        {/* BEST-SELLING PRODUCTS */}
-        {featuredProducts.length>0&&(
-          <section className="lp-section lp-featured-section">
-            <div className="container">
-              <div className="lp-section-header">
-                <h2>{t.feat_t}</h2>
-                <p>{t.feat_s}</p>
-              </div>
-              <div className="lp-products-grid">
-                {featuredProducts.map((p,i)=>(
-                  <div key={i} className="lp-product-card">
-                    {p.original_price_usd&&p.original_price_usd!==p.price_usd&&<div className="sale-badge">{lang==='en'?'SALE':'OFERTA'}</div>}
-                    {p.image_url?<img src={p.image_url} alt={p.product} className="lp-product-img" loading="lazy" decoding="async"/>:<div className="lp-product-img-placeholder"><FlaskConical size={40} strokeWidth={1.5}/></div>}
-                    <div className="lp-product-body">
-                      <span className={`lp-stock-badge${p.status?.toLowerCase()==='in stock'?' in-stock':' out-stock'}`}>
-                        {p.status?.toLowerCase()==='in stock'?t.in_stock:t.out_stock}
-                      </span>
-                      <h4>{p.product}</h4>
-                      <div className="lp-product-price">
-                        {p.original_price_usd&&p.original_price_usd!==p.price_usd?(
-                          <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                            <span className="price-original">{lang==='en'?p.original_price_usd:p.original_price_crc||p.original_price_usd}</span>
-                            <span className="price-sale">{lang==='en'?p.price_usd:p.price_crc||p.price_usd}</span>
-                          </div>
-                        ):(lang==='en'?p.price_usd:p.price_crc||p.price_usd)}
-                      </div>
-                      <div style={{display:'flex',gap:'8px',marginTop:'12px',flexWrap:'wrap'}}>
-                        <Link href={`/catalog?product=${encodeURIComponent(p.product)}&lang=${lang}`} className="lp-product-btn" style={{flex:'1',textAlign:'center',justifyContent:'center',background:'var(--primary)',color:'white',padding:'9px 12px',borderRadius:'10px',textDecoration:'none',fontWeight:'700',fontSize:'0.8rem',display:'flex',alignItems:'center',gap:'4px'}}>
-                          {t.feat_btn} <ArrowUpRight size={13}/>
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{textAlign:'center',marginTop:'40px'}}>
-                <Link href={`/catalog?lang=${lang}`} className="btn-outline">
-                  {lang==='en'?'View All Products':'Ver Todos los Productos'} <ExternalLink size={15} style={{marginLeft:6,display:'inline'}}/>
-                </Link>
-              </div>
-            </div>
-          </section>
-        )}
 
         {/* CATEGORIES */}
         <section className="lp-section lp-cats-section">
@@ -533,6 +534,20 @@ export default function LandingPage() {
       {/* FOOTER */}
       <footer className="footer" style={{marginTop:0}}>
         <div className="container">
+          <div className="lp-footer-cta">
+            <div>
+              <span>{lang==='en'?'READY TO ORDER?':'¿LISTO PARA ORDENAR?'}</span>
+              <h2>{lang==='en'?'Browse 300+ research peptides':'Explora más de 300 péptidos de investigación'}</h2>
+            </div>
+            <div className="lp-footer-cta-actions">
+              <Link href={`/catalog?lang=${lang}`} className="lp-footer-shop">
+                {lang==='en'?'Shop Now':'Comprar ahora'} <ArrowUpRight size={17}/>
+              </Link>
+              <button type="button" onClick={()=>handleWA('footer')} className="lp-footer-wa">
+                <WaIcon/> {lang==='en'?'WhatsApp Us':'WhatsApp'}
+              </button>
+            </div>
+          </div>
           <img src="/logo.webp" alt="Logo" style={{height:'36px',marginBottom:'16px',opacity:0.95,borderRadius:'8px'}} loading="lazy"/>
           <p>{t.f_desc}</p>
           <div className="footer-links-grid" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'32px',textAlign:'left',margin:'40px 0'}}>
