@@ -696,6 +696,7 @@ export default function WhatsAppInbox({
           <div className="admin-wa-empty">
             <MessageCircle size={48} aria-hidden />
             <p>Select a conversation to start messaging.</p>
+            <small>For new customers, ask them to message us from the website WhatsApp button first. No numeric code is needed.</small>
           </div>
         )}
       </div>

@@ -276,8 +276,8 @@ export default function WhatsAppSessionTab() {
               />
               <span>
                 <strong style={{ color: '#fbbf24' }}>Allow new number</strong> — this contact has never
-                messaged us. Cold sends raise ban risk and are capped per day; leave off unless the
-                person genuinely expects your message.
+                messaged us. The safer flow is to ask them to open WhatsApp from the website and send
+                any message first. No numeric code is needed.
               </span>
             </label>
 

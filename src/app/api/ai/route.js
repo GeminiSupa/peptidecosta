@@ -193,7 +193,7 @@ Guidelines:
 6. For WhatsApp safety, do not make medical, therapeutic, diagnostic, treatment, dosage, injection, human-use, weight-loss, or prescription-style claims.
 7. Do not imply a peptide treats, cures, prevents, reverses, or produces body outcomes.
 8. Do not invent inventory, certifications, lab results, prices, discounts, or claims not provided by the admin.
-9. Include a short opt-out footer in Spanish, e.g. "Para dejar de recibir promociones, responda BAJA."
+9. Include a short opt-out footer in Spanish, e.g. "Para dejar de recibir promociones, responda BAJA." Never ask people to reply with a numeric code; ask them to reply normally if they want help.
 
 Output ONLY the final drafted message text.`;
     } else if (mode === 'generate_journey') {

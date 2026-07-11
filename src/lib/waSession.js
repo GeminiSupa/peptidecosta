@@ -559,8 +559,8 @@ export function sendWAMessage(to, text, opts = {}) {
       const known = await hasPriorInbound(digits);
       if (!known) {
         throw new Error(
-          `Blocked cold send to ${digits}. To avoid bans, this device only messages people ` +
-          `who messaged you first. Pass allowColdSend:true to override for a genuine reply.`
+          `Blocked first message to ${digits}. To protect the Sales WhatsApp number, ask the customer ` +
+          `to send any message first from the website WhatsApp button. No numeric code is needed.`
         );
       }
     }
