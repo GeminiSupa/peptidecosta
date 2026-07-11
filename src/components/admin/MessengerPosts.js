@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, MessageSquare, ThumbsUp, Share2, Send, ExternalLink, CheckCircle2 } from 'lucide-react';
+import {
+  CalendarClock, CheckCircle2, ExternalLink, Image as ImageIcon, Link as LinkIcon,
+  MessageSquare, RefreshCw, Send, Share2, ThumbsUp,
+} from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
 function initials(name) {
@@ -33,6 +36,16 @@ export default function MessengerPosts() {
   const [dmText, setDmText] = useState('');
   const [dmSending, setDmSending] = useState(false);
   const [dmDone, setDmDone] = useState({}); // comment id -> true after DM sent
+  const [publicFor, setPublicFor] = useState(null); // comment id being publicly replied to
+  const [publicText, setPublicText] = useState('');
+  const [publicSending, setPublicSending] = useState(false);
+  const [publicDone, setPublicDone] = useState({});
+  const [draftMessage, setDraftMessage] = useState('');
+  const [draftLink, setDraftLink] = useState('');
+  const [draftImageUrl, setDraftImageUrl] = useState('');
+  const [draftScheduledAt, setDraftScheduledAt] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [postStatus, setPostStatus] = useState('');
 
   const fetchPosts = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -53,6 +66,7 @@ export default function MessengerPosts() {
 
   const summary = data?.summary;
   const posts = useMemo(() => data?.posts || [], [data]);
+  const scheduledPosts = useMemo(() => data?.scheduledPosts || [], [data]);
 
   const sendDm = async (comment) => {
     const text = dmText.trim();
@@ -80,12 +94,77 @@ export default function MessengerPosts() {
     }
   };
 
+  const sendPublicReply = async (comment) => {
+    const text = publicText.trim();
+    if (!text || publicSending) return;
+    setPublicSending(true);
+    try {
+      const res = await adminFetch('/api/facebook/comment-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commentId: comment.id, message: text }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setPublicDone((p) => ({ ...p, [comment.id]: true }));
+        setPublicFor(null);
+        setPublicText('');
+        fetchPosts(true);
+      } else {
+        alert('Public reply failed: ' + (json.error || 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Public reply error: ' + e.message);
+    } finally {
+      setPublicSending(false);
+    }
+  };
+
+  const publishPost = async () => {
+    if (posting) return;
+    const payload = {
+      message: draftMessage.trim(),
+      link: draftLink.trim(),
+      imageUrl: draftImageUrl.trim(),
+      scheduledAt: draftScheduledAt,
+    };
+    if (!payload.message && !payload.link && !payload.imageUrl) {
+      setPostStatus('Add a caption, catalog link, or image URL first.');
+      return;
+    }
+
+    setPosting(true);
+    setPostStatus('');
+    try {
+      const res = await adminFetch('/api/messenger/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setPostStatus(json.error || 'Post failed.');
+        return;
+      }
+      setPostStatus(json.scheduled ? 'Post scheduled on Facebook.' : 'Post published on Facebook.');
+      setDraftMessage('');
+      setDraftLink('');
+      setDraftImageUrl('');
+      setDraftScheduledAt('');
+      fetchPosts(true);
+    } catch (e) {
+      setPostStatus(e.message || 'Post failed.');
+    } finally {
+      setPosting(false);
+    }
+  };
+
   return (
     <div style={{ paddingBottom: 40 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div>
-          <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.1rem', fontWeight: 700 }}>Post Comments</h3>
-          <p style={{ margin: '4px 0 0', color: '#94a3b8', fontSize: '0.85rem' }}>Comments on your Facebook posts. DM any commenter directly.</p>
+          <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.1rem', fontWeight: 700 }}>Content & Engagement</h3>
+          <p style={{ margin: '4px 0 0', color: '#94a3b8', fontSize: '0.85rem' }}>Publish posts, watch comments, and reply from the Page.</p>
         </div>
         <button
           type="button"
@@ -96,13 +175,94 @@ export default function MessengerPosts() {
         </button>
       </div>
 
+      <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, padding: 16, marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <Send size={16} style={{ color: '#38bdf8' }} />
+          <div>
+            <div style={{ color: '#f8fafc', fontWeight: 800, fontSize: '0.95rem' }}>Create Facebook Post</div>
+            <div style={{ color: '#64748b', fontSize: '0.76rem' }}>Use a catalog link with UTM tracking when you want to measure sales impact.</div>
+          </div>
+        </div>
+
+        <textarea
+          value={draftMessage}
+          onChange={(e) => setDraftMessage(e.target.value)}
+          placeholder="Write a caption for the Page..."
+          rows={4}
+          style={{ width: '100%', resize: 'vertical', minHeight: 92, padding: '12px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: '#111c31', color: '#f8fafc', fontSize: '0.9rem', lineHeight: 1.5, outline: 'none' }}
+        />
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginTop: 10 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#111c31', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '0 10px', minHeight: 40 }}>
+            <LinkIcon size={14} style={{ color: '#94a3b8', flex: 'none' }} />
+            <input
+              value={draftLink}
+              onChange={(e) => setDraftLink(e.target.value)}
+              placeholder="Catalog or blog link"
+              style={{ width: '100%', border: 0, outline: 0, background: 'transparent', color: '#e2e8f0', fontSize: '0.82rem' }}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#111c31', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '0 10px', minHeight: 40 }}>
+            <ImageIcon size={14} style={{ color: '#94a3b8', flex: 'none' }} />
+            <input
+              value={draftImageUrl}
+              onChange={(e) => setDraftImageUrl(e.target.value)}
+              placeholder="Image URL"
+              style={{ width: '100%', border: 0, outline: 0, background: 'transparent', color: '#e2e8f0', fontSize: '0.82rem' }}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#111c31', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '0 10px', minHeight: 40 }}>
+            <CalendarClock size={14} style={{ color: '#94a3b8', flex: 'none' }} />
+            <input
+              type="datetime-local"
+              value={draftScheduledAt}
+              onChange={(e) => setDraftScheduledAt(e.target.value)}
+              title="Optional schedule time"
+              style={{ width: '100%', border: 0, outline: 0, background: 'transparent', color: '#e2e8f0', fontSize: '0.78rem' }}
+            />
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ color: postStatus.includes('failed') || postStatus.includes('Add ') ? '#fca5a5' : '#94a3b8', fontSize: '0.78rem' }}>
+            {postStatus || 'Emails are only available from Lead Ads or forms where the person submits one.'}
+          </div>
+          <button
+            type="button"
+            onClick={publishPost}
+            disabled={posting}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: 0, background: posting ? '#475569' : '#1877f2', color: '#fff', fontSize: '0.83rem', fontWeight: 800, cursor: posting ? 'not-allowed' : 'pointer' }}
+          >
+            <Send size={14} /> {posting ? 'Sending...' : draftScheduledAt ? 'Schedule Post' : 'Publish Post'}
+          </button>
+        </div>
+      </div>
+
       {/* Analytics */}
       {summary && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
           <Stat label="Posts" value={summary.posts} />
+          <Stat label="Scheduled" value={summary.scheduled || 0} tint="#fbbf24" />
           <Stat label="Comments received" value={summary.totalComments} tint="#38bdf8" />
           <Stat label="Publicly replied" value={summary.totalReplied} tint="#4ade80" />
+          <Stat label="Need reply" value={Math.max((summary.totalComments || 0) - (summary.totalReplied || 0), 0)} tint="#f97316" />
           <Stat label="Reply rate" value={`${summary.replyRate}%`} tint={summary.replyRate >= 60 ? '#4ade80' : summary.replyRate >= 30 ? '#fbbf24' : '#f87171'} />
+        </div>
+      )}
+
+      {scheduledPosts.length > 0 && (
+        <div style={{ background: '#0e1626', border: '1px solid rgba(251,191,36,0.18)', borderRadius: 14, padding: 14, marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f8fafc', fontWeight: 800, marginBottom: 10 }}>
+            <CalendarClock size={16} style={{ color: '#fbbf24' }} /> Scheduled Posts
+          </div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {scheduledPosts.map((post) => (
+              <div key={post.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '9px 10px', borderRadius: 10, background: '#111c31', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ color: '#cbd5e1', fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{post.message}</span>
+                <span style={{ color: '#fbbf24', fontSize: '0.76rem', fontWeight: 800, flex: 'none' }}>{fmtDate(post.scheduledTime || post.createdTime)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -163,6 +323,30 @@ export default function MessengerPosts() {
                             </div>
                             <div style={{ color: '#cbd5e1', fontSize: '0.86rem', margin: '3px 0 6px', whiteSpace: 'pre-wrap' }}>{c.message || '(no text)'}</div>
 
+                            {publicDone[c.id] ? (
+                              <span style={{ color: '#4ade80', fontSize: '0.76rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5, marginRight: 8 }}><CheckCircle2 size={13} /> Public reply sent</span>
+                            ) : publicFor === c.id ? (
+                              <div style={{ display: 'flex', gap: 8, margin: '6px 0 8px' }}>
+                                <input
+                                  type="text"
+                                  value={publicText}
+                                  onChange={(e) => setPublicText(e.target.value)}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') sendPublicReply(c); }}
+                                  placeholder="Public reply on this comment..."
+                                  autoFocus
+                                  style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: '#1e293b', color: '#f8fafc', fontSize: '0.84rem' }}
+                                />
+                                <button type="button" onClick={() => sendPublicReply(c)} disabled={publicSending || !publicText.trim()} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: publicSending || !publicText.trim() ? '#475569' : '#16a34a', color: '#fff', fontWeight: 700, fontSize: '0.8rem', cursor: publicSending || !publicText.trim() ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                  <Send size={14} /> {publicSending ? '...' : 'Reply'}
+                                </button>
+                                <button type="button" onClick={() => { setPublicFor(null); setPublicText(''); }} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
+                              </div>
+                            ) : (
+                              <button type="button" onClick={() => { setPublicFor(c.id); setPublicText(''); setDmFor(null); }} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(34,197,94,0.35)', background: 'rgba(34,197,94,0.12)', color: '#4ade80', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer', marginRight: 8 }}>
+                                Public reply
+                              </button>
+                            )}
+
                             {dmDone[c.id] ? (
                               <span style={{ color: '#4ade80', fontSize: '0.76rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><CheckCircle2 size={13} /> DM sent</span>
                             ) : dmFor === c.id ? (
@@ -182,7 +366,7 @@ export default function MessengerPosts() {
                                 <button type="button" onClick={() => { setDmFor(null); setDmText(''); }} style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}>Cancel</button>
                               </div>
                             ) : (
-                              <button type="button" onClick={() => { setDmFor(c.id); setDmText(''); }} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(59,130,246,0.35)', background: 'rgba(59,130,246,0.12)', color: '#60a5fa', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer' }}>
+                              <button type="button" onClick={() => { setDmFor(c.id); setDmText(''); setPublicFor(null); }} style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(59,130,246,0.35)', background: 'rgba(59,130,246,0.12)', color: '#60a5fa', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer' }}>
                                 Send DM
                               </button>
                             )}

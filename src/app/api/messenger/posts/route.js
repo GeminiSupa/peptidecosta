@@ -9,6 +9,21 @@ const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 const PAGE_ID = process.env.FACEBOOK_PAGE_ID || process.env.MESSENGER_PAGE_ID || '';
 const GRAPH = 'https://graph.facebook.com/v25.0';
 
+async function resolvePageId() {
+  if (PAGE_ID) return PAGE_ID;
+  const me = await (await fetch(`${GRAPH}/me?access_token=${PAGE_ACCESS_TOKEN}`)).json();
+  if (me.error) throw new Error(me.error.message);
+  return me.id;
+}
+
+function metaErrorMessage(error) {
+  const code = error?.code;
+  if (code === 190) return 'Facebook Page access token is invalid or expired. Renew it in Meta Business settings.';
+  if (code === 10 || code === 200) return 'Meta blocked this action. The Page token likely needs pages_manage_posts/pages_read_engagement approval.';
+  if (code === 4 || code === 17 || code === 32 || code === 613) return 'Meta rate limit hit. Wait a few minutes and try again.';
+  return error?.message || 'Meta API request failed.';
+}
+
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
@@ -18,11 +33,11 @@ export async function GET(request) {
       return NextResponse.json({ error: 'FACEBOOK_PAGE_ACCESS_TOKEN is not configured.' }, { status: 500 });
     }
 
-    let pageId = PAGE_ID;
-    if (!pageId) {
-      const me = await (await fetch(`${GRAPH}/me?access_token=${PAGE_ACCESS_TOKEN}`)).json();
-      if (me.error) return NextResponse.json({ error: me.error.message, code: me.error.code }, { status: 502 });
-      pageId = me.id;
+    let pageId;
+    try {
+      pageId = await resolvePageId();
+    } catch (err) {
+      return NextResponse.json({ error: err.message }, { status: 502 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -43,6 +58,24 @@ export async function GET(request) {
     const json = await res.json();
     if (json.error) {
       return NextResponse.json({ error: json.error.message, code: json.error.code }, { status: 502 });
+    }
+
+    let scheduledPosts = [];
+    try {
+      const scheduledFields = ['id', 'message', 'scheduled_publish_time', 'created_time'].join(',');
+      const scheduledUrl = `${GRAPH}/${pageId}/scheduled_posts?fields=${encodeURIComponent(scheduledFields)}&limit=10&access_token=${PAGE_ACCESS_TOKEN}`;
+      const scheduledRes = await fetch(scheduledUrl, { cache: 'no-store' });
+      const scheduledJson = await scheduledRes.json();
+      if (!scheduledJson.error) {
+        scheduledPosts = (scheduledJson.data || []).map((p) => ({
+          id: p.id,
+          message: (p.message || '').trim() || '(scheduled post)',
+          scheduledTime: p.scheduled_publish_time ? Number(p.scheduled_publish_time) * 1000 : null,
+          createdTime: p.created_time,
+        }));
+      }
+    } catch (scheduledErr) {
+      console.warn('[Messenger Posts] Scheduled posts unavailable:', scheduledErr.message);
     }
 
     let totalComments = 0;
@@ -85,14 +118,101 @@ export async function GET(request) {
       pageId,
       summary: {
         posts: posts.length,
+        scheduled: scheduledPosts.length,
         totalComments,
         totalReplied,
         replyRate: totalComments ? Math.round((totalReplied / totalComments) * 100) : 0,
       },
+      scheduledPosts,
       posts,
     });
   } catch (err) {
     console.error('[Messenger Posts] Error:', err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function POST(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
+  try {
+    if (!PAGE_ACCESS_TOKEN) {
+      return NextResponse.json({ error: 'FACEBOOK_PAGE_ACCESS_TOKEN is not configured.' }, { status: 500 });
+    }
+
+    const { message = '', link = '', imageUrl = '', scheduledAt = '' } = await request.json();
+    const cleanMessage = String(message || '').trim();
+    const cleanLink = String(link || '').trim();
+    const cleanImageUrl = String(imageUrl || '').trim();
+    const cleanScheduledAt = String(scheduledAt || '').trim();
+
+    if (!cleanMessage && !cleanLink && !cleanImageUrl) {
+      return NextResponse.json({ error: 'Add a message, link, or image URL before publishing.' }, { status: 400 });
+    }
+
+    let scheduledTimestamp = null;
+    if (cleanScheduledAt) {
+      const scheduledMs = new Date(cleanScheduledAt).getTime();
+      if (!Number.isFinite(scheduledMs)) {
+        return NextResponse.json({ error: 'Scheduled time is invalid.' }, { status: 400 });
+      }
+      const minMs = Date.now() + 10 * 60 * 1000;
+      const maxMs = Date.now() + 75 * 24 * 60 * 60 * 1000;
+      if (scheduledMs < minMs) {
+        return NextResponse.json({ error: 'Schedule at least 10 minutes in the future for Facebook scheduled posts.' }, { status: 400 });
+      }
+      if (scheduledMs > maxMs) {
+        return NextResponse.json({ error: 'Facebook scheduled posts must be within about 75 days.' }, { status: 400 });
+      }
+      scheduledTimestamp = Math.floor(scheduledMs / 1000);
+    }
+
+    const pageId = await resolvePageId();
+    const isPhotoPost = Boolean(cleanImageUrl);
+    const endpoint = isPhotoPost ? `${GRAPH}/${pageId}/photos` : `${GRAPH}/${pageId}/feed`;
+    const params = new URLSearchParams();
+    params.set('access_token', PAGE_ACCESS_TOKEN);
+
+    if (isPhotoPost) {
+      params.set('url', cleanImageUrl);
+      if (cleanMessage || cleanLink) {
+        params.set('caption', [cleanMessage, cleanLink].filter(Boolean).join('\n\n'));
+      }
+    } else {
+      if (cleanMessage) params.set('message', cleanMessage);
+      if (cleanLink) params.set('link', cleanLink);
+    }
+
+    if (scheduledTimestamp) {
+      params.set('published', 'false');
+      params.set('scheduled_publish_time', String(scheduledTimestamp));
+    }
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params,
+    });
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      console.error('[Messenger Posts] Publish error:', data);
+      return NextResponse.json({
+        error: metaErrorMessage(data.error),
+        metaCode: data.error?.code,
+      }, { status: res.status || 502 });
+    }
+
+    console.log(`[Messenger Posts] ${scheduledTimestamp ? 'Scheduled' : 'Published'} Page post by ${auth.user?.email || 'admin'}`);
+    return NextResponse.json({
+      success: true,
+      scheduled: Boolean(scheduledTimestamp),
+      postId: data.post_id || data.id,
+      raw: data,
+    });
+  } catch (err) {
+    console.error('[Messenger Posts] Publish exception:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

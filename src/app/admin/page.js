@@ -4539,7 +4539,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
               {[
                 { id: 'inbox', label: '💬 Inbox' },
-                { id: 'posts', label: '📊 Post Comments' },
+                { id: 'posts', label: '📣 Content & Engagement' },
               ].map((v) => (
                 <button
                   key={v.id}

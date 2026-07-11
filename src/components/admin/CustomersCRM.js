@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Users, User, Mail, MessageCircle, Download, DollarSign, Package, Calendar,
   ArrowDownUp, BadgeCheck, Search, Upload, Crown, Phone, MapPin, ShoppingBag,
-  Sparkles, Brain, Edit2, Save, Send
+  Sparkles, Brain, Edit2, Save, Send, X
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
