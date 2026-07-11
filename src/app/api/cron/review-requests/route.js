@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyCronRequest } from '@/lib/cronAuth';
+import {
+  createTrustpilotServiceInvitation,
+  getTrustpilotConfigStatus,
+  isTrustpilotConfigured,
+} from '@/lib/trustpilot';
 import nodemailer from 'nodemailer';
 
 export const runtime = 'nodejs';
@@ -22,7 +27,7 @@ export async function GET(request) {
 
     const { data: eligibleOrders, error } = await supabase
       .from('orders')
-      .select('id, customer_email, customer_name, customer_phone, currency')
+      .select('id, order_number, customer_email, customer_name, customer_phone, currency, payment_method, total_usd, total_crc, created_at, updated_at')
       .eq('status', 'Order Complete')
       .is('review_requested_at', null)
       .lte('updated_at', fiveDaysAgo.toISOString())
@@ -36,29 +41,71 @@ export async function GET(request) {
       return NextResponse.json({ message: 'No eligible orders for review requests.' });
     }
 
+    const trustpilotEnabled = isTrustpilotConfigured();
+    const configStatus = getTrustpilotConfigStatus();
     const SMTP_HOST = process.env.SMTP_HOST;
     const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
     const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
     const SMTP_USER = process.env.SMTP_USER;
     const SMTP_PASS = process.env.SMTP_PASS;
 
-    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-      return NextResponse.json({ error: 'SMTP settings missing' }, { status: 500 });
+    if (!trustpilotEnabled && (!SMTP_HOST || !SMTP_USER || !SMTP_PASS)) {
+      return NextResponse.json({
+        error: 'No review invitation channel is configured',
+        trustpilot: configStatus,
+        smtpConfigured: false,
+      }, { status: 500 });
     }
 
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: { user: SMTP_USER, pass: SMTP_PASS }
-    });
+    const transporter = SMTP_HOST && SMTP_USER && SMTP_PASS
+      ? nodemailer.createTransport({
+          host: SMTP_HOST,
+          port: SMTP_PORT,
+          secure: SMTP_SECURE,
+          auth: { user: SMTP_USER, pass: SMTP_PASS },
+          tls: { rejectUnauthorized: false }
+        })
+      : null;
 
-    let sentCount = 0;
+    let trustpilotSentCount = 0;
+    let emailSentCount = 0;
+    let skippedCount = 0;
+    let trustpilotFailedCount = 0;
+    let emailFailedCount = 0;
 
     for (const order of eligibleOrders) {
-      if (!order.customer_email) continue;
+      if (!order.customer_email) {
+        skippedCount++;
+        continue;
+      }
 
-      const reviewLink = process.env.REVIEW_LINK_GOOGLE || process.env.REVIEW_LINK_TRUSTPILOT || 'https://catalog.peptidescostarica.net/customer-feedback';
+      if (trustpilotEnabled) {
+        try {
+          await createTrustpilotServiceInvitation(order);
+
+          await supabase
+            .from('orders')
+            .update({ review_requested_at: new Date().toISOString() })
+            .eq('id', order.id);
+
+          trustpilotSentCount++;
+          continue;
+        } catch (err) {
+          trustpilotFailedCount++;
+          console.error(`[CRON Review Requests] Trustpilot invitation failed for order ${order.order_number || order.id}`, err);
+
+          if (process.env.TRUSTPILOT_FALLBACK_EMAIL_ON_ERROR !== 'true') {
+            continue;
+          }
+        }
+      }
+
+      if (!transporter) {
+        skippedCount++;
+        continue;
+      }
+
+      const reviewLink = process.env.REVIEW_LINK_TRUSTPILOT || process.env.REVIEW_LINK_GOOGLE || 'https://catalog.peptidescostarica.net/customer-feedback';
       
       const isSpanish = order.currency === 'CRC';
       const subject = isSpanish ? `¿Cómo va tu investigación? 🧪` : `How is your research going? 🧪`;
@@ -140,13 +187,22 @@ export async function GET(request) {
           .update({ review_requested_at: new Date().toISOString() })
           .eq('id', order.id);
 
-        sentCount++;
+        emailSentCount++;
       } catch (err) {
+        emailFailedCount++;
         console.error(`Failed to send review request to ${order.customer_email}`, err);
       }
     }
 
-    return NextResponse.json({ success: true, emailsSent: sentCount });
+    return NextResponse.json({
+      success: true,
+      trustpilotEnabled,
+      trustpilotSent: trustpilotSentCount,
+      fallbackEmailsSent: emailSentCount,
+      skipped: skippedCount,
+      trustpilotFailed: trustpilotFailedCount,
+      emailFailed: emailFailedCount,
+    });
 
   } catch (err) {
     console.error('[CRON Review Requests]', err);
