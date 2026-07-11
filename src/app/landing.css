@@ -349,9 +349,9 @@
 
 .trust-flow-inner {
     display: grid;
-    grid-template-columns: minmax(210px, .58fr) minmax(0, 1.42fr) minmax(150px, .32fr);
-    align-items: center;
-    gap: 20px;
+    grid-template-columns: minmax(260px, .72fr) minmax(0, 1.28fr);
+    align-items: start;
+    gap: clamp(24px, 3vw, 42px);
 }
 
 .trust-flow-head span {
@@ -377,21 +377,22 @@
 
 .trust-flow-steps {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(2, minmax(210px, 1fr));
+    gap: 12px;
 }
 
 .trust-flow-step {
     position: relative;
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr);
-    gap: 12px;
-    min-height: 118px;
-    padding: 15px 13px 14px;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 13px;
+    min-height: 132px;
+    padding: 16px 15px 15px;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     background: rgba(255, 255, 255, .88);
     box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
+    overflow: hidden;
 }
 
 .trust-flow-number {
@@ -405,8 +406,8 @@
 
 .trust-flow-icon {
     display: grid;
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     place-items: center;
     border-radius: 8px;
     color: #f58220;
@@ -416,21 +417,25 @@
 .trust-flow-step h3 {
     margin: 1px 0 6px;
     color: #17234d;
-    font-size: .86rem;
+    font-size: .94rem;
     line-height: 1.2;
+    overflow-wrap: normal;
+    word-break: normal;
 }
 
 .trust-flow-step p {
     margin: 0;
     color: #64748b;
-    font-size: .74rem;
+    font-size: .78rem;
     line-height: 1.45;
 }
 
 .trust-flow-actions {
-    display: grid;
-    gap: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
     min-width: 0;
+    margin-top: 22px;
 }
 
 .trust-flow-primary,
@@ -440,13 +445,27 @@
     justify-content: center;
     gap: 7px;
     min-height: 42px;
-    padding: 10px 12px;
+    padding: 10px 15px;
     border-radius: 4px;
     font-size: .78rem;
     font-weight: 900;
     line-height: 1.1;
     text-decoration: none;
     white-space: nowrap;
+}
+
+@media (min-width: 1180px) {
+    .trust-flow-inner {
+        grid-template-columns: minmax(280px, .55fr) minmax(0, 1.45fr);
+    }
+
+    .trust-flow-steps {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .trust-flow-step {
+        min-height: 148px;
+    }
 }
 
 .trust-flow-primary {
