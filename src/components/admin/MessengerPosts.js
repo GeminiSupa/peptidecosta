@@ -2,8 +2,9 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CalendarClock, CheckCircle2, ExternalLink, Image as ImageIcon, Link as LinkIcon,
-  MessageSquare, RefreshCw, Send, Share2, ThumbsUp,
+  CalendarClock, CheckCircle2, Copy, ExternalLink, Flame, Image as ImageIcon,
+  Link as LinkIcon, Mail, Megaphone, MessageSquare, Phone, RefreshCw, Send,
+  Share2, Target, ThumbsUp, UserPlus,
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
@@ -15,6 +16,60 @@ function fmtDate(v) {
   const d = new Date(v);
   if (isNaN(d.getTime())) return '';
   return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+const POST_TEMPLATES = [
+  {
+    id: 'inventory',
+    label: 'Inventory Push',
+    icon: Megaphone,
+    message: 'Inventario local disponible en Costa Rica. Consulta el catálogo actualizado, precios CRC en vivo y documentación por lote.',
+    link: 'https://peptidescostarica.net/catalog?lang=es',
+  },
+  {
+    id: 'coa',
+    label: 'COA Trust',
+    icon: CheckCircle2,
+    message: 'Antes de ordenar, revisa la documentación disponible por lote. Transparencia, stock local y coordinación directa en Costa Rica.',
+    link: 'https://peptidescostarica.net/coa-database?lang=es',
+  },
+  {
+    id: 'whatsapp',
+    label: 'Ask Expert',
+    icon: MessageSquare,
+    message: '¿Tienes preguntas sobre disponibilidad, documentación o entrega local? Escríbenos y te ayudamos en español o inglés.',
+    link: 'https://peptidescostarica.net/contact?lang=es',
+  },
+];
+
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64) || 'facebook-post';
+}
+
+function defaultCampaign() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `fb-${yyyy}${mm}${dd}`;
+}
+
+function addUtm(link, campaign) {
+  const clean = String(link || '').trim();
+  if (!clean) return '';
+  try {
+    const url = new URL(clean, 'https://peptidescostarica.net');
+    url.searchParams.set('utm_source', 'facebook');
+    url.searchParams.set('utm_medium', 'social');
+    url.searchParams.set('utm_campaign', slugify(campaign || defaultCampaign()));
+    return url.toString();
+  } catch {
+    return clean;
+  }
 }
 
 function Stat({ label, value, tint }) {
@@ -44,8 +99,12 @@ export default function MessengerPosts() {
   const [draftLink, setDraftLink] = useState('');
   const [draftImageUrl, setDraftImageUrl] = useState('');
   const [draftScheduledAt, setDraftScheduledAt] = useState('');
+  const [draftCampaign, setDraftCampaign] = useState(defaultCampaign);
   const [posting, setPosting] = useState(false);
   const [postStatus, setPostStatus] = useState('');
+  const [hotLeadDone, setHotLeadDone] = useState({});
+  const [hotLeadSaving, setHotLeadSaving] = useState('');
+  const [copiedTrackedLink, setCopiedTrackedLink] = useState(false);
 
   const fetchPosts = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -67,6 +126,16 @@ export default function MessengerPosts() {
   const summary = data?.summary;
   const posts = useMemo(() => data?.posts || [], [data]);
   const scheduledPosts = useMemo(() => data?.scheduledPosts || [], [data]);
+  const leadAds = useMemo(() => data?.leadAds || [], [data]);
+  const topPosts = useMemo(() => data?.topPosts || [], [data]);
+  const trackedLink = useMemo(() => addUtm(draftLink, draftCampaign), [draftLink, draftCampaign]);
+
+  const applyTemplate = (template) => {
+    setDraftMessage(template.message);
+    setDraftLink(template.link);
+    setDraftCampaign(`${defaultCampaign()}-${template.id}`);
+    setPostStatus('');
+  };
 
   const sendDm = async (comment) => {
     const text = dmText.trim();
@@ -124,7 +193,7 @@ export default function MessengerPosts() {
     if (posting) return;
     const payload = {
       message: draftMessage.trim(),
-      link: draftLink.trim(),
+      link: trackedLink || draftLink.trim(),
       imageUrl: draftImageUrl.trim(),
       scheduledAt: draftScheduledAt,
     };
@@ -151,11 +220,51 @@ export default function MessengerPosts() {
       setDraftLink('');
       setDraftImageUrl('');
       setDraftScheduledAt('');
+      setDraftCampaign(defaultCampaign());
       fetchPosts(true);
     } catch (e) {
       setPostStatus(e.message || 'Post failed.');
     } finally {
       setPosting(false);
+    }
+  };
+
+  const copyTrackedLink = async () => {
+    if (!trackedLink) return;
+    try {
+      await navigator.clipboard.writeText(trackedLink);
+      setCopiedTrackedLink(true);
+      setTimeout(() => setCopiedTrackedLink(false), 1400);
+    } catch {
+      setPostStatus('Could not copy tracked link.');
+    }
+  };
+
+  const markHotLead = async (comment, post) => {
+    if (!comment?.id || hotLeadSaving) return;
+    setHotLeadSaving(comment.id);
+    try {
+      const res = await adminFetch('/api/facebook/comment-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commentId: comment.id,
+          postId: post.id,
+          commenterName: comment.from,
+          commentText: comment.message,
+          postPermalink: post.permalink,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        alert('Lead save failed: ' + (json.error || 'Unknown error'));
+        return;
+      }
+      setHotLeadDone((p) => ({ ...p, [comment.id]: true }));
+    } catch (e) {
+      alert('Lead save error: ' + e.message);
+    } finally {
+      setHotLeadSaving('');
     }
   };
 
@@ -182,6 +291,22 @@ export default function MessengerPosts() {
             <div style={{ color: '#f8fafc', fontWeight: 800, fontSize: '0.95rem' }}>Create Facebook Post</div>
             <div style={{ color: '#64748b', fontSize: '0.76rem' }}>Use a catalog link with UTM tracking when you want to measure sales impact.</div>
           </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          {POST_TEMPLATES.map((template) => {
+            const Icon = template.icon;
+            return (
+              <button
+                key={template.id}
+                type="button"
+                onClick={() => applyTemplate(template)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 10px', borderRadius: 999, border: '1px solid rgba(56,189,248,0.24)', background: 'rgba(56,189,248,0.08)', color: '#7dd3fc', fontSize: '0.76rem', fontWeight: 800, cursor: 'pointer' }}
+              >
+                <Icon size={13} /> {template.label}
+              </button>
+            );
+          })}
         </div>
 
         <textarea
@@ -212,6 +337,15 @@ export default function MessengerPosts() {
             />
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#111c31', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '0 10px', minHeight: 40 }}>
+            <Target size={14} style={{ color: '#94a3b8', flex: 'none' }} />
+            <input
+              value={draftCampaign}
+              onChange={(e) => setDraftCampaign(e.target.value)}
+              placeholder="UTM campaign"
+              style={{ width: '100%', border: 0, outline: 0, background: 'transparent', color: '#e2e8f0', fontSize: '0.82rem' }}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#111c31', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '0 10px', minHeight: 40 }}>
             <CalendarClock size={14} style={{ color: '#94a3b8', flex: 'none' }} />
             <input
               type="datetime-local"
@@ -222,6 +356,20 @@ export default function MessengerPosts() {
             />
           </label>
         </div>
+
+        {trackedLink && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '8px 10px', borderRadius: 10, border: '1px solid rgba(34,197,94,0.16)', background: 'rgba(34,197,94,0.08)', color: '#bbf7d0', fontSize: '0.74rem', minWidth: 0 }}>
+            <Target size={13} style={{ flex: 'none', color: '#4ade80' }} />
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trackedLink}</span>
+            <button
+              type="button"
+              onClick={copyTrackedLink}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flex: 'none', border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.12)', color: '#86efac', borderRadius: 8, padding: '5px 8px', fontSize: '0.7rem', fontWeight: 800, cursor: 'pointer' }}
+            >
+              <Copy size={12} /> {copiedTrackedLink ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
           <div style={{ color: postStatus.includes('failed') || postStatus.includes('Add ') ? '#fca5a5' : '#94a3b8', fontSize: '0.78rem' }}>
@@ -243,10 +391,68 @@ export default function MessengerPosts() {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
           <Stat label="Posts" value={summary.posts} />
           <Stat label="Scheduled" value={summary.scheduled || 0} tint="#fbbf24" />
+          <Stat label="Lead Ads" value={summary.leadAds || 0} tint="#a78bfa" />
           <Stat label="Comments received" value={summary.totalComments} tint="#38bdf8" />
           <Stat label="Publicly replied" value={summary.totalReplied} tint="#4ade80" />
           <Stat label="Need reply" value={Math.max((summary.totalComments || 0) - (summary.totalReplied || 0), 0)} tint="#f97316" />
           <Stat label="Reply rate" value={`${summary.replyRate}%`} tint={summary.replyRate >= 60 ? '#4ade80' : summary.replyRate >= 30 ? '#fbbf24' : '#f87171'} />
+        </div>
+      )}
+
+      {(topPosts.length > 0 || leadAds.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, marginBottom: 18 }}>
+          {topPosts.length > 0 && (
+            <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f8fafc', fontWeight: 800, marginBottom: 10 }}>
+                <Flame size={16} style={{ color: '#f97316' }} /> Best Performing Posts
+              </div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {topPosts.map((post) => (
+                  <a
+                    key={post.id}
+                    href={post.permalink || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'grid', gap: 5, padding: '10px', borderRadius: 10, background: '#111c31', border: '1px solid rgba(255,255,255,0.05)', color: 'inherit', textDecoration: 'none' }}
+                  >
+                    <span style={{ color: '#e2e8f0', fontSize: '0.82rem', lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{post.message}</span>
+                    <span style={{ display: 'flex', gap: 12, color: '#94a3b8', fontSize: '0.72rem', flexWrap: 'wrap' }}>
+                      <span><ThumbsUp size={11} /> {post.reactions}</span>
+                      <span><MessageSquare size={11} /> {post.comments}</span>
+                      <span><Share2 size={11} /> {post.shares}</span>
+                      <strong style={{ color: '#f97316' }}>Score {post.score}</strong>
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {leadAds.length > 0 && (
+            <div style={{ background: '#0e1626', border: '1px solid rgba(167,139,250,0.16)', borderRadius: 14, padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f8fafc', fontWeight: 800, marginBottom: 10 }}>
+                <UserPlus size={16} style={{ color: '#a78bfa' }} /> Lead Ads Inbox
+              </div>
+              <div style={{ display: 'grid', gap: 8, maxHeight: 330, overflow: 'auto' }}>
+                {leadAds.map((lead) => (
+                  <div key={lead.id} style={{ display: 'grid', gap: 5, padding: '10px', borderRadius: 10, background: '#111c31', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                      <strong style={{ color: '#f8fafc', fontSize: '0.84rem' }}>{lead.name}</strong>
+                      <span style={{ color: lead.status === 'unread' ? '#fbbf24' : '#64748b', fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase' }}>{lead.status}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', color: '#94a3b8', fontSize: '0.74rem' }}>
+                      {lead.email && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Mail size={11} /> {lead.email}</span>}
+                      {lead.phone && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Phone size={11} /> {lead.phone}</span>}
+                      {!lead.email && !lead.phone && <span>No email/phone returned by Meta</span>}
+                    </div>
+                    <div style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                      {[lead.source, lead.campaign, fmtDate(lead.createdAt)].filter(Boolean).join(' · ')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -322,6 +528,19 @@ export default function MessengerPosts() {
                               )}
                             </div>
                             <div style={{ color: '#cbd5e1', fontSize: '0.86rem', margin: '3px 0 6px', whiteSpace: 'pre-wrap' }}>{c.message || '(no text)'}</div>
+
+                            {hotLeadDone[c.id] ? (
+                              <span style={{ color: '#fbbf24', fontSize: '0.76rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5, marginRight: 8 }}><Flame size={13} /> Hot lead saved</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => markHotLead(c, post)}
+                                disabled={hotLeadSaving === c.id}
+                                style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(251,146,60,0.35)', background: 'rgba(251,146,60,0.12)', color: '#fb923c', fontSize: '0.76rem', fontWeight: 800, cursor: hotLeadSaving === c.id ? 'wait' : 'pointer', marginRight: 8 }}
+                              >
+                                {hotLeadSaving === c.id ? 'Saving...' : 'Mark hot lead'}
+                              </button>
+                            )}
 
                             {publicDone[c.id] ? (
                               <span style={{ color: '#4ade80', fontSize: '0.76rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5, marginRight: 8 }}><CheckCircle2 size={13} /> Public reply sent</span>

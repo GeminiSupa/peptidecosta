@@ -78,6 +78,9 @@ export default function LeadsManager({
           (l.region || '').toLowerCase().includes(q) ||
           (l.country || '').toLowerCase().includes(q) ||
           (l.source || '').toLowerCase().includes(q) ||
+          (l.utm_source || '').toLowerCase().includes(q) ||
+          (l.utm_medium || '').toLowerCase().includes(q) ||
+          (l.utm_campaign || '').toLowerCase().includes(q) ||
           (l.notes || '').toLowerCase().includes(q)
         );
         if (!match) return false;
@@ -86,7 +89,11 @@ export default function LeadsManager({
         if (leadsSourceFilter === 'whatsapp' && l.contact_method !== 'whatsapp' && !(l.phone) && !(l.contact_value && !String(l.contact_value).includes('@'))) return false;
         if (leadsSourceFilter === 'email' && l.contact_method !== 'email' && !(l.email) && !(l.contact_value && String(l.contact_value).includes('@'))) return false;
         if (leadsSourceFilter === 'converted' && !getLeadConversion(l).converted) return false;
-        if (leadsSourceFilter === 'facebook' && !(l.source && String(l.source).toLowerCase().includes('facebook'))) return false;
+        if (leadsSourceFilter === 'facebook' && !(
+          (l.source && String(l.source).toLowerCase().includes('facebook')) ||
+          (l.utm_source && String(l.utm_source).toLowerCase().includes('facebook')) ||
+          (l.utm_medium && String(l.utm_medium).toLowerCase().includes('comment'))
+        )) return false;
       }
       if (localContactedFilter && localContactedFilter !== 'All') {
         const isContacted = !!l.last_contacted_at;

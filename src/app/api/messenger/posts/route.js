@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 // Live Facebook Post + Comments feed for the admin dashboard.
 // Requires the page token to have `pages_read_user_content` (Standard Access is
@@ -12,7 +13,7 @@ const GRAPH = 'https://graph.facebook.com/v25.0';
 async function resolvePageId() {
   if (PAGE_ID) return PAGE_ID;
   const me = await (await fetch(`${GRAPH}/me?access_token=${PAGE_ACCESS_TOKEN}`)).json();
-  if (me.error) throw new Error(me.error.message);
+  if (me.error) throw new Error(metaErrorMessage(me.error));
   return me.id;
 }
 
@@ -57,10 +58,11 @@ export async function GET(request) {
     const res = await fetch(url, { cache: 'no-store' });
     const json = await res.json();
     if (json.error) {
-      return NextResponse.json({ error: json.error.message, code: json.error.code }, { status: 502 });
+      return NextResponse.json({ error: metaErrorMessage(json.error), code: json.error.code }, { status: 502 });
     }
 
     let scheduledPosts = [];
+    let leadAds = [];
     try {
       const scheduledFields = ['id', 'message', 'scheduled_publish_time', 'created_time'].join(',');
       const scheduledUrl = `${GRAPH}/${pageId}/scheduled_posts?fields=${encodeURIComponent(scheduledFields)}&limit=10&access_token=${PAGE_ACCESS_TOKEN}`;
@@ -76,6 +78,31 @@ export async function GET(request) {
       }
     } catch (scheduledErr) {
       console.warn('[Messenger Posts] Scheduled posts unavailable:', scheduledErr.message);
+    }
+
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data: leadRows, error: leadError } = await supabase
+        .from('facebook_notifications')
+        .select('id,sender_name,email,phone,content,status,created_at,raw_payload,external_link')
+        .eq('type', 'lead')
+        .order('created_at', { ascending: false })
+        .limit(25);
+      if (leadError) throw leadError;
+      leadAds = (leadRows || []).map((row) => ({
+        id: row.id,
+        name: row.sender_name || 'Facebook Lead',
+        email: row.email || '',
+        phone: row.phone || '',
+        status: row.status || 'unread',
+        createdAt: row.created_at,
+        content: row.content || '',
+        campaign: row.raw_payload?.form_id || row.raw_payload?.campaign_name || row.raw_payload?.utm_campaign || '',
+        source: row.raw_payload?.platform || 'Facebook Lead Ads',
+        externalLink: row.external_link || null,
+      }));
+    } catch (leadErr) {
+      console.warn('[Messenger Posts] Lead Ads inbox unavailable:', leadErr.message);
     }
 
     let totalComments = 0;
@@ -113,17 +140,36 @@ export async function GET(request) {
         comments,
       };
     });
+    const topPosts = [...posts]
+      .sort((a, b) => {
+        const scoreA = (a.reactions || 0) + (a.commentCount || 0) * 3 + (a.shares || 0) * 5;
+        const scoreB = (b.reactions || 0) + (b.commentCount || 0) * 3 + (b.shares || 0) * 5;
+        return scoreB - scoreA;
+      })
+      .slice(0, 5)
+      .map((post) => ({
+        id: post.id,
+        message: post.message,
+        permalink: post.permalink,
+        reactions: post.reactions,
+        comments: post.commentCount,
+        shares: post.shares,
+        score: (post.reactions || 0) + (post.commentCount || 0) * 3 + (post.shares || 0) * 5,
+      }));
 
     return NextResponse.json({
       pageId,
       summary: {
         posts: posts.length,
         scheduled: scheduledPosts.length,
+        leadAds: leadAds.length,
         totalComments,
         totalReplied,
         replyRate: totalComments ? Math.round((totalReplied / totalComments) * 100) : 0,
       },
       scheduledPosts,
+      leadAds,
+      topPosts,
       posts,
     });
   } catch (err) {

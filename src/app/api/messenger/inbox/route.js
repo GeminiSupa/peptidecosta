@@ -7,6 +7,21 @@ const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 const PAGE_ID = process.env.FACEBOOK_PAGE_ID || process.env.MESSENGER_PAGE_ID || '';
 const GRAPH = 'https://graph.facebook.com/v25.0';
 
+function metaErrorMessage(error) {
+  const code = error?.code;
+  const message = error?.message || '';
+  if (code === 190 || /Error validating access token/i.test(message)) {
+    return 'Facebook Page access token is invalid or expired. Renew FACEBOOK_PAGE_ACCESS_TOKEN in Meta Business settings, then redeploy.';
+  }
+  if (code === 10 || code === 200) {
+    return 'Meta blocked this request. The Page token likely needs pages_messaging/pages_read_engagement approval.';
+  }
+  if (code === 4 || code === 17 || code === 32 || code === 613) {
+    return 'Meta rate limit hit. Wait a few minutes and try again.';
+  }
+  return message || 'Meta API request failed.';
+}
+
 // Facebook auto-generates these marker lines when a Messenger thread originates
 // from a comment on a Page post. We use them to split "Comments" from real DMs.
 const COMMENT_MARKERS = [
@@ -60,7 +75,7 @@ export async function GET(request) {
       const meRes = await fetch(`${GRAPH}/me?access_token=${PAGE_ACCESS_TOKEN}`);
       const me = await meRes.json();
       if (me.error) {
-        return NextResponse.json({ error: me.error.message, code: me.error.code }, { status: 502 });
+        return NextResponse.json({ error: metaErrorMessage(me.error), code: me.error.code }, { status: 502 });
       }
       pageId = me.id;
     }
@@ -79,7 +94,7 @@ export async function GET(request) {
       const json = await res.json();
       if (json.error) {
         if (rawConvs.length === 0) {
-          return NextResponse.json({ error: json.error.message, code: json.error.code }, { status: 502 });
+          return NextResponse.json({ error: metaErrorMessage(json.error), code: json.error.code }, { status: 502 });
         }
         break; // keep what we already have
       }
