@@ -140,6 +140,7 @@ export default function MessengerPosts() {
   const sendDm = async (comment) => {
     const text = dmText.trim();
     if (!text || dmSending) return;
+    if (!confirm(`Send this private DM to ${comment.from || 'this commenter'}?\n\n${text}`)) return;
     setDmSending(true);
     try {
       const res = await adminFetch('/api/facebook/private-reply', {
@@ -166,6 +167,7 @@ export default function MessengerPosts() {
   const sendPublicReply = async (comment) => {
     const text = publicText.trim();
     if (!text || publicSending) return;
+    if (!confirm(`Post this public reply to ${comment.from || 'this commenter'}?\n\n${text}`)) return;
     setPublicSending(true);
     try {
       const res = await adminFetch('/api/facebook/comment-reply', {
@@ -201,6 +203,9 @@ export default function MessengerPosts() {
       setPostStatus('Add a caption, catalog link, or image URL first.');
       return;
     }
+    const publishLabel = payload.scheduledAt ? 'schedule this Facebook post' : 'publish this Facebook post now';
+    const postPreview = [payload.message, payload.link, payload.imageUrl].filter(Boolean).join('\n\n');
+    if (!confirm(`Confirm you want to ${publishLabel}:\n\n${postPreview}`)) return;
 
     setPosting(true);
     setPostStatus('');

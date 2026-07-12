@@ -8,7 +8,7 @@ export const ADMIN_MODULES = [
   { id: 'carts', label: 'Abandoned Carts', title: 'Abandoned Carts', group: 'Sales & Marketing' },
   { id: 'share', label: 'Share Links', title: 'Share Links', group: 'Sales & Marketing' },
   { id: 'reviews', label: 'Reviews', title: 'Reviews', group: 'Sales & Marketing' },
-  { id: 'facebook', label: 'FB Alerts', title: 'FB Alerts', group: 'Sales & Marketing' },
+  { id: 'facebook', label: 'FB Alerts', title: 'Facebook Alerts', group: 'Sales & Marketing', hiddenFromNav: true },
   { id: 'messenger', label: 'Facebook', title: 'Facebook', group: 'Sales & Marketing', alwaysAvailable: true },
   { id: 'marketing', label: 'Marketing Studio', title: 'Marketing Studio', group: 'Sales & Marketing' },
   { id: 'affiliates', label: 'Affiliates & Promotions', title: 'Affiliates', group: 'Sales & Marketing' },
@@ -34,7 +34,7 @@ export const ADMIN_TAB_TITLES = Object.fromEntries(
 export const ADMIN_NAV_GROUPS = ['Overview', 'Core Operations', 'Sales & Marketing', 'Analytics & Content', 'System & AI']
   .map((title) => ({
     title,
-    tabs: ADMIN_MODULES.filter((module) => module.group === title).map((module) => module.id),
+    tabs: ADMIN_MODULES.filter((module) => module.group === title && !module.hiddenFromNav).map((module) => module.id),
   }));
 
 export const SUPERADMIN_ONLY_TAB_IDS = new Set(

@@ -352,7 +352,7 @@ export default function AdminPage() {
   // Facebook Notifications States
   const [facebookNotifications, setFacebookNotifications] = useState([]);
   const [loadingFbNotifications, setLoadingFbNotifications] = useState(true);
-  const [fbView, setFbView] = useState('inbox'); // 'inbox' | 'posts' — Facebook tab sub-view
+  const [fbView, setFbView] = useState('inbox'); // 'inbox' | 'posts' | 'alerts' — Facebook tab sub-view
   const [fbFilter, setFbFilter] = useState('All');
   const [toastMessage, setToastMessage] = useState('');
   const [leadsSearch, setLeadsSearch] = useState('');
@@ -1374,8 +1374,14 @@ Core Rules:
     [orders, adminProfile, isStaffAgent]
   );
 
-  const navigateToTab = useCallback((tabId, linkRef = null) => {
+  const navigateToTab = useCallback((tabId, linkRef = null, options = {}) => {
     if (!ADMIN_TAB_IDS.has(tabId)) return;
+    let targetTab = tabId;
+    let nextFbView = options.fbView || null;
+    if (tabId === 'facebook') {
+      targetTab = 'messenger';
+      nextFbView = 'alerts';
+    }
     if (tabId === 'whatsapp_ai' && linkRef) {
       const waId = String(linkRef).replace(/\D/g, '');
       if (waId) setActiveChatWaId(waId);
@@ -1384,21 +1390,23 @@ Core Rules:
       setFbFilter('All');
       setFocusedFacebookNotificationId(String(linkRef));
     }
-    setActiveTab(tabId);
+    if (targetTab === 'messenger' && nextFbView) setFbView(nextFbView);
+    setActiveTab(targetTab);
     setMobileMoreOpen(false);
-    const query = new URLSearchParams({ tab: tabId });
+    const query = new URLSearchParams({ tab: targetTab });
+    if (targetTab === 'messenger' && nextFbView) query.set('view', nextFbView);
     if (linkRef) query.set('ref', String(linkRef));
     router.replace(`/admin?${query.toString()}`, { scroll: false });
   }, [router]);
 
   useEffect(() => {
-    if (activeTab !== 'facebook' || !focusedFacebookNotificationId) return;
+    if (activeTab !== 'messenger' || fbView !== 'alerts' || !focusedFacebookNotificationId) return;
     const frame = requestAnimationFrame(() => {
       const target = document.getElementById(`facebook-notification-${focusedFacebookNotificationId}`);
       target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeTab, facebookNotifications, focusedFacebookNotificationId]);
+  }, [activeTab, fbView, facebookNotifications, focusedFacebookNotificationId]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -1426,22 +1434,33 @@ Core Rules:
 
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
+    const viewParam = params.get('view');
     const linkRef = params.get('ref');
     let targetTab = tabParam && ADMIN_TAB_IDS.has(tabParam) ? tabParam : getDefaultTab(adminProfile);
+    let targetFbView = ['inbox', 'posts', 'alerts'].includes(viewParam) ? viewParam : null;
+
+    if (targetTab === 'facebook') {
+      targetTab = 'messenger';
+      targetFbView = 'alerts';
+    }
 
     if (!resolveTabAccess(targetTab, adminProfile)) {
       targetTab = getDefaultTab(adminProfile);
     }
 
     setActiveTab(targetTab);
+    if (targetTab === 'messenger') setFbView(targetFbView || 'inbox');
     if (targetTab === 'whatsapp_ai' && linkRef) setActiveChatWaId(String(linkRef).replace(/\D/g, ''));
-    if (targetTab === 'facebook' && linkRef) {
+    if (targetTab === 'messenger' && (targetFbView === 'alerts' || tabParam === 'facebook') && linkRef) {
       setFbFilter('All');
       setFocusedFacebookNotificationId(linkRef);
     }
 
-    if (tabParam !== targetTab) {
-      router.replace(`/admin?tab=${encodeURIComponent(targetTab)}`, { scroll: false });
+    if (tabParam !== targetTab || (targetTab === 'messenger' && targetFbView && viewParam !== targetFbView)) {
+      const query = new URLSearchParams({ tab: targetTab });
+      if (targetTab === 'messenger' && targetFbView) query.set('view', targetFbView);
+      if (linkRef) query.set('ref', linkRef);
+      router.replace(`/admin?${query.toString()}`, { scroll: false });
     }
   }, [mounted, adminProfile, profileLoading, router]);
 
@@ -1450,9 +1469,17 @@ Core Rules:
     if (!adminProfile || profileLoading) return;
 
     const onPopState = () => {
-      const tabParam = new URLSearchParams(window.location.search).get('tab');
-      if (tabParam && ADMIN_TAB_IDS.has(tabParam) && resolveTabAccess(tabParam, adminProfile)) {
-        setActiveTab(tabParam);
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      const viewParam = params.get('view');
+      if (tabParam && ADMIN_TAB_IDS.has(tabParam)) {
+        const targetTab = tabParam === 'facebook' ? 'messenger' : tabParam;
+        if (resolveTabAccess(targetTab, adminProfile)) {
+          setActiveTab(targetTab);
+          if (targetTab === 'messenger') {
+            setFbView(tabParam === 'facebook' ? 'alerts' : (['inbox', 'posts', 'alerts'].includes(viewParam) ? viewParam : 'inbox'));
+          }
+        }
       }
     };
 
@@ -3956,7 +3983,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           </div>
           )}
 
-          {['carts','share','reviews','facebook','marketing','affiliates','broadcasts'].some(hasAccess) && (
+          {['carts','share','reviews','messenger','marketing','affiliates','broadcasts'].some(hasAccess) && (
           <div className="admin-nav-section">
             <div className="admin-nav-section-title">Sales & Marketing</div>
             <div className="admin-nav-section-items">
@@ -3997,20 +4024,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   )}
                 </button>
               )}
-              {hasAccess('facebook') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'facebook' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('facebook')}
-                >
-                  <FacebookIcon size={14} style={{ color: activeTab === 'facebook' ? 'inherit' : '#1877f2' }} />
-                  <span className="tab-label">FB Alerts</span>
-                  {facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
-                    <span className="tab-count badge-info">
-                      {facebookNotifications.filter(n => n.status === 'unread').length}
-                    </span>
-                  )}
-                </button>
-              )}
               {hasAccess('messenger') && (
                 <button
                   className={`admin-tab-btn ${activeTab === 'messenger' ? 'active' : ''}`}
@@ -4018,6 +4031,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 >
                   <FacebookIcon size={14} style={{ color: activeTab === 'messenger' ? 'inherit' : '#1877f2' }} />
                   <span className="tab-label">Facebook</span>
+                  {facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
+                    <span className="tab-count badge-info">
+                      {facebookNotifications.filter(n => n.status === 'unread').length}
+                    </span>
+                  )}
                 </button>
               )}
               {hasAccess('marketing') && (
@@ -4538,29 +4556,54 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <div className="admin-orders-tab">
             <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
               {[
-                { id: 'inbox', label: '💬 Inbox' },
-                { id: 'posts', label: '📣 Content & Engagement' },
-              ].map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => setFbView(v.id)}
-                  style={{
-                    padding: '9px 18px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer',
-                    border: '1px solid ' + (fbView === v.id ? '#1877f2' : 'rgba(255,255,255,0.1)'),
-                    background: fbView === v.id ? '#1877f2' : 'transparent',
-                    color: fbView === v.id ? '#fff' : '#94a3b8',
-                  }}
-                >
-                  {v.label}
-                </button>
-              ))}
+                { id: 'inbox', label: 'Inbox', count: null, Icon: MessageCircle },
+                { id: 'posts', label: 'Content & Engagement', count: null, Icon: Megaphone },
+                { id: 'alerts', label: 'Alerts', count: facebookNotifications.filter(n => n.status === 'unread').length, Icon: Bell },
+              ].map((v) => {
+                const Icon = v.Icon;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => {
+                      setFbView(v.id);
+                      const query = new URLSearchParams({ tab: 'messenger' });
+                      if (v.id !== 'inbox') query.set('view', v.id);
+                      router.replace(`/admin?${query.toString()}`, { scroll: false });
+                    }}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '7px',
+                      padding: '9px 18px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer',
+                      border: '1px solid ' + (fbView === v.id ? '#1877f2' : 'rgba(255,255,255,0.1)'),
+                      background: fbView === v.id ? '#1877f2' : 'transparent',
+                      color: fbView === v.id ? '#fff' : '#94a3b8',
+                    }}
+                  >
+                    <Icon size={14} aria-hidden />
+                    {v.label}
+                    {v.count > 0 && (
+                      <span style={{
+                        minWidth: 18,
+                        padding: '1px 6px',
+                        borderRadius: 999,
+                        background: fbView === v.id ? 'rgba(255,255,255,0.24)' : 'rgba(14,165,233,0.16)',
+                        color: fbView === v.id ? '#fff' : '#38bdf8',
+                        fontSize: '0.68rem',
+                        fontWeight: 800,
+                        textAlign: 'center',
+                      }}>
+                        {v.count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            {fbView === 'posts' ? <MessengerPosts /> : <MessengerInbox />}
+            {fbView === 'posts' ? <MessengerPosts /> : fbView === 'alerts' ? null : <MessengerInbox />}
           </div>
         )}
 
-        {activeTab === 'facebook' && (
+        {activeTab === 'messenger' && fbView === 'alerts' && (
           <div className="admin-orders-tab">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
               <div>
@@ -6457,6 +6500,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                             <span className="admin-more-tab-badge success">{leads.length}</span>
                           )}
                           {tabId === 'facebook' && facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
+                            <span className="admin-more-tab-badge">{facebookNotifications.filter(n => n.status === 'unread').length}</span>
+                          )}
+                          {tabId === 'messenger' && facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
                             <span className="admin-more-tab-badge">{facebookNotifications.filter(n => n.status === 'unread').length}</span>
                           )}
                           {tabId === 'inquiries' && inquiryCount > 0 && (

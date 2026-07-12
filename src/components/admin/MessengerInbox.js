@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, MessageCircle, RefreshCw, Search, Send, Sparkles, Paperclip } from 'lucide-react';
+import { ChevronLeft, MessageCircle, MessageSquare, RefreshCw, Search, Send, Sparkles, Paperclip } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 
@@ -171,6 +171,16 @@ export default function MessengerInbox() {
     const t = setInterval(() => fetchInbox(), POLL_MS);
     return () => clearInterval(t);
   }, [fetchInbox]);
+
+  useEffect(() => {
+    document.body.classList.add('admin-wa-tab-active');
+    return () => document.body.classList.remove('admin-wa-tab-active');
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle('admin-wa-conversation-open', Boolean(activeId));
+    return () => document.body.classList.remove('admin-wa-conversation-open');
+  }, [activeId]);
 
   const hasUnread = useCallback((conv) => {
     if (!conv.lastInboundAt) return false;
@@ -400,33 +410,37 @@ export default function MessengerInbox() {
           {/* DMs / Comments tabs */}
           <div style={{ display: 'flex', gap: '8px', margin: '10px 12px 0' }}>
             {[
-              { id: 'dm', label: '💬 DMs', count: counts.dm },
-              { id: 'comment', label: '📝 Comments', count: counts.comment },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => { setActiveTab(tab.id); setActiveId(null); }}
-                style={{
-                  flex: 1,
-                  padding: '8px 10px',
-                  borderRadius: '8px',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  border: '1px solid ' + (activeTab === tab.id ? '#0ea5e9' : 'rgba(255,255,255,0.1)'),
-                  background: activeTab === tab.id ? '#0ea5e9' : 'transparent',
-                  color: activeTab === tab.id ? '#fff' : '#94a3b8',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                }}
-              >
-                {tab.label}
-                <span style={{
-                  background: 'rgba(0,0,0,0.25)', borderRadius: '10px',
-                  padding: '1px 7px', fontSize: '0.7rem', fontWeight: 700,
-                }}>{tab.count}</span>
-              </button>
-            ))}
+              { id: 'dm', label: 'DMs', count: counts.dm, Icon: MessageCircle },
+              { id: 'comment', label: 'Comments', count: counts.comment, Icon: MessageSquare },
+            ].map((tab) => {
+              const Icon = tab.Icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => { setActiveTab(tab.id); setActiveId(null); }}
+                  style={{
+                    flex: 1,
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    border: '1px solid ' + (activeTab === tab.id ? '#0ea5e9' : 'rgba(255,255,255,0.1)'),
+                    background: activeTab === tab.id ? '#0ea5e9' : 'transparent',
+                    color: activeTab === tab.id ? '#fff' : '#94a3b8',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                  }}
+                >
+                  <Icon size={14} aria-hidden />
+                  {tab.label}
+                  <span style={{
+                    background: 'rgba(0,0,0,0.25)', borderRadius: '10px',
+                    padding: '1px 7px', fontSize: '0.7rem', fontWeight: 700,
+                  }}>{tab.count}</span>
+                </button>
+              );
+            })}
           </div>
 
           <div className="admin-wa-search-row" style={{ display: 'flex', gap: '8px', margin: '10px 12px' }}>
