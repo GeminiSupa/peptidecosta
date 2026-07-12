@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getPageAccessToken } from '@/lib/facebookPageToken';
 
 // Messenger inbox: live Graph API fetch (no DB). Redeploy marker: 2026-07-04.
 // ─── Meta Credentials ───
-const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 const PAGE_ID = process.env.FACEBOOK_PAGE_ID || process.env.MESSENGER_PAGE_ID || '';
 const GRAPH = 'https://graph.facebook.com/v25.0';
 
@@ -57,6 +57,7 @@ export async function GET(request) {
   if (auth.error) return auth.error;
 
   try {
+    const PAGE_ACCESS_TOKEN = await getPageAccessToken();
     if (!PAGE_ACCESS_TOKEN) {
       return NextResponse.json(
         { error: 'FACEBOOK_PAGE_ACCESS_TOKEN is not configured.' },

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getPageAccessToken } from '@/lib/facebookPageToken';
 
 // Sends a private reply (a DM) to someone who commented on a Page post.
 // Uses the current Meta Send API method: POST /me/messages with
@@ -19,7 +20,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'commentId and message are required' }, { status: 400 });
     }
 
-    const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+    const PAGE_ACCESS_TOKEN = await getPageAccessToken();
     if (!PAGE_ACCESS_TOKEN) {
       return NextResponse.json({ error: 'Facebook Page Access Token not configured' }, { status: 500 });
     }

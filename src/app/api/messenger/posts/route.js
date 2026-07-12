@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { getPageAccessToken } from '@/lib/facebookPageToken';
 
 // Live Facebook Post + Comments feed for the admin dashboard.
 // Requires the page token to have `pages_read_user_content` (Standard Access is
 // enough for the page's own content). Reports comment counts and whether the
 // Page has publicly replied to each comment.
-const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 const PAGE_ID = process.env.FACEBOOK_PAGE_ID || process.env.MESSENGER_PAGE_ID || '';
 const GRAPH = 'https://graph.facebook.com/v25.0';
 
-async function resolvePageId() {
+async function resolvePageId(token) {
   if (PAGE_ID) return PAGE_ID;
-  const me = await (await fetch(`${GRAPH}/me?access_token=${PAGE_ACCESS_TOKEN}`)).json();
+  const me = await (await fetch(`${GRAPH}/me?access_token=${token}`)).json();
   if (me.error) throw new Error(metaErrorMessage(me.error));
   return me.id;
 }
@@ -30,13 +30,14 @@ export async function GET(request) {
   if (auth.error) return auth.error;
 
   try {
+    const PAGE_ACCESS_TOKEN = await getPageAccessToken();
     if (!PAGE_ACCESS_TOKEN) {
       return NextResponse.json({ error: 'FACEBOOK_PAGE_ACCESS_TOKEN is not configured.' }, { status: 500 });
     }
 
     let pageId;
     try {
-      pageId = await resolvePageId();
+      pageId = await resolvePageId(PAGE_ACCESS_TOKEN);
     } catch (err) {
       return NextResponse.json({ error: err.message }, { status: 502 });
     }
@@ -183,6 +184,7 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   try {
+    const PAGE_ACCESS_TOKEN = await getPageAccessToken();
     if (!PAGE_ACCESS_TOKEN) {
       return NextResponse.json({ error: 'FACEBOOK_PAGE_ACCESS_TOKEN is not configured.' }, { status: 500 });
     }
@@ -214,7 +216,7 @@ export async function POST(request) {
       scheduledTimestamp = Math.floor(scheduledMs / 1000);
     }
 
-    const pageId = await resolvePageId();
+    const pageId = await resolvePageId(PAGE_ACCESS_TOKEN);
     const isPhotoPost = Boolean(cleanImageUrl);
     const endpoint = isPhotoPost ? `${GRAPH}/${pageId}/photos` : `${GRAPH}/${pageId}/feed`;
     const params = new URLSearchParams();

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getPageAccessToken } from '@/lib/facebookPageToken';
 
 // ─── Supabase client (service role for server writes) ───
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,7 +13,6 @@ const supabase = supabaseUrl && (supabaseServiceKey || supabaseAnonKey)
 
 // ─── Meta Credentials ───
 const VERIFY_TOKEN = process.env.FACEBOOK_VERIFY_TOKEN;
-const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 
 /**
  * GET Handler: Verification handshake with Meta.
@@ -46,6 +46,7 @@ export async function POST(request) {
     const body = await request.json();
     console.log('[Facebook Webhook] 📩 Event Received:', JSON.stringify(body, null, 2));
 
+    const PAGE_ACCESS_TOKEN = await getPageAccessToken();
     const entries = body?.entry || [];
 
     for (const entry of entries) {

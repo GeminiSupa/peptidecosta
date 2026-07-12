@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getPageAccessToken } from '@/lib/facebookPageToken';
 
 // Sends Messenger "sender actions" (typing indicator, mark seen) so replies feel
 // live to the customer. Uses the same Page token as the reply endpoint.
-const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 const ALLOWED = new Set(['typing_on', 'typing_off', 'mark_seen']);
 
 export async function POST(request) {
@@ -19,6 +19,7 @@ export async function POST(request) {
     if (!ALLOWED.has(action)) {
       return NextResponse.json({ error: 'action must be typing_on, typing_off, or mark_seen' }, { status: 400 });
     }
+    const PAGE_ACCESS_TOKEN = await getPageAccessToken();
     if (!PAGE_ACCESS_TOKEN) {
       return NextResponse.json({ error: 'Facebook Page Access Token not configured' }, { status: 500 });
     }

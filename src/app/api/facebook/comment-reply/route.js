@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getPageAccessToken } from '@/lib/facebookPageToken';
 
-const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 const GRAPH = 'https://graph.facebook.com/v25.0';
 
 function friendlyMetaError(err) {
@@ -25,6 +25,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'commentId and message are required.' }, { status: 400 });
     }
 
+    const PAGE_ACCESS_TOKEN = await getPageAccessToken();
     if (!PAGE_ACCESS_TOKEN) {
       return NextResponse.json({ error: 'Facebook Page Access Token not configured.' }, { status: 500 });
     }

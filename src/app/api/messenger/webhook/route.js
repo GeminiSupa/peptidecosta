@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getPageAccessToken } from '@/lib/facebookPageToken';
 
 // ─── Supabase client (service role for server writes) ───
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -10,11 +11,9 @@ const supabase = supabaseUrl && (supabaseServiceKey || supabaseAnonKey)
   ? createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey)
   : null;
 
-// ─── Meta Credentials ───
-// Fallback to the hardcoded values you provided if environment variables are missing
-const VERIFY_TOKEN = process.env.MESSENGER_VERIFY_TOKEN || 'peptide_messenger_verify_2026';
-const PAGE_ID = process.env.MESSENGER_PAGE_ID || '1042589428946472';
-const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+// ─── Meta Credentials (env-only; no secrets hardcoded) ───
+const VERIFY_TOKEN = process.env.MESSENGER_VERIFY_TOKEN;
+const PAGE_ID = process.env.MESSENGER_PAGE_ID || process.env.FACEBOOK_PAGE_ID || '';
 
 /**
  * GET Handler: Verification handshake with Meta.
@@ -27,7 +26,7 @@ export async function GET(request) {
     const token = searchParams.get('hub.verify_token');
     const challenge = searchParams.get('hub.challenge');
 
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    if (mode === 'subscribe' && VERIFY_TOKEN && token === VERIFY_TOKEN) {
       console.log('[Messenger Webhook] ✅ Verification Successful');
       return new Response(challenge, { status: 200 });
     }
@@ -48,6 +47,7 @@ export async function POST(request) {
     const body = await request.json();
     console.log('[Messenger Webhook] 📩 Event Received:', JSON.stringify(body, null, 2));
 
+    const PAGE_ACCESS_TOKEN = await getPageAccessToken();
     if (body.object === 'page') {
       const entries = body?.entry || [];
       

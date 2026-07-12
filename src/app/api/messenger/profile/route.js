@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getPageAccessToken } from '@/lib/facebookPageToken';
 
 // Fetches a Messenger user's real name + profile photo for a single conversation
 // (called lazily when a thread is opened, so we avoid one lookup per contact).
-const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
@@ -16,6 +16,7 @@ export async function GET(request) {
     if (!psid) {
       return NextResponse.json({ error: 'psid is required' }, { status: 400 });
     }
+    const PAGE_ACCESS_TOKEN = await getPageAccessToken();
     if (!PAGE_ACCESS_TOKEN) {
       return NextResponse.json({ error: 'Facebook Page Access Token not configured' }, { status: 500 });
     }

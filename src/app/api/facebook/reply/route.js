@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getPageAccessToken } from '@/lib/facebookPageToken';
 
 // Sends a Messenger reply from the Page — POLICY-AWARE.
 //
@@ -9,7 +10,6 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 // app-review approval). Violating the window repeatedly gets the Page's messaging
 // restricted or removed — so we enforce it server-side instead of letting Meta
 // rack up violations against the Page.
-const PAGE_ACCESS_TOKEN = process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 // Set FB_HUMAN_AGENT_ENABLED=1 ONLY after Meta approves the Human Agent
 // permission for the app — sending the tag without approval fails anyway.
 const HUMAN_AGENT_ENABLED = process.env.FB_HUMAN_AGENT_ENABLED === '1';
@@ -49,6 +49,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'recipientId and either messageText or imageUrl are required' }, { status: 400 });
     }
 
+    const PAGE_ACCESS_TOKEN = await getPageAccessToken();
     if (!PAGE_ACCESS_TOKEN) {
       return NextResponse.json({ error: 'Facebook Page Access Token not configured' }, { status: 500 });
     }
