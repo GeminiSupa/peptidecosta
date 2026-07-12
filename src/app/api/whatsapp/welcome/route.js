@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
-import { isWhatsAppSuppressed } from '@/lib/whatsappCompliance';
+import { canSendWhatsAppMarketing } from '@/lib/whatsappCompliance';
 
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -41,9 +41,10 @@ export async function POST(request) {
       }, { status: 400 });
     }
 
-    // Compliance: skip if this number opted out of WhatsApp marketing.
-    if (await isWhatsAppSuppressed(supabase, cleanPhone)) {
-      return NextResponse.json({ success: false, skipped: true, reason: 'suppressed' });
+    // Compliance: only message people who explicitly opted in (and not opted out).
+    const gate = await canSendWhatsAppMarketing(supabase, cleanPhone);
+    if (!gate.ok) {
+      return NextResponse.json({ success: false, skipped: true, reason: gate.reason });
     }
 
     const origin = request.headers.get('origin') || 'https://catalog.peptidescostarica.net';

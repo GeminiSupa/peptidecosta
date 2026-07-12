@@ -43,6 +43,47 @@ export function detectWhatsAppIntent(text) {
   return null;
 }
 
+/**
+ * True ONLY if this phone number has an explicit WhatsApp opt-in on record
+ * (someone ticked the consent box). Matches on the trailing 8 digits so that
+ * differences in country-code formatting between tables don't cause a miss.
+ * FAILS CLOSED: any uncertainty (no client, no match, DB error) returns false.
+ */
+export async function hasWhatsAppOptIn(supabase, phone) {
+  if (!supabase || !phone) return false;
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length < 8) return false;
+  const last8 = digits.slice(-8);
+  try {
+    const { data } = await supabase
+      .from('catalog_leads')
+      .select('id')
+      .eq('whatsapp_consent', true)
+      .ilike('contact_value', `%${last8}%`)
+      .limit(1);
+    return Array.isArray(data) && data.length > 0;
+  } catch (err) {
+    console.error('[WhatsApp Compliance] Opt-in lookup failed:', err.message);
+    return false; // fail closed — never message someone we cannot confirm opted in
+  }
+}
+
+/**
+ * The single gate every MARKETING WhatsApp send must pass. Returns true only if
+ * the number both opted in AND has not opted out. Transactional messages
+ * (order confirmations, shipping updates) do NOT use this — only promos do.
+ * @returns {Promise<{ ok: boolean, reason?: string }>}
+ */
+export async function canSendWhatsAppMarketing(supabase, phone) {
+  if (await isWhatsAppSuppressed(supabase, phone)) {
+    return { ok: false, reason: 'opted_out' };
+  }
+  if (!(await hasWhatsAppOptIn(supabase, phone))) {
+    return { ok: false, reason: 'no_opt_in' };
+  }
+  return { ok: true };
+}
+
 /** True if this phone number has opted out of WhatsApp marketing. */
 export async function isWhatsAppSuppressed(supabase, phone) {
   if (!supabase || !phone) return false;

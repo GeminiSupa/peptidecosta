@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { canSendWhatsAppMarketing } from '@/lib/whatsappCompliance';
 
 export const maxDuration = 60; // Vercel limit
 export const dynamic = 'force-dynamic';
@@ -42,9 +43,16 @@ export async function GET(request) {
   let sentCount = 0;
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
 
+  let skippedNoConsent = 0;
   for (const cart of abandonedCarts) {
     // We can only send a recovery message if we captured a phone number
     if (!cart.customer_phone) continue;
+
+    // Compliance gate: only message people who explicitly opted in to WhatsApp.
+    // This is a marketing (promo) message, so it must never go to a non-opted-in
+    // number — that is what gets the WhatsApp number flagged for spam.
+    const gate = await canSendWhatsAppMarketing(supabaseAdmin, cart.customer_phone);
+    if (!gate.ok) { skippedNoConsent++; continue; }
 
     // Build the recovery message
     let cartItemsText = "";
@@ -98,6 +106,7 @@ export async function GET(request) {
   return NextResponse.json({
     success: true,
     processed: abandonedCarts.length,
-    sent: sentCount
+    sent: sentCount,
+    skippedNoConsent
   });
 }

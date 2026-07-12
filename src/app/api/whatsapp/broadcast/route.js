@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
-import { isWhatsAppSuppressed } from '@/lib/whatsappCompliance';
+import { canSendWhatsAppMarketing } from '@/lib/whatsappCompliance';
 
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -84,8 +84,10 @@ export async function POST(request) {
         continue;
       }
 
-      // Compliance: never send marketing to a number that has opted out.
-      if (await isWhatsAppSuppressed(supabase, cleanPhone)) {
+      // Compliance: only send marketing to numbers that explicitly opted in
+      // (and have not opted out). Everything else is skipped, not sent.
+      const gate = await canSendWhatsAppMarketing(supabase, cleanPhone);
+      if (!gate.ok) {
         results.suppressedCount++;
         continue;
       }

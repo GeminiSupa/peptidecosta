@@ -60,6 +60,10 @@ export default function LeadsManager({
   const adsLeads = safeLeads.filter(l => l.utm_source || l.utm_medium || l.utm_campaign || (l.source && l.source.toLowerCase().includes('facebook'))).length;
   const organicLeads = totalLeads - adsLeads;
 
+  // WhatsApp marketing opt-in (only these may receive promo WhatsApp messages).
+  const optInLeads = safeLeads.filter(l => l.whatsapp_consent === true).length;
+  const noOptInLeads = totalLeads - optInLeads;
+
   // Filtering
 
   // Local Sorting State
@@ -89,6 +93,8 @@ export default function LeadsManager({
         if (leadsSourceFilter === 'whatsapp' && l.contact_method !== 'whatsapp' && !(l.phone) && !(l.contact_value && !String(l.contact_value).includes('@'))) return false;
         if (leadsSourceFilter === 'email' && l.contact_method !== 'email' && !(l.email) && !(l.contact_value && String(l.contact_value).includes('@'))) return false;
         if (leadsSourceFilter === 'converted' && !getLeadConversion(l).converted) return false;
+        if (leadsSourceFilter === 'wa_optin' && l.whatsapp_consent !== true) return false;
+        if (leadsSourceFilter === 'wa_nooptin' && l.whatsapp_consent === true) return false;
         if (leadsSourceFilter === 'facebook' && !(
           (l.source && String(l.source).toLowerCase().includes('facebook')) ||
           (l.utm_source && String(l.utm_source).toLowerCase().includes('facebook')) ||
@@ -182,6 +188,13 @@ export default function LeadsManager({
           <div style={{ fontSize: '0.7rem', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Converted</div>
           <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#10b981' }}>{convertedLeads}</div>
         </div>
+        <div style={{ flex: '1 1 120px', background: 'rgba(34, 197, 94, 0.08)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(34, 197, 94, 0.15)' }} title="Only opted-in contacts may receive WhatsApp promotions">
+          <div style={{ fontSize: '0.7rem', color: '#22c55e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>WA Opt-in</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#22c55e' }}>
+            {optInLeads}
+            <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 'normal' }}> / {noOptInLeads} not</span>
+          </div>
+        </div>
       </div>
 
       <div style={{ marginBottom: '20px' }}>
@@ -242,6 +255,8 @@ export default function LeadsManager({
           <option value="email">Email</option>
           <option value="facebook">Facebook Ads</option>
           <option value="converted">Converted</option>
+          <option value="wa_optin">✓ WhatsApp Opt-in</option>
+          <option value="wa_nooptin">✗ No WhatsApp Opt-in</option>
         </select>
 
         <select
@@ -368,6 +383,21 @@ export default function LeadsManager({
                         <span style={{ padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 'bold' }}>
                           {lead.language ? lead.language.toUpperCase() : 'EN'}
                         </span>
+                        {lead.whatsapp_consent === true ? (
+                          <span
+                            title="Opted in — may receive WhatsApp promotions"
+                            style={{ padding: '2px 6px', background: 'rgba(34,197,94,0.15)', color: '#4ade80', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 'bold', border: '1px solid rgba(34,197,94,0.3)' }}
+                          >
+                            ✓ WA opt-in
+                          </span>
+                        ) : (
+                          <span
+                            title="Not opted in — do NOT send WhatsApp promotions to this contact"
+                            style={{ padding: '2px 6px', background: 'rgba(255,255,255,0.03)', color: '#64748b', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 'bold', border: '1px solid rgba(255,255,255,0.08)' }}
+                          >
+                            ✗ no WA opt-in
+                          </span>
+                        )}
                         {lead.contact_method === 'whatsapp' ? (
                           <button 
                             onClick={() => openLeadOutreachComposer(lead, 'whatsapp')}

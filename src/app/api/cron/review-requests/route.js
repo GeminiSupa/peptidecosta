@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyCronRequest } from '@/lib/cronAuth';
+import { canSendWhatsAppMarketing } from '@/lib/whatsappCompliance';
 import {
   createTrustpilotServiceInvitation,
   getTrustpilotConfigStatus,
@@ -149,10 +150,12 @@ export async function GET(request) {
         const metaToken = process.env.WHATSAPP_ACCESS_TOKEN;
         const metaPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
-        if (order.customer_phone && metaToken && metaPhoneId) {
-          let cleanPhone = order.customer_phone.replace(/[^0-9]/g, '');
-          if (cleanPhone.length === 8) cleanPhone = '506' + cleanPhone;
+        let cleanPhone = order.customer_phone ? order.customer_phone.replace(/[^0-9]/g, '') : '';
+        if (cleanPhone.length === 8) cleanPhone = '506' + cleanPhone;
+        // Only send the WhatsApp review request to numbers that explicitly opted in.
+        const waGate = cleanPhone ? await canSendWhatsAppMarketing(supabase, cleanPhone) : { ok: false };
 
+        if (cleanPhone && metaToken && metaPhoneId && waGate.ok) {
           await fetch(`https://graph.facebook.com/v25.0/${metaPhoneId}/messages`, {
             method: 'POST',
             headers: {
