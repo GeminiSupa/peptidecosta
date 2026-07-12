@@ -13,7 +13,7 @@ import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
-  Plus, Minus, Trash2, Check, AlertCircle, ArrowLeft,
+  Plus, Minus, Trash2, Check, CheckCircle, AlertCircle, ArrowLeft,
   ChevronLeft, ChevronRight,
   Dna, FlaskConical, Syringe, TestTubes, Atom,
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
@@ -268,6 +268,13 @@ export default function CatalogPage() {
   const [gateError, setGateError] = useState('');
   const [gateConsent, setGateConsent] = useState(false); // WhatsApp marketing opt-in — MUST default false (Meta requires an active opt-in; pre-ticking gets the number flagged for spam)
 
+  // Second-chance WhatsApp opt-in re-prompt (for visitors who unlocked the
+  // catalog but did NOT opt in). Shown at most once / 3 days, stops after 2 dismissals.
+  const [showWaReprompt, setShowWaReprompt]           = useState(false);
+  const [waRepromptPhone, setWaRepromptPhone]         = useState('');
+  const [waRepromptSubmitting, setWaRepromptSubmitting] = useState(false);
+  const [waRepromptDone, setWaRepromptDone]           = useState(false);
+
   // PayPal States
   const [paypalReady, setPaypalReady] = useState(false);
   const paypalButtonRef = useRef(null);
@@ -305,6 +312,57 @@ export default function CatalogPage() {
       }
     }
   }, [loading]);
+
+  // Second-chance WhatsApp opt-in re-prompt: for visitors who unlocked the
+  // catalog but never opted in. Fires once (after 15s), at most once / 3 days,
+  // and stops entirely after 2 dismissals so it never becomes a nuisance.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
+    const optedIn = localStorage.getItem('wa_opted_in') === 'true';
+    if (!hasAccess || optedIn) return;
+
+    let state = { lastShown: 0, dismisses: 0 };
+    try { state = { ...state, ...JSON.parse(localStorage.getItem('wa_optin_prompt') || '{}') }; } catch {}
+    if (state.dismisses >= 2) return;
+    const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
+    if (state.lastShown && Date.now() - state.lastShown < THREE_DAYS) return;
+
+    const stored = localStorage.getItem('catalog_lead_contact') || '';
+    if (stored && !stored.includes('@')) setWaRepromptPhone(stored);
+
+    const timer = setTimeout(() => {
+      setShowWaReprompt(true);
+      localStorage.setItem('wa_optin_prompt', JSON.stringify({ ...state, lastShown: Date.now() }));
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleWaRepromptSubmit = async (e) => {
+    e.preventDefault();
+    const clean = cleanPhoneNumber((waRepromptPhone || '').trim());
+    if (!clean || clean.length < 8) return;
+    setWaRepromptSubmitting(true);
+    try {
+      await fetch('/api/leads/optin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: clean, language: lang }),
+      }).catch(() => {});
+      localStorage.setItem('wa_opted_in', 'true');
+      setWaRepromptDone(true);
+      setTimeout(() => setShowWaReprompt(false), 2500);
+    } finally {
+      setWaRepromptSubmitting(false);
+    }
+  };
+
+  const dismissWaReprompt = () => {
+    setShowWaReprompt(false);
+    let s = {};
+    try { s = JSON.parse(localStorage.getItem('wa_optin_prompt') || '{}'); } catch {}
+    localStorage.setItem('wa_optin_prompt', JSON.stringify({ lastShown: Date.now(), dismisses: (s.dismisses || 0) + 1 }));
+  };
 
   // Load Site Settings for Banner
   useEffect(() => {
@@ -586,6 +644,7 @@ export default function CatalogPage() {
       const finalContact = isEmail ? gateInput.trim() : cleanPhoneNumber(gateInput.trim());
       localStorage.setItem('catalog_access_granted', 'true');
       localStorage.setItem('catalog_lead_contact', finalContact);
+      if (gateConsent) localStorage.setItem('wa_opted_in', 'true'); // never re-prompt opted-in users
       setGateAccessGranted(true);
     } catch (err) {
       console.error('Error saving lead:', err);
@@ -4372,6 +4431,63 @@ export default function CatalogPage() {
           </div>
         ))}
       </div>
+
+      {/* Second-chance WhatsApp opt-in re-prompt (dismissible, not a full gate) */}
+      {showWaReprompt && (
+        <div style={{
+          position: 'fixed', bottom: '18px', right: '18px', zIndex: 9998,
+          maxWidth: '340px', width: 'calc(100% - 36px)',
+          background: 'var(--bg-card)', border: '1px solid rgba(37,211,102,0.35)',
+          borderRadius: '16px', boxShadow: '0 10px 40px rgba(0,0,0,0.35)',
+          padding: '16px', animation: 'fadeIn 0.3s ease',
+        }}>
+          <button
+            onClick={dismissWaReprompt}
+            aria-label="Close"
+            style={{ position: 'absolute', top: '8px', right: '10px', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}
+          >
+            &times;
+          </button>
+
+          {waRepromptDone ? (
+            <div style={{ textAlign: 'center', padding: '8px 4px' }}>
+              <div style={{ fontSize: '1.6rem', marginBottom: '6px' }}>✅</div>
+              <div style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '0.95rem' }}>
+                {lang === 'en' ? "You're in! We'll message you on WhatsApp." : '¡Listo! Le escribiremos por WhatsApp.'}
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleWaRepromptSubmit}>
+              <div style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '0.95rem', marginBottom: '2px', paddingRight: '18px' }}>
+                {lang === 'en' ? '📲 Get exclusive deals on WhatsApp' : '📲 Reciba ofertas exclusivas por WhatsApp'}
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '10px', lineHeight: 1.4 }}>
+                {lang === 'en'
+                  ? 'Deals & new-stock alerts only — no spam. Reply STOP anytime.'
+                  : 'Solo ofertas y avisos de stock, sin spam. Responda BAJA cuando quiera.'}
+              </div>
+              <input
+                type="tel"
+                value={waRepromptPhone}
+                onChange={(e) => setWaRepromptPhone(e.target.value)}
+                placeholder={lang === 'en' ? 'WhatsApp number (+506…)' : 'Número WhatsApp (+506…)'}
+                required
+                style={{ width: '100%', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '0.9rem', outline: 'none', marginBottom: '8px' }}
+              />
+              <button
+                type="submit"
+                disabled={waRepromptSubmitting}
+                className="whatsapp-btn"
+                style={{ width: '100%', padding: '10px', border: 'none', borderRadius: '10px', fontSize: '0.9rem', fontWeight: 700 }}
+              >
+                {waRepromptSubmitting
+                  ? (lang === 'en' ? 'Saving…' : 'Guardando…')
+                  : (lang === 'en' ? 'Yes, keep me posted' : 'Sí, manténganme informado')}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { canRetryDelivery, isMarketingSuppressed, normalizeMarketingIdentity } from '@/lib/marketingDelivery.mjs';
 import { createJourneyTrackingToken } from '@/lib/marketingTokens';
+import { hasWhatsAppOptIn } from '@/lib/whatsappCompliance';
 
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
@@ -128,14 +129,14 @@ async function sendEmail(to, message, subject, tracking = null, htmlContent = nu
   }
 }
 
-async function recordSuppressed(broadcastId, identity, channel) {
+async function recordSuppressed(broadcastId, identity, channel, reason = 'Global marketing suppression') {
   await supabase.from('marketing_delivery_events').upsert({
     broadcast_id: broadcastId,
     contact_key: identity,
     channel,
     status: 'suppressed',
     attempt_count: 0,
-    error: 'Global marketing suppression',
+    error: reason,
     last_attempt_at: new Date().toISOString(),
   }, { onConflict: 'broadcast_id,contact_key,channel' });
 }
@@ -282,15 +283,29 @@ export async function GET(request) {
         let retryEmail = false;
 
         if (channels.whatsapp && contact.phone) {
-          const result = await guardedSend({
-            broadcastId: broadcast.id,
-            identity: normalizeMarketingIdentity(contact.phone, 'whatsapp'),
-            channel: 'whatsapp',
-            suppressions,
-            send: () => sendWhatsApp(contact.phone, message, channels.whatsappTemplateName, contact.name, channels.whatsappTemplateLanguage),
-          });
-          sentWhatsapp = result.sent;
-          retryWhatsapp = result.retryable;
+          // OPT-IN GATE: never WhatsApp-broadcast to a number that has not
+          // explicitly opted in. This is the #1 protection against Meta spam
+          // flags — "All Customers"/"Everyone" audiences include people who
+          // never consented to WhatsApp marketing.
+          const optedIn = await hasWhatsAppOptIn(supabase, contact.phone);
+          if (!optedIn) {
+            await recordSuppressed(
+              broadcast.id,
+              normalizeMarketingIdentity(contact.phone, 'whatsapp'),
+              'whatsapp',
+              'No WhatsApp opt-in — skipped to protect the number'
+            );
+          } else {
+            const result = await guardedSend({
+              broadcastId: broadcast.id,
+              identity: normalizeMarketingIdentity(contact.phone, 'whatsapp'),
+              channel: 'whatsapp',
+              suppressions,
+              send: () => sendWhatsApp(contact.phone, message, channels.whatsappTemplateName, contact.name, channels.whatsappTemplateLanguage),
+            });
+            sentWhatsapp = result.sent;
+            retryWhatsapp = result.retryable;
+          }
         }
         if (channels.email && contact.email && (message || channels.emailHtmlContent)) {
           const result = await guardedSend({

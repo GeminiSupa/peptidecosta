@@ -402,6 +402,10 @@ export default function BroadcastsPanel({ products = [] }) {
             <option value="custom">Custom List (Manual Entry)</option>
           </select>
 
+          <div style={{ marginTop: '10px', padding: '10px 12px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '8px', fontSize: '0.78rem', color: '#4ade80', lineHeight: 1.45 }}>
+            🛡️ <strong>WhatsApp messages only go to contacts who opted in</strong>, no matter which audience you pick — non-opted-in numbers are skipped automatically to protect your number from spam flags. Email still reaches everyone in the audience.
+          </div>
+
           {audience === 'custom' && (
             <div style={{ marginTop: '12px' }}>
               <textarea 
