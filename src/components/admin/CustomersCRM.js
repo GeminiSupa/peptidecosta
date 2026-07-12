@@ -1,14 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
-  Users, User, Mail, MessageCircle, Download, DollarSign, Package, Calendar,
+  Users, User, Mail, MessageCircle, DollarSign, Calendar,
   ArrowDownUp, BadgeCheck, Search, Upload, Crown, Phone, MapPin, ShoppingBag,
-  Sparkles, Brain, Edit2, Save, Send, X
+  Sparkles, Brain, Edit2, Save, Send, X, History, Clock, ClipboardList,
+  Activity, CheckCircle2, Copy, AlertTriangle, Target
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
 import { adminFetch } from '@/lib/adminApi';
+import { supabase } from '@/lib/supabase';
+
+const CRM_REMINDERS_KEY = 'peptides_crm_follow_up_reminders_v1';
+const CRM_ACTIVITY_KEY = 'peptides_crm_staff_activity_v1';
 
 const resolveRecommendation = (cust) => {
   // Combine past purchases and cart items to search for keywords
@@ -69,6 +74,71 @@ const resolveRecommendation = (cust) => {
   };
 };
 
+const daysSince = (date) => {
+  const time = new Date(date || Date.now()).getTime();
+  if (!Number.isFinite(time)) return 0;
+  return Math.floor((Date.now() - time) / (1000 * 60 * 60 * 24));
+};
+
+const getCustomerTags = (cust) => {
+  const inactive = !cust.isLead && daysSince(cust.lastOrderDate) >= 60;
+  const tags = [];
+
+  if (cust.isLead) {
+    tags.push({ key: 'lead', label: 'Lead', tone: 'amber' });
+  }
+  if (!cust.isLead && cust.totalSpentUsd >= 500) {
+    tags.push({ key: 'vip', label: 'VIP', tone: 'gold' });
+  }
+  if (!cust.isLead && cust.orderCount >= 2) {
+    tags.push({ key: 'repeat', label: 'Repeat buyer', tone: 'blue' });
+  }
+  if (inactive) {
+    tags.push({ key: 'inactive', label: 'Inactive', tone: 'red' });
+  }
+  if (!tags.length) {
+    tags.push({ key: 'customer', label: 'Customer', tone: 'green' });
+  }
+
+  return tags;
+};
+
+const formatTimelineDate = (value) => {
+  if (!value) return 'No date';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'No date';
+  return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+};
+
+const buildSalesScript = (cust) => {
+  const rec = resolveRecommendation(cust);
+  const firstName = (cust.name || 'there').split(' ')[0];
+  const cartLine = cust.cartItems?.length
+    ? `I saw you were reviewing ${cust.cartItems.map(item => item.product).join(', ')}.`
+    : `Based on your profile, ${rec.product} is the next item I would check first.`;
+  const purchaseLine = cust.purchasedItems?.length
+    ? `You previously ordered ${cust.purchasedItems.slice(0, 3).join(', ')}.`
+    : cartLine;
+
+  if (cust.isLead) {
+    return `Hi ${firstName}, this is Peptides Costa Rica. ${cartLine} We have local Costa Rica inventory, COA documentation, and CRC pricing ready. Would you like me to check availability and coordinate the next step for you?`;
+  }
+
+  if (daysSince(cust.lastOrderDate) >= 60) {
+    return `Hi ${firstName}, quick follow-up from Peptides Costa Rica. ${purchaseLine} We have updated local stock and COA documentation available. If you are planning a new research order, I can check current inventory and CRC pricing for you.`;
+  }
+
+  if (cust.totalSpentUsd >= 500) {
+    return `Hi ${firstName}, thank you for being one of our priority customers. ${purchaseLine} I can reserve local stock, confirm COA documentation, and suggest ${rec.product} if you want to compare options.`;
+  }
+
+  if (cust.orderCount >= 2) {
+    return `Hi ${firstName}, thanks for ordering with us again. ${purchaseLine} ${rec.product} may be worth reviewing next. I can confirm live CRC pricing and local availability before you place the order.`;
+  }
+
+  return `Hi ${firstName}, this is Peptides Costa Rica. ${purchaseLine} I can help you verify COA documentation, current Costa Rica stock, and live CRC pricing before you order.`;
+};
+
 export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhatsAppClick }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -91,6 +161,55 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [broadcastLoading, setBroadcastLoading] = useState(false);
   const [broadcastResults, setBroadcastResults] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [timelineData, setTimelineData] = useState(null);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineError, setTimelineError] = useState('');
+  const [reminders, setReminders] = useState([]);
+  const [staffActivity, setStaffActivity] = useState([]);
+  const [newReminder, setNewReminder] = useState({ dueAt: '', note: '' });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      setReminders(JSON.parse(window.localStorage.getItem(CRM_REMINDERS_KEY) || '[]'));
+      setStaffActivity(JSON.parse(window.localStorage.getItem(CRM_ACTIVITY_KEY) || '[]'));
+    } catch {
+      setReminders([]);
+      setStaffActivity([]);
+    }
+  }, []);
+
+  const saveReminders = useCallback((next) => {
+    setReminders(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(CRM_REMINDERS_KEY, JSON.stringify(next));
+    }
+  }, []);
+
+  const saveActivity = useCallback((next) => {
+    const trimmed = next.slice(0, 250);
+    setStaffActivity(trimmed);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(CRM_ACTIVITY_KEY, JSON.stringify(trimmed));
+    }
+  }, []);
+
+  const recordActivity = useCallback((action, customer, detail = '') => {
+    const actor = typeof window !== 'undefined'
+      ? window.localStorage.getItem('admin_email') || 'Staff'
+      : 'Staff';
+    const entry = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      customerId: customer?.id || 'unknown',
+      customerName: customer?.name || 'Unknown customer',
+      action,
+      detail,
+      actor,
+      createdAt: new Date().toISOString(),
+    };
+    saveActivity([entry, ...staffActivity]);
+  }, [saveActivity, staffActivity]);
   // Derived customer data from order history and abandoned carts
   const customers = useMemo(() => {
     const map = {};
@@ -233,8 +352,8 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
     result.sort((a, b) => {
       let comparison = 0;
       if (sortField === 'date') {
-        const timeA = new Date(a.lastActive).getTime();
-        const timeB = new Date(b.lastActive).getTime();
+        const timeA = new Date(a.lastOrderDate).getTime();
+        const timeB = new Date(b.lastOrderDate).getTime();
         comparison = timeA - timeB;
       } else if (sortField === 'ltv') {
         comparison = (a.totalSpentUsd || 0) - (b.totalSpentUsd || 0);
@@ -468,6 +587,93 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
     }
   };
 
+  const openCustomerWorkspace = async (cust) => {
+    setSelectedCustomer(cust);
+    setTimelineData(null);
+    setTimelineError('');
+    setNewReminder({ dueAt: '', note: '' });
+    recordActivity('Opened workspace', cust, 'Viewed customer timeline and playbook');
+
+    const params = new URLSearchParams();
+    if (cust.email) params.set('email', cust.email);
+    if (cust.whatsappWaId || cust.phone) params.set('phone', cust.whatsappWaId || cust.phone);
+
+    if (!params.toString()) {
+      setTimelineError('This customer needs an email or phone before the timeline can be loaded.');
+      return;
+    }
+
+    setTimelineLoading(true);
+    try {
+      const response = await adminFetch(`/api/admin/customer-timeline?${params.toString()}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to load timeline');
+      setTimelineData(data);
+    } catch (error) {
+      setTimelineError(error.message || 'Unable to load timeline');
+    } finally {
+      setTimelineLoading(false);
+    }
+  };
+
+  const closeCustomerWorkspace = () => {
+    setSelectedCustomer(null);
+    setTimelineData(null);
+    setTimelineError('');
+    setNewReminder({ dueAt: '', note: '' });
+  };
+
+  const handleAddReminder = () => {
+    if (!selectedCustomer || !newReminder.dueAt || !newReminder.note.trim()) return;
+    const reminder = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      customerId: selectedCustomer.id,
+      customerName: selectedCustomer.name,
+      dueAt: newReminder.dueAt,
+      note: newReminder.note.trim(),
+      status: 'open',
+      createdAt: new Date().toISOString(),
+    };
+    saveReminders([reminder, ...reminders]);
+    recordActivity('Created follow-up', selectedCustomer, reminder.note);
+    setNewReminder({ dueAt: '', note: '' });
+  };
+
+  const handleCompleteReminder = (reminderId) => {
+    if (!selectedCustomer) return;
+    const next = reminders.map(reminder => (
+      reminder.id === reminderId
+        ? { ...reminder, status: 'done', completedAt: new Date().toISOString() }
+        : reminder
+    ));
+    saveReminders(next);
+    recordActivity('Completed follow-up', selectedCustomer, 'Marked reminder as done');
+  };
+
+  const handleCopyScript = async () => {
+    if (!selectedCustomer) return;
+    const script = buildSalesScript(selectedCustomer);
+    try {
+      await navigator.clipboard.writeText(script);
+      recordActivity('Copied sales script', selectedCustomer, resolveRecommendation(selectedCustomer).product);
+    } catch {
+      recordActivity('Viewed sales script', selectedCustomer, resolveRecommendation(selectedCustomer).product);
+    }
+  };
+
+  const selectedCustomerTags = selectedCustomer ? getCustomerTags(selectedCustomer) : [];
+  const selectedCustomerPhone = selectedCustomer ? (selectedCustomer.whatsappWaId || selectedCustomer.phone) : '';
+  const selectedCustomerScript = selectedCustomer ? buildSalesScript(selectedCustomer) : '';
+  const selectedCustomerReminders = selectedCustomer
+    ? reminders
+        .filter(reminder => reminder.customerId === selectedCustomer.id)
+        .sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt))
+    : [];
+  const selectedCustomerActivity = selectedCustomer
+    ? staffActivity.filter(entry => entry.customerId === selectedCustomer.id).slice(0, 8)
+    : [];
+  const openReminderCount = reminders.filter(reminder => reminder.status !== 'done').length;
+
   return (
     <div className="crm-container">
       <style dangerouslySetInnerHTML={{__html: `
@@ -564,21 +770,6 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           display: flex;
           align-items: center;
           gap: 8px;
-        }
-        .cust-row-badge {
-          font-size: 0.65rem;
-          padding: 2px 8px;
-          border-radius: 9999px;
-          font-weight: bold;
-          display: inline-block;
-        }
-        .cust-badge-lead {
-          background: rgba(245, 158, 11, 0.15);
-          color: #fbbf24;
-        }
-        .cust-badge-customer {
-          background: rgba(16, 185, 129, 0.15);
-          color: #34d399;
         }
         .crm-cell-location {
           font-size: 0.8rem;
@@ -770,26 +961,173 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           color: #38bdf8;
         }
 
-        /* VIP Tag */
+        /* Customer Tags */
         .cust-row-name-container {
           display: flex;
           align-items: center;
           gap: 6px;
           flex-wrap: wrap;
         }
-        .cust-vip-badge {
-          background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%) !important;
-          color: #050b14 !important;
-          font-size: 0.6rem !important;
-          font-weight: 900 !important;
-          text-transform: uppercase !important;
-          letter-spacing: 0.04em !important;
-          padding: 1px 6px !important;
-          border-radius: 4px !important;
-          display: inline-flex !important;
-          align-items: center !important;
-          gap: 2px !important;
-          box-shadow: 0 0 8px rgba(245, 158, 11, 0.3) !important;
+        .crm-tag-stack {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          margin-top: 4px;
+        }
+        .crm-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          border-radius: 999px;
+          padding: 2px 7px;
+          font-size: 0.62rem;
+          font-weight: 800;
+          line-height: 1.2;
+          border: 1px solid rgba(255,255,255,0.12);
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+        }
+        .crm-tag.gold {
+          background: rgba(251, 191, 36, 0.14);
+          border-color: rgba(251, 191, 36, 0.28);
+          color: #fbbf24;
+        }
+        .crm-tag.blue {
+          background: rgba(56, 189, 248, 0.12);
+          border-color: rgba(56, 189, 248, 0.25);
+          color: #38bdf8;
+        }
+        .crm-tag.green {
+          background: rgba(34, 197, 94, 0.12);
+          border-color: rgba(34, 197, 94, 0.25);
+          color: #4ade80;
+        }
+        .crm-tag.amber {
+          background: rgba(245, 158, 11, 0.14);
+          border-color: rgba(245, 158, 11, 0.28);
+          color: #fbbf24;
+        }
+        .crm-tag.red {
+          background: rgba(248, 113, 113, 0.12);
+          border-color: rgba(248, 113, 113, 0.25);
+          color: #f87171;
+        }
+        .crm-workspace-modal {
+          position: fixed;
+          inset: 0;
+          background: rgba(2, 6, 23, 0.72);
+          backdrop-filter: blur(6px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 18px;
+        }
+        .crm-workspace-panel {
+          width: min(1120px, 96vw);
+          max-height: 92vh;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          background: #0b1220;
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          border-radius: 16px;
+          box-shadow: 0 30px 80px rgba(0,0,0,0.45);
+        }
+        .crm-workspace-head {
+          padding: 18px 20px;
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 16px;
+        }
+        .crm-workspace-body {
+          padding: 18px;
+          overflow-y: auto;
+          display: grid;
+          grid-template-columns: minmax(300px, 0.9fr) minmax(340px, 1.1fr);
+          gap: 14px;
+        }
+        .crm-workspace-card {
+          background: rgba(15, 23, 42, 0.62);
+          border: 1px solid rgba(148, 163, 184, 0.14);
+          border-radius: 12px;
+          padding: 14px;
+        }
+        .crm-workspace-card h4 {
+          margin: 0 0 12px;
+          color: #f8fafc;
+          font-size: 0.9rem;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .crm-field {
+          width: 100%;
+          padding: 10px 11px;
+          background: rgba(2, 6, 23, 0.48);
+          border: 1px solid rgba(148, 163, 184, 0.18);
+          border-radius: 8px;
+          color: #e2e8f0;
+          outline: none;
+          font-size: 0.84rem;
+        }
+        .crm-field:focus {
+          border-color: rgba(56, 189, 248, 0.45);
+        }
+        .crm-workspace-btn {
+          border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(255,255,255,0.05);
+          color: #e2e8f0;
+          border-radius: 8px;
+          padding: 9px 11px;
+          font-weight: 800;
+          font-size: 0.78rem;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          text-decoration: none;
+        }
+        .crm-workspace-btn.primary {
+          background: #f97316;
+          border-color: #f97316;
+          color: #fff;
+        }
+        .crm-workspace-btn.green {
+          background: #22c55e;
+          border-color: #22c55e;
+          color: #052e16;
+        }
+        .crm-reminder-row,
+        .crm-activity-row,
+        .crm-timeline-row {
+          border-top: 1px solid rgba(148, 163, 184, 0.12);
+          padding-top: 10px;
+          margin-top: 10px;
+        }
+        .crm-reminder-row.done {
+          opacity: 0.55;
+        }
+        .crm-timeline-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: #38bdf8;
+          flex: 0 0 auto;
+          margin-top: 5px;
+        }
+        .crm-script-box {
+          background: rgba(2, 6, 23, 0.42);
+          border: 1px solid rgba(148, 163, 184, 0.14);
+          border-radius: 10px;
+          color: #cbd5e1;
+          font-size: 0.85rem;
+          line-height: 1.6;
+          padding: 12px;
+          white-space: pre-wrap;
         }
 
         /* LTV green pill */
@@ -812,6 +1150,9 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
         }
 
         @media (max-width: 1023px) {
+          .crm-workspace-body {
+            grid-template-columns: 1fr;
+          }
           .crm-kpi-row {
             grid-template-columns: 1fr;
             padding: 12px;
@@ -872,6 +1213,15 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           <div className="crm-kpi-info">
             <span className="crm-kpi-label">Pipeline LTV Value</span>
             <span className="crm-kpi-value">${crmStats.totalLtv.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+        <div className="crm-kpi-card">
+          <div className="crm-kpi-icon blue">
+            <Clock size={18} />
+          </div>
+          <div className="crm-kpi-info">
+            <span className="crm-kpi-label">Open Follow-ups</span>
+            <span className="crm-kpi-value">{openReminderCount}</span>
           </div>
         </div>
       </div>
@@ -994,6 +1344,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
             <tbody>
               {paginatedCustomers.map(cust => {
                 const contactPhone = cust.whatsappWaId || cust.phone;
+                const tags = getCustomerTags(cust);
                 return (
                   <tr key={cust.id} style={{ background: selectedCustomerIds.includes(cust.id) ? 'rgba(56, 189, 248, 0.05)' : 'transparent' }}>
                     <td data-label="Select" style={{ textAlign: 'center' }}>
@@ -1013,14 +1364,18 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                         <div>
                           <div className="cust-row-name-container">
                             <span className="cust-row-name">{cust.name}</span>
-                            {!cust.isLead && cust.totalSpentUsd >= 500 && (
-                              <span className="cust-vip-badge" title="VIP Customer (Spent >= $500)">
-                                <Crown size={9} /> VIP
+                          </div>
+                          <div className="crm-tag-stack">
+                            {tags.map(tag => (
+                              <span key={tag.key} className={`crm-tag ${tag.tone}`}>
+                                {tag.key === 'vip' && <Crown size={9} />}
+                                {tag.key === 'repeat' && <ShoppingBag size={9} />}
+                                {tag.key === 'lead' && <Target size={9} />}
+                                {tag.key === 'inactive' && <AlertTriangle size={9} />}
+                                {tag.key === 'customer' && <BadgeCheck size={9} />}
+                                {tag.label}
                               </span>
-                            )}
-                            <span className={`cust-row-badge ${cust.isLead ? 'cust-badge-lead' : 'cust-badge-customer'}`}>
-                              {cust.isLead ? 'Cart Lead' : 'Customer'}
-                            </span>
+                            ))}
                           </div>
                           {cust.isLead && cust.cartItems && cust.cartItems.length > 0 && (
                             <div style={{ fontSize: '0.7rem', color: '#fbbf24', marginTop: '2px', fontWeight: '500' }}>
@@ -1160,6 +1515,9 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                     {/* Actions Column */}
                     <td data-label="Actions">
                       <div className="crm-compact-actions">
+                        <button className="crm-icon-btn" onClick={() => openCustomerWorkspace(cust)} title="Open Timeline">
+                          <History size={13} />
+                        </button>
                         <button className="crm-icon-btn edit" onClick={() => openEditModal(cust)} title="Edit Profile">
                           <Edit2 size={13} />
                         </button>
@@ -1264,6 +1622,191 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Customer Workspace Modal */}
+      {selectedCustomer && (
+        <div className="crm-workspace-modal">
+          <div className="crm-workspace-panel">
+            <div className="crm-workspace-head">
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <div className="cust-avatar-mini" style={{ width: '36px', height: '36px', background: selectedCustomer.isLead ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)' }}>
+                    {selectedCustomer.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.05rem' }}>{selectedCustomer.name}</h3>
+                    <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '2px' }}>
+                      {[selectedCustomer.email, selectedCustomerPhone ? `+${selectedCustomerPhone}` : '', selectedCustomer.location].filter(Boolean).join(' | ')}
+                    </div>
+                  </div>
+                </div>
+                <div className="crm-tag-stack" style={{ marginTop: '10px' }}>
+                  {selectedCustomerTags.map(tag => (
+                    <span key={tag.key} className={`crm-tag ${tag.tone}`}>
+                      {tag.key === 'vip' && <Crown size={9} />}
+                      {tag.key === 'repeat' && <ShoppingBag size={9} />}
+                      {tag.key === 'lead' && <Target size={9} />}
+                      {tag.key === 'inactive' && <AlertTriangle size={9} />}
+                      {tag.key === 'customer' && <BadgeCheck size={9} />}
+                      {tag.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <button onClick={closeCustomerWorkspace} className="crm-icon-btn" title="Close">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="crm-workspace-body">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="crm-workspace-card">
+                  <h4><Clock size={16} color="#38bdf8" /> Follow-up reminders</h4>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    <input
+                      type="datetime-local"
+                      className="crm-field"
+                      value={newReminder.dueAt}
+                      onChange={event => setNewReminder({ ...newReminder, dueAt: event.target.value })}
+                    />
+                    <textarea
+                      className="crm-field"
+                      rows={3}
+                      value={newReminder.note}
+                      onChange={event => setNewReminder({ ...newReminder, note: event.target.value })}
+                      placeholder="Example: Check Retatrutide availability and follow up after lunch"
+                    />
+                    <button
+                      className="crm-workspace-btn primary"
+                      onClick={handleAddReminder}
+                      disabled={!newReminder.dueAt || !newReminder.note.trim()}
+                      style={{ opacity: (!newReminder.dueAt || !newReminder.note.trim()) ? 0.55 : 1 }}
+                    >
+                      <Save size={14} /> Add reminder
+                    </button>
+                  </div>
+                  <div style={{ marginTop: '12px' }}>
+                    {selectedCustomerReminders.length === 0 ? (
+                      <div style={{ color: '#64748b', fontSize: '0.82rem' }}>No reminders for this contact yet.</div>
+                    ) : selectedCustomerReminders.map(reminder => (
+                      <div key={reminder.id} className={`crm-reminder-row ${reminder.status === 'done' ? 'done' : ''}`}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
+                          <div>
+                            <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.82rem' }}>
+                              {formatTimelineDate(reminder.dueAt)}
+                            </div>
+                            <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '3px', lineHeight: 1.45 }}>
+                              {reminder.note}
+                            </div>
+                          </div>
+                          {reminder.status !== 'done' && (
+                            <button className="crm-icon-btn" onClick={() => handleCompleteReminder(reminder.id)} title="Mark done">
+                              <CheckCircle2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="crm-workspace-card">
+                  <h4><Activity size={16} color="#fbbf24" /> Staff activity log</h4>
+                  {selectedCustomerActivity.length === 0 ? (
+                    <div style={{ color: '#64748b', fontSize: '0.82rem' }}>No staff activity recorded yet.</div>
+                  ) : selectedCustomerActivity.map(entry => (
+                    <div key={entry.id} className="crm-activity-row">
+                      <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.82rem' }}>{entry.action}</div>
+                      <div style={{ color: '#94a3b8', fontSize: '0.76rem', marginTop: '3px' }}>
+                        {entry.actor} | {formatTimelineDate(entry.createdAt)}
+                      </div>
+                      {entry.detail && (
+                        <div style={{ color: '#64748b', fontSize: '0.76rem', marginTop: '4px', lineHeight: 1.45 }}>{entry.detail}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="crm-workspace-card">
+                  <h4><ClipboardList size={16} color="#f97316" /> Sales script</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+                    <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>
+                      Suggested product: <strong style={{ color: '#e2e8f0' }}>{resolveRecommendation(selectedCustomer).product}</strong>
+                    </div>
+                    <button className="crm-workspace-btn" onClick={handleCopyScript}>
+                      <Copy size={14} /> Copy
+                    </button>
+                  </div>
+                  <div className="crm-script-box">{selectedCustomerScript}</div>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                    {selectedCustomerPhone && (
+                      <button
+                        className="crm-workspace-btn green"
+                        onClick={() => {
+                          recordActivity('Started WhatsApp follow-up', selectedCustomer, resolveRecommendation(selectedCustomer).product);
+                          if (onWhatsAppClick) {
+                            onWhatsAppClick({
+                              name: selectedCustomer.name,
+                              phone: selectedCustomerPhone,
+                              prefilledText: selectedCustomerScript,
+                              cartItems: selectedCustomer.cartItems || []
+                            });
+                          } else {
+                            window.open(`https://wa.me/${selectedCustomerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(selectedCustomerScript)}`, '_blank');
+                          }
+                        }}
+                      >
+                        <MessageCircle size={14} /> Send on WhatsApp
+                      </button>
+                    )}
+                    {selectedCustomer.email && (
+                      <a
+                        className="crm-workspace-btn"
+                        href={`mailto:${selectedCustomer.email}?subject=${encodeURIComponent('Peptides Costa Rica follow-up')}&body=${encodeURIComponent(selectedCustomerScript)}`}
+                        onClick={() => recordActivity('Started email follow-up', selectedCustomer, resolveRecommendation(selectedCustomer).product)}
+                      >
+                        <Mail size={14} /> Email script
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div className="crm-workspace-card">
+                  <h4><History size={16} color="#38bdf8" /> Order timeline</h4>
+                  {timelineLoading && (
+                    <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Loading timeline...</div>
+                  )}
+                  {!timelineLoading && timelineError && (
+                    <div style={{ color: '#f87171', fontSize: '0.82rem' }}>{timelineError}</div>
+                  )}
+                  {!timelineLoading && !timelineError && timelineData?.warnings?.length > 0 && (
+                    <div style={{ color: '#fbbf24', fontSize: '0.76rem', marginBottom: '10px' }}>
+                      Some data sources were unavailable: {timelineData.warnings.join(', ')}
+                    </div>
+                  )}
+                  {!timelineLoading && !timelineError && (!timelineData?.timeline || timelineData.timeline.length === 0) && (
+                    <div style={{ color: '#64748b', fontSize: '0.82rem' }}>No timeline events found yet.</div>
+                  )}
+                  {!timelineLoading && !timelineError && timelineData?.timeline?.slice(0, 18).map((item, index) => (
+                    <div key={`${item.type}-${item.date}-${index}`} className="crm-timeline-row" style={{ display: 'flex', gap: '10px' }}>
+                      <span className="crm-timeline-dot" />
+                      <div>
+                        <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.82rem' }}>{item.title}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '0.76rem', marginTop: '3px' }}>{formatTimelineDate(item.date)} | {item.type}</div>
+                        {item.description && (
+                          <div style={{ color: '#64748b', fontSize: '0.77rem', marginTop: '4px', lineHeight: 1.45 }}>{item.description}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
