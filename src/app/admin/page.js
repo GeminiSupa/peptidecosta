@@ -29,7 +29,6 @@ import AffiliatesManager from '@/components/admin/AffiliatesManager';
 import InquiriesManager from '@/components/admin/InquiriesManager';
 import DashboardHome from '@/components/admin/DashboardHome';
 import AgentDashboard from '@/components/admin/AgentDashboard';
-import { filterOrdersVisibleToAgent } from '@/lib/agentOrders';
 import GlobalSearch from '@/components/admin/GlobalSearch';
 import NotificationCenter from '@/components/admin/NotificationCenter';
 import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
@@ -119,8 +118,8 @@ function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, i
     case 'orders':
       return isStaffAgent
         ? (pendingOrders
-          ? `${pendingOrders} pending · ${orders.length} visible to you`
-          : `${orders.length} order${orders.length !== 1 ? 's' : ''} (yours + unassigned)`)
+          ? `${pendingOrders} pending · ${orders.length} in shared queue`
+          : `${orders.length} order${orders.length !== 1 ? 's' : ''} in shared queue`)
         : (pendingOrders
           ? `${pendingOrders} pending · ${orders.length} total`
           : `${orders.length} order${orders.length !== 1 ? 's' : ''}`);
@@ -1372,8 +1371,8 @@ Core Rules:
   const isStaffAgent = adminProfile && !adminProfile.is_superadmin;
 
   const visibleOrders = useMemo(
-    () => (isStaffAgent ? filterOrdersVisibleToAgent(orders, adminProfile) : orders),
-    [orders, adminProfile, isStaffAgent]
+    () => orders,
+    [orders]
   );
 
   const navigateToTab = useCallback((tabId, linkRef = null, options = {}) => {

@@ -52,7 +52,7 @@ export default function OrdersManager({
           <h3>{isStaffAgent ? 'My Orders' : 'Customer Orders Log Ledger'}</h3>
           <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 12px 0' }}>
             {isStaffAgent
-              ? 'You see orders assigned to you and unassigned orders. Assign yourself on an order to claim it for commission.'
+              ? 'Shared order queue for the sales team. Tag the managing agent on an order to claim commission ownership.'
               : 'A secure listing of all catalog order intents placed by customers. Double check entries here before coordinating dispatches on WhatsApp.'}
           </p>
           <div className="admin-toolbar-filters">
