@@ -3734,7 +3734,8 @@ export default function CatalogClient({
                     icon: <CreditCard size={18} />,
                     iconColor: '#0ea5e9', // Blue
                     title: lang === 'en' ? 'Card' : 'Tarjeta',
-                    detail: lang === 'en' ? 'Credit or debit' : 'Crédito o débito',
+                    detail: lang === 'en' ? 'Coming soon' : 'Próximamente',
+                    disabled: true,
                   },
                   {
                     value: 'whatsapp',
@@ -3756,8 +3757,10 @@ export default function CatalogClient({
                     type="button"
                     role="radio"
                     aria-checked={paymentMethod === method.value}
-                    className={`payment-method-card ${paymentMethod === method.value ? 'active' : ''}`}
-                    onClick={() => setPaymentMethod(method.value)}
+                    aria-disabled={method.disabled || undefined}
+                    disabled={method.disabled}
+                    className={`payment-method-card ${paymentMethod === method.value ? 'active' : ''} ${method.disabled ? 'disabled' : ''}`}
+                    onClick={() => !method.disabled && setPaymentMethod(method.value)}
                   >
                     <span className="payment-method-icon" style={method.iconColor ? { color: method.iconColor } : {}}>{method.icon}</span>
                     <span>

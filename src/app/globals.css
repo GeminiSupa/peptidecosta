@@ -1733,6 +1733,19 @@ body {
     transform: translateY(-1px);
 }
 
+.payment-method-card.disabled,
+.payment-method-card:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+    transform: none;
+}
+
+.payment-method-card.disabled:hover,
+.payment-method-card:disabled:hover {
+    border-color: var(--border);
+    transform: none;
+}
+
 .payment-method-card.active {
     border-color: var(--primary);
     background: rgba(234, 179, 8, 0.1);
