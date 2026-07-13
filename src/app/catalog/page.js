@@ -238,6 +238,12 @@ export default function CatalogPage() {
   const [customerIdType, setCustomerIdType] = useState('1');
   const [customerIdNumber, setCustomerIdNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('whatsapp');
+  const [cardDetails, setCardDetails] = useState({
+    holder: '',
+    number: '',
+    expiry: '',
+    cvv: '',
+  });
   const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [cartAnimating, setCartAnimating] = useState(false);
@@ -1395,37 +1401,6 @@ export default function CatalogPage() {
       : formatPriceVal(Math.round(originalUsd * rate), 'CRC');
   };
 
-  const getExchangeRateNote = () => {
-    const updated = exchangeRateUpdatedAt
-      ? new Date(exchangeRateUpdatedAt).toLocaleTimeString(lang === 'en' ? 'en-US' : 'es-CR', { hour: 'numeric', minute: '2-digit' })
-      : null;
-    const rateLabel = `1 USD = ₡${Math.round(exchangeRate).toLocaleString('en-US')}`;
-    if (lang === 'en') {
-      return updated
-        ? `CRC prices update with the live exchange rate. ${rateLabel}, refreshed ${updated}.`
-        : `CRC prices update with the live exchange rate. ${rateLabel}.`;
-    }
-    return updated
-      ? `Los precios CRC se actualizan con el tipo de cambio en vivo. ${rateLabel}, actualizado ${updated}.`
-      : `Los precios CRC se actualizan con el tipo de cambio en vivo. ${rateLabel}.`;
-  };
-
-  const getExchangeRateMeta = () => {
-    const updated = exchangeRateUpdatedAt
-      ? new Date(exchangeRateUpdatedAt).toLocaleTimeString(lang === 'en' ? 'en-US' : 'es-CR', { hour: 'numeric', minute: '2-digit' })
-      : null;
-    return {
-      label: lang === 'en' ? 'Live CRC rate' : 'Tipo CRC en vivo',
-      rate: `1 USD = ₡${Math.round(exchangeRate).toLocaleString('en-US')}`,
-      updated: updated
-        ? (lang === 'en' ? `Updated ${updated}` : `Actualizado ${updated}`)
-        : (lang === 'en' ? 'Live conversion' : 'Conversión en vivo'),
-      note: lang === 'en'
-        ? 'CRC prices are calculated automatically from the USD price.'
-        : 'Los precios CRC se calculan automáticamente desde el precio USD.',
-    };
-  };
-
   const renderRatingSummary = (productName) => {
     const prodReviews = reviews.filter(r => r.product_name === productName);
     if (prodReviews.length === 0) return null;
@@ -1857,14 +1832,25 @@ export default function CatalogPage() {
       return;
     }
 
+    if (method === 'tilopay') {
+      const cleanCardNumber = cardDetails.number.replace(/\D/g, '');
+      const cleanCvv = cardDetails.cvv.replace(/\D/g, '');
+      if (!cardDetails.holder.trim() || cleanCardNumber.length < 12 || !cardDetails.expiry.trim() || cleanCvv.length < 3) {
+        alert(lang === 'en'
+          ? 'Please enter complete card details.'
+          : 'Ingrese los datos completos de la tarjeta.');
+        return;
+      }
+    }
+
     setTilopaySubmitting(true);
 
     const orderNum = `${method === 'sinpe' ? 'SPCR' : 'TPCR'}-${Date.now().toString(36).toUpperCase()}`;
     const totalVal = getFinalTotal();
-    const tilopayCurrency = method === 'sinpe' ? 'CRC' : currency;
-    const tilopayAmount = method === 'sinpe' && currency === 'USD'
-      ? Math.round(totalVal * exchangeRate)
-      : totalVal;
+    const tilopayCurrency = method === 'sinpe' ? 'CRC' : 'USD';
+    const tilopayAmount = method === 'sinpe'
+      ? (currency === 'USD' ? Math.round(totalVal * exchangeRate) : totalVal)
+      : (currency === 'USD' ? totalVal : Number((totalVal / exchangeRate).toFixed(2)));
     const totalUsd = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
     const totalCrc = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
     const shippingCosts = getShippingCostFields(currency, exchangeRate, getShippingFee());
@@ -1932,7 +1918,7 @@ export default function CatalogPage() {
     });
 
     try {
-      const res = await fetch('/api/tilopay/create-payment', {
+      const res = await fetch(method === 'tilopay' ? '/api/shieldhubpay/process-card' : '/api/tilopay/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1947,6 +1933,13 @@ export default function CatalogPage() {
           paymentMethod: method,
           customerIdType,
           customerIdNumber,
+          customerIp: customerMetadata?.ip_address || null,
+          card: method === 'tilopay' ? {
+            holder: cardDetails.holder,
+            number: cardDetails.number,
+            expiry: cardDetails.expiry,
+            cvv: cardDetails.cvv,
+          } : undefined,
         }),
       });
 
@@ -1954,6 +1947,13 @@ export default function CatalogPage() {
 
       if (data.paymentUrl) {
         window.location.href = data.paymentUrl;
+        return;
+      }
+
+      if (data.ok && method === 'tilopay') {
+        setCart([]);
+        localStorage.removeItem('cart');
+        window.location.href = `/thank-you?lang=${lang}&order=${encodeURIComponent(orderNum)}`;
         return;
       }
 
@@ -2994,17 +2994,6 @@ export default function CatalogPage() {
               ? 'Browse available peptides, prices, and real-time availability.' 
               : 'Explora péptidos disponibles, precios y disponibilidad en tiempo real.'}
           </p>
-          {(() => {
-            const fx = getExchangeRateMeta();
-            return (
-              <div className="catalog-fx-card" title={getExchangeRateNote()}>
-                <span className="catalog-fx-label">{fx.label}</span>
-                <strong>{fx.rate}</strong>
-                <span>{fx.updated}</span>
-                <small>{fx.note}</small>
-              </div>
-            );
-          })()}
         </div>
         {gateLoading ? (
           <div className="loader">
@@ -3902,14 +3891,6 @@ export default function CatalogPage() {
               </div>
               <div className="payment-method-grid" role="radiogroup" aria-label={lang === 'en' ? 'Payment method' : 'Método de pago'}>
                 {[
-                  /* SINPE and Card (Tilopay) hidden until production account is activated
-                  {
-                    value: 'sinpe',
-                    icon: <Smartphone size={18} />,
-                    iconColor: '#f97316', // Orange
-                    title: lang === 'en' ? 'SINPE Móvil' : 'SINPE Móvil',
-                    detail: lang === 'en' ? 'Secure Tilopay checkout' : 'Pago seguro con Tilopay',
-                  },
                   {
                     value: 'tilopay',
                     icon: <CreditCard size={18} />,
@@ -3917,7 +3898,6 @@ export default function CatalogPage() {
                     title: lang === 'en' ? 'Card' : 'Tarjeta',
                     detail: lang === 'en' ? 'Credit or debit' : 'Crédito o débito',
                   },
-                  */
                   {
                     value: 'whatsapp',
                     icon: <MessageCircle size={18} />,
@@ -3983,6 +3963,51 @@ export default function CatalogPage() {
                 </div>
               ) : paymentMethod === 'tilopay' || paymentMethod === 'sinpe' ? (
                 <div className="tilopay-payment-panel">
+                  {paymentMethod === 'tilopay' && (
+                    <div className="card-payment-fields">
+                      <input
+                        type="text"
+                        className="checkout-input"
+                        autoComplete="cc-name"
+                        placeholder={lang === 'en' ? 'Name on card' : 'Nombre en la tarjeta'}
+                        value={cardDetails.holder}
+                        onChange={(e) => setCardDetails(prev => ({ ...prev, holder: e.target.value }))}
+                      />
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className="checkout-input"
+                        autoComplete="cc-number"
+                        placeholder={lang === 'en' ? 'Card number' : 'Número de tarjeta'}
+                        value={cardDetails.number}
+                        onChange={(e) => setCardDetails(prev => ({ ...prev, number: e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').trim().slice(0, 23) }))}
+                      />
+                      <div className="card-payment-fields__row">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className="checkout-input"
+                          autoComplete="cc-exp"
+                          placeholder="MM/YY"
+                          value={cardDetails.expiry}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+                            const expiry = digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+                            setCardDetails(prev => ({ ...prev, expiry }));
+                          }}
+                        />
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          className="checkout-input"
+                          autoComplete="cc-csc"
+                          placeholder="CVV"
+                          value={cardDetails.cvv}
+                          onChange={(e) => setCardDetails(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                        />
+                      </div>
+                    </div>
+                  )}
                   {(!customerName || !customerEmail || !customerPhone || !shippingAddress || !customerIdNumber) ? (
                     <div style={{ padding: '12px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.9rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
                       {lang === 'en' ? 'Please enter your contact, shipping, and ID details to proceed.' : 'Ingrese sus datos de contacto, envío y número de identificación para continuar.'}
@@ -4017,8 +4042,8 @@ export default function CatalogPage() {
                         ? 'Tilopay will show the exact SINPE number, CRC amount, and reference code.'
                         : 'Tilopay mostrará el número SINPE, monto exacto en CRC y código de referencia.')
                       : (lang === 'en'
-                        ? 'Secure checkout powered by Tilopay · Visa, Mastercard & more'
-                        : 'Pago seguro con Tilopay · Visa, Mastercard y más')}
+                        ? 'Secure card checkout powered by Shield Hub Pay sandbox'
+                        : 'Pago seguro con tarjeta mediante Shield Hub Pay sandbox')}
                   </p>
                 </div>
               ) : (
