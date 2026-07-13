@@ -23,6 +23,10 @@ const TRUSTPILOT_MONTHLY_LIMIT = 50;
 // The order-complete email (which BCCs Trustpilot to trigger an invitation) only
 // fires for these statuses, so we count these to estimate invitations used.
 const INVITE_TRIGGER_STATUSES = new Set(['Completed', 'Order Complete']);
+// The Trustpilot AFS integration went live on this date (CR midnight). Orders
+// completed BEFORE this never BCC'd Trustpilot, so counting them would wildly
+// over-report the first month — we only count completions from here onward.
+const TRUSTPILOT_GO_LIVE = new Date('2026-07-14T06:00:00Z');
 
 function isOutOfStock(status) {
   const s = (status || '').toLowerCase();
@@ -134,8 +138,11 @@ export default function DashboardHome({
     // complete with a customer email triggers one verified invitation via the
     // order-complete email BCC. Dated by completion (CR time), like revenue.
     const monthStart = startOfMonth(now);
+    // Count from the later of "start of month" and "integration go-live" so the
+    // first month isn't inflated by completions that predate the Trustpilot BCC.
+    const countFrom = monthStart > TRUSTPILOT_GO_LIVE ? monthStart : TRUSTPILOT_GO_LIVE;
     const trustpilotUsed = orders.filter((o) =>
-      INVITE_TRIGGER_STATUSES.has(o.status) && o.customer_email && getRevenueDate(o) >= monthStart
+      INVITE_TRIGGER_STATUSES.has(o.status) && o.customer_email && getRevenueDate(o) >= countFrom
     ).length;
 
     return {
