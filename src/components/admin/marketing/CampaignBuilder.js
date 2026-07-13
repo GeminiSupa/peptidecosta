@@ -304,12 +304,12 @@ export default function CampaignBuilder({ editingCampaignId }) {
   const [statusDetail,   setStatusDetail]   = useState('');
   const [lastTestedSignature, setLastTestedSignature] = useState('');
   const [lastTestSentAt, setLastTestSentAt] = useState(null);
-  const autosaveTimerRef = useRef(null);
   const localSnapshotTimerRef = useRef(null);
   const saveInFlightRef  = useRef(false);
   const pendingSaveRef   = useRef(false);
   const recoveryCheckedRef = useRef(false);
   const selectedCampaignIdRef = useRef(editingCampaignId || '');
+  const hydratedCampaignIdRef = useRef('');
   const suppressEditorUpdatesRef = useRef(false);
 
   const buildCampaignSignature = useCallback((html = '') => JSON.stringify({
@@ -372,7 +372,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
 
   const markDraftDirty = () => {
     setAutosaveStatus('pending');
-    setStatusDetail('Changes captured locally; server save will retry automatically.');
+    setStatusDetail('Unsaved changes. Keep designing, then click Save draft when you are ready.');
     setLastTestedSignature('');
     setLastTestSentAt(null);
     setDraftRevision(revision => revision + 1);
@@ -447,6 +447,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
   const restoreLocalSnapshot = useCallback((snapshot) => {
     if (!snapshot) return;
     selectedCampaignIdRef.current = snapshot.selectedCampaignId || '';
+    hydratedCampaignIdRef.current = snapshot.selectedCampaignId || '';
     setSelectedCampaignId(snapshot.selectedCampaignId || '');
     setCampaignName(snapshot.campaignName || 'Recovered Campaign');
     setSubject(snapshot.subject || '');
@@ -476,6 +477,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
     setSelectedTemplate(tpl.id);
     setShowTemplates(false);
     selectedCampaignIdRef.current = '';
+    hydratedCampaignIdRef.current = '';
     setSelectedCampaignId('');
 
     if (tpl.subject) setSubject(tpl.subject);
@@ -522,6 +524,8 @@ export default function CampaignBuilder({ editingCampaignId }) {
 
   useEffect(() => {
     if (!selectedCampaign || !isReady) return;
+    if (hydratedCampaignIdRef.current === selectedCampaign.id) return;
+    hydratedCampaignIdRef.current = selectedCampaign.id;
 
     setCampaignName(selectedCampaign.title || '');
     setSubject(selectedCampaign.subject_line || '');
@@ -662,6 +666,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Failed to save campaign');
         selectedCampaignIdRef.current = data.campaign.id;
+        hydratedCampaignIdRef.current = data.campaign.id;
         setSelectedCampaignId(data.campaign.id);
         setAutosaveStatus('saved');
         setLastSavedAt(new Date());
@@ -671,7 +676,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
         return true;
     } catch (err) {
       setAutosaveStatus('error');
-      setStatusDetail(`Save failed: ${err.message}. Your draft is still saved locally in this browser and will retry.`);
+      setStatusDetail(`Save failed: ${err.message}. Your draft is still backed up in this browser; click Save draft to try again.`);
       writeLocalSnapshot({ unsaved: true, source: 'server-save-failed' });
       return false;
     } finally {
@@ -691,22 +696,11 @@ export default function CampaignBuilder({ editingCampaignId }) {
   };
 
   useEffect(() => {
-    if (!draftRevision || !isReady || !campaignName.trim() || !subject.trim()) return;
-    clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => {
-      persistCampaign({ silent: true });
-    }, 1400);
-    return () => clearTimeout(autosaveTimerRef.current);
-    // A revision is emitted only by explicit field/editor changes; the save closure is from that render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftRevision, isReady]);
-
-  useEffect(() => {
     if (!draftRevision || !isReady) return;
     clearTimeout(localSnapshotTimerRef.current);
     localSnapshotTimerRef.current = setTimeout(() => {
       writeLocalSnapshot({ unsaved: true, source: 'local-autosave' });
-    }, 600);
+    }, 30000);
     return () => clearTimeout(localSnapshotTimerRef.current);
   }, [draftRevision, isReady, writeLocalSnapshot]);
 
@@ -811,6 +805,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to duplicate');
       selectedCampaignIdRef.current = data.campaign.id;
+      hydratedCampaignIdRef.current = data.campaign.id;
       setSelectedCampaignId(data.campaign.id);
       fetchCampaigns();
       alert('✅ Campaign duplicated!');
@@ -829,6 +824,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to delete');
       selectedCampaignIdRef.current = '';
+      hydratedCampaignIdRef.current = '';
       setSelectedCampaignId('');
       fetchCampaigns();
       alert('Campaign deleted.');
@@ -873,10 +869,10 @@ export default function CampaignBuilder({ editingCampaignId }) {
                   : autosaveStatus === 'recovered'
                     ? 'Recovered local draft'
                     : autosaveStatus === 'pending'
-                      ? 'Saved locally, server save queued'
+                      ? 'Unsaved changes'
                       : lastSavedAt
                         ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                        : 'Autosave is on'}
+                        : 'Manual save mode'}
             </span>
             {statusDetail && <small>{statusDetail}</small>}
             {lastTestSentAt && (
