@@ -144,6 +144,107 @@ export async function DELETE(request) {
   }
 }
 
+async function collectBroadcastTargets(audience, customContacts) {
+  const targets = new Map();
+
+  if (audience === 'all_customers' || audience === 'all_leads' || audience === 'leads_7_days') {
+    let query = supabase.from('orders').select('customer_phone, customer_email, customer_name').neq('status', 'cancelled');
+    if (audience === 'leads_7_days') {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      query = query.gte('created_at', sevenDaysAgo.toISOString());
+    }
+    const { data: orders } = await query;
+    orders?.forEach(o => {
+      const key = o.customer_phone || o.customer_email;
+      if (key && !targets.has(key)) {
+        const name = o.customer_name ? o.customer_name.split(' ')[0] : 'Customer';
+        targets.set(key, { phone: o.customer_phone, email: o.customer_email, name });
+      }
+    });
+  }
+
+  if (audience === 'abandoned_carts' || audience === 'all_leads' || audience === 'leads_7_days') {
+    let query = supabase.from('abandoned_carts').select('phone, email, name').eq('status', 'active');
+    if (audience === 'leads_7_days') {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      query = query.gte('created_at', sevenDaysAgo.toISOString());
+    }
+    const { data: carts } = await query;
+    carts?.forEach(c => {
+      const key = c.phone || c.email;
+      if (key && !targets.has(key)) {
+        const fname = c.name ? c.name.split(' ')[0] : 'Customer';
+        targets.set(key, { phone: c.phone, email: c.email, name: fname });
+      }
+    });
+
+    let leadsQuery = supabase.from('catalog_leads').select('contact_value, contact_method, name');
+    if (audience === 'leads_7_days') {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      leadsQuery = leadsQuery.gte('created_at', sevenDaysAgo.toISOString());
+    }
+    const { data: catalogLeads } = await leadsQuery;
+    catalogLeads?.forEach(cl => {
+      if (!targets.has(cl.contact_value)) {
+        targets.set(cl.contact_value, {
+          phone: cl.contact_method === 'whatsapp' ? cl.contact_value : null,
+          email: cl.contact_method === 'email' ? cl.contact_value : null,
+          name: cl.name ? cl.name.split(' ')[0] : 'Customer'
+        });
+      }
+    });
+  }
+
+  if (audience === 'custom' && customContacts) {
+    const contactsList = customContacts.split(/[\n,]+/).map(c => c.trim()).filter(Boolean);
+    contactsList.forEach(c => {
+      if (c.includes('|')) {
+        const [phone, email] = c.split('|');
+        targets.set(c, { phone: phone || null, email: email || null });
+      } else {
+        const isEmail = c.includes('@');
+        targets.set(c, {
+          phone: isEmail ? null : c,
+          email: isEmail ? c : null
+        });
+      }
+    });
+  }
+
+  return targets;
+}
+
+export async function GET(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
+  try {
+    const { searchParams } = new URL(request.url);
+    if (searchParams.get('estimate') !== '1') {
+      return NextResponse.json({ error: 'Unknown broadcast action' }, { status: 400 });
+    }
+
+    const audience = searchParams.get('audience') || 'all_customers';
+    const customContacts = searchParams.get('customContacts') || '';
+    const targets = await collectBroadcastTargets(audience, customContacts);
+    const contacts = Array.from(targets.values());
+
+    return NextResponse.json({
+      success: true,
+      audience,
+      totalTargets: contacts.length,
+      whatsappTargets: contacts.filter(contact => !!contact.phone).length,
+      emailTargets: contacts.filter(contact => !!contact.email).length
+    });
+  } catch (err) {
+    console.error('Broadcast Estimate Error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+  }
+}
+
 export async function POST(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
@@ -171,7 +272,7 @@ export async function POST(request) {
       return NextResponse.json({ success: true, text: 'Broadcast scheduled successfully', queuedCount: 1 });
     }
 
-    const targets = new Map(); // Use Map to deduplicate by phone/email
+    let targets = new Map(); // Use Map to deduplicate by phone/email
 
     if (audience === 'test' && testContact) {
        const isEmail = testContact.includes('@');
@@ -180,70 +281,7 @@ export async function POST(request) {
          email: isEmail ? testContact : null 
        });
     } else {
-
-    if (audience === 'all_customers' || audience === 'all_leads' || audience === 'leads_7_days') {
-      let query = supabase.from('orders').select('customer_phone, customer_email, customer_name').neq('status', 'cancelled');
-      if (audience === 'leads_7_days') {
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        query = query.gte('created_at', sevenDaysAgo.toISOString());
-      }
-      const { data: orders } = await query;
-      orders?.forEach(o => {
-        const key = o.customer_phone || o.customer_email;
-        if (key && !targets.has(key)) {
-          const name = o.customer_name ? o.customer_name.split(' ')[0] : 'Customer';
-          targets.set(key, { phone: o.customer_phone, email: o.customer_email, name });
-        }
-      });
-    }
-
-    if (audience === 'abandoned_carts' || audience === 'all_leads' || audience === 'leads_7_days') {
-      let query = supabase.from('abandoned_carts').select('phone, email, name').eq('status', 'active');
-      if (audience === 'leads_7_days') {
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        query = query.gte('created_at', sevenDaysAgo.toISOString());
-      }
-      const { data: carts } = await query;
-      carts?.forEach(c => {
-        const key = c.phone || c.email;
-        if (key && !targets.has(key)) {
-          const fname = c.name ? c.name.split(' ')[0] : 'Customer';
-          targets.set(key, { phone: c.phone, email: c.email, name: fname });
-        }
-      });
-
-      // Also pull from catalog_leads for leads_7_days/all_leads
-      let leadsQuery = supabase.from('catalog_leads').select('contact_value, contact_method');
-      if (audience === 'leads_7_days') {
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        leadsQuery = leadsQuery.gte('created_at', sevenDaysAgo.toISOString());
-      }
-      const { data: catalogLeads } = await leadsQuery;
-      catalogLeads?.forEach(cl => {
-        if (!targets.has(cl.contact_value)) {
-          targets.set(cl.contact_value, {
-            phone: cl.contact_method === 'whatsapp' ? cl.contact_value : null,
-            email: cl.contact_method === 'email' ? cl.contact_value : null,
-            name: cl.name ? cl.name.split(' ')[0] : 'Customer'
-          });
-        }
-      });
-    }
-
-    if (audience === 'custom' && customContacts) {
-       const contactsList = customContacts.split(/[\n,]+/).map(c => c.trim()).filter(Boolean);
-       contactsList.forEach(c => {
-         const isEmail = c.includes('@');
-         targets.set(c, {
-           phone: isEmail ? null : c,
-           email: isEmail ? c : null
-         });
-       });
-    }
-    
+      targets = await collectBroadcastTargets(audience, customContacts);
     } // Close the else block
 
     const contacts = Array.from(targets.values());

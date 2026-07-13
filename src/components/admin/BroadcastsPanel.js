@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader, Calendar, Trash2 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
@@ -14,6 +14,8 @@ export default function BroadcastsPanel({ products = [] }) {
   const [isDrafting, setIsDrafting] = useState(false);
   const [result, setResult] = useState(null);
   const [targetProducts, setTargetProducts] = useState([]);
+  const [audienceEstimate, setAudienceEstimate] = useState(null);
+  const [isEstimateLoading, setIsEstimateLoading] = useState(false);
 
   // Banners State
   const [banners, setBanners] = useState([]);
@@ -110,6 +112,65 @@ export default function BroadcastsPanel({ products = [] }) {
     loadBanners();
   }, []);
 
+  const audienceLabels = {
+    all_customers: 'All Past Customers',
+    abandoned_carts: 'Abandoned Carts',
+    all_leads: 'Everyone (Customers + Leads)',
+    leads_7_days: 'Recent Leads (Last 7 Days)',
+    custom: 'Custom List'
+  };
+
+  const customContactEstimate = useMemo(() => {
+    const entries = customContacts.split(/[\n,]+/).map(contact => contact.trim()).filter(Boolean);
+    return {
+      totalTargets: entries.length,
+      whatsappTargets: entries.filter(contact => !contact.includes('@')).length,
+      emailTargets: entries.filter(contact => contact.includes('@')).length
+    };
+  }, [customContacts]);
+
+  const isLeadOrProspectAudience = ['all_leads', 'leads_7_days', 'abandoned_carts', 'custom'].includes(audience);
+  const whatsappCategory = channels.whatsapp ? 'Marketing' : 'Off';
+  const whatsappCategoryReason = isLeadOrProspectAudience
+    ? 'Lead, cart recovery, promo, and prospect outreach must use a Marketing template.'
+    : 'Broadcast promos are Marketing. Use Utility only for order, payment, shipping, or account updates the customer is expecting.';
+  const displayedEstimate = audience === 'custom' ? customContactEstimate : audienceEstimate;
+
+  useEffect(() => {
+    if (audience === 'custom') {
+      setAudienceEstimate(null);
+      return;
+    }
+
+    let cancelled = false;
+    const loadAudienceEstimate = async () => {
+      setIsEstimateLoading(true);
+      try {
+        const res = await adminFetch(`/api/admin/broadcast?estimate=1&audience=${encodeURIComponent(audience)}`);
+        const data = await res.json();
+        if (!cancelled) {
+          setAudienceEstimate(res.ok ? data : null);
+        }
+      } catch (err) {
+        if (!cancelled) setAudienceEstimate(null);
+      } finally {
+        if (!cancelled) setIsEstimateLoading(false);
+      }
+    };
+
+    loadAudienceEstimate();
+    return () => {
+      cancelled = true;
+    };
+  }, [audience]);
+
+  const buildChannelsPayload = () => ({
+    ...channels,
+    emailSubject,
+    whatsappCategory: channels.whatsapp ? whatsappCategory : null,
+    whatsappCategoryReason: channels.whatsapp ? whatsappCategoryReason : null
+  });
+
   const handleDeleteScheduled = async (id) => {
     if (!window.confirm("Delete this scheduled broadcast?")) return;
     try {
@@ -160,7 +221,7 @@ export default function BroadcastsPanel({ products = [] }) {
         body: JSON.stringify({ 
           audience: 'test',
           testContact: testNumber,
-          channels: { ...channels, emailSubject },
+          channels: buildChannelsPayload(),
           message: message ? `[TEST BROADCAST]\n${message}` : '',
           whatsappTemplateName: channels.whatsappTemplateName || undefined,
           whatsappTemplateLanguage: channels.whatsappTemplateLanguage || 'es'
@@ -181,7 +242,11 @@ export default function BroadcastsPanel({ products = [] }) {
   const handleBroadcast = async () => {
     if (!message && !channels.whatsappTemplateName) return alert("Please enter a message or template name first.");
     if (audience === 'custom' && !customContacts.trim()) return alert("Please enter custom contacts.");
-    if (!window.confirm(`Are you sure you want to broadcast this to ${audience === 'custom' ? 'your custom list' : audience}?`)) return;
+    const estimateText = displayedEstimate
+      ? `${displayedEstimate.totalTargets} total, ${displayedEstimate.whatsappTargets} WhatsApp candidates, ${displayedEstimate.emailTargets} email candidates`
+      : 'estimate loading';
+    const categoryText = channels.whatsapp ? `\nWhatsApp category: ${whatsappCategory} (${whatsappCategoryReason})` : '';
+    if (!window.confirm(`Are you sure you want to broadcast this to ${audienceLabels[audience] || audience}?\nAudience counter: ${estimateText}${categoryText}`)) return;
     
     setIsSending(true);
     setResult(null);
@@ -192,7 +257,7 @@ export default function BroadcastsPanel({ products = [] }) {
         body: JSON.stringify({ 
           audience, 
           customContacts: audience === 'custom' ? customContacts : undefined,
-          channels: { ...channels, emailSubject }, 
+          channels: buildChannelsPayload(),
           message,
           whatsappTemplateName: channels.whatsappTemplateName || undefined,
           whatsappTemplateLanguage: channels.whatsappTemplateLanguage || 'es',
@@ -406,6 +471,40 @@ export default function BroadcastsPanel({ products = [] }) {
             🛡️ <strong>WhatsApp messages only go to contacts who opted in</strong>, no matter which audience you pick — non-opted-in numbers are skipped automatically to protect your number from spam flags. Email still reaches everyone in the audience.
           </div>
 
+          <div style={{ marginTop: '10px', padding: '12px', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(56, 189, 248, 0.18)', borderRadius: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '10px', flexWrap: 'wrap' }}>
+              <span style={{ color: '#e2e8f0', fontSize: '0.82rem', fontWeight: 700 }}>Send summary</span>
+              <span style={{ padding: '4px 9px', borderRadius: '999px', background: channels.whatsapp ? 'rgba(14, 165, 233, 0.16)' : 'rgba(148, 163, 184, 0.12)', color: channels.whatsapp ? '#7dd3fc' : '#94a3b8', border: `1px solid ${channels.whatsapp ? 'rgba(14, 165, 233, 0.28)' : 'rgba(148, 163, 184, 0.2)'}`, fontSize: '0.72rem', fontWeight: 800 }}>
+                WhatsApp: {whatsappCategory}
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', marginBottom: '10px' }}>
+              <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Audience</div>
+                <div style={{ color: '#f8fafc', fontSize: '0.85rem', fontWeight: 700 }}>{audienceLabels[audience] || audience}</div>
+              </div>
+              <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Counter</div>
+                <div style={{ color: '#f8fafc', fontSize: '0.85rem', fontWeight: 700 }}>
+                  {isEstimateLoading && audience !== 'custom'
+                    ? 'Counting...'
+                    : `${displayedEstimate?.totalTargets ?? 0} total`}
+                </div>
+              </div>
+              <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>WhatsApp</div>
+                <div style={{ color: '#f8fafc', fontSize: '0.85rem', fontWeight: 700 }}>{displayedEstimate?.whatsappTargets ?? 0} candidates</div>
+              </div>
+              <div style={{ padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Email</div>
+                <div style={{ color: '#f8fafc', fontSize: '0.85rem', fontWeight: 700 }}>{displayedEstimate?.emailTargets ?? 0} candidates</div>
+              </div>
+            </div>
+            <div style={{ color: '#cbd5e1', fontSize: '0.76rem', lineHeight: 1.45 }}>
+              {channels.whatsapp ? whatsappCategoryReason : 'WhatsApp is turned off for this broadcast.'}
+            </div>
+          </div>
+
           {audience === 'custom' && (
             <div style={{ marginTop: '12px' }}>
               <textarea 
@@ -590,6 +689,11 @@ export default function BroadcastsPanel({ products = [] }) {
                     <span style={{ color: '#94a3b8', fontSize: '0.85rem', textTransform: 'capitalize' }}>
                       To: {sb.audience.replace('_', ' ')} {sb.channels?.whatsapp ? '(WA)' : ''} {sb.channels?.email ? '(Email)' : ''}
                     </span>
+                    {sb.channels?.whatsappCategory && (
+                      <span style={{ color: '#7dd3fc', fontSize: '0.75rem', fontWeight: 700, padding: '2px 7px', borderRadius: '999px', background: 'rgba(14, 165, 233, 0.12)', border: '1px solid rgba(14, 165, 233, 0.22)' }}>
+                        WA {sb.channels.whatsappCategory}
+                      </span>
+                    )}
                   </div>
                   <div style={{ color: '#cbd5e1', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {sb.message}

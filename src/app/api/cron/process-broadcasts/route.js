@@ -237,19 +237,51 @@ export async function GET(request) {
       const targets = new Map();
       const { audience, channels, message, custom_contacts } = broadcast;
 
-      if (audience === 'all_customers' || audience === 'all_leads') {
-        const { data: orders } = await supabase.from('orders').select('customer_phone, customer_email').neq('status', 'cancelled');
+      if (audience === 'all_customers' || audience === 'all_leads' || audience === 'leads_7_days') {
+        let query = supabase.from('orders').select('customer_phone, customer_email, customer_name, created_at').neq('status', 'cancelled');
+        if (audience === 'leads_7_days') {
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          query = query.gte('created_at', sevenDaysAgo.toISOString());
+        }
+        const { data: orders } = await query;
         orders?.forEach(o => {
           const key = o.customer_phone || o.customer_email;
-          if (key && !targets.has(key)) targets.set(key, { phone: o.customer_phone, email: o.customer_email });
+          const name = o.customer_name ? o.customer_name.split(' ')[0] : 'Customer';
+          if (key && !targets.has(key)) targets.set(key, { phone: o.customer_phone, email: o.customer_email, name });
         });
       }
 
-      if (audience === 'abandoned_carts' || audience === 'all_leads') {
-        const { data: carts } = await supabase.from('abandoned_carts').select('phone, email');
+      if (audience === 'abandoned_carts' || audience === 'all_leads' || audience === 'leads_7_days') {
+        let query = supabase.from('abandoned_carts').select('phone, email, name, created_at').eq('status', 'active');
+        if (audience === 'leads_7_days') {
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          query = query.gte('created_at', sevenDaysAgo.toISOString());
+        }
+        const { data: carts } = await query;
         carts?.forEach(c => {
           const key = c.phone || c.email;
-          if (key && !targets.has(key)) targets.set(key, { phone: c.phone, email: c.email });
+          const name = c.name ? c.name.split(' ')[0] : 'Customer';
+          if (key && !targets.has(key)) targets.set(key, { phone: c.phone, email: c.email, name });
+        });
+
+        let leadsQuery = supabase.from('catalog_leads').select('contact_value, contact_method, name, created_at');
+        if (audience === 'leads_7_days') {
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          leadsQuery = leadsQuery.gte('created_at', sevenDaysAgo.toISOString());
+        }
+        const { data: catalogLeads } = await leadsQuery;
+        catalogLeads?.forEach(lead => {
+          const key = lead.contact_value;
+          if (key && !targets.has(key)) {
+            targets.set(key, {
+              phone: lead.contact_method === 'whatsapp' ? lead.contact_value : null,
+              email: lead.contact_method === 'email' ? lead.contact_value : null,
+              name: lead.name ? lead.name.split(' ')[0] : 'Customer',
+            });
+          }
         });
       }
 
