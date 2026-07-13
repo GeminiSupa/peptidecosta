@@ -17,7 +17,8 @@ import {
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send,
-  Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft, Megaphone
+  Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft, Megaphone,
+  PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
@@ -342,6 +343,7 @@ export default function AdminPage() {
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [manualOrderOpen, setManualOrderOpen] = useState(false);
   const [inquiryCount, setInquiryCount] = useState(0);
   const [unreadTeamMsgCount, setUnreadTeamMsgCount] = useState(0);
@@ -1499,6 +1501,16 @@ Core Rules:
     return () => window.removeEventListener('keydown', onKey);
   }, [isAuthenticated]);
 
+  useEffect(() => {
+    if (!mounted) return;
+    setSidebarCollapsed(localStorage.getItem('admin_sidebar_collapsed') === 'true');
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem('admin_sidebar_collapsed', sidebarCollapsed ? 'true' : 'false');
+  }, [mounted, sidebarCollapsed]);
+
   const handleGlobalSearchSelect = (result) => {
     if (result.type === 'order') {
       setSelectedOrderDetails(result.payload);
@@ -1517,6 +1529,8 @@ Core Rules:
       navigateToTab('leads');
     } else if (result.type === 'customer') {
       navigateToTab('customers');
+    } else if (result.type === 'tab' && result.payload?.tab) {
+      navigateToTab(result.payload.tab);
     }
   };
 
@@ -3440,7 +3454,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     const selected = leads.filter(l => selectedLeads.includes(l.id));
     const phones = selected.map(l => l.phone || (l.contact_method === 'whatsapp' ? l.contact_value : null)).filter(Boolean);
     if (phones.length === 0) return alert('No selected leads have phone numbers.');
-    alert(`Bulk WhatsApp is limited by browser. To contact ${phones.length} leads, please use a broadcast tool or message them individually.`);
+    localStorage.setItem('pending_broadcast_contacts', phones.join('\n'));
+    localStorage.setItem('pending_broadcast_source', `${phones.length} selected lead${phones.length !== 1 ? 's' : ''}`);
+    navigateToTab('broadcasts');
+    setToastMessage(`${phones.length} lead${phones.length !== 1 ? 's' : ''} loaded into Broadcasts.`);
   };
 
   const handleBulkDeleteLeads = async () => {
@@ -3867,7 +3884,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   }
 
   return (
-    <div className="admin-layout min-h-screen" suppressHydrationWarning>
+    <div className={`admin-layout min-h-screen${sidebarCollapsed ? ' admin-sidebar-collapsed' : ''}`} suppressHydrationWarning>
       {/* Toast Alert Notification */}
       {toastMessage && (
         <div className="admin-toast" role="status" aria-live="polite">
@@ -3889,6 +3906,15 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             </div>
           </div>
           <div className="admin-nav-tools">
+            <button
+              type="button"
+              className="admin-sidebar-toggle"
+              onClick={() => setSidebarCollapsed((value) => !value)}
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            </button>
             <button type="button" className="admin-search-trigger" onClick={() => setGlobalSearchOpen(true)}>
               <Search size={14} />
               <span className="admin-search-label">Search</span>
@@ -5158,6 +5184,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             handleBulkDeleteLeads={handleBulkDeleteLeads}
             handleLeadUpdate={handleLeadUpdate}
             handleLeadDelete={handleLeadDelete}
+            handleLeadFieldUpdate={handleLeadFieldUpdate}
             leadsSearch={leadsSearch}
             setLeadsSearch={setLeadsSearch}
             leadsSourceFilter={leadsSourceFilter}

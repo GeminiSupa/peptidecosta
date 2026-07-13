@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Users, Trash2, Upload, Brain, Sparkles, 
-  Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp
+  Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp, Columns3, List
 } from 'lucide-react';
 
 const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) => (
@@ -30,6 +30,7 @@ export default function LeadsManager({
   handleBulkLeadsWhatsApp,
   handleBulkDeleteLeads,
   handleLeadDelete,
+  handleLeadFieldUpdate,
   leadsSearch,
   setLeadsSearch,
   leadsSourceFilter,
@@ -70,6 +71,7 @@ export default function LeadsManager({
   const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
   const [localContactedFilter, setLocalContactedFilter] = useState('All');
   const [lastSelectedLeadIndex, setLastSelectedLeadIndex] = useState(null);
+  const [viewMode, setViewMode] = useState('table');
 
   const filteredAndSortedLeads = useMemo(() => {
     const safeLeads = leads || [];
@@ -122,6 +124,32 @@ export default function LeadsManager({
   }, [leads, leadsSearch, leadsSourceFilter, leadsAreaFilter, localContactedFilter, sortDir]);
 
   const filteredLeads = filteredAndSortedLeads;
+
+  const pipelineColumns = useMemo(() => {
+    const columns = [
+      { id: 'New', label: 'New', color: '#38bdf8', helper: 'Fresh leads waiting for first touch' },
+      { id: 'Contacted', label: 'Contacted', color: '#f59e0b', helper: 'Already reached by the team' },
+      { id: 'Recovered', label: 'Recovered', color: '#22c55e', helper: 'Converted or moved to recovered' },
+      { id: 'Lost', label: 'Lost', color: '#f87171', helper: 'Not a fit or no response' },
+    ];
+
+    const buckets = Object.fromEntries(columns.map(column => [column.id, []]));
+    filteredLeads.forEach(lead => {
+      const conversion = getLeadConversion(lead);
+      const status = conversion.converted ? 'Recovered' : (lead.status || (lead.last_contacted_at ? 'Contacted' : 'New'));
+      const bucket = buckets[status] ? status : 'New';
+      buckets[bucket].push(lead);
+    });
+
+    return columns.map(column => ({ ...column, leads: buckets[column.id] || [] }));
+  }, [filteredLeads, getLeadConversion]);
+
+  const handleDropLead = (event, status) => {
+    event.preventDefault();
+    const leadId = event.dataTransfer.getData('text/plain');
+    if (!leadId || !handleLeadFieldUpdate) return;
+    handleLeadFieldUpdate(leadId, 'status', status);
+  };
 
 
   const safePage = page || 1;
@@ -292,11 +320,29 @@ export default function LeadsManager({
             <option value="asc" style={{background: '#0f172a'}}>Oldest First</option>
           </select>
         </div>
+        <div className="admin-view-toggle" aria-label="Leads view mode">
+          <button
+            type="button"
+            className={viewMode === 'table' ? 'active' : ''}
+            onClick={() => setViewMode('table')}
+            title="Table view"
+          >
+            <List size={14} /> Table
+          </button>
+          <button
+            type="button"
+            className={viewMode === 'kanban' ? 'active' : ''}
+            onClick={() => setViewMode('kanban')}
+            title="Kanban view"
+          >
+            <Columns3 size={14} /> Kanban
+          </button>
+        </div>
 
       </div>
 
       {selectedLeads && selectedLeads.length > 0 && (
-        <div style={{ marginBottom: '12px', padding: '10px 16px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.15)', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+        <div className="admin-bulk-action-bar" style={{ marginBottom: '12px', padding: '10px 16px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.15)', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '0.85rem' }}>
           <span style={{ fontWeight: 'bold', color: '#38bdf8' }}>{selectedLeads.length} Selected</span>
           <span style={{ color: '#334155' }}>|</span>
           <button onClick={handleBulkLeadsEmail} style={{ width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', gap: '4px', display: 'inline-flex', background: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}>
@@ -317,11 +363,77 @@ export default function LeadsManager({
           <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '1.1rem' }}>Loading Leads Pipeline...</h3>
           <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: '0.85rem' }}>Fetching the latest data from the CRM.</p>
         </div>
-      ) : paginatedLeads.length === 0 ? (
+      ) : filteredLeads.length === 0 ? (
         <div style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '12px', padding: '40px 20px', border: '1px dashed rgba(255,255,255,0.1)', textAlign: 'center' }}>
           <Users size={36} style={{ color: '#334155', marginBottom: '10px' }} />
           <h3 style={{ color: '#94a3b8', margin: 0, fontSize: '1rem' }}>No Leads Found</h3>
           <p style={{ color: '#64748b', margin: '4px 0 0', fontSize: '0.85rem' }}>Try adjusting your search filters.</p>
+        </div>
+      ) : viewMode === 'kanban' ? (
+        <div className="leads-kanban-board">
+          {pipelineColumns.map(column => (
+            <section
+              key={column.id}
+              className="leads-kanban-column"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => handleDropLead(event, column.id)}
+              style={{ '--column-color': column.color }}
+            >
+              <header className="leads-kanban-header">
+                <div>
+                  <h3>{column.label}</h3>
+                  <p>{column.helper}</p>
+                </div>
+                <span>{column.leads.length}</span>
+              </header>
+              <div className="leads-kanban-list">
+                {column.leads.length === 0 ? (
+                  <div className="leads-kanban-empty">Drop leads here</div>
+                ) : column.leads.map(lead => {
+                  const conversion = getLeadConversion(lead);
+                  const views = productViews.filter(v => v.contact_value === lead.contact_value);
+                  const contactValue = lead.contact_value || lead.phone || lead.email || 'Lead';
+                  return (
+                    <article
+                      key={lead.id}
+                      className={`leads-kanban-card${safeSelectedLeads.includes(lead.id) ? ' selected' : ''}`}
+                      draggable={!!handleLeadFieldUpdate}
+                      onDragStart={(event) => event.dataTransfer.setData('text/plain', lead.id)}
+                    >
+                      <div className="leads-kanban-card-top">
+                        <input
+                          type="checkbox"
+                          checked={safeSelectedLeads.includes(lead.id)}
+                          onChange={(event) => handleLocalSelectLead(lead.id, event.target.checked, false, filteredLeads.findIndex(item => item.id === lead.id))}
+                        />
+                        <button type="button" onClick={() => setSelectedLeadDetails?.(lead)}>
+                          {contactValue}
+                        </button>
+                      </div>
+                      <div className="leads-kanban-meta">
+                        <span>{lead.contact_method === 'whatsapp' ? 'WhatsApp' : 'Email'}</span>
+                        <span>{lead.city || lead.country || 'Unknown area'}</span>
+                      </div>
+                      <div className="leads-kanban-tags">
+                        <span>{getReferralLabel ? getReferralLabel(lead) : 'Organic'}</span>
+                        {lead.whatsapp_consent === true && <span>WA opt-in</span>}
+                        {conversion.converted && <span className="success">Converted</span>}
+                        {views.length > 0 && <span>{views.length} views</span>}
+                      </div>
+                      <div className="leads-kanban-actions">
+                        <button type="button" onClick={() => openLeadOutreachComposer(lead, lead.contact_method === 'whatsapp' ? 'whatsapp' : 'email')}>
+                          <MessageCircle size={13} /> Contact
+                        </button>
+                        <button type="button" onClick={() => setSelectedLeadDetails?.(lead)}>
+                          Details
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </div>
       ) : (
         <div className="table-responsive admin-table-wrap" style={{ background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
@@ -612,7 +724,7 @@ export default function LeadsManager({
         </div>
       )}
 
-      {totalPages > 1 && (
+      {viewMode === 'table' && totalPages > 1 && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '15px', marginTop: '20px' }}>
           <button 
             disabled={page === 1} 

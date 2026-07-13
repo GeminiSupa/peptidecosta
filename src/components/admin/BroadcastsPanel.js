@@ -110,6 +110,17 @@ export default function BroadcastsPanel({ products = [] }) {
   useEffect(() => {
     fetchScheduled();
     loadBanners();
+
+    const pendingContacts = localStorage.getItem('pending_broadcast_contacts');
+    if (pendingContacts) {
+      setAudience('custom');
+      setCustomContacts(pendingContacts);
+      setChannels(prev => ({ ...prev, whatsapp: true }));
+      const source = localStorage.getItem('pending_broadcast_source');
+      setResult({ success: true, text: `${source || 'Selected contacts'} loaded into this broadcast.` });
+      localStorage.removeItem('pending_broadcast_contacts');
+      localStorage.removeItem('pending_broadcast_source');
+    }
   }, []);
 
   const audienceLabels = {

@@ -1,14 +1,24 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, X, ClipboardList, Users, Target, Package } from 'lucide-react';
+import { Search, X, ClipboardList, Users, Target, Package, LayoutDashboard } from 'lucide-react';
 
 const TYPE_META = {
   order: { icon: ClipboardList, label: 'Order' },
   product: { icon: Package, label: 'Product' },
   lead: { icon: Target, label: 'Lead' },
   customer: { icon: Users, label: 'Customer' },
+  tab: { icon: LayoutDashboard, label: 'Jump' },
 };
+
+const QUICK_ACTIONS = [
+  { type: 'tab', id: 'orders', title: 'Open Orders', sub: 'Customer order ledger', payload: { tab: 'orders' } },
+  { type: 'tab', id: 'leads', title: 'Open Leads Pipeline', sub: 'Lead table and Kanban board', payload: { tab: 'leads' } },
+  { type: 'tab', id: 'broadcasts', title: 'Open Broadcasts', sub: 'Bulk WhatsApp and email sends', payload: { tab: 'broadcasts' } },
+  { type: 'tab', id: 'marketing', title: 'Open Marketing Studio', sub: 'Campaigns and automations', payload: { tab: 'marketing' } },
+  { type: 'tab', id: 'analytics', title: 'Open Analytics', sub: 'Revenue and conversion reporting', payload: { tab: 'analytics' } },
+  { type: 'tab', id: 'team_chat', title: 'Open Team Chat', sub: 'Internal team messages', payload: { tab: 'team_chat' } },
+];
 
 export default function GlobalSearch({
   open,
@@ -47,9 +57,9 @@ export default function GlobalSearch({
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (q.length < 2) return [];
+    if (q.length < 2) return QUICK_ACTIONS.slice(0, 6);
 
-    const out = [];
+    const out = QUICK_ACTIONS.filter(action => `${action.title} ${action.sub}`.toLowerCase().includes(q));
 
     for (const o of orders) {
       const hay = [
@@ -155,9 +165,7 @@ export default function GlobalSearch({
           </button>
         </form>
         <div className="global-search-results">
-          {query.length < 2 ? (
-            <p className="global-search-hint">Type at least 2 characters · ↑↓ navigate · Enter to open</p>
-          ) : results.length === 0 ? (
+          {results.length === 0 ? (
             <p className="global-search-hint">No results for &ldquo;{query}&rdquo;</p>
           ) : (
             results.map((r, idx) => {
