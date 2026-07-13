@@ -2514,7 +2514,9 @@ Core Rules:
         if (newStatus === 'Completed' || newStatus === 'Order Complete') {
           const updatedOrder = prevOrder || orders.find(o => o.id === orderId);
           if (updatedOrder && updatedOrder.customer_email) {
-            fetch('/api/order-shipped-notification', {
+            // adminFetch attaches the admin session token so the (now
+            // authenticated) email endpoint accepts the request.
+            adminFetch('/api/order-shipped-notification', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ ...updatedOrder, status: newStatus })

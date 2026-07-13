@@ -3,7 +3,7 @@
 import React, { useMemo } from 'react';
 import {
   ClipboardList, ShoppingCart, Target, DollarSign, Package,
-  AlertTriangle, Inbox, MessageSquare, TrendingUp, ChevronRight,
+  AlertTriangle, Inbox, MessageSquare, TrendingUp, ChevronRight, Star,
 } from 'lucide-react';
 import { COMMISSION_ELIGIBLE_ORDER_STATUSES } from '@/lib/agentOrders';
 
@@ -16,6 +16,13 @@ const REVENUE_STATUSES = new Set(COMMISSION_ELIGIBLE_ORDER_STATUSES);
 // Matches the status_change log messages written when an order is marked
 // paid/complete (e.g. "Status changed to Order Complete").
 const COMPLETION_MESSAGE_RE = /paid|complet/i;
+
+// Trustpilot's FREE plan sends 50 verified review invitations per month.
+// If the account is upgraded, change this (Starter = 100, Plus = 300).
+const TRUSTPILOT_MONTHLY_LIMIT = 50;
+// The order-complete email (which BCCs Trustpilot to trigger an invitation) only
+// fires for these statuses, so we count these to estimate invitations used.
+const INVITE_TRIGGER_STATUSES = new Set(['Completed', 'Order Complete']);
 
 function isOutOfStock(status) {
   const s = (status || '').toLowerCase();
@@ -46,6 +53,15 @@ function startOfWeek(d = new Date()) {
   const day = cr.getUTCDay();                        // 0 = Sunday, in CR time
   const diff = day === 0 ? 6 : day - 1;
   cr.setUTCDate(cr.getUTCDate() - diff);
+  return new Date(cr.getTime() + CR_OFFSET_MS);
+}
+
+// Start of the current month in Costa Rica, as an absolute instant. Used for the
+// monthly Trustpilot invitation quota, which resets on the 1st.
+function startOfMonth(d = new Date()) {
+  const cr = new Date(d.getTime() - CR_OFFSET_MS);
+  cr.setUTCHours(0, 0, 0, 0);
+  cr.setUTCDate(1);
   return new Date(cr.getTime() + CR_OFFSET_MS);
 }
 
@@ -114,6 +130,14 @@ export default function DashboardHome({
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .slice(0, 6);
 
+    // Trustpilot invitations used this month (estimate): every order marked
+    // complete with a customer email triggers one verified invitation via the
+    // order-complete email BCC. Dated by completion (CR time), like revenue.
+    const monthStart = startOfMonth(now);
+    const trustpilotUsed = orders.filter((o) =>
+      INVITE_TRIGGER_STATUSES.has(o.status) && o.customer_email && getRevenueDate(o) >= monthStart
+    ).length;
+
     return {
       pendingOrders,
       revenueToday,
@@ -123,8 +147,13 @@ export default function DashboardHome({
       hotLeads,
       stockAlerts,
       recentOrders,
+      trustpilotUsed,
     };
   }, [orders, abandonedCarts, leads, products]);
+
+  // Remaining invitations + a color that warns as the monthly quota runs low.
+  const trustpilotRemaining = Math.max(0, TRUSTPILOT_MONTHLY_LIMIT - stats.trustpilotUsed);
+  const trustpilotColor = trustpilotRemaining === 0 ? '#f87171' : trustpilotRemaining <= 10 ? '#fbbf24' : '#34d399';
 
   const attention = [
     stats.pendingOrders.length > 0 && {
@@ -220,7 +249,24 @@ export default function DashboardHome({
             <div className="dashboard-kpi-label">Recoverable Carts</div>
           </div>
         </div>
+        {/* Trustpilot review-invitation quota (Free plan = 50/month). Estimate only —
+            the Free plan has no API, so we approximate from completed orders. */}
+        <div className="dashboard-kpi-card" title={`Estimate (~${trustpilotRemaining} left): ${stats.trustpilotUsed} of ${TRUSTPILOT_MONTHLY_LIMIT} invitations approx. sent this month. Free plan has no Trustpilot API, so this is not the exact count.`}>
+          <div className="dashboard-kpi-icon" style={{ background: 'rgba(52, 211, 153, 0.15)', color: trustpilotColor }}>
+            <Star size={20} />
+          </div>
+          <div>
+            <div className="dashboard-kpi-value" style={{ color: trustpilotColor }}>≈{trustpilotRemaining}</div>
+            <div className="dashboard-kpi-label">Trustpilot invites left (est.) · {stats.trustpilotUsed}/{TRUSTPILOT_MONTHLY_LIMIT}</div>
+          </div>
+        </div>
       </div>
+
+      {/* Honesty note: the Trustpilot number is an estimate, not the real count. */}
+      <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '10px 2px 0', lineHeight: 1.5 }}>
+        ★ <strong style={{ color: '#cbd5e1' }}>Trustpilot invites left</strong> is an <strong style={{ color: '#cbd5e1' }}>estimate</strong>, not the exact count.
+        The Free plan has no Trustpilot API, so we approximate it from completed orders this month. For the real number, check your Trustpilot dashboard.
+      </p>
 
       {attention.length > 0 && (
         <section className="dashboard-section">

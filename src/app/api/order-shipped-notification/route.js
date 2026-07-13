@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
+import { verifyAdminSession } from '@/lib/adminAuth';
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
@@ -8,6 +9,11 @@ const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
+
+// Trustpilot Automatic Feedback Service (AFS): BCC this address on the
+// order-complete email and Trustpilot sends the customer a verified review
+// invitation (default 7-day delay, configured in the Trustpilot dashboard).
+const TRUSTPILOT_AFS_BCC = process.env.TRUSTPILOT_AFS_BCC || 'peptidescostarica.net+7777886f21@invite.trustpilot.com';
 
 const escapeHtml = (value = '') => String(value)
   .replace(/&/g, '&amp;')
@@ -141,6 +147,12 @@ const buildCustomerShippedHtml = (order, totalPrimary, totalUsd, totalCrc, lang,
 };
 
 export async function POST(request) {
+  // Security: admin-only. This endpoint emails customers AND triggers a Trustpilot
+  // review invitation (via BCC). Leaving it open would let anyone spam customers
+  // and burn the monthly Trustpilot invitation quota on arbitrary addresses.
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
   try {
     const order = await request.json();
     const links = await getBusinessLinks();
@@ -186,7 +198,20 @@ export async function POST(request) {
     };
 
     const customerHtml = buildCustomerShippedHtml(normalizedOrder, totalPrimary, totalUsd, totalCrc, orderLang, links);
-    
+
+    // Trustpilot AFS structured data (read by Trustpilot from the BCC'd copy).
+    // Not visible to the customer; gives Trustpilot the name, order ref, and language.
+    const trustpilotSnippet = `
+<script type="application/json+trustpilot">
+{
+  "recipientEmail": ${JSON.stringify(order.customer_email.trim())},
+  "recipientName": ${JSON.stringify(order.customer_name || 'Cliente')},
+  "referenceId": ${JSON.stringify(normalizedOrder.orderNumber || '')},
+  "locale": ${JSON.stringify(orderLang === 'en' ? 'en-US' : 'es-ES')}
+}
+</script>`;
+    const customerHtmlWithTrustpilot = customerHtml + trustpilotSnippet;
+
     const customerText = [
       orderLang === 'en' ? 'Your order is on the way!' : '¡Su pedido está en camino!',
       '',
@@ -207,12 +232,14 @@ export async function POST(request) {
         : `¿Necesita ayuda? Contacte a soporte al ${links.whatsappDisplay} o responda a este correo.`
     ].join('\\n');
 
+    const bccList = [process.env.BCC_EMAIL || 'omerforce@gmail.com', TRUSTPILOT_AFS_BCC].filter(Boolean);
+
     const customerInfo = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+      bcc: bccList,
       from: NOTIFICATION_FROM,
       to: order.customer_email.trim(),
       subject: customerSubject,
-      html: customerHtml,
+      html: customerHtmlWithTrustpilot,
       text: customerText,
     });
 
