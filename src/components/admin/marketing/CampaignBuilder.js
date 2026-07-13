@@ -261,7 +261,7 @@ function Section({ title, icon: Icon, defaultOpen = true, children }) {
   );
 }
 
-export default function CampaignBuilder({ editingCampaignId }) {
+export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
   const emailEditorRef      = useRef(null);
   const [isReady,           setIsReady]           = useState(false);
   const [isSaving,          setIsSaving]          = useState(false);
@@ -298,13 +298,11 @@ export default function CampaignBuilder({ editingCampaignId }) {
   // Test email
   const [testEmail,      setTestEmail]      = useState('');
   const [isSendingTest,  setIsSendingTest]  = useState(false);
-  const [draftRevision,  setDraftRevision]  = useState(0);
   const [autosaveStatus, setAutosaveStatus] = useState('idle');
   const [lastSavedAt,    setLastSavedAt]    = useState(null);
   const [statusDetail,   setStatusDetail]   = useState('');
   const [lastTestedSignature, setLastTestedSignature] = useState('');
   const [lastTestSentAt, setLastTestSentAt] = useState(null);
-  const localSnapshotTimerRef = useRef(null);
   const saveInFlightRef  = useRef(false);
   const pendingSaveRef   = useRef(false);
   const recoveryCheckedRef = useRef(false);
@@ -324,6 +322,30 @@ export default function CampaignBuilder({ editingCampaignId }) {
     scheduledAt,
     html
   }), [campaignName, isABTest, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
+
+  const hasUnsavedChanges = ['pending', 'error', 'recovered'].includes(autosaveStatus);
+  const saveStatusText = useMemo(() => {
+    if (autosaveStatus === 'saving' || isSaving) return 'Saving changes...';
+    if (autosaveStatus === 'error') return 'Save failed';
+    if (autosaveStatus === 'recovered') return 'Recovered local draft';
+    if (autosaveStatus === 'pending') return 'Unsaved changes';
+    if (lastSavedAt) return `Saved ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    return 'Manual save mode';
+  }, [autosaveStatus, isSaving, lastSavedAt]);
+
+  useEffect(() => {
+    onDirtyChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onDirtyChange]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return undefined;
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   const writeLocalSnapshot = useCallback(async ({ unsaved = true, source = 'local' } = {}) => {
     const editor = emailEditorRef.current?.editor;
@@ -375,7 +397,6 @@ export default function CampaignBuilder({ editingCampaignId }) {
     setStatusDetail('Unsaved changes. Keep designing, then click Save draft when you are ready.');
     setLastTestedSignature('');
     setLastTestSentAt(null);
-    setDraftRevision(revision => revision + 1);
   };
 
   const updateDraftField = (setter, value) => {
@@ -474,6 +495,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
   }, [loadEditorDesign]);
 
   const applyTemplate = (tpl) => {
+    if (hasUnsavedChanges && !confirm('Apply this template and replace your current unsaved email design?')) return;
     setSelectedTemplate(tpl.id);
     setShowTemplates(false);
     selectedCampaignIdRef.current = '';
@@ -684,25 +706,27 @@ export default function CampaignBuilder({ editingCampaignId }) {
       saveInFlightRef.current = false;
       if (pendingSaveRef.current) {
         pendingSaveRef.current = false;
-        setDraftRevision(revision => revision + 1);
+        setAutosaveStatus('pending');
       }
     }
   };
 
-  const saveCampaign = async () => {
+  const saveCampaign = useCallback(async () => {
     if (!subject || (isABTest && !subjectB)) { alert('Please enter subject line(s).'); return; }
     if (scheduleMode === 'scheduled' && !scheduledAt) { alert('Please pick a scheduled date/time.'); return; }
     await persistCampaign({ silent: false });
-  };
+  }, [isABTest, persistCampaign, scheduleMode, scheduledAt, subject, subjectB]);
 
   useEffect(() => {
-    if (!draftRevision || !isReady) return;
-    clearTimeout(localSnapshotTimerRef.current);
-    localSnapshotTimerRef.current = setTimeout(() => {
-      writeLocalSnapshot({ unsaved: true, source: 'local-autosave' });
-    }, 30000);
-    return () => clearTimeout(localSnapshotTimerRef.current);
-  }, [draftRevision, isReady, writeLocalSnapshot]);
+    const handleKeyDown = (event) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
+      event.preventDefault();
+      if (!isReady || isSaving) return;
+      saveCampaign();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isReady, isSaving, saveCampaign]);
 
   const handleEditorReady = (editor) => {
     setIsReady(true);
@@ -851,6 +875,24 @@ export default function CampaignBuilder({ editingCampaignId }) {
         </div>
       </div>
 
+      <div className="mkt-builder-savebar" role="region" aria-label="Campaign save controls">
+        <div className="mkt-builder-savebar-status">
+          <span className={`mkt-autosave-status ${autosaveStatus}`} role="status" aria-live="polite">
+            {autosaveStatus === 'saving' || isSaving ? <Loader2 size={13} className="animate-spin" /> : autosaveStatus === 'error' ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}
+            {saveStatusText}
+          </span>
+          <small>{hasUnsavedChanges ? 'Your editor selection is preserved until you choose Save draft.' : 'Use Cmd/Ctrl+S to save without leaving the editor.'}</small>
+        </div>
+        <div className="mkt-builder-savebar-actions">
+          <button onClick={openPreview} disabled={!isReady} className="mkt-btn">
+            <Eye size={14} /> Preview
+          </button>
+          <button onClick={saveCampaign} disabled={!isReady || isSaving} className="mkt-btn mkt-btn-primary">
+            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save draft <kbd>⌘S</kbd>
+          </button>
+        </div>
+      </div>
+
       {/* ══ CONFIG PANEL ══ */}
       <div className="mkt-builder-config">
 
@@ -862,17 +904,7 @@ export default function CampaignBuilder({ editingCampaignId }) {
             <small>Check the real inbox layout before sending to subscribers.</small>
             <span className={`mkt-autosave-status ${autosaveStatus}`} role="status" aria-live="polite">
               {autosaveStatus === 'saving' || isSaving ? <Loader2 size={12} className="animate-spin" /> : autosaveStatus === 'error' ? <AlertTriangle size={12} /> : <CheckCircle2 size={12} />}
-              {autosaveStatus === 'saving' || isSaving
-                ? 'Saving changes…'
-                : autosaveStatus === 'error'
-                  ? 'Save failed, retrying'
-                  : autosaveStatus === 'recovered'
-                    ? 'Recovered local draft'
-                    : autosaveStatus === 'pending'
-                      ? 'Unsaved changes'
-                      : lastSavedAt
-                        ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                        : 'Manual save mode'}
+              {saveStatusText}
             </span>
             {statusDetail && <small>{statusDetail}</small>}
             {lastTestSentAt && (

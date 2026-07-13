@@ -23,6 +23,14 @@ const TABS = [
 export default function EmailMarketingStudio() {
   const [activeTab, setActiveTab] = useState('opportunities');
   const [headerStats, setHeaderStats] = useState({ subscribers: '—', campaigns: '—', sent: '—' });
+  const [campaignBuilderDirty, setCampaignBuilderDirty] = useState(false);
+
+  const selectTab = (id) => {
+    if (id === activeTab) return;
+    if (activeTab === 'campaigns' && campaignBuilderDirty && !confirm('You have unsaved campaign changes. Switch tabs and discard them?')) return;
+    setActiveTab(id);
+    if (id !== 'campaigns') setCampaignBuilderDirty(false);
+  };
 
   // Pull quick KPIs for the stats strip
   useEffect(() => {
@@ -80,7 +88,7 @@ export default function EmailMarketingStudio() {
               key={id}
               role="tab"
               aria-selected={activeTab === id}
-              onClick={() => setActiveTab(id)}
+              onClick={() => selectTab(id)}
               className={`mkt-tab ${activeTab === id ? 'active' : ''}`}
             >
               <Icon size={15} />
@@ -94,7 +102,7 @@ export default function EmailMarketingStudio() {
       <div className="mkt-container mkt-fade-in" key={activeTab}>
         {activeTab === 'opportunities' && <RevenueOpportunities />}
         {activeTab === 'subscribers' && <SubscriberManager />}
-        {activeTab === 'campaigns'   && <CampaignManager />}
+        {activeTab === 'campaigns'   && <CampaignManager onDirtyChange={setCampaignBuilderDirty} />}
         {activeTab === 'automations' && <AutomationStudio />}
         {activeTab === 'safety' && <MarketingSafetyCenter />}
       </div>

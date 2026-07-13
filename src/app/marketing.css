@@ -195,10 +195,41 @@
 .mkt-builder-section-toggle > span svg { color: #34d399; }
 .mkt-builder-section-toggle > svg { flex: 0 0 auto; color: rgba(255,255,255,.32); }
 .mkt-builder-section-body { padding: 2px 16px 18px; }
-.mkt-builder-quick-actions {
+.mkt-builder-savebar {
   position: sticky;
   top: 12px;
-  z-index: 12;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(56, 189, 248, .22);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(13, 28, 43, .97), rgba(18, 22, 29, .98));
+  box-shadow: 0 14px 35px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(16px);
+}
+.mkt-builder-savebar-status { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.mkt-builder-savebar-status small { color: rgba(255,255,255,.45); font-size: 11px; line-height: 1.35; }
+.mkt-builder-savebar-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+.mkt-builder-savebar-actions .mkt-btn { min-height: 40px; margin: 0; }
+.mkt-builder-savebar kbd {
+  display: inline-flex;
+  min-width: 24px;
+  justify-content: center;
+  margin-left: 2px;
+  padding: 2px 5px;
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 5px;
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.72);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+}
+.mkt-builder-quick-actions {
   display: grid;
   grid-template-columns: minmax(210px, .7fr) minmax(360px, 1.3fr);
   gap: 7px 22px;
@@ -207,9 +238,7 @@
   padding: 16px 18px;
   border: 1px solid rgba(56, 189, 248, .22);
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(13, 28, 43, .97), rgba(18, 22, 29, .98));
-  box-shadow: 0 14px 35px rgba(0, 0, 0, .28);
-  backdrop-filter: blur(16px);
+  background: linear-gradient(135deg, rgba(13, 28, 43, .86), rgba(18, 22, 29, .9));
 }
 .mkt-builder-quick-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .mkt-builder-quick-copy strong { overflow: hidden; color: #fff; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1062,6 +1091,7 @@
 ══════════════════════════════════════ */
 @media (max-width: 640px) {
   .mkt-mobile-editor-notice { display: flex; }
+  .mkt-builder-savebar { display: none; }
   .mkt-builder-back { min-height: 44px; margin-bottom: 8px; }
   .mkt-builder-section { margin-bottom: 10px; border-radius: 12px; }
   .mkt-builder-section-toggle { min-height: 52px; padding: 0 13px; }

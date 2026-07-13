@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import CampaignDashboard from './CampaignDashboard';
 
@@ -14,24 +14,33 @@ const CampaignBuilder = dynamic(() => import('./CampaignBuilder'), {
   )
 });
 
-export default function CampaignManager() {
+export default function CampaignManager({ onDirtyChange }) {
   const [view, setView] = useState('list'); // 'list' | 'builder'
   const [editingId, setEditingId] = useState(null);
+  const [builderDirty, setBuilderDirty] = useState(false);
 
   const handleEdit = (id) => {
     setEditingId(id);
+    setBuilderDirty(false);
     setView('builder');
   };
 
   const handleCreate = () => {
     setEditingId(null);
+    setBuilderDirty(false);
     setView('builder');
   };
 
   const handleBack = () => {
+    if (builderDirty && !confirm('You have unsaved campaign changes. Leave the builder and discard them?')) return;
     setView('list');
     setEditingId(null);
+    setBuilderDirty(false);
   };
+
+  useEffect(() => {
+    onDirtyChange?.(builderDirty);
+  }, [builderDirty, onDirtyChange]);
 
   return (
     <div className="mkt-campaign-manager">
@@ -46,7 +55,7 @@ export default function CampaignManager() {
           >
             <span aria-hidden="true">&larr;</span> Campaigns
           </button>
-          <CampaignBuilder editingCampaignId={editingId} />
+          <CampaignBuilder editingCampaignId={editingId} onDirtyChange={setBuilderDirty} />
         </div>
       )}
     </div>
