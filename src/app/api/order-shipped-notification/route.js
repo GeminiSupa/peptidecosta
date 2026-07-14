@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
@@ -199,6 +200,22 @@ export async function POST(request) {
 
     const customerHtml = buildCustomerShippedHtml(normalizedOrder, totalPrimary, totalUsd, totalCrc, orderLang, links);
 
+    // Only BCC Trustpilot the FIRST time an order is completed. Re-marking an
+    // order (Completed -> Processing -> Completed, or resending the receipt)
+    // must not burn another monthly invitation or spam the customer.
+    let alreadyInvited = false;
+    let supabase = null;
+    try {
+      supabase = getSupabaseAdmin();
+      let query = supabase.from('orders').select('id, review_requested_at');
+      query = order.id ? query.eq('id', order.id) : query.eq('order_number', order.order_number);
+      const { data: existing } = await query.maybeSingle();
+      alreadyInvited = Boolean(existing?.review_requested_at);
+    } catch (err) {
+      // If the lookup fails we fall back to sending the invitation (previous behavior).
+      console.error('[Order Shipped Notification] review_requested_at lookup failed:', err.message);
+    }
+
     // Trustpilot AFS structured data (read by Trustpilot from the BCC'd copy).
     // Not visible to the customer; gives Trustpilot the name, order ref, and language.
     const trustpilotSnippet = `
@@ -210,7 +227,7 @@ export async function POST(request) {
   "locale": ${JSON.stringify(orderLang === 'en' ? 'en-US' : 'es-ES')}
 }
 </script>`;
-    const customerHtmlWithTrustpilot = customerHtml + trustpilotSnippet;
+    const customerHtmlWithTrustpilot = alreadyInvited ? customerHtml : customerHtml + trustpilotSnippet;
 
     const customerText = [
       orderLang === 'en' ? 'Your order is on the way!' : '¡Su pedido está en camino!',
@@ -230,9 +247,12 @@ export async function POST(request) {
       orderLang === 'en' 
         ? `Need help? Contact our support desk at ${links.whatsappDisplay} or reply to this email.`
         : `¿Necesita ayuda? Contacte a soporte al ${links.whatsappDisplay} o responda a este correo.`
-    ].join('\\n');
+    ].join('\n');
 
-    const bccList = [process.env.BCC_EMAIL || 'omerforce@gmail.com', TRUSTPILOT_AFS_BCC].filter(Boolean);
+    const bccList = [
+      process.env.BCC_EMAIL || 'omerforce@gmail.com',
+      alreadyInvited ? null : TRUSTPILOT_AFS_BCC,
+    ].filter(Boolean);
 
     const customerInfo = await transporter.sendMail({
       bcc: bccList,
@@ -245,9 +265,22 @@ export async function POST(request) {
 
     console.log(`[Order Shipped Notification] Customer receipt dispatched: ${customerInfo.messageId} to ${order.customer_email}`);
 
+    // Record that the Trustpilot invitation went out so later resends (and the
+    // review-requests cron, which checks the same column) never duplicate it.
+    if (!alreadyInvited && supabase) {
+      try {
+        let update = supabase.from('orders').update({ review_requested_at: new Date().toISOString() });
+        update = order.id ? update.eq('id', order.id) : update.eq('order_number', order.order_number);
+        await update;
+      } catch (err) {
+        console.error('[Order Shipped Notification] Failed to mark review_requested_at:', err.message);
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      messageId: customerInfo.messageId
+      messageId: customerInfo.messageId,
+      trustpilotInvited: !alreadyInvited,
     });
   } catch (err) {
     console.error('[Order Shipped Notification] Unexpected handler crash:', err);
