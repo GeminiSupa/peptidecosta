@@ -28,6 +28,7 @@ import {
 const FALLBACK_EXCHANGE_RATE = 454.48;
 const FREE_SHIPPING_USD_THRESHOLD = 200;
 const FLAT_SHIPPING_CRC = 2500;
+const CARD_CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CARD_CHECKOUT === 'true';
 
 const CATEGORY_TRANSLATIONS = {
   'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
@@ -3734,8 +3735,10 @@ export default function CatalogClient({
                     icon: <CreditCard size={18} />,
                     iconColor: '#0ea5e9', // Blue
                     title: lang === 'en' ? 'Card' : 'Tarjeta',
-                    detail: lang === 'en' ? 'Coming soon' : 'Próximamente',
-                    disabled: true,
+                    detail: CARD_CHECKOUT_ENABLED
+                      ? (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox')
+                      : (lang === 'en' ? 'Coming soon' : 'Próximamente'),
+                    disabled: !CARD_CHECKOUT_ENABLED,
                   },
                   {
                     value: 'whatsapp',
