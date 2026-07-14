@@ -2686,7 +2686,7 @@ export default function CatalogPage() {
               onClick={() => handleLangToggle('en')} 
               className={lang === 'en' ? 'active' : ''}
             >
-              EN
+              ENG
             </button>
             <button 
               onClick={() => handleLangToggle('es')} 

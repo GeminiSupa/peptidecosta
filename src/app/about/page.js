@@ -114,7 +114,7 @@ export default function AboutPage() {
           <div className="lp-header-actions">
             <div className="lang-selector">
               <button onClick={() => handleLang('es')} className={lang === 'es' ? 'active' : ''}>ES</button>
-              <button onClick={() => handleLang('en')} className={lang === 'en' ? 'active' : ''}>EN</button>
+              <button onClick={() => handleLang('en')} className={lang === 'en' ? 'active' : ''}>ENG</button>
             </div>
             <Link href={`/catalog?lang=${lang}`} className="lp-nav-cta">{lang === 'en' ? 'Shop' : 'Tienda'} <ArrowRight size={15} /></Link>
           </div>

@@ -22,7 +22,7 @@ export function EditorialHeader({ lang, onLanguage }) {
         <div className="editorial-actions">
           <div className="editorial-language" aria-label="Language">
             <button onClick={() => onLanguage('es')} className={lang === 'es' ? 'active' : ''}>ES</button>
-            <button onClick={() => onLanguage('en')} className={lang === 'en' ? 'active' : ''}>EN</button>
+            <button onClick={() => onLanguage('en')} className={lang === 'en' ? 'active' : ''}>ENG</button>
           </div>
           <Link href="/catalog" className="editorial-shop" aria-label={lang === 'en' ? 'Open catalog' : 'Abrir catálogo'}><ArrowRight size={18}/></Link>
         </div>

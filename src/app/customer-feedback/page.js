@@ -63,7 +63,7 @@ export default function CustomerFeedbackPage() {
               </div>
               <div className="lang-selector">
                 <button onClick={() => handleLang('es')} className={lang === 'es' ? 'active' : ''}>ES</button>
-                <button onClick={() => handleLang('en')} className={lang === 'en' ? 'active' : ''}>EN</button>
+                <button onClick={() => handleLang('en')} className={lang === 'en' ? 'active' : ''}>ENG</button>
               </div>
             </div>
             <Link href={`/catalog?lang=${lang}`} className="lp-nav-cta">
