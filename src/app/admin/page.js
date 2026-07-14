@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
+import { getLeadConversion as resolveLeadConversion } from '@/lib/leadConversion.mjs';
 import { 
   Lock, LayoutDashboard, ListFilter, Plus, Trash2, Mail, MessageCircle,
   Save, Upload, Download, Share2, Clipboard, LogOut, Check, 
@@ -908,39 +909,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [isLocalAiDraft, setIsLocalAiDraft] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
 
-  // A lead is "converted" only when it maps to an order the customer actually
-  // PAID (not just placed). Pending / Payment Pending / Cancelled don't count.
-  const getLeadConversion = (lead) => {
-    if (!lead || !lead.contact_value) return { converted: false };
-    const val = String(lead.contact_value).trim().toLowerCase();
-    const isEmail = val.includes('@');
-    const PAID_STATUSES = new Set(['Paid', 'Completed', 'Order Complete', 'Processing']);
-    const isPaid = (o) => PAID_STATUSES.has(o.status);
-
-    if (isEmail) {
-      const match = (orders || []).find(o =>
-        o.customer_email && String(o.customer_email).trim().toLowerCase() === val && isPaid(o)
-      );
-      if (match) return { converted: true, order: match };
-    } else {
-      const cleanLeadPhone = val.replace(/[^0-9]/g, '');
-      // Require a real phone (>= 8 digits) on both sides and match on the LAST 8
-      // digits so local and +country formats align. This also avoids the old bug
-      // where a garbage phone like "wendy" cleaned to "" and matched EVERY lead
-      // (since any string .endsWith("") is true).
-      if (cleanLeadPhone.length >= 8) {
-        const leadTail = cleanLeadPhone.slice(-8);
-        const match = (orders || []).find(o => {
-          if (!isPaid(o)) return false;
-          const cleanOrderPhone = String(o.customer_phone || '').replace(/[^0-9]/g, '');
-          if (cleanOrderPhone.length < 8) return false;
-          return cleanOrderPhone.slice(-8) === leadTail;
-        });
-        if (match) return { converted: true, order: match };
-      }
-    }
-    return { converted: false };
-  };
+  const getLeadConversion = useCallback(
+    (lead) => resolveLeadConversion(lead, orders),
+    [orders]
+  );
 
   const handleLeadFieldUpdate = async (id, fieldName, value) => {
     // Update local state first
