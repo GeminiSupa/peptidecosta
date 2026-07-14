@@ -55,7 +55,31 @@ export async function POST(request) {
         .maybeSingle();
 
       if (existingLead) {
-        console.log(`[Leads Capture] Contact ${cleanContact} already exists. Skipping promo generation.`);
+        if (whatsapp_consent) {
+          const { error: updateErr } = await supabase
+            .from('catalog_leads')
+            .update({
+              whatsapp_consent: contact_method === 'whatsapp',
+              marketing_consent: true,
+              consent_at: new Date().toISOString(),
+              consent_source: 'catalog_gate',
+              language,
+              ip_address,
+              city,
+              region,
+              country,
+              utm_source,
+              utm_medium,
+              utm_campaign,
+              referrer
+            })
+            .eq('id', existingLead.id);
+
+          if (updateErr) {
+            console.error('[Leads Capture] Error updating existing lead consent:', updateErr);
+          }
+        }
+        console.log(`[Leads Capture] Contact ${cleanContact} already exists. Updated consent if provided.`);
         return NextResponse.json({ success: true, message: 'Already registered' });
       }
     }

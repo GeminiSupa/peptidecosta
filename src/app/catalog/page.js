@@ -269,11 +269,11 @@ export default function CatalogPage() {
   // Access Gate States
   const [gateAccessGranted, setGateAccessGranted] = useState(false); // Default false for security, updated in useEffect
   const [gateLoading, setGateLoading] = useState(true);
-  const [gateVisible, setGateVisible] = useState(false); // New visitors see products briefly before the gate appears.
+  const [gateVisible, setGateVisible] = useState(false); // New visitors see products for 15s before the gate appears.
   const [gateInput, setGateInput] = useState('');
   const [gateSubmitting, setGateSubmitting] = useState(false);
   const [gateError, setGateError] = useState('');
-  const [gateConsent, setGateConsent] = useState(false); // WhatsApp marketing opt-in — MUST default false (Meta requires an active opt-in; pre-ticking gets the number flagged for spam)
+  const [gateConsent, setGateConsent] = useState(true);
 
   // Second-chance WhatsApp opt-in re-prompt (for visitors who unlocked the
   // catalog but did NOT opt in). Shown at most once / 3 days, stops after 2 dismissals.
@@ -314,7 +314,7 @@ export default function CatalogPage() {
       setGateAccessGranted(hasAccess);
       setGateLoading(false);
       if (!hasAccess && !loading) {
-        const timer = setTimeout(() => setGateVisible(true), 2000);
+        const timer = setTimeout(() => setGateVisible(true), 15000);
         return () => clearTimeout(timer);
       }
     }
@@ -1896,7 +1896,7 @@ export default function CatalogPage() {
       return;
     }
 
-    await sendOrderNotification({
+    const orderNotificationPayload = {
       orderNumber: orderNum,
       customerName,
       customerPhone,
@@ -1916,7 +1916,7 @@ export default function CatalogPage() {
       paymentMethod: method === 'sinpe' ? 'sinpe' : 'tilopay',
       status: method === 'sinpe' ? 'Pending - SINPE Tilopay' : 'Pending - Card',
       lang,
-    });
+    };
 
     try {
       const res = await fetch(method === 'tilopay' ? '/api/shieldhubpay/process-card' : '/api/tilopay/create-payment', {
@@ -1947,11 +1947,19 @@ export default function CatalogPage() {
       const data = await res.json();
 
       if (data.paymentUrl) {
+        await sendOrderNotification({
+          ...orderNotificationPayload,
+          status: data.orderStatus || orderNotificationPayload.status,
+        });
         window.location.href = data.paymentUrl;
         return;
       }
 
       if (data.ok && method === 'tilopay') {
+        await sendOrderNotification({
+          ...orderNotificationPayload,
+          status: data.orderStatus || 'Paid',
+        });
         setCart([]);
         localStorage.removeItem('cart');
         window.location.href = `/thank-you?lang=${lang}&order=${encodeURIComponent(orderNum)}`;
@@ -3060,13 +3068,13 @@ export default function CatalogPage() {
                   <span>
                     <span style={{ fontWeight: 700, display: 'block', marginBottom: '2px' }}>
                       {lang === 'en'
-                        ? '📲 Send me exclusive deals & new-stock alerts on WhatsApp'
-                        : '📲 Envíenme ofertas exclusivas y avisos de stock por WhatsApp'}
+                        ? 'Send me promotions, sales, and new-stock alerts'
+                        : 'Envíenme promociones, ofertas y avisos de nuevo stock'}
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       {lang === 'en'
-                        ? 'Only useful updates from Peptides Costa Rica — no spam. Reply STOP anytime to unsubscribe.'
-                        : 'Solo novedades útiles de Peptides Costa Rica, sin spam. Responda BAJA en cualquier momento para cancelar.'}
+                        ? 'By keeping this checked, you consent to receive marketing updates by WhatsApp or email from Peptides Costa Rica. Reply STOP or unsubscribe anytime.'
+                        : 'Al mantener esta casilla marcada, acepta recibir novedades de marketing por WhatsApp o correo de Peptides Costa Rica. Responda BAJA o cancele la suscripción cuando quiera.'}
                     </span>
                   </span>
                 </label>
@@ -3094,6 +3102,7 @@ export default function CatalogPage() {
             style={{
               opacity: 1,
               pointerEvents: !gateAccessGranted && gateVisible ? 'none' : 'auto',
+              filter: !gateAccessGranted && gateVisible ? 'blur(8px)' : 'none',
               transition: 'filter 0.3s',
             }}
           >

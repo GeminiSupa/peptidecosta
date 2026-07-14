@@ -37,6 +37,18 @@ const paymentLabels = {
   }
 };
 
+const normalizePaymentMethod = (method = '') => String(method || '').toLowerCase();
+
+const isPaidStatus = (status = '') => {
+  const normalized = String(status || '').toLowerCase();
+  return normalized.includes('paid') || normalized.includes('complet');
+};
+
+const isElectronicGatewayPayment = (method = '') => {
+  const normalized = normalizePaymentMethod(method);
+  return normalized === 'tilopay' || normalized === 'sinpe';
+};
+
 const buildItemsRows = (items = [], currency) => items.map((item) => {
   const price = Number(item.price || 0);
   const qty = Number(item.qty || 0);
@@ -72,7 +84,7 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
       ? 'FREE'
       : formatMoney(shippingAmount, order.currency);
       
-  const isPaid = order.status && (order.status.toLowerCase().includes('paid') || order.status.toLowerCase().includes('complet'));
+  const isPaid = isPaidStatus(order.status);
   const whatsappNumberClean = (order.customerPhone || '').replace(/[^0-9]/g, '');
   const whatsappPayLink = `https://wa.me/${whatsappNumberClean}`;
 
@@ -205,17 +217,28 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
 const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc, lang, links, salesTextEn, salesTextEs, promoCodesList) => {
 
   const isEn = lang === 'en';
-  const isPaid = order.status && (order.status.toLowerCase().includes('paid') || order.status.toLowerCase().includes('complet'));
+  const isPaid = isPaidStatus(order.status);
+  const paymentMethod = normalizePaymentMethod(order.paymentMethod);
+  const isGatewayPayment = isElectronicGatewayPayment(paymentMethod);
+  const showManualPaymentAction = !isPaid && !isGatewayPayment;
   const strings = {
-    title: isPaid ? (isEn ? 'Order Confirmed!' : '¡Pedido Confirmado!') : (isEn ? 'Action Required: Complete Payment' : 'Acción Requerida: Completar Pago'),
+    title: isPaid
+      ? (isEn ? 'Order Confirmed!' : '¡Pedido Confirmado!')
+      : isGatewayPayment
+        ? (isEn ? 'Order Received - Payment Processing' : 'Pedido Recibido - Pago en Proceso')
+        : (isEn ? 'Action Required: Complete Payment' : 'Acción Requerida: Completar Pago'),
     subtitle: isPaid 
       ? (isEn ? "We've received your order and payment. Here are your transaction details." : 'Hemos recibido su pedido y su pago. A continuación encontrará los detalles.') 
-      : (isEn ? "We've received your order! Please submit your payment to complete processing." : '¡Hemos recibido su pedido! Por favor envíe su pago para procesarlo.'),
+      : isGatewayPayment
+        ? (isEn ? "We've received your order and are waiting for the payment processor's final confirmation." : 'Hemos recibido su pedido y estamos esperando la confirmación final del procesador de pago.')
+        : (isEn ? "We've received your order! Please submit your payment to complete processing." : '¡Hemos recibido su pedido! Por favor envíe su pago para procesarlo.'),
     ref: isEn ? 'Order Reference' : 'Referencia del Pedido',
     method: isEn ? 'Payment Method' : 'Método de Pago',
     status: isEn ? 'Payment Status' : 'Estado del Pago',
     paidStatus: isEn ? 'Paid / Completed' : 'Pagado / Completado',
-    pendingStatus: isEn ? 'Pending Payment' : 'Pago Pendiente',
+    pendingStatus: isGatewayPayment
+      ? (isEn ? 'Awaiting Processor Confirmation' : 'Esperando Confirmación del Procesador')
+      : (isEn ? 'Pending Payment' : 'Pago Pendiente'),
     shippingTo: isEn ? 'Shipping Destination' : 'Destinatario de Envío',
     orderSummary: isEn ? 'Order Summary' : 'Resumen de su Orden',
     product: isEn ? 'Product' : 'Producto',
@@ -224,7 +247,7 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
     supportTitle: isEn ? 'Need Assistance?' : '¿Necesita Ayuda?',
     supportText: isEn ? 'Our scientific support desk is ready to answer any questions about reconstitution, supplies, or shipping details.' : 'Nuestra mesa de soporte científico está lista para responder cualquier consulta sobre reconstitución, suministros o logística de envío.',
     whatsappBtn: isEn ? 'Chat with Support on WhatsApp' : 'Chatear con Soporte por WhatsApp',
-    payNowBtn: isEn ? 'Pay Now via WhatsApp' : 'Pagar Ahora vía WhatsApp',
+    payNowBtn: isEn ? 'Complete Payment on WhatsApp' : 'Completar Pago por WhatsApp',
     footer: isEn ? 'High-Purity Research Peptides · Base in Costa Rica' : 'Péptidos de Alta Pureza para Investigación · Con base en Costa Rica',
   };
 
@@ -252,16 +275,24 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
         ${!isPaid ? `
         <div style="background-color:#f0fdf4; border:1px solid #bbf7d0; border-radius:16px; padding:24px; text-align:center; margin-bottom:32px;">
           <h2 style="color:#166534; font-size:18px; font-weight:800; margin:0 0 8px; line-height:1.3;">
-            ${isEn ? '⚠️ Action Required: Complete Your Payment' : '⚠️ Acción Requerida: Complete su Pago'}
+            ${isGatewayPayment
+              ? (isEn ? 'Payment Processing' : 'Pago en Proceso')
+              : (isEn ? 'Action Required: Complete Your Payment' : 'Acción Requerida: Complete su Pago')}
           </h2>
           <p style="color:#166534; font-size:14px; margin:0 0 18px; font-weight:500; line-height:1.5;">
-            ${isEn 
-              ? 'To secure your order and schedule dispatch, please send your payment confirmation screenshot to our agent on WhatsApp.' 
-              : 'Para asegurar su pedido y programar el envío, por favor envíe el comprobante de su pago a nuestro asesor por WhatsApp.'}
+            ${isGatewayPayment
+              ? (isEn
+                ? 'No WhatsApp payment action is needed for this order. We will update your order once the payment processor confirms the transaction.'
+                : 'No necesita completar el pago por WhatsApp para este pedido. Actualizaremos su orden cuando el procesador confirme la transacción.')
+              : (isEn
+                ? 'To secure your order and schedule dispatch, please send your payment confirmation screenshot to our agent on WhatsApp.'
+                : 'Para asegurar su pedido y programar el envío, por favor envíe el comprobante de su pago a nuestro asesor por WhatsApp.')}
           </p>
+          ${showManualPaymentAction ? `
           <a href="${whatsappPayLink}" style="display:inline-block;background-color:#22c55e;color:#ffffff;text-decoration:none;padding:16px 32px;border-radius:12px;font-weight:800;font-size:18px;text-transform:uppercase;letter-spacing:0.5px;">
              💬 ${strings.payNowBtn}
           </a>
+          ` : ''}
         </div>
         ` : ''}
 
@@ -342,7 +373,7 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
           </table>
         </div>
 
-        ${!isPaid ? `
+        ${showManualPaymentAction ? `
         <div style="text-align:center;margin-bottom:32px;border-top:1px solid #e2e8f0;padding-top:32px;">
           <h4 style="margin:0 0 8px;color:#0f172a;font-size:17px;font-weight:800;">
             ${isEn ? 'Ready to complete your order?' : '¿Listo para completar su pedido?'}
@@ -496,7 +527,7 @@ export async function POST(request) {
       customerReceipt: { sent: false, skipped: true }
     };
 
-    const isPaid = order.status && (order.status.toLowerCase().includes('paid') || order.status.toLowerCase().includes('complet'));
+    const isPaid = isPaidStatus(order.status);
     const skipAdmin = order.customerReceiptOnly === true;
     const skipCustomer = order.adminNotificationOnly === true;
 
@@ -566,12 +597,16 @@ export async function POST(request) {
         const customerHtml = buildCustomerHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc, orderLang, links, salesTextEn, salesTextEs, promoCodesList);
         
         const customerText = [
-          orderLang === 'en' ? 'Thank you for your order!' : 'Gracias por su compra!',
+          isPaid
+            ? (orderLang === 'en' ? 'Thank you for your order and payment!' : 'Gracias por su pedido y su pago!')
+            : isElectronicGatewayPayment(order.paymentMethod)
+              ? (orderLang === 'en' ? 'We received your order and are waiting for payment processor confirmation.' : 'Recibimos su pedido y estamos esperando la confirmación del procesador de pago.')
+              : (orderLang === 'en' ? 'Thank you for your order!' : 'Gracias por su pedido!'),
           '',
           `${orderLang === 'en' ? 'Order Summary' : 'Resumen de su Orden'}:`,
           ` ${orderLang === 'en' ? 'Reference' : 'Referencia'}: ${order.orderNumber || 'N/A'}`,
           ` ${orderLang === 'en' ? 'Payment Method' : 'Método de Pago'}: ${paymentLabel}`,
-          ` ${orderLang === 'en' ? 'Total Paid' : 'Total Pagado'}: ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`,
+          ` ${isPaid ? (orderLang === 'en' ? 'Total Paid' : 'Total Pagado') : (orderLang === 'en' ? 'Order Total' : 'Total del Pedido')}: ${totalPrimary}${totalUsd && totalUsd !== totalPrimary ? ` / ${totalUsd}` : ''}${totalCrc && totalCrc !== totalPrimary ? ` / ${totalCrc}` : ''}`,
           '',
           `${orderLang === 'en' ? 'Delivery Details' : 'Detalles de Envío'}:`,
           order.shippingAddress || 'N/A',

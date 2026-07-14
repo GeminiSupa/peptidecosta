@@ -215,10 +215,11 @@ export default function CatalogClient({
   // Access Gate States
   const [gateAccessGranted, setGateAccessGranted] = useState(false); // Default false for security, updated in useEffect
   const [gateLoading, setGateLoading] = useState(true);
-  const [gateVisible, setGateVisible] = useState(false); // New visitors see products briefly before the gate appears.
+  const [gateVisible, setGateVisible] = useState(false); // New visitors see products for 15s before the gate appears.
   const [gateInput, setGateInput] = useState('');
   const [gateSubmitting, setGateSubmitting] = useState(false);
   const [gateError, setGateError] = useState('');
+  const [gateConsent, setGateConsent] = useState(true);
 
   // PayPal States
   const [paypalReady, setPaypalReady] = useState(false);
@@ -252,7 +253,7 @@ export default function CatalogClient({
       setGateAccessGranted(hasAccess);
       setGateLoading(false);
       if (!hasAccess && !loading) {
-        const timer = setTimeout(() => setGateVisible(true), 2000);
+        const timer = setTimeout(() => setGateVisible(true), 15000);
         return () => clearTimeout(timer);
       }
     }
@@ -470,6 +471,7 @@ export default function CatalogClient({
           body: JSON.stringify({
             contact_method: isEmail ? 'email' : 'whatsapp',
             contact_value: cleanContact,
+            whatsapp_consent: gateConsent,
             language: lang,
             ip_address: ip,
             city: city,
@@ -487,6 +489,7 @@ export default function CatalogClient({
       const finalContact = isEmail ? gateInput.trim() : cleanPhoneNumber(gateInput.trim());
       localStorage.setItem('catalog_access_granted', 'true');
       localStorage.setItem('catalog_lead_contact', finalContact);
+      if (gateConsent) localStorage.setItem('wa_opted_in', 'true');
       setGateAccessGranted(true);
     } catch (err) {
       console.error('Error saving lead:', err);
@@ -1743,7 +1746,7 @@ export default function CatalogClient({
       return;
     }
 
-    await sendOrderNotification({
+    const orderNotificationPayload = {
       orderNumber: orderNum,
       customerName,
       customerPhone,
@@ -1763,7 +1766,7 @@ export default function CatalogClient({
       paymentMethod: method === 'sinpe' ? 'sinpe' : 'tilopay',
       status: method === 'sinpe' ? 'Pending - SINPE Tilopay' : 'Pending - Card',
       lang,
-    });
+    };
 
     try {
       const res = await fetch(method === 'tilopay' ? '/api/shieldhubpay/process-card' : '/api/tilopay/create-payment', {
@@ -1794,11 +1797,19 @@ export default function CatalogClient({
       const data = await res.json();
 
       if (data.paymentUrl) {
+        await sendOrderNotification({
+          ...orderNotificationPayload,
+          status: data.orderStatus || orderNotificationPayload.status,
+        });
         window.location.href = data.paymentUrl;
         return;
       }
 
       if (data.ok && method === 'tilopay') {
+        await sendOrderNotification({
+          ...orderNotificationPayload,
+          status: data.orderStatus || 'Paid',
+        });
         setCart([]);
         localStorage.removeItem('cart');
         window.location.href = `/thank-you?lang=${lang}&order=${encodeURIComponent(orderNum)}`;
@@ -2889,6 +2900,33 @@ export default function CatalogClient({
                     : 'Nota: Usa + y tu código de país (ej. +506 para CR, +1 para US) para asegurar que recibas el código en WhatsApp.'}
                 </div>
                 {gateError && <div style={{ color: '#ef4444', fontSize: '0.8rem', fontWeight: 'bold' }}>{gateError}</div>}
+                <label style={{
+                  display: 'flex', alignItems: 'flex-start', gap: '10px',
+                  fontSize: '0.85rem', color: 'var(--text-main)', textAlign: 'left',
+                  cursor: 'pointer', lineHeight: 1.45,
+                  background: 'rgba(37, 211, 102, 0.08)',
+                  border: `1px solid ${gateConsent ? 'rgba(37,211,102,0.6)' : 'rgba(37,211,102,0.25)'}`,
+                  borderRadius: '12px', padding: '12px 14px', transition: 'border-color 0.2s',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={gateConsent}
+                    onChange={(e) => setGateConsent(e.target.checked)}
+                    style={{ marginTop: '2px', flexShrink: 0, width: '18px', height: '18px', accentColor: '#25D366' }}
+                  />
+                  <span>
+                    <span style={{ fontWeight: 700, display: 'block', marginBottom: '2px' }}>
+                      {lang === 'en'
+                        ? 'Send me promotions, sales, and new-stock alerts'
+                        : 'Envíenme promociones, ofertas y avisos de nuevo stock'}
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {lang === 'en'
+                        ? 'By keeping this checked, you consent to receive marketing updates by WhatsApp or email from Peptides Costa Rica. Reply STOP or unsubscribe anytime.'
+                        : 'Al mantener esta casilla marcada, acepta recibir novedades de marketing por WhatsApp o correo de Peptides Costa Rica. Responda BAJA o cancele la suscripción cuando quiera.'}
+                    </span>
+                  </span>
+                </label>
                 <button 
                   type="submit" 
                   disabled={gateSubmitting}
@@ -2913,6 +2951,7 @@ export default function CatalogClient({
             style={{
               opacity: 1,
               pointerEvents: !gateAccessGranted && gateVisible ? 'none' : 'auto',
+              filter: !gateAccessGranted && gateVisible ? 'blur(8px)' : 'none',
               transition: 'filter 0.3s',
             }}
           >
