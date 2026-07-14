@@ -75,7 +75,7 @@ export default function ManualOrderModal({ open, onClose, products = [], onCreat
       return;
     }
 
-    const totalUsd = form.currency === 'USD' ? total : Math.round(total / 454.48);
+    const totalUsd = form.currency === 'USD' ? Number(total.toFixed(2)) : parseFloat((total / 454.48).toFixed(2));
     const totalCrc = form.currency === 'CRC' ? total : Math.round(total * 454.48);
 
     try {
@@ -133,7 +133,17 @@ export default function ManualOrderModal({ open, onClose, products = [], onCreat
               <option value="CRC">CRC (₡)</option>
               <option value="USD">USD ($)</option>
             </select>
-            <select className="admin-select" value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })}>
+            <select
+              className="admin-select"
+              value={form.payment_method}
+              onChange={(e) => setForm({
+                ...form,
+                payment_method: e.target.value,
+                status: e.target.value === 'card'
+                  ? 'Payment Pending'
+                  : (form.status === 'Payment Pending' ? 'Pending' : form.status),
+              })}
+            >
               <option value="whatsapp">WhatsApp</option>
               <option value="paypal">PayPal</option>
               <option value="sinpe">SINPE</option>
@@ -141,7 +151,12 @@ export default function ManualOrderModal({ open, onClose, products = [], onCreat
             </select>
             <select className="admin-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
               <option value="Pending">Pending</option>
+              <option value="Payment Pending">Payment Pending</option>
+              <option value="Pending - Card">Pending - Card</option>
+              <option value="Pending - Card 3DS">Pending - Card 3DS</option>
               <option value="Paid">Paid</option>
+              <option value="Declined">Declined</option>
+              <option value="Error">Error</option>
               <option value="Processing">Processing</option>
               <option value="Order Complete">Order Complete</option>
             </select>

@@ -111,6 +111,9 @@ export default function OrderDetailPanel({
   const [savingOrder, setSavingOrder] = useState(false);
   const [orderError, setOrderError] = useState('');
   const [phoneCopied, setPhoneCopied] = useState(false);
+  const [cardLinkLoading, setCardLinkLoading] = useState(false);
+  const [cardLinkCopied, setCardLinkCopied] = useState(false);
+  const [cardLinkError, setCardLinkError] = useState('');
 
   useEffect(() => {
     if (!order) return;
@@ -125,9 +128,33 @@ export default function OrderDetailPanel({
     setEditItems(Array.isArray(order.items) ? order.items.map((i) => ({ ...i })) : []);
     setOrderError('');
     setPhoneCopied(false);
+    setCardLinkCopied(false);
+    setCardLinkError('');
   }, [order]);
 
   if (!order) return null;
+
+  const copyCardPaymentLink = async () => {
+    setCardLinkLoading(true);
+    setCardLinkCopied(false);
+    setCardLinkError('');
+
+    try {
+      const res = await adminFetch('/api/admin/orders/card-payment-link', {
+        method: 'POST',
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not create card payment link');
+
+      await navigator.clipboard.writeText(data.paymentUrl);
+      setCardLinkCopied(true);
+    } catch (err) {
+      setCardLinkError(err.message);
+    } finally {
+      setCardLinkLoading(false);
+    }
+  };
 
   const activity = Array.isArray(order.activity_log) ? order.activity_log : [];
   const cardPaymentBadge = getCardPaymentBadge(order);
@@ -453,6 +480,21 @@ export default function OrderDetailPanel({
               lineHeight: 1.45,
             }}>
               Verify this card payment in Shield Hub Pay before fulfilling the order.
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-secondary"
+                  onClick={copyCardPaymentLink}
+                  disabled={cardLinkLoading}
+                  style={{ fontSize: '0.78rem', padding: '8px 10px' }}
+                >
+                  <Copy size={13} />
+                  {cardLinkLoading ? 'Creating link...' : cardLinkCopied ? 'Payment link copied' : 'Copy card payment link'}
+                </button>
+                {cardLinkError && (
+                  <span style={{ color: '#f87171', fontSize: '0.78rem' }}>{cardLinkError}</span>
+                )}
+              </div>
             </div>
           )}
         </div>
