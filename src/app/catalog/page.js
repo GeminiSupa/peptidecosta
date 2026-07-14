@@ -2990,8 +2990,8 @@ export default function CatalogPage() {
             {lang === 'en' ? 'Peptide Catalog Costa Rica' : 'Catálogo de Péptidos en Costa Rica'}
           </h1>
           <p className="catalog-seo-sub">
-            {lang === 'en' 
-              ? 'Browse available peptides, prices, and real-time availability.' 
+            {lang === 'en'
+              ? 'Browse available peptides, prices, and real-time availability.'
               : 'Explora péptidos disponibles, precios y disponibilidad en tiempo real.'}
           </p>
         </div>
