@@ -2468,7 +2468,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                       cleanMethodName = 'SINPE Móvil';
                       icon = <Smartphone size={14} />;
                       color = '#f97316'; // Orange
-                    } else if (method === 'tilopay') {
+                    } else if (method === 'card') {
                       cleanMethodName = 'Credit Card';
                       icon = <CreditCard size={14} />;
                       color = '#0ea5e9'; // Blue
@@ -3279,7 +3279,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   <li style={{ marginBottom: '8px' }}>
                     <strong>Optimize Checkout Payment Channels</strong>: {(() => {
                       const topPayment = Object.entries(paymentBreakdown).sort((a,b) => b[1].count - a[1].count)[0];
-                      const topMethodName = topPayment[0] === 'sinpe' ? 'SINPE Móvil' : topPayment[0] === 'tilopay' ? 'Credit Card' : topPayment[0].toUpperCase();
+                      const topMethodName = topPayment[0] === 'sinpe' ? 'SINPE Móvil' : topPayment[0] === 'card' ? 'Credit Card' : topPayment[0].toUpperCase();
                       return (
                         <span>
                           Your customers highly prefer using <strong>{topMethodName}</strong> ({topPayment[1].count} orders). Keep this payment pathway completely friction-free! If manual WhatsApp ordering or SINPE verification load becomes too high, guide customers to use automated credit card processing to secure instant checkout.

@@ -21,7 +21,7 @@ import {
   Plus, Minus, Trash2, Check, AlertCircle, ArrowLeft,
   Dna, FlaskConical, Syringe, TestTubes, Atom,
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
-  CreditCard, Smartphone, MessageCircle, Lock, Share2
+  CreditCard, MessageCircle, Lock, Share2
 } from 'lucide-react';
 
 // const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
@@ -226,8 +226,8 @@ export default function CatalogClient({
   const paypalButtonRef = useRef(null);
   const paypalRendered = useRef(false);
 
-  // Tilopay State
-  const [tilopaySubmitting, setTilopaySubmitting] = useState(false);
+  // Card Payment State
+  const [cardSubmitting, setCardSubmitting] = useState(false);
 
   // Contact Modal States
   const [contactModalOpen, setContactModalOpen] = useState(false);
@@ -689,7 +689,7 @@ export default function CatalogClient({
     }
 
 
-    // Check for Tilopay redirect params
+    // Check for card payment redirect params
     const paymentParam = urlParams.get('payment');
     if (paymentParam === 'success' || urlParams.get('code') === '1') {
       setCart([]); // Clear cart on success
@@ -1676,32 +1676,28 @@ export default function CatalogClient({
     }
   };
 
-  const startTilopayCheckout = async (method) => {
-    if (tilopaySubmitting || cart.length === 0) return;
+  const startCardCheckout = async () => {
+    if (cardSubmitting || cart.length === 0) return;
 
     if (!customerName || !customerEmail || !customerPhone || !shippingAddress || !customerIdNumber) {
       return;
     }
 
-    if (method === 'tilopay') {
-      const cleanCardNumber = cardDetails.number.replace(/\D/g, '');
-      const cleanCvv = cardDetails.cvv.replace(/\D/g, '');
-      if (!cardDetails.holder.trim() || cleanCardNumber.length < 12 || !cardDetails.expiry.trim() || cleanCvv.length < 3) {
-        alert(lang === 'en'
-          ? 'Please enter complete card details.'
-          : 'Ingrese los datos completos de la tarjeta.');
-        return;
-      }
+    const cleanCardNumber = cardDetails.number.replace(/\D/g, '');
+    const cleanCvv = cardDetails.cvv.replace(/\D/g, '');
+    if (!cardDetails.holder.trim() || cleanCardNumber.length < 12 || !cardDetails.expiry.trim() || cleanCvv.length < 3) {
+      alert(lang === 'en'
+        ? 'Please enter complete card details.'
+        : 'Ingrese los datos completos de la tarjeta.');
+      return;
     }
 
-    setTilopaySubmitting(true);
+    setCardSubmitting(true);
 
-    const orderNum = `${method === 'sinpe' ? 'SPCR' : 'TPCR'}-${Date.now().toString(36).toUpperCase()}`;
+    const orderNum = `CARD-${Date.now().toString(36).toUpperCase()}`;
     const totalVal = getFinalTotal();
-    const tilopayCurrency = method === 'sinpe' ? 'CRC' : 'USD';
-    const tilopayAmount = method === 'sinpe'
-      ? (currency === 'USD' ? Math.round(totalVal * exchangeRate) : totalVal)
-      : (currency === 'USD' ? totalVal : Number((totalVal / exchangeRate).toFixed(2)));
+    const cardCurrency = 'USD';
+    const cardAmount = currency === 'USD' ? totalVal : Number((totalVal / exchangeRate).toFixed(2));
     const totalUsd = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
     const totalCrc = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
     const shippingCosts = getShippingCostFields(currency, exchangeRate, getShippingFee());
@@ -1711,7 +1707,7 @@ export default function CatalogClient({
       price: getPriceAsNumber(item, currency),
     }));
 
-    const tilopaySave = await saveOrderToDatabase({
+    const cardSave = await saveOrderToDatabase({
       order_number: orderNum,
       customer_name: customerName,
       customer_phone: customerPhone,
@@ -1724,8 +1720,8 @@ export default function CatalogClient({
       total_crc: currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate),
       ...shippingCosts,
       currency,
-      payment_method: method === 'sinpe' ? 'sinpe' : 'tilopay',
-      status: method === 'sinpe' ? 'Pending - SINPE Tilopay' : 'Pending - Card',
+      payment_method: 'card',
+      status: 'Pending - Card',
       ip_address: customerMetadata?.ip_address || null,
       location_data: customerMetadata?.location_data || null,
       device_info: customerMetadata?.device_info || null,
@@ -1738,8 +1734,8 @@ export default function CatalogClient({
       affiliate_commission_crc: promoData?.valid ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * promoData.commission_rate) : 0,
     });
 
-    if (!tilopaySave.ok) {
-      setTilopaySubmitting(false);
+    if (!cardSave.ok) {
+      setCardSubmitting(false);
       alert(lang === 'en'
         ? 'Could not save your order. Please try again or contact us on WhatsApp.'
         : 'No se pudo guardar su pedido. Por favor intente de nuevo o contáctenos por WhatsApp.');
@@ -1763,34 +1759,34 @@ export default function CatalogClient({
       promoDiscount: getPromoDiscountAmount(),
       shipping: getShippingFee(),
       currency,
-      paymentMethod: method === 'sinpe' ? 'sinpe' : 'tilopay',
-      status: method === 'sinpe' ? 'Pending - SINPE Tilopay' : 'Pending - Card',
+      paymentMethod: 'card',
+      status: 'Pending - Card',
       lang,
     };
 
     try {
-      const res = await fetch(method === 'tilopay' ? '/api/shieldhubpay/process-card' : '/api/tilopay/create-payment', {
+      const res = await fetch('/api/shieldhubpay/process-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: tilopayAmount,
-          currency: tilopayCurrency,
+          amount: cardAmount,
+          currency: cardCurrency,
           orderNumber: orderNum,
           customerName,
           customerPhone,
           customerEmail,
           shippingAddress,
           lang,
-          paymentMethod: method,
+          paymentMethod: 'card',
           customerIdType,
           customerIdNumber,
           customerIp: customerMetadata?.ip_address || null,
-          card: method === 'tilopay' ? {
+          card: {
             holder: cardDetails.holder,
             number: cardDetails.number,
             expiry: cardDetails.expiry,
             cvv: cardDetails.cvv,
-          } : undefined,
+          },
         }),
       });
 
@@ -1805,7 +1801,7 @@ export default function CatalogClient({
         return;
       }
 
-      if (data.ok && method === 'tilopay') {
+      if (data.ok) {
         await sendOrderNotification({
           ...orderNotificationPayload,
           status: data.orderStatus || 'Paid',
@@ -1817,21 +1813,21 @@ export default function CatalogClient({
       }
 
       alert(lang === 'en'
-        ? `${method === 'sinpe' ? 'SINPE' : 'Card'} payment setup failed: ${data.error || 'Unknown error'}`
-        : `Error al configurar el pago ${method === 'sinpe' ? 'SINPE' : 'con tarjeta'}: ${data.error || 'Error desconocido'}`);
-      setTilopaySubmitting(false);
+        ? `Card payment setup failed: ${data.error || 'Unknown error'}`
+        : `Error al configurar el pago con tarjeta: ${data.error || 'Error desconocido'}`);
+      setCardSubmitting(false);
     } catch (err) {
-      console.error('Tilopay error:', err);
+      console.error('Card payment error:', err);
       alert(lang === 'en' ? 'Connection error. Please try again.' : 'Error de conexión. Intente de nuevo.');
-      setTilopaySubmitting(false);
+      setCardSubmitting(false);
     }
   };
 
   // Checkout submit
   const handleCheckoutSubmit = async (e) => {
     e.preventDefault();
-    if (paymentMethod === 'tilopay' || paymentMethod === 'sinpe') {
-      // Tilopay is handled by its own button below — should not reach here
+    if (paymentMethod === 'card') {
+      // Card payment is handled by its own button below — should not reach here
       return;
     }
     if (!customerName || !customerPhone || !shippingAddress || !customerIdNumber || cart.length === 0) return;
@@ -3596,8 +3592,6 @@ export default function CatalogClient({
               )}
             </div>
 
-            {renderOrderSummary()}
-
             <form id="checkout-form-main" onSubmit={handleCheckoutSubmit} className="checkout-form" style={{ paddingBottom: '80px' }}>
               
               <div className="checkout-step-header">
@@ -3629,7 +3623,7 @@ export default function CatalogClient({
                 onChange={(e) => setCustomerPhone(e.target.value)}
               />
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', width: '100%', marginBottom: '12px' }}>
+              <div className="checkout-id-grid">
                 <div>
                   <select
                     className="checkout-input"
@@ -3770,16 +3764,6 @@ export default function CatalogClient({
               <div className="payment-method-grid" role="radiogroup" aria-label={lang === 'en' ? 'Payment method' : 'Método de pago'}>
                 {[
                   {
-                    value: 'tilopay',
-                    icon: <CreditCard size={18} />,
-                    iconColor: '#0ea5e9', // Blue
-                    title: lang === 'en' ? 'Card' : 'Tarjeta',
-                    detail: CARD_CHECKOUT_ENABLED
-                      ? (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox')
-                      : (lang === 'en' ? 'Coming soon' : 'Próximamente'),
-                    disabled: !CARD_CHECKOUT_ENABLED,
-                  },
-                  {
                     value: 'whatsapp',
                     icon: <MessageCircle size={18} />,
                     iconColor: '#22c55e', // Green
@@ -3787,11 +3771,22 @@ export default function CatalogClient({
                     detail: lang === 'en' ? 'Coordinate manually' : 'Coordinar manualmente',
                   },
                   {
+                    value: 'card',
+                    icon: <CreditCard size={18} />,
+                    iconColor: '#0ea5e9', // Blue
+                    title: lang === 'en' ? 'Card' : 'Tarjeta',
+                    detail: CARD_CHECKOUT_ENABLED
+                      ? (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox')
+                      : (lang === 'en' ? 'Coming soon' : 'Próximamente'),
+                    badge: CARD_CHECKOUT_ENABLED ? (lang === 'en' ? 'Test' : 'Prueba') : (lang === 'en' ? 'Soon' : 'Pronto'),
+                    disabled: !CARD_CHECKOUT_ENABLED,
+                  },
+                  {
                     value: 'paypal',
                     icon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797H9.603c-.536 0-.99.394-1.073.926L7.076 21.337Z" fill="#253B80"/><path d="M20.16 7.035c-.01.058-.02.117-.032.177-1.071 5.497-4.74 7.398-9.426 7.398H8.847a1.16 1.16 0 0 0-1.146.98l-.94 5.967-.266 1.69a.61.61 0 0 0 .603.707h4.24c.468 0 .866-.34.94-.802l.038-.198.745-4.724.048-.26a.948.948 0 0 1 .937-.803h.59c3.827 0 6.822-1.554 7.7-6.05.367-1.878.177-3.446-.793-4.548a3.78 3.78 0 0 0-1.083-.834Z" fill="#179BD7"/><path d="M19.064 6.59a8.321 8.321 0 0 0-1.024-.227 12.99 12.99 0 0 0-2.063-.15h-6.25a.94.94 0 0 0-.932.795L7.684 14.01l-.033.21a1.16 1.16 0 0 1 1.146-.98h1.855c4.686 0 8.355-1.902 9.426-7.399.032-.163.06-.322.083-.477a5.58 5.58 0 0 0-1.097-.473Z" fill="#222D65"/></svg>,
                     iconColor: undefined,
                     title: 'PayPal',
-                    detail: lang === 'en' ? 'PayPal or Credit/Debit Card' : 'PayPal o Tarjeta Débito/Crédito',
+                    detail: lang === 'en' ? 'PayPal transfer only' : 'Solo transferencia PayPal',
                   },
                 ].map(method => (
                   <button
@@ -3809,6 +3804,9 @@ export default function CatalogClient({
                       <strong>{method.title}</strong>
                       <small>{method.detail}</small>
                     </span>
+                    {method.badge && (
+                      <span className="payment-method-status-badge">{method.badge}</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -3844,53 +3842,56 @@ export default function CatalogClient({
                     </button>
                   </div>
                 </div>
-              ) : paymentMethod === 'tilopay' || paymentMethod === 'sinpe' ? (
-                <div className="tilopay-payment-panel">
-                  {paymentMethod === 'tilopay' && (
-                    <div className="card-payment-fields">
-                      <input
-                        type="text"
-                        className="checkout-input"
-                        autoComplete="cc-name"
-                        placeholder={lang === 'en' ? 'Name on card' : 'Nombre en la tarjeta'}
-                        value={cardDetails.holder}
-                        onChange={(e) => setCardDetails(prev => ({ ...prev, holder: e.target.value }))}
-                      />
+              ) : paymentMethod === 'card' ? (
+                <div className="card-payment-panel">
+                  <div className="card-payment-fields">
+                    <input
+                      type="text"
+                      className="checkout-input"
+                      autoComplete="cc-name"
+                      placeholder={lang === 'en' ? 'Name on card' : 'Nombre en la tarjeta'}
+                      value={cardDetails.holder}
+                      onChange={(e) => setCardDetails(prev => ({ ...prev, holder: e.target.value }))}
+                    />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className="checkout-input"
+                      autoComplete="cc-number"
+                      placeholder={lang === 'en' ? 'Card number' : 'Número de tarjeta'}
+                      value={cardDetails.number}
+                      onChange={(e) => setCardDetails(prev => ({ ...prev, number: e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').trim().slice(0, 23) }))}
+                    />
+                    <div className="card-payment-fields__row">
                       <input
                         type="text"
                         inputMode="numeric"
                         className="checkout-input"
-                        autoComplete="cc-number"
-                        placeholder={lang === 'en' ? 'Card number' : 'Número de tarjeta'}
-                        value={cardDetails.number}
-                        onChange={(e) => setCardDetails(prev => ({ ...prev, number: e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').trim().slice(0, 23) }))}
+                        autoComplete="cc-exp"
+                        placeholder="MM/YY"
+                        value={cardDetails.expiry}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+                          const expiry = digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+                          setCardDetails(prev => ({ ...prev, expiry }));
+                        }}
                       />
-                      <div className="card-payment-fields__row">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          className="checkout-input"
-                          autoComplete="cc-exp"
-                          placeholder="MM/YY"
-                          value={cardDetails.expiry}
-                          onChange={(e) => {
-                            const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
-                            const expiry = digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
-                            setCardDetails(prev => ({ ...prev, expiry }));
-                          }}
-                        />
-                        <input
-                          type="password"
-                          inputMode="numeric"
-                          className="checkout-input"
-                          autoComplete="cc-csc"
-                          placeholder="CVV"
-                          value={cardDetails.cvv}
-                          onChange={(e) => setCardDetails(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
-                        />
-                      </div>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        className="checkout-input"
+                        autoComplete="cc-csc"
+                        placeholder="CVV"
+                        value={cardDetails.cvv}
+                        onChange={(e) => setCardDetails(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+                      />
                     </div>
-                  )}
+                    <p className="card-payment-security-note">
+                      {lang === 'en'
+                        ? 'Card details are sent securely to Shield Hub Pay and are not stored by Costa Peptides.'
+                        : 'Los datos de la tarjeta se envían de forma segura a Shield Hub Pay y no se almacenan en Costa Peptides.'}
+                    </p>
+                  </div>
                   {(!customerName || !customerEmail || !customerPhone || !shippingAddress || !customerIdNumber) ? (
                     <div style={{ padding: '12px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.9rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
                       {lang === 'en' ? 'Please enter your contact, shipping, and ID details to proceed.' : 'Ingrese sus datos de contacto, envío y número de identificación para continuar.'}
@@ -3898,35 +3899,27 @@ export default function CatalogClient({
                   ) : (
                     <button
                       type="button"
-                      disabled={tilopaySubmitting || cart.length === 0}
-                      onClick={() => startTilopayCheckout(paymentMethod)}
-                      className={`tilopay-btn ${paymentMethod === 'sinpe' ? 'sinpe' : ''}`}
+                      disabled={cardSubmitting || cart.length === 0}
+                      onClick={startCardCheckout}
+                      className="card-payment-btn"
                     >
-                      {tilopaySubmitting ? (
+                      {cardSubmitting ? (
                         <>
                           <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
                           {lang === 'en' ? 'Redirecting to payment...' : 'Redirigiendo al pago...'}
                         </>
                       ) : (
                         <>
-                          {paymentMethod === 'sinpe' ? <Smartphone size={18} /> : <CreditCard size={18} />}
-                          {paymentMethod === 'sinpe'
-                            ? (lang === 'en'
-                              ? `Pay ${formatPriceVal(currency === 'CRC' ? getFinalTotal() : Math.round(getFinalTotal() * exchangeRate), 'CRC')} via SINPE`
-                              : `Pagar ${formatPriceVal(currency === 'CRC' ? getFinalTotal() : Math.round(getFinalTotal() * exchangeRate), 'CRC')} vía SINPE`)
-                            : (lang === 'en' ? `Pay ${formatPriceVal(getFinalTotal(), currency)} by Card` : `Pagar ${formatPriceVal(getFinalTotal(), currency)} con Tarjeta`)}
+                          <CreditCard size={18} />
+                          {lang === 'en' ? `Pay ${formatPriceVal(getFinalTotal(), currency)} by Card` : `Pagar ${formatPriceVal(getFinalTotal(), currency)} con Tarjeta`}
                         </>
                       )}
                     </button>
                   )}
-                  <p className="tilopay-caption">
-                    {paymentMethod === 'sinpe'
-                      ? (lang === 'en'
-                        ? 'Tilopay will show the exact SINPE number, CRC amount, and reference code.'
-                        : 'Tilopay mostrará el número SINPE, monto exacto en CRC y código de referencia.')
-                      : (lang === 'en'
-                        ? 'Secure card checkout powered by Shield Hub Pay sandbox'
-                        : 'Pago seguro con tarjeta mediante Shield Hub Pay sandbox')}
+                  <p className="card-payment-caption">
+                    {lang === 'en'
+                      ? 'Secure card checkout powered by Shield Hub Pay sandbox'
+                      : 'Pago seguro con tarjeta mediante Shield Hub Pay sandbox'}
                   </p>
                 </div>
               ) : (

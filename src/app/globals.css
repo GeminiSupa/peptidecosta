@@ -1692,6 +1692,14 @@ body {
     gap: 12px;
 }
 
+.checkout-id-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    width: 100%;
+    margin-bottom: 12px;
+}
+
 .checkout-input {
     width: 100%;
     padding: 10px 14px;
@@ -1714,6 +1722,7 @@ body {
 }
 
 .payment-method-card {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 9px;
@@ -1780,6 +1789,27 @@ body {
     line-height: 1.2;
 }
 
+.payment-method-status-badge {
+    margin-left: auto;
+    align-self: flex-start;
+    flex-shrink: 0;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(14, 165, 233, 0.12);
+    color: #38bdf8;
+    font-size: 0.62rem;
+    font-weight: 900;
+    line-height: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.payment-method-card.disabled .payment-method-status-badge,
+.payment-method-card:disabled .payment-method-status-badge {
+    background: rgba(148, 163, 184, 0.14);
+    color: var(--text-muted);
+}
+
 .payment-total-notice {
     display: flex;
     align-items: center;
@@ -1831,7 +1861,7 @@ body {
     gap: 8px;
 }
 
-.tilopay-payment-panel {
+.card-payment-panel {
     margin-top: 4px;
 }
 
@@ -1847,7 +1877,19 @@ body {
     gap: 8px;
 }
 
-.tilopay-btn {
+.card-payment-security-note {
+    margin: 0;
+    padding: 9px 10px;
+    border: 1px solid rgba(14, 165, 233, 0.18);
+    border-radius: 10px;
+    background: rgba(14, 165, 233, 0.08);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.card-payment-btn {
     width: 100%;
     padding: 14px;
     border-radius: 12px;
@@ -1865,23 +1907,18 @@ body {
     transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
-.tilopay-btn.sinpe {
-    background: linear-gradient(135deg, #0f766e 0%, #16a34a 100%);
-    box-shadow: 0 4px 14px rgba(22, 163, 74, 0.3);
-}
-
-.tilopay-btn:hover:not(:disabled) {
+.card-payment-btn:hover:not(:disabled) {
     transform: translateY(-1px);
     box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
 }
 
-.tilopay-btn:disabled {
+.card-payment-btn:disabled {
     background: #64748b;
     box-shadow: none;
     cursor: not-allowed;
 }
 
-.tilopay-caption {
+.card-payment-caption {
     text-align: center;
     font-size: 0.72rem;
     color: var(--text-muted);
@@ -1889,11 +1926,63 @@ body {
     line-height: 1.35;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 600px) {
+    .cart-drawer {
+        right: -100%;
+        max-width: none;
+        width: 100vw;
+    }
+
+    .cart-header {
+        padding: 16px;
+    }
+
+    .cart-header h2 {
+        font-size: 1.05rem;
+    }
+
+    .cart-items-container,
+    .cart-footer {
+        padding: 16px;
+    }
+
+    .cart-suggestions {
+        display: none;
+    }
+
+    .cart-footer {
+        padding-bottom: 0;
+    }
+
+    .cart-order-summary {
+        border-radius: 10px;
+        padding: 12px;
+    }
+
+    .checkout-input {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    .checkout-step-header {
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .checkout-step-header h3 {
+        font-size: 0.92rem;
+    }
+
     .payment-method-grid,
     .sinpe-id-grid,
+    .checkout-id-grid,
     .card-payment-fields__row {
         grid-template-columns: 1fr;
+    }
+
+    .payment-method-card {
+        min-height: 54px;
+        padding: 11px;
     }
 
     .payment-total-notice {
@@ -1905,6 +1994,12 @@ body {
     .payment-total-notice-detail {
         max-width: none;
         text-align: left;
+    }
+
+    .cart-sticky-submit {
+        margin: 0 -16px;
+        width: calc(100% + 32px);
+        padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
     }
 }
 

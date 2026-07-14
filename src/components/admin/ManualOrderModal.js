@@ -137,7 +137,7 @@ export default function ManualOrderModal({ open, onClose, products = [], onCreat
               <option value="whatsapp">WhatsApp</option>
               <option value="paypal">PayPal</option>
               <option value="sinpe">SINPE</option>
-              <option value="tilopay">Card</option>
+              <option value="card">Card</option>
             </select>
             <select className="admin-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
               <option value="Pending">Pending</option>

@@ -52,7 +52,7 @@ async function sendSalesOrderAlerts(order, orderNumber) {
             type: 'body',
             parameters: [
               { type: 'text', text: orderNumber },
-              { type: 'text', text: order.customer_name },
+              { type: 'text', text: `${order.customer_name} - ${order.customer_phone || 'N/A'}` },
               { type: 'text', text: formatSalesAlertTotal(order) },
               { type: 'text', text: itemLabel },
             ],

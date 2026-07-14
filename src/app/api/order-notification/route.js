@@ -24,15 +24,15 @@ const paymentLabels = {
   en: {
     whatsapp: 'WhatsApp Manual Coordination',
     paypal: 'PayPal Secure Payment',
-    sinpe: 'SINPE Móvil vía Tilopay',
-    tilopay: 'Credit / Debit Card via Tilopay',
+    sinpe: 'SINPE Móvil',
+    card: 'Credit / Debit Card via Shield Hub Pay',
     unknown: 'Standard Payment Method',
   },
   es: {
     whatsapp: 'Coordinación Manual por WhatsApp',
     paypal: 'Pago Seguro con PayPal',
-    sinpe: 'SINPE Móvil vía Tilopay',
-    tilopay: 'Tarjeta de Crédito / Débito vía Tilopay',
+    sinpe: 'SINPE Móvil',
+    card: 'Tarjeta de Crédito / Débito vía Shield Hub Pay',
     unknown: 'Método de Pago Estándar',
   }
 };
@@ -46,7 +46,7 @@ const isPaidStatus = (status = '') => {
 
 const isElectronicGatewayPayment = (method = '') => {
   const normalized = normalizePaymentMethod(method);
-  return normalized === 'tilopay' || normalized === 'sinpe';
+  return normalized === 'card';
 };
 
 const buildItemsRows = (items = [], currency) => items.map((item) => {

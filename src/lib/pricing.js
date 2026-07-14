@@ -75,7 +75,7 @@ export function computeOrderTotals(lineItems, currency, exchangeRate = FALLBACK_
 export async function getUsdToCrcRate() {
   try {
     const res = await fetch('https://open.er-api.com/v6/latest/USD', {
-      // Don't let a slow FX provider hang the checkout-link request.
+      // Don't let a slow FX provider hang server-side checkout work.
       signal: AbortSignal.timeout(4000),
     });
     if (res.ok) {

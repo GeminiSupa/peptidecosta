@@ -1657,6 +1657,7 @@
         flex-shrink: 0 !important;
         box-shadow: 4px 0 32px rgba(0, 0, 0, 0.4) !important;
         z-index: 100 !important;
+        transition: width 0.22s ease, padding 0.22s ease, box-shadow 0.22s ease !important;
     }
     
     /* Custom premium scrollbar for sidebar */
@@ -1855,6 +1856,14 @@
         padding-right: 10px !important;
     }
 
+    .admin-sidebar-collapsed .admin-navbar:hover,
+    .admin-sidebar-collapsed .admin-navbar:focus-within {
+        width: 264px !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+        box-shadow: 10px 0 40px rgba(0, 0, 0, 0.45) !important;
+    }
+
     .admin-sidebar-collapsed .admin-navbar ~ .admin-container {
         margin-left: 82px !important;
         width: calc(100% - 82px) !important;
@@ -1871,6 +1880,18 @@
         object-fit: contain !important;
     }
 
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-nav-logo-container,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-nav-logo-container {
+        align-items: flex-start !important;
+        padding: 12px !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-logo-img,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-logo-img {
+        max-width: none !important;
+        max-height: 42px !important;
+    }
+
     .admin-sidebar-collapsed .db-status-indicator,
     .admin-sidebar-collapsed .admin-search-label,
     .admin-sidebar-collapsed .admin-search-trigger kbd,
@@ -1880,11 +1901,42 @@
         display: none !important;
     }
 
+    .admin-sidebar-collapsed .admin-navbar:hover .db-status-indicator,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .db-status-indicator {
+        display: flex !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-search-label,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-search-label,
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-search-trigger kbd,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-search-trigger kbd,
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-tab-btn .tab-label,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-tab-btn .tab-label {
+        display: inline !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-nav-section-title,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-nav-section-title {
+        display: block !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-user-details,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-user-details {
+        display: flex !important;
+    }
+
     .admin-sidebar-collapsed .admin-nav-tools {
         display: grid !important;
         grid-template-columns: 1fr !important;
         gap: 8px !important;
         justify-items: stretch !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-nav-tools,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-nav-tools {
+        display: flex !important;
+        grid-template-columns: none !important;
+        align-items: center !important;
     }
 
     .admin-sidebar-collapsed .admin-search-trigger,
@@ -1896,15 +1948,44 @@
         justify-content: center !important;
     }
 
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-search-trigger,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-search-trigger {
+        width: auto !important;
+        max-width: 160px !important;
+        height: 36px !important;
+        padding: 8px 10px !important;
+        justify-content: flex-start !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-sidebar-toggle,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-sidebar-toggle {
+        width: 36px !important;
+        max-width: 36px !important;
+        height: 36px !important;
+    }
+
     .admin-sidebar-collapsed .admin-nav-sections {
         gap: 8px !important;
         align-items: center !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-nav-sections,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-nav-sections {
+        gap: 18px !important;
+        align-items: stretch !important;
     }
 
     .admin-sidebar-collapsed .admin-nav-section,
     .admin-sidebar-collapsed .admin-nav-section-items {
         width: 100% !important;
         align-items: center !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-nav-section,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-nav-section,
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-nav-section-items,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-nav-section-items {
+        align-items: stretch !important;
     }
 
     .admin-sidebar-collapsed .admin-tab-btn {
@@ -1916,8 +1997,23 @@
         border-radius: 12px !important;
     }
 
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-tab-btn,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-tab-btn {
+        width: 100% !important;
+        min-height: auto !important;
+        padding: 10px 14px !important;
+        justify-content: flex-start !important;
+        border-left-width: 3px !important;
+        border-radius: 10px !important;
+    }
+
     .admin-sidebar-collapsed .admin-tab-btn:hover {
         transform: none !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-tab-btn:hover,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-tab-btn:hover {
+        transform: translateX(4px) !important;
     }
 
     .admin-sidebar-collapsed .admin-more-tab-badge,
@@ -1933,12 +2029,28 @@
         align-items: center !important;
     }
 
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-sidebar-footer,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-sidebar-footer {
+        padding: 16px 12px !important;
+        align-items: stretch !important;
+    }
+
     .admin-sidebar-collapsed .admin-user-info {
         justify-content: center !important;
     }
 
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-user-info,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-user-info {
+        justify-content: flex-start !important;
+    }
+
     .admin-sidebar-collapsed .admin-session-actions {
         grid-template-columns: 1fr !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-session-actions,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-session-actions {
+        grid-template-columns: 1fr 1fr !important;
     }
     
     .admin-toolbar {

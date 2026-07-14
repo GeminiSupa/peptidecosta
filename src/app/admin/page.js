@@ -1486,12 +1486,13 @@ Core Rules:
 
   useEffect(() => {
     if (!mounted) return;
-    setSidebarCollapsed(localStorage.getItem('admin_sidebar_collapsed') === 'true');
+    const savedSidebarPreference = localStorage.getItem('admin_sidebar_auto_hide');
+    setSidebarCollapsed(savedSidebarPreference === null ? true : savedSidebarPreference === 'true');
   }, [mounted]);
 
   useEffect(() => {
     if (!mounted) return;
-    localStorage.setItem('admin_sidebar_collapsed', sidebarCollapsed ? 'true' : 'false');
+    localStorage.setItem('admin_sidebar_auto_hide', sidebarCollapsed ? 'true' : 'false');
   }, [mounted, sidebarCollapsed]);
 
   const handleGlobalSearchSelect = (result) => {
@@ -3895,8 +3896,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               type="button"
               className="admin-sidebar-toggle"
               onClick={() => setSidebarCollapsed((value) => !value)}
-              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label={sidebarCollapsed ? 'Pin sidebar open' : 'Enable auto-hide sidebar'}
+              title={sidebarCollapsed ? 'Pin sidebar open' : 'Enable auto-hide sidebar'}
             >
               {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
             </button>

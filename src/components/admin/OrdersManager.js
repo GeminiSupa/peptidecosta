@@ -59,7 +59,7 @@ function getStatusSelectStyle(status) {
 }
 
 function getCardPaymentBadge(order) {
-  if (order.payment_method !== 'tilopay') return null;
+  if (order.payment_method !== 'card') return null;
   const status = String(order.status || '').toLowerCase();
   if (status.includes('paid')) return { label: 'Paid', color: '#4ade80', bg: 'rgba(34, 197, 94, 0.14)' };
   if (status.includes('declined')) return { label: 'Declined', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
@@ -261,7 +261,7 @@ export default function OrdersManager({
                             fontSize: '0.75rem',
                             fontWeight: 'bold'
                           }}>
-                            {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE' : order.payment_method === 'tilopay' ? '💳 Card' : '💬 WA'}
+                            {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE' : order.payment_method === 'card' ? '💳 Card' : '💬 WA'}
                           </span>
                           {getCardPaymentBadge(order) && (
                             <span style={{

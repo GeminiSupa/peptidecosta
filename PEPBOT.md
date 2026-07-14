@@ -23,11 +23,9 @@ src/
   lib/
     botAuth.js      — shared IP/origin allowlist (THE place to add your bot's IP)
     pricing.js      — authoritative server-side pricing (mirrors catalog checkout math)
-    tilopay.js      — reusable Tilopay payment-link client
 
   app/api/bot/
     catalog/route.js        — GET  /api/bot/catalog
-    checkout-link/route.js  — POST /api/bot/checkout-link
 ```
 
 ---
@@ -162,108 +160,6 @@ Large / growing catalog:
 
 ---
 
-## Endpoint 2 — POST /api/bot/checkout-link
-
-Purpose: Turn a bot-collected cart + customer details into a single-use Tilopay
-hosted payment link. The link can be sent directly to the customer (WhatsApp,
-chat, email). Also persists a draft order in the admin dashboard tagged
-sales_agent: "pepbot".
-
-URL:     POST https://catalog.peptidescostarica.net/api/bot/checkout-link
-Auth:    allowlist (see above)
-Method:  POST
-Headers: Content-Type: application/json
-
-### Security Guarantees
-
-Prices are NEVER accepted from the bot. Only product IDs / names + quantities
-are trusted from the caller. The server resolves every price from the products
-table and applies the same math as the website (volume discounts, shipping).
-A compromised or buggy bot cannot set its own prices.
-
-### Request Body
-
-{
-  "items": [
-    { "product": "Retatrutide 10mg", "qty": 2 },
-    { "productId": "uuid-here",      "qty": 1 }
-  ],
-  "currency": "CRC",          // "CRC" (default) | "USD"
-  "paymentMethod": "tilopay", // "tilopay" (card, default) | "sinpe" (SINPE Móvil)
-  "customer": {
-    "name":     "Jane Doe",           // REQUIRED
-    "phone":    "+50688887777",       // required for tilopay (card)
-    "email":    "jane@example.com",   // optional
-    "idType":   1,                    // required for sinpe (1=cedula, 2=dimex, etc.)
-    "idNumber": "118450789",          // required for sinpe
-    "address":  "Desamparados, SJ..."  // optional, stored on order
-  }
-}
-
-Lookup: each item can be identified by UUID (productId) or exact name (product).
-Both can be used in the same request. Names are case-insensitive.
-
-### Success Response (200)
-
-{
-  "ok": true,
-  "orderNumber": "BTCR-M1ABC",      // BTCR- prefix for card, BSCR- for SINPE
-  "paymentUrl": "https://app.tilopay.com/...",   // single-use hosted checkout
-  "currency": "CRC",
-  "total": 234500,
-  "breakdown": {
-    "subtotal": 231000,
-    "discountPct": 0,
-    "discountAmount": 0,
-    "shipping": 2500,
-    "vialCount": 3
-  }
-}
-
-The bot should send paymentUrl directly to the customer.
-
-### Pricing Rules (server-enforced, mirrors website)
-
-Volume discounts (applied to subtotal):
-  5–9 vials  → 15% off
-  10+ vials  → 20% off
-
-Shipping:
-  Order subtotal (after discount) < $200 USD equivalent → ₡3,500 flat
-  Order subtotal >= $200 USD equivalent → FREE
-
-Exchange rate:
-  Live from https://open.er-api.com/v6/latest/USD (USD→CRC)
-  Falls back to 454.48 CRC/USD if the live rate is unavailable
-
-### Error Responses
-
-  400 — validation failure (missing name, invalid qty, etc.)
-  403 — caller IP/origin not in allowlist
-  404 — product not found
-  409 — product out of stock, or no valid price for requested currency
-  500 — database write failed
-  502 — Tilopay API unreachable or did not return a URL
-         (order row is still created in the DB as Pending — not silently lost)
-  503 — allowlist empty (endpoint disabled) or Tilopay not configured
-
-### Example Call
-
-curl -X POST https://catalog.peptidescostarica.net/api/bot/checkout-link \
-  -H "Content-Type: application/json" \
-  -d '{
-    "items": [{ "product": "Retatrutide 10mg", "qty": 2 }],
-    "currency": "CRC",
-    "paymentMethod": "tilopay",
-    "customer": {
-      "name": "Jane Doe",
-      "phone": "+50688887777",
-      "email": "jane@example.com"
-    }
-  }'
-
----
-
 ## Pricing Library (src/lib/pricing.js)
 
 Can be imported by any future bot route to compute totals consistently.
@@ -275,31 +171,10 @@ Can be imported by any future bot route to compute totals consistently.
     → { subtotal, discountPct, discountAmount, discountedTotal, shipping, total, vialCount }
   getUsdToCrcRate()                          — async, live rate with fallback
 
----
-
-## Tilopay Client (src/lib/tilopay.js)
-
-Can be imported by any future bot route that needs to generate payment links.
-
-  isTilopayConfigured()                      — boolean config check
-  createTilopayPaymentLink({ amount, currency, orderNumber, customerName,
-    paymentMethod, customerIdType, customerIdNumber, description })
-    → Promise<{ paymentUrl: string }>
-
-Payment methods:
-  tilopay     — hosted card payment (Visa/Mastercard)
-  sinpe       — SINPE Móvil (Costa Rica mobile bank transfer)
-  sinpemovil  — alias for sinpe
-
----
-
 ## Order Prefixes (admin dashboard reference)
 
   WPCR-  WhatsApp checkout (human, website)
-  TPCR-  Tilopay card checkout (human, website)
-  SPCR-  SINPE checkout (human, website)
-  BTCR-  Bot-generated Tilopay card checkout (pepbot)
-  BSCR-  Bot-generated SINPE checkout (pepbot)
+  CARD-  Shield Hub Pay card checkout (human, website)
 
 Bot orders also carry sales_agent = "pepbot" in the orders table.
 
@@ -322,4 +197,4 @@ Bot orders also carry sales_agent = "pepbot" in the orders table.
 - POST /api/bot/lead          — upsert a contact into the nurture/CRM pipeline
 - Embedded live chat widget   — floating React component on the site
 - Nurture pipeline            — coupon codes, triggered email/WhatsApp sequences
-- WhatsApp webhook integration — auto-detect purchase intent → call checkout-link
+- WhatsApp webhook integration — auto-detect purchase intent → hand off to checkout

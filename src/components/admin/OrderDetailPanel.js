@@ -48,7 +48,7 @@ const getStoredTotal = (order) => {
 };
 
 const getCardPaymentBadge = (order) => {
-  if (order.payment_method !== 'tilopay') return null;
+  if (order.payment_method !== 'card') return null;
   const status = String(order.status || '').toLowerCase();
   if (status.includes('paid')) return { label: 'Paid', color: '#4ade80', bg: 'rgba(34, 197, 94, 0.14)' };
   if (status.includes('declined')) return { label: 'Declined', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
@@ -440,7 +440,7 @@ export default function OrderDetailPanel({
               <div><label>Promo</label><span style={{ color: '#38bdf8' }}>{order.promo_code}</span></div>
             )}
           </div>
-          {order.payment_method === 'tilopay' && (
+          {order.payment_method === 'card' && (
             <div style={{
               marginTop: '12px',
               padding: '12px',
