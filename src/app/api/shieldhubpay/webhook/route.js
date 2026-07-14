@@ -13,6 +13,17 @@ function statusToOrderStatus(status) {
   return `Payment ${status || 'Pending'}`;
 }
 
+function buildPaymentPatch(status, payload) {
+  return {
+    status,
+    payment_transaction_id: payload?.id ? String(payload.id) : null,
+    payment_provider_status: payload?.status || null,
+    payment_authorization: payload?.authorization || null,
+    payment_descriptor: payload?.descriptor_text || null,
+    payment_provider_response: payload || null,
+  };
+}
+
 export async function POST(req) {
   try {
     const payload = await req.json();
@@ -47,12 +58,20 @@ export async function POST(req) {
     if (existing.status !== statusText) {
       const { error } = await supabase
         .from('orders')
-        .update({ status: statusText })
+        .update(buildPaymentPatch(statusText, payload))
         .eq('order_number', orderNumber);
 
       if (error) {
-        console.error('[Shield Hub Pay webhook] Update failed:', error.message);
-        return NextResponse.json({ error: 'Database update failed' }, { status: 500 });
+        const fallback = await supabase
+          .from('orders')
+          .update({ status: statusText })
+          .eq('order_number', orderNumber);
+
+        if (fallback.error) {
+          console.error('[Shield Hub Pay webhook] Update failed:', fallback.error.message);
+          return NextResponse.json({ error: 'Database update failed' }, { status: 500 });
+        }
+        console.warn('[Shield Hub Pay webhook] Payment metadata columns unavailable; updated status only:', error.message);
       }
     }
 

@@ -51,15 +51,37 @@ function normalizeCard(card = {}) {
   };
 }
 
+function buildPaymentPatch(status, transaction) {
+  return {
+    status,
+    payment_transaction_id: transaction?.id ? String(transaction.id) : null,
+    payment_provider_status: transaction?.status || null,
+    payment_authorization: transaction?.authorization || null,
+    payment_descriptor: transaction?.descriptor_text || null,
+    payment_provider_response: transaction || null,
+  };
+}
+
 async function updateOrderStatus(orderNumber, status, transaction) {
   if (!orderNumber) return;
 
   try {
     const supabase = getSupabaseAdmin();
-    await supabase
+    const patch = buildPaymentPatch(status, transaction);
+    const { error } = await supabase
       .from('orders')
-      .update({ status })
+      .update(patch)
       .eq('order_number', orderNumber);
+
+    if (error) {
+      const fallback = await supabase
+        .from('orders')
+        .update({ status })
+        .eq('order_number', orderNumber);
+
+      if (fallback.error) throw fallback.error;
+      console.warn('[Shield Hub Pay] Payment metadata columns unavailable; updated status only:', error.message);
+    }
 
     if (status === 'Paid') {
       await supabase.from('admin_notifications').insert({

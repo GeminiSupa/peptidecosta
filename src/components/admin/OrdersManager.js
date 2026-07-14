@@ -1,6 +1,73 @@
 import React from 'react';
 import { Database, Plus, Download } from 'lucide-react';
 
+const ORDER_STATUS_OPTIONS = [
+  'Pending',
+  'Payment Pending',
+  'Pending - Card',
+  'Pending - Card 3DS',
+  'Paid',
+  'Declined',
+  'Error',
+  'Processing',
+  'Order Complete',
+  'Cancelled',
+];
+
+function getStatusSelectStyle(status) {
+  const normalized = String(status || 'Pending').toLowerCase();
+  if (normalized.includes('paid') || normalized.includes('complete')) {
+    return {
+      background: 'rgba(34, 197, 94, 0.15)',
+      color: '#4ade80',
+      border: '1px solid rgba(34, 197, 94, 0.3)',
+    };
+  }
+  if (normalized.includes('declined') || normalized.includes('cancel') || normalized.includes('error')) {
+    return {
+      background: 'rgba(239, 68, 68, 0.15)',
+      color: '#f87171',
+      border: '1px solid rgba(239, 68, 68, 0.3)',
+    };
+  }
+  if (normalized.includes('3ds')) {
+    return {
+      background: 'rgba(168, 85, 247, 0.15)',
+      color: '#c084fc',
+      border: '1px solid rgba(168, 85, 247, 0.3)',
+    };
+  }
+  if (normalized.includes('processing')) {
+    return {
+      background: 'rgba(56, 189, 248, 0.15)',
+      color: '#38bdf8',
+      border: '1px solid rgba(56, 189, 248, 0.3)',
+    };
+  }
+  if (normalized.includes('payment')) {
+    return {
+      background: 'rgba(244, 63, 94, 0.15)',
+      color: '#fb7185',
+      border: '1px solid rgba(244, 63, 94, 0.3)',
+    };
+  }
+  return {
+    background: 'rgba(245, 158, 11, 0.15)',
+    color: '#f59e0b',
+    border: '1px solid rgba(245, 158, 11, 0.3)',
+  };
+}
+
+function getCardPaymentBadge(order) {
+  if (order.payment_method !== 'tilopay') return null;
+  const status = String(order.status || '').toLowerCase();
+  if (status.includes('paid')) return { label: 'Paid', color: '#4ade80', bg: 'rgba(34, 197, 94, 0.14)' };
+  if (status.includes('declined')) return { label: 'Declined', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
+  if (status.includes('3ds')) return { label: '3DS Pending', color: '#c084fc', bg: 'rgba(168, 85, 247, 0.14)' };
+  if (status.includes('error')) return { label: 'Error', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
+  return { label: 'Card Pending', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.14)' };
+}
+
 export default function OrdersManager({
   visibleOrders,
   orderStatusFilter, setOrderStatusFilter,
@@ -75,11 +142,9 @@ export default function OrdersManager({
               }}
             >
               <option value="All">All Statuses</option>
-              <option value="Pending">Pending</option>
-              <option value="Payment Pending">Payment Pending</option>
-              <option value="Processing">Processing</option>
-              <option value="Order Complete">Order Complete</option>
-              <option value="Cancelled">Cancelled</option>
+              {ORDER_STATUS_OPTIONS.map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -187,16 +252,31 @@ export default function OrdersManager({
                         )}
                       </td>
                       <td data-label="Payment" style={{ padding: '10px 12px' }}>
-                        <span style={{ 
-                          padding: '4px 8px', 
-                          borderRadius: '6px', 
-                          background: 'rgba(255,255,255,0.05)', 
-                          color: '#94a3b8',
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold'
-                        }}>
-                          {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE' : order.payment_method === 'tilopay' ? '💳 Card' : '💬 WA'}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', alignItems: 'flex-start' }}>
+                          <span style={{
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            background: 'rgba(255,255,255,0.05)',
+                            color: '#94a3b8',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold'
+                          }}>
+                            {order.payment_method === 'paypal' ? '💳 PayPal' : order.payment_method === 'sinpe' ? '📱 SINPE' : order.payment_method === 'tilopay' ? '💳 Card' : '💬 WA'}
+                          </span>
+                          {getCardPaymentBadge(order) && (
+                            <span style={{
+                              padding: '3px 7px',
+                              borderRadius: '999px',
+                              background: getCardPaymentBadge(order).bg,
+                              color: getCardPaymentBadge(order).color,
+                              fontSize: '0.68rem',
+                              fontWeight: 900,
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {getCardPaymentBadge(order).label}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td data-label="Status" style={{ padding: '10px 12px' }}>
                         <select 
@@ -212,19 +292,15 @@ export default function OrdersManager({
                             borderRadius: '6px',
                             fontSize: '0.75rem',
                             width: '120px',
-                            background: order.status === 'Order Complete' ? 'rgba(34, 197, 94, 0.15)' : order.status === 'Processing' ? 'rgba(56, 189, 248, 0.15)' : order.status === 'Cancelled' ? 'rgba(239, 68, 68, 0.15)' : order.status === 'Payment Pending' ? 'rgba(244, 63, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                            color: order.status === 'Order Complete' ? '#4ade80' : order.status === 'Processing' ? '#38bdf8' : order.status === 'Cancelled' ? '#f87171' : order.status === 'Payment Pending' ? '#fb7185' : '#f59e0b',
+                            ...getStatusSelectStyle(order.status),
                             fontWeight: 'bold',
-                            border: order.status === 'Order Complete' ? '1px solid rgba(34, 197, 94, 0.3)' : order.status === 'Processing' ? '1px solid rgba(56, 189, 248, 0.3)' : order.status === 'Cancelled' ? '1px solid rgba(239, 68, 68, 0.3)' : order.status === 'Payment Pending' ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
                             textAlign: 'center',
                             cursor: 'pointer'
                           }}
                         >
-                          <option value="Pending">Pending</option>
-                          <option value="Payment Pending">Payment Pending</option>
-                          <option value="Processing">Processing</option>
-                          <option value="Order Complete">Order Complete</option>
-                          <option value="Cancelled">Cancelled</option>
+                          {ORDER_STATUS_OPTIONS.map(status => (
+                            <option key={status} value={status}>{status}</option>
+                          ))}
                         </select>
                       </td>
                       <td data-label="Agent" style={{ padding: '10px 12px' }}>

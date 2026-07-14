@@ -240,6 +240,11 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS shipping_address TEXT;
 
 -- Add tracking_number for old order tracking
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS tracking_number TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_transaction_id TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_provider_status TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_authorization TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_descriptor TEXT;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_provider_response JSONB;
 
 -- 3. Added Sale Prices (Added May)
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS original_price_usd TEXT;

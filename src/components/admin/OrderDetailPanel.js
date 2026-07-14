@@ -6,6 +6,18 @@ import { formatActivityType } from '@/lib/orderActivity';
 import { adminFetch } from '@/lib/adminApi';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
+const ORDER_STATUS_OPTIONS = [
+  'Pending',
+  'Payment Pending',
+  'Pending - Card',
+  'Pending - Card 3DS',
+  'Paid',
+  'Declined',
+  'Error',
+  'Processing',
+  'Order Complete',
+  'Cancelled',
+];
 
 const formatCustomerIdType = (idType) => {
   if (!idType) return '';
@@ -33,6 +45,16 @@ const getItemsSubtotal = (items = []) => items.reduce(
 const getStoredTotal = (order) => {
   if (order.currency === 'USD') return Number(order.total_usd) || 0;
   return Number(order.total_crc) || 0;
+};
+
+const getCardPaymentBadge = (order) => {
+  if (order.payment_method !== 'tilopay') return null;
+  const status = String(order.status || '').toLowerCase();
+  if (status.includes('paid')) return { label: 'Paid', color: '#4ade80', bg: 'rgba(34, 197, 94, 0.14)' };
+  if (status.includes('declined')) return { label: 'Declined', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
+  if (status.includes('3ds')) return { label: '3DS Pending', color: '#c084fc', bg: 'rgba(168, 85, 247, 0.14)' };
+  if (status.includes('error')) return { label: 'Error', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
+  return { label: 'Pending', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.14)' };
 };
 
 const inferShippingCosts = (order) => {
@@ -108,6 +130,7 @@ export default function OrderDetailPanel({
   if (!order) return null;
 
   const activity = Array.isArray(order.activity_log) ? order.activity_log : [];
+  const cardPaymentBadge = getCardPaymentBadge(order);
   const shipping = order.currency === 'USD'
     ? Number(shippingUsd) || 0
     : Number(shippingCrc) || 0;
@@ -359,6 +382,23 @@ export default function OrderDetailPanel({
           <h3>Transaction</h3>
           <div className="order-detail-grid">
             <div><label>Payment</label><span>{order.payment_method}</span></div>
+            {cardPaymentBadge && (
+              <div>
+                <label>Card payment</label>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '4px 9px',
+                  borderRadius: '999px',
+                  background: cardPaymentBadge.bg,
+                  color: cardPaymentBadge.color,
+                  fontSize: '0.75rem',
+                  fontWeight: 900,
+                }}>
+                  {cardPaymentBadge.label}
+                </span>
+              </div>
+            )}
             <div>
               <label>Status</label>
               <select
@@ -367,14 +407,26 @@ export default function OrderDetailPanel({
                 onChange={(e) => onStatusChange(order.id, e.target.value)}
                 style={{ width: '100%', marginTop: '4px' }}
               >
-                <option value="Pending">Pending</option>
-                <option value="Payment Pending">Payment Pending</option>
-                <option value="Paid">Paid</option>
-                <option value="Processing">Processing</option>
-                <option value="Order Complete">Order Complete</option>
-                <option value="Cancelled">Cancelled</option>
+                {ORDER_STATUS_OPTIONS.map(status => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
               </select>
             </div>
+            {order.payment_transaction_id && (
+              <div>
+                <label>Shield transaction ID</label>
+                <span style={{ fontFamily: 'monospace' }}>{order.payment_transaction_id}</span>
+              </div>
+            )}
+            {order.payment_provider_status && (
+              <div><label>Shield status</label><span>{order.payment_provider_status}</span></div>
+            )}
+            {order.payment_authorization && (
+              <div><label>Authorization</label><span style={{ fontFamily: 'monospace' }}>{order.payment_authorization}</span></div>
+            )}
+            {order.payment_descriptor && (
+              <div><label>Descriptor</label><span>{order.payment_descriptor}</span></div>
+            )}
             <div>
               <label>Tracking</label>
               <input
@@ -388,6 +440,21 @@ export default function OrderDetailPanel({
               <div><label>Promo</label><span style={{ color: '#38bdf8' }}>{order.promo_code}</span></div>
             )}
           </div>
+          {order.payment_method === 'tilopay' && (
+            <div style={{
+              marginTop: '12px',
+              padding: '12px',
+              borderRadius: '10px',
+              border: '1px solid rgba(251, 191, 36, 0.25)',
+              background: 'rgba(251, 191, 36, 0.09)',
+              color: '#fbbf24',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              lineHeight: 1.45,
+            }}>
+              Verify this card payment in Shield Hub Pay before fulfilling the order.
+            </div>
+          )}
         </div>
 
         <div className="order-detail-section">

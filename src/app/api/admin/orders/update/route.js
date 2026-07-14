@@ -22,6 +22,8 @@ export async function PATCH(request) {
       'payment_proof_url', 'shipping_cost_crc', 'shipping_cost_usd',
       'customer_name', 'customer_phone', 'customer_email', 'customer_id_number',
       'shipping_address', 'items', 'total_usd', 'total_crc',
+      'payment_transaction_id', 'payment_provider_status', 'payment_authorization',
+      'payment_descriptor', 'payment_provider_response',
     ];
     const patch = {};
     for (const key of allowed) {
