@@ -1651,7 +1651,9 @@
         gap: 20px !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
-        background: rgba(10, 15, 28, 0.75) !important;
+        /* Near-opaque: backdrop-filter silently fails on some GPUs/browsers,
+           and a 0.75-alpha panel over content becomes unreadable without it. */
+        background: rgba(10, 15, 28, 0.97) !important;
         backdrop-filter: blur(16px) !important;
         -webkit-backdrop-filter: blur(16px) !important;
         flex-shrink: 0 !important;
@@ -1862,6 +1864,9 @@
         padding-left: 12px !important;
         padding-right: 12px !important;
         box-shadow: 10px 0 40px rgba(0, 0, 0, 0.45) !important;
+        /* Fully solid while overlaying the page content, so the nav labels
+           never mix with the dashboard text underneath. */
+        background: #0a0f1c !important;
     }
 
     .admin-sidebar-collapsed .admin-navbar ~ .admin-container {
