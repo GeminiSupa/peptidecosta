@@ -9,7 +9,7 @@ import {
   CalendarClock, TestTube2, CopyPlus, Sparkles
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
-import { buildMarketingEmailFooterTemplateHtml } from '@/lib/marketingEmailFooter';
+import { MARKETING_FOOTER_MARKER, buildMarketingEmailFooterTemplateHtml } from '@/lib/marketingEmailFooter';
 
 const LOCAL_DRAFT_KEY = 'marketing_studio_local_email_draft_v1';
 const ACTUAL_SMTP_SENDER = 'info@peptidescostarica.net';
@@ -65,6 +65,39 @@ const emailFooterBlock = () => textBlock(buildMarketingEmailFooterTemplateHtml()
   textAlign: 'center',
   color: '#3f4f46',
 });
+
+const emailFooterRow = () => ({
+  cells: [1],
+  columns: [
+    {
+      contents: [emailFooterBlock()],
+      values: { backgroundColor: '#f4f4f5', padding: '0px' },
+    },
+  ],
+  values: { backgroundColor: '#f4f4f5', padding: '0px' },
+});
+
+function designHasMarketingFooter(design) {
+  return JSON.stringify(design || {}).includes(MARKETING_FOOTER_MARKER);
+}
+
+function appendMarketingFooterToDesign(design) {
+  const nextDesign = JSON.parse(JSON.stringify(design || createBlankDesign()));
+  if (designHasMarketingFooter(nextDesign)) return { design: nextDesign, added: false };
+
+  nextDesign.body = nextDesign.body || {};
+  nextDesign.body.rows = Array.isArray(nextDesign.body.rows) ? nextDesign.body.rows : [];
+  nextDesign.body.rows.push(emailFooterRow());
+  nextDesign.body.values = nextDesign.body.values || {};
+  nextDesign.body.values.backgroundColor = nextDesign.body.values.backgroundColor || '#f3f4f6';
+  nextDesign.body.values.contentWidth = nextDesign.body.values.contentWidth || '600px';
+  nextDesign.schemaVersion = nextDesign.schemaVersion || 21;
+  nextDesign.counters = nextDesign.counters || {};
+  nextDesign.counters.u_row = Number(nextDesign.counters.u_row || nextDesign.body.rows.length) + 1;
+  nextDesign.counters.u_column = Number(nextDesign.counters.u_column || nextDesign.body.rows.length) + 1;
+  nextDesign.counters.u_content_text = Number(nextDesign.counters.u_content_text || 0) + 1;
+  return { design: nextDesign, added: true };
+}
 
 const createTemplateDesign = ({ headline, eyebrow, body, cta, footerNote, accent = '#10b981' }) => ({
   counters: { u_row: 6, u_column: 6, u_content_text: 10, u_content_button: 1, u_content_divider: 1 },
@@ -122,14 +155,7 @@ const createTemplateDesign = ({ headline, eyebrow, body, cta, footerNote, accent
         values: { backgroundColor: '#ffffff', padding: '0px' },
       },
       {
-        cells: [1],
-        columns: [
-          {
-            contents: [emailFooterBlock()],
-            values: { backgroundColor: '#f4f4f5', padding: '0px' },
-          },
-        ],
-        values: { backgroundColor: '#f4f4f5', padding: '0px' },
+        ...emailFooterRow(),
       },
     ],
     values: {
@@ -161,14 +187,7 @@ const createBlankDesign = () => ({
         values: { backgroundColor: '#ffffff', padding: '0px' },
       },
       {
-        cells: [1],
-        columns: [
-          {
-            contents: [emailFooterBlock()],
-            values: { backgroundColor: '#f4f4f5', padding: '0px' },
-          },
-        ],
-        values: { backgroundColor: '#f4f4f5', padding: '0px' },
+        ...emailFooterRow(),
       },
     ],
     values: {
@@ -794,6 +813,25 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     });
   };
 
+  const addDefaultFooterToCurrentDesign = () => {
+    const editor = emailEditorRef.current?.editor;
+    if (!editor || !isReady) return;
+
+    editor.exportHtml(({ design }) => {
+      const { design: designWithFooter, added } = appendMarketingFooterToDesign(design);
+      if (!added) {
+        setStatusDetail('This campaign already has the default footer. Click the footer block in the editor to edit it.');
+        return;
+      }
+
+      suppressEditorUpdatesRef.current = true;
+      editor.loadDesign(designWithFooter);
+      setTimeout(() => { suppressEditorUpdatesRef.current = false; }, 800);
+      markDraftDirty();
+      setStatusDetail('Default footer added. Click the footer block in the editor if you want to edit the text or links.');
+    });
+  };
+
   const sendCampaign = async (isTestBatch = false) => {
     if (!selectedCampaignId) {
       setStatusDetail('Save this campaign before sending.');
@@ -1223,7 +1261,12 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       {/* ══ EMAIL EDITOR ══ */}
       <div className="mkt-editor-heading">
         <div><span>4</span><div><strong>Design your email</strong><small>Drag blocks into the canvas and edit the content directly.</small></div></div>
-        <button type="button" onClick={openPreview} disabled={!isReady} className="mkt-btn"><Eye size={14} /> Preview</button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <button type="button" onClick={addDefaultFooterToCurrentDesign} disabled={!isReady} className="mkt-btn">
+            <CopyPlus size={14} /> Add default footer
+          </button>
+          <button type="button" onClick={openPreview} disabled={!isReady} className="mkt-btn"><Eye size={14} /> Preview</button>
+        </div>
       </div>
       <div className="mkt-email-editor-frame">
         {!isReady && (
