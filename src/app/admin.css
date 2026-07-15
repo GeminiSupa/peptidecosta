@@ -1662,20 +1662,15 @@
         transition: width 0.22s ease, padding 0.22s ease, box-shadow 0.22s ease !important;
     }
     
-    /* Custom premium scrollbar for sidebar */
+    /* The sidebar still scrolls with the wheel/trackpad, but without a visible
+       scrollbar — the permanent light thumb read as a stray gradient stripe
+       running down the panel's edge. */
+    .admin-navbar {
+        scrollbar-width: none !important;
+    }
     .admin-navbar::-webkit-scrollbar {
-        width: 4px !important;
-        display: block !important;
-    }
-    .admin-navbar::-webkit-scrollbar-track {
-        background: rgba(0, 0, 0, 0.05) !important;
-    }
-    .admin-navbar::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.1) !important;
-        border-radius: 2px !important;
-    }
-    .admin-navbar::-webkit-scrollbar-thumb:hover {
-        background: rgba(0, 212, 255, 0.3) !important;
+        width: 0 !important;
+        display: none !important;
     }
     
     /* Custom premium scrollbar for responsive tables */
@@ -1850,6 +1845,9 @@
         padding: 28px 32px !important;
         max-width: none !important;
         box-sizing: border-box !important;
+        /* Follow the sidebar's 0.22s expand/collapse so the content glides
+           instead of jumping. */
+        transition: margin-left 0.22s ease, width 0.22s ease !important;
     }
 
     .admin-sidebar-collapsed .admin-navbar {
@@ -1872,6 +1870,15 @@
     .admin-sidebar-collapsed .admin-navbar ~ .admin-container {
         margin-left: 82px !important;
         width: calc(100% - 82px) !important;
+    }
+
+    /* When the collapsed sidebar expands on hover, push the page content
+       aside instead of covering it — no more dashboard text hidden or cut
+       off behind the open menu. */
+    .admin-sidebar-collapsed .admin-navbar:hover ~ .admin-container,
+    .admin-sidebar-collapsed .admin-navbar:focus-within ~ .admin-container {
+        margin-left: 264px !important;
+        width: calc(100% - 264px) !important;
     }
 
     .admin-sidebar-collapsed .admin-nav-logo-container {
