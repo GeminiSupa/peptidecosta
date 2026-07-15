@@ -1641,7 +1641,9 @@
         position: fixed !important;
         left: 0 !important;
         top: 0 !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+        /* Dark edge — the previous white 8% line read as a light stripe
+           against the dark dashboard. */
+        border-right: 1px solid rgba(0, 0, 0, 0.45) !important;
         border-bottom: none !important;
         padding: 20px 12px 90px 12px !important;
         display: flex !important;
@@ -1662,15 +1664,25 @@
         transition: width 0.22s ease, padding 0.22s ease, box-shadow 0.22s ease !important;
     }
     
-    /* The sidebar still scrolls with the wheel/trackpad, but without a visible
-       scrollbar — the permanent light thumb read as a stray gradient stripe
-       running down the panel's edge. */
+    /* Slim, low-contrast scrollbar: visible enough to grab, without reading
+       as a bright stripe down the panel edge. */
     .admin-navbar {
-        scrollbar-width: none !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(148, 163, 184, 0.3) transparent !important;
     }
     .admin-navbar::-webkit-scrollbar {
-        width: 0 !important;
-        display: none !important;
+        width: 6px !important;
+        display: block !important;
+    }
+    .admin-navbar::-webkit-scrollbar-track {
+        background: transparent !important;
+    }
+    .admin-navbar::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.28) !important;
+        border-radius: 3px !important;
+    }
+    .admin-navbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 212, 255, 0.45) !important;
     }
     
     /* Custom premium scrollbar for responsive tables */
@@ -2031,9 +2043,22 @@
     .admin-sidebar-collapsed .admin-more-tab-badge,
     .admin-sidebar-collapsed .tab-count {
         position: absolute !important;
-        top: -4px !important;
-        right: -4px !important;
+        /* Inside the button's corner — hanging 4px outside the narrow rail
+           got the badges clipped in half by the sidebar's overflow. */
+        top: 2px !important;
+        right: 2px !important;
         margin: 0 !important;
+    }
+
+    /* When the auto-hidden sidebar is expanded (hover/focus), let the badges
+       flow back inline at the end of their row like in pinned mode, instead
+       of overlapping the tab labels at the button corner. */
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-more-tab-badge,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-more-tab-badge,
+    .admin-sidebar-collapsed .admin-navbar:hover .tab-count,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .tab-count {
+        position: static !important;
+        margin-left: auto !important;
     }
 
     .admin-sidebar-collapsed .admin-sidebar-footer {
