@@ -22,7 +22,7 @@ export default function AffiliatesManager({ products = [] }) {
 
   // Forms State
   const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
-  const [newPromo, setNewPromo] = useState({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true });
+  const [newPromo, setNewPromo] = useState({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '' });
   const [editingPromo, setEditingPromo] = useState(null);
 
   const handleUpdatePromo = async (e) => {
@@ -152,21 +152,36 @@ export default function AffiliatesManager({ products = [] }) {
     }
   };
 
+  // Costa Rica is UTC−6 year-round: turn a YYYY-MM-DD into that day's last
+  // moment in CR time, so "valid until Sunday" means Sunday night in CR
+  // regardless of which timezone the admin creating the code sits in.
+  const crEndOfDayIso = (dateStr) => (dateStr
+    ? new Date(Date.parse(`${dateStr}T23:59:59.999Z`) + 6 * 60 * 60 * 1000).toISOString()
+    : null);
+
   const handleCreatePromo = async (e) => {
     e.preventDefault();
-    if (!newPromo.code || !newPromo.affiliate_id) return;
-    
+    // Only the code is mandatory. Affiliate is optional: general marketing codes
+    // (FLASH10 etc.) intentionally have no affiliate and pay no commission.
+    if (!newPromo.code) return;
+
     try {
       const cleanCode = newPromo.code.trim().toUpperCase();
       const { data, error } = await supabase
         .from('promo_codes')
-        .insert([{ ...newPromo, code: cleanCode }])
+        .insert([{
+          code: cleanCode,
+          discount_pct: newPromo.discount_pct,
+          is_active: true,
+          affiliate_id: newPromo.affiliate_id || null,
+          valid_until: crEndOfDayIso(newPromo.valid_until),
+        }])
         .select('*, affiliates(name)');
-        
+
       if (error) throw error;
-      
+
       setPromoCodes([data[0], ...promoCodes]);
-      setNewPromo({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true });
+      setNewPromo({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '' });
     } catch (err) {
       alert('Error creating promo code (Make sure the code is unique): ' + err.message);
     }
@@ -330,8 +345,8 @@ export default function AffiliatesManager({ products = [] }) {
                 <h3 style={{ margin: '0', fontSize: '0.9rem', fontWeight: 'bold', color: '#e2e8f0' }}>Generate Promo Code</h3>
                 <div className="admin-form-grid-2">
                   <input required placeholder="Code (e.g. SMITH10)" value={newPromo.code} onChange={e => setNewPromo({...newPromo, code: e.target.value.toUpperCase()})} style={{...inputStyle, textTransform: 'uppercase'}} />
-                  <select required value={newPromo.affiliate_id} onChange={e => setNewPromo({...newPromo, affiliate_id: e.target.value})} style={{...inputStyle, color: newPromo.affiliate_id ? '#f8fafc' : '#94a3b8'}}>
-                    <option value="" disabled>Select Affiliate...</option>
+                  <select value={newPromo.affiliate_id} onChange={e => setNewPromo({...newPromo, affiliate_id: e.target.value})} style={{...inputStyle, color: newPromo.affiliate_id ? '#f8fafc' : '#94a3b8'}}>
+                    <option value="" style={{color: '#0f172a'}}>General Code (no affiliate)</option>
                     {affiliates.map(a => <option key={a.id} value={a.id} style={{color: '#0f172a'}}>{a.name}</option>)}
                   </select>
                   <select value={newPromo.discount_pct} onChange={e => setNewPromo({...newPromo, discount_pct: parseFloat(e.target.value)})} style={inputStyle}>
@@ -344,6 +359,13 @@ export default function AffiliatesManager({ products = [] }) {
                     <option value={0.40}>40% Customer Discount</option>
                     <option value={0.50}>50% Customer Discount</option>
                   </select>
+                  <input
+                    type="date"
+                    title="Optional: last day the code works (expires 11:59pm Costa Rica time). Leave empty for no expiry."
+                    value={newPromo.valid_until}
+                    onChange={e => setNewPromo({...newPromo, valid_until: e.target.value})}
+                    style={{...inputStyle, color: newPromo.valid_until ? '#f8fafc' : '#94a3b8'}}
+                  />
                   <button type="submit" style={btnStyle('#059669')}><Plus size={16} /> Create Code</button>
                 </div>
               </form>
