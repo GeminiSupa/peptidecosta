@@ -9,6 +9,7 @@ import {
   CalendarClock, TestTube2, CopyPlus, Sparkles
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
+import { buildMarketingEmailFooterTemplateHtml } from '@/lib/marketingEmailFooter';
 
 const LOCAL_DRAFT_KEY = 'marketing_studio_local_email_draft_v1';
 const ACTUAL_SMTP_SENDER = 'info@peptidescostarica.net';
@@ -57,8 +58,16 @@ const dividerBlock = () => ({
   },
 });
 
+const emailFooterBlock = () => textBlock(buildMarketingEmailFooterTemplateHtml(), {
+  containerPadding: '0px',
+  fontSize: '13px',
+  lineHeight: '150%',
+  textAlign: 'center',
+  color: '#3f4f46',
+});
+
 const createTemplateDesign = ({ headline, eyebrow, body, cta, footerNote, accent = '#10b981' }) => ({
-  counters: { u_row: 5, u_column: 5, u_content_text: 8, u_content_button: 1, u_content_divider: 1 },
+  counters: { u_row: 6, u_column: 6, u_content_text: 10, u_content_button: 1, u_content_divider: 1 },
   body: {
     rows: [
       {
@@ -112,12 +121,61 @@ const createTemplateDesign = ({ headline, eyebrow, body, cta, footerNote, accent
         ],
         values: { backgroundColor: '#ffffff', padding: '0px' },
       },
+      {
+        cells: [1],
+        columns: [
+          {
+            contents: [emailFooterBlock()],
+            values: { backgroundColor: '#f4f4f5', padding: '0px' },
+          },
+        ],
+        values: { backgroundColor: '#f4f4f5', padding: '0px' },
+      },
     ],
     values: {
       backgroundColor: '#f3f4f6',
       contentWidth: '600px',
       fontFamily: { label: 'Arial', value: 'arial,helvetica,sans-serif' },
       preheaderText: eyebrow,
+    },
+  },
+  schemaVersion: 21,
+});
+
+const createBlankDesign = () => ({
+  counters: { u_row: 3, u_column: 3, u_content_text: 3 },
+  body: {
+    rows: [
+      {
+        cells: [1],
+        columns: [
+          {
+            contents: [
+              textBlock('<p>Start writing your email here...</p>', {
+                containerPadding: '28px 24px',
+              }),
+            ],
+            values: { backgroundColor: '#ffffff', padding: '0px' },
+          },
+        ],
+        values: { backgroundColor: '#ffffff', padding: '0px' },
+      },
+      {
+        cells: [1],
+        columns: [
+          {
+            contents: [emailFooterBlock()],
+            values: { backgroundColor: '#f4f4f5', padding: '0px' },
+          },
+        ],
+        values: { backgroundColor: '#f4f4f5', padding: '0px' },
+      },
+    ],
+    values: {
+      backgroundColor: '#f3f4f6',
+      contentWidth: '600px',
+      fontFamily: { label: 'Arial', value: 'arial,helvetica,sans-serif' },
+      preheaderText: '',
     },
   },
   schemaVersion: 21,
@@ -235,7 +293,7 @@ const TEMPLATES = [
     icon: '✏️',
     name: 'Blank Canvas',
     desc: 'Start from scratch',
-    design: null,
+    design: createBlankDesign(),
   },
 ];
 
@@ -635,6 +693,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
 
   const canSend = preflightItems.every(item => item.ok);
   const activeCampaignIsABTest = Boolean(selectedCampaign?.is_ab_test || isABTest);
+  const selectedCampaignSentCount = selectedCampaign?.campaign_sends?.[0]?.count || 0;
 
   const persistCampaign = async ({ silent = false } = {}) => {
     if (!isReady || !emailEditorRef.current?.editor || !campaignName.trim() || !subject.trim() || (isABTest && !subjectB.trim())) return false;
@@ -767,7 +826,11 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to send');
-      alert('Campaign sending initiated! Emails are dispatching in the background.');
+      const progressText = data.remaining > 0
+        ? `${data.message} The cron job will continue the remaining batches.`
+        : data.message || 'Campaign sending complete.';
+      alert(progressText);
+      setStatusDetail(progressText);
       fetchCampaigns();
     } catch (err) {
       alert('Failed to send: ' + err.message);
@@ -1113,6 +1176,11 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
                     <span>{estimatedAudience.length}</span> eligible subscriber{estimatedAudience.length === 1 ? '' : 's'}
                   </span>
                 </h3>
+                {selectedCampaignId && (
+                  <div className="mkt-text-xs mkt-text-muted" style={{ marginTop: '6px' }}>
+                    Sent counter: {selectedCampaignSentCount.toLocaleString()} / {estimatedAudience.length.toLocaleString()}
+                  </div>
+                )}
               </div>
               <Users size={16} style={{ color: 'rgba(255,255,255,0.3)' }} />
             </div>

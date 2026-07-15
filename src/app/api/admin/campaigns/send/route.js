@@ -16,7 +16,18 @@ export async function POST(request) {
       sendWinner: Boolean(send_winner),
       winnerVariant: winner_variant,
     });
-    return NextResponse.json({ success: true, message: `Sent ${result.sent}/${result.targeted} emails`, ...result });
+    const counter = `${result.sentTotal}/${result.totalEligible}`;
+    const nextBatch = result.nextBatchAt
+      ? ` Next batch is scheduled for ${new Date(result.nextBatchAt).toLocaleString()}.`
+      : '';
+    const remaining = result.remaining > 0
+      ? ` ${result.remaining} remaining.${nextBatch}`
+      : ' Campaign complete.';
+    return NextResponse.json({
+      success: true,
+      message: `Sent ${result.sent}/${result.targeted} emails in this batch. Total sent: ${counter}.${remaining}`,
+      ...result,
+    });
   } catch (error) {
     console.error('[Campaign send]', error);
     return NextResponse.json({ error: error.message || 'Campaign delivery failed' }, { status: error instanceof CampaignDeliveryError ? error.status : 500 });

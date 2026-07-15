@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import nodemailer from 'nodemailer';
+import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 
+const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
@@ -46,7 +48,12 @@ export async function POST(request) {
       replyTo: SMTP_USER,
       to: email,
       subject: `[TEST] ${subject}`,
-      html: html_content,
+      html: applyMarketingEmailFooter(html_content, {
+        domain: DOMAIN,
+        unsubscribeUrl: `${DOMAIN}/unsubscribe`,
+        preferencesUrl: `${DOMAIN}/unsubscribe`,
+        viewEmailUrl: DOMAIN,
+      }),
     });
 
     return NextResponse.json({ success: true, message: `Test email sent to ${email}` });

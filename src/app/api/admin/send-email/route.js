@@ -4,6 +4,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { getBusinessLinks } from '@/lib/settings';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { createUnsubscribeToken } from '@/lib/marketingTokens';
+import { MARKETING_FOOTER_MARKER, applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
 
@@ -66,7 +67,7 @@ export async function POST(request) {
     });
 
     // Make the message body render beautifully with paragraphs
-    const formattedHtml = html_content || `
+    const rawHtml = html_content || `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.6;max-width:600px;margin:0 auto;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.03);">
         <!-- Header Banner -->
         <div style="background:linear-gradient(135deg, #0f172a, #022c22);padding:28px 24px;text-align:center;">
@@ -103,6 +104,14 @@ export async function POST(request) {
       ...(unsubscribeUrl ? [`<${unsubscribeUrl}>`] : []),
       `<mailto:${SMTP_USER}?subject=unsubscribe>`,
     ].join(', ');
+    const formattedHtml = (test_mode || String(rawHtml).includes(MARKETING_FOOTER_MARKER))
+      ? applyMarketingEmailFooter(rawHtml, {
+        domain: DOMAIN,
+        unsubscribeUrl: unsubscribeUrl || `${DOMAIN}/unsubscribe`,
+        preferencesUrl: unsubscribeUrl || `${DOMAIN}/unsubscribe`,
+        viewEmailUrl: DOMAIN,
+      })
+      : rawHtml;
 
     const info = await transporter.sendMail({
       bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
