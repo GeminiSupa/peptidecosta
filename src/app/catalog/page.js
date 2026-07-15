@@ -25,6 +25,9 @@ const FALLBACK_EXCHANGE_RATE = 454.48;
 const FREE_SHIPPING_USD_THRESHOLD = 200;
 const FLAT_SHIPPING_CRC = 2500;
 const CARD_CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CARD_CHECKOUT === 'true';
+// 'live' hides the sandbox/test labels. Keep unset (sandbox) until the LIVE
+// Shield Hub Pay credentials are in place, then set NEXT_PUBLIC_CARD_CHECKOUT_MODE=live.
+const CARD_CHECKOUT_LIVE = process.env.NEXT_PUBLIC_CARD_CHECKOUT_MODE === 'live';
 
 const CATEGORY_TRANSLATIONS = {
   'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
@@ -3908,9 +3911,13 @@ export default function CatalogPage() {
                     iconColor: '#0ea5e9', // Blue
                     title: lang === 'en' ? 'Card' : 'Tarjeta',
                     detail: CARD_CHECKOUT_ENABLED
-                      ? (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox')
+                      ? (CARD_CHECKOUT_LIVE
+                        ? (lang === 'en' ? 'Visa / Mastercard' : 'Visa / Mastercard')
+                        : (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox'))
                       : (lang === 'en' ? 'Coming soon' : 'Próximamente'),
-                    badge: CARD_CHECKOUT_ENABLED ? (lang === 'en' ? 'Test' : 'Prueba') : (lang === 'en' ? 'Soon' : 'Pronto'),
+                    badge: CARD_CHECKOUT_ENABLED
+                      ? (CARD_CHECKOUT_LIVE ? null : (lang === 'en' ? 'Test' : 'Prueba'))
+                      : (lang === 'en' ? 'Soon' : 'Pronto'),
                     disabled: !CARD_CHECKOUT_ENABLED,
                   },
                   {
@@ -4049,9 +4056,13 @@ export default function CatalogPage() {
                     </button>
                   )}
                   <p className="card-payment-caption">
-                    {lang === 'en'
-                      ? 'Secure card checkout powered by Shield Hub Pay sandbox'
-                      : 'Pago seguro con tarjeta mediante Shield Hub Pay sandbox'}
+                    {CARD_CHECKOUT_LIVE
+                      ? (lang === 'en'
+                        ? 'Secure Visa / Mastercard checkout powered by Shield Hub Pay'
+                        : 'Pago seguro con Visa / Mastercard mediante Shield Hub Pay')
+                      : (lang === 'en'
+                        ? 'Secure card checkout powered by Shield Hub Pay sandbox'
+                        : 'Pago seguro con tarjeta mediante Shield Hub Pay sandbox')}
                   </p>
                 </div>
               ) : (

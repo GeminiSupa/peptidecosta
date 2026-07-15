@@ -15,6 +15,40 @@ export function buildShieldHubPayHash(amount, transactionReference) {
     .digest('hex');
 }
 
+// Authoritative transaction lookup (GET /api/transaction/{id}). Uses a different
+// hash recipe than payments: sha256(clientId + transactionId + apiSecret).
+// The gateway returns HTTP 200 even for auth failures ({errorCode: "002"}), so
+// success is detected by the body echoing the requested transaction id.
+export async function getShieldHubPayTransaction(transactionId) {
+  if (!isShieldHubPayConfigured()) {
+    throw new Error('Shield Hub Pay credentials are not configured');
+  }
+
+  const hash = crypto
+    .createHash('sha256')
+    .update(`${SHIELD_HUB_PAY_CLIENT_ID}${transactionId}${SHIELD_HUB_PAY_API_SECRET}`)
+    .digest('hex');
+
+  const response = await fetch(`${SHIELD_HUB_PAY_BASE_URL}/api/transaction/${encodeURIComponent(transactionId)}`, {
+    headers: {
+      Accept: 'application/json',
+      'client-id': SHIELD_HUB_PAY_CLIENT_ID,
+      'client-hash': hash,
+    },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok || String(data?.id) !== String(transactionId)) {
+    throw new Error(
+      data?.errorMessage || data?.error?.messsage || data?.error?.message
+        || `Shield Hub Pay transaction lookup failed (${response.status})`
+    );
+  }
+
+  return data;
+}
+
 export async function processShieldHubPayTransaction(payload) {
   if (!isShieldHubPayConfigured()) {
     throw new Error('Shield Hub Pay credentials are not configured');

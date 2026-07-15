@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { isShieldHubPayConfigured, getShieldHubPayTransaction } from '@/lib/shieldHubPay';
 
 export const runtime = 'nodejs';
 
@@ -26,13 +27,41 @@ function buildPaymentPatch(status, payload) {
 
 export async function POST(req) {
   try {
-    const payload = await req.json();
-    const orderNumber = payload.transaction_reference;
-    const statusText = statusToOrderStatus(payload.status);
+    const rawPayload = await req.json();
+    const orderNumber = rawPayload.transaction_reference;
+    const transactionId = rawPayload.id;
 
     if (!orderNumber) {
       return NextResponse.json({ error: 'Missing transaction reference' }, { status: 400 });
     }
+
+    if (!transactionId) {
+      return NextResponse.json({ error: 'Missing transaction id' }, { status: 400 });
+    }
+
+    // Shield Hub Pay does not sign webhooks, so the POSTed body proves nothing —
+    // anyone who knows an order number could claim it was paid. Re-fetch the
+    // transaction from the gateway (authenticated with our credentials) and only
+    // trust THAT copy for the status and stored payment metadata.
+    if (!isShieldHubPayConfigured()) {
+      console.error('[Shield Hub Pay webhook] Credentials not configured; cannot verify webhook.');
+      return NextResponse.json({ error: 'Webhook verification unavailable' }, { status: 500 });
+    }
+
+    let payload;
+    try {
+      payload = await getShieldHubPayTransaction(transactionId);
+    } catch (err) {
+      console.error(`[Shield Hub Pay webhook] Could not verify transaction ${transactionId}:`, err.message);
+      return NextResponse.json({ error: 'Transaction could not be verified with gateway' }, { status: 400 });
+    }
+
+    if (String(payload.transaction_reference || '') !== String(orderNumber)) {
+      console.warn(`[Shield Hub Pay webhook] Reference mismatch: webhook says ${orderNumber}, gateway says ${payload.transaction_reference} (txn ${transactionId})`);
+      return NextResponse.json({ error: 'Transaction reference mismatch' }, { status: 400 });
+    }
+
+    const statusText = statusToOrderStatus(payload.status);
 
     const supabase = getSupabaseAdmin();
     const { data: existing, error: lookupErr } = await supabase
