@@ -30,11 +30,7 @@ export function verifyCardPaymentOrderToken(orderNumber, token) {
 
 export function buildCardPaymentPath(orderNumber) {
   const token = signCardPaymentOrder(orderNumber);
-  const params = new URLSearchParams({
-    order: String(orderNumber),
-    token,
-  });
-  return `/pay-card?${params.toString()}`;
+  return `/pay-card/${encodeURIComponent(String(orderNumber))}/${encodeURIComponent(token)}`;
 }
 
 export function getPublicBaseUrl(requestUrl) {

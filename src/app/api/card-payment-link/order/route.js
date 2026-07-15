@@ -36,8 +36,12 @@ export async function GET(request) {
     const orderNumber = searchParams.get('order');
     const token = searchParams.get('token');
 
+    if (!orderNumber || !token) {
+      return NextResponse.json({ error: 'Payment link is missing order or token details' }, { status: 400 });
+    }
+
     if (!verifyCardPaymentOrderToken(orderNumber, token)) {
-      return NextResponse.json({ error: 'Invalid or expired payment link' }, { status: 403 });
+      return NextResponse.json({ error: 'Payment link signature is invalid. Please request a fresh card payment link.' }, { status: 403 });
     }
 
     const supabase = getSupabaseAdmin();

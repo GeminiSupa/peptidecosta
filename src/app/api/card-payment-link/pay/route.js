@@ -73,8 +73,12 @@ export async function POST(request) {
     const body = await request.json();
     const { orderNumber, token, card, customerEmail, customerIp, lang = 'es' } = body;
 
+    if (!orderNumber || !token) {
+      return NextResponse.json({ error: 'Payment link is missing order or token details' }, { status: 400 });
+    }
+
     if (!verifyCardPaymentOrderToken(orderNumber, token)) {
-      return NextResponse.json({ error: 'Invalid or expired payment link' }, { status: 403 });
+      return NextResponse.json({ error: 'Payment link signature is invalid. Please request a fresh card payment link.' }, { status: 403 });
     }
 
     const supabase = getSupabaseAdmin();
