@@ -22,7 +22,27 @@ function escapeHtml(value) {
   return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
-async function sendWhatsApp(to, message, templateName = null, firstName = 'Customer', languageCode = 'es') {
+// Builds the {{1}} value for a template send. Meta rejects an empty parameter,
+// so a nameless contact always needs *something* readable in that slot.
+//
+// greetingVariable=true is for templates whose {{1}} carries the whole greeting
+// (e.g. "👋 {{1}} ¡Retatrutide...") — a nameless contact then reads "¡Buenas!"
+// rather than an English "Customer" stranded in a Spanish message.
+// greetingVariable=false is the classic shape, where {{1}} is a bare first name
+// and the greeting is baked into the template (e.g. "¡Hola {{1}}!").
+function buildTemplateParam(firstName, languageCode, greetingVariable) {
+  const isEn = String(languageCode || 'es').toLowerCase().startsWith('en');
+  // Meta rejects parameters containing newlines/tabs, so flatten defensively.
+  const name = String(firstName || '').replace(/\s+/g, ' ').trim();
+
+  if (greetingVariable) {
+    if (name) return isEn ? `Hi ${name}` : `Hola ${name}`;
+    return isEn ? 'Hello!' : '¡Buenas!';
+  }
+  return name || (isEn ? 'Customer' : 'Cliente');
+}
+
+async function sendWhatsApp(to, message, templateName = null, firstName = null, languageCode = 'es', greetingVariable = false) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   if (!token || !phoneNumberId) return false;
@@ -42,7 +62,7 @@ async function sendWhatsApp(to, message, templateName = null, firstName = 'Custo
         language: { code: languageCode || 'es' },
         components: [{
           type: 'body',
-          parameters: [{ type: 'text', text: firstName || 'Customer' }],
+          parameters: [{ type: 'text', text: buildTemplateParam(firstName, languageCode, greetingVariable) }],
         }],
       },
     } : {
@@ -244,42 +264,51 @@ export async function GET(request) {
           sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
           query = query.gte('created_at', sevenDaysAgo.toISOString());
         }
-        const { data: orders } = await query;
+        const { data: orders, error: ordersError } = await query;
+        if (ordersError) throw new Error(`Order audience lookup failed: ${ordersError.message}`);
         orders?.forEach(o => {
           const key = o.customer_phone || o.customer_email;
-          const name = o.customer_name ? o.customer_name.split(' ')[0] : 'Customer';
+          const name = o.customer_name ? o.customer_name.split(' ')[0] : null;
           if (key && !targets.has(key)) targets.set(key, { phone: o.customer_phone, email: o.customer_email, name });
         });
       }
 
       if (audience === 'abandoned_carts' || audience === 'all_leads' || audience === 'leads_7_days') {
-        let query = supabase.from('abandoned_carts').select('phone, email, name, created_at').eq('status', 'active');
+        // NOTE: these are customer_* columns — an earlier `phone, email, name`
+        // select errored on every run, and because the error was discarded the
+        // audience silently came back empty instead of failing loudly.
+        let query = supabase.from('abandoned_carts').select('customer_phone, customer_email, customer_name, created_at').eq('status', 'active');
         if (audience === 'leads_7_days') {
           const sevenDaysAgo = new Date();
           sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
           query = query.gte('created_at', sevenDaysAgo.toISOString());
         }
-        const { data: carts } = await query;
+        const { data: carts, error: cartsError } = await query;
+        if (cartsError) throw new Error(`Abandoned cart audience lookup failed: ${cartsError.message}`);
         carts?.forEach(c => {
-          const key = c.phone || c.email;
-          const name = c.name ? c.name.split(' ')[0] : 'Customer';
-          if (key && !targets.has(key)) targets.set(key, { phone: c.phone, email: c.email, name });
+          const key = c.customer_phone || c.customer_email;
+          const name = c.customer_name ? c.customer_name.split(' ')[0] : null;
+          if (key && !targets.has(key)) targets.set(key, { phone: c.customer_phone, email: c.customer_email, name });
         });
 
-        let leadsQuery = supabase.from('catalog_leads').select('contact_value, contact_method, name, created_at');
+        // catalog_leads has no name column — selecting one errored out here too,
+        // which meant every opted-in catalog lead was silently dropped from
+        // "All Leads" broadcasts.
+        let leadsQuery = supabase.from('catalog_leads').select('contact_value, contact_method, created_at');
         if (audience === 'leads_7_days') {
           const sevenDaysAgo = new Date();
           sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
           leadsQuery = leadsQuery.gte('created_at', sevenDaysAgo.toISOString());
         }
-        const { data: catalogLeads } = await leadsQuery;
+        const { data: catalogLeads, error: leadsError } = await leadsQuery;
+        if (leadsError) throw new Error(`Catalog lead audience lookup failed: ${leadsError.message}`);
         catalogLeads?.forEach(lead => {
           const key = lead.contact_value;
           if (key && !targets.has(key)) {
             targets.set(key, {
               phone: lead.contact_method === 'whatsapp' ? lead.contact_value : null,
               email: lead.contact_method === 'email' ? lead.contact_value : null,
-              name: lead.name ? lead.name.split(' ')[0] : 'Customer',
+              name: null,
             });
           }
         });
@@ -333,7 +362,7 @@ export async function GET(request) {
               identity: normalizeMarketingIdentity(contact.phone, 'whatsapp'),
               channel: 'whatsapp',
               suppressions,
-              send: () => sendWhatsApp(contact.phone, message, channels.whatsappTemplateName, contact.name, channels.whatsappTemplateLanguage),
+              send: () => sendWhatsApp(contact.phone, message, channels.whatsappTemplateName, contact.name, channels.whatsappTemplateLanguage, channels.whatsappGreetingVariable),
             });
             sentWhatsapp = result.sent;
             retryWhatsapp = result.retryable;

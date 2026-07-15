@@ -625,6 +625,21 @@ export default function BroadcastsPanel({ products = [] }) {
               </select>
             </div>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Use an approved template name to bypass the 24-hour window restriction and reach all leads.</p>
+            {channels.whatsappTemplateName && (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginTop: '10px', padding: '10px 12px', background: 'rgba(52, 211, 153, 0.06)', border: '1px solid rgba(52, 211, 153, 0.2)', borderRadius: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(channels.whatsappGreetingVariable)}
+                  onChange={e => setChannels({ ...channels, whatsappGreetingVariable: e.target.checked })}
+                  style={{ marginTop: '2px', flexShrink: 0, width: '16px', height: '16px', accentColor: '#34d399' }}
+                />
+                <span style={{ fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.45 }}>
+                  <strong style={{ display: 'block', color: '#e2e8f0' }}>{'{{1}} is the whole greeting'}</strong>
+                  Tick this when the template starts with the variable (e.g. <code>{'👋 {{1}} ¡Retatrutide...'}</code>). Contacts with a name get “Hola María”; contacts without one get “¡Buenas!” instead of an English fallback.
+                  Leave unticked for templates where the greeting is already written in, like <code>{'¡Hola {{1}}!'}</code>.
+                </span>
+              </label>
+            )}
           </div>
         )}
         
