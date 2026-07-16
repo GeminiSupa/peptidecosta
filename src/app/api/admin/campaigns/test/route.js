@@ -2,14 +2,9 @@ import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import nodemailer from 'nodemailer';
 import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
+import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
 
 export async function POST(request) {
   const auth = await verifyAdminSession(request);
@@ -25,27 +20,28 @@ export async function POST(request) {
       );
     }
 
-    if (!SMTP_USER || !SMTP_PASS || !SMTP_HOST) {
+    const smtp = getCampaignSmtpConfig();
+    if (!smtp.configured) {
       return NextResponse.json(
-        { error: 'Email sender credentials are not configured' },
+        { error: 'Campaign email sender credentials are not configured' },
         { status: 500 }
       );
     }
 
     const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
       auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
+        user: smtp.user,
+        pass: smtp.pass,
       }
     });
 
     await transporter.sendMail({
       bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
-      from: NOTIFICATION_FROM,
-      replyTo: SMTP_USER,
+      from: smtp.from,
+      replyTo: smtp.replyTo,
       to: email,
       subject: `[TEST] ${subject}`,
       html: applyMarketingEmailFooter(html_content, {

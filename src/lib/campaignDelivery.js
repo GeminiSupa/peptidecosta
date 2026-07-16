@@ -3,10 +3,9 @@ import { createUnsubscribeToken } from '@/lib/marketingTokens';
 import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
+import { getCampaignSmtpConfig, isCampaignRackspaceSmtp } from '@/lib/campaignSmtp';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${process.env.SMTP_USER || 'omerforce@gmail.com'}>`;
-const RACKSPACE_HOST_PATTERN = /(emailsrvr|rackspace)/i;
 
 function positiveInteger(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -18,16 +17,12 @@ function nonNegativeInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
-function isRackspaceSmtp() {
-  return RACKSPACE_HOST_PATTERN.test(process.env.SMTP_HOST || '');
-}
-
 function wait(ms) {
   return ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve();
 }
 
 function campaignSafetyConfig() {
-  const rackspace = isRackspaceSmtp();
+  const rackspace = isCampaignRackspaceSmtp();
   return {
     rackspace,
     batchSize: positiveInteger(
@@ -94,11 +89,12 @@ function trackedHtml(campaign, subscriber) {
 
 export async function deliverCampaign(campaignId, options = {}) {
   const { isTestBatch = false, sendWinner = false, winnerVariant = 'A' } = options;
+  const smtp = getCampaignSmtpConfig();
   const supabase = getSupabaseAdmin();
   const { data: campaign, error: campaignError } = await supabase.from('email_campaigns').select('*').eq('id', campaignId).single();
   if (campaignError || !campaign) throw new CampaignDeliveryError('Campaign not found', 404);
   if (!campaign.subject_line || !campaign.html_content) throw new CampaignDeliveryError('Campaign must have a subject and saved email body before sending', 400);
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS || !process.env.SMTP_HOST) throw new CampaignDeliveryError('Email sender credentials are not configured', 500);
+  if (!smtp.configured) throw new CampaignDeliveryError('Campaign email sender credentials are not configured', 500);
   if (campaign.status === 'sending') throw new CampaignDeliveryError('Campaign is already sending', 409);
   if (campaign.status === 'sent' && !sendWinner) throw new CampaignDeliveryError('Campaign was already sent. Duplicate it before sending again.', 409);
   if (campaign.status === 'testing' && campaign.is_ab_test && !sendWinner) throw new CampaignDeliveryError('A/B test is in progress. Pick a winner before sending the remaining subscribers.', 409);
@@ -154,10 +150,10 @@ export async function deliverCampaign(campaignId, options = {}) {
   const transporter = nodemailer.createTransport({
     pool: true,
     maxConnections: safety.maxConnections,
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 465),
-    secure: process.env.SMTP_SECURE !== 'false',
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.secure,
+    auth: { user: smtp.user, pass: smtp.pass },
   });
   let sent = 0;
   let failed = 0;
@@ -174,13 +170,13 @@ export async function deliverCampaign(campaignId, options = {}) {
         const unsubscribeUrl = `${DOMAIN}/api/unsubscribe?t=${encodeURIComponent(createUnsubscribeToken(subscriber.id))}`;
         await transporter.sendMail({
           ...(process.env.CAMPAIGN_BCC_EMAIL ? { bcc: process.env.CAMPAIGN_BCC_EMAIL } : {}),
-          from: NOTIFICATION_FROM,
+          from: smtp.from,
           to: subscriber.email,
           subject,
           html: trackedHtml(campaign, subscriber),
-          replyTo: campaign.reply_to || undefined,
+          replyTo: campaign.reply_to || smtp.replyTo,
           headers: {
-            'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:${process.env.SMTP_USER}?subject=unsubscribe>`,
+            'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:${smtp.replyTo}?subject=unsubscribe>`,
             'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
           },
         });

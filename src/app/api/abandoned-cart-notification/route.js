@@ -231,7 +231,6 @@ export async function POST(request) {
     const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
 
     const mailInfo = await transporter.sendMail({
-      bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
       from: NOTIFICATION_FROM,
       replyTo: SMTP_USER || 'info@peptidescostarica.net',
       to: customer_email.trim(),

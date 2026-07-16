@@ -5,6 +5,7 @@ import { canRetryDelivery, isMarketingSuppressed, normalizeMarketingIdentity } f
 import { createJourneyTrackingToken } from '@/lib/marketingTokens';
 import { hasWhatsAppOptIn } from '@/lib/whatsappCompliance';
 import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
+import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
@@ -12,11 +13,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
 
 function escapeHtml(value) {
@@ -104,14 +100,15 @@ function addTrackingToHtml(html, tracking) {
 }
 
 async function sendEmail(to, message, subject, tracking = null, htmlContent = null) {
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return false;
+  const smtp = getCampaignSmtpConfig();
+  if (!smtp.configured) return false;
 
   try {
     const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: { user: SMTP_USER, pass: SMTP_PASS }
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
+      auth: { user: smtp.user, pass: smtp.pass }
     });
 
     const trackingToken = tracking ? createJourneyTrackingToken(tracking) : null;
@@ -139,7 +136,8 @@ async function sendEmail(to, message, subject, tracking = null, htmlContent = nu
 
     const res = await transporter.sendMail({
             bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
-      from: `Peptides Costa Rica <info@peptidescostarica.net>`,
+      from: smtp.from,
+      replyTo: smtp.replyTo,
       to: to.trim(),
       subject: subject || 'Flash Sale! Exclusive Offer Inside',
       text: message || '',

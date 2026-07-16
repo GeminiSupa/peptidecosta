@@ -2,16 +2,11 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
-
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
 
 // Helper for sending WhatsApp via the official graph API
 async function sendWhatsApp(to, message, templateName = null, firstName = 'Customer', languageCode = 'es') {
@@ -77,7 +72,8 @@ let globalTransporter = null;
 
 // Helper for sending Emails
 async function sendEmail(to, message, subject) {
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return false;
+  const smtp = getCampaignSmtpConfig();
+  if (!smtp.configured) return false;
 
   try {
     if (!globalTransporter) {
@@ -85,12 +81,12 @@ async function sendEmail(to, message, subject) {
         pool: true,
         maxConnections: 5,
         maxMessages: 200,
-        host: SMTP_HOST,
-        port: SMTP_PORT,
-        secure: SMTP_SECURE,
+        host: smtp.host,
+        port: smtp.port,
+        secure: smtp.secure,
         auth: {
-          user: SMTP_USER,
-          pass: SMTP_PASS,
+          user: smtp.user,
+          pass: smtp.pass,
         }
       });
     }
@@ -113,7 +109,8 @@ async function sendEmail(to, message, subject) {
 
     const res = await globalTransporter.sendMail({
       bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
-      from: `Peptides Costa Rica <info@peptidescostarica.net>`,
+      from: smtp.from,
+      replyTo: smtp.replyTo,
       to: to.trim(),
       subject: subject || 'Flash Sale! Exclusive Offer Inside',
       text: message,
