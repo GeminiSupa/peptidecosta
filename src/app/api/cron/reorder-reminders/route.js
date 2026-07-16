@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyCronRequest } from '@/lib/cronAuth';
 import nodemailer from 'nodemailer';
+import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,21 +35,16 @@ export async function GET(request) {
       return NextResponse.json({ message: 'No eligible orders for reorder reminders.' });
     }
 
-    const SMTP_HOST = process.env.SMTP_HOST;
-    const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-    const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-    const SMTP_USER = process.env.SMTP_USER;
-    const SMTP_PASS = process.env.SMTP_PASS;
-
-    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-      return NextResponse.json({ error: 'SMTP settings missing' }, { status: 500 });
+    const smtp = getCampaignSmtpConfig();
+    if (!smtp.configured) {
+      return NextResponse.json({ error: 'Campaign SMTP settings missing' }, { status: 500 });
     }
 
     const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: { user: SMTP_USER, pass: SMTP_PASS }
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
+      auth: { user: smtp.user, pass: smtp.pass }
     });
 
     let sentCount = 0;
@@ -79,8 +75,8 @@ export async function GET(request) {
 
       try {
         await transporter.sendMail({
-          from: `Peptides Costa Rica <${SMTP_USER}>`,
-          replyTo: 'omerforce@gmail.com',
+          from: smtp.from,
+          replyTo: smtp.replyTo,
           to: order.customer_email.trim(),
           subject,
           html,

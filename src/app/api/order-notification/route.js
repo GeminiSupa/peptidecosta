@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 
 // Environment variables will be read inside the POST handler
 // to ensure they are always fresh in serverless environments.
@@ -427,12 +428,7 @@ export async function POST(request) {
   const NOTIFICATION_TO = rawNotificationTo.includes('surfyesi@hotmail.com')
     ? rawNotificationTo
     : `${rawNotificationTo}, surfyesi@hotmail.com`;
-  const SMTP_HOST = process.env.SMTP_HOST;
-  const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-  const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-  const SMTP_USER = process.env.SMTP_USER;
-  const SMTP_PASS = process.env.SMTP_PASS;
-  const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
+  const smtp = getCampaignSmtpConfig();
 
   try {
     const order = await request.json();
@@ -496,8 +492,8 @@ export async function POST(request) {
       });
     }
 
-    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-      console.warn('[Order notification] SMTP settings are not configured; email skipped.');
+    if (!smtp.configured) {
+      console.warn('[Order notification] Campaign SMTP settings are not configured; email skipped.');
       return NextResponse.json({ sent: false, skipped: true });
     }
 
@@ -513,12 +509,12 @@ export async function POST(request) {
 
     // Nodemailer transporter creation
     const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
       auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
+        user: smtp.user,
+        pass: smtp.pass,
       }
     });
 
@@ -571,7 +567,7 @@ export async function POST(request) {
 
       const adminInfo = await transporter.sendMail({
             bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
-        from: NOTIFICATION_FROM,
+        from: smtp.from,
         to: NOTIFICATION_TO,
         subject: adminSubject,
         html: adminHtml,
@@ -629,8 +625,8 @@ export async function POST(request) {
         ].join('\n');
 
         const customerInfo = await transporter.sendMail({
-          from: NOTIFICATION_FROM,
-          replyTo: 'omerforce@gmail.com',
+          from: smtp.from,
+          replyTo: smtp.replyTo,
           to: order.customerEmail.trim(),
           subject: customerSubject,
           html: customerHtml,

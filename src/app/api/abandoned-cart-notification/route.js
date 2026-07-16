@@ -2,13 +2,7 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
 import { getBusinessLinks } from '@/lib/settings';
-
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
+import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -175,19 +169,20 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
-    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-      console.warn('[Abandoned Cart Notification] SMTP credentials not set. Recovery email skipped.');
-      return NextResponse.json({ sent: false, error: 'SMTP settings missing' }, { status: 500 });
+    const smtp = getCampaignSmtpConfig();
+    if (!smtp.configured) {
+      console.warn('[Abandoned Cart Notification] Campaign SMTP credentials not set. Recovery email skipped.');
+      return NextResponse.json({ sent: false, error: 'Campaign SMTP settings missing' }, { status: 500 });
     }
 
     // Connect to SMTP
     const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
       auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
+        user: smtp.user,
+        pass: smtp.pass,
       }
     });
 
@@ -228,11 +223,9 @@ export async function POST(request) {
         : '¿Necesita ayuda? Contacte a soporte al +506 8404-6973 o responda a este correo.'
     ].join('\n');
 
-    const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'info@peptidescostarica.net'}>`;
-
     const mailInfo = await transporter.sendMail({
-      from: NOTIFICATION_FROM,
-      replyTo: SMTP_USER || 'info@peptidescostarica.net',
+      from: smtp.from,
+      replyTo: smtp.replyTo,
       to: customer_email.trim(),
       subject: customerSubject,
       html: recoveryHtml,
