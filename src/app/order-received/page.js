@@ -17,13 +17,22 @@ function OrderReceivedContent() {
   useEffect(() => {
     setMounted(true);
     if (typeof window !== 'undefined') {
+      // Language precedence: explicit ?lang → previously stored choice →
+      // the visitor's browser language → Spanish. The browser-language step
+      // matters here because a customer redirected from a third-party payment
+      // link arrives with no ?lang and no stored preference, so without it every
+      // visitor would see Spanish regardless of who they are.
       const params = new URLSearchParams(window.location.search);
       const urlLang = params.get('lang');
+      const storedLang = localStorage.getItem('lang');
+      const browserLang = (navigator.language || navigator.userLanguage || '').toLowerCase().startsWith('en') ? 'en' : 'es';
+
       if (urlLang === 'en' || urlLang === 'es') {
         setLang(urlLang);
+      } else if (storedLang === 'en' || storedLang === 'es') {
+        setLang(storedLang);
       } else {
-        const storedLang = localStorage.getItem('lang');
-        if (storedLang === 'en' || storedLang === 'es') setLang(storedLang);
+        setLang(browserLang);
       }
     }
   }, []);
@@ -34,12 +43,16 @@ function OrderReceivedContent() {
       body: 'We have received your order and are working on it. We will be in touch with you soon.',
       note: 'Please expect slower response times on weekends and outside working hours.',
       button: 'Return to Catalog',
+      whatsappText1: 'To speak to a live agent immediately, please message us on ',
+      whatsappLink: 'Whatsapp: 8404-6973',
     },
     es: {
       title: 'Gracias por su Pedido',
       body: 'Hemos recibido su pedido y ya estamos trabajando en él. Nos pondremos en contacto con usted pronto.',
       note: 'Por favor, espere tiempos de respuesta más lentos los fines de semana y fuera del horario laboral.',
       button: 'Volver al Catálogo',
+      whatsappText1: 'Para hablar con un agente en vivo de inmediato, por favor envíenos un mensaje por ',
+      whatsappLink: 'Whatsapp: 8404-6973',
     },
   }[lang];
 
@@ -115,6 +128,28 @@ function OrderReceivedContent() {
           <ArrowLeft size={18} />
           {t.button}
         </Link>
+
+        <p style={{
+          fontSize: '0.85rem',
+          color: '#64748b',
+          lineHeight: 1.5,
+          margin: '24px 0 0',
+        }}>
+          {t.whatsappText1}
+          <a
+            href="https://wa.me/50684046973"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              color: '#059669',
+              fontWeight: 600,
+              textDecoration: 'underline',
+            }}
+          >
+            {t.whatsappLink}
+          </a>
+          .
+        </p>
 
         <p style={{ fontSize: '0.75rem', color: '#cbd5e1', fontWeight: 600, letterSpacing: '0.3px', margin: '28px 0 0' }}>
           Peptides Costa Rica
