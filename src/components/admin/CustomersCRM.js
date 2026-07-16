@@ -112,7 +112,10 @@ const formatTimelineDate = (value) => {
 
 const buildSalesScript = (cust) => {
   const rec = resolveRecommendation(cust);
-  const firstName = (cust.name || 'there').split(' ')[0];
+  const rawName = String(cust.name || '').trim();
+  const lowerName = rawName.toLowerCase();
+  const genericNames = new Set(['pre-purchase lead', 'lead', 'unknown', 'customer']);
+  const firstName = rawName && !genericNames.has(lowerName) ? rawName.split(' ')[0] : 'there';
   const cartLine = cust.cartItems?.length
     ? `I saw you were reviewing ${cust.cartItems.map(item => item.product).join(', ')}.`
     : `Based on your profile, ${rec.product} is the next item I would check first.`;
@@ -121,7 +124,7 @@ const buildSalesScript = (cust) => {
     : cartLine;
 
   if (cust.isLead) {
-    return `Hi ${firstName}, this is Peptides Costa Rica. ${cartLine} We have local Costa Rica inventory, COA documentation, and CRC pricing ready. Would you like me to check availability and coordinate the next step for you?`;
+    return `Hi ${firstName}, this is Peptides Costa Rica. ${cartLine} We have local Costa Rica inventory, COA documentation, and CRC pricing ready. Would you like me to check current availability or answer any questions before you order?`;
   }
 
   if (daysSince(cust.lastOrderDate) >= 60) {
