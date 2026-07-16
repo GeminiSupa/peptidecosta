@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { isShieldHubPayConfigured, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
+import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
 
 export const runtime = 'nodejs';
 
@@ -14,7 +14,7 @@ function normalizeAmount(amount, currency) {
 }
 
 function splitName(name = '') {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const parts = normalizeShieldHubPayName(name).split(/\s+/).filter(Boolean);
   return {
     first: parts[0] || 'Customer',
     last: parts.slice(1).join(' ') || parts[0] || 'Customer',
@@ -35,7 +35,7 @@ function parseBillingAddress(shippingAddress = '') {
   };
 }
 
-function normalizeCard(card = {}) {
+function normalizeCard(card = {}, fallbackHolder = 'Customer') {
   const expiry = String(card.expiry || '').replace(/\s+/g, '');
   const [rawMonth, rawYear] = expiry.includes('/') ? expiry.split('/') : [card.expiryMonth, card.expiryYear];
   const expiryMonth = String(rawMonth || '').replace(/\D/g, '').padStart(2, '0').slice(0, 2);
@@ -43,7 +43,7 @@ function normalizeCard(card = {}) {
   const expiryYear = yearDigits.length === 4 ? yearDigits.slice(2) : yearDigits;
 
   return {
-    holder: String(card.holder || '').trim(),
+    holder: normalizeShieldHubPayName(card.holder, fallbackHolder),
     number: String(card.number || '').replace(/\D/g, ''),
     cvv: String(card.cvv || '').replace(/\D/g, ''),
     expiry_month: expiryMonth,
@@ -133,7 +133,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Card payments are currently configured for USD only' }, { status: 400 });
     }
 
-    const normalizedCard = normalizeCard(card);
+    const normalizedCard = normalizeCard(card, customerName);
     if (!normalizedCard.holder || normalizedCard.number.length < 12 || normalizedCard.cvv.length < 3 || !normalizedCard.expiry_month || !normalizedCard.expiry_year) {
       return NextResponse.json({ error: 'Missing or invalid card details' }, { status: 400 });
     }

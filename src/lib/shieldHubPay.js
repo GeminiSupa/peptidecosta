@@ -15,6 +15,19 @@ export function buildShieldHubPayHash(amount, transactionReference) {
     .digest('hex');
 }
 
+export function normalizeShieldHubPayName(value, fallback = 'Customer') {
+  const clean = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (clean) return clean;
+  if (fallback && fallback !== value) return normalizeShieldHubPayName(fallback, 'Customer');
+  return 'Customer';
+}
+
 // Authoritative transaction lookup (GET /api/transaction/{id}). Uses a different
 // hash recipe than payments: sha256(clientId + transactionId + apiSecret).
 // The gateway returns HTTP 200 even for auth failures ({errorCode: "002"}), so

@@ -46,6 +46,7 @@ function CardPaymentContent() {
         setOrder(data.order);
         setForm(prev => ({
           ...prev,
+          holder: prev.holder || data.order.customerName || '',
           email: data.order.customerEmail || '',
         }));
       } catch (err) {
