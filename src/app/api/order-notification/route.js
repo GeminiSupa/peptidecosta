@@ -629,7 +629,6 @@ export async function POST(request) {
         ].join('\n');
 
         const customerInfo = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
           from: NOTIFICATION_FROM,
           replyTo: 'omerforce@gmail.com',
           to: order.customerEmail.trim(),
