@@ -50,11 +50,26 @@ const getStoredTotal = (order) => {
 const getCardPaymentBadge = (order) => {
   if (order.payment_method !== 'card') return null;
   const status = String(order.status || '').toLowerCase();
-  if (status.includes('paid')) return { label: 'Paid', color: '#4ade80', bg: 'rgba(34, 197, 94, 0.14)' };
-  if (status.includes('declined')) return { label: 'Declined', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
-  if (status.includes('3ds')) return { label: '3DS Pending', color: '#c084fc', bg: 'rgba(168, 85, 247, 0.14)' };
-  if (status.includes('error')) return { label: 'Error', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
-  return { label: 'Pending', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.14)' };
+  const providerStatus = String(order.payment_provider_status || '').toLowerCase();
+
+  if (
+    status.includes('paid') ||
+    status.includes('complete') ||
+    providerStatus === 'approved' ||
+    providerStatus === 'completed'
+  ) {
+    return { label: 'Paid', color: '#4ade80', bg: 'rgba(34, 197, 94, 0.14)' };
+  }
+  if (status.includes('declined') || providerStatus === 'declined') {
+    return { label: 'Declined', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
+  }
+  if (status.includes('3ds') || providerStatus.includes('3ds')) {
+    return { label: '3DS Pending', color: '#c084fc', bg: 'rgba(168, 85, 247, 0.14)' };
+  }
+  if (status.includes('error') || providerStatus === 'failed') {
+    return { label: 'Error', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
+  }
+  return { label: 'Card Pending', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.14)' };
 };
 
 const inferShippingCosts = (order) => {

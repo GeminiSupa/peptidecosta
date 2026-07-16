@@ -16,11 +16,18 @@ const ORDER_STATUS_OPTIONS = [
 
 function getStatusSelectStyle(status) {
   const normalized = String(status || 'Pending').toLowerCase();
-  if (normalized.includes('paid') || normalized.includes('complete')) {
+  if (normalized.includes('complete')) {
     return {
       background: 'rgba(34, 197, 94, 0.15)',
       color: '#4ade80',
       border: '1px solid rgba(34, 197, 94, 0.3)',
+    };
+  }
+  if (normalized.includes('paid')) {
+    return {
+      background: 'rgba(234, 179, 8, 0.15)',
+      color: '#eab308',
+      border: '1px solid rgba(234, 179, 8, 0.3)',
     };
   }
   if (normalized.includes('declined') || normalized.includes('cancel') || normalized.includes('error')) {
@@ -61,10 +68,25 @@ function getStatusSelectStyle(status) {
 function getCardPaymentBadge(order) {
   if (order.payment_method !== 'card') return null;
   const status = String(order.status || '').toLowerCase();
-  if (status.includes('paid')) return { label: 'Paid', color: '#4ade80', bg: 'rgba(34, 197, 94, 0.14)' };
-  if (status.includes('declined')) return { label: 'Declined', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
-  if (status.includes('3ds')) return { label: '3DS Pending', color: '#c084fc', bg: 'rgba(168, 85, 247, 0.14)' };
-  if (status.includes('error')) return { label: 'Error', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
+  const providerStatus = String(order.payment_provider_status || '').toLowerCase();
+
+  if (
+    status.includes('paid') ||
+    status.includes('complete') ||
+    providerStatus === 'approved' ||
+    providerStatus === 'completed'
+  ) {
+    return { label: 'Paid', color: '#4ade80', bg: 'rgba(34, 197, 94, 0.14)' };
+  }
+  if (status.includes('declined') || providerStatus === 'declined') {
+    return { label: 'Declined', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
+  }
+  if (status.includes('3ds') || providerStatus.includes('3ds')) {
+    return { label: '3DS Pending', color: '#c084fc', bg: 'rgba(168, 85, 247, 0.14)' };
+  }
+  if (status.includes('error') || providerStatus === 'failed') {
+    return { label: 'Error', color: '#f87171', bg: 'rgba(239, 68, 68, 0.14)' };
+  }
   return { label: 'Card Pending', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.14)' };
 }
 
