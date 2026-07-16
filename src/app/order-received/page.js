@@ -62,9 +62,15 @@ function OrderReceivedContent() {
         borderRadius: '20px',
         border: '1px solid #e2e8f0',
         boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
-        padding: '40px 32px',
+        padding: '36px 32px 40px',
         textAlign: 'center',
       }}>
+        <img
+          src="/logo.png"
+          alt="Peptides Costa Rica"
+          style={{ height: '52px', width: 'auto', margin: '0 auto 24px', display: 'block' }}
+        />
+
         <div style={{
           width: '72px',
           height: '72px',
@@ -109,6 +115,10 @@ function OrderReceivedContent() {
           <ArrowLeft size={18} />
           {t.button}
         </Link>
+
+        <p style={{ fontSize: '0.75rem', color: '#cbd5e1', fontWeight: 600, letterSpacing: '0.3px', margin: '28px 0 0' }}>
+          Peptides Costa Rica
+        </p>
       </div>
     </div>
   );
