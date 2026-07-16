@@ -57,9 +57,20 @@ export class CampaignDeliveryError extends Error {
 }
 
 function personalize(value, subscriber) {
+  const first = String(subscriber?.first_name || '').trim();
+  const last = String(subscriber?.last_name || '').trim();
+
+  // First-name tags in every style the editor might emit: [FIRST_NAME] and the
+  // Mailchimp merge tags *|FIRST:NAME|* / *|FNAME|*. Without matching these the
+  // raw tag shipped to every recipient (e.g. "HOLA *|FIRST:NAME|*!"). When the
+  // name is empty, swallow one leading space so a nameless greeting reads
+  // "HOLA!" rather than "HOLA !"; when present, keep the space.
+  const firstNameTag = /[ \t]?(?:\[FIRST_NAME\]|\*\|\s*(?:FIRST:?NAME|FNAME)\s*\|\*)/gi;
+  const lastNameTag = /[ \t]?(?:\[LAST_NAME\]|\*\|\s*(?:LAST:?NAME|LNAME)\s*\|\*)/gi;
+
   return String(value || '')
-    .replace(/\[FIRST_NAME\]/g, subscriber.first_name || 'Friend')
-    .replace(/\[LAST_NAME\]/g, subscriber.last_name || '');
+    .replace(firstNameTag, (match) => (first ? (match.startsWith(' ') || match.startsWith('\t') ? ' ' : '') + first : ''))
+    .replace(lastNameTag, (match) => (last ? (match.startsWith(' ') || match.startsWith('\t') ? ' ' : '') + last : ''));
 }
 
 function trackedHtml(campaign, subscriber) {
