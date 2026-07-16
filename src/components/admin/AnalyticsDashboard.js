@@ -605,12 +605,26 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   const simHook = getSimulatedHook(selectedSimPeptide);
 
+  const normalizePaymentMethod = (method) => {
+    const value = String(method || 'whatsapp').trim().toLowerCase();
+    if (value === 'tilopay' || value === 'tilo pay' || value === 'shieldhubpay' || value === 'shield hub pay') return 'card';
+    return value || 'whatsapp';
+  };
+
+  const getPaymentMethodLabel = (method) => {
+    if (method === 'sinpe') return 'SINPE Móvil';
+    if (method === 'card') return 'Credit Card';
+    if (method === 'whatsapp') return 'WhatsApp';
+    if (method === 'paypal') return 'PayPal';
+    return method.toUpperCase();
+  };
+
   // Payment channels and Source metrics
   const paymentBreakdown = {};
   const whatsappSourceBreakdown = {};
   
   orders.forEach(o => {
-    const method = o.payment_method || 'whatsapp';
+    const method = normalizePaymentMethod(o.payment_method);
     if (!paymentBreakdown[method]) {
       paymentBreakdown[method] = { count: 0, revenue: 0 };
     }
@@ -2460,20 +2474,17 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   {Object.entries(paymentBreakdown).map(([method, data]) => {
                     const pct = (data.count / maxPaymentCount) * 100;
                     
-                    let cleanMethodName = method.toUpperCase();
+                    let cleanMethodName = getPaymentMethodLabel(method);
                     let icon = null;
                     let color = '#a78bfa'; // default purple
                     
                     if (method === 'sinpe') {
-                      cleanMethodName = 'SINPE Móvil';
                       icon = <Smartphone size={14} />;
                       color = '#f97316'; // Orange
                     } else if (method === 'card') {
-                      cleanMethodName = 'Credit Card';
                       icon = <CreditCard size={14} />;
                       color = '#0ea5e9'; // Blue
                     } else if (method === 'whatsapp') {
-                      cleanMethodName = 'WhatsApp';
                       icon = <MessageCircle size={14} />;
                       color = '#22c55e'; // Green
                     }
@@ -3279,7 +3290,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   <li style={{ marginBottom: '8px' }}>
                     <strong>Optimize Checkout Payment Channels</strong>: {(() => {
                       const topPayment = Object.entries(paymentBreakdown).sort((a,b) => b[1].count - a[1].count)[0];
-                      const topMethodName = topPayment[0] === 'sinpe' ? 'SINPE Móvil' : topPayment[0] === 'card' ? 'Credit Card' : topPayment[0].toUpperCase();
+                      const topMethodName = getPaymentMethodLabel(topPayment[0]);
                       return (
                         <span>
                           Your customers highly prefer using <strong>{topMethodName}</strong> ({topPayment[1].count} orders). Keep this payment pathway completely friction-free! If manual WhatsApp ordering or SINPE verification load becomes too high, guide customers to use automated credit card processing to secure instant checkout.
