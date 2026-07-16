@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import { canRetryDelivery, isMarketingSuppressed, normalizeMarketingIdentity } from '@/lib/marketingDelivery.mjs';
 import { createJourneyTrackingToken } from '@/lib/marketingTokens';
 import { hasWhatsAppOptIn } from '@/lib/whatsappCompliance';
+import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
 
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
@@ -88,9 +89,10 @@ async function sendWhatsApp(to, message, templateName = null, firstName = null, 
 }
 
 function addTrackingToHtml(html, tracking) {
-  if (!tracking) return html;
+  const safeHtml = clampOutlookButtonSizes(html);
+  if (!tracking) return safeHtml;
   const trackingToken = createJourneyTrackingToken(tracking);
-  const trackedHtml = String(html || '').replace(/href="([^"]+)"/g, (match, url) => {
+  const trackedHtml = String(safeHtml || '').replace(/href="([^"]+)"/g, (match, url) => {
     if (!url.startsWith('http') && !url.startsWith('/')) return match;
     const absoluteUrl = url.startsWith('/') ? `${BASE_URL}${url}` : url;
     return `href="${BASE_URL}/api/tracking/journey/click?t=${encodeURIComponent(trackingToken)}&url=${encodeURIComponent(absoluteUrl)}"`;

@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { createUnsubscribeToken } from '@/lib/marketingTokens';
 import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${process.env.SMTP_USER || 'omerforce@gmail.com'}>`;
@@ -62,7 +63,8 @@ function personalize(value, subscriber) {
 }
 
 function trackedHtml(campaign, subscriber) {
-  const content = personalize(campaign.html_content, subscriber).replace(/href="([^"]+)"/g, (match, url) => {
+  const safeHtml = clampOutlookButtonSizes(campaign.html_content);
+  const content = personalize(safeHtml, subscriber).replace(/href="([^"]+)"/g, (match, url) => {
     if (!url.startsWith('http') && !url.startsWith('/')) return match;
     const absoluteUrl = url.startsWith('/') ? `${DOMAIN}${url}` : url;
     const separator = absoluteUrl.includes('?') ? '&' : '?';
