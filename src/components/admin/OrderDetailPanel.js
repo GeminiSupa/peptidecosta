@@ -173,6 +173,11 @@ export default function OrderDetailPanel({
 
   const activity = Array.isArray(order.activity_log) ? order.activity_log : [];
   const cardPaymentBadge = getCardPaymentBadge(order);
+  const statusLower = String(order.status || '').toLowerCase();
+  const isActionRequired = order.payment_method === 'card' && 
+                            cardPaymentBadge?.label === 'Paid' && 
+                            !statusLower.includes('complete') && 
+                            !statusLower.includes('cancel');
   const shipping = order.currency === 'USD'
     ? Number(shippingUsd) || 0
     : Number(shippingCrc) || 0;
@@ -345,6 +350,22 @@ export default function OrderDetailPanel({
 
   return (
     <div className="modal active" onClick={onClose} style={{ zIndex: 210 }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes alert-pulse {
+          0% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            transform: scale(0.95);
+          }
+          70% {
+            box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+            transform: scale(1.15);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            transform: scale(0.95);
+          }
+        }
+      `}} />
       <div className="modal-content order-detail-panel" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="close-modal" onClick={onClose}>&times;</button>
 
@@ -423,6 +444,33 @@ export default function OrderDetailPanel({
         <div className="order-detail-section">
           <h3>Transaction</h3>
           <div className="order-detail-grid">
+            {isActionRequired && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '8px',
+                padding: '10px 12px',
+                color: '#f87171',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                gridColumn: '1 / -1',
+                marginBottom: '8px',
+              }}>
+                <span style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: '#ef4444',
+                  boxShadow: '0 0 0 0 rgba(239, 68, 68, 0.7)',
+                  animation: 'alert-pulse 1.8s infinite ease-in-out',
+                  display: 'inline-block'
+                }} />
+                <span>Card payment approved. Fulfill order and set status to "Order Complete".</span>
+              </div>
+            )}
             <div><label>Payment</label><span>{order.payment_method}</span></div>
             {cardPaymentBadge && (
               <div>

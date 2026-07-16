@@ -136,6 +136,22 @@ export default function OrdersManager({
 
   return (
     <div className="admin-tab-panel admin-tab-orders-panel">
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes alert-pulse {
+          0% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            transform: scale(0.95);
+          }
+          70% {
+            box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+            transform: scale(1.15);
+          }
+          100% {
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            transform: scale(0.95);
+          }
+        }
+      `}} />
       <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ flex: '1 1 auto', minWidth: 0 }}>
           <h3>{isStaffAgent ? 'My Orders' : 'Customer Orders Log Ledger'}</h3>
@@ -230,6 +246,13 @@ export default function OrdersManager({
                   
                   const _storedTotal = order.currency === 'USD' ? Number(order.total_usd || 0) : Number(order.total_crc || 0);
                   const _displayTotal = _storedTotal;
+
+                  const status = String(order.status || '').toLowerCase();
+                  const cardBadge = getCardPaymentBadge(order);
+                  const isActionRequired = order.payment_method === 'card' && 
+                                            cardBadge?.label === 'Paid' && 
+                                            !status.includes('complete') && 
+                                            !status.includes('cancel');
                   
                   return (
                     <tr key={order.id}>
@@ -238,8 +261,30 @@ export default function OrdersManager({
                       </td>
                       <td data-label="Order Info" style={{ padding: '10px 12px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontWeight: 'bold', color: '#fbbf24', fontSize: '0.85rem' }}>
+                          <span style={{ 
+                            fontWeight: 'bold', 
+                            color: '#fbbf24', 
+                            fontSize: '0.85rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}>
                             #{order.order_number || order.id.slice(0, 8)}
+                            {isActionRequired && (
+                              <span 
+                                title="Card payment approved - Action required to complete order"
+                                style={{
+                                  width: '8px',
+                                  height: '8px',
+                                  borderRadius: '50%',
+                                  backgroundColor: '#ef4444',
+                                  display: 'inline-block',
+                                  boxShadow: '0 0 0 0 rgba(239, 68, 68, 0.7)',
+                                  animation: 'alert-pulse 1.8s infinite ease-in-out',
+                                  flexShrink: 0,
+                                }}
+                              />
+                            )}
                           </span>
                           <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
                             {items.length} {items.length === 1 ? 'item' : 'items'}
