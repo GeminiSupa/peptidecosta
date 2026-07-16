@@ -375,6 +375,8 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
   // Test email
   const [testEmail,      setTestEmail]      = useState('');
   const [isSendingTest,  setIsSendingTest]  = useState(false);
+  // Fallback used for name merge tags when a contact has no name on file.
+  const [defaultFirstName, setDefaultFirstName] = useState('');
   const [autosaveStatus, setAutosaveStatus] = useState('idle');
   const [lastSavedAt,    setLastSavedAt]    = useState(null);
   const [statusDetail,   setStatusDetail]   = useState('');
@@ -893,6 +895,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
             subject: subject || 'Test Campaign',
             html_content: html,
             test_mode: true,
+            default_first_name: defaultFirstName.trim(),
           }),
         });
         const data = await res.json();
@@ -1028,6 +1031,15 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
                 }}
                 placeholder="name@example.com"
                 aria-label="Test email recipients"
+              />
+              <input
+                type="text"
+                value={defaultFirstName}
+                onChange={e => setDefaultFirstName(e.target.value)}
+                placeholder="Default name (e.g. Cliente)"
+                aria-label="Default first name when a contact has no name on file"
+                title="Used to fill the name merge tag when a contact has no name. Leave empty to show no name."
+                style={{ maxWidth: '190px' }}
               />
               <button
                 type="button"

@@ -5,6 +5,7 @@ import { getBusinessLinks } from '@/lib/settings';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { createUnsubscribeToken } from '@/lib/marketingTokens';
 import { MARKETING_FOOTER_MARKER, applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
+import { clampOutlookButtonSizes, personalizeMergeTags } from '@/lib/emailHtmlSafety';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
 
@@ -20,7 +21,7 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   try {
-    const { to, subject, message, html_content, test_mode = false, ignoreSuppression = false } = await request.json();
+    const { to, subject, message, html_content, test_mode = false, ignoreSuppression = false, default_first_name = '', default_last_name = '' } = await request.json();
     const links = await getBusinessLinks();
 
     if (!to || !subject || (!message && !html_content)) {
@@ -35,14 +36,18 @@ export async function POST(request) {
 
     // Look up subscriber (for the unsubscribe token) and any active suppression.
     let subscriberId = null;
+    let subscriberFirstName = '';
+    let subscriberLastName = '';
     try {
       const supabaseAdmin = getSupabaseAdmin();
       const [{ data: sub }, { data: suppressed }] = await Promise.all([
-        supabaseAdmin.from('email_subscribers').select('id').eq('email', recipient).maybeSingle(),
+        supabaseAdmin.from('email_subscribers').select('id, first_name, last_name').eq('email', recipient).maybeSingle(),
         supabaseAdmin.from('marketing_suppressions').select('id')
           .eq('active', true).eq('identity', recipient).in('channel', ['email', 'all']).limit(1),
       ]);
       subscriberId = sub?.id || null;
+      subscriberFirstName = sub?.first_name || '';
+      subscriberLastName = sub?.last_name || '';
 
       // Respect unsubscribes. ignoreSuppression is for genuine 1-on-1 support
       // replies the customer asked for — never for outreach.
@@ -104,14 +109,30 @@ export async function POST(request) {
       ...(unsubscribeUrl ? [`<${unsubscribeUrl}>`] : []),
       `<mailto:${SMTP_USER}?subject=unsubscribe>`,
     ].join(', ');
-    const formattedHtml = (test_mode || String(rawHtml).includes(MARKETING_FOOTER_MARKER))
-      ? applyMarketingEmailFooter(rawHtml, {
+    // Run the same fixes real sends get, so a test email is representative:
+    // fix Outlook's oversized-button bug and resolve name merge tags. Names come
+    // from the recipient's own subscriber record — no fabricated sample. If the
+    // address has no name on file the tag resolves to empty (e.g. "HOLA!"), and
+    // the campaign's own default value (set in the designer) fills in when
+    // provided.
+    const processedHtml = personalizeMergeTags(
+      clampOutlookButtonSizes(rawHtml),
+      {
+        firstName: subscriberFirstName,
+        lastName: subscriberLastName,
+        defaultFirstName: default_first_name,
+        defaultLastName: default_last_name,
+      }
+    );
+
+    const formattedHtml = (test_mode || String(processedHtml).includes(MARKETING_FOOTER_MARKER))
+      ? applyMarketingEmailFooter(processedHtml, {
         domain: DOMAIN,
         unsubscribeUrl: unsubscribeUrl || `${DOMAIN}/unsubscribe`,
         preferencesUrl: unsubscribeUrl || `${DOMAIN}/unsubscribe`,
         viewEmailUrl: DOMAIN,
       })
-      : rawHtml;
+      : processedHtml;
 
     const info = await transporter.sendMail({
       bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
