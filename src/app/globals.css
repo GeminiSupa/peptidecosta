@@ -5291,6 +5291,7 @@ body:has(.product-grid.grid-view) {
     background: rgba(255, 255, 255, 0.92);
     padding: 3px 5px;
     border-radius: 4px;
+    box-sizing: content-box;
 }
 
 .trust-text {
