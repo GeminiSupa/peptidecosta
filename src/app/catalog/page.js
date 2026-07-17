@@ -2779,14 +2779,15 @@ export default function CatalogPage() {
               rel="noopener noreferrer"
               className="trust-badge press-badge"
             >
-              <span className="press-badge-label">
-                {lang === 'en' ? 'As seen in' : 'Visto en'}
-              </span>
               <img
                 src="/costa-rica-news-logo.png"
                 alt="The Costa Rica News"
                 className="press-badge-logo"
               />
+              <div className="trust-text">
+                <span className="trust-score">{lang === 'en' ? 'As seen in' : 'Visto en'}</span>
+                <span className="trust-desc press-badge-name">The Costa Rica News</span>
+              </div>
             </a>
           </div>
         </div>

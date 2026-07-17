@@ -5263,29 +5263,23 @@ body:has(.product-grid.grid-view) {
     background: var(--bg-card);
 }
 
-/* Press seal: sized to its logo (not stretched like the flex:1 review badges),
-   horizontal "As seen in" label + a legible wordmark, with a rust accent border
-   to set it apart from the star-rating badges. */
+/* Press seal: same size and anatomy as the review badges (inherits .trust-badge
+   sizing) — logo in the icon slot, "As seen in" as the title, the publication
+   name as the subtitle. Rust border sets it apart from the star-rating badges. */
 .press-badge {
-    flex: 0 0 auto;
-    max-width: none;
-    gap: 8px;
     border-color: var(--accent);
 }
 
-.press-badge-label {
-    font-size: 0.55rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #64748b;
-    white-space: nowrap;
+.press-badge-logo {
+    height: 16px;
+    width: auto;
+    flex: 0 0 auto;
+    display: block;
 }
 
-.press-badge-logo {
-    height: 30px;
-    width: auto;
-    display: block;
+.press-badge-name {
+    font-size: 0.52rem;
+    white-space: nowrap;
 }
 
 .trust-text {
