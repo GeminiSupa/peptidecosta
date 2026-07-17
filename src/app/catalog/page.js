@@ -292,6 +292,11 @@ export default function CatalogPage() {
 
   // Card Payment State
   const [cardSubmitting, setCardSubmitting] = useState(false);
+  // Synchronous double-submit guard. The `cardSubmitting` state guard updates too
+  // late to stop a fast second click, so a ref blocks re-entry the instant the
+  // handler fires — repeated charge attempts are what trip the gateway's
+  // "attempts allowed" limit and can double-charge the customer.
+  const cardSubmitLockRef = useRef(false);
 
   // Contact Modal States
   const [contactModalOpen, setContactModalOpen] = useState(false);
@@ -1830,7 +1835,7 @@ export default function CatalogPage() {
   };
 
   const startCardCheckout = async () => {
-    if (cardSubmitting || cart.length === 0) return;
+    if (cardSubmitLockRef.current || cardSubmitting || cart.length === 0) return;
 
     if (!customerName || !customerEmail || !customerPhone || !shippingAddress || !customerIdNumber) {
       return;
@@ -1845,6 +1850,7 @@ export default function CatalogPage() {
       return;
     }
 
+    cardSubmitLockRef.current = true;
     setCardSubmitting(true);
 
     const orderNum = `CARD-${Date.now().toString(36).toUpperCase()}`;
@@ -1889,6 +1895,7 @@ export default function CatalogPage() {
 
     if (!cardSave.ok) {
       setCardSubmitting(false);
+      cardSubmitLockRef.current = false;
       alert(lang === 'en'
         ? 'Could not save your order. Please try again or contact us on WhatsApp.'
         : 'No se pudo guardar su pedido. Por favor intente de nuevo o contáctenos por WhatsApp.');
@@ -1969,10 +1976,12 @@ export default function CatalogPage() {
         ? `Card payment setup failed: ${data.error || 'Unknown error'}`
         : `Error al configurar el pago con tarjeta: ${data.error || 'Error desconocido'}`);
       setCardSubmitting(false);
+      cardSubmitLockRef.current = false;
     } catch (err) {
       console.error('Card payment error:', err);
       alert(lang === 'en' ? 'Connection error. Please try again.' : 'Error de conexión. Intente de nuevo.');
       setCardSubmitting(false);
+      cardSubmitLockRef.current = false;
     }
   };
 

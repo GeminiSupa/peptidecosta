@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
+import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 
 export const runtime = 'nodejs';
 
@@ -138,26 +139,54 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Missing or invalid card details' }, { status: 400 });
     }
 
+    // Atomically claim the order so two concurrent requests can't both charge it
+    // (a double-click, two tabs, or a resend). The winner charges; a loser — the
+    // order already paid, or already being processed — is rejected before the
+    // gateway is touched a second time.
+    const supabase = getSupabaseAdmin();
+    const claim = await claimOrderForPayment(supabase, orderNumber);
+    if (!claim.claimed) {
+      const state = await describeOrderPaymentState(supabase, orderNumber);
+      if (state === 'not_found') {
+        return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+      }
+      if (state === 'settled') {
+        return NextResponse.json({ error: 'This order is already paid' }, { status: 409 });
+      }
+      return NextResponse.json(
+        { error: 'A payment for this order is already being processed. Please wait a moment before trying again.' },
+        { status: 409 },
+      );
+    }
+
     const name = splitName(customerName);
     const formattedAmount = normalizeAmount(amount, currency);
     const baseUrl = APP_URL.replace(/\/$/, '');
 
-    const transaction = await processShieldHubPayTransaction({
-      amount: formattedAmount,
-      currency,
-      transaction_reference: orderNumber,
-      redirectback_url: `${baseUrl}/thank-you?lang=${encodeURIComponent(lang)}&order=${encodeURIComponent(orderNumber)}`,
-      notification_url: `${baseUrl}/api/shieldhubpay/webhook`,
-      customer: {
-        first: name.first,
-        last: name.last,
-        email: customerEmail,
-        phone: customerPhone,
-        ip: customerIp || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
-      },
-      billing: parseBillingAddress(shippingAddress),
-      card: normalizedCard,
-    });
+    let transaction;
+    try {
+      transaction = await processShieldHubPayTransaction({
+        amount: formattedAmount,
+        currency,
+        transaction_reference: orderNumber,
+        redirectback_url: `${baseUrl}/thank-you?lang=${encodeURIComponent(lang)}&order=${encodeURIComponent(orderNumber)}`,
+        notification_url: `${baseUrl}/api/shieldhubpay/webhook`,
+        customer: {
+          first: name.first,
+          last: name.last,
+          email: customerEmail,
+          phone: customerPhone,
+          ip: customerIp || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
+        },
+        billing: parseBillingAddress(shippingAddress),
+        card: normalizedCard,
+      });
+    } catch (chargeErr) {
+      // No charge result — release the claim so the customer can retry instead of
+      // the order being stuck as "processing".
+      await releaseOrderClaim(supabase, orderNumber);
+      throw chargeErr;
+    }
 
     const orderStatus = statusToOrderStatus(transaction.status);
     await updateOrderStatus(orderNumber, orderStatus, transaction);

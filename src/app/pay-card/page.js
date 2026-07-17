@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { CreditCard, Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -20,6 +20,10 @@ function CardPaymentContent() {
   const [error, setError] = useState('');
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
+  // Synchronous double-submit guard. `paying` (React state) updates too late to
+  // stop a fast second click, so a ref blocks re-entry the instant submit fires —
+  // a repeated charge attempt is what trips the gateway's "attempts allowed" error.
+  const submitLockRef = useRef(false);
   const [form, setForm] = useState({
     holder: '',
     number: '',
@@ -82,6 +86,7 @@ function CardPaymentContent() {
 
   const submitPayment = async (event) => {
     event.preventDefault();
+    if (submitLockRef.current) return; // a charge is already in flight — ignore repeat clicks
     setError('');
 
     const cleanCardNumber = form.number.replace(/\D/g, '');
@@ -91,6 +96,7 @@ function CardPaymentContent() {
       return;
     }
 
+    submitLockRef.current = true;
     setPaying(true);
     try {
       const res = await fetch('/api/card-payment-link/pay', {
@@ -125,6 +131,7 @@ function CardPaymentContent() {
       setError(err.message);
     } finally {
       setPaying(false);
+      submitLockRef.current = false; // released so a genuine retry (e.g. new card) can proceed
     }
   };
 
