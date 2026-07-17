@@ -5284,6 +5284,15 @@ body:has(.product-grid.grid-view) {
     white-space: nowrap;
 }
 
+/* The Costa Rica News logo is dark navy on transparent, so it disappears against
+   the dark header. Give it a light chip in dark mode only (same approach as the
+   main brand logo) so it stays legible. */
+[data-theme="dark"] .press-badge-logo {
+    background: rgba(255, 255, 255, 0.92);
+    padding: 3px 5px;
+    border-radius: 4px;
+}
+
 .trust-text {
     display: flex;
     flex-direction: column;
