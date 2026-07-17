@@ -5264,15 +5264,26 @@ body:has(.product-grid.grid-view) {
 }
 
 /* Press seal: sized to its logo (not stretched like the flex:1 review badges),
-   with a rust accent border to set it apart from the star-rating badges. */
+   horizontal "As seen in" label + a legible wordmark, with a rust accent border
+   to set it apart from the star-rating badges. */
 .press-badge {
     flex: 0 0 auto;
     max-width: none;
+    gap: 8px;
     border-color: var(--accent);
 }
 
+.press-badge-label {
+    font-size: 0.55rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+    white-space: nowrap;
+}
+
 .press-badge-logo {
-    height: 22px;
+    height: 30px;
     width: auto;
     display: block;
 }

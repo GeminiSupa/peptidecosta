@@ -2779,16 +2779,14 @@ export default function CatalogPage() {
               rel="noopener noreferrer"
               className="trust-badge press-badge"
             >
-              <div className="trust-text" style={{ alignItems: 'flex-start' }}>
-                <span className="trust-desc" style={{ marginBottom: '3px' }}>
-                  {lang === 'en' ? 'As seen in' : 'Visto en'}
-                </span>
-                <img
-                  src="/costa-rica-news-logo.png"
-                  alt="The Costa Rica News"
-                  className="press-badge-logo"
-                />
-              </div>
+              <span className="press-badge-label">
+                {lang === 'en' ? 'As seen in' : 'Visto en'}
+              </span>
+              <img
+                src="/costa-rica-news-logo.png"
+                alt="The Costa Rica News"
+                className="press-badge-logo"
+              />
             </a>
           </div>
         </div>
