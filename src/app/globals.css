@@ -5263,15 +5263,14 @@ body:has(.product-grid.grid-view) {
     background: var(--bg-card);
 }
 
-/* Press seal: same anatomy as the review badges (logo in the icon slot, "As seen
-   in" title, publication name subtitle) but sized to its content instead of the
-   flex:1 share — the wide wordmark plus the long name need a touch more width
-   than a compact rating badge, so this keeps it readable without overflowing.
-   Rust border sets it apart from the star-rating badges. */
+/* Press seal: same anatomy and border as the review badges (logo in the icon
+   slot, "As seen in" title, publication name subtitle) but sized to its content
+   instead of the flex:1 share — the wide wordmark plus the long name need a touch
+   more width than a compact rating badge, so this keeps it readable without
+   overflowing. */
 .press-badge {
     flex: 0 0 auto;
     max-width: none;
-    border-color: var(--accent);
 }
 
 .press-badge-logo {
