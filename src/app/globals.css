@@ -5263,6 +5263,20 @@ body:has(.product-grid.grid-view) {
     background: var(--bg-card);
 }
 
+/* Press seal: sized to its logo (not stretched like the flex:1 review badges),
+   with a rust accent border to set it apart from the star-rating badges. */
+.press-badge {
+    flex: 0 0 auto;
+    max-width: none;
+    border-color: var(--accent);
+}
+
+.press-badge-logo {
+    height: 22px;
+    width: auto;
+    display: block;
+}
+
 .trust-text {
     display: flex;
     flex-direction: column;
