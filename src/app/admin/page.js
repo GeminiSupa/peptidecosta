@@ -25,6 +25,7 @@ import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
 import ExportModal from '@/components/admin/ExportModal';
 import TeamManagement from '@/components/admin/TeamManagement';
+import TestPaymentPanel from '@/components/admin/TestPaymentPanel';
 import TeamChat from '@/components/admin/TeamChat';
 import AffiliatesManager from '@/components/admin/AffiliatesManager';
 import InquiriesManager from '@/components/admin/InquiriesManager';
@@ -4134,7 +4135,16 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 </button>
               )}
               {adminProfile?.is_superadmin && (
-                <button 
+                <button
+                  className={`admin-tab-btn ${activeTab === 'payment_test' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('payment_test')}
+                >
+                  <FlaskConical size={14} />
+                  <span className="tab-label">Payment Test</span>
+                </button>
+              )}
+              {adminProfile?.is_superadmin && (
+                <button
                   className={`admin-tab-btn ${activeTab === 'team' ? 'active' : ''}`}
                   onClick={() => navigateToTab('team')}
                 >
@@ -5194,6 +5204,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'team' && (
           <div className="admin-orders-tab admin-tab-panel">
             <TeamManagement currentUserProfile={adminProfile} currentUserEmail={loggedInEmail.current} onTeamChanged={fetchAgents} />
+          </div>
+        )}
+
+        {activeTab === 'payment_test' && (
+          <div className="admin-orders-tab admin-tab-panel">
+            <TestPaymentPanel />
           </div>
         )}
 

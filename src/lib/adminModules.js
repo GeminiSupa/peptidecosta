@@ -18,6 +18,7 @@ export const ADMIN_MODULES = [
   { id: 'whatsapp_ai', label: 'Sales WhatsApp', title: 'Sales WhatsApp', group: 'System & AI' },
   { id: 'wa_session', label: 'WA Session (2nd Device)', title: 'WA Session (2nd Device)', group: 'System & AI' },
   { id: 'team', label: 'Team Management', title: 'Team Management', group: 'System & AI', superadminOnly: true },
+  { id: 'payment_test', label: 'Payment Testing', title: 'Payment Testing (Sandbox)', group: 'System & AI', superadminOnly: true },
   { id: 'team_chat', label: 'Team Chat', title: 'Team Chat', group: 'System & AI', alwaysAvailable: true },
 ];
 
