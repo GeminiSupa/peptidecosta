@@ -388,6 +388,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
   const selectedCampaignIdRef = useRef(editingCampaignId || '');
   const hydratedCampaignIdRef = useRef('');
   const suppressEditorUpdatesRef = useRef(false);
+  const seededBlankRef = useRef(false);
 
   const buildCampaignSignature = useCallback((html = '') => JSON.stringify({
     title: campaignName,
@@ -665,6 +666,22 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       setPendingDesign(null);
     }
   }, [loadEditorDesign, pendingDesign, isReady]);
+
+  // Unlayer's own built-in blank design is 500px wide, so anything built from
+  // scratch shipped narrower than the 600px Mailchimp and our own templates use.
+  // Nothing was loading a design when the editor mounts with no campaign
+  // selected, which left that 500px default in place. Seed our blank instead.
+  useEffect(() => {
+    if (!isReady || seededBlankRef.current) return;
+    // A campaign or template already owns the canvas. Mark it handled so that
+    // clearing pendingDesign after it loads cannot seed a blank over the top.
+    if (selectedCampaignId || pendingDesign) {
+      seededBlankRef.current = true;
+      return;
+    }
+    seededBlankRef.current = true;
+    loadEditorDesign(createBlankDesign());
+  }, [isReady, selectedCampaignId, pendingDesign, loadEditorDesign]);
 
   useEffect(() => {
     if (!isReady || recoveryCheckedRef.current || typeof window === 'undefined') return;
