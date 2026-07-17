@@ -5263,37 +5263,35 @@ body:has(.product-grid.grid-view) {
     background: var(--bg-card);
 }
 
-/* Press feature strip below the header controls, above the catalog. The band is a
-   full-width backdrop; the clickable seal is a contained card so it reads as a
-   tappable object, not a caption. Kept out of the rating-badge flex row so it has
-   room to be legible and can't collide with those badges on mobile. */
+/* Press feature band: full-width "As seen in The Costa Rica News" strip below the
+   header controls, above the catalog. Kept out of the rating-badge flex row so it
+   has room to be legible and can't collide with those badges on mobile. */
 .press-band {
     display: flex;
+    align-items: center;
     justify-content: center;
-    padding: 16px;
+    gap: 12px;
+    padding: 13px 16px;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
-}
-
-.press-band-card {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    padding: 9px 20px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    box-shadow: 0 1px 3px rgba(0, 39, 102, 0.08);
     text-decoration: none;
     cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    transition: background 0.18s ease;
 }
 
-.press-band-card:hover {
+/* Hover feedback: the band lightens, the label turns to the accent colour, and
+   the logo nudges up a touch so it clearly reads as a link. */
+.press-band:hover {
+    background: var(--bg-card);
+}
+
+.press-band:hover .press-band-label {
+    color: var(--accent);
+}
+
+.press-band:hover .press-band-logo {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 39, 102, 0.12);
-    border-color: var(--accent);
 }
 
 .press-band-label {
@@ -5302,17 +5300,14 @@ body:has(.product-grid.grid-view) {
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: #475569;
+    transition: color 0.18s ease;
 }
 
 .press-band-logo {
-    height: 30px;
+    height: 32px;
     width: auto;
     display: block;
-}
-
-.press-band-icon {
-    color: var(--accent);
-    flex: 0 0 auto;
+    transition: transform 0.18s ease;
 }
 
 /* The logo is dark navy on transparent, so give it a light chip and a lighter
@@ -5330,17 +5325,14 @@ body:has(.product-grid.grid-view) {
 
 @media (max-width: 640px) {
     .press-band {
-        padding: 12px 14px;
-    }
-    .press-band-card {
         gap: 9px;
-        padding: 8px 16px;
+        padding: 10px 14px;
     }
     .press-band-label {
-        font-size: 0.62rem;
+        font-size: 0.64rem;
     }
     .press-band-logo {
-        height: 24px;
+        height: 26px;
     }
 }
 

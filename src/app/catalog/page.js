@@ -17,7 +17,7 @@ import {
   ChevronLeft, ChevronRight,
   Dna, FlaskConical, Syringe, TestTubes, Atom,
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
-  CreditCard, MessageCircle, Lock, Share2, ExternalLink
+  CreditCard, MessageCircle, Lock, Share2
 } from 'lucide-react';
 
 // const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
@@ -3001,23 +3001,20 @@ export default function CatalogPage() {
       </div>
 
       {/* Press feature band — "As seen in The Costa Rica News" */}
-      <div className="press-band">
-        <a
-          href="https://thecostaricanews.com/introducing-peptides-costa-rica-bringing-trusted-peptide-products-to-costa-rica/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="press-band-card"
-          aria-label={lang === 'en' ? 'As seen in The Costa Rica News — read the article' : 'Visto en The Costa Rica News — leer el artículo'}
-        >
-          <span className="press-band-label">{lang === 'en' ? 'As seen in' : 'Visto en'}</span>
-          <img
-            src="/costa-rica-news-logo.png"
-            alt="The Costa Rica News"
-            className="press-band-logo"
-          />
-          <ExternalLink size={15} className="press-band-icon" aria-hidden="true" />
-        </a>
-      </div>
+      <a
+        href="https://thecostaricanews.com/introducing-peptides-costa-rica-bringing-trusted-peptide-products-to-costa-rica/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="press-band"
+        aria-label={lang === 'en' ? 'As seen in The Costa Rica News' : 'Visto en The Costa Rica News'}
+      >
+        <span className="press-band-label">{lang === 'en' ? 'As seen in' : 'Visto en'}</span>
+        <img
+          src="/costa-rica-news-logo.png"
+          alt="The Costa Rica News"
+          className="press-band-logo"
+        />
+      </a>
 
       {/* Main Catalog View */}
       <main className="main container" style={{ position: 'relative', minHeight: '60vh' }}>
