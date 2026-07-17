@@ -5263,24 +5263,37 @@ body:has(.product-grid.grid-view) {
     background: var(--bg-card);
 }
 
-/* Press feature band: full-width "As seen in The Costa Rica News" strip below the
-   header controls, above the catalog. Kept out of the rating-badge flex row so it
-   has room to be legible and can't collide with those badges on mobile. */
+/* Press feature strip below the header controls, above the catalog. The band is a
+   full-width backdrop; the clickable seal is a contained card so it reads as a
+   tappable object, not a caption. Kept out of the rating-badge flex row so it has
+   room to be legible and can't collide with those badges on mobile. */
 .press-band {
     display: flex;
-    align-items: center;
     justify-content: center;
-    gap: 12px;
-    padding: 12px 16px;
+    padding: 16px;
     background: var(--bg-secondary);
     border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
-    text-decoration: none;
-    transition: background 0.15s ease;
 }
 
-.press-band:hover {
+.press-band-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 20px;
     background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    box-shadow: 0 1px 3px rgba(0, 39, 102, 0.08);
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.press-band-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 39, 102, 0.12);
+    border-color: var(--accent);
 }
 
 .press-band-label {
@@ -5292,9 +5305,14 @@ body:has(.product-grid.grid-view) {
 }
 
 .press-band-logo {
-    height: 32px;
+    height: 30px;
     width: auto;
     display: block;
+}
+
+.press-band-icon {
+    color: var(--accent);
+    flex: 0 0 auto;
 }
 
 /* The logo is dark navy on transparent, so give it a light chip and a lighter
@@ -5312,14 +5330,17 @@ body:has(.product-grid.grid-view) {
 
 @media (max-width: 640px) {
     .press-band {
+        padding: 12px 14px;
+    }
+    .press-band-card {
         gap: 9px;
-        padding: 10px 14px;
+        padding: 8px 16px;
     }
     .press-band-label {
-        font-size: 0.64rem;
+        font-size: 0.62rem;
     }
     .press-band-logo {
-        height: 26px;
+        height: 24px;
     }
 }
 
