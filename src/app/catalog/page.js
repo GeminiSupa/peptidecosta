@@ -2772,23 +2772,6 @@ export default function CatalogPage() {
                 </span>
               </div>
             </a>
-
-            <a
-              href="https://thecostaricanews.com/introducing-peptides-costa-rica-bringing-trusted-peptide-products-to-costa-rica/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="trust-badge press-badge"
-            >
-              <img
-                src="/costa-rica-news-logo.png"
-                alt="The Costa Rica News"
-                className="press-badge-logo"
-              />
-              <div className="trust-text">
-                <span className="trust-score">{lang === 'en' ? 'As seen in' : 'Visto en'}</span>
-                <span className="trust-desc press-badge-name">The Costa Rica News</span>
-              </div>
-            </a>
           </div>
         </div>
       </header>
@@ -3016,6 +2999,22 @@ export default function CatalogPage() {
           </button>
         </nav>
       </div>
+
+      {/* Press feature band — "As seen in The Costa Rica News" */}
+      <a
+        href="https://thecostaricanews.com/introducing-peptides-costa-rica-bringing-trusted-peptide-products-to-costa-rica/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="press-band"
+        aria-label={lang === 'en' ? 'As seen in The Costa Rica News' : 'Visto en The Costa Rica News'}
+      >
+        <span className="press-band-label">{lang === 'en' ? 'As seen in' : 'Visto en'}</span>
+        <img
+          src="/costa-rica-news-logo.png"
+          alt="The Costa Rica News"
+          className="press-band-logo"
+        />
+      </a>
 
       {/* Main Catalog View */}
       <main className="main container" style={{ position: 'relative', minHeight: '60vh' }}>

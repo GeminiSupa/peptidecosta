@@ -5263,35 +5263,64 @@ body:has(.product-grid.grid-view) {
     background: var(--bg-card);
 }
 
-/* Press seal: same anatomy and border as the review badges (logo in the icon
-   slot, "As seen in" title, publication name subtitle) but sized to its content
-   instead of the flex:1 share — the wide wordmark plus the long name need a touch
-   more width than a compact rating badge, so this keeps it readable without
-   overflowing. */
-.press-badge {
-    flex: 0 0 auto;
-    max-width: none;
+/* Press feature band: full-width "As seen in The Costa Rica News" strip below the
+   header controls, above the catalog. Kept out of the rating-badge flex row so it
+   has room to be legible and can't collide with those badges on mobile. */
+.press-band {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    text-decoration: none;
+    transition: background 0.15s ease;
 }
 
-.press-badge-logo {
-    height: 20px;
+.press-band:hover {
+    background: var(--bg-card);
+}
+
+.press-band-label {
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #475569;
+}
+
+.press-band-logo {
+    height: 32px;
     width: auto;
-    flex: 0 0 auto;
     display: block;
 }
 
-.press-badge-name {
-    white-space: nowrap;
+/* The logo is dark navy on transparent, so give it a light chip and a lighter
+   label in dark mode (same approach as the main brand logo) to stay legible. */
+[data-theme="dark"] .press-band-label {
+    color: #94a3b8;
 }
 
-/* The Costa Rica News logo is dark navy on transparent, so it disappears against
-   the dark header. Give it a light chip in dark mode only (same approach as the
-   main brand logo) so it stays legible. */
-[data-theme="dark"] .press-badge-logo {
+[data-theme="dark"] .press-band-logo {
     background: rgba(255, 255, 255, 0.92);
-    padding: 3px 5px;
-    border-radius: 4px;
+    padding: 5px 8px;
+    border-radius: 5px;
     box-sizing: content-box;
+}
+
+@media (max-width: 640px) {
+    .press-band {
+        gap: 9px;
+        padding: 10px 14px;
+    }
+    .press-band-label {
+        font-size: 0.64rem;
+    }
+    .press-band-logo {
+        height: 26px;
+    }
 }
 
 .trust-text {
