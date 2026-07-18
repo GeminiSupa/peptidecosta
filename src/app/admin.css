@@ -4436,7 +4436,7 @@
     height: min(680px, calc(100dvh - 220px));
     min-height: 400px;
     display: grid;
-    grid-template-columns: minmax(260px, 320px) 1fr;
+    grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
     gap: 16px;
     padding: 0;
     min-width: 0;
@@ -5389,6 +5389,16 @@
         max-height: none;
         flex: 1;
         min-height: 0;
+        height: 100%;
+    }
+
+    .admin-whatsapp-inbox:not(.admin-wa-chat-open) .admin-wa-chat-pane {
+        display: none;
+    }
+
+    .admin-whatsapp-inbox:not(.admin-wa-chat-open) .admin-wa-list-pane,
+    .admin-whatsapp-inbox:not(.admin-wa-chat-open) .admin-wa-conversations-panel {
+        height: 100%;
     }
 
     .admin-whatsapp-inbox.admin-wa-chat-open {
