@@ -5449,17 +5449,10 @@
     }
 
     .admin-wa-composer-row {
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    .admin-wa-composer-actions {
         flex-direction: row;
+        align-items: flex-end;
+        gap: 6px;
         width: 100%;
-    }
-
-    .admin-wa-composer-actions .admin-wa-btn {
-        flex: 1;
     }
 }
 
@@ -5741,6 +5734,27 @@
 
     body.admin-wa-conversation-open .admin-wa-composer {
         padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+    }
+
+    body.admin-wa-conversation-open .admin-wa-composer-row {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-end;
+        gap: 6px;
+        width: 100%;
+    }
+
+    body.admin-wa-conversation-open .admin-wa-composer-input {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    body.admin-wa-conversation-open .admin-wa-attach-btn,
+    body.admin-wa-conversation-open .admin-wa-composer-tool,
+    body.admin-wa-conversation-open .admin-wa-send-circle {
+        width: 42px;
+        height: 46px;
+        flex: 0 0 42px;
     }
 
     .admin-navbar {
