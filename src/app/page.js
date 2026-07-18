@@ -285,6 +285,23 @@ export default function LandingPage() {
           </div>
         </section>
 
+        <a
+          href="https://thecostaricanews.com/introducing-peptides-costa-rica-bringing-trusted-peptide-products-to-costa-rica/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="press-band landing-press-band"
+          aria-label={lang === 'en' ? 'As seen in The Costa Rica News' : 'Visto en The Costa Rica News'}
+        >
+          <span className="press-band-label">{lang === 'en' ? 'As seen in' : 'Visto en'}</span>
+          <img
+            src="/costa-rica-news-logo.png"
+            alt="The Costa Rica News"
+            className="press-band-logo"
+          />
+          <span className="landing-press-cta">{lang === 'en' ? 'Read feature' : 'Leer nota'}</span>
+          <ArrowUpRight size={14} strokeWidth={2.4} aria-hidden="true" />
+        </a>
+
         {/* BEST-SELLING PRODUCTS */}
         {featuredProducts.length>0&&(
           <section className="lp-section lp-featured-section lp-featured-section--early">

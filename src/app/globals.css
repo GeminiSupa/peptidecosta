@@ -5332,10 +5332,32 @@ body:has(.product-grid.grid-view) {
     transition: transform 0.18s ease;
 }
 
+.landing-press-band {
+    position: relative;
+    z-index: 2;
+    margin: 0;
+    min-height: 58px;
+    background: #fff;
+}
+
+.landing-press-cta {
+    display: inline-flex;
+    align-items: center;
+    color: var(--accent);
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
 /* The logo is dark navy on transparent, so give it a light chip and a lighter
    label in dark mode (same approach as the main brand logo) to stay legible. */
 [data-theme="dark"] .press-band-label {
     color: #94a3b8;
+}
+
+[data-theme="dark"] .landing-press-band {
+    background: #0f172a;
 }
 
 [data-theme="dark"] .press-band-logo {
@@ -5356,6 +5378,12 @@ body:has(.product-grid.grid-view) {
     }
     .press-band-logo {
         height: 22px;
+    }
+    .landing-press-band {
+        min-height: 44px;
+    }
+    .landing-press-cta {
+        display: none;
     }
 }
 
