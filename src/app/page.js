@@ -142,37 +142,6 @@ export default function LandingPage() {
     { q:t.faq_q4,a:t.faq_a4 },{ q:t.faq_q5,a:t.faq_a5 },
   ];
 
-  const steps = [
-    { n:'1',en:'Choose Product',es:'Elige tu Producto',den:'Browse our verified research peptide catalog.',des:'Navega nuestro catálogo de péptidos verificados.' },
-    { n:'2',en:'Add to Cart',es:'Agrega al Carrito',den:'Select products and review your order.',des:'Selecciona productos y revisa tu pedido.' },
-    { n:'3',en:'Confirm via WhatsApp',es:'Confirma por WhatsApp',den:'Send us your order for secure payment details.',des:'Envíanos tu pedido para procesar el pago.' },
-    { n:'4',en:'Local Delivery',es:'Entrega Local',den:'Fast 24-48h delivery anywhere in Costa Rica.',des:'Entrega rápida 24-48h en toda Costa Rica.' },
-  ];
-
-  const trustCards = [
-    { icon:<FlaskConical size={30} strokeWidth={1.6}/>,t:t.tr1_t,d:t.tr1_d },
-    { icon:<Truck size={30} strokeWidth={1.6}/>,t:t.tr2_t,d:t.tr2_d },
-    { icon:<MessageCircle size={30} strokeWidth={1.6}/>,t:t.tr3_t,d:t.tr3_d },
-  ];
-
-  const quickStartSteps = [
-    {
-      icon:<FlaskConical size={20} strokeWidth={1.8}/>,
-      t:lang==='en'?'Pick from live stock':'Elige del inventario',
-      d:lang==='en'?'Open the catalog and see currently available research products.':'Abre el catálogo y revisa productos de investigación disponibles.'
-    },
-    {
-      icon:<CheckCircle size={20} strokeWidth={1.8}/>,
-      t:lang==='en'?'Review batch details':'Revisa el lote',
-      d:lang==='en'?'Check pricing, availability, and COA information before ordering.':'Consulta precio, disponibilidad e información COA antes de ordenar.'
-    },
-    {
-      icon:<Truck size={20} strokeWidth={1.8}/>,
-      t:lang==='en'?'Coordinate locally':'Coordina localmente',
-      d:lang==='en'?'Confirm through WhatsApp and arrange delivery inside Costa Rica.':'Confirma por WhatsApp y coordina entrega dentro de Costa Rica.'
-    },
-  ];
-
   const localAdvantages = [
     {
       icon:<Truck size={24} strokeWidth={1.8}/>,
@@ -194,6 +163,12 @@ export default function LandingPage() {
       t:lang==='en'?'COA documentation':'Documentación COA',
       d:lang==='en'?'Batch information is part of the buying flow so customers can verify details first.':'La información de lote forma parte del flujo de compra para verificar detalles primero.'
     },
+  ];
+
+  const localStats = [
+    { value:'CRC', label:lang==='en'?'local pricing':'precios locales' },
+    { value:'COA', label:lang==='en'?'batch visibility':'visibilidad de lote' },
+    { value:'24/7', label:lang==='en'?'WhatsApp access':'acceso WhatsApp' },
   ];
 
   return (
@@ -349,38 +324,6 @@ export default function LandingPage() {
 
         <TrustFlowBand lang={lang} />
 
-        <section className="lp-quick-start" aria-labelledby="quick-start-title">
-          <div className="container lp-quick-start-inner">
-            <div className="lp-quick-start-copy">
-              <span className="lp-quick-start-kicker">{lang==='en'?'START WITH CONFIDENCE':'EMPIEZA CON CONFIANZA'}</span>
-              <h2 id="quick-start-title">{lang==='en'?'Current stock, clear details, local coordination.':'Inventario actual, detalles claros y coordinación local.'}</h2>
-              <p>{lang==='en'
-                ? 'See what is available, review the batch information, and talk with a real person before arranging delivery.'
-                : 'Consulta qué está disponible, revisa la información del lote y habla con una persona antes de coordinar la entrega.'}</p>
-              <div className="lp-quick-start-actions">
-                <Link href={`/catalog?lang=${lang}`} className="lp-quick-start-primary" aria-label={lang==='en'?'Open the product catalog':'Abrir el catálogo de productos'}>
-                  {lang==='en'?'Browse Products':'Ver productos'} <ArrowUpRight size={17}/>
-                </Link>
-                <button type="button" onClick={()=>handleWA('quick_start')} className="lp-quick-start-secondary" aria-label={lang==='en'?'Ask us on WhatsApp':'Preguntar por WhatsApp'}>
-                  <WaIcon/> {lang==='en'?'Ask on WhatsApp':'Preguntar'}
-                </button>
-              </div>
-            </div>
-            <div className="lp-quick-start-steps">
-              {quickStartSteps.map((step,i)=>(
-                <div key={i} className="lp-quick-start-step">
-                  <div className="lp-quick-start-number">{i+1}</div>
-                  <div className="lp-quick-start-icon">{step.icon}</div>
-                  <div>
-                    <h3>{step.t}</h3>
-                    <p>{step.d}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         <section className="lp-local-advantage" aria-labelledby="local-advantage-title">
           <div className="container lp-local-advantage-grid">
             <div className="lp-local-advantage-copy">
@@ -389,6 +332,22 @@ export default function LandingPage() {
               <p>{lang==='en'
                 ? 'The best customer experience is practical: clear stock, clear documentation, direct answers, and local coordination.'
                 : 'La mejor experiencia es práctica: inventario claro, documentación clara, respuestas directas y coordinación local.'}</p>
+              <div className="lp-local-stat-row" aria-label={lang==='en'?'Costa Rica order advantages':'Ventajas para ordenar en Costa Rica'}>
+                {localStats.map((stat)=>(
+                  <div key={stat.value} className="lp-local-stat">
+                    <strong>{stat.value}</strong>
+                    <small>{stat.label}</small>
+                  </div>
+                ))}
+              </div>
+              <div className="lp-local-advantage-actions">
+                <Link href={`/catalog?lang=${lang}`} className="lp-local-advantage-primary">
+                  {lang==='en'?'Check stock':'Ver inventario'} <ArrowUpRight size={16}/>
+                </Link>
+                <button type="button" onClick={()=>handleWA('local_advantage')} className="lp-local-advantage-secondary">
+                  <WaIcon/> {lang==='en'?'Ask a question':'Preguntar'}
+                </button>
+              </div>
             </div>
             <div className="lp-local-advantage-list">
               {localAdvantages.map((item)=>(
@@ -397,23 +356,6 @@ export default function LandingPage() {
                   <h3>{item.t}</h3>
                   <p>{item.d}</p>
                 </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* TRUST CARDS */}
-        <section className="lp-trust-section">
-          <div className="container">
-            <div className="lp-trust-grid">
-              {trustCards.map((c,i)=>(
-                <div key={i} className="lp-trust-card">
-                  <div className="lp-trust-icon">{c.icon}</div>
-                  <div>
-                    <h3 className="lp-trust-title">{c.t}</h3>
-                    <p className="lp-trust-desc">{c.d}</p>
-                  </div>
-                </div>
               ))}
             </div>
           </div>
@@ -430,25 +372,6 @@ export default function LandingPage() {
             <Link href={`/about?lang=${lang}`} className="lp-founder-note-link">
               {lang==='en'?'Read Joey and Sean’s story':'Conoce la historia de Joey y Sean'} <ArrowRight size={16}/>
             </Link>
-          </div>
-        </section>
-
-        {/* HOW TO ORDER */}
-        <section className="lp-how-section">
-          <div className="container">
-            <div className="lp-section-header">
-              <h2>{t.how_t}</h2>
-              <p>{t.how_s}</p>
-            </div>
-            <div className="lp-steps-grid">
-              {steps.map((s,i)=>(
-                <div key={i} className="lp-step-card">
-                  <div className="lp-step-number">{s.n}</div>
-                  <h3>{lang==='en'?s.en:s.es}</h3>
-                  <p>{lang==='en'?s.den:s.des}</p>
-                </div>
-              ))}
-            </div>
           </div>
         </section>
 
@@ -484,7 +407,7 @@ export default function LandingPage() {
             <div style={{borderRadius:'20px',overflow:'hidden',boxShadow:'0 8px 40px rgba(0,0,0,0.1)',position:'relative',marginTop:'32px'}}>
               <img src="/customer_transformation.webp" alt={lang==='en'?'Customer experience with Peptides Costa Rica':'Experiencias de clientes con Péptidos Costa Rica'} width={800} height={330} loading="lazy" decoding="async" style={{width:'100%',display:'block',height:'auto',maxHeight:'420px',objectFit:'cover',objectPosition:'center top'}} onError={(e)=>{e.target.parentElement.parentElement.parentElement.style.display='none';}}/>
               <div style={{position:'absolute',top:'16px',left:'16px',background:'linear-gradient(135deg,#22c55e,#16a34a)',color:'#fff',fontSize:'0.78rem',fontWeight:'800',padding:'6px 16px',borderRadius:'24px',letterSpacing:'0.04em',textTransform:'uppercase',boxShadow:'0 4px 14px rgba(34,197,94,0.4)'}}>
-                {lang==='en'?'✓ Verified Results':'✓ Resultados Verificados'}
+                {lang==='en'?'Customer feedback':'Comentarios de clientes'}
               </div>
             </div>
             <p style={{marginTop:'20px',fontSize:'0.78rem',color:'var(--text-muted)',lineHeight:1.6,textAlign:'center',fontStyle:'italic'}}>
