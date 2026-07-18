@@ -510,7 +510,7 @@ export default function WhatsAppInbox({
                     <span className="admin-wa-header-avatar" aria-hidden>
                       {getInitials(currentChat?.displayName || activeChatWaId)}
                     </span>
-                    <span>
+                    <span className="admin-wa-chat-identity">
                       <span className="admin-wa-chat-title">
                         {currentChat?.displayName || activeChatWaId}
                       </span>
@@ -665,9 +665,9 @@ export default function WhatsAppInbox({
               )}
 
               <div className="admin-wa-composer-row">
-                <label className="admin-wa-attach-btn" title="Attach an image">
-                  {uploadingWaImage ? <Loader2 size={20} className="spinner" color="#94a3b8" /> : <Paperclip size={20} color="#94a3b8" />}
-                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { if(handleWaImageUpload) handleWaImageUpload(e.target.files[0]); }} disabled={uploadingWaImage} />
+                <label className="admin-wa-attach-btn" title="Attach screenshot or image" aria-label="Attach screenshot or image">
+                  {uploadingWaImage ? <Loader2 size={20} className="spinner" /> : <Paperclip size={20} />}
+                  <input type="file" accept="image/*,.heic,.heif" style={{ display: 'none' }} onChange={(e) => { if(handleWaImageUpload) handleWaImageUpload(e.target.files[0]); }} disabled={uploadingWaImage} />
                 </label>
                 <button type="button" className={`admin-wa-composer-tool${showQuickReplies ? ' active' : ''}`} onClick={() => setShowQuickReplies(value => !value)} aria-label="Quick reply templates" title="Quick replies">
                   <MessagesSquare size={19} />

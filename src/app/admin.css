@@ -1452,13 +1452,15 @@
 .admin-wa-icon-btn:hover { border-color: rgba(45,212,191,.3); color: #5eead4; }
 .admin-wa-call-btn {
     border-color: rgba(34, 197, 94, .22);
-    background: rgba(34, 197, 94, .1);
-    color: #86efac;
+    background: #16a34a;
+    color: #fff;
     text-decoration: none;
+    box-shadow: 0 8px 22px rgba(22, 163, 74, .24);
 }
 .admin-wa-call-btn:hover {
-    border-color: rgba(34, 197, 94, .42);
-    color: #bbf7d0;
+    border-color: rgba(34, 197, 94, .48);
+    background: #15803d;
+    color: #fff;
 }
 .admin-wa-search-row { display: flex; gap: 8px; padding: 10px 12px 8px; }
 .admin-wa-search-row .admin-wa-search { flex: 1; margin: 0; min-height: 44px; }
@@ -1480,6 +1482,15 @@
 .admin-wa-composer-input { min-width: 80px; min-height: 48px; max-height: 132px; border-radius: 14px; }
 .admin-wa-composer-tool { border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.04); color: #94a3b8; }
 .admin-wa-composer-tool.active { border-color: rgba(45,212,191,.28); background: rgba(45,212,191,.11); color: #5eead4; }
+.admin-wa-attach-btn {
+    color: #94a3b8;
+}
+.admin-wa-attach-btn:hover,
+.admin-wa-attach-btn:focus-within {
+    border-color: rgba(45, 212, 191, .32);
+    background: rgba(45, 212, 191, .1);
+    color: #5eead4;
+}
 .admin-wa-composer-ai { color: #c4b5fd; }
 .admin-wa-composer-tool:disabled { opacity: .45; cursor: wait; }
 .admin-wa-send-circle { border: 0; border-radius: 50%; background: #10b981; color: #fff; box-shadow: 0 6px 18px rgba(16,185,129,.24); }
@@ -1518,6 +1529,7 @@
     .admin-wa-conversations-header { min-height: 64px; padding: 10px 12px; }
     .admin-wa-chat-more { opacity: 1; background: transparent; }
     .admin-wa-chat-item { padding-right: 46px; min-height: 70px; }
+    .admin-wa-chat-header-actions { flex-wrap: nowrap; }
     .admin-wa-composer-row { flex-direction: row; align-items: flex-end; gap: 6px; }
     .admin-wa-composer-input { flex: 1; }
     .admin-wa-composer-actions { display: contents; }
@@ -1533,9 +1545,38 @@
     .admin-wa-send-circle { width: 42px; height: 46px; flex-basis: 42px; }
     .admin-wa-composer-input { padding: 12px 11px; }
     .admin-wa-chat-header { min-height: 62px; padding: 8px; }
+    .admin-wa-chat-header-meta { gap: 6px; }
+    .admin-wa-chat-identity { display: flex; min-width: 0; flex-direction: column; }
     .admin-wa-header-avatar { width: 34px; height: 34px; }
-    .admin-wa-autopilot-badge { padding: 4px 6px; }
-    .admin-wa-chat-header-actions { gap: 5px; }
+    .admin-wa-chat-title { max-width: clamp(92px, 32vw, 180px); font-size: .82rem; }
+    .admin-wa-chat-phone { font-size: .66rem; }
+    .admin-wa-chat-header-actions { gap: 5px; flex-wrap: nowrap; }
+    .admin-wa-chat-header-actions .admin-wa-icon-btn,
+    .admin-wa-chat-header-actions .admin-wa-refresh-btn {
+        width: 38px;
+        height: 38px;
+        min-width: 38px !important;
+        flex: 0 0 38px;
+        border-radius: 11px;
+    }
+    .admin-wa-call-btn {
+        width: 42px !important;
+        height: 42px !important;
+        min-width: 42px !important;
+        flex-basis: 42px !important;
+        border-radius: 50% !important;
+    }
+    .admin-wa-autopilot-badge {
+        width: 30px;
+        height: 30px;
+        justify-content: center;
+        padding: 0;
+        border-radius: 50%;
+    }
+    .admin-wa-autopilot-badge-short,
+    .admin-wa-autopilot-badge-long {
+        display: none;
+    }
 }
 
 @media (min-width: 640px) {
@@ -5260,7 +5301,7 @@
     }
 
     .admin-wa-chat-header-actions {
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         justify-content: flex-end;
     }
 
