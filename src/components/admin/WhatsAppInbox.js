@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, Check, CheckCheck, ChevronLeft, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound } from 'lucide-react';
+import { Brain, Check, CheckCheck, ChevronLeft, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall } from 'lucide-react';
 
 const INITIAL_CHAT_LIMIT = 30;
 const GENERIC_CONTACT_NAMES = new Set([
@@ -343,6 +343,7 @@ export default function WhatsAppInbox({
   }, [activeChatMessages, messageSearch]);
 
   const currentChat = chatsList.find((c) => c.waId === activeChatWaId);
+  const activeChatCallHref = activeChatWaId ? `tel:+${activeChatWaId}` : null;
 
   const customerContext = useMemo(() => {
     if (!activeChatWaId) return null;
@@ -520,6 +521,16 @@ export default function WhatsAppInbox({
               </div>
 
               <div className="admin-wa-chat-header-actions">
+                {activeChatCallHref && (
+                  <a
+                    href={activeChatCallHref}
+                    className="admin-wa-icon-btn admin-wa-call-btn"
+                    aria-label={`Call ${currentChat?.displayName || activeChatWaId}`}
+                    title={`Call +${activeChatWaId}`}
+                  >
+                    <PhoneCall size={17} />
+                  </a>
+                )}
                 <button 
                   type="button" 
                   className="admin-wa-refresh-btn" 
