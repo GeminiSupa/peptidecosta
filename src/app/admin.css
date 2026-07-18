@@ -1523,6 +1523,113 @@
 .admin-wa-context-card > div { display: flex; flex-direction: column; gap: 4px; }
 .admin-wa-context-card strong { color: #e2e8f0; font-size: .82rem; }
 .admin-wa-context-source { margin: 0; color: #94a3b8; font-size: .75rem; }
+.admin-wa-action-backdrop {
+    align-items: flex-end;
+    justify-content: center;
+}
+.admin-wa-action-sheet {
+    width: min(430px, 100%);
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-bottom: 0;
+    border-radius: 24px 24px 0 0;
+    background: #0b1322;
+    box-shadow: 0 -24px 70px rgba(0, 0, 0, .45);
+}
+.admin-wa-action-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, .07);
+}
+.admin-wa-action-header > div {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+}
+.admin-wa-action-header strong {
+    overflow: hidden;
+    color: #f8fafc;
+    font-size: .95rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.admin-wa-action-header small {
+    color: #94a3b8;
+    font-size: .74rem;
+}
+.admin-wa-action-header button {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .04);
+    color: #94a3b8;
+    cursor: pointer;
+}
+.admin-wa-action-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 12px max(16px, env(safe-area-inset-bottom));
+}
+.admin-wa-action-row {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 12px;
+    min-height: 72px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, .035);
+    color: #e2e8f0;
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    width: 100%;
+}
+.admin-wa-action-row:hover,
+.admin-wa-action-row:focus-visible {
+    border-color: rgba(45, 212, 191, .26);
+    background: rgba(45, 212, 191, .08);
+}
+.admin-wa-action-row > span {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    place-items: center;
+    border-radius: 14px;
+    background: rgba(45, 212, 191, .1);
+    color: #5eead4;
+}
+.admin-wa-action-row--call > span {
+    background: #16a34a;
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(22, 163, 74, .22);
+}
+.admin-wa-action-row div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+}
+.admin-wa-action-row strong {
+    color: #f8fafc;
+    font-size: .9rem;
+}
+.admin-wa-action-row small {
+    color: #94a3b8;
+    font-size: .72rem;
+    line-height: 1.35;
+}
 
 @media (max-width: 1023px) {
     .admin-whatsapp-inbox { height: calc(100dvh - 158px); }
@@ -1536,6 +1643,18 @@
     .admin-wa-sheet { height: min(88dvh,760px); margin-top: auto; border: 1px solid rgba(255,255,255,.09); border-bottom: 0; border-radius: 22px 22px 0 0; }
     .admin-wa-sheet-backdrop { align-items: flex-end; }
     .admin-wa-sheet-header { min-height: 66px; }
+}
+
+@media (min-width: 769px) {
+    .admin-wa-action-backdrop {
+        align-items: center;
+        justify-content: flex-end;
+    }
+    .admin-wa-action-sheet {
+        margin-right: 18px;
+        border-bottom: 1px solid rgba(255, 255, 255, .1);
+        border-radius: 18px;
+    }
 }
 
 @media (max-width: 560px) {

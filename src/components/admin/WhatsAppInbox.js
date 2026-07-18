@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, Check, CheckCheck, ChevronLeft, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall } from 'lucide-react';
+import { Brain, Check, CheckCheck, ChevronLeft, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy } from 'lucide-react';
 
 const INITIAL_CHAT_LIMIT = 30;
 const GENERIC_CONTACT_NAMES = new Set([
@@ -188,6 +188,7 @@ export default function WhatsAppInbox({
   const [visibleChatCount, setVisibleChatCount] = useState(INITIAL_CHAT_LIMIT);
   const [showAiSettings, setShowAiSettings] = useState(false);
   const [showCustomerContext, setShowCustomerContext] = useState(false);
+  const [showContactActions, setShowContactActions] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
 
   // Pull-to-refresh state
@@ -344,6 +345,7 @@ export default function WhatsAppInbox({
 
   const currentChat = chatsList.find((c) => c.waId === activeChatWaId);
   const activeChatCallHref = activeChatWaId ? `tel:+${activeChatWaId}` : null;
+  const activeChatWhatsAppHref = activeChatWaId ? `https://wa.me/${activeChatWaId}` : null;
 
   const customerContext = useMemo(() => {
     if (!activeChatWaId) return null;
@@ -378,6 +380,16 @@ export default function WhatsAppInbox({
     });
     return () => cancelAnimationFrame(t);
   }, [activeChatWaId, activeChatMessages.length]);
+
+  const copyActiveChatPhone = async () => {
+    if (!activeChatWaId) return;
+    try {
+      await navigator.clipboard.writeText(`+${activeChatWaId}`);
+      setShowContactActions(false);
+    } catch (err) {
+      console.warn('Failed to copy WhatsApp phone number:', err);
+    }
+  };
 
   const handleComposerKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -469,6 +481,7 @@ export default function WhatsAppInbox({
                       isUnread={chatIsUnread}
                       onClick={() => {
                         setActiveChatWaId(chat.waId);
+                        setShowContactActions(false);
                         if (markSeen) markSeen(chat.waId, chat.lastInboundAt);
                       }}
                       onMarkUnread={() => {
@@ -500,7 +513,10 @@ export default function WhatsAppInbox({
                 <button
                   type="button"
                   className="admin-wa-back-btn"
-                  onClick={() => setActiveChatWaId(null)}
+                  onClick={() => {
+                    setShowContactActions(false);
+                    setActiveChatWaId(null);
+                  }}
                   aria-label="Back to conversations"
                 >
                   <ChevronLeft size={18} />
@@ -522,14 +538,15 @@ export default function WhatsAppInbox({
 
               <div className="admin-wa-chat-header-actions">
                 {activeChatCallHref && (
-                  <a
-                    href={activeChatCallHref}
+                  <button
+                    type="button"
                     className="admin-wa-icon-btn admin-wa-call-btn"
-                    aria-label={`Call ${currentChat?.displayName || activeChatWaId}`}
-                    title={`Call +${activeChatWaId}`}
+                    onClick={() => setShowContactActions(true)}
+                    aria-label={`Contact ${currentChat?.displayName || activeChatWaId}`}
+                    title="Contact options"
                   >
                     <PhoneCall size={17} />
-                  </a>
+                  </button>
                 )}
                 <button 
                   type="button" 
@@ -773,6 +790,37 @@ export default function WhatsAppInbox({
                 <div><span>Sales signal</span><strong>{customerContext?.cart ? 'Active abandoned cart' : customerContext?.lead ? 'Marketing lead' : 'WhatsApp contact'}</strong></div>
               </div>
               {customerContext?.lead?.utm_source && <p className="admin-wa-context-source">Source: {customerContext.lead.utm_source}</p>}
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {showContactActions && activeChatWaId && (
+        <div className="admin-wa-sheet-backdrop admin-wa-action-backdrop" onClick={() => setShowContactActions(false)}>
+          <aside className="admin-wa-action-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="wa-contact-actions-title">
+            <header className="admin-wa-action-header">
+              <span className="admin-wa-header-avatar" aria-hidden>{getInitials(currentChat?.displayName || activeChatWaId)}</span>
+              <div>
+                <strong id="wa-contact-actions-title">{currentChat?.displayName || 'Customer'}</strong>
+                <small>+{activeChatWaId}</small>
+              </div>
+              <button type="button" onClick={() => setShowContactActions(false)} aria-label="Close contact options">
+                <X size={18} />
+              </button>
+            </header>
+            <div className="admin-wa-action-list">
+              <a href={activeChatCallHref} className="admin-wa-action-row admin-wa-action-row--call">
+                <span><PhoneCall size={20} /></span>
+                <div><strong>Phone call</strong><small>Uses this device dialer. On Apple devices this may open FaceTime.</small></div>
+              </a>
+              <a href={activeChatWhatsAppHref} target="_blank" rel="noopener noreferrer" className="admin-wa-action-row">
+                <span><MessageCircle size={20} /></span>
+                <div><strong>Open WhatsApp chat</strong><small>Jump to the customer conversation in WhatsApp.</small></div>
+              </a>
+              <button type="button" className="admin-wa-action-row" onClick={copyActiveChatPhone}>
+                <span><Copy size={20} /></span>
+                <div><strong>Copy number</strong><small>Use it in WhatsApp, phone, or notes.</small></div>
+              </button>
             </div>
           </aside>
         </div>
