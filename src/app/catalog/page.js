@@ -2674,52 +2674,54 @@ export default function CatalogPage() {
             <ArrowLeft size={16} />
             {lang === 'en' ? 'Back' : 'Volver'}
           </Link>
-          <Link href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-muted)', textDecoration: 'none', fontWeight: '700', fontSize: '0.72rem', opacity: 0.4, letterSpacing: '0.05em', marginRight: '8px' }} title="Admin Dashboard">
-            <Lock size={11} /> ADMIN
-          </Link>
-          <div className="theme-toggle">
-            <button 
-              onClick={() => handleThemeToggle('light')} 
-              className={theme === 'light' ? 'active' : ''} 
-              title="Light Mode"
-            >
-              <Sun size={14} strokeWidth={2.5} />
-            </button>
-            <button 
-              onClick={() => handleThemeToggle('dark')} 
-              className={theme === 'dark' ? 'active' : ''} 
-              title="Dark Mode"
-            >
-              <Moon size={14} strokeWidth={2.5} />
-            </button>
-          </div>
-          <div className="lang-selector">
-            <button 
-              onClick={() => handleLangToggle('en')} 
-              className={lang === 'en' ? 'active' : ''}
-            >
-              ENG
-            </button>
-            <button 
-              onClick={() => handleLangToggle('es')} 
-              className={lang === 'es' ? 'active' : ''}
-            >
-              ES
-            </button>
-          </div>
-          <div className="currency-selector">
-            <button 
-              onClick={() => setCurrency('USD')} 
-              className={currency === 'USD' ? 'active' : ''}
-            >
-              USD
-            </button>
-            <button 
-              onClick={() => setCurrency('CRC')} 
-              className={currency === 'CRC' ? 'active' : ''}
-            >
-              CRC
-            </button>
+          <div className="header-controls">
+            <Link href="/admin" className="admin-link" title="Admin Dashboard">
+              <Lock size={11} /> ADMIN
+            </Link>
+            <div className="theme-toggle">
+              <button
+                onClick={() => handleThemeToggle('light')}
+                className={theme === 'light' ? 'active' : ''}
+                title="Light Mode"
+              >
+                <Sun size={14} strokeWidth={2.5} />
+              </button>
+              <button
+                onClick={() => handleThemeToggle('dark')}
+                className={theme === 'dark' ? 'active' : ''}
+                title="Dark Mode"
+              >
+                <Moon size={14} strokeWidth={2.5} />
+              </button>
+            </div>
+            <div className="lang-selector">
+              <button
+                onClick={() => handleLangToggle('en')}
+                className={lang === 'en' ? 'active' : ''}
+              >
+                ENG
+              </button>
+              <button
+                onClick={() => handleLangToggle('es')}
+                className={lang === 'es' ? 'active' : ''}
+              >
+                ES
+              </button>
+            </div>
+            <div className="currency-selector">
+              <button
+                onClick={() => setCurrency('USD')}
+                className={currency === 'USD' ? 'active' : ''}
+              >
+                USD
+              </button>
+              <button
+                onClick={() => setCurrency('CRC')}
+                className={currency === 'CRC' ? 'active' : ''}
+              >
+                CRC
+              </button>
+            </div>
           </div>
         </div>
 
@@ -3027,6 +3029,17 @@ export default function CatalogPage() {
               ? 'Browse available peptides, prices, and real-time availability.'
               : 'Explora péptidos disponibles, precios y disponibilidad en tiempo real.'}
           </p>
+          <button
+            type="button"
+            className="catalog-hero-promo"
+            onClick={() => window.open('https://peptidescostarica.net', '_blank', 'noopener,noreferrer')}
+            aria-label={lang === 'en' ? 'Open Peptides Costa Rica website' : 'Abrir sitio de Peptides Costa Rica'}
+          >
+            <img
+              src="/catalog-promo-banner.webp"
+              alt={lang === 'en' ? 'Peptides Costa Rica product vials' : 'Viales de Peptides Costa Rica'}
+            />
+          </button>
         </div>
         {gateLoading ? (
           <div className="loader">
@@ -3141,27 +3154,6 @@ export default function CatalogPage() {
           </div>
         ) : (
           <>
-          {/* Catalog Promotional Banner */}
-          <div style={{
-            width: '100%', marginBottom: '24px', borderRadius: '16px', overflow: 'hidden',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.12)', cursor: 'pointer', position: 'relative'
-          }}
-            onClick={() => window.open('https://peptidescostarica.net', '_blank')}
-          >
-            <img
-              src="https://peptidescostarica.net/wp-content/uploads/2026/04/Untitled-design-5-1.png"
-              alt={lang === 'en' ? 'Peptides Costa Rica – Premium Peptide Research Supplies' : 'Péptidos Costa Rica – Suministros de Investigación Premium'}
-              style={{
-                width: '100%',
-                display: 'block',
-                height: 'auto',
-                maxHeight: '220px',
-                objectFit: 'cover',
-                objectPosition: 'center'
-              }}
-              onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.style.display = 'none'; }}
-            />
-          </div>
           <div className={`product-grid ${viewMode}-view`}>
             {filteredProducts.map((p, idx) => {
               const isBac = isBacWater(p.product);
