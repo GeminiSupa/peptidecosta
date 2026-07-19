@@ -5787,7 +5787,7 @@ body:has(.product-grid.grid-view) {
     }
 
     .catalog-press-band .press-band-logo {
-        justify-self: start;
+        justify-self: center;
         height: 17px;
         max-width: 58px;
         object-fit: contain;
