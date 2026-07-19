@@ -5285,6 +5285,27 @@ body:has(.product-grid.grid-view) {
     background: var(--bg-card);
 }
 
+.header-proof-column {
+    display: flex;
+    flex: 1 1 420px;
+    min-width: 0;
+    max-width: 430px;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+}
+
+.header-proof-column .trust-badges-container {
+    flex: 0 0 auto;
+    width: 100%;
+}
+
+.header-proof-column .trust-badge {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
+}
+
 /* Press feature band: full-width "As seen in The Costa Rica News" strip below the
    header controls, above the catalog. Kept out of the rating-badge flex row so it
    has room to be legible and can't collide with those badges on mobile. */
@@ -5300,6 +5321,18 @@ body:has(.product-grid.grid-view) {
     text-decoration: none;
     cursor: pointer;
     transition: background 0.18s ease;
+}
+
+.catalog-press-band {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 0.62fr 0.82fr 1.56fr;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
 }
 
 /* Hover feedback: the band lightens, the label turns to the accent colour, and
@@ -5328,8 +5361,33 @@ body:has(.product-grid.grid-view) {
 .press-band-logo {
     height: 32px;
     width: auto;
+    max-width: 100%;
     display: block;
     transition: transform 0.18s ease;
+}
+
+.press-band-quote {
+    min-width: 0;
+    padding-left: 9px;
+    border-left: 1px solid var(--border);
+    color: var(--text-main);
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 0.68rem;
+    line-height: 1.12;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.catalog-press-band .press-band-label,
+.catalog-press-band .press-band-logo,
+.catalog-press-band .press-band-quote {
+    justify-self: center;
+}
+
+.catalog-press-band .press-band-quote {
+    justify-self: start;
+    max-width: 100%;
 }
 
 .landing-press-band {
@@ -5672,18 +5730,35 @@ body:has(.product-grid.grid-view) {
         gap: 8px;
     }
 
+    .header-proof-column {
+        flex: 0 0 auto;
+        width: 100%;
+        max-width: none;
+        align-items: stretch;
+        gap: 7px;
+    }
+
     .logo-img-custom {
         max-height: 36px;
     }
 
     .trust-badges-container {
         width: 100%;
-        justify-content: center;
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        overflow-x: auto;
         gap: 6px;
         padding: 4px 0 6px;
+        scrollbar-width: none;
+    }
+
+    .trust-badges-container::-webkit-scrollbar {
+        display: none;
     }
 
     .trust-badge {
+        flex: 1 1 0;
+        max-width: none;
         min-width: 0;
         padding: 5px 6px;
         gap: 4px;
@@ -5696,6 +5771,36 @@ body:has(.product-grid.grid-view) {
 
     .trust-desc {
         font-size: 0.45rem;
+    }
+
+    .catalog-press-band {
+        min-height: 38px;
+        grid-template-columns: 0.5fr 0.72fr 1.78fr;
+        padding: 6px 6px;
+        gap: 2px;
+    }
+
+    .catalog-press-band .press-band-label {
+        justify-self: start;
+        font-size: 0.38rem;
+        letter-spacing: 0.02em;
+    }
+
+    .catalog-press-band .press-band-logo {
+        justify-self: start;
+        height: 17px;
+        max-width: 58px;
+        object-fit: contain;
+    }
+
+    .press-band-quote {
+        padding-left: 4px;
+        font-size: 0.42rem;
+        white-space: nowrap;
+        line-height: 1.05;
+        display: block;
+        overflow: hidden;
+        text-overflow: clip;
     }
 
     .header-sticky-section {
