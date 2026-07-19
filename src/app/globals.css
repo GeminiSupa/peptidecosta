@@ -5689,7 +5689,8 @@ body:has(.product-grid.grid-view) {
     }
 
     .header-top.container {
-        align-items: flex-start;
+        align-items: center;
+        flex-wrap: nowrap;
         gap: 7px;
         padding-left: 14px;
         padding-right: 14px;
@@ -5697,13 +5698,15 @@ body:has(.product-grid.grid-view) {
 
     .header-top a {
         font-size: 0.68rem !important;
+        white-space: nowrap;
     }
 
+    /* Back link and the theme/lang/currency selectors share one row on mobile;
+       flex-wrap is disabled above so the controls can't drop to a second line. */
     .header-controls {
-        width: 100%;
         justify-content: flex-end;
+        flex-wrap: nowrap;
         gap: 6px;
-        margin-top: -2px;
     }
 
     .admin-link {
@@ -5773,24 +5776,29 @@ body:has(.product-grid.grid-view) {
         font-size: 0.45rem;
     }
 
+    /* On mobile the band drops the desktop grid for a centered flex row, so the
+       label + logo + quote sit as one centered group instead of spreading out. */
     .catalog-press-band {
         min-height: 38px;
-        grid-template-columns: 0.5fr 0.72fr 1.78fr;
+        display: flex;
+        justify-content: center;
         padding: 6px 6px;
-        gap: 2px;
+        gap: 6px;
     }
 
     .catalog-press-band .press-band-label {
-        justify-self: start;
         font-size: 0.38rem;
         letter-spacing: 0.02em;
     }
 
     .catalog-press-band .press-band-logo {
-        justify-self: center;
         height: 17px;
         max-width: 58px;
         object-fit: contain;
+    }
+
+    .catalog-press-band .press-band-quote {
+        flex: 0 1 auto;
     }
 
     .press-band-quote {
