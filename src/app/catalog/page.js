@@ -1921,6 +1921,7 @@ export default function CatalogPage() {
       currency,
       paymentMethod: 'card',
       status: 'Pending - Card',
+      customerReceiptOnly: true,
       lang,
     };
 
@@ -2068,6 +2069,7 @@ export default function CatalogPage() {
       currency,
       paymentMethod,
       status: 'Pending',
+      customerReceiptOnly: true,
       lang,
     });
 
@@ -2339,6 +2341,7 @@ export default function CatalogPage() {
               currency: 'USD',
               paymentMethod: 'paypal',
               status: 'Paid',
+              customerReceiptOnly: true,
               lang: cLang,
             });
 

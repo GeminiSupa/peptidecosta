@@ -1761,6 +1761,7 @@ export default function CatalogClient({
       currency,
       paymentMethod: 'card',
       status: 'Pending - Card',
+      customerReceiptOnly: true,
       lang,
     };
 
@@ -1906,6 +1907,7 @@ export default function CatalogClient({
       currency,
       paymentMethod,
       status: 'Pending',
+      customerReceiptOnly: true,
       lang,
     });
 
@@ -2177,6 +2179,7 @@ export default function CatalogClient({
               currency: 'USD',
               paymentMethod: 'paypal',
               status: 'Paid',
+              customerReceiptOnly: true,
               lang: cLang,
             });
 

@@ -16,6 +16,60 @@ function formatSalesAlertTotal(order) {
     : `CRC ${Number(order.total_crc || 0).toLocaleString('es-CR')}`;
 }
 
+function buildOrderNotificationPayload(order, orderNumber) {
+  const items = Array.isArray(order.items) ? order.items : [];
+  const currency = order.currency || 'USD';
+  const itemsAmount = items.reduce((sum, item) => {
+    return sum + ((Number(item.price) || 0) * (Number(item.qty) || 0));
+  }, 0);
+  const shipping = currency === 'CRC'
+    ? Number(order.shipping_cost_crc || 0)
+    : Number(order.shipping_cost_usd || 0);
+  const promoDiscount = currency === 'CRC'
+    ? Number(order.discount_amount_crc || 0)
+    : Number(order.discount_amount_usd || 0);
+  const total = currency === 'CRC'
+    ? Number(order.total_crc || 0)
+    : Number(order.total_usd || 0);
+  const volumeDiscount = Math.max(0, itemsAmount - promoDiscount + shipping - total);
+
+  return {
+    orderNumber,
+    customerName: order.customer_name,
+    customerPhone: order.customer_phone,
+    customerEmail: order.customer_email || '',
+    shippingAddress: order.shipping_address,
+    customerIdType: order.customer_id_type,
+    customerIdNumber: order.customer_id_number,
+    items,
+    total,
+    totalUsd: order.total_usd,
+    totalCrc: order.total_crc,
+    subtotal: itemsAmount,
+    volumeDiscount,
+    promoDiscount,
+    shipping,
+    currency,
+    paymentMethod: order.payment_method,
+    status: order.status || 'Pending',
+    adminNotificationOnly: true,
+    lang: currency === 'CRC' ? 'es' : 'en',
+  };
+}
+
+async function sendAdminOrderEmail(baseUrl, order, orderNumber) {
+  const response = await fetch(`${baseUrl}/api/order-notification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildOrderNotificationPayload(order, orderNumber)),
+  });
+
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result?.error || result?.details || `Order notification returned ${response.status}`);
+  }
+}
+
 async function sendSalesOrderAlerts(order, orderNumber) {
   const recipients = (process.env.SALES_TEAM_WHATSAPP_NUMBERS || '')
     .split(',')
@@ -308,7 +362,14 @@ export async function POST(request) {
     }
 
     // Execute post-order alerts in the background
+    const baseUrl = new URL(request.url).origin;
     after(async () => {
+      try {
+        await sendAdminOrderEmail(baseUrl, order, data.order_number);
+      } catch (err) {
+        console.error('[orders/create] Background admin email alert error:', err);
+      }
+
       try {
         await sendSalesOrderAlerts(order, data.order_number);
       } catch (err) {
