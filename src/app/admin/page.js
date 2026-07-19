@@ -443,6 +443,7 @@ export default function AdminPage() {
   const [savingWaSettings, setSavingWaSettings] = useState(false);
   const [chatInputText, setChatInputText] = useState('');
   const [draftingAiReply, setDraftingAiReply] = useState(false);
+  const [liveWaSendFeedback, setLiveWaSendFeedback] = useState({ status: 'idle', message: '' });
 
   // ── WA unread tracking (localStorage-backed) ──────────────────────────────
   // seenMap: { [waId]: isoTimestamp } — the lastInboundAt we have "seen"
@@ -489,6 +490,7 @@ export default function AdminPage() {
   const [baileysActiveChatWaId, setBaileysActiveChatWaId] = useState(null);
   const [baileysChatInputText, setBaileysChatInputText] = useState('');
   const [sendingBaileysMsg, setSendingBaileysMsg] = useState(false);
+  const [baileysSendFeedback, setBaileysSendFeedback] = useState({ status: 'idle', message: '' });
 
   // Save WhatsApp settings handler
   const handleSaveWhatsappSettings = async (settings) => {
@@ -594,6 +596,10 @@ Please draft a perfect next response to this customer. Match their language (Spa
     
     const textToSend = chatInputText.trim();
     if (!mediaUrl) setChatInputText('');
+    setLiveWaSendFeedback({
+      status: 'sending',
+      message: mediaUrl ? 'Sending attachment...' : 'Sending message...',
+    });
 
     // Optimistically insert message into UI state thread
     const tempId = `temp-${Date.now()}`;
@@ -624,15 +630,22 @@ Please draft a perfect next response to this customer. Match their language (Spa
 
       const data = await res.json();
       if (res.ok && data.success) {
+        setLiveWaSendFeedback({ status: 'idle', message: '' });
         loadAdminData();
       } else {
-        alert('❌ Failed to send WhatsApp: ' + (data.error || 'Unknown error'));
+        setLiveWaSendFeedback({
+          status: 'error',
+          message: data.error || 'WhatsApp delivery failed. Check the reply window or try again.',
+        });
         setWhatsappMessages(prev => prev.filter(m => m.id !== tempId));
         setChatInputText(textToSend);
       }
     } catch (err) {
       console.error(err);
-      alert('❌ Failed to send WhatsApp: ' + err.message);
+      setLiveWaSendFeedback({
+        status: 'error',
+        message: err.message || 'WhatsApp delivery failed. Please try again.',
+      });
       setWhatsappMessages(prev => prev.filter(m => m.id !== tempId));
       if (!mediaUrl) setChatInputText(textToSend);
     }
@@ -674,6 +687,7 @@ Please draft a perfect next response to this customer. Match their language (Spa
     const textToSend = baileysChatInputText.trim();
     setBaileysChatInputText('');
     setSendingBaileysMsg(true);
+    setBaileysSendFeedback({ status: 'sending', message: 'Sending from linked device...' });
 
     const tempId = `temp-baileys-${Date.now()}`;
     const optimisticMessage = {
@@ -696,14 +710,21 @@ Please draft a perfect next response to this customer. Match their language (Spa
       });
       const data = await res.json();
       if (!res.ok || data.error) {
-        alert('❌ Failed to send: ' + (data.error || 'Unknown error'));
+        setBaileysSendFeedback({
+          status: 'error',
+          message: data.error || 'Linked-device send failed. Please try again.',
+        });
         setWhatsappMessages(prev => prev.filter(m => m.id !== tempId));
         setBaileysChatInputText(textToSend);
       } else {
+        setBaileysSendFeedback({ status: 'idle', message: '' });
         loadAdminData();
       }
     } catch (err) {
-      alert('❌ Failed to send: ' + err.message);
+      setBaileysSendFeedback({
+        status: 'error',
+        message: err.message || 'Linked-device send failed. Please try again.',
+      });
       setWhatsappMessages(prev => prev.filter(m => m.id !== tempId));
       setBaileysChatInputText(textToSend);
     } finally {
@@ -5237,6 +5258,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 // (Baileys might not support image upload through same mechanism easily, but we'll pass it anyway)
                 uploadingWaImage={uploadingWaImage}
                 handleWaImageUpload={handleWaImageUpload}
+                sendingMessage={sendingBaileysMsg}
+                sendFeedback={baileysSendFeedback}
+                onDismissSendFeedback={() => setBaileysSendFeedback({ status: 'idle', message: '' })}
               />
             </div>
           </div>
@@ -5389,32 +5413,37 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {/* TAB: WHATSAPP AI INBOX */}
         {activeTab === 'whatsapp_ai' && (
-          <>
-          <WhatsAppAnalyticsPanel />
-          <WhatsAppInbox
-            whatsappMessages={whatsappMessages}
-            orders={orders}
-            leads={leads}
-            abandonedCarts={abandonedCarts}
-            loadingWhatsappMessages={loadingWhatsappMessages}
-            whatsappSettings={whatsappSettings}
-            setWhatsappSettings={setWhatsappSettings}
-            handleSaveWhatsappSettings={handleSaveWhatsappSettings}
-            savingWaSettings={savingWaSettings}
-            activeChatWaId={activeChatWaId}
-            setActiveChatWaId={setActiveChatWaId}
-            chatInputText={chatInputText}
-            setChatInputText={setChatInputText}
-            handleSendLiveWhatsappMessage={handleSendLiveWhatsappMessage}
-            handleDraftAiChatReply={handleDraftAiChatReply}
-            draftingAiReply={draftingAiReply}
-            loadAdminData={loadAdminData}
-            seenMap={seenMap}
-            markSeen={markSeen}
-            uploadingWaImage={uploadingWaImage}
-            handleWaImageUpload={handleWaImageUpload}
-          />
-          </>
+          <div className="admin-whatsapp-workspace">
+            <WhatsAppInbox
+              whatsappMessages={whatsappMessages}
+              orders={orders}
+              leads={leads}
+              abandonedCarts={abandonedCarts}
+              loadingWhatsappMessages={loadingWhatsappMessages}
+              whatsappSettings={whatsappSettings}
+              setWhatsappSettings={setWhatsappSettings}
+              handleSaveWhatsappSettings={handleSaveWhatsappSettings}
+              savingWaSettings={savingWaSettings}
+              activeChatWaId={activeChatWaId}
+              setActiveChatWaId={setActiveChatWaId}
+              chatInputText={chatInputText}
+              setChatInputText={setChatInputText}
+              handleSendLiveWhatsappMessage={handleSendLiveWhatsappMessage}
+              handleDraftAiChatReply={handleDraftAiChatReply}
+              draftingAiReply={draftingAiReply}
+              loadAdminData={loadAdminData}
+              seenMap={seenMap}
+              markSeen={markSeen}
+              uploadingWaImage={uploadingWaImage}
+              handleWaImageUpload={handleWaImageUpload}
+              sendFeedback={liveWaSendFeedback}
+              sendingMessage={liveWaSendFeedback.status === 'sending'}
+              onDismissSendFeedback={() => setLiveWaSendFeedback({ status: 'idle', message: '' })}
+            />
+            <div className="admin-whatsapp-analytics-shell">
+              <WhatsAppAnalyticsPanel />
+            </div>
+          </div>
         )}
       </div>
 

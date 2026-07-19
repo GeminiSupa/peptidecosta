@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, Check, CheckCheck, ChevronLeft, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy } from 'lucide-react';
+import { Brain, Check, CheckCheck, ChevronLeft, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus } from 'lucide-react';
 
 const INITIAL_CHAT_LIMIT = 30;
+const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const SERVICE_WINDOW_URGENT_MS = 2 * 60 * 60 * 1000;
 const GENERIC_CONTACT_NAMES = new Set([
   'administrator',
   'ai copilot',
@@ -55,6 +57,102 @@ function formatMessageDate(value) {
   if (date.toDateString() === today.toDateString()) return 'Today';
   if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
   return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatRelativeDuration(ms) {
+  const safeMs = Math.max(0, ms || 0);
+  const minutes = Math.ceil(safeMs / (60 * 1000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours < 24) return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
+
+function getReplyWindow(lastInboundAt, now) {
+  if (!lastInboundAt) {
+    return {
+      state: 'closed',
+      label: 'Template needed',
+      detail: 'No recent customer message. Free-form replies may be rejected.',
+    };
+  }
+
+  const inboundTime = new Date(lastInboundAt).getTime();
+  if (!Number.isFinite(inboundTime)) {
+    return {
+      state: 'closed',
+      label: 'Check window',
+      detail: 'Could not verify the WhatsApp reply window.',
+    };
+  }
+
+  const msLeft = inboundTime + SERVICE_WINDOW_MS - now;
+  if (msLeft <= 0) {
+    return {
+      state: 'closed',
+      label: 'Window closed',
+      detail: 'Use an approved template before sending a free-form follow-up.',
+    };
+  }
+
+  const duration = formatRelativeDuration(msLeft);
+  if (msLeft <= SERVICE_WINDOW_URGENT_MS) {
+    return {
+      state: 'urgent',
+      label: `${duration} left`,
+      detail: 'Reply soon before WhatsApp requires a template.',
+    };
+  }
+
+  return {
+    state: 'open',
+    label: `${duration} left`,
+    detail: 'Free-form replies are available.',
+  };
+}
+
+function getCartItems(cartData) {
+  if (!cartData) return [];
+  let parsed = cartData;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.items) ? parsed.items : []);
+}
+
+function calculateCartTotal(cartData) {
+  if (!cartData) return 0;
+  let parsed = cartData;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return 0;
+    }
+  }
+
+  const items = getCartItems(parsed);
+  if (!items.length && typeof parsed?.total !== 'undefined') {
+    return parseFloat(String(parsed.total || '0').replace(/[^0-9.]/g, '')) || 0;
+  }
+
+  return items.reduce((sum, item) => {
+    const price = parseFloat(String(item?.price_usd || item?.priceUsd || item?.price || '0').replace(/[^0-9.]/g, '')) || 0;
+    const qty = parseInt(item?.qty || item?.quantity || 1, 10) || 1;
+    return sum + (price * qty);
+  }, 0);
+}
+
+function formatMoney(value) {
+  const amount = Number(value || 0);
+  if (!amount) return '$0';
+  return `$${amount.toLocaleString(undefined, { maximumFractionDigits: amount >= 100 ? 0 : 2 })}`;
 }
 
 function useIsMobileWa() {
@@ -132,13 +230,18 @@ const WaChatItem = ({ chat, isActive, isUnread, onClick, onMarkUnread }) => {
           </div>
           <div className="admin-wa-chat-item-bottom">
             <span className="admin-wa-chat-item-preview">{chat.lastMessageText || 'Photo'}</span>
-            {chat.isAiLast ? (
-              <span className="admin-wa-badge admin-wa-badge--ai">AI</span>
-            ) : isUnread ? (
-              <span className="admin-wa-unread-dot" aria-label="New message" />
-            ) : chat.direction === 'outbound' ? (
-              <CheckCheck size={14} className="admin-wa-chat-sent-icon" aria-label="Sent" />
-            ) : null}
+            <span className="admin-wa-chat-flags">
+              {chat.direction === 'inbound' && (
+                <span className="admin-wa-waiting-chip">Waiting</span>
+              )}
+              {chat.isAiLast ? (
+                <span className="admin-wa-badge admin-wa-badge--ai">AI</span>
+              ) : isUnread ? (
+                <span className="admin-wa-unread-dot" aria-label="New message" />
+              ) : chat.direction === 'outbound' ? (
+                <CheckCheck size={14} className="admin-wa-chat-sent-icon" aria-label="Sent" />
+              ) : null}
+            </span>
           </div>
         </div>
       </button>
@@ -177,12 +280,15 @@ export default function WhatsAppInbox({
   markSeen,
   uploadingWaImage,
   handleWaImageUpload,
+  sendingMessage = false,
+  sendFeedback,
+  onDismissSendFeedback,
 }) {
   const isMobile = useIsMobileWa();
   const messagesEndRef = useRef(null);
   const composerRef = useRef(null);
   const [chatSearch, setChatSearch] = useState('');
-  const [inboxFilter, setInboxFilter] = useState('all');
+  const [inboxFilter, setInboxFilter] = useState('needs_reply');
   const [messageSearch, setMessageSearch] = useState('');
   const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [visibleChatCount, setVisibleChatCount] = useState(INITIAL_CHAT_LIMIT);
@@ -190,6 +296,8 @@ export default function WhatsAppInbox({
   const [showCustomerContext, setShowCustomerContext] = useState(false);
   const [showContactActions, setShowContactActions] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [showComposerTools, setShowComposerTools] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   // Pull-to-refresh state
   const scrollRef = useRef(null);
@@ -307,11 +415,20 @@ export default function WhatsAppInbox({
     () => chatsList.filter(hasUnread).length,
     [chatsList, hasUnread]
   );
+  const waitingCount = useMemo(
+    () => chatsList.filter((chat) => chat.direction === 'inbound').length,
+    [chatsList]
+  );
+  const hotCartCount = useMemo(
+    () => chatsList.filter((chat) => chat.stage === 'Cart').length,
+    [chatsList]
+  );
 
   const filteredChats = useMemo(() => {
     let result = chatsList;
     if (inboxFilter === 'unread') result = result.filter(hasUnread);
     if (inboxFilter === 'needs_reply') result = result.filter((chat) => chat.direction === 'inbound');
+    if (inboxFilter === 'hot_cart') result = result.filter((chat) => chat.stage === 'Cart');
     const query = chatSearch.trim().toLowerCase();
     if (query) {
       const digits = normalizePhone(query);
@@ -362,6 +479,44 @@ export default function WhatsAppInbox({
     return { orders: customerOrders, latestOrder: customerOrders[0] || null, cart, lead, lifetimeValue };
   }, [abandonedCarts, activeChatWaId, leads, orders]);
 
+  const replyWindow = useMemo(
+    () => getReplyWindow(currentChat?.lastInboundAt, now),
+    [currentChat?.lastInboundAt, now]
+  );
+
+  const customerContextSummary = useMemo(() => {
+    if (!customerContext) return null;
+    const highlights = [];
+    const cartItems = getCartItems(customerContext.cart?.cart_data);
+    const cartTotal = calculateCartTotal(customerContext.cart?.cart_data);
+
+    if (customerContext.cart) {
+      const itemCopy = cartItems.length === 1 ? '1 item' : `${cartItems.length || 'Active'} items`;
+      highlights.push(`Cart ${cartTotal ? formatMoney(cartTotal) : 'active'} · ${itemCopy}`);
+    }
+
+    if (customerContext.latestOrder) {
+      const latestTotal = Number(customerContext.latestOrder.total_usd || 0);
+      highlights.push(`Latest ${customerContext.latestOrder.status || 'order'}${latestTotal ? ` · ${formatMoney(latestTotal)}` : ''}`);
+    }
+
+    if (customerContext.lead?.utm_source) {
+      highlights.push(`Source ${customerContext.lead.utm_source}`);
+    }
+
+    if (!highlights.length && customerContext.orders.length) {
+      highlights.push(`${customerContext.orders.length} order${customerContext.orders.length !== 1 ? 's' : ''}`);
+    }
+
+    if (!highlights.length) highlights.push('WhatsApp contact');
+
+    return {
+      tone: customerContext.cart ? 'hot' : customerContext.latestOrder ? 'customer' : customerContext.lead ? 'lead' : 'contact',
+      label: customerContext.cart ? 'Hot cart' : customerContext.latestOrder ? 'Customer' : customerContext.lead ? 'Lead' : 'Contact',
+      text: highlights.slice(0, 2).join(' · '),
+    };
+  }, [customerContext]);
+
   useEffect(() => {
     document.body.classList.add('admin-wa-tab-active');
     return () => document.body.classList.remove('admin-wa-tab-active');
@@ -381,6 +536,15 @@ export default function WhatsAppInbox({
     return () => cancelAnimationFrame(t);
   }, [activeChatWaId, activeChatMessages.length]);
 
+  useEffect(() => {
+    if (!activeChatWaId) return undefined;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 60 * 1000);
+    return () => clearInterval(timer);
+  }, [activeChatWaId]);
+
+  const sendButtonDisabled = sendingMessage || !chatInputText.trim();
+
   const copyActiveChatPhone = async () => {
     if (!activeChatWaId) return;
     try {
@@ -394,9 +558,35 @@ export default function WhatsAppInbox({
   const handleComposerKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendLiveWhatsappMessage();
+      if (!sendButtonDisabled) handleSendLiveWhatsappMessage();
     }
   };
+
+  const quickReplyTemplates = [
+    { label: 'Greeting', text: 'Hello! How can I help you today?' },
+    { label: 'Price list', text: 'Here is our full catalog and price list: https://peptidescostarica.net/' },
+    { label: 'Delivery', text: 'We offer fast local delivery in Costa Rica.' },
+  ];
+
+  const appendQuickReply = (text) => {
+    setChatInputText(prev => prev + (prev ? ' ' : '') + text);
+    setShowQuickReplies(false);
+    if (isMobile) setShowComposerTools(false);
+  };
+
+  const filterTabs = [
+    { id: 'needs_reply', label: 'Waiting', count: waitingCount },
+    { id: 'hot_cart', label: 'Hot carts', count: hotCartCount },
+    { id: 'unread', label: 'Unread', count: unreadCount },
+    { id: 'all', label: 'All', count: chatsList.length },
+  ];
+  const emptyCopy = chatSearch
+    ? 'No conversations match your search.'
+    : inboxFilter === 'needs_reply'
+      ? 'No customers are waiting for a reply.'
+      : inboxFilter === 'hot_cart'
+        ? 'No active cart conversations right now.'
+        : 'No conversations yet. Incoming messages will appear here.';
 
   return (
     <div
@@ -440,9 +630,21 @@ export default function WhatsAppInbox({
           </div>
 
           <div className="admin-wa-filter-tabs" role="tablist" aria-label="Conversation filters">
-            <button type="button" role="tab" aria-selected={inboxFilter === 'all'} className={inboxFilter === 'all' ? 'active' : ''} onClick={() => setInboxFilter('all')}>All <span>{chatsList.length}</span></button>
-            <button type="button" role="tab" aria-selected={inboxFilter === 'unread'} className={inboxFilter === 'unread' ? 'active' : ''} onClick={() => setInboxFilter('unread')}>Unread <span>{unreadCount}</span></button>
-            <button type="button" role="tab" aria-selected={inboxFilter === 'needs_reply'} className={inboxFilter === 'needs_reply' ? 'active' : ''} onClick={() => setInboxFilter('needs_reply')}>Needs reply <span>{chatsList.filter((chat) => chat.direction === 'inbound').length}</span></button>
+            {filterTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={inboxFilter === tab.id}
+                className={inboxFilter === tab.id ? 'active' : ''}
+                onClick={() => {
+                  setInboxFilter(tab.id);
+                  setVisibleChatCount(INITIAL_CHAT_LIMIT);
+                }}
+              >
+                {tab.label} <span>{tab.count}</span>
+              </button>
+            ))}
           </div>
 
           <div 
@@ -463,9 +665,7 @@ export default function WhatsAppInbox({
               <div className="admin-wa-state-msg">Loading conversations...</div>
             ) : filteredChats.length === 0 ? (
               <div className="admin-wa-state-msg admin-wa-state-msg--empty">
-                {chatSearch
-                  ? 'No conversations match your search.'
-                  : 'No conversations yet. Incoming messages will appear here.'}
+                {emptyCopy}
               </div>
             ) : (
               <>
@@ -537,7 +737,7 @@ export default function WhatsAppInbox({
               </div>
 
               <div className="admin-wa-chat-header-actions">
-                {activeChatCallHref && (
+                {activeChatCallHref && !isMobile && (
                   <button
                     type="button"
                     className="admin-wa-icon-btn admin-wa-call-btn"
@@ -548,18 +748,20 @@ export default function WhatsAppInbox({
                     <PhoneCall size={17} />
                   </button>
                 )}
-                <button 
-                  type="button" 
-                  className="admin-wa-refresh-btn" 
-                  onClick={() => {
-                    setShowMessageSearch(!showMessageSearch);
-                    if (showMessageSearch) setMessageSearch('');
-                  }} 
-                  style={{ minWidth: '44px', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  title="Search in conversation"
-                >
-                  <Search size={16} />
-                </button>
+                {!isMobile && (
+                  <button
+                    type="button"
+                    className="admin-wa-refresh-btn"
+                    onClick={() => {
+                      setShowMessageSearch(!showMessageSearch);
+                      if (showMessageSearch) setMessageSearch('');
+                    }}
+                    style={{ minWidth: '44px', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="Search in conversation"
+                  >
+                    <Search size={16} />
+                  </button>
+                )}
                 {whatsappSettings.ai_auto_reply && (
                   <span className="admin-wa-autopilot-badge">
                     <span className="admin-wa-autopilot-dot" aria-hidden />
@@ -567,9 +769,20 @@ export default function WhatsAppInbox({
                     <span className="admin-wa-autopilot-badge-short">AI On</span>
                   </span>
                 )}
+                <span className={`admin-wa-window-chip admin-wa-window-chip--${replyWindow.state}`}>
+                  <Clock size={13} aria-hidden />
+                  <span>{replyWindow.label}</span>
+                </span>
+                {!isMobile && (
                 <button type="button" className="admin-wa-icon-btn" onClick={() => setShowCustomerContext(true)} aria-label="View customer details" title="Customer details">
                   <Info size={17} />
                 </button>
+                )}
+                {isMobile && (
+                  <button type="button" className="admin-wa-icon-btn" onClick={() => setShowContactActions(true)} aria-label="More conversation actions" title="More actions">
+                    <MoreHorizontal size={18} />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -584,13 +797,13 @@ export default function WhatsAppInbox({
                   style={{ flex: 1, background: '#0a1120', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem', outline: 'none' }}
                   autoFocus
                 />
-                <button 
+                <button
                   type="button" 
                   onClick={() => {
                     setShowMessageSearch(false);
                     setMessageSearch('');
                   }}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+                  className="admin-wa-search-close"
                 >
                   <X size={16} />
                 </button>
@@ -673,22 +886,102 @@ export default function WhatsAppInbox({
             </div>
 
             <div className="admin-wa-composer" ref={composerRef}>
-              {showQuickReplies && (
-                <div className="admin-wa-quick-replies" aria-label="Quick replies">
-                  <button type="button" onClick={() => { setChatInputText(prev => prev + (prev ? ' ' : '') + 'Hello! How can I help you today?'); setShowQuickReplies(false); }}>Hello 👋</button>
-                  <button type="button" onClick={() => { setChatInputText(prev => prev + (prev ? ' ' : '') + 'Here is our full catalog and price list: https://peptidescostarica.net/'); setShowQuickReplies(false); }}>Price list</button>
-                  <button type="button" onClick={() => { setChatInputText(prev => prev + (prev ? ' ' : '') + 'We offer fast local delivery in Costa Rica!'); setShowQuickReplies(false); }}>Delivery</button>
+              {customerContextSummary && (
+                <button
+                  type="button"
+                  className={`admin-wa-context-strip admin-wa-context-strip--${customerContextSummary.tone}`}
+                  onClick={() => setShowCustomerContext(true)}
+                  aria-label="Open customer context"
+                >
+                  <span>{customerContextSummary.label}</span>
+                  <strong>{customerContextSummary.text}</strong>
+                </button>
+              )}
+
+              {replyWindow.state !== 'open' && (
+                <div className={`admin-wa-window-strip admin-wa-window-strip--${replyWindow.state}`}>
+                  <Clock size={15} aria-hidden />
+                  <div>
+                    <strong>{replyWindow.label}</strong>
+                    <span>{replyWindow.detail}</span>
+                  </div>
                 </div>
               )}
 
-              <div className="admin-wa-composer-row">
-                <label className="admin-wa-attach-btn" title="Attach screenshot or image" aria-label="Attach screenshot or image">
-                  {uploadingWaImage ? <Loader2 size={20} className="spinner" /> : <Paperclip size={20} />}
-                  <input type="file" accept="image/*,.heic,.heif" style={{ display: 'none' }} onChange={(e) => { if(handleWaImageUpload) handleWaImageUpload(e.target.files[0]); }} disabled={uploadingWaImage} />
-                </label>
-                <button type="button" className={`admin-wa-composer-tool${showQuickReplies ? ' active' : ''}`} onClick={() => setShowQuickReplies(value => !value)} aria-label="Quick reply templates" title="Quick replies">
-                  <MessagesSquare size={19} />
-                </button>
+              {sendFeedback?.status === 'error' && (
+                <div className="admin-wa-send-feedback admin-wa-send-feedback--error" role="alert">
+                  <span>{sendFeedback.message || 'Message failed to send.'}</span>
+                  {onDismissSendFeedback && (
+                    <button type="button" onClick={onDismissSendFeedback}>Dismiss</button>
+                  )}
+                </div>
+              )}
+              {sendFeedback?.status === 'sending' && (
+                <div className="admin-wa-send-feedback">
+                  <Loader2 size={14} className="spinner" aria-hidden />
+                  <span>{sendFeedback.message || 'Sending message...'}</span>
+                </div>
+              )}
+
+              {showQuickReplies && (
+                <div className="admin-wa-quick-replies" aria-label="Quick replies">
+                  {quickReplyTemplates.map((template) => (
+                    <button type="button" key={template.label} onClick={() => appendQuickReply(template.text)}>
+                      {template.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {isMobile && showComposerTools && (
+                <div className="admin-wa-mobile-tool-tray" aria-label="Message tools">
+                  <label className="admin-wa-tool-tile" title="Attach screenshot or image" aria-label="Attach screenshot or image">
+                    {uploadingWaImage ? <Loader2 size={18} className="spinner" /> : <Paperclip size={18} />}
+                    <span>Attach</span>
+                    <input type="file" accept="image/*,.heic,.heif" style={{ display: 'none' }} onChange={(e) => { if(handleWaImageUpload) handleWaImageUpload(e.target.files[0]); }} disabled={uploadingWaImage} />
+                  </label>
+                  <button type="button" className={`admin-wa-tool-tile${showQuickReplies ? ' active' : ''}`} onClick={() => setShowQuickReplies(value => !value)} aria-label="Quick reply templates">
+                    <MessagesSquare size={18} />
+                    <span>Templates</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-wa-tool-tile admin-wa-composer-ai"
+                    onClick={() => {
+                      handleDraftAiChatReply(activeChatWaId);
+                      setShowComposerTools(false);
+                    }}
+                    disabled={draftingAiReply}
+                    aria-label="Draft a reply with AI"
+                  >
+                    {draftingAiReply ? <Loader2 size={18} className="spinner" /> : <Sparkles size={18} />}
+                    <span>AI draft</span>
+                  </button>
+                </div>
+              )}
+
+              <div className={`admin-wa-composer-row${isMobile ? ' admin-wa-composer-row--mobile' : ''}`}>
+                {isMobile ? (
+                  <button
+                    type="button"
+                    className={`admin-wa-composer-tool admin-wa-composer-menu${showComposerTools ? ' active' : ''}`}
+                    onClick={() => setShowComposerTools(value => !value)}
+                    aria-label={showComposerTools ? 'Close message tools' : 'Open message tools'}
+                    title={showComposerTools ? 'Close tools' : 'Message tools'}
+                  >
+                    {showComposerTools ? <X size={19} /> : <Plus size={20} />}
+                  </button>
+                ) : (
+                  <>
+                    <label className="admin-wa-attach-btn" title="Attach screenshot or image" aria-label="Attach screenshot or image">
+                      {uploadingWaImage ? <Loader2 size={20} className="spinner" /> : <Paperclip size={20} />}
+                      <input type="file" accept="image/*,.heic,.heif" style={{ display: 'none' }} onChange={(e) => { if(handleWaImageUpload) handleWaImageUpload(e.target.files[0]); }} disabled={uploadingWaImage} />
+                    </label>
+                    <button type="button" className={`admin-wa-composer-tool${showQuickReplies ? ' active' : ''}`} onClick={() => setShowQuickReplies(value => !value)} aria-label="Quick reply templates" title="Quick replies">
+                      <MessagesSquare size={19} />
+                    </button>
+                  </>
+                )}
                 <textarea
                   className="admin-wa-composer-input"
                   value={chatInputText}
@@ -698,24 +991,26 @@ export default function WhatsAppInbox({
                   rows={1}
                   enterKeyHint="send"
                 />
-                <button
-                  type="button"
-                  className="admin-wa-composer-tool admin-wa-composer-ai"
-                  onClick={() => handleDraftAiChatReply(activeChatWaId)}
-                  disabled={draftingAiReply}
-                  aria-label="Draft a reply with AI"
-                  title="AI draft"
-                >
-                  {draftingAiReply ? <Loader2 size={19} className="spinner" /> : <Sparkles size={19} />}
-                </button>
+                {!isMobile && (
+                  <button
+                    type="button"
+                    className="admin-wa-composer-tool admin-wa-composer-ai"
+                    onClick={() => handleDraftAiChatReply(activeChatWaId)}
+                    disabled={draftingAiReply}
+                    aria-label="Draft a reply with AI"
+                    title="AI draft"
+                  >
+                    {draftingAiReply ? <Loader2 size={19} className="spinner" /> : <Sparkles size={19} />}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="admin-wa-send-circle"
                   onClick={() => handleSendLiveWhatsappMessage()}
-                  disabled={!chatInputText.trim()}
+                  disabled={sendButtonDisabled}
                   aria-label="Send message"
                 >
-                  <Send size={19} aria-hidden />
+                  {sendingMessage ? <Loader2 size={19} className="spinner" aria-hidden /> : <Send size={19} aria-hidden />}
                 </button>
               </div>
             </div>
@@ -817,6 +1112,28 @@ export default function WhatsAppInbox({
                 <span><MessageCircle size={20} /></span>
                 <div><strong>Open WhatsApp chat</strong><small>Jump to the customer conversation in WhatsApp.</small></div>
               </a>
+              <button
+                type="button"
+                className="admin-wa-action-row"
+                onClick={() => {
+                  setShowMessageSearch(true);
+                  setShowContactActions(false);
+                }}
+              >
+                <span><Search size={20} /></span>
+                <div><strong>Search conversation</strong><small>Find a product, price, or previous promise.</small></div>
+              </button>
+              <button
+                type="button"
+                className="admin-wa-action-row"
+                onClick={() => {
+                  setShowCustomerContext(true);
+                  setShowContactActions(false);
+                }}
+              >
+                <span><Info size={20} /></span>
+                <div><strong>Customer details</strong><small>Order history, cart signal, and source.</small></div>
+              </button>
               <button type="button" className="admin-wa-action-row" onClick={copyActiveChatPhone}>
                 <span><Copy size={20} /></span>
                 <div><strong>Copy number</strong><small>Use it in WhatsApp, phone, or notes.</small></div>

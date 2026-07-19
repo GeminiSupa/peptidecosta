@@ -1440,6 +1440,8 @@
 }
 
 /* Sales WhatsApp — mobile-first sales inbox refinement */
+.admin-whatsapp-workspace { display: flex; flex-direction: column; gap: 16px; }
+.admin-whatsapp-analytics-shell { order: 2; }
 .admin-wa-inbox-heading { display: flex; min-width: 0; flex-direction: column; gap: 2px; text-transform: none; letter-spacing: 0; }
 .admin-wa-inbox-heading > span { color: #f8fafc; font-size: .95rem; font-weight: 820; }
 .admin-wa-inbox-heading small { color: #64748b; font-size: .68rem; font-weight: 600; }
@@ -1464,8 +1466,9 @@
 }
 .admin-wa-search-row { display: flex; gap: 8px; padding: 10px 12px 8px; }
 .admin-wa-search-row .admin-wa-search { flex: 1; margin: 0; min-height: 44px; }
-.admin-wa-filter-tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; padding: 0 12px 10px; border-bottom: 1px solid rgba(255,255,255,.06); }
-.admin-wa-filter-tabs button { min-height: 38px; padding: 0 7px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: #718096; font: inherit; font-size: .7rem; font-weight: 750; white-space: nowrap; cursor: pointer; }
+.admin-wa-filter-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 0 12px 10px; border-bottom: 1px solid rgba(255,255,255,.06); scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.admin-wa-filter-tabs::-webkit-scrollbar { display: none; }
+.admin-wa-filter-tabs button { flex: 0 0 auto; min-width: 78px; min-height: 44px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: #718096; font: inherit; font-size: .72rem; font-weight: 750; white-space: nowrap; cursor: pointer; touch-action: manipulation; }
 .admin-wa-filter-tabs button span { margin-left: 3px; color: #475569; font-size: .62rem; }
 .admin-wa-filter-tabs button.active { border-color: rgba(45,212,191,.23); background: rgba(45,212,191,.1); color: #99f6e4; }
 .admin-wa-filter-tabs button.active span { color: #5eead4; }
@@ -1474,11 +1477,14 @@
 .admin-wa-stage--customer { background: rgba(16,185,129,.13); color: #6ee7b7; }
 .admin-wa-stage--cart { background: rgba(245,158,11,.13); color: #fbbf24; }
 .admin-wa-stage--lead { background: rgba(56,189,248,.13); color: #7dd3fc; }
+.admin-wa-chat-flags { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; }
+.admin-wa-waiting-chip { padding: 2px 6px; border-radius: 999px; background: rgba(251, 191, 36, .13); color: #fbbf24; font-size: .58rem; font-weight: 850; text-transform: uppercase; letter-spacing: 0; }
 .admin-wa-chat-more { position: absolute; z-index: 3; right: 5px; top: 50%; display: grid; width: 40px; height: 40px; place-items: center; padding: 0; border: 0; border-radius: 9px; opacity: 0; transform: translateY(-50%); background: #172237; color: #94a3b8; cursor: pointer; transition: opacity .15s ease; }
 .admin-wa-chat-item-shell:hover .admin-wa-chat-more,
 .admin-wa-chat-more:focus-visible { opacity: 1; }
 .admin-wa-composer { background: rgba(8,13,23,.96); backdrop-filter: blur(18px); }
 .admin-wa-composer-row { display: flex; align-items: flex-end; gap: 7px; }
+.admin-wa-composer-row--mobile { display: grid; grid-template-columns: 48px minmax(0,1fr) 50px; gap: 8px; }
 .admin-wa-composer-input { min-width: 80px; min-height: 48px; max-height: 132px; border-radius: 14px; }
 .admin-wa-composer-tool { border: 1px solid rgba(255,255,255,.09); background: rgba(255,255,255,.04); color: #94a3b8; }
 .admin-wa-composer-tool.active { border-color: rgba(45,212,191,.28); background: rgba(45,212,191,.11); color: #5eead4; }
@@ -1496,7 +1502,35 @@
 .admin-wa-send-circle { border: 0; border-radius: 50%; background: #10b981; color: #fff; box-shadow: 0 6px 18px rgba(16,185,129,.24); }
 .admin-wa-send-circle:disabled { background: #1e293b; color: #64748b; box-shadow: none; cursor: not-allowed; }
 .admin-wa-quick-replies { margin: 0 0 9px; padding: 0; }
-.admin-wa-quick-replies button { min-height: 38px; padding: 0 13px; }
+.admin-wa-quick-replies button { min-height: 44px; padding: 0 14px; }
+.admin-wa-mobile-tool-tray { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin-bottom: 8px; }
+.admin-wa-tool-tile { display: grid; min-height: 58px; place-items: center; gap: 4px; padding: 8px 6px; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: rgba(255,255,255,.04); color: #cbd5e1; font: inherit; font-size: .7rem; font-weight: 750; cursor: pointer; touch-action: manipulation; }
+.admin-wa-tool-tile.active,
+.admin-wa-tool-tile:focus-visible { border-color: rgba(45,212,191,.3); background: rgba(45,212,191,.1); color: #99f6e4; outline: none; }
+.admin-wa-context-strip,
+.admin-wa-window-strip,
+.admin-wa-send-feedback { display: flex; width: 100%; align-items: center; gap: 9px; margin-bottom: 8px; padding: 9px 11px; border-radius: 12px; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.035); color: #cbd5e1; text-align: left; }
+.admin-wa-context-strip { cursor: pointer; font: inherit; touch-action: manipulation; }
+.admin-wa-context-strip span { flex: 0 0 auto; padding: 3px 7px; border-radius: 999px; background: rgba(45,212,191,.13); color: #5eead4; font-size: .62rem; font-weight: 850; text-transform: uppercase; }
+.admin-wa-context-strip strong { min-width: 0; overflow: hidden; color: #e5edf7; font-size: .75rem; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.admin-wa-context-strip--hot span { background: rgba(245,158,11,.15); color: #fbbf24; }
+.admin-wa-context-strip--customer span { background: rgba(16,185,129,.14); color: #6ee7b7; }
+.admin-wa-context-strip--lead span { background: rgba(56,189,248,.14); color: #7dd3fc; }
+.admin-wa-window-chip { display: inline-flex; min-height: 30px; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px; border: 1px solid rgba(45,212,191,.18); background: rgba(45,212,191,.08); color: #99f6e4; font-size: .66rem; font-weight: 800; white-space: nowrap; }
+.admin-wa-window-chip--urgent,
+.admin-wa-window-strip--urgent { border-color: rgba(251,191,36,.32); background: rgba(251,191,36,.1); color: #fbbf24; }
+.admin-wa-window-chip--closed,
+.admin-wa-window-strip--closed { border-color: rgba(248,113,113,.32); background: rgba(248,113,113,.1); color: #fecaca; }
+.admin-wa-window-strip { align-items: flex-start; }
+.admin-wa-window-strip div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.admin-wa-window-strip strong { color: currentColor; font-size: .72rem; }
+.admin-wa-window-strip span,
+.admin-wa-send-feedback span { color: #94a3b8; font-size: .7rem; line-height: 1.35; }
+.admin-wa-send-feedback { justify-content: space-between; color: #94a3b8; }
+.admin-wa-send-feedback--error { border-color: rgba(248,113,113,.28); background: rgba(127,29,29,.16); color: #fecaca; }
+.admin-wa-send-feedback--error span { color: #fecaca; }
+.admin-wa-send-feedback button { min-height: 36px; padding: 0 10px; border: 1px solid rgba(248,113,113,.26); border-radius: 9px; background: rgba(248,113,113,.08); color: #fecaca; font: inherit; font-size: .68rem; font-weight: 800; cursor: pointer; }
+.admin-wa-search-close { display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; padding: 0; border: 0; border-radius: 10px; background: transparent; color: #94a3b8; cursor: pointer; }
 .admin-wa-sheet-backdrop { position: fixed; z-index: 10020; inset: 0; display: flex; align-items: stretch; justify-content: flex-end; background: rgba(2,6,23,.72); backdrop-filter: blur(7px); }
 .admin-wa-sheet { width: min(420px,100%); height: 100%; overflow-y: auto; border-left: 1px solid rgba(255,255,255,.09); background: #0b1322; box-shadow: -22px 0 60px rgba(0,0,0,.35); }
 .admin-wa-sheet-header { position: sticky; z-index: 2; top: 0; display: flex; min-height: 72px; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.07); background: rgba(11,19,34,.95); backdrop-filter: blur(16px); }
@@ -7158,6 +7192,10 @@
    This block intentionally sits last because admin.css contains older repeated
    CRM rules above. The active component class is the source of truth on mobile. */
 @media (max-width: 1023px) {
+    body.admin-wa-conversation-open .admin-whatsapp-analytics-shell {
+        display: none !important;
+    }
+
     .admin-whatsapp-inbox {
         display: grid !important;
         grid-template-columns: minmax(0, 1fr) !important;
@@ -7221,9 +7259,9 @@
 
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-composer-row {
         display: grid !important;
-        grid-template-columns: 42px 42px minmax(0, 1fr) 42px 46px !important;
+        grid-template-columns: 48px minmax(0, 1fr) 50px !important;
         align-items: end !important;
-        gap: 6px !important;
+        gap: 8px !important;
         width: 100% !important;
         min-width: 0 !important;
     }
@@ -7264,8 +7302,8 @@
     }
 
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-composer-row {
-        grid-template-columns: 40px 40px minmax(0, 1fr) 40px 44px !important;
-        gap: 5px !important;
+        grid-template-columns: 46px minmax(0, 1fr) 48px !important;
+        gap: 6px !important;
     }
 
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-attach-btn,
