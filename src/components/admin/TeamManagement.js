@@ -4,7 +4,7 @@ import { adminFetch } from '@/lib/adminApi';
 import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import AgentDashboard from './AgentDashboard';
 import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/commissionPayouts';
-import { getOrderSalesAmounts, isCommissionEligibleOrder } from '@/lib/agentOrders';
+import { getOrderSalesAmounts, isCommissionEligibleOrder, orderBelongsToAgent } from '@/lib/agentOrders';
 import { ASSIGNABLE_ADMIN_MODULES } from '@/lib/adminModules';
 
 export default function TeamManagement({ currentUserProfile, currentUserEmail, onTeamChanged }) {
@@ -24,6 +24,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [payoutFilterAgent, setPayoutFilterAgent] = useState('all');
   const [payoutFilterStatus, setPayoutFilterStatus] = useState('pending');
   const [expandedPayoutId, setExpandedPayoutId] = useState(null);
+  const [pendingByPayout, setPendingByPayout] = useState({}); // payoutId -> pending (not-yet-paid) orders for that week
+  const [pendingLoadingId, setPendingLoadingId] = useState(null);
   const [editingPayout, setEditingPayout] = useState(null);
   const [payoutForm, setPayoutForm] = useState(null);
   const [payoutSaveLoading, setPayoutSaveLoading] = useState(false);
@@ -87,6 +89,32 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       alert('Network error trying to process payout.');
     }
     setActionLoadingId(null);
+  };
+
+  // Pending (not-yet-paid) orders for a payout's week are not stored on the
+  // payout record, so fetch them on demand when the card is expanded. These are
+  // shown for visibility only and never added to the payout total.
+  const loadPendingForPayout = async (p) => {
+    if (!p?.id || pendingByPayout[p.id]) return;
+    setPendingLoadingId(p.id);
+    try {
+      const { data } = await supabase
+        .from('orders')
+        .select('id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at')
+        .gte('created_at', p.start_date)
+        .lte('created_at', p.end_date)
+        .not('status', 'eq', 'Cancelled')
+        .order('created_at', { ascending: false });
+      const profile = { name: p.agent_name, email: p.agent_email };
+      const pend = (data || []).filter(
+        (o) => orderBelongsToAgent(o, profile) && !isCommissionEligibleOrder(o)
+      );
+      setPendingByPayout((prev) => ({ ...prev, [p.id]: pend }));
+    } catch (err) {
+      console.error('Failed to load pending orders for payout:', err);
+      setPendingByPayout((prev) => ({ ...prev, [p.id]: [] }));
+    }
+    setPendingLoadingId(null);
   };
 
   const handleSyncCommissions = async () => {
@@ -665,28 +693,65 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                       <button
                         type="button"
                         className="commission-payout-card__toggle"
-                        onClick={() => setExpandedPayoutId(isExpanded ? null : p.id)}
+                        onClick={() => {
+                          const next = isExpanded ? null : p.id;
+                          setExpandedPayoutId(next);
+                          if (next) loadPendingForPayout(p);
+                        }}
                       >
                         {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         {isExpanded ? 'Hide orders' : `View ${orderCount} included order${orderCount === 1 ? '' : 's'}`}
                       </button>
                     )}
 
-                    {isExpanded && (
-                      <div className="commission-payout-card__orders">
-                        {includedOrders.map((order) => (
-                          <div key={order.id} className="commission-payout-card__order-row">
-                            <span>#{order.order_number || order.id?.slice(0, 8)}</span>
-                            <span>{order.customer_name || 'N/A'}</span>
-                            <span>
-                              {order.currency === 'USD'
-                                ? formatMoneyUI(order.total_usd, 'USD')
-                                : formatMoneyUI(order.total_crc, 'CRC')}
-                            </span>
+                    {isExpanded && (() => {
+                      const pendOrders = pendingByPayout[p.id] || [];
+                      const pendTotals = pendOrders.reduce((t, o) => {
+                        const a = getOrderSalesAmounts(o);
+                        t.usd += a.usd; t.crc += a.crc;
+                        return t;
+                      }, { usd: 0, crc: 0 });
+                      const orderRow = (order) => (
+                        <div key={order.id} className="commission-payout-card__order-row">
+                          <span>#{order.order_number || order.id?.slice(0, 8)}</span>
+                          <span>{order.customer_name || 'N/A'}</span>
+                          <span>
+                            {order.currency === 'USD'
+                              ? formatMoneyUI(order.total_usd, 'USD')
+                              : formatMoneyUI(order.total_crc, 'CRC')}
+                          </span>
+                        </div>
+                      );
+                      return (
+                        <div className="commission-payout-card__orders">
+                          <div className="commission-payout-card__order-row" style={{ fontWeight: 700, color: '#4ade80' }}>
+                            <span>✓ Paid · counts toward pay ({includedOrders.length})</span>
+                            <span />
+                            <span>{formatMoneyUI(displayedUsdSales, 'USD')}</span>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          {includedOrders.map(orderRow)}
+
+                          {pendingLoadingId === p.id && !pendingByPayout[p.id] && (
+                            <div className="commission-payout-card__order-row" style={{ opacity: 0.6 }}>
+                              <span>Loading pending…</span><span /><span />
+                            </div>
+                          )}
+                          {pendOrders.length > 0 && (
+                            <>
+                              <div className="commission-payout-card__order-row" style={{ fontWeight: 700, color: '#fbbf24', marginTop: '8px' }}>
+                                <span>⏳ Pending · not counted yet ({pendOrders.length})</span>
+                                <span />
+                                <span>{pendTotals.usd > 0 ? formatMoneyUI(pendTotals.usd, 'USD') : formatMoneyUI(pendTotals.crc, 'CRC')}</span>
+                              </div>
+                              {pendOrders.map(orderRow)}
+                              <div style={{ fontSize: '0.7rem', fontStyle: 'italic', opacity: 0.65, marginTop: '4px' }}>
+                                Not part of this payout — counts once marked paid/complete.
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     <div className="commission-payout-card__actions">
                       {p.status === 'Pending' ? (
