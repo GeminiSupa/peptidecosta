@@ -2,7 +2,7 @@ import nodemailer from 'nodemailer';
 import { createUnsubscribeToken } from '@/lib/marketingTokens';
 import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { clampOutlookButtonSizes, personalizeMergeTags } from '@/lib/emailHtmlSafety';
+import { clampOutlookButtonSizes, personalizeMergeTags, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
 import { getCampaignSmtpConfig, isCampaignRackspaceSmtp } from '@/lib/campaignSmtp';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
@@ -59,7 +59,7 @@ function personalize(value, subscriber) {
 }
 
 function trackedHtml(campaign, subscriber) {
-  const safeHtml = clampOutlookButtonSizes(campaign.html_content);
+  const safeHtml = stabilizeSimpleLinkRows(clampOutlookButtonSizes(campaign.html_content));
   const content = personalize(safeHtml, subscriber).replace(/href="([^"]+)"/g, (match, url) => {
     if (!url.startsWith('http') && !url.startsWith('/')) return match;
     const absoluteUrl = url.startsWith('/') ? `${DOMAIN}${url}` : url;

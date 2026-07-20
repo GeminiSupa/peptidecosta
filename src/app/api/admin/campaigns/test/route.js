@@ -3,6 +3,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import nodemailer from 'nodemailer';
 import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
+import { clampOutlookButtonSizes, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
 
@@ -44,7 +45,7 @@ export async function POST(request) {
       replyTo: smtp.replyTo,
       to: email,
       subject: `[TEST] ${subject}`,
-      html: applyMarketingEmailFooter(html_content, {
+      html: applyMarketingEmailFooter(stabilizeSimpleLinkRows(clampOutlookButtonSizes(html_content)), {
         domain: DOMAIN,
         unsubscribeUrl: `${DOMAIN}/unsubscribe`,
         preferencesUrl: `${DOMAIN}/unsubscribe`,

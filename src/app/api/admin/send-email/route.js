@@ -5,7 +5,7 @@ import { getBusinessLinks } from '@/lib/settings';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { createUnsubscribeToken } from '@/lib/marketingTokens';
 import { MARKETING_FOOTER_MARKER, applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
-import { clampOutlookButtonSizes, personalizeMergeTags } from '@/lib/emailHtmlSafety';
+import { clampOutlookButtonSizes, personalizeMergeTags, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
 
@@ -116,7 +116,7 @@ export async function POST(request) {
     // the campaign's own default value (set in the designer) fills in when
     // provided.
     const processedHtml = personalizeMergeTags(
-      clampOutlookButtonSizes(rawHtml),
+      stabilizeSimpleLinkRows(clampOutlookButtonSizes(rawHtml)),
       {
         firstName: subscriberFirstName,
         lastName: subscriberLastName,

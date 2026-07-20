@@ -20,6 +20,42 @@ export function clampOutlookButtonSizes(html, { maxHeight = 60, resetHeight = 40
   });
 }
 
+function addInlineStyle(tag, extraStyle) {
+  if (/style\s*=/i.test(tag)) {
+    return tag.replace(/style=(["'])(.*?)\1/i, (_match, quote, style) => {
+      const separator = String(style || '').trim().endsWith(';') ? '' : ';';
+      return `style=${quote}${style}${separator}${extraStyle}${quote}`;
+    });
+  }
+
+  return tag.replace(/<a\b/i, `<a style="${extraStyle}"`);
+}
+
+// Some editor blocks are visually laid out as a navigation row, but the export is
+// just adjacent anchors inside a paragraph/div. Webmail clients collapse those
+// into a run of plain text links. For simple link-only blocks, emit a tiny
+// presentation table so test emails match the editor much more closely.
+export function stabilizeSimpleLinkRows(html) {
+  if (!html || typeof html !== 'string') return html;
+
+  return html.replace(/<(?:p|div)(?:\s[^>]*)?>((?:\s*<a\b[\s\S]*?<\/a>\s*){2,})<\/(?:p|div)>/gi, (fullBlock, inner) => {
+    const anchors = inner.match(/<a\b[\s\S]*?<\/a>/gi) || [];
+    if (anchors.length < 2) return fullBlock;
+
+    const withoutAnchors = inner.replace(/<a\b[\s\S]*?<\/a>/gi, '').replace(/&nbsp;/gi, '').trim();
+    if (withoutAnchors) return fullBlock;
+
+    const tableStyle = 'width:100%;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;';
+    const cellWidth = `${(100 / anchors.length).toFixed(4)}%`;
+    const cells = anchors.map((anchor) => {
+      const styledAnchor = anchor.replace(/<a\b[^>]*>/i, (openTag) => addInlineStyle(openTag, 'display:inline-block;padding:8px 10px;'));
+      return `<td align="center" valign="top" width="${cellWidth}" style="padding:0;text-align:center;">${styledAnchor}</td>`;
+    }).join('');
+
+    return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="${tableStyle}"><tr>${cells}</tr></table>`;
+  });
+}
+
 // Replaces first/last-name merge tags in every style the Unlayer editor might
 // emit: bracket ([FIRST_NAME]) and Mailchimp (*|FIRST:NAME|*, *|FNAME|*). Without
 // this the raw tag shipped to recipients (e.g. "HOLA *|FIRST:NAME|*!").
