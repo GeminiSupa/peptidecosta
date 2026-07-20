@@ -213,7 +213,7 @@ export async function POST(request) {
     if (order.promo_code) {
       const { data: promoData } = await supabase
         .from('promo_codes')
-        .select('is_active, valid_from, valid_until, usage_limit, usage_count')
+        .select('is_active, valid_from, valid_until, usage_limit, usage_count, once_per_customer')
         .eq('code', order.promo_code.toUpperCase())
         .single();
         
@@ -235,6 +235,28 @@ export async function POST(request) {
       }
       if (promoData.usage_limit !== null && promoData.usage_count >= promoData.usage_limit) {
         return NextResponse.json({ error: 'Promo code has reached its usage limit' }, { status: 400 });
+      }
+      // One-time-per-customer codes: block if this customer (by email or phone)
+      // already has a prior order using this code.
+      if (promoData.once_per_customer) {
+        const codeUpper = order.promo_code.toUpperCase();
+        let alreadyUsed = false;
+        const checkPriorUse = async (field, value) => {
+          if (alreadyUsed || !value) return;
+          const { data: prior } = await supabase
+            .from('orders')
+            .select('promo_code')
+            .eq(field, value)
+            .not('promo_code', 'is', null);
+          if ((prior || []).some((o) => String(o.promo_code || '').trim().toUpperCase() === codeUpper)) {
+            alreadyUsed = true;
+          }
+        };
+        await checkPriorUse('customer_email', order.customer_email);
+        await checkPriorUse('customer_phone', order.customer_phone);
+        if (alreadyUsed) {
+          return NextResponse.json({ error: 'This promo code can only be used once per customer.' }, { status: 400 });
+        }
       }
     }
 

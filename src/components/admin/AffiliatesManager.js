@@ -22,7 +22,7 @@ export default function AffiliatesManager({ products = [] }) {
 
   // Forms State
   const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
-  const [newPromo, setNewPromo] = useState({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '' });
+  const [newPromo, setNewPromo] = useState({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '', once_per_customer: false });
   const [editingPromo, setEditingPromo] = useState(null);
 
   const handleUpdatePromo = async (e) => {
@@ -175,13 +175,14 @@ export default function AffiliatesManager({ products = [] }) {
           is_active: true,
           affiliate_id: newPromo.affiliate_id || null,
           valid_until: crEndOfDayIso(newPromo.valid_until),
+          once_per_customer: !!newPromo.once_per_customer,
         }])
         .select('*, affiliates(name)');
 
       if (error) throw error;
 
       setPromoCodes([data[0], ...promoCodes]);
-      setNewPromo({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '' });
+      setNewPromo({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '', once_per_customer: false });
     } catch (err) {
       alert('Error creating promo code (Make sure the code is unique): ' + err.message);
     }
@@ -368,6 +369,15 @@ export default function AffiliatesManager({ products = [] }) {
                   />
                   <button type="submit" style={btnStyle('#059669')}><Plus size={16} /> Create Code</button>
                 </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', color: '#e2e8f0', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!newPromo.once_per_customer}
+                    onChange={e => setNewPromo({ ...newPromo, once_per_customer: e.target.checked })}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  <span>One-time use <strong>per customer</strong> — each customer can redeem this code only once</span>
+                </label>
               </form>
             )}
 
