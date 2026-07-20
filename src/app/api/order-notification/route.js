@@ -2,11 +2,33 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 
 // Environment variables will be read inside the POST handler
 // to ensure they are always fresh in serverless environments.
 
+export const runtime = 'nodejs';
+
+function getOrderSmtpConfig() {
+  const host = process.env.ORDER_SMTP_HOST || process.env.SMTP_HOST;
+  const port = Number(process.env.ORDER_SMTP_PORT || process.env.SMTP_PORT || 465);
+  const secure = (process.env.ORDER_SMTP_SECURE ?? process.env.SMTP_SECURE) !== 'false';
+  const user = process.env.ORDER_SMTP_USER || process.env.SMTP_USER;
+  const pass = process.env.ORDER_SMTP_PASS || process.env.SMTP_PASS;
+  const fromEmail = process.env.ORDER_NOTIFICATION_FROM_EMAIL || process.env.SMTP_FROM || user || 'info@peptidescostarica.net';
+  const from = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${fromEmail}>`;
+  const replyTo = process.env.ORDER_NOTIFICATION_REPLY_TO || process.env.SMTP_REPLY_TO || fromEmail;
+
+  return {
+    host,
+    port,
+    secure,
+    user,
+    pass,
+    from,
+    replyTo,
+    configured: Boolean(host && user && pass),
+  };
+}
 
 const escapeHtml = (value = '') => String(value)
   .replace(/&/g, '&amp;')
@@ -428,7 +450,7 @@ export async function POST(request) {
   const NOTIFICATION_TO = rawNotificationTo.includes('surfyesi@hotmail.com')
     ? rawNotificationTo
     : `${rawNotificationTo}, surfyesi@hotmail.com`;
-  const smtp = getCampaignSmtpConfig();
+  const smtp = getOrderSmtpConfig();
 
   try {
     const order = await request.json();
@@ -493,8 +515,8 @@ export async function POST(request) {
     }
 
     if (!smtp.configured) {
-      console.warn('[Order notification] Campaign SMTP settings are not configured; email skipped.');
-      return NextResponse.json({ sent: false, skipped: true });
+      console.warn('[Order notification] Transactional SMTP settings are not configured; email skipped.');
+      return NextResponse.json({ sent: false, skipped: true, error: 'Transactional SMTP settings missing' }, { status: 500 });
     }
 
     // Format payment descriptions
@@ -525,7 +547,7 @@ export async function POST(request) {
 
     const isPaid = isPaidStatus(order.status);
     const skipAdmin = order.customerReceiptOnly === true;
-    const skipCustomer = order.adminNotificationOnly === true;
+    const skipCustomer = order.adminNotificationOnly === true && order.forceCustomerReceipt !== true;
 
     //  1. SEND ADMIN NOTIFICATION 
     if (!skipAdmin) {

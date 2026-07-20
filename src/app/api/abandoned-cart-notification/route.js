@@ -25,6 +25,38 @@ const formatMoney = (value, currency) => {
   return `₡${Math.round(amount).toLocaleString('en-US')}`;
 };
 
+const normalizeCartItem = (item = {}) => {
+  const product = item.product || item.product_name || item.name || 'Premium Peptide';
+  const qty = Number(item.qty || item.quantity || item.count || 1);
+
+  return {
+    ...item,
+    product,
+    qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
+  };
+};
+
+const normalizeCartData = (cartData) => {
+  if (typeof cartData === 'string') {
+    try {
+      const parsed = JSON.parse(cartData);
+      return Array.isArray(parsed) ? parsed.map(normalizeCartItem) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return Array.isArray(cartData) ? cartData.map(normalizeCartItem) : [];
+};
+
+const normalizeOrigin = (request) => {
+  const rawOrigin = request.headers.get('origin')
+    || process.env.NEXT_PUBLIC_BASE_URL
+    || 'https://catalog.peptidescostarica.net';
+
+  return rawOrigin.replace(/\/$/, '');
+};
+
 const buildItemsRows = (items = [], currency, exchangeRate = 454.48) => items.map((item) => {
   // Parse item price
   let price = 0;
@@ -162,10 +194,11 @@ export async function POST(request) {
       lang = 'es',
       currency = 'CRC'
     } = payload;
+    const normalizedCartData = normalizeCartData(cart_data);
 
     const links = await getBusinessLinks();
 
-    if (!customer_email || !session_id || !Array.isArray(cart_data) || cart_data.length === 0) {
+    if (!customer_email || !session_id || normalizedCartData.length === 0) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
@@ -192,8 +225,8 @@ export async function POST(request) {
       : `¿Olvidaste algo? 🧪 ¡Tu carrito de Péptidos Costa Rica te espera!`;
 
     // Dynamic checkout URL
-    const origin = request.headers.get('origin') || 'https://catalog.peptidescostarica.net';
-    const checkoutUrl = `${origin}/catalog?session_id=${session_id}&recovered=true`;
+    const origin = normalizeOrigin(request);
+    const checkoutUrl = `${origin}/catalog?recover_session=${encodeURIComponent(session_id)}`;
 
     // Sanitize customer name to prevent literal 'null', 'undefined', 'n/a', etc.
     let cleanCustomerName = '';
@@ -205,7 +238,7 @@ export async function POST(request) {
       }
     }
 
-    const recoveryHtml = buildRecoveryHtml(customer_name, cart_data, checkoutUrl, currency, lang, links);
+    const recoveryHtml = buildRecoveryHtml(cleanCustomerName, normalizedCartData, checkoutUrl, currency, lang, links);
 
     const recoveryText = [
       isEn ? 'We saved your cart for you!' : '¡Guardamos tu carrito para ti!',
@@ -216,7 +249,7 @@ export async function POST(request) {
       checkoutUrl,
       '',
       isEn ? 'Items in your cart:' : 'Artículos en tu carrito:',
-      ...cart_data.map(item => `• ${item.product} x${item.qty}`),
+      ...normalizedCartData.map(item => `• ${item.product} x${item.qty}`),
       '',
       isEn 
         ? 'Need help? Contact support at +506 8404-6973 or reply to this email.'
