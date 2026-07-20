@@ -39,6 +39,21 @@ function getInitials(name) {
   return words.slice(0, 2).map((word) => word[0]).join('').toUpperCase() || 'C';
 }
 
+const AVATAR_COLORS = [
+  ['#6366f1','#4f46e5'], ['#ec4899','#db2777'], ['#f59e0b','#d97706'],
+  ['#10b981','#059669'], ['#3b82f6','#2563eb'], ['#8b5cf6','#7c3aed'],
+  ['#14b8a6','#0d9488'], ['#ef4444','#dc2626'], ['#06b6d4','#0891b2'],
+  ['#f97316','#ea580c'], ['#84cc16','#65a30d'], ['#e879f9','#c026d3'],
+];
+
+function avatarColorFor(name) {
+  const str = String(name || '');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  const pair = AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+  return `linear-gradient(145deg, ${pair[0]}, ${pair[1]})`;
+}
+
 function formatConversationTime(value) {
   const date = new Date(value);
   const today = new Date();
@@ -219,7 +234,7 @@ const WaChatItem = ({ chat, isActive, isUnread, onClick, onMarkUnread }) => {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <span className="admin-wa-chat-avatar" aria-hidden>{getInitials(chat.displayName)}</span>
+        <span className="admin-wa-chat-avatar" style={{ background: avatarColorFor(chat.displayName) }} aria-hidden>{getInitials(chat.displayName)}</span>
         <div className="admin-wa-chat-item-content">
           <div className="admin-wa-chat-item-top">
             <span className="admin-wa-chat-item-identity">
@@ -709,79 +724,78 @@ export default function WhatsAppInbox({
         {activeChatWaId ? (
           <>
             <div className="admin-wa-chat-header">
-              <div className="admin-wa-chat-header-meta">
-                <button
-                  type="button"
-                  className="admin-wa-back-btn"
-                  onClick={() => {
-                    setShowContactActions(false);
-                    setActiveChatWaId(null);
-                  }}
-                  aria-label="Back to conversations"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <div className="admin-wa-chat-header-text">
-                  <span className="admin-wa-chat-title-row">
-                    <span className="admin-wa-header-avatar" aria-hidden>
-                      {getInitials(currentChat?.displayName || activeChatWaId)}
-                    </span>
-                    <span className="admin-wa-chat-identity">
+              <div className="admin-wa-chat-header-row1">
+                <div className="admin-wa-chat-header-meta">
+                  <button
+                    type="button"
+                    className="admin-wa-back-btn"
+                    onClick={() => {
+                      setShowContactActions(false);
+                      setActiveChatWaId(null);
+                    }}
+                    aria-label="Back to conversations"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <div className="admin-wa-chat-header-text">
+                    <span className="admin-wa-chat-title-row">
+                      <span className="admin-wa-header-avatar" style={{ background: avatarColorFor(currentChat?.displayName || activeChatWaId) }} aria-hidden>
+                        {getInitials(currentChat?.displayName || activeChatWaId)}
+                      </span>
                       <span className="admin-wa-chat-title">
                         {currentChat?.displayName || activeChatWaId}
                       </span>
-                      <span className="admin-wa-chat-phone">+{activeChatWaId}</span>
                     </span>
-                  </span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="admin-wa-chat-header-actions">
-                {activeChatCallHref && !isMobile && (
+                <div className="admin-wa-chat-header-actions">
+                  {activeChatCallHref && !isMobile && (
+                    <button
+                      type="button"
+                      className="admin-wa-icon-btn admin-wa-call-btn"
+                      onClick={() => setShowContactActions(true)}
+                      aria-label={`Contact ${currentChat?.displayName || activeChatWaId}`}
+                      title="Contact options"
+                    >
+                      <PhoneCall size={17} />
+                    </button>
+                  )}
                   <button
                     type="button"
-                    className="admin-wa-icon-btn admin-wa-call-btn"
-                    onClick={() => setShowContactActions(true)}
-                    aria-label={`Contact ${currentChat?.displayName || activeChatWaId}`}
-                    title="Contact options"
-                  >
-                    <PhoneCall size={17} />
-                  </button>
-                )}
-                {!isMobile && (
-                  <button
-                    type="button"
-                    className="admin-wa-refresh-btn"
+                    className="admin-wa-icon-btn"
                     onClick={() => {
                       setShowMessageSearch(!showMessageSearch);
                       if (showMessageSearch) setMessageSearch('');
                     }}
-                    style={{ minWidth: '44px', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     title="Search in conversation"
+                    aria-label="Search in conversation"
                   >
                     <Search size={16} />
                   </button>
-                )}
+                  {!isMobile && (
+                  <button type="button" className="admin-wa-icon-btn" onClick={() => setShowCustomerContext(true)} aria-label="View customer details" title="Customer details">
+                    <Info size={17} />
+                  </button>
+                  )}
+                  <button type="button" className="admin-wa-icon-btn" onClick={() => setShowContactActions(true)} aria-label="More conversation actions" title="More actions">
+                    <MoreHorizontal size={18} />
+                  </button>
+                </div>
+              </div>
+              <div className="admin-wa-chat-status-row">
                 {whatsappSettings.ai_auto_reply && (
                   <span className="admin-wa-autopilot-badge">
                     <span className="admin-wa-autopilot-dot" aria-hidden />
-                    <span className="admin-wa-autopilot-badge-long">AI Autopilot Active</span>
-                    <span className="admin-wa-autopilot-badge-short">AI On</span>
+                    <span>AI On</span>
                   </span>
                 )}
                 <span className={`admin-wa-window-chip admin-wa-window-chip--${replyWindow.state}`}>
                   <Clock size={13} aria-hidden />
                   <span>{replyWindow.label}</span>
                 </span>
-                {!isMobile && (
-                <button type="button" className="admin-wa-icon-btn" onClick={() => setShowCustomerContext(true)} aria-label="View customer details" title="Customer details">
-                  <Info size={17} />
-                </button>
-                )}
-                {isMobile && (
-                  <button type="button" className="admin-wa-icon-btn" onClick={() => setShowContactActions(true)} aria-label="More conversation actions" title="More actions">
-                    <MoreHorizontal size={18} />
-                  </button>
+                {currentChat && (
+                  <span className={`admin-wa-stage admin-wa-stage--${currentChat.stage.toLowerCase()}`}>{currentChat.stage}</span>
                 )}
               </div>
             </div>
@@ -810,6 +824,19 @@ export default function WhatsAppInbox({
               </div>
             )}
 
+            {customerContextSummary && (
+              <button
+                type="button"
+                className={`admin-wa-context-strip-sticky admin-wa-context-strip-sticky--${customerContextSummary.tone}`}
+                onClick={() => setShowCustomerContext(true)}
+                aria-label="Open customer context"
+              >
+                {customerContextSummary.tone === 'hot' && <ShoppingCart size={15} aria-hidden />}
+                <span className="admin-wa-context-strip-label">{customerContextSummary.label}</span>
+                <strong>{customerContextSummary.text}</strong>
+              </button>
+            )}
+
             <div className="admin-wa-messages">
               {displayChatMessages.map((msg, index) => {
                 const isInbound = msg.direction === 'inbound';
@@ -832,7 +859,7 @@ export default function WhatsAppInbox({
                     )}
                     <div className={`admin-wa-message-row admin-wa-message-row--${isInbound ? 'inbound' : 'outbound'}`}>
                       {isInbound && (
-                        <span className="admin-wa-message-avatar" aria-hidden>{getInitials(senderName)}</span>
+                        <span className="admin-wa-message-avatar" style={{ background: avatarColorFor(senderName) }} aria-hidden>{getInitials(senderName)}</span>
                       )}
                       <div
                         className={`admin-wa-bubble admin-wa-bubble--${
@@ -886,20 +913,17 @@ export default function WhatsAppInbox({
             </div>
 
             <div className="admin-wa-composer" ref={composerRef}>
-              {customerContextSummary && (
-                <button
-                  type="button"
-                  className={`admin-wa-context-strip admin-wa-context-strip--${customerContextSummary.tone}`}
-                  onClick={() => setShowCustomerContext(true)}
-                  aria-label="Open customer context"
-                >
-                  <span>{customerContextSummary.label}</span>
-                  <strong>{customerContextSummary.text}</strong>
-                </button>
+              {replyWindow.state === 'closed' && (
+                <div className="admin-wa-window-blocked">
+                  <div className="admin-wa-window-blocked-icon"><Clock size={20} aria-hidden /></div>
+                  <div className="admin-wa-window-blocked-text">
+                    <strong>Window closed</strong>
+                    <span>Use an approved template before sending a free-form follow-up.</span>
+                  </div>
+                </div>
               )}
-
-              {replyWindow.state !== 'open' && (
-                <div className={`admin-wa-window-strip admin-wa-window-strip--${replyWindow.state}`}>
+              {replyWindow.state === 'urgent' && (
+                <div className={`admin-wa-window-strip admin-wa-window-strip--urgent`}>
                   <Clock size={15} aria-hidden />
                   <div>
                     <strong>{replyWindow.label}</strong>
@@ -944,19 +968,6 @@ export default function WhatsAppInbox({
                     <MessagesSquare size={18} />
                     <span>Templates</span>
                   </button>
-                  <button
-                    type="button"
-                    className="admin-wa-tool-tile admin-wa-composer-ai"
-                    onClick={() => {
-                      handleDraftAiChatReply(activeChatWaId);
-                      setShowComposerTools(false);
-                    }}
-                    disabled={draftingAiReply}
-                    aria-label="Draft a reply with AI"
-                  >
-                    {draftingAiReply ? <Loader2 size={18} className="spinner" /> : <Sparkles size={18} />}
-                    <span>AI draft</span>
-                  </button>
                 </div>
               )}
 
@@ -987,22 +998,21 @@ export default function WhatsAppInbox({
                   value={chatInputText}
                   onChange={(e) => setChatInputText(e.target.value)}
                   onKeyDown={handleComposerKeyDown}
-                  placeholder="Message customer…"
+                  placeholder={replyWindow.state === 'closed' ? 'Window closed — send a template first' : 'Message customer…'}
                   rows={1}
                   enterKeyHint="send"
+                  disabled={replyWindow.state === 'closed'}
                 />
-                {!isMobile && (
-                  <button
-                    type="button"
-                    className="admin-wa-composer-tool admin-wa-composer-ai"
-                    onClick={() => handleDraftAiChatReply(activeChatWaId)}
-                    disabled={draftingAiReply}
-                    aria-label="Draft a reply with AI"
-                    title="AI draft"
-                  >
-                    {draftingAiReply ? <Loader2 size={19} className="spinner" /> : <Sparkles size={19} />}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="admin-wa-composer-tool admin-wa-composer-ai"
+                  onClick={() => handleDraftAiChatReply(activeChatWaId)}
+                  disabled={draftingAiReply}
+                  aria-label="Draft a reply with AI"
+                  title="AI draft"
+                >
+                  {draftingAiReply ? <Loader2 size={19} className="spinner" /> : <Sparkles size={19} />}
+                </button>
                 <button
                   type="button"
                   className="admin-wa-send-circle"
@@ -1069,7 +1079,7 @@ export default function WhatsAppInbox({
             </header>
             <div className="admin-wa-sheet-body">
               <div className="admin-wa-context-person">
-                <span className="admin-wa-header-avatar" aria-hidden>{getInitials(currentChat?.displayName || activeChatWaId)}</span>
+                <span className="admin-wa-header-avatar" style={{ background: avatarColorFor(currentChat?.displayName || activeChatWaId) }} aria-hidden>{getInitials(currentChat?.displayName || activeChatWaId)}</span>
                 <div><strong>{currentChat?.displayName || 'Customer'}</strong><small>+{activeChatWaId}</small></div>
               </div>
               <div className="admin-wa-context-stats">
@@ -1094,7 +1104,7 @@ export default function WhatsAppInbox({
         <div className="admin-wa-sheet-backdrop admin-wa-action-backdrop" onClick={() => setShowContactActions(false)}>
           <aside className="admin-wa-action-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="wa-contact-actions-title">
             <header className="admin-wa-action-header">
-              <span className="admin-wa-header-avatar" aria-hidden>{getInitials(currentChat?.displayName || activeChatWaId)}</span>
+              <span className="admin-wa-header-avatar" style={{ background: avatarColorFor(currentChat?.displayName || activeChatWaId) }} aria-hidden>{getInitials(currentChat?.displayName || activeChatWaId)}</span>
               <div>
                 <strong id="wa-contact-actions-title">{currentChat?.displayName || 'Customer'}</strong>
                 <small>+{activeChatWaId}</small>
