@@ -482,7 +482,8 @@ export async function POST(request) {
           .or(`usage_limit.is.null,usage_limit.gt.usage_count`);
         
         if (promos && promos.length > 0) {
-          promoCodesList = promos;
+          // Never surface hidden codes (private mailer-only codes) in emails.
+          promoCodesList = promos.filter((p) => !p.hidden);
         }
       } catch (err) {
         console.warn('Could not fetch sales/promos for email:', err.message);
