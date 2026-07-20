@@ -3,10 +3,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Briefcase, TrendingUp, DollarSign, Target, ClipboardList,
-  ChevronRight, Wallet,
+  ChevronRight, ChevronLeft, Wallet,
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { getOrderSalesAmounts } from '@/lib/agentOrders';
+
+function formatDay(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 function formatMoney(val, curr) {
   const num = Number(val || 0);
@@ -26,12 +32,13 @@ export default function AgentDashboard({
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [weekOffset, setWeekOffset] = useState(0);
 
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const response = await adminFetch('/api/agent/analytics');
+      const response = await adminFetch(`/api/agent/analytics?weekOffset=${weekOffset}`);
       const data = await response.json();
       if (data.success) {
         setStats(data.stats);
@@ -43,7 +50,7 @@ export default function AgentDashboard({
       setError('Could not load your earnings data');
     }
     setLoading(false);
-  }, []);
+  }, [weekOffset]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -59,6 +66,16 @@ export default function AgentDashboard({
 
   const name = currentUserProfile?.name || currentUserEmail?.split('@')[0] || 'Agent';
   const salaryCurr = stats.salaryCurrency || 'USD';
+  const viewingPastWeek = (stats.weekOffset || 0) > 0;
+  const weekRange = stats.weekStartDate
+    ? `${formatDay(stats.weekStartDate)} – ${formatDay(stats.weekEndDate)}`
+    : '';
+  const weekWord = viewingPastWeek
+    ? `week of ${weekRange}`
+    : weekRange
+      ? `this week (${weekRange})`
+      : 'this week';
+  const weekOrdersList = stats.weekOrders || [];
   const estWeekPayUsd =
     stats.currentWeekCommissionUSD + (salaryCurr === 'USD' ? Number(stats.weeklySalary || 0) : 0);
   const estWeekPayCrc =
@@ -70,12 +87,41 @@ export default function AgentDashboard({
         <div>
           <h2 className="dashboard-home-title">{title}</h2>
           <p className="dashboard-home-subtitle">
-            Welcome back, {name} · Week of {new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            Welcome back, {name} · {viewingPastWeek ? 'Viewing week of' : 'Week of'} {weekRange}
           </p>
         </div>
-        <button type="button" className="admin-btn admin-btn-secondary" onClick={fetchAnalytics}>
-          Refresh
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary"
+            onClick={() => setWeekOffset((w) => w + 1)}
+            title="Previous week"
+          >
+            <ChevronLeft size={16} /> Prev week
+          </button>
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary"
+            onClick={() => setWeekOffset((w) => Math.max(w - 1, 0))}
+            disabled={!viewingPastWeek}
+            style={!viewingPastWeek ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+            title="Next week"
+          >
+            Next week <ChevronRight size={16} />
+          </button>
+          {viewingPastWeek && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary"
+              onClick={() => setWeekOffset(0)}
+            >
+              This week
+            </button>
+          )}
+          <button type="button" className="admin-btn admin-btn-secondary" onClick={fetchAnalytics}>
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="dashboard-kpi-grid">
@@ -116,7 +162,7 @@ export default function AgentDashboard({
                 ? formatMoney(stats.currentWeekSalesUSD, 'USD')
                 : formatMoney(stats.currentWeekSalesCRC, 'CRC')}
             </div>
-            <div className="dashboard-kpi-label">My sales this week</div>
+            <div className="dashboard-kpi-label">My sales {weekWord}</div>
             <div className="dashboard-mini-sub">{stats.currentWeekOrdersCount} completed</div>
           </div>
         </div>
@@ -129,7 +175,7 @@ export default function AgentDashboard({
             <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>
               {estWeekPayUsd > 0 ? formatMoney(estWeekPayUsd, 'USD') : formatMoney(estWeekPayCrc, 'CRC')}
             </div>
-            <div className="dashboard-kpi-label">Est. pay this week</div>
+            <div className="dashboard-kpi-label">Est. pay {weekWord}</div>
             <div className="dashboard-mini-sub">{stats.commissionRate}% commission + salary</div>
           </div>
         </div>
@@ -170,7 +216,7 @@ export default function AgentDashboard({
             <div className="dashboard-mini-row" style={{ cursor: 'default' }}>
               <DollarSign size={16} style={{ color: '#4ade80' }} />
               <div style={{ flex: 1 }}>
-                <div className="dashboard-mini-title">Commission earned (this week)</div>
+                <div className="dashboard-mini-title">Commission earned · {weekWord}</div>
                 <div className="dashboard-mini-sub">On your assigned orders</div>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -189,12 +235,18 @@ export default function AgentDashboard({
         </section>
 
         <section className="dashboard-section">
-          <h3 className="dashboard-section-title">My recent orders ({stats.recentOrders.length})</h3>
-          {stats.recentOrders.length === 0 ? (
-            <p className="dashboard-empty">No orders assigned to you yet.</p>
+          <h3 className="dashboard-section-title">
+            {viewingPastWeek
+              ? `My orders · ${weekRange} (${weekOrdersList.length})`
+              : `My recent orders (${stats.recentOrders.length})`}
+          </h3>
+          {(viewingPastWeek ? weekOrdersList : stats.recentOrders).length === 0 ? (
+            <p className="dashboard-empty">
+              {viewingPastWeek ? 'No orders assigned to you that week.' : 'No orders assigned to you yet.'}
+            </p>
           ) : (
             <div className="dashboard-mini-list">
-              {stats.recentOrders.map((o) => {
+              {(viewingPastWeek ? weekOrdersList : stats.recentOrders).map((o) => {
                 const { usd, crc } = getOrderSalesAmounts(o);
                 const display =
                   o.currency === 'CRC' || (!usd && crc)
