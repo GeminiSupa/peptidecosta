@@ -94,6 +94,26 @@ export default function AgentDashboard({
     : stats.currentWeekCommissionCRC + (salaryCurr === 'CRC' ? Number(stats.weeklySalary || 0) : 0);
   const payLabelWord = wp ? 'Pay' : 'Est. pay';
 
+  const weekPendingList = stats.weekPendingOrders || [];
+  const moneyOrEmpty = (usd, crc) => (usd > 0 ? formatMoney(usd, 'USD') : crc > 0 ? formatMoney(crc, 'CRC') : formatMoney(0, salaryCurr));
+
+  const renderOrderRow = (o) => {
+    const { usd, crc } = getOrderSalesAmounts(o);
+    const display = o.currency === 'CRC' || (!usd && crc) ? `₡${crc.toLocaleString()}` : `$${usd}`;
+    return (
+      <button key={o.id} type="button" className="dashboard-mini-row" onClick={() => onOpenOrder?.(o)}>
+        <div>
+          <div className="dashboard-mini-title">#{o.order_number || o.id.slice(0, 8)}</div>
+          <div className="dashboard-mini-sub">{o.customer_name || 'Customer'}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div className="dashboard-mini-val">{display}</div>
+          <div className="dashboard-mini-sub">{o.status || 'Pending'}</div>
+        </div>
+      </button>
+    );
+  };
+
   return (
     <div className="dashboard-home agent-dashboard">
       <div className="dashboard-home-header">
@@ -250,42 +270,31 @@ export default function AgentDashboard({
         </section>
 
         <section className="dashboard-section">
-          <h3 className="dashboard-section-title">
-            {viewingPastWeek
-              ? `My orders · ${weekRange} (${weekOrdersList.length})`
-              : `My recent orders (${stats.recentOrders.length})`}
-          </h3>
-          {(viewingPastWeek ? weekOrdersList : stats.recentOrders).length === 0 ? (
-            <p className="dashboard-empty">
-              {viewingPastWeek ? 'No orders assigned to you that week.' : 'No orders assigned to you yet.'}
-            </p>
+          <h3 className="dashboard-section-title">My orders · {weekRange}</h3>
+
+          {/* Paid — these count toward pay */}
+          <div className="dashboard-mini-row" style={{ cursor: 'default', color: '#4ade80', fontWeight: 700 }}>
+            <span style={{ flex: 1 }}>✓ Paid · counts toward pay ({weekOrdersList.length})</span>
+            <span>{moneyOrEmpty(weekSalesUsd, weekSalesCrc)}</span>
+          </div>
+          {weekOrdersList.length === 0 ? (
+            <p className="dashboard-empty">No paid orders in this week yet.</p>
           ) : (
-            <div className="dashboard-mini-list">
-              {(viewingPastWeek ? weekOrdersList : stats.recentOrders).map((o) => {
-                const { usd, crc } = getOrderSalesAmounts(o);
-                const display =
-                  o.currency === 'CRC' || (!usd && crc)
-                    ? `₡${crc.toLocaleString()}`
-                    : `$${usd}`;
-                return (
-                  <button
-                    key={o.id}
-                    type="button"
-                    className="dashboard-mini-row"
-                    onClick={() => onOpenOrder?.(o)}
-                  >
-                    <div>
-                      <div className="dashboard-mini-title">#{o.order_number || o.id.slice(0, 8)}</div>
-                      <div className="dashboard-mini-sub">{o.customer_name || 'Customer'}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className="dashboard-mini-val">{display}</div>
-                      <div className="dashboard-mini-sub">{o.status || 'Pending'}</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+            <div className="dashboard-mini-list">{weekOrdersList.map(renderOrderRow)}</div>
+          )}
+
+          {/* Pending — not counted toward pay yet */}
+          {weekPendingList.length > 0 && (
+            <>
+              <div className="dashboard-mini-row" style={{ cursor: 'default', color: '#fbbf24', fontWeight: 700, marginTop: '14px' }}>
+                <span style={{ flex: 1 }}>⏳ Pending · not counted yet ({weekPendingList.length})</span>
+                <span>{moneyOrEmpty(stats.weekPendingSalesUSD, stats.weekPendingSalesCRC)}</span>
+              </div>
+              <div className="dashboard-mini-list">{weekPendingList.map(renderOrderRow)}</div>
+              <p className="dashboard-mini-sub" style={{ marginTop: '6px', fontStyle: 'italic' }}>
+                These don’t count toward pay until they’re marked paid/complete.
+              </p>
+            </>
           )}
           {onNavigate && stats.pendingOrdersCount > 0 && (
             <button

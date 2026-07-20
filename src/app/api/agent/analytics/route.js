@@ -129,10 +129,19 @@ export async function GET(request) {
     const pendingOrders = agentOrders.filter(
       (o) => o.created_at >= monthStartUtc && (o.status || 'Pending') === 'Pending'
     );
+    // Orders in the viewed week that are NOT yet paid (any non-cancelled status
+    // that isn't Paid/Completed). Surfaced separately so both the agent and the
+    // owner can see the pipeline that hasn't counted toward pay yet. Keyed off
+    // created_at since a not-yet-paid order has no completion date.
+    const weekPendingOrders = agentOrders.filter(
+      (o) => !isCommissionEligibleOrder(o)
+        && o.created_at >= weekStartUtc && o.created_at < weekEndUtc
+    );
 
     const monthSales = sumAgentOrders(monthOrders);
     const weekSales = sumAgentOrders(weekOrders);
     const todaySales = sumAgentOrders(todayOrders);
+    const weekPendingSales = sumAgentOrders(weekPendingOrders);
 
     const rate = Number(profile.commission_rate || 0);
     const weekCommissionUsd = weekSales.usd * (rate / 100);
@@ -148,17 +157,6 @@ export async function GET(request) {
     if (payoutsError) {
       console.warn('Error fetching payouts:', payoutsError.message);
     }
-
-    const { data: recentAll } = await supabaseAdmin
-      .from('orders')
-      .select('id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at')
-      .not('status', 'eq', 'Cancelled')
-      .order('created_at', { ascending: false })
-      .limit(500);
-
-    const recentOrders = (recentAll || [])
-      .filter((o) => orderBelongsToAgent(o, profile))
-      .slice(0, 50);
 
     const displayEndCR = new Date(selectedWeekEndCR);
     displayEndCR.setUTCDate(displayEndCR.getUTCDate() - 1);
@@ -199,6 +197,10 @@ export async function GET(request) {
         weekEndDate: displayEndCR.toISOString().slice(0, 10),
         weekPayout,
         weekOrders: weekOrders.map(({ activity_log, ...rest }) => rest),
+        weekPendingOrders: weekPendingOrders.map(({ activity_log, ...rest }) => rest),
+        weekPendingCount: weekPendingSales.count,
+        weekPendingSalesUSD: weekPendingSales.usd,
+        weekPendingSalesCRC: weekPendingSales.crc,
         weeklySalary: profile.weekly_salary || 0,
         salaryCurrency: profile.salary_currency || 'USD',
         commissionRate: rate,
@@ -215,7 +217,6 @@ export async function GET(request) {
         todaySalesUSD: todaySales.usd,
         todaySalesCRC: todaySales.crc,
         pendingOrdersCount: pendingOrders.length,
-        recentOrders,
         recentPayouts: recentPayouts || [],
       },
     });
