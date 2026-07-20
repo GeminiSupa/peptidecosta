@@ -47,6 +47,23 @@ function sumAgentOrders(agentOrders) {
   return { usd, crc, count: agentOrders.length };
 }
 
+// When an order counts toward pay = when it was marked Paid/Complete, not when
+// it was created. Mirrors the weekly payout report exactly so an order created
+// in one week but paid the next lands in the same week on both screens. Falls
+// back to created_at when there is no completion entry in the activity log.
+function orderCompletedAtMs(order) {
+  let ts = order.created_at;
+  const log = Array.isArray(order.activity_log) ? order.activity_log : null;
+  if (log) {
+    const completions = log.filter(
+      (l) => l && l.type === 'status_change' && typeof l.message === 'string'
+        && (l.message.includes('Paid') || l.message.includes('Complet'))
+    );
+    if (completions.length) ts = completions[completions.length - 1].at;
+  }
+  return new Date(ts).getTime();
+}
+
 const MAX_WEEK_OFFSET = 52;
 
 export async function GET(request) {
@@ -72,11 +89,15 @@ export async function GET(request) {
     const weekEndUtc = weekOffset === 0 ? nowUtc : crToUtc(selectedWeekEndCR).toISOString();
 
     const rangeStartUtc = weekStartUtc < monthStartUtc ? weekStartUtc : monthStartUtc;
+    // Orders are dated by completion, so an order created before the window can
+    // still be paid inside it. Fetch a buffer earlier so those are not missed.
+    const COMPLETION_LAG_BUFFER_MS = 31 * 24 * 60 * 60 * 1000;
+    const fetchStartUtc = new Date(new Date(rangeStartUtc).getTime() - COMPLETION_LAG_BUFFER_MS).toISOString();
 
     const { data: orders, error: ordersError } = await supabaseAdmin
       .from('orders')
-      .select('id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at')
-      .gte('created_at', rangeStartUtc)
+      .select('id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at, activity_log')
+      .gte('created_at', fetchStartUtc)
       .lte('created_at', nowUtc)
       .not('status', 'eq', 'Cancelled')
       .order('created_at', { ascending: false });
@@ -92,11 +113,19 @@ export async function GET(request) {
     // still show in the lists, but must never inflate sales or commission (they
     // are not paid yet), otherwise the agent's screen disagrees with the payout.
     const eligibleOrders = agentOrders.filter(isCommissionEligibleOrder);
-    const monthOrders = eligibleOrders.filter((o) => o.created_at >= monthStartUtc);
-    const todayOrders = eligibleOrders.filter((o) => o.created_at >= todayStartUtc);
-    const weekOrders = eligibleOrders.filter(
-      (o) => o.created_at >= weekStartUtc && o.created_at < weekEndUtc
-    );
+    // Bucket eligible orders by completion time (see orderCompletedAtMs), so pay
+    // periods match the payout report rather than being keyed off created_at.
+    const monthStartMs = new Date(monthStartUtc).getTime();
+    const todayStartMs = new Date(todayStartUtc).getTime();
+    const weekStartMs = new Date(weekStartUtc).getTime();
+    const weekEndMs = new Date(weekEndUtc).getTime();
+    const monthOrders = eligibleOrders.filter((o) => orderCompletedAtMs(o) >= monthStartMs);
+    const todayOrders = eligibleOrders.filter((o) => orderCompletedAtMs(o) >= todayStartMs);
+    const weekOrders = eligibleOrders.filter((o) => {
+      const t = orderCompletedAtMs(o);
+      return t >= weekStartMs && t < weekEndMs;
+    });
+    // Pending orders are inherently recent; keep them keyed off created_at.
     const pendingOrders = agentOrders.filter(
       (o) => o.created_at >= monthStartUtc && (o.status || 'Pending') === 'Pending'
     );
@@ -140,7 +169,7 @@ export async function GET(request) {
         weekOffset,
         weekStartDate: selectedWeekStartCR.toISOString().slice(0, 10),
         weekEndDate: displayEndCR.toISOString().slice(0, 10),
-        weekOrders,
+        weekOrders: weekOrders.map(({ activity_log, ...rest }) => rest),
         weeklySalary: profile.weekly_salary || 0,
         salaryCurrency: profile.salary_currency || 'USD',
         commissionRate: rate,
