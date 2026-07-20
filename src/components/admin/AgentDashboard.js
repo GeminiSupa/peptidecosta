@@ -76,10 +76,23 @@ export default function AgentDashboard({
       ? `this week (${weekRange})`
       : 'this week';
   const weekOrdersList = stats.weekOrders || [];
-  const estWeekPayUsd =
-    stats.currentWeekCommissionUSD + (salaryCurr === 'USD' ? Number(stats.weeklySalary || 0) : 0);
-  const estWeekPayCrc =
-    stats.currentWeekCommissionCRC + (salaryCurr === 'CRC' ? Number(stats.weeklySalary || 0) : 0);
+
+  // When the owner has already scanned a payout for the viewed week, show that
+  // record's exact figures so the agent's screen matches the payout report to
+  // the cent (see weekPayout in the analytics API). Otherwise fall back to the
+  // live estimate for the current, not-yet-scanned week.
+  const wp = stats.weekPayout;
+  const weekSalesUsd = wp ? wp.usdSales : stats.currentWeekSalesUSD;
+  const weekSalesCrc = wp ? wp.crcSales : stats.currentWeekSalesCRC;
+  const weekCommUsd = wp ? wp.usdCommission : stats.currentWeekCommissionUSD;
+  const weekCommCrc = wp ? wp.crcCommission : stats.currentWeekCommissionCRC;
+  const estWeekPayUsd = wp
+    ? wp.totalPayoutUsd
+    : stats.currentWeekCommissionUSD + (salaryCurr === 'USD' ? Number(stats.weeklySalary || 0) : 0);
+  const estWeekPayCrc = wp
+    ? wp.totalPayoutCrc
+    : stats.currentWeekCommissionCRC + (salaryCurr === 'CRC' ? Number(stats.weeklySalary || 0) : 0);
+  const payLabelWord = wp ? 'Pay' : 'Est. pay';
 
   return (
     <div className="dashboard-home agent-dashboard">
@@ -158,9 +171,9 @@ export default function AgentDashboard({
           </div>
           <div>
             <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>
-              {stats.currentWeekSalesUSD > 0
-                ? formatMoney(stats.currentWeekSalesUSD, 'USD')
-                : formatMoney(stats.currentWeekSalesCRC, 'CRC')}
+              {weekSalesUsd > 0
+                ? formatMoney(weekSalesUsd, 'USD')
+                : formatMoney(weekSalesCrc, 'CRC')}
             </div>
             <div className="dashboard-kpi-label">My sales {weekWord}</div>
             <div className="dashboard-mini-sub">{stats.currentWeekOrdersCount} completed</div>
@@ -175,8 +188,10 @@ export default function AgentDashboard({
             <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>
               {estWeekPayUsd > 0 ? formatMoney(estWeekPayUsd, 'USD') : formatMoney(estWeekPayCrc, 'CRC')}
             </div>
-            <div className="dashboard-kpi-label">Est. pay {weekWord}</div>
-            <div className="dashboard-mini-sub">{stats.commissionRate}% commission + salary</div>
+            <div className="dashboard-kpi-label">{payLabelWord} {weekWord}</div>
+            <div className="dashboard-mini-sub">
+              {wp ? `From payout report · ${wp.status === 'Approved' ? 'Paid' : 'Pending'}` : `${stats.commissionRate}% commission + salary`}
+            </div>
           </div>
         </div>
 
@@ -220,13 +235,13 @@ export default function AgentDashboard({
                 <div className="dashboard-mini-sub">On your assigned orders</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                {stats.currentWeekCommissionUSD > 0 && (
-                  <div className="dashboard-mini-val">{formatMoney(stats.currentWeekCommissionUSD, 'USD')}</div>
+                {weekCommUsd > 0 && (
+                  <div className="dashboard-mini-val">{formatMoney(weekCommUsd, 'USD')}</div>
                 )}
-                {stats.currentWeekCommissionCRC > 0 && (
-                  <div className="dashboard-mini-val">{formatMoney(stats.currentWeekCommissionCRC, 'CRC')}</div>
+                {weekCommCrc > 0 && (
+                  <div className="dashboard-mini-val">{formatMoney(weekCommCrc, 'CRC')}</div>
                 )}
-                {stats.currentWeekCommissionUSD === 0 && stats.currentWeekCommissionCRC === 0 && (
+                {weekCommUsd === 0 && weekCommCrc === 0 && (
                   <div className="dashboard-mini-sub">$0</div>
                 )}
               </div>

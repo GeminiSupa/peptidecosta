@@ -163,12 +163,41 @@ export async function GET(request) {
     const displayEndCR = new Date(selectedWeekEndCR);
     displayEndCR.setUTCDate(displayEndCR.getUTCDate() - 1);
 
+    const weekStartDate = selectedWeekStartCR.toISOString().slice(0, 10);
+
+    // If the owner has already scanned a payout for the viewed week, show that
+    // record's stored figures verbatim so the agent sees exactly what the payout
+    // report shows (same USD/CRC, frozen at scan-time FX) instead of a live
+    // re-computation that can drift by a few cents on currency conversion.
+    // A week can have several rows (re-scans leave Rejected duplicates). Ignore
+    // Rejected and prefer the finalized Approved payout, else the Pending one.
+    const weekPayoutMatches = (recentPayouts || []).filter(
+      (p) => typeof p.start_date === 'string'
+        && p.start_date.slice(0, 10) === weekStartDate
+        && p.status !== 'Rejected'
+    );
+    const weekPayoutRecord = weekPayoutMatches.find((p) => p.status === 'Approved')
+      || weekPayoutMatches[0]
+      || null;
+    const weekPayout = weekPayoutRecord
+      ? {
+          usdSales: Number(weekPayoutRecord.usd_sales || 0),
+          crcSales: Number(weekPayoutRecord.crc_sales || 0),
+          usdCommission: Number(weekPayoutRecord.usd_commission || 0),
+          crcCommission: Number(weekPayoutRecord.crc_commission || 0),
+          totalPayoutUsd: Number(weekPayoutRecord.total_payout_usd || 0),
+          totalPayoutCrc: Number(weekPayoutRecord.total_payout_crc || 0),
+          status: weekPayoutRecord.status || 'Pending',
+        }
+      : null;
+
     return NextResponse.json({
       success: true,
       stats: {
         weekOffset,
-        weekStartDate: selectedWeekStartCR.toISOString().slice(0, 10),
+        weekStartDate,
         weekEndDate: displayEndCR.toISOString().slice(0, 10),
+        weekPayout,
         weekOrders: weekOrders.map(({ activity_log, ...rest }) => rest),
         weeklySalary: profile.weekly_salary || 0,
         salaryCurrency: profile.salary_currency || 'USD',
