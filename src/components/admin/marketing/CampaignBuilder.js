@@ -13,6 +13,9 @@ import { MARKETING_FOOTER_MARKER, buildMarketingEmailFooterTemplateHtml } from '
 
 const LOCAL_DRAFT_KEY = 'marketing_studio_local_email_draft_v1';
 const ACTUAL_SMTP_SENDER = 'info@peptidescostarica.net';
+const EMAIL_TEMPLATE_WIDTH = 600;
+const MOBILE_PREVIEW_WIDTH = 375;
+const MOBILE_PREVIEW_HEIGHT = 667;
 
 // ── Template Library ─────────────────────────────────────────────────
 const brandButton = {
@@ -1330,64 +1333,47 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
 
       {/* ══ PREVIEW MODAL ══ */}
       {previewHtml && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          {/* Header bar */}
-          <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', padding: '16px 24px', background: '#0f172a', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-            <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Preview:</span>
+        <div className="mkt-preview-modal">
+          <div className="mkt-preview-toolbar">
+            <span className="mkt-preview-label">Preview</span>
             <button 
               type="button"
               onClick={() => setDeviceMode('desktop')}
-              style={{ 
-                background: deviceMode === 'desktop' ? 'rgba(56, 189, 248, 0.15)' : 'transparent', 
-                border: deviceMode === 'desktop' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(255,255,255,0.1)',
-                color: deviceMode === 'desktop' ? '#38bdf8' : '#94a3b8', 
-                display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 20px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.85rem', transition: 'all 0.2s'
-              }}>
+              className={`mkt-preview-mode${deviceMode === 'desktop' ? ' active' : ''}`}
+              aria-pressed={deviceMode === 'desktop'}
+            >
               <Monitor size={16} /> Desktop
             </button>
             <button 
               type="button"
               onClick={() => setDeviceMode('mobile')}
-              style={{ 
-                background: deviceMode === 'mobile' ? 'rgba(56, 189, 248, 0.15)' : 'transparent', 
-                border: deviceMode === 'mobile' ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(255,255,255,0.1)',
-                color: deviceMode === 'mobile' ? '#38bdf8' : '#94a3b8', 
-                display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 20px', borderRadius: '8px', fontWeight: 'bold', fontSize: '0.85rem', transition: 'all 0.2s'
-              }}>
+              className={`mkt-preview-mode${deviceMode === 'mobile' ? ' active' : ''}`}
+              aria-pressed={deviceMode === 'mobile'}
+            >
               <Smartphone size={16} /> Mobile
             </button>
-            <div style={{ flex: 1 }} />
-            <span style={{ fontSize: '0.75rem', color: '#475569' }}>{deviceMode === 'mobile' ? '375 × 667 px' : '600 px wide'}</span>
+            <span className="mkt-preview-size">
+              {deviceMode === 'mobile'
+                ? `${MOBILE_PREVIEW_WIDTH} x ${MOBILE_PREVIEW_HEIGHT} viewport`
+                : `${EMAIL_TEMPLATE_WIDTH}px template width`}
+            </span>
             <button 
               type="button"
               onClick={() => setPreviewHtml(null)}
-              style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', cursor: 'pointer', padding: '8px', borderRadius: '8px', display: 'flex', alignItems: 'center' }}
+              className="mkt-preview-close"
+              aria-label="Close preview"
             >
               <X size={18} />
             </button>
           </div>
-          {/* Preview iframe */}
-          <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '32px 16px', overflow: 'auto', width: '100%' }}>
-            <div style={{
-              width: deviceMode === 'mobile' ? '375px' : '600px',
-              height: deviceMode === 'mobile' ? '667px' : '80vh',
-              border: deviceMode === 'mobile' ? '12px solid #1e293b' : '2px solid #1e293b',
-              borderRadius: deviceMode === 'mobile' ? '40px' : '12px',
-              overflow: 'hidden',
-              boxShadow: '0 25px 60px -15px rgba(0,0,0,0.6)',
-              background: '#fff',
-              transition: 'all 0.3s ease',
-              position: 'relative',
-              flexShrink: 0,
-            }}>
-              {/* Phone notch */}
-              {deviceMode === 'mobile' && (
-                <div style={{ position: 'absolute', top: '0', left: '50%', transform: 'translateX(-50%)', width: '120px', height: '24px', background: '#1e293b', borderRadius: '0 0 16px 16px', zIndex: 2 }} />
-              )}
+
+          <div className="mkt-preview-stage">
+            <div className={`mkt-preview-device is-${deviceMode}`}>
+              {deviceMode === 'mobile' && <div className="mkt-preview-notch" />}
               <iframe
                 title="Email Preview"
                 srcDoc={previewHtml}
-                style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+                className="mkt-preview-iframe"
                 sandbox="allow-same-origin"
               />
             </div>

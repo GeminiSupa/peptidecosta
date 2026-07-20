@@ -904,6 +904,135 @@
 .mkt-mobile-editor-notice > div { display: flex; flex-direction: column; gap: 3px; }
 .mkt-mobile-editor-notice span { color: rgba(255,255,255,.58); line-height: 1.45; }
 
+.mkt-preview-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+}
+
+.mkt-preview-toolbar {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 14px 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  background: #0f172a;
+}
+
+.mkt-preview-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.mkt-preview-mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 18px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  transition: background .2s, border-color .2s, color .2s;
+}
+
+.mkt-preview-mode.active {
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
+.mkt-preview-size {
+  margin-left: auto;
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.mkt-preview-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  cursor: pointer;
+}
+
+.mkt-preview-stage {
+  --preview-stage-headroom: 136px;
+  display: flex;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 28px 16px;
+  overflow: auto;
+}
+
+.mkt-preview-device {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 25px 60px -15px rgba(0,0,0,0.6);
+  transition: width .25s ease, border-radius .25s ease, border-width .25s ease;
+}
+
+.mkt-preview-device.is-desktop {
+  width: min(600px, calc(100vw - 52px));
+  height: min(80dvh, calc(100dvh - var(--preview-stage-headroom)));
+  border: 2px solid #1e293b;
+  border-radius: 12px;
+}
+
+.mkt-preview-device.is-mobile {
+  width: min(375px, calc(100vw - 56px));
+  aspect-ratio: 375 / 667;
+  border: 12px solid #1e293b;
+  border-radius: 40px;
+}
+
+.mkt-preview-notch {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 2;
+  width: min(120px, 36%);
+  height: 24px;
+  transform: translateX(-50%);
+  border-radius: 0 0 16px 16px;
+  background: #1e293b;
+}
+
+.mkt-preview-iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
 /* ══════════════════════════════════════
    TEMPLATE PICKER
 ══════════════════════════════════════ */
@@ -1132,6 +1261,41 @@
   .mkt-preflight-actions .mkt-save-action { display: none; }
   .mkt-editor-heading { display: none; }
   .mkt-email-editor-frame { display: none; }
+
+  .mkt-preview-toolbar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 8px;
+    min-height: 0;
+    padding: 10px 12px;
+  }
+  .mkt-preview-label { width: 100%; font-size: 10px; }
+  .mkt-preview-mode {
+    flex: 1 1 112px;
+    min-height: 42px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .mkt-preview-size {
+    order: 4;
+    width: calc(100% - 48px);
+    margin-left: 0;
+    font-size: 10px;
+  }
+  .mkt-preview-close {
+    order: 5;
+    width: 42px;
+    height: 42px;
+    margin-left: auto;
+  }
+  .mkt-preview-stage {
+    --preview-stage-headroom: 174px;
+    padding: 14px 16px 18px;
+  }
+  .mkt-preview-device.is-mobile {
+    border-width: 10px;
+    border-radius: 32px;
+  }
 
   .mkt-modal-backdrop { padding: 0; align-items: stretch; }
   .mkt-journey-editor { max-height: 100dvh; border-radius: 0; padding: 16px; }
