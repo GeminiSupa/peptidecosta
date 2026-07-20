@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { getOrderSalesAmounts, orderBelongsToAgent } from '@/lib/agentOrders';
+import { getOrderSalesAmounts, orderBelongsToAgent, isCommissionEligibleOrder } from '@/lib/agentOrders';
 
 const CR_OFFSET = -6;
 
@@ -87,12 +87,19 @@ export async function GET(request) {
     }
 
     const agentOrders = (orders || []).filter((o) => orderBelongsToAgent(o, profile));
-    const monthOrders = agentOrders.filter((o) => o.created_at >= monthStartUtc);
-    const todayOrders = agentOrders.filter((o) => o.created_at >= todayStartUtc);
-    const weekOrders = agentOrders.filter(
+    // Only Paid/Completed/Order Complete orders count toward pay — this is the
+    // exact rule the weekly payout report uses. Pending/processing/blocked orders
+    // still show in the lists, but must never inflate sales or commission (they
+    // are not paid yet), otherwise the agent's screen disagrees with the payout.
+    const eligibleOrders = agentOrders.filter(isCommissionEligibleOrder);
+    const monthOrders = eligibleOrders.filter((o) => o.created_at >= monthStartUtc);
+    const todayOrders = eligibleOrders.filter((o) => o.created_at >= todayStartUtc);
+    const weekOrders = eligibleOrders.filter(
       (o) => o.created_at >= weekStartUtc && o.created_at < weekEndUtc
     );
-    const pendingOrders = monthOrders.filter((o) => (o.status || 'Pending') === 'Pending');
+    const pendingOrders = agentOrders.filter(
+      (o) => o.created_at >= monthStartUtc && (o.status || 'Pending') === 'Pending'
+    );
 
     const monthSales = sumAgentOrders(monthOrders);
     const weekSales = sumAgentOrders(weekOrders);
