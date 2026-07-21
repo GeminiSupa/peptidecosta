@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getLeadConversion } from '../src/lib/leadConversion.mjs';
+import { getAbandonedCartConversion, getLeadConversion } from '../src/lib/leadConversion.mjs';
 
 test('does not convert leads with invalid or blank phone values', () => {
   const orders = [
@@ -16,6 +16,7 @@ test('requires the matched order to be paid', () => {
   const lead = { contact_value: '+506 8888-7777' };
   const orders = [
     { id: 'pending-order', status: 'Payment Pending', customer_phone: '+506 8888-7777' },
+    { id: 'not-paid-order', status: 'Not Paid', customer_phone: '+506 8888-7777' },
   ];
 
   assert.equal(getLeadConversion(lead, orders).converted, false);
@@ -39,4 +40,41 @@ test('matches paid orders by normalized email', () => {
   ];
 
   assert.equal(getLeadConversion(lead, orders).converted, true);
+});
+
+test('converts abandoned carts when a paid order matches the cart contact', () => {
+  const cart = {
+    created_at: '2026-07-20T12:00:00.000Z',
+    customer_email: ' PERSON@example.COM ',
+    customer_phone: '8888-7777',
+  };
+  const orders = [
+    {
+      id: 'order-1',
+      status: 'Paid',
+      created_at: '2026-07-20T12:20:00.000Z',
+      customer_email: 'person@example.com',
+    },
+  ];
+
+  const result = getAbandonedCartConversion(cart, orders);
+  assert.equal(result.converted, true);
+  assert.equal(result.order.id, 'order-1');
+});
+
+test('does not hide newer abandoned carts because of older paid orders', () => {
+  const cart = {
+    created_at: '2026-07-20T12:00:00.000Z',
+    customer_phone: '+506 8888-7777',
+  };
+  const orders = [
+    {
+      id: 'older-order',
+      status: 'Completed',
+      created_at: '2026-07-20T08:00:00.000Z',
+      customer_phone: '8888-7777',
+    },
+  ];
+
+  assert.equal(getAbandonedCartConversion(cart, orders).converted, false);
 });

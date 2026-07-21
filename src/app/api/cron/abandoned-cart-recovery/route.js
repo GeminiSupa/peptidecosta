@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { canSendWhatsAppMarketing } from '@/lib/whatsappCompliance';
+import { getAbandonedCartConversion } from '@/lib/leadConversion.mjs';
+import { markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
 
 export const maxDuration = 60; // Vercel limit
 export const dynamic = 'force-dynamic';
@@ -40,11 +42,45 @@ export async function GET(request) {
     return NextResponse.json({ success: true, message: 'No carts require recovery at this time.' });
   }
 
+  const { data: orders, error: ordersError } = await supabaseAdmin
+    .from('orders')
+    .select('id, order_number, status, created_at, customer_email, customer_phone')
+    .order('created_at', { ascending: false })
+    .limit(1000);
+
+  if (ordersError) {
+    console.error('Error fetching orders for abandoned cart recovery guard:', ordersError);
+    return NextResponse.json({ error: ordersError.message }, { status: 500 });
+  }
+
+  const convertedCarts = abandonedCarts.filter((cart) => getAbandonedCartConversion(cart, orders || []).converted);
+  const recoverableCarts = abandonedCarts.filter((cart) => !getAbandonedCartConversion(cart, orders || []).converted);
+
+  if (convertedCarts.length > 0) {
+    const { error: convertedUpdateError } = await markAbandonedCartsConverted(
+      supabaseAdmin,
+      convertedCarts.map((cart) => cart.session_id)
+    );
+    if (convertedUpdateError) {
+      console.warn('Failed to mark converted abandoned carts:', convertedUpdateError.message);
+    }
+  }
+
+  if (recoverableCarts.length === 0) {
+    return NextResponse.json({
+      success: true,
+      message: 'No carts require recovery after paid-order filtering.',
+      processed: 0,
+      sent: 0,
+      skippedPaidOrders: convertedCarts.length,
+    });
+  }
+
   let sentCount = 0;
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
 
   let skippedNoConsent = 0;
-  for (const cart of abandonedCarts) {
+  for (const cart of recoverableCarts) {
     // We can only send a recovery message if we captured a phone number
     if (!cart.customer_phone) continue;
 
@@ -105,8 +141,9 @@ export async function GET(request) {
 
   return NextResponse.json({
     success: true,
-    processed: abandonedCarts.length,
+    processed: recoverableCarts.length,
     sent: sentCount,
-    skippedNoConsent
+    skippedNoConsent,
+    skippedPaidOrders: convertedCarts.length
   });
 }

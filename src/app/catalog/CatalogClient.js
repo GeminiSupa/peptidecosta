@@ -29,6 +29,7 @@ const FALLBACK_EXCHANGE_RATE = 454.48;
 const FREE_SHIPPING_USD_THRESHOLD = 200;
 const FLAT_SHIPPING_CRC = 2500;
 const CARD_CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CARD_CHECKOUT === 'true';
+const GATE_BYPASS_VALUES = new Set(['1', 'true', 'yes', 'skip', 'bypass']);
 
 const CATEGORY_TRANSLATIONS = {
   'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
@@ -510,6 +511,7 @@ export default function CatalogClient({
       const utmSource = urlParams.get('utm_source');
       const utmMedium = urlParams.get('utm_medium');
       const utmCampaign = urlParams.get('utm_campaign');
+      const referralParam = urlParams.get('referral') || urlParams.get('affiliate') || urlParams.get('ref');
       const ref = document.referrer;
 
       if (utmSource) localStorage.setItem('lead_utm_source', utmSource);
@@ -518,6 +520,7 @@ export default function CatalogClient({
       if (ref && !ref.includes(window.location.hostname)) {
         localStorage.setItem('lead_referrer', ref);
       }
+      if (referralParam) localStorage.setItem('lead_referrer', `affiliate:${referralParam}`);
     }
 
     // URL overrides
@@ -613,9 +616,12 @@ export default function CatalogClient({
 
     // Bypass gate if they already have access granted or have contact info or admin preview URL param
     const adminPreview = urlParams.get('admin_preview') === 'true';
+    const gateBypassParam = urlParams.get('gate') || urlParams.get('catalog_gate') || urlParams.get('lead_gate');
+    const skipLeadGate = GATE_BYPASS_VALUES.has(String(gateBypassParam || '').trim().toLowerCase());
     const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
-    if (hasAccess || savedPhone || savedEmail || leadContact || savedName || adminPreview) {
+    if (hasAccess || savedPhone || savedEmail || leadContact || savedName || adminPreview || skipLeadGate) {
       setGateAccessGranted(true);
+      setGateVisible(false);
       localStorage.setItem('catalog_access_granted', 'true');
     }
 
@@ -675,12 +681,15 @@ export default function CatalogClient({
     }
 
     // Clean up URL parameters if present to keep the address bar clean
-    if (agentParam || recoverSession) {
+    if (agentParam || recoverSession || skipLeadGate) {
       setTimeout(() => {
         if (typeof window !== 'undefined') {
           const cleanUrl = window.location.pathname + window.location.search
             .replace(/&?recover_session=[^&]+/, '')
             .replace(/&?sales_agent=[^&]+/, '')
+            .replace(/&?gate=[^&]+/, '')
+            .replace(/&?catalog_gate=[^&]+/, '')
+            .replace(/&?lead_gate=[^&]+/, '')
             .replace(/\?$/, '')
             .replace(/\?&/, '?');
           window.history.replaceState({}, document.title, cleanUrl);

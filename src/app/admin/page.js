@@ -10,7 +10,11 @@ import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
-import { getLeadConversion as resolveLeadConversion } from '@/lib/leadConversion.mjs';
+import {
+  getAbandonedCartConversion,
+  getLeadConversion as resolveLeadConversion,
+} from '@/lib/leadConversion.mjs';
+import { markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
 import { 
   Lock, LayoutDashboard, ListFilter, Plus, Trash2, Mail, MessageCircle,
   Save, Upload, Download, Share2, Clipboard, LogOut, Check, 
@@ -1762,6 +1766,7 @@ Core Rules:
     setLoadingProducts(true);
     setLoadingOrders(true);
     let loadedProducts = [];
+    let loadedOrders = [];
 
     // Fetch bucket images
     fetchBucketImages();
@@ -1896,6 +1901,7 @@ Core Rules:
         const data = await fetchAllRows('orders', 'created_at', false);
 
         if (data) {
+          loadedOrders = data;
           setOrders(data);
         }
       } catch (err) {
@@ -1912,11 +1918,13 @@ Core Rules:
 
         if (data) {
           const withItems = data.filter((c) => cartHasItems(c.cart_data));
+          const cartsWithPaidOrders = withItems.filter((c) => getAbandonedCartConversion(c, loadedOrders).converted);
+          const recoverableCarts = withItems.filter((c) => !getAbandonedCartConversion(c, loadedOrders).converted);
           const emptySessionIds = data
             .filter((c) => !cartHasItems(c.cart_data))
             .map((c) => c.session_id);
 
-          setAbandonedCarts(withItems);
+          setAbandonedCarts(recoverableCarts);
 
           if (emptySessionIds.length > 0) {
             supabase
@@ -1925,6 +1933,12 @@ Core Rules:
               .in('session_id', emptySessionIds)
               .then(({ error }) => {
                 if (error) console.warn('Empty abandoned cart cleanup failed:', error.message);
+              });
+          }
+          if (cartsWithPaidOrders.length > 0) {
+            markAbandonedCartsConverted(supabase, cartsWithPaidOrders.map((c) => c.session_id))
+              .then(({ error }) => {
+                if (error) console.warn('Paid abandoned cart cleanup failed:', error.message);
               });
           }
         }
@@ -2591,12 +2605,15 @@ Core Rules:
   };
 
   // Delete a single abandoned cart entry
-  const handleDeleteCart = async (sessionId) => {
+  const handleDeleteCart = async (cartKey) => {
     if (!confirm('Remove this cart entry? This cannot be undone.')) return;
-    setAbandonedCarts(prev => prev.filter(c => c.session_id !== sessionId));
+    setAbandonedCarts(prev => prev.filter(c => (c.session_id || c.id) !== cartKey && c.id !== cartKey));
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from('abandoned_carts').delete().eq('session_id', sessionId);
+        const matchedCart = abandonedCarts.find((c) => (c.session_id || c.id) === cartKey || c.id === cartKey);
+        let query = supabase.from('abandoned_carts').delete();
+        query = matchedCart?.session_id ? query.eq('session_id', matchedCart.session_id) : query.eq('id', cartKey);
+        await query;
       } catch(err) {
         console.error('Cart delete error:', err);
       }

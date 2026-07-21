@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
 import { getBusinessLinks } from '@/lib/settings';
 import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
+import { findPaidOrderMatchForCart, markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -200,6 +201,45 @@ export async function POST(request) {
 
     if (!customer_email || !session_id || normalizedCartData.length === 0) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
+    }
+
+    if (supabase) {
+      let cart = {
+        session_id,
+        customer_name,
+        customer_email,
+        cart_data: normalizedCartData,
+      };
+      const { data: storedCart, error: cartLookupError } = await supabase
+        .from('abandoned_carts')
+        .select('session_id, created_at, last_updated, customer_email, customer_phone')
+        .eq('session_id', session_id)
+        .maybeSingle();
+
+      if (cartLookupError) {
+        console.warn('[Abandoned Cart Notification] Could not load cart row for paid-order guard:', cartLookupError.message);
+      } else if (storedCart) {
+        cart = {
+          ...cart,
+          ...storedCart,
+          customer_email: storedCart.customer_email || customer_email,
+        };
+      }
+
+      const { match, error: paidMatchError } = await findPaidOrderMatchForCart(supabase, cart);
+      if (paidMatchError) {
+        console.error('[Abandoned Cart Notification] Failed to verify paid-order match:', paidMatchError);
+        return NextResponse.json({ error: 'Could not verify whether this cart already converted' }, { status: 500 });
+      }
+      if (match) {
+        await markAbandonedCartsConverted(supabase, [session_id]);
+        return NextResponse.json({
+          success: false,
+          skipped: true,
+          reason: 'paid_order_exists',
+          error: `Skipped recovery email because this customer already has a paid order${match.order_number ? ` (${match.order_number})` : ''}.`,
+        }, { status: 409 });
+      }
     }
 
     const smtp = getCampaignSmtpConfig();

@@ -463,7 +463,7 @@ export default function CartsManager({
                           <Eye size={14} />
                         </button>
                         <button 
-                          onClick={() => handleDeleteCart && handleDeleteCart(cart.id)}
+                          onClick={() => handleDeleteCart && handleDeleteCart(cart.session_id || cart.id)}
                           style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
                           title="Delete Cart"
                         >

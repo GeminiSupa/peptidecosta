@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { canSendWhatsAppMarketing } from '@/lib/whatsappCompliance';
+import { findPaidOrderMatchForCart, markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
 
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -40,6 +41,44 @@ export async function POST(request) {
       return NextResponse.json({
         error: `Invalid phone number: "${customer_phone}". WhatsApp numbers must be between 8 and 15 digits, including the country code (e.g. 50684046973 or 84046973).`
       }, { status: 400 });
+    }
+
+    if (supabase) {
+      let cart = {
+        session_id,
+        customer_name,
+        customer_phone,
+      };
+      const { data: storedCart, error: cartLookupError } = await supabase
+        .from('abandoned_carts')
+        .select('session_id, created_at, last_updated, customer_email, customer_phone')
+        .eq('session_id', session_id)
+        .maybeSingle();
+
+      if (cartLookupError) {
+        console.warn('[Abandoned Cart WhatsApp] Could not load cart row for paid-order guard:', cartLookupError.message);
+      } else if (storedCart) {
+        cart = {
+          ...cart,
+          ...storedCart,
+          customer_phone: storedCart.customer_phone || customer_phone,
+        };
+      }
+
+      const { match, error: paidMatchError } = await findPaidOrderMatchForCart(supabase, cart);
+      if (paidMatchError) {
+        console.error('[Abandoned Cart WhatsApp] Failed to verify paid-order match:', paidMatchError);
+        return NextResponse.json({ error: 'Could not verify whether this cart already converted' }, { status: 500 });
+      }
+      if (match) {
+        await markAbandonedCartsConverted(supabase, [session_id]);
+        return NextResponse.json({
+          success: false,
+          skipped: true,
+          reason: 'paid_order_exists',
+          error: `Skipped recovery WhatsApp because this customer already has a paid order${match.order_number ? ` (${match.order_number})` : ''}.`,
+        }, { status: 409 });
+      }
     }
 
     // Compliance: only message people who explicitly opted in (and not opted out).
