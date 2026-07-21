@@ -2607,16 +2607,26 @@ Core Rules:
   // Delete a single abandoned cart entry
   const handleDeleteCart = async (cartKey) => {
     if (!confirm('Remove this cart entry? This cannot be undone.')) return;
-    setAbandonedCarts(prev => prev.filter(c => (c.session_id || c.id) !== cartKey && c.id !== cartKey));
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const matchedCart = abandonedCarts.find((c) => (c.session_id || c.id) === cartKey || c.id === cartKey);
-        let query = supabase.from('abandoned_carts').delete();
-        query = matchedCart?.session_id ? query.eq('session_id', matchedCart.session_id) : query.eq('id', cartKey);
-        await query;
-      } catch(err) {
-        console.error('Cart delete error:', err);
+    try {
+      const matchedCart = abandonedCarts.find((c) => (c.session_id || c.id) === cartKey || c.id === cartKey);
+      const res = await adminFetch('/api/admin/abandoned-carts/update', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cartKey,
+          sessionId: matchedCart?.session_id || null,
+          id: matchedCart?.id || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `Delete failed with status ${res.status}`);
       }
+
+      setAbandonedCarts(prev => prev.filter(c => (c.session_id || c.id) !== cartKey && c.id !== cartKey));
+    } catch(err) {
+      console.error('Cart delete error:', err);
+      alert(`Failed to delete cart: ${err.message}`);
     }
   };
 
