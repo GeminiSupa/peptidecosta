@@ -4,6 +4,7 @@ import { adminFetch } from '@/lib/adminApi';
 import QRCode from 'qrcode';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check, QrCode, Copy, Download, X } from 'lucide-react';
 import { BADGE_STYLE_OPTIONS, resolvePromoBadgeText } from '@/lib/promoBadge.mjs';
+import ReferralAnalytics from '@/components/admin/ReferralAnalytics';
 
 const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://catalog.peptidescostarica.net/catalog?lang=es';
 
@@ -399,6 +400,8 @@ export default function AffiliatesManager({ products = [] }) {
       </div>
 
       {activeSubTab === 'partners' ? (
+      <>
+      <ReferralAnalytics />
       <div className="admin-responsive-grid-auto">
         
         {/* AFFILIATES SECTION */}
@@ -706,6 +709,7 @@ export default function AffiliatesManager({ products = [] }) {
         </div>
 
       </div>
+      </>
       ) : (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
