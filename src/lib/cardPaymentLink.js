@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { getPublicSiteUrl } from '@/lib/publicUrl';
 
 const PAYMENT_LINK_SECRET = process.env.SHIELD_HUB_PAY_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
@@ -34,7 +35,5 @@ export function buildCardPaymentPath(orderNumber) {
 }
 
 export function getPublicBaseUrl(requestUrl) {
-  return (process.env.NEXT_PUBLIC_SITE_URL
-    || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
-    || new URL(requestUrl).origin).replace(/\/$/, '');
+  return getPublicSiteUrl(requestUrl);
 }

@@ -3,11 +3,11 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
+import { getPublicSiteUrl } from '@/lib/publicUrl';
 
 export const runtime = 'nodejs';
 
-const APP_URL = process.env.NEXT_PUBLIC_SITE_URL
-  || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://peptidecosta.vercel.app');
+const APP_URL = getPublicSiteUrl();
 
 function normalizeAmount(amount, currency) {
   return currency === 'CRC'

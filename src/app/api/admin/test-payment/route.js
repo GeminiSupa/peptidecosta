@@ -3,6 +3,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
+import { getPublicSiteUrl } from '@/lib/publicUrl';
 
 export const runtime = 'nodejs';
 
@@ -13,8 +14,7 @@ export const runtime = 'nodejs';
 // checkout routes have no path to this mode: it exists only behind superadmin
 // auth on this route.
 
-const APP_URL = process.env.NEXT_PUBLIC_SITE_URL
-  || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://peptidecosta.vercel.app');
+const APP_URL = getPublicSiteUrl();
 
 function normalizeCard(card = {}) {
   const expiry = String(card.expiry || '').replace(/\s+/g, '');
