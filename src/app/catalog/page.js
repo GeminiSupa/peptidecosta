@@ -694,6 +694,29 @@ export default function CatalogPage() {
         localStorage.setItem('lead_referrer', ref);
       }
       if (referralParam) localStorage.setItem('lead_referrer', `affiliate:${referralParam}`);
+
+      // Record the landing so QR codes and referral links have a scan count to
+      // sit alongside the orders they produce. Fire-and-forget: analytics must
+      // never delay or break the catalog. Server-side de-duplication means a
+      // reload cannot inflate the number.
+      const scanAgent = urlParams.get('sales_agent');
+      const scanPromo = urlParams.get('promo_code') || urlParams.get('promo');
+      if (scanAgent || scanPromo || referralParam) {
+        const seenKey = 'referral_scan_logged';
+        const alreadyLogged = localStorage.getItem(seenKey);
+        fetch('/api/referral-scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            salesAgent: scanAgent,
+            promoCode: scanPromo,
+            referral: referralParam,
+            utmSource, utmMedium, utmCampaign,
+            sessionId: localStorage.getItem('cart_session_id'),
+            isFirstVisit: !alreadyLogged,
+          }),
+        }).then(() => localStorage.setItem(seenKey, '1')).catch(() => {});
+      }
     }
 
     // URL overrides
