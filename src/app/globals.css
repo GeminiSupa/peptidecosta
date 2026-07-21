@@ -4028,18 +4028,52 @@ body {
     }
 }
 
+/* Diagonal sale ribbon. The wrapper is a square clipping box pinned to the
+   top-left of .product-image, which already has overflow:hidden and a 12px
+   radius, so the ribbon ends flush with the rounded corner. The inner span is
+   the rotated bar — it is deliberately wider than the box so its ends are
+   clipped rather than showing as cut-off corners. */
 .sale-badge {
     position: absolute;
-    top: 10px;
-    left: 15px;
+    top: 0;
+    left: 0;
+    width: 88px;
+    height: 88px;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 3;
+}
+
+.sale-badge span {
+    position: absolute;
+    left: -38px;
+    top: 20px;
+    width: 132px;
+    padding: 5px 0;
+    transform: rotate(-45deg);
     background: #f58220;
-    color: white;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 0.72rem;
+    color: #ffffff;
+    font-size: 0.68rem;
     font-weight: 800;
-    z-index: 2;
-    box-shadow: 0 4px 10px rgba(245, 130, 32, 0.25);
+    letter-spacing: 0.4px;
+    text-align: center;
+    text-transform: uppercase;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+/* Compact grid cards are narrower — scale the ribbon down so it does not
+   swallow the thumbnail. */
+.product-grid.compact-view .sale-badge {
+    width: 68px;
+    height: 68px;
+}
+
+.product-grid.compact-view .sale-badge span {
+    left: -32px;
+    top: 14px;
+    width: 108px;
+    font-size: 0.6rem;
+    padding: 4px 0;
 }
 
 .lp-stock-badge {

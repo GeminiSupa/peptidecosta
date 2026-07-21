@@ -3228,15 +3228,17 @@ export default function CatalogPage() {
                     )}
                     {inStock && p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd && (
                       <div className="sale-badge">
-                        {(() => {
-                          const original = typeof p.originalPriceUsd === 'string' ? parseFloat(p.originalPriceUsd.replace(/[^0-9.]/g, '')) : p.originalPriceUsd;
-                          const current = typeof p.priceUsd === 'string' ? parseFloat(p.priceUsd.replace(/[^0-9.]/g, '')) : p.priceUsd;
-                          if (original && current && original > current) {
-                            const pct = Math.round((1 - (current / original)) * 100);
-                            return `-${pct}%`;
-                          }
-                          return lang === 'en' ? 'SALE' : 'OFERTA';
-                        })()}
+                        <span>
+                          {(() => {
+                            const original = typeof p.originalPriceUsd === 'string' ? parseFloat(p.originalPriceUsd.replace(/[^0-9.]/g, '')) : p.originalPriceUsd;
+                            const current = typeof p.priceUsd === 'string' ? parseFloat(p.priceUsd.replace(/[^0-9.]/g, '')) : p.priceUsd;
+                            if (original && current && original > current) {
+                              const pct = Math.round((1 - (current / original)) * 100);
+                              return lang === 'en' ? `Save ${pct}%` : `Ahorra ${pct}%`;
+                            }
+                            return lang === 'en' ? 'Sale' : 'Oferta';
+                          })()}
+                        </span>
                       </div>
                     )}
                   </div>
