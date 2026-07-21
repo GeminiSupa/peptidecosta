@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader, Calendar, Trash2 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
+import BroadcastProgress from '@/components/admin/BroadcastProgress';
 
 export default function BroadcastsPanel({ products = [] }) {
   const [audience, setAudience] = useState('all_customers');
@@ -699,6 +700,8 @@ export default function BroadcastsPanel({ products = [] }) {
           {result.success ? '✅' : '❌'} {result.text}
         </div>
       )}
+      <BroadcastProgress />
+
       {scheduledBroadcasts.length > 0 && (
         <div style={{ marginTop: '32px', padding: '24px', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '16px', border: '1px solid rgba(56, 189, 248, 0.15)' }}>
           <h3 style={{ margin: '0 0 16px', fontSize: '1.1rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
