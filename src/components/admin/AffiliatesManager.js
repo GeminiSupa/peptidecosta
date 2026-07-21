@@ -12,6 +12,7 @@ const EMPTY_PROMO = {
   code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '',
   once_per_customer: false, hidden: false,
   show_sale_badge: false, badge_style: 'code', badge_text: '',
+  min_units: '',
 };
 
 const slugify = (value) => String(value || '')
@@ -309,6 +310,7 @@ export default function AffiliatesManager({ products = [] }) {
           valid_until: crEndOfDayIso(newPromo.valid_until),
           once_per_customer: !!newPromo.once_per_customer,
           hidden: !!newPromo.hidden,
+          min_units: Number(newPromo.min_units) > 0 ? Math.floor(Number(newPromo.min_units)) : null,
           // A hidden code is private, so it can never carry a public ribbon.
           show_sale_badge: !newPromo.hidden && !!newPromo.show_sale_badge,
           badge_style: newPromo.badge_style || 'code',
@@ -527,6 +529,16 @@ export default function AffiliatesManager({ products = [] }) {
                     <option value={0.40}>40% Customer Discount</option>
                     <option value={0.50}>50% Customer Discount</option>
                   </select>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Min units (optional)"
+                    title="Optional: the cart must contain at least this many units in total, across any products, before the code works. Leave empty for no minimum."
+                    value={newPromo.min_units}
+                    onChange={e => setNewPromo({...newPromo, min_units: e.target.value})}
+                    style={inputStyle}
+                  />
                   <input
                     type="date"
                     title="Optional: last day the code works (expires 11:59pm Costa Rica time). Leave empty for no expiry."

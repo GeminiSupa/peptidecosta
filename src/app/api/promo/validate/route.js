@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { checkMinUnits, minUnitsMessage } from '@/lib/promoEligibility.mjs';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -7,7 +8,8 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request) {
   try {
-    const { code } = await request.json();
+    const body = await request.json();
+    const { code } = body;
 
     if (!code) {
       return NextResponse.json({ valid: false, error: 'No code provided' }, { status: 400 });
@@ -28,6 +30,7 @@ export async function POST(request) {
         valid_until,
         target_product,
         is_flash_sale,
+        min_units,
         usage_limit,
         usage_count,
         affiliate_id,
@@ -57,11 +60,25 @@ export async function POST(request) {
       return NextResponse.json({ valid: false, error: 'Promo code has already been used or reached its usage limit.' });
     }
 
+    // Minimum-units condition. Checked here rather than only in the browser so
+    // the requirement cannot be sidestepped by calling this endpoint directly.
+    const unitCheck = checkMinUnits(promo, body?.unitCount);
+    if (!unitCheck.ok) {
+      return NextResponse.json({
+        valid: false,
+        error: minUnitsMessage(promo, unitCheck.unitCount, body?.lang || 'es'),
+        min_units: unitCheck.minUnits,
+        unit_count: unitCheck.unitCount,
+      });
+    }
+
     // Success: Return the discount and affiliate data to the frontend
     return NextResponse.json({
       valid: true,
       code: promo.code,
       discount_pct: promo.discount_pct,
+      // Returned so the cart can re-check as items change, not just on entry.
+      min_units: promo.min_units || 0,
       target_product: promo.target_product,
       is_flash_sale: promo.is_flash_sale,
       affiliate_id: promo.affiliate_id,

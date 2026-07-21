@@ -11,6 +11,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, cleanPhoneNumber } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
+import { checkMinUnits, minUnitsMessage } from '@/lib/promoEligibility.mjs';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
@@ -1794,7 +1795,7 @@ export default function CatalogPage() {
       const res = await fetch('/api/promo/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: codeToApply }),
+        body: JSON.stringify({ code: codeToApply, unitCount: getCartVialCount(), lang }),
       });
       const data = await res.json();
       if (data.valid) {
@@ -1819,6 +1820,17 @@ export default function CatalogPage() {
     }
     setPromoLoading(false);
   };
+
+  // A cart can stop qualifying after the code was accepted — someone applies a
+  // 20-unit code then removes items. Without this the discount would silently
+  // survive, so the minimum has to be re-checked whenever the cart changes.
+  useEffect(() => {
+    if (!promoData?.valid) return;
+    const check = checkMinUnits(promoData, getCartVialCount());
+    if (check.ok) return;
+    setPromoData(null);
+    setPromoError(minUnitsMessage(promoData, check.unitCount, lang));
+  }, [cart, promoData, lang]);
 
   useEffect(() => {
     if (autoPromoAppliedRef.current || typeof window === 'undefined') return;
