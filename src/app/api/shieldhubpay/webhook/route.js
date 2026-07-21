@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isShieldHubPayConfigured, getShieldHubPayTransaction } from '@/lib/shieldHubPay';
+import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 
 export const runtime = 'nodejs';
 
@@ -66,7 +67,7 @@ export async function POST(req) {
     const supabase = getSupabaseAdmin();
     const { data: existing, error: lookupErr } = await supabase
       .from('orders')
-      .select('id, status')
+      .select('id, status, customer_email, customer_phone')
       .eq('order_number', orderNumber)
       .maybeSingle();
 
@@ -105,6 +106,14 @@ export async function POST(req) {
     }
 
     if (statusText === 'Paid') {
+      const { error: cartCleanupError } = await markActiveAbandonedCartsConvertedForOrder(supabase, {
+        ...existing,
+        status: statusText,
+      });
+      if (cartCleanupError) {
+        console.warn('[Shield Hub Pay webhook] Paid cart cleanup failed:', cartCleanupError.message);
+      }
+
       try {
         await supabase.from('admin_notifications').insert({
           type: 'payment_received',

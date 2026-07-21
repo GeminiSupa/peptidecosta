@@ -1918,8 +1918,8 @@ Core Rules:
 
         if (data) {
           const withItems = data.filter((c) => cartHasItems(c.cart_data));
-          const cartsWithPaidOrders = withItems.filter((c) => getAbandonedCartConversion(c, loadedOrders).converted);
-          const recoverableCarts = withItems.filter((c) => !getAbandonedCartConversion(c, loadedOrders).converted);
+          const cartsWithPaidOrders = withItems.filter((c) => getAbandonedCartConversion(c, loadedOrders, { ignoreTiming: true }).converted);
+          const recoverableCarts = withItems.filter((c) => !getAbandonedCartConversion(c, loadedOrders, { ignoreTiming: true }).converted);
           const emptySessionIds = data
             .filter((c) => !cartHasItems(c.cart_data))
             .map((c) => c.session_id);

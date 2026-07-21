@@ -53,8 +53,8 @@ export async function GET(request) {
     return NextResponse.json({ error: ordersError.message }, { status: 500 });
   }
 
-  const convertedCarts = abandonedCarts.filter((cart) => getAbandonedCartConversion(cart, orders || []).converted);
-  const recoverableCarts = abandonedCarts.filter((cart) => !getAbandonedCartConversion(cart, orders || []).converted);
+  const convertedCarts = abandonedCarts.filter((cart) => getAbandonedCartConversion(cart, orders || [], { ignoreTiming: true }).converted);
+  const recoverableCarts = abandonedCarts.filter((cart) => !getAbandonedCartConversion(cart, orders || [], { ignoreTiming: true }).converted);
 
   if (convertedCarts.length > 0) {
     const { error: convertedUpdateError } = await markAbandonedCartsConverted(

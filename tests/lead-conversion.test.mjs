@@ -78,3 +78,20 @@ test('does not hide newer abandoned carts because of older paid orders', () => {
 
   assert.equal(getAbandonedCartConversion(cart, orders).converted, false);
 });
+
+test('can ignore cart timing for recovery safety checks', () => {
+  const cart = {
+    created_at: '2026-07-20T12:00:00.000Z',
+    customer_phone: '+506 8888-7777',
+  };
+  const orders = [
+    {
+      id: 'older-order',
+      status: 'Paid',
+      created_at: '2026-07-20T08:00:00.000Z',
+      customer_phone: '8888-7777',
+    },
+  ];
+
+  assert.equal(getAbandonedCartConversion(cart, orders, { ignoreTiming: true }).converted, true);
+});

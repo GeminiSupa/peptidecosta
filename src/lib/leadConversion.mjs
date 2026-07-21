@@ -78,7 +78,9 @@ function parseDateMs(value) {
   return Number.isFinite(time) ? time : null;
 }
 
-function orderCouldResolveCart(cart, order) {
+function orderCouldResolveCart(cart, order, { ignoreTiming = false } = {}) {
+  if (ignoreTiming) return true;
+
   const cartTime = parseDateMs(cart?.created_at || cart?.last_updated);
   const orderTime = parseDateMs(order?.created_at);
 
@@ -88,7 +90,7 @@ function orderCouldResolveCart(cart, order) {
   return orderTime >= cartTime - twoHoursMs;
 }
 
-export function getAbandonedCartConversion(cart, orders = []) {
+export function getAbandonedCartConversion(cart, orders = [], options = {}) {
   if (!cart) return { converted: false };
 
   const cartEmails = uniqueValues([
@@ -110,7 +112,7 @@ export function getAbandonedCartConversion(cart, orders = []) {
   }
 
   const match = (orders || []).find((order) => {
-    if (!orderIsPaid(order) || !orderCouldResolveCart(cart, order)) return false;
+    if (!orderIsPaid(order) || !orderCouldResolveCart(cart, order, options)) return false;
 
     const orderEmails = uniqueValues([
       normalizeEmail(order.customer_email),

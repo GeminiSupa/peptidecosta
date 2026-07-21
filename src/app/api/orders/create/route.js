@@ -1,5 +1,6 @@
 import { after, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 
 export const runtime = 'nodejs';
 
@@ -381,6 +382,11 @@ export async function POST(request) {
       } catch (cartErr) {
         console.warn('[orders/create] Abandoned cart update failed:', cartErr.message);
       }
+    }
+
+    const { error: paidCartCleanupError } = await markActiveAbandonedCartsConvertedForOrder(supabase, order);
+    if (paidCartCleanupError) {
+      console.warn('[orders/create] Paid cart cleanup failed:', paidCartCleanupError.message);
     }
 
     // Execute post-order alerts in the background

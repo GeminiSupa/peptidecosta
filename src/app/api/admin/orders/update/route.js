@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
+import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 
 export const runtime = 'nodejs';
 
@@ -71,6 +72,11 @@ export async function PATCH(request) {
       const isNowPaid = patch.status.toLowerCase().includes('paid') || patch.status.toLowerCase().includes('complet');
 
       if (!wasPaid && isNowPaid) {
+        const { error: cartCleanupError } = await markActiveAbandonedCartsConvertedForOrder(supabase, data);
+        if (cartCleanupError) {
+          console.warn('[admin/orders/update] Paid cart cleanup failed:', cartCleanupError.message);
+        }
+
         try {
           const itemsAmount = (data.items || []).reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
           const shippingCost = data.currency === 'CRC' ? Number(data.shipping_cost_crc || 0) : Number(data.shipping_cost_usd || 0);

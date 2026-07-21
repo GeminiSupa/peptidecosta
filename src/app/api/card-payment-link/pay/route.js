@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyCardPaymentOrderToken, getPublicBaseUrl } from '@/lib/cardPaymentLink';
 import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
+import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 
 export const runtime = 'nodejs';
 
@@ -172,6 +173,15 @@ export async function POST(request) {
     }
 
     if (orderStatus === 'Paid') {
+      const { error: cartCleanupError } = await markActiveAbandonedCartsConvertedForOrder(supabase, {
+        ...order,
+        status: orderStatus,
+        customer_email: email,
+      });
+      if (cartCleanupError) {
+        console.warn('[card-payment-link/pay] Paid cart cleanup failed:', cartCleanupError.message);
+      }
+
       await supabase.from('admin_notifications').insert({
         type: 'payment_received',
         title: `Card payment approved: ${order.order_number}`,

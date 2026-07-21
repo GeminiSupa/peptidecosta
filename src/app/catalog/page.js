@@ -871,6 +871,7 @@ export default function CatalogPage() {
     // Check for card payment redirect params
     const paymentParam = urlParams.get('payment');
     if (paymentParam === 'success' || urlParams.get('code') === '1') {
+      if (sid) localStorage.setItem('checkout_completed_session_id', sid);
       setCart([]); // Clear cart on success
       localStorage.removeItem('cart');
       // Clean up URL and redirect to thank-you conversion page
@@ -1152,9 +1153,14 @@ export default function CatalogPage() {
   useEffect(() => {
     localStorage.setItem('cart', JSON.stringify(cart));
 
-    if (sessionId && isSupabaseConfigured && supabase) {
+    if (sessionId && isSupabaseConfigured && supabase && !orderSubmitting) {
       const timeoutId = setTimeout(async () => {
         try {
+          if (localStorage.getItem('checkout_completed_session_id') === sessionId) {
+            await supabase.from('abandoned_carts').delete().eq('session_id', sessionId);
+            return;
+          }
+
           if (cart.length === 0) {
             localStorage.removeItem('had_items');
             await supabase.from('abandoned_carts').delete().eq('session_id', sessionId);
@@ -1192,7 +1198,7 @@ export default function CatalogPage() {
       }, 1000);
       return () => clearTimeout(timeoutId);
     }
-  }, [cart, customerName, customerPhone, customerEmail, sessionId, customerMetadata, lang, currency]);
+  }, [cart, customerName, customerPhone, customerEmail, sessionId, customerMetadata, lang, currency, orderSubmitting]);
 
   // Load Catalog Data (Supabase or CSV fallback)
   const loadCatalogData = async () => {
@@ -1976,6 +1982,7 @@ export default function CatalogPage() {
           ...orderNotificationPayload,
           status: data.orderStatus || 'Paid',
         });
+        if (sessionId) localStorage.setItem('checkout_completed_session_id', sessionId);
         setCart([]);
         localStorage.removeItem('cart');
         window.location.href = `/thank-you?lang=${lang}&order=${encodeURIComponent(orderNum)}`;
@@ -2141,6 +2148,7 @@ export default function CatalogPage() {
     window.open(whatsappUrl, '_blank');
 
     setOrderSubmitting(false);
+    if (sessionId) localStorage.setItem('checkout_completed_session_id', sessionId);
     setCart([]);
     setCustomerName('');
     setCustomerPhone('');
@@ -2355,6 +2363,7 @@ export default function CatalogPage() {
             });
 
             setOrderSubmitting(false);
+            if (sid) localStorage.setItem('checkout_completed_session_id', sid);
             setCart([]);
             setCustomerName('');
             setCustomerPhone('');

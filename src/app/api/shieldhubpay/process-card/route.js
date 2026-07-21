@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
+import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 
 export const runtime = 'nodejs';
 
@@ -63,7 +64,7 @@ function buildPaymentPatch(status, transaction) {
   };
 }
 
-async function updateOrderStatus(orderNumber, status, transaction) {
+async function updateOrderStatus(orderNumber, status, transaction, orderContact = {}) {
   if (!orderNumber) return;
 
   try {
@@ -85,6 +86,15 @@ async function updateOrderStatus(orderNumber, status, transaction) {
     }
 
     if (status === 'Paid') {
+      const { error: cartCleanupError } = await markActiveAbandonedCartsConvertedForOrder(supabase, {
+        status,
+        customer_email: orderContact.customerEmail,
+        customer_phone: orderContact.customerPhone,
+      });
+      if (cartCleanupError) {
+        console.warn('[Shield Hub Pay] Paid cart cleanup failed:', cartCleanupError.message);
+      }
+
       await supabase.from('admin_notifications').insert({
         type: 'payment_received',
         title: `Card payment approved: ${orderNumber}`,
@@ -189,7 +199,7 @@ export async function POST(req) {
     }
 
     const orderStatus = statusToOrderStatus(transaction.status);
-    await updateOrderStatus(orderNumber, orderStatus, transaction);
+    await updateOrderStatus(orderNumber, orderStatus, transaction, { customerEmail, customerPhone });
 
     if (transaction.status === 'Approved') {
       return NextResponse.json({ ok: true, status: transaction.status, orderStatus, transactionId: transaction.id });
