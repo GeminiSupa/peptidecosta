@@ -3,7 +3,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import QRCode from 'qrcode';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check, QrCode, Copy, Download, X } from 'lucide-react';
-import { BADGE_STYLE_OPTIONS, resolvePromoBadgeText } from '@/lib/promoBadge.mjs';
+import { getBadgeStyleOptions, resolvePromoBadgeText } from '@/lib/promoBadge.mjs';
 import ReferralAnalytics from '@/components/admin/ReferralAnalytics';
 
 const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://catalog.peptidescostarica.net/catalog?lang=es';
@@ -588,7 +588,7 @@ export default function AffiliatesManager({ products = [] }) {
                       onChange={e => setNewPromo({ ...newPromo, badge_style: e.target.value })}
                       style={inputStyle}
                     >
-                      {BADGE_STYLE_OPTIONS.map(option => (
+                      {getBadgeStyleOptions(newPromo.discount_pct, newPromo.code).map(option => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
                     </select>

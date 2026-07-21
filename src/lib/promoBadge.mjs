@@ -12,12 +12,28 @@
 
 export const BADGE_STYLES = ['code', 'save', 'limited', 'custom'];
 
-export const BADGE_STYLE_OPTIONS = [
-  { value: 'code', label: '25% off with CODE', hint: 'Names the code so the unchanged price makes sense' },
-  { value: 'save', label: 'Save 25%', hint: 'Cleaner, but does not explain the full price' },
-  { value: 'limited', label: 'Limited offer', hint: 'No numbers — useful for negotiable pricing' },
-  { value: 'custom', label: 'Write my own', hint: 'Free text, e.g. "Ask us for bulk pricing"' },
-];
+/**
+ * Wording choices for the picker, showing the discount actually selected.
+ *
+ * These were once fixed strings using 25% as an example, which read as a bug
+ * when the promo was set to something else: choosing 10% still offered
+ * "25% off with CODE".
+ *
+ * @param {number} discountPct fraction (0.10) or whole number (10)
+ * @param {string} [code] the code being created, previewed once typed
+ */
+export function getBadgeStyleOptions(discountPct, code = '') {
+  const pct = toPercent(discountPct);
+  const shown = pct > 0 ? pct : 25;
+  const name = String(code || '').trim().toUpperCase() || 'CODE';
+
+  return [
+    { value: 'code', label: `${shown}% off with ${name}`, hint: 'Names the code so the unchanged price makes sense' },
+    { value: 'save', label: `Save ${shown}%`, hint: 'Cleaner, but does not explain the full price' },
+    { value: 'limited', label: 'Limited offer', hint: 'No numbers — useful for negotiable pricing' },
+    { value: 'custom', label: 'Write my own', hint: 'Free text, e.g. "Ask us for bulk pricing"' },
+  ];
+}
 
 /** discount_pct is stored as a fraction (0.25); promos occasionally carry 25. */
 export function toPercent(discountPct) {

@@ -6,6 +6,7 @@ import {
   isBadgeEligible,
   resolvePromoBadgeText,
   getPromoBadgeForProduct,
+  getBadgeStyleOptions,
 } from '../src/lib/promoBadge.mjs';
 
 const promo = (over = {}) => ({
@@ -111,4 +112,21 @@ test('a hidden promo cannot win even with the deepest discount', () => {
 test('no badge when nothing targets the product', () => {
   const promos = [promo({ target_product: 'Tesamorelin' })];
   assert.equal(getPromoBadgeForProduct(promos, 'Retatrutide 10mg', 'en'), null);
+});
+
+test('wording options show the discount actually selected, not a fixed example', () => {
+  const tenPct = getBadgeStyleOptions(0.10, 'BULK20');
+  assert.equal(tenPct[0].label, '10% off with BULK20');
+  assert.equal(tenPct[1].label, 'Save 10%');
+
+  const fortyPct = getBadgeStyleOptions(40, 'BIG');
+  assert.equal(fortyPct[0].label, '40% off with BIG');
+});
+
+test('wording options fall back to a placeholder before a code is typed', () => {
+  assert.equal(getBadgeStyleOptions(0.15, '')[0].label, '15% off with CODE');
+});
+
+test('wording options survive a zero discount without showing 0%', () => {
+  assert.equal(getBadgeStyleOptions(0, 'X')[0].label, '25% off with X');
 });
