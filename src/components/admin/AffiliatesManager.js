@@ -3,8 +3,15 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import QRCode from 'qrcode';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check, QrCode, Copy, Download, X } from 'lucide-react';
+import { BADGE_STYLE_OPTIONS, resolvePromoBadgeText } from '@/lib/promoBadge.mjs';
 
 const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://catalog.peptidescostarica.net/catalog?lang=es';
+
+const EMPTY_PROMO = {
+  code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '',
+  once_per_customer: false, hidden: false,
+  show_sale_badge: false, badge_style: 'code', badge_text: '',
+};
 
 const slugify = (value) => String(value || '')
   .trim()
@@ -56,7 +63,7 @@ export default function AffiliatesManager({ products = [] }) {
 
   // Forms State
   const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
-  const [newPromo, setNewPromo] = useState({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '', once_per_customer: false, hidden: false });
+  const [newPromo, setNewPromo] = useState(EMPTY_PROMO);
   const [editingAffiliate, setEditingAffiliate] = useState(null);
   const [editingPromo, setEditingPromo] = useState(null);
 
@@ -301,13 +308,17 @@ export default function AffiliatesManager({ products = [] }) {
           valid_until: crEndOfDayIso(newPromo.valid_until),
           once_per_customer: !!newPromo.once_per_customer,
           hidden: !!newPromo.hidden,
+          // A hidden code is private, so it can never carry a public ribbon.
+          show_sale_badge: !newPromo.hidden && !!newPromo.show_sale_badge,
+          badge_style: newPromo.badge_style || 'code',
+          badge_text: newPromo.badge_style === 'custom' ? (newPromo.badge_text || '').trim() || null : null,
         }])
         .select('*, affiliates(name)');
 
       if (error) throw error;
 
       setPromoCodes([data[0], ...promoCodes]);
-      setNewPromo({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '', once_per_customer: false, hidden: false });
+      setNewPromo(EMPTY_PROMO);
     } catch (err) {
       alert('Error creating promo code (Make sure the code is unique): ' + err.message);
     }
@@ -540,6 +551,52 @@ export default function AffiliatesManager({ products = [] }) {
                   />
                   <span><strong>Hidden</strong> — never shown to customers (kept out of confirmation emails); usable only by people who know the code</span>
                 </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', color: newPromo.hidden ? '#64748b' : '#e2e8f0', cursor: newPromo.hidden ? 'not-allowed' : 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    disabled={!!newPromo.hidden}
+                    checked={!newPromo.hidden && !!newPromo.show_sale_badge}
+                    onChange={e => setNewPromo({ ...newPromo, show_sale_badge: e.target.checked })}
+                    style={{ width: '16px', height: '16px', cursor: newPromo.hidden ? 'not-allowed' : 'pointer' }}
+                  />
+                  <span>
+                    <strong>Show sale ribbon</strong> — put a ribbon on this code&apos;s products in the catalog
+                    {newPromo.hidden && <em style={{ color: '#fbbf24' }}> — unavailable on hidden codes, which stay off the public catalog</em>}
+                  </span>
+                </label>
+
+                {!newPromo.hidden && newPromo.show_sale_badge && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 14px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Ribbon wording</span>
+                    <select
+                      value={newPromo.badge_style || 'code'}
+                      onChange={e => setNewPromo({ ...newPromo, badge_style: e.target.value })}
+                      style={inputStyle}
+                    >
+                      {BADGE_STYLE_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    {newPromo.badge_style === 'custom' && (
+                      <input
+                        placeholder="e.g. Ask us for bulk pricing"
+                        maxLength={40}
+                        value={newPromo.badge_text || ''}
+                        onChange={e => setNewPromo({ ...newPromo, badge_text: e.target.value })}
+                        style={inputStyle}
+                      />
+                    )}
+                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                      Preview: <strong style={{ color: '#f58220' }}>
+                        {resolvePromoBadgeText({ ...newPromo, is_active: true, show_sale_badge: true }, 'en') || '(nothing — enter some text)'}
+                      </strong>
+                    </span>
+                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                      The shelf price does not change until the code is entered, so wording that names the code avoids confusion.
+                      Leave <strong>Target product</strong> empty to ribbon every product.
+                    </span>
+                  </div>
+                )}
               </form>
             )}
 

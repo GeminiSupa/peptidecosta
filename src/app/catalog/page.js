@@ -10,6 +10,7 @@ import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, cleanPhoneNumber } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
+import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
@@ -195,6 +196,7 @@ export default function CatalogPage() {
   
   // Products Data States
   const [products, setProducts] = useState([]);
+  const [promoBadges, setPromoBadges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDbBacked, setIsDbBacked] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(FALLBACK_EXCHANGE_RATE);
@@ -1259,6 +1261,17 @@ export default function CatalogPage() {
         if (revData) {
           setReviews(revData);
         }
+
+        // Promo codes opted in to showing a sale ribbon. Hidden codes are
+        // excluded in the query as well as in isBadgeEligible — a private code
+        // must never reach the public catalog, so it is filtered twice.
+        const { data: badgePromos } = await supabase
+          .from('promo_codes')
+          .select('code, discount_pct, is_active, hidden, show_sale_badge, badge_style, badge_text, target_product, valid_from, valid_until, usage_limit, usage_count')
+          .eq('show_sale_badge', true)
+          .eq('is_active', true)
+          .eq('hidden', false);
+        setPromoBadges(badgePromos || []);
       } catch (err) {
         console.error("Supabase load error, falling back to local spreadsheet CSV...", err);
         setIsDbBacked(false);
@@ -3226,21 +3239,22 @@ export default function CatalogPage() {
                         {lang === 'en' ? `🔥 Only ${p.inventoryCount} left!` : `🔥 ¡Solo quedan ${p.inventoryCount}!`}
                       </div>
                     )}
-                    {inStock && p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd && (
-                      <div className="sale-badge">
-                        <span>
-                          {(() => {
-                            const original = typeof p.originalPriceUsd === 'string' ? parseFloat(p.originalPriceUsd.replace(/[^0-9.]/g, '')) : p.originalPriceUsd;
-                            const current = typeof p.priceUsd === 'string' ? parseFloat(p.priceUsd.replace(/[^0-9.]/g, '')) : p.priceUsd;
-                            if (original && current && original > current) {
-                              const pct = Math.round((1 - (current / original)) * 100);
-                              return lang === 'en' ? `Save ${pct}%` : `Ahorra ${pct}%`;
-                            }
-                            return lang === 'en' ? 'Sale' : 'Oferta';
-                          })()}
-                        </span>
-                      </div>
-                    )}
+                    {inStock && (() => {
+                      // A product-level sale wins: its price has genuinely dropped,
+                      // so reporting the gap is accurate. A promo ribbon only
+                      // applies when there is no real markdown to show.
+                      if (p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd) {
+                        const original = typeof p.originalPriceUsd === 'string' ? parseFloat(p.originalPriceUsd.replace(/[^0-9.]/g, '')) : p.originalPriceUsd;
+                        const current = typeof p.priceUsd === 'string' ? parseFloat(p.priceUsd.replace(/[^0-9.]/g, '')) : p.priceUsd;
+                        const text = original && current && original > current
+                          ? (lang === 'en' ? `Save ${Math.round((1 - (current / original)) * 100)}%` : `Ahorra ${Math.round((1 - (current / original)) * 100)}%`)
+                          : (lang === 'en' ? 'Sale' : 'Oferta');
+                        return <div className="sale-badge"><span>{text}</span></div>;
+                      }
+
+                      const promoBadge = getPromoBadgeForProduct(promoBadges, p.product, lang);
+                      return promoBadge ? <div className="sale-badge"><span>{promoBadge.text}</span></div> : null;
+                    })()}
                   </div>
                   <div className="product-info">
                     <div className="product-category">{translateCategory(p.category)}</div>
