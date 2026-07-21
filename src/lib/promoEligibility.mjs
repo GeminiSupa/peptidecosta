@@ -31,6 +31,26 @@ export function checkMinUnits(promo, unitCount) {
   return { ok, minUnits, unitCount: units, shortfall: ok ? 0 : minUnits - units };
 }
 
+/**
+ * A promo with a unit minimum is a negotiated bulk deal, so it REPLACES the
+ * automatic volume discount rather than stacking on top of it.
+ *
+ * Without this the two compound: a 25% code on a cart already getting the
+ * automatic 20% leaves the customer paying 60% of list, not 75%. The person
+ * setting up the deal types the figure they agreed and quietly gives away far
+ * more. Replacing rather than stacking makes the number typed the number the
+ * customer receives.
+ */
+export function replacesVolumeDiscount(promo) {
+  return getMinUnits(promo) > 0;
+}
+
+/** Volume discount percent to apply, given any promo currently in the cart. */
+export function effectiveVolumeDiscountPct(promo, volumeDiscountPct) {
+  if (promo && replacesVolumeDiscount(promo)) return 0;
+  return Number(volumeDiscountPct) || 0;
+}
+
 /** Customer-facing wording. Returns null when the requirement is met. */
 export function minUnitsMessage(promo, unitCount, lang = 'es') {
   const { ok, minUnits, shortfall } = checkMinUnits(promo, unitCount);

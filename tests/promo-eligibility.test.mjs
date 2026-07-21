@@ -5,6 +5,8 @@ import {
   getMinUnits,
   checkMinUnits,
   minUnitsMessage,
+  replacesVolumeDiscount,
+  effectiveVolumeDiscountPct,
 } from '../src/lib/promoEligibility.mjs';
 
 test('counts units across every line, not lines', () => {
@@ -68,4 +70,35 @@ test('a cart that drops below the minimum stops qualifying', () => {
 
   const after = countCartUnits([{ qty: 5 }]);
   assert.equal(checkMinUnits(promo, after).ok, false, 'removing items must revoke the discount');
+});
+
+test('a bulk promo replaces the automatic volume discount', () => {
+  assert.equal(replacesVolumeDiscount({ min_units: 20 }), true);
+  assert.equal(effectiveVolumeDiscountPct({ min_units: 20 }, 20), 0);
+});
+
+test('an ordinary promo leaves the volume discount alone', () => {
+  assert.equal(replacesVolumeDiscount({ min_units: null }), false);
+  assert.equal(effectiveVolumeDiscountPct({ min_units: null }, 20), 20);
+  assert.equal(effectiveVolumeDiscountPct(null, 20), 20);
+});
+
+test('the typed percentage is what the customer actually receives', () => {
+  // 20 units, $1000 subtotal, 20% automatic volume discount, 25% bulk code.
+  const subtotal = 1000;
+  const volumePct = effectiveVolumeDiscountPct({ min_units: 20 }, 20);
+  const afterVolume = subtotal * (1 - volumePct / 100);
+  const final = afterVolume - afterVolume * 0.25;
+
+  assert.equal(final, 750, 'typing 25% must charge $750, not $600');
+  assert.equal(Math.round((1 - final / subtotal) * 100), 25);
+});
+
+test('without the minimum, the old compounding still applies', () => {
+  const subtotal = 1000;
+  const volumePct = effectiveVolumeDiscountPct({ min_units: null }, 20);
+  const afterVolume = subtotal * (1 - volumePct / 100);
+  const final = afterVolume - afterVolume * 0.25;
+
+  assert.equal(final, 600, 'ordinary codes are unchanged by this feature');
 });

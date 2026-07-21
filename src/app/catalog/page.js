@@ -11,7 +11,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, cleanPhoneNumber } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
-import { checkMinUnits, minUnitsMessage } from '@/lib/promoEligibility.mjs';
+import { checkMinUnits, minUnitsMessage, effectiveVolumeDiscountPct } from '@/lib/promoEligibility.mjs';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
@@ -1712,10 +1712,16 @@ export default function CatalogPage() {
     return 0;
   };
 
+  // A bulk promo (one with a unit minimum) replaces the automatic volume
+  // discount instead of stacking with it, so the percentage on the code is the
+  // percentage the customer actually gets. Single source of truth - every
+  // checkout path reads this rather than getVolumeDiscountPct directly.
+  const getEffectiveVolumePct = () =>
+    effectiveVolumeDiscountPct(promoData?.valid ? promoData : null, getVolumeDiscountPct(getCartVialCount()));
+
   const getDiscountedTotal = () => {
     const subtotal = getCartTotal();
-    const vials = getCartVialCount();
-    const pct = getVolumeDiscountPct(vials);
+    const pct = getEffectiveVolumePct();
     if (pct > 0) return Math.round(subtotal * (1 - pct / 100));
     return subtotal;
   };
@@ -1770,12 +1776,11 @@ export default function CatalogPage() {
         .reduce((sum, item) => sum + getPriceAsNumber(item, currency) * item.qty, 0);
     }
     
-    const vials = getCartVialCount();
-    const volumePct = getVolumeDiscountPct(vials);
+    const volumePct = getEffectiveVolumePct();
     if (volumePct > 0) {
       targetTotal = targetTotal * (1 - volumePct / 100);
     }
-    
+
     return currency === 'USD' ? parseFloat((targetTotal * promoData.discount_pct).toFixed(2)) : Math.round(targetTotal * promoData.discount_pct);
   };
 
@@ -2079,7 +2084,7 @@ export default function CatalogPage() {
     const subtotalVal = getCartTotal();
     const totalVal = getFinalTotal();
     const vialCount = getCartVialCount();
-    const discountPct = getVolumeDiscountPct(vialCount);
+    const discountPct = getEffectiveVolumePct();
     const orderItems = cart.map(item => ({
       product: item.product,
       qty: item.qty,
@@ -2259,7 +2264,10 @@ export default function CatalogPage() {
         }, 0);
         
         const vials = getCartVialCount(currentCart);
-        const pct = getVolumeDiscountPct(vials);
+        const pct = effectiveVolumeDiscountPct(
+          checkoutDataRef.current.promoData?.valid ? checkoutDataRef.current.promoData : null,
+          getVolumeDiscountPct(vials),
+        );
         const itemsTotal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
         const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
         
@@ -2307,7 +2315,10 @@ export default function CatalogPage() {
         }, 0);
         
         const vials = getCartVialCount(currentCart);
-        const pct = getVolumeDiscountPct(vials);
+        const pct = effectiveVolumeDiscountPct(
+          checkoutDataRef.current.promoData?.valid ? checkoutDataRef.current.promoData : null,
+          getVolumeDiscountPct(vials),
+        );
         const itemsTotal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
         
         const pData = checkoutDataRef.current.promoData;
@@ -2580,7 +2591,7 @@ export default function CatalogPage() {
   const renderOrderSummary = ({ showHeading = false, compact = false } = {}) => {
     const shipFee = getShippingFee();
     const isFreeShip = qualifiesForFreeShipping();
-    const hasVolumeDiscount = getVolumeDiscountPct(getCartVialCount()) > 0;
+    const hasVolumeDiscount = getEffectiveVolumePct() > 0;
     const hasPromoDiscount = promoData?.valid;
     const itemsBeforeShipping = getItemsTotalBeforeShipping();
 
@@ -3733,15 +3744,15 @@ export default function CatalogPage() {
         {cart.length > 0 && !orderSuccess && (
           <div className="cart-footer">
             {/* Volume discount banner */}
-            {getVolumeDiscountPct(getCartVialCount()) > 0 && (
+            {getEffectiveVolumePct() > 0 && (
               <div style={{ background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(16, 185, 129, 0.1))', border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '12px', padding: '10px 14px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '1.1rem' }}>🏷️</span>
                   <div>
                     <div style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: '700', fontSize: '0.8rem' }}>
                       {lang === 'en'
-                        ? `Volume Discount: ${getVolumeDiscountPct(getCartVialCount())}% OFF`
-                        : `Desc. por Volumen: ${getVolumeDiscountPct(getCartVialCount())}% DESC.`}
+                        ? `Volume Discount: ${getEffectiveVolumePct()}% OFF`
+                        : `Desc. por Volumen: ${getEffectiveVolumePct()}% DESC.`}
                     </div>
                     <div style={{ color: theme === 'dark' ? '#86efac' : '#166534', fontSize: '0.7rem', marginTop: '2px' }}>
                       {lang === 'en'

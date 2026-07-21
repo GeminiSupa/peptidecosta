@@ -548,6 +548,13 @@ export default function AffiliatesManager({ products = [] }) {
                   />
                   <button type="submit" style={btnStyle('#059669')}><Plus size={16} /> Create Code</button>
                 </div>
+                {Number(newPromo.min_units) > 0 && (
+                  <div style={{ padding: '10px 14px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '10px', fontSize: '0.82rem', color: '#a7f3d0' }}>
+                    Bulk deal: this replaces the automatic volume discount rather than adding to it, so the
+                    customer gets exactly <strong>{Math.round((Number(newPromo.discount_pct) || 0) * 100)}%</strong> off
+                    once their cart reaches {Math.floor(Number(newPromo.min_units))} units.
+                  </div>
+                )}
                 <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', color: '#e2e8f0', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
