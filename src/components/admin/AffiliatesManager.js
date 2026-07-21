@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
-import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check } from 'lucide-react';
+import QRCode from 'qrcode';
+import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check, QrCode, Copy, Download, X } from 'lucide-react';
+
+const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://peptidecosta.vercel.app/catalog?lang=es';
+
+const slugify = (value) => String(value || '')
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '') || 'promo';
 
 export default function AffiliatesManager({ products = [] }) {
   const [affiliates, setAffiliates] = useState([]);
@@ -19,11 +28,73 @@ export default function AffiliatesManager({ products = [] }) {
   const [customEndDate, setCustomEndDate] = useState('');
   const [targetAffiliate, setTargetAffiliate] = useState('all');
   const [promoFilter, setPromoFilter] = useState('standard');
+  const [qrModal, setQrModal] = useState(null);
+  const [qrLoadingId, setQrLoadingId] = useState(null);
 
   // Forms State
   const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
   const [newPromo, setNewPromo] = useState({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '', once_per_customer: false, hidden: false });
   const [editingPromo, setEditingPromo] = useState(null);
+
+  const buildPromoCatalogUrl = (promo) => {
+    const url = new URL(CATALOG_BASE_URL);
+    const affiliateName = promo.affiliates?.name || promo.affiliate_name || '';
+    const campaignName = affiliateName || promo.code;
+
+    if (!url.searchParams.get('lang')) url.searchParams.set('lang', 'es');
+    url.searchParams.set('promo_code', promo.code);
+    url.searchParams.set('utm_source', 'affiliate');
+    url.searchParams.set('utm_medium', 'qr');
+    url.searchParams.set('utm_campaign', slugify(campaignName));
+    url.searchParams.set('referral', campaignName);
+    url.searchParams.set('gate', 'skip');
+
+    return url.toString();
+  };
+
+  const handleOpenQr = async (promo) => {
+    setQrLoadingId(promo.id);
+    try {
+      const link = buildPromoCatalogUrl(promo);
+      const dataUrl = await QRCode.toDataURL(link, {
+        width: 720,
+        margin: 2,
+        color: {
+          dark: '#0f172a',
+          light: '#ffffff'
+        }
+      });
+
+      setQrModal({
+        promo,
+        link,
+        dataUrl,
+        title: promo.affiliate_id ? `${promo.affiliates?.name || 'Affiliate'} - ${promo.code}` : promo.code
+      });
+    } catch (err) {
+      alert('Error creating QR code: ' + err.message);
+    } finally {
+      setQrLoadingId(null);
+    }
+  };
+
+  const handleCopyQrLink = async () => {
+    if (!qrModal?.link) return;
+    try {
+      await navigator.clipboard.writeText(qrModal.link);
+      alert('Affiliate link copied.');
+    } catch {
+      window.prompt('Copy this affiliate link:', qrModal.link);
+    }
+  };
+
+  const handleDownloadQr = () => {
+    if (!qrModal?.dataUrl) return;
+    const link = document.createElement('a');
+    link.href = qrModal.dataUrl;
+    link.download = `${slugify(qrModal.title)}-qr.png`;
+    link.click();
+  };
 
   const handleUpdatePromo = async (e) => {
     e.preventDefault();
@@ -460,6 +531,16 @@ export default function AffiliatesManager({ products = [] }) {
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     {promoFilter !== 'welcome' && (
+                      <button
+                        onClick={() => handleOpenQr(promo)}
+                        disabled={qrLoadingId === promo.id}
+                        title="Create QR affiliate link"
+                        style={{ color: '#22d3ee', background: 'rgba(34, 211, 238, 0.1)', border: '1px solid rgba(34, 211, 238, 0.2)', borderRadius: '8px', cursor: qrLoadingId === promo.id ? 'wait' : 'pointer', padding: '8px', transition: 'all 0.2s', opacity: qrLoadingId === promo.id ? 0.65 : 1 }}
+                      >
+                        <QrCode size={18} />
+                      </button>
+                    )}
+                    {promoFilter !== 'welcome' && (
                       <button onClick={() => handleTogglePromo(promo.id, promo.is_active)} style={{ background: promo.is_active ? 'rgba(52, 211, 153, 0.1)' : 'rgba(148, 163, 184, 0.1)', border: `1px solid ${promo.is_active ? 'rgba(52, 211, 153, 0.2)' : 'rgba(148, 163, 184, 0.2)'}`, borderRadius: '8px', cursor: 'pointer', padding: '8px', color: promo.is_active ? '#34d399' : '#94a3b8' }}>
                         {promo.is_active ? <CheckCircle size={18} /> : <XCircle size={18} />}
                       </button>
@@ -596,6 +677,41 @@ export default function AffiliatesManager({ products = [] }) {
               </table>
             </div>
           )}
+        </div>
+      )}
+      {/* QR CODE MODAL */}
+      {qrModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '460px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', marginBottom: '18px' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.15rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <QrCode size={20} color="#22d3ee" /> QR Code
+                </h2>
+                <div style={{ color: '#94a3b8', fontSize: '0.82rem', marginTop: '4px' }}>{qrModal.title}</div>
+              </div>
+              <button onClick={() => setQrModal(null)} title="Close" style={{ color: '#94a3b8', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', cursor: 'pointer', padding: '8px' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ background: '#ffffff', borderRadius: '12px', padding: '16px', display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
+              <img src={qrModal.dataUrl} alt={`QR code for ${qrModal.title}`} style={{ width: '100%', maxWidth: '320px', height: 'auto', display: 'block' }} />
+            </div>
+
+            <div style={{ color: '#cbd5e1', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '8px', padding: '10px 12px', fontSize: '0.78rem', lineHeight: 1.4, wordBreak: 'break-all', marginBottom: '16px' }}>
+              {qrModal.link}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <button type="button" onClick={handleCopyQrLink} style={{ ...btnStyle('#2563eb'), padding: '10px 12px' }}>
+                <Copy size={16} /> Copy Link
+              </button>
+              <button type="button" onClick={handleDownloadQr} style={{ ...btnStyle('#059669'), padding: '10px 12px' }}>
+                <Download size={16} /> Download QR
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {/* EDIT PROMO MODAL */}

@@ -150,6 +150,7 @@ export default function CatalogClient({
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const [searchFocused, setSearchFocused] = useState(false);
   const searchRef = useRef(null);
+  const autoPromoAppliedRef = useRef(false);
   const [activeCategory, setActiveCategory] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
   const [priceFilter, setPriceFilter] = useState('all');
@@ -1589,15 +1590,17 @@ export default function CatalogClient({
     return (items - promo) + getShippingFee();
   };
 
-  const handleApplyPromo = async () => {
-    if (!promoCodeInput) return;
+  const handleApplyPromo = async (codeOverride = null) => {
+    const codeToApply = String(codeOverride || promoCodeInput || '').trim().toUpperCase();
+    if (!codeToApply) return;
+    setPromoCodeInput(codeToApply);
     setPromoLoading(true);
     setPromoError('');
     try {
       const res = await fetch('/api/promo/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: promoCodeInput }),
+        body: JSON.stringify({ code: codeToApply }),
       });
       const data = await res.json();
       if (data.valid) {
@@ -1622,6 +1625,16 @@ export default function CatalogClient({
     }
     setPromoLoading(false);
   };
+
+  useEffect(() => {
+    if (autoPromoAppliedRef.current || typeof window === 'undefined') return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const promoParam = urlParams.get('promo_code') || urlParams.get('promo') || urlParams.get('coupon') || urlParams.get('discount');
+    if (!promoParam) return;
+
+    autoPromoAppliedRef.current = true;
+    handleApplyPromo(promoParam);
+  }, []);
 
   const getStoredAttribution = () => {
     try {
