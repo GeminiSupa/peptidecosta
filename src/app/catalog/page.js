@@ -3227,7 +3227,7 @@ export default function CatalogPage() {
                       </div>
                     )}
                     {inStock && p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd && (
-                      <div className="sale-badge" style={{ position: 'absolute', top: '10px', right: '10px', background: '#ef4444', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', zIndex: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
+                      <div className="sale-badge">
                         {(() => {
                           const original = typeof p.originalPriceUsd === 'string' ? parseFloat(p.originalPriceUsd.replace(/[^0-9.]/g, '')) : p.originalPriceUsd;
                           const current = typeof p.priceUsd === 'string' ? parseFloat(p.priceUsd.replace(/[^0-9.]/g, '')) : p.priceUsd;
