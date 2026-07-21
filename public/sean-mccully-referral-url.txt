@@ -1,1 +1,1 @@
-https://www.costapeptides.com/catalog?sales_agent=Sean%20Mccully&utm_source=affiliate&utm_medium=qr&utm_campaign=sean-mccully&referral=Sean%20Mccully&gate=skip
+https://peptidecosta.vercel.app/catalog?lang=es&sales_agent=Sean%20Mccully&utm_source=affiliate&utm_medium=qr&utm_campaign=sean-mccully&referral=Sean%20Mccully&gate=skip
