@@ -12,6 +12,29 @@ const slugify = (value) => String(value || '')
   .replace(/[^a-z0-9]+/g, '-')
   .replace(/^-+|-+$/g, '') || 'promo';
 
+const COMMISSION_RATE_OPTIONS = [
+  { value: 0.05, label: '5% Commission Payout' },
+  { value: 0.10, label: '10% Commission Payout' },
+  { value: 0.15, label: '15% Commission Payout' },
+  { value: 0.20, label: '20% Commission Payout' },
+  { value: 0.25, label: '25% Commission Payout' },
+  { value: 0.30, label: '30% Commission Payout' },
+  { value: 0.35, label: '35% Commission Payout' },
+  { value: 0.40, label: '40% Commission Payout' },
+  { value: 0.50, label: '50% Commission Payout' },
+];
+
+const getCommissionSelectValue = (rate) => {
+  const numericRate = Number(rate || 0);
+  return COMMISSION_RATE_OPTIONS.some(option => option.value === numericRate) ? String(numericRate) : 'custom';
+};
+
+const parseCommissionPercent = (value) => {
+  const pct = Number(value);
+  if (!Number.isFinite(pct)) return 0;
+  return Math.max(0, Math.min(100, pct)) / 100;
+};
+
 export default function AffiliatesManager({ products = [] }) {
   const [affiliates, setAffiliates] = useState([]);
   const [promoCodes, setPromoCodes] = useState([]);
@@ -34,6 +57,7 @@ export default function AffiliatesManager({ products = [] }) {
   // Forms State
   const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
   const [newPromo, setNewPromo] = useState({ code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '', once_per_customer: false, hidden: false });
+  const [editingAffiliate, setEditingAffiliate] = useState(null);
   const [editingPromo, setEditingPromo] = useState(null);
 
   const buildPromoCatalogUrl = (promo) => {
@@ -211,6 +235,35 @@ export default function AffiliatesManager({ products = [] }) {
     }
   };
 
+  const handleUpdateAffiliate = async (e) => {
+    e.preventDefault();
+    if (!editingAffiliate?.id || !editingAffiliate.name || !editingAffiliate.email) return;
+
+    try {
+      const payload = {
+        name: editingAffiliate.name.trim(),
+        email: editingAffiliate.email.trim(),
+        whatsapp: editingAffiliate.whatsapp?.trim() || null,
+        commission_rate: Number(editingAffiliate.commission_rate || 0)
+      };
+
+      const { data, error } = await supabase
+        .from('affiliates')
+        .update(payload)
+        .eq('id', editingAffiliate.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setAffiliates(affiliates.map(a => a.id === editingAffiliate.id ? data : a));
+      setEditingAffiliate(null);
+      loadData();
+    } catch (err) {
+      alert('Error updating affiliate: ' + err.message);
+    }
+  };
+
   const handleDeleteAffiliate = async (id) => {
     if (!confirm('Are you sure you want to delete this affiliate? All their promo codes will also be deleted.')) return;
     try {
@@ -351,12 +404,31 @@ export default function AffiliatesManager({ products = [] }) {
                 <input required placeholder="Name (e.g. Dr. Smith)" value={newAffiliate.name} onChange={e => setNewAffiliate({...newAffiliate, name: e.target.value})} style={inputStyle} />
                 <input required type="email" placeholder="Email" value={newAffiliate.email} onChange={e => setNewAffiliate({...newAffiliate, email: e.target.value})} style={inputStyle} />
                 <input placeholder="WhatsApp (Optional)" value={newAffiliate.whatsapp} onChange={e => setNewAffiliate({...newAffiliate, whatsapp: e.target.value})} style={inputStyle} />
-                <select value={newAffiliate.commission_rate} onChange={e => setNewAffiliate({...newAffiliate, commission_rate: parseFloat(e.target.value)})} style={inputStyle}>
-                  <option value={0.05}>5% Commission Payout</option>
-                  <option value={0.10}>10% Commission Payout</option>
-                  <option value={0.15}>15% Commission Payout</option>
-                  <option value={0.20}>20% Commission Payout</option>
+                <select
+                  value={getCommissionSelectValue(newAffiliate.commission_rate)}
+                  onChange={e => setNewAffiliate({
+                    ...newAffiliate,
+                    commission_rate: e.target.value === 'custom' ? newAffiliate.commission_rate : parseFloat(e.target.value)
+                  })}
+                  style={inputStyle}
+                >
+                  {COMMISSION_RATE_OPTIONS.map(option => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                  {getCommissionSelectValue(newAffiliate.commission_rate) === 'custom' && (
+                    <option value="custom">Custom Commission Payout</option>
+                  )}
                 </select>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  placeholder="Manual payout %"
+                  value={Number(newAffiliate.commission_rate * 100).toString()}
+                  onChange={e => setNewAffiliate({ ...newAffiliate, commission_rate: parseCommissionPercent(e.target.value) })}
+                  style={inputStyle}
+                />
               </div>
               <button type="submit" style={btnStyle('#2563eb')}><Plus size={16} /> Add Affiliate</button>
             </form>
@@ -371,7 +443,16 @@ export default function AffiliatesManager({ products = [] }) {
                       {(aff.commission_rate * 100).toFixed(0)}% Payout Rate
                     </div>
                   </div>
-                  <button onClick={() => handleDeleteAffiliate(aff.id)} style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', cursor: 'pointer', padding: '8px', transition: 'all 0.2s' }}><Trash2 size={16} /></button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => setEditingAffiliate({ ...aff })}
+                      title="Edit affiliate"
+                      style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', cursor: 'pointer', padding: '8px', transition: 'all 0.2s' }}
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button onClick={() => handleDeleteAffiliate(aff.id)} title="Delete affiliate" style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', cursor: 'pointer', padding: '8px', transition: 'all 0.2s' }}><Trash2 size={16} /></button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -712,6 +793,52 @@ export default function AffiliatesManager({ products = [] }) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* EDIT AFFILIATE MODAL */}
+      {editingAffiliate && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <form onSubmit={handleUpdateAffiliate} style={{ background: '#0e1626', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '24px', width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+            <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Edit2 size={20} color="#38bdf8" /> Edit Affiliate
+            </h2>
+
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <input required placeholder="Name" value={editingAffiliate.name || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, name: e.target.value })} style={inputStyle} />
+              <input required type="email" placeholder="Email" value={editingAffiliate.email || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, email: e.target.value })} style={inputStyle} />
+              <input placeholder="WhatsApp (Optional)" value={editingAffiliate.whatsapp || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, whatsapp: e.target.value })} style={inputStyle} />
+              <select
+                value={getCommissionSelectValue(editingAffiliate.commission_rate)}
+                onChange={e => setEditingAffiliate({
+                  ...editingAffiliate,
+                  commission_rate: e.target.value === 'custom' ? editingAffiliate.commission_rate : parseFloat(e.target.value)
+                })}
+                style={inputStyle}
+              >
+                {COMMISSION_RATE_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+                {getCommissionSelectValue(editingAffiliate.commission_rate) === 'custom' && (
+                  <option value="custom">Custom Commission Payout</option>
+                )}
+              </select>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                placeholder="Manual payout %"
+                value={Number((editingAffiliate.commission_rate || 0) * 100).toString()}
+                onChange={e => setEditingAffiliate({ ...editingAffiliate, commission_rate: parseCommissionPercent(e.target.value) })}
+                style={inputStyle}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+              <button type="button" onClick={() => setEditingAffiliate(null)} style={{ flex: 1, padding: '12px', background: 'transparent', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Cancel</button>
+              <button type="submit" style={{ flex: 1, padding: '12px', background: '#38bdf8', color: '#0f172a', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Save Affiliate</button>
+            </div>
+          </form>
         </div>
       )}
       {/* EDIT PROMO MODAL */}
