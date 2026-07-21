@@ -6,8 +6,9 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { createUnsubscribeToken } from '@/lib/marketingTokens';
 import { MARKETING_FOOTER_MARKER, applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { clampOutlookButtonSizes, personalizeMergeTags, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
 
-const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
+const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);

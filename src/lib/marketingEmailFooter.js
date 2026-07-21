@@ -1,3 +1,5 @@
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
+
 export const MARKETING_FOOTER_MARKER = 'data-costa-email-footer';
 
 const PLACEHOLDERS = {
@@ -16,7 +18,7 @@ function escapeHtml(value) {
 }
 
 function footerValues(options = {}) {
-  const domain = String(options.domain || 'https://www.costapeptides.com').replace(/\/+$/, '');
+  const domain = String(options.domain || LIVE_SITE_URL).replace(/\/+$/, '');
   const unsubscribeUrl = options.unsubscribeUrl || `${domain}/unsubscribe`;
   return {
     currentYear: options.currentYear || new Date().getFullYear(),

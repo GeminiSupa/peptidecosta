@@ -4,8 +4,9 @@ import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { clampOutlookButtonSizes, personalizeMergeTags, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
 import { getCampaignSmtpConfig, isCampaignRackspaceSmtp } from '@/lib/campaignSmtp';
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
 
-const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
+const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
 function positiveInteger(value, fallback) {
   const parsed = Number.parseInt(value, 10);

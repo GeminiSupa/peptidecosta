@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import EmailEditor from 'react-email-editor';
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
 import {
   AlertTriangle, CheckCircle2, Copy, Eye, Loader2, Save, Send,
   Users, ChevronDown, ChevronUp, Smartphone, LayoutTemplate,
@@ -19,7 +20,7 @@ const MOBILE_PREVIEW_HEIGHT = 667;
 
 // ── Template Library ─────────────────────────────────────────────────
 const brandButton = {
-  href: { name: 'web', values: { href: 'https://www.costapeptides.com/catalog', target: '_blank' } },
+  href: { name: 'web', values: { href: `${LIVE_SITE_URL}/catalog`, target: '_blank' } },
   buttonColors: { color: '#ffffff', backgroundColor: '#10b981', hoverColor: '#ffffff', hoverBackgroundColor: '#059669' },
   border: {},
   borderRadius: '6px',
@@ -43,7 +44,7 @@ const textBlock = (text, overrides = {}) => ({
   },
 });
 
-const buttonBlock = (text, href = 'https://www.costapeptides.com/catalog') => ({
+const buttonBlock = (text, href = `${LIVE_SITE_URL}/catalog`) => ({
   type: 'button',
   values: {
     ...brandButton,
@@ -304,7 +305,7 @@ const TEMPLATES = [
 
 <p>All products are <strong>third-party tested</strong> and ship directly from Costa Rica. Stock is limited on first batches — grab yours before they run out!</p>
 
-<p>You can view all our products and place your order directly on our <a href="https://www.costapeptides.com/catalog" style="color: #059669; font-weight: bold; text-decoration: underline;">online catalog here</a>.</p>`,
+<p>You can view all our products and place your order directly on our <a href="${LIVE_SITE_URL}/catalog" style="color: #059669; font-weight: bold; text-decoration: underline;">online catalog here</a>.</p>`,
       cta: 'Shop New Arrivals →',
       footerNote: '<p>Want more info on any of these products? Just reply to this email and our team will send you everything you need.</p>',
       accent: '#059669',

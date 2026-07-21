@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { canSendWhatsAppMarketing } from '@/lib/whatsappCompliance';
 import { getAbandonedCartConversion } from '@/lib/leadConversion.mjs';
 import { markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
 
 export const maxDuration = 60; // Vercel limit
 export const dynamic = 'force-dynamic';
@@ -77,7 +78,7 @@ export async function GET(request) {
   }
 
   let sentCount = 0;
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
   let skippedNoConsent = 0;
   for (const cart of recoverableCarts) {

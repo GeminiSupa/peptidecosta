@@ -6,6 +6,7 @@ import { createJourneyTrackingToken } from '@/lib/marketingTokens';
 import { hasWhatsAppOptIn } from '@/lib/whatsappCompliance';
 import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
 import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
 
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
@@ -13,7 +14,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
 function escapeHtml(value) {
   return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');

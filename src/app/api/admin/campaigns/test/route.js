@@ -4,8 +4,9 @@ import nodemailer from 'nodemailer';
 import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 import { clampOutlookButtonSizes, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
 
-const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.costapeptides.com';
+const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
 export async function POST(request) {
   const auth = await verifyAdminSession(request);
