@@ -398,6 +398,16 @@ export async function GET(request) {
 
       totalSent += queuedCount;
 
+      const { data: latestBroadcast, error: latestBroadcastError } = await supabase
+        .from('scheduled_broadcasts')
+        .select('status')
+        .eq('id', broadcast.id)
+        .maybeSingle();
+      if (latestBroadcastError) throw latestBroadcastError;
+      if (latestBroadcast?.status === 'cancelled') {
+        continue;
+      }
+
       const contactsToRequeue = [...remainingContacts, ...retryContacts];
       if (contactsToRequeue.length > 0) {
         // Re-queue the remaining contacts

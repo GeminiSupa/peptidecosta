@@ -80,6 +80,14 @@ test('a broadcast that has not started yet does not report 100 percent', () => {
   assert.equal(p.isComplete, false);
 });
 
+test('a cancelled broadcast is terminal even with queued contacts left', () => {
+  const p = computeBroadcastProgress({ events: [], customContacts: 'a,b,c', status: 'cancelled' });
+  assert.equal(p.total, 3);
+  assert.equal(p.remaining, 3);
+  assert.equal(p.percent, 0);
+  assert.equal(p.isComplete, true);
+});
+
 test('still in flight while a contact is mid-send', () => {
   const events = [ev('a', 'whatsapp', 'processing', '2026-07-21T10:00:00Z')];
   const p = computeBroadcastProgress({ events, customContacts: '', status: 'pending' });

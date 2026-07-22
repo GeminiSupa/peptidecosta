@@ -62,7 +62,8 @@ export function computeBroadcastProgress({ events = [], customContacts = '', sta
   const attempted = summary.attemptedContacts;
   const total = attempted + remaining;
 
-  const isComplete = status === 'completed' || (total > 0 && remaining === 0 && summary.byStatus.processing === 0);
+  const isComplete = ['completed', 'cancelled'].includes(status)
+    || (total > 0 && remaining === 0 && summary.byStatus.processing === 0);
 
   return {
     total,

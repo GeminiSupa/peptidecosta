@@ -86,3 +86,41 @@ export async function GET(request) {
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
   }
 }
+
+export async function PATCH(request) {
+  const auth = await verifyAdminSession(request);
+  if (auth.error) return auth.error;
+
+  try {
+    const { id, action } = await request.json();
+    if (!id) {
+      return NextResponse.json({ error: 'Broadcast id is required' }, { status: 400 });
+    }
+    if (action !== 'cancel') {
+      return NextResponse.json({ error: 'Unsupported broadcast action' }, { status: 400 });
+    }
+
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('scheduled_broadcasts')
+      .update({ status: 'cancelled' })
+      .eq('id', id)
+      .in('status', ['pending', 'processing'])
+      .select('id, status')
+      .maybeSingle();
+
+    if (error) {
+      console.error('[admin/broadcasts/progress/cancel]', error.message);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (!data) {
+      return NextResponse.json({ error: 'Broadcast is already finished or was not found' }, { status: 409 });
+    }
+
+    return NextResponse.json({ ok: true, broadcast: data });
+  } catch (err) {
+    console.error('[admin/broadcasts/progress/cancel]', err);
+    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
+  }
+}

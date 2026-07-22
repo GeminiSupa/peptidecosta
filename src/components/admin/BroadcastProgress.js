@@ -22,6 +22,7 @@ export default function BroadcastProgress() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState({});
+  const [stoppingId, setStoppingId] = useState(null);
   const timerRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -51,6 +52,27 @@ export default function BroadcastProgress() {
     if (active) timerRef.current = setTimeout(load, POLL_MS);
     return () => clearTimeout(timerRef.current);
   }, [broadcasts, load]);
+
+  const handleStop = async (broadcast) => {
+    if (!broadcast?.id || stoppingId) return;
+    if (!confirm('Stop this broadcast? No more queued recipients will be sent.')) return;
+
+    setStoppingId(broadcast.id);
+    try {
+      const res = await adminFetch('/api/admin/broadcasts/progress', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: broadcast.id, action: 'cancel' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `Stop failed (${res.status})`);
+      await load();
+    } catch (err) {
+      alert(`Could not stop broadcast: ${err.message}`);
+    } finally {
+      setStoppingId(null);
+    }
+  };
 
   const visible = broadcasts.filter((b) => b.progress?.total > 0 || !b.progress?.isComplete);
 
@@ -82,7 +104,9 @@ export default function BroadcastProgress() {
         {visible.map((b) => {
           const p = b.progress || {};
           const done = p.isComplete;
-          const barColor = done ? '#10b981' : '#38bdf8';
+          const isStopped = b.status === 'cancelled';
+          const canStop = !done && ['pending', 'processing'].includes(String(b.status || '').toLowerCase());
+          const barColor = isStopped ? '#f59e0b' : done ? '#10b981' : '#38bdf8';
           const isOpen = !!expanded[b.id];
           const eta = b.estimate ? formatDuration(b.estimate.remainingMs) : null;
 
@@ -99,9 +123,21 @@ export default function BroadcastProgress() {
                     {b.preview || '—'}
                   </div>
                 </div>
-                <span style={{ flexShrink: 0, fontSize: '0.72rem', fontWeight: 800, padding: '3px 9px', borderRadius: '999px', whiteSpace: 'nowrap', color: done ? '#10b981' : '#38bdf8', background: done ? 'rgba(16,185,129,0.12)' : 'rgba(56,189,248,0.12)', border: `1px solid ${done ? 'rgba(16,185,129,0.25)' : 'rgba(56,189,248,0.25)'}` }}>
-                  {done ? 'Finished' : 'Sending'}
-                </span>
+                <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {canStop && (
+                    <button
+                      type="button"
+                      onClick={() => handleStop(b)}
+                      disabled={stoppingId === b.id}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', borderRadius: '999px', padding: '4px 9px', fontSize: '0.72rem', fontWeight: 800, cursor: stoppingId === b.id ? 'wait' : 'pointer' }}
+                    >
+                      <XCircle size={12} /> {stoppingId === b.id ? 'Stopping' : 'Stop'}
+                    </button>
+                  )}
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '3px 9px', borderRadius: '999px', whiteSpace: 'nowrap', color: isStopped ? '#fbbf24' : done ? '#10b981' : '#38bdf8', background: isStopped ? 'rgba(251,191,36,0.12)' : done ? 'rgba(16,185,129,0.12)' : 'rgba(56,189,248,0.12)', border: `1px solid ${isStopped ? 'rgba(251,191,36,0.25)' : done ? 'rgba(16,185,129,0.25)' : 'rgba(56,189,248,0.25)'}` }}>
+                    {isStopped ? 'Stopped' : done ? 'Finished' : 'Sending'}
+                  </span>
+                </div>
               </div>
 
               <div style={{ height: '8px', background: '#1e293b', borderRadius: '999px', overflow: 'hidden', marginBottom: '8px' }}>
