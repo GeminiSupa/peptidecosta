@@ -122,6 +122,14 @@ export default function BroadcastProgress() {
                   <div style={{ color: '#94a3b8', fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>
                     {b.preview || '—'}
                   </div>
+                  {p.startedAt && (
+                    <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '3px' }}>
+                      {new Date(p.startedAt).toLocaleString()}
+                      {done && p.lastActivityAt && p.lastActivityAt !== p.startedAt
+                        ? ` → ${done ? 'finished ' : ''}${new Date(p.lastActivityAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        : ''}
+                    </div>
+                  )}
                 </div>
                 <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {canStop && (

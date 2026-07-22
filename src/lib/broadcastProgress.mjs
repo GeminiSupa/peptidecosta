@@ -58,12 +58,32 @@ export function summarizeDeliveryEvents(events = []) {
  */
 export function computeBroadcastProgress({ events = [], customContacts = '', status = 'pending' } = {}) {
   const summary = summarizeDeliveryEvents(events);
-  const remaining = countQueuedContacts(customContacts);
   const attempted = summary.attemptedContacts;
+
+  // The cron rewrites custom_contacts with the still-queued remainder before
+  // processing each batch, but never clears it on completion - so a COMPLETED
+  // broadcast is left holding its final batch, and counting that as "remaining"
+  // double-counts people who were already attempted ("73 of 78" for a 73-person
+  // blast). It can only complete once nothing genuinely remains, so zero it.
+  //
+  // A CANCELLED broadcast is different: its queue is people deliberately never
+  // sent, which is real information ("stopped at 40 of 200") - keep counting it.
+  const isTerminal = ['completed', 'cancelled'].includes(status);
+  const remaining = status === 'completed' ? 0 : countQueuedContacts(customContacts);
   const total = attempted + remaining;
 
-  const isComplete = ['completed', 'cancelled'].includes(status)
+  const isComplete = isTerminal
     || (total > 0 && remaining === 0 && summary.byStatus.processing === 0);
+
+  // When the blast ran: earliest and latest attempt across all recipients.
+  let startedAt = null;
+  let lastActivityAt = null;
+  for (const event of events || []) {
+    const first = new Date(event?.first_attempt_at || 0).getTime();
+    const last = new Date(event?.last_attempt_at || event?.first_attempt_at || 0).getTime();
+    if (first > 0 && (startedAt === null || first < startedAt)) startedAt = first;
+    if (last > 0 && (lastActivityAt === null || last > lastActivityAt)) lastActivityAt = last;
+  }
 
   return {
     total,
@@ -76,6 +96,8 @@ export function computeBroadcastProgress({ events = [], customContacts = '', sta
     inFlight: summary.byStatus.processing,
     byChannel: summary.byChannel,
     isComplete,
+    startedAt: startedAt ? new Date(startedAt).toISOString() : null,
+    lastActivityAt: lastActivityAt ? new Date(lastActivityAt).toISOString() : null,
   };
 }
 

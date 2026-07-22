@@ -115,3 +115,39 @@ test('no estimate once nothing is left to send', () => {
     ev(`c${i}`, 'whatsapp', 'delivered', new Date(Date.UTC(2026, 6, 21, 10, 0, i)).toISOString()));
   assert.equal(estimateCompletion(events, 0), null);
 });
+
+test('a finished broadcast does not double-count its final batch ("73 of 78")', () => {
+  // The cron leaves the last batch sitting in custom_contacts when it marks a
+  // broadcast completed, and those 5 people already have delivery events.
+  const events = Array.from({ length: 73 }, (_, i) =>
+    ev(`c${i}`, 'whatsapp', i % 2 ? 'delivered' : 'suppressed', '2026-07-22T13:56:00Z'));
+  const leftovers = 'c68,c69,c70,c71,c72';
+
+  const p = computeBroadcastProgress({ events, customContacts: leftovers, status: 'completed' });
+  assert.equal(p.total, 73, 'total must be the people actually processed, not 78');
+  assert.equal(p.attempted, 73);
+  assert.equal(p.percent, 100);
+  assert.equal(p.isComplete, true);
+});
+
+test('a still-running broadcast keeps counting its queue', () => {
+  const events = [ev('a', 'whatsapp', 'delivered', '2026-07-22T13:56:00Z')];
+  const p = computeBroadcastProgress({ events, customContacts: 'b,c', status: 'pending' });
+  assert.equal(p.total, 3, 'queue still counts while the broadcast is live');
+});
+
+test('exposes when the blast started and finished', () => {
+  const events = [
+    ev('a', 'whatsapp', 'delivered', '2026-07-22T13:56:00Z'),
+    ev('b', 'whatsapp', 'delivered', '2026-07-22T14:02:30Z'),
+  ];
+  const p = computeBroadcastProgress({ events, customContacts: '', status: 'completed' });
+  assert.equal(p.startedAt, '2026-07-22T13:56:00.000Z');
+  assert.equal(p.lastActivityAt, '2026-07-22T14:02:30.000Z');
+});
+
+test('no timestamps when nothing has been attempted', () => {
+  const p = computeBroadcastProgress({ events: [], customContacts: 'a,b', status: 'pending' });
+  assert.equal(p.startedAt, null);
+  assert.equal(p.lastActivityAt, null);
+});
