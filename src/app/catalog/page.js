@@ -3338,53 +3338,25 @@ export default function CatalogPage() {
                           {lang === 'en' ? 'Included in Order' : 'Incluido en Pedido'}
                         </button>
                       ) : inStock ? (
-                        (() => {
-                          const cartItem = cart.find(item => item.product === p.product);
-                          if (cartItem) {
-                            return (
-                              <div className="inline-qty-selector" onClick={(e) => e.stopPropagation()}>
-                                <button 
-                                  className="qty-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    updateCartQty(p.product, -1);
-                                  }}
-                                  title="Decrease quantity"
-                                >
-                                  <Minus size={16} />
-                                </button>
-                                <span className="qty-val">{cartItem.qty}</span>
-                                <button 
-                                  className="qty-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    updateCartQty(p.product, 1);
-                                  }}
-                                  title="Increase quantity"
-                                >
-                                  <Plus size={16} />
-                                </button>
-                              </div>
-                            );
+                        // The card always shows the Add button; quantity is
+                        // adjusted inside the cart only. addToCart already
+                        // increments (and enforces stock) when the item is
+                        // in the cart, so repeat clicks just add one more.
+                        <button
+                          className={`add-to-cart-btn ${addedProductId === p.product ? 'added' : ''}`}
+                          onClick={(e) => addToCartWithAnimation(e, p)}
+                        >
+                          {addedProductId === p.product
+                            ? <Check size={16} />
+                            : <Plus size={16} />
                           }
-                          return (
-                            <button 
-                              className={`add-to-cart-btn ${addedProductId === p.product ? 'added' : ''}`}
-                              onClick={(e) => addToCartWithAnimation(e, p)}
-                            >
-                              {addedProductId === p.product 
-                                ? <Check size={16} /> 
-                                : <Plus size={16} />
-                              }
-                              <span>
-                                {addedProductId === p.product 
-                                  ? (lang === 'en' ? 'Added' : 'Añadido') 
-                                  : (lang === 'en' ? 'Add To Cart' : 'Agregar')
-                                }
-                              </span>
-                            </button>
-                          );
-                        })()
+                          <span>
+                            {addedProductId === p.product
+                              ? (lang === 'en' ? 'Added' : 'Añadido')
+                              : (lang === 'en' ? 'Add To Cart' : 'Agregar')
+                            }
+                          </span>
+                        </button>
                       ) : (
                         <button className="add-to-cart-btn out-of-stock-btn" disabled>
                           <span>{lang === 'en' ? 'Out of Stock' : 'Agotado'}</span>
