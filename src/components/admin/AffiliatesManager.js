@@ -299,28 +299,29 @@ export default function AffiliatesManager({ products = [] }) {
     if (!newPromo.code) return;
 
     try {
-      const cleanCode = newPromo.code.trim().toUpperCase();
-      const { data, error } = await supabase
-        .from('promo_codes')
-        .insert([{
-          code: cleanCode,
+      // Writes go through the server (admin session + service role) so the
+      // browser key needs no write access to promo_codes at all.
+      const res = await adminFetch('/api/admin/promo/manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          code: newPromo.code.trim().toUpperCase(),
           discount_pct: newPromo.discount_pct,
-          is_active: true,
           affiliate_id: newPromo.affiliate_id || null,
           valid_until: crEndOfDayIso(newPromo.valid_until),
           once_per_customer: !!newPromo.once_per_customer,
           hidden: !!newPromo.hidden,
-          min_units: Number(newPromo.min_units) > 0 ? Math.floor(Number(newPromo.min_units)) : null,
-          // A hidden code is private, so it can never carry a public ribbon.
-          show_sale_badge: !newPromo.hidden && !!newPromo.show_sale_badge,
+          min_units: newPromo.min_units,
+          show_sale_badge: !!newPromo.show_sale_badge,
           badge_style: newPromo.badge_style || 'code',
-          badge_text: newPromo.badge_style === 'custom' ? (newPromo.badge_text || '').trim() || null : null,
-        }])
-        .select('*, affiliates(name)');
+          badge_text: newPromo.badge_text,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `Create failed (${res.status})`);
 
-      if (error) throw error;
-
-      setPromoCodes([data[0], ...promoCodes]);
+      setPromoCodes([data.promo, ...promoCodes]);
       setNewPromo(EMPTY_PROMO);
     } catch (err) {
       alert('Error creating promo code (Make sure the code is unique): ' + err.message);
@@ -329,12 +330,14 @@ export default function AffiliatesManager({ products = [] }) {
 
   const handleTogglePromo = async (id, currentStatus) => {
     try {
-      const { error } = await supabase
-        .from('promo_codes')
-        .update({ is_active: !currentStatus })
-        .eq('id', id);
-      if (error) throw error;
-      
+      const res = await adminFetch('/api/admin/promo/manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle', id, is_active: !currentStatus }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `Toggle failed (${res.status})`);
+
       setPromoCodes(promoCodes.map(p => p.id === id ? { ...p, is_active: !currentStatus } : p));
     } catch (err) {
       alert('Error updating promo code: ' + err.message);
@@ -344,8 +347,14 @@ export default function AffiliatesManager({ products = [] }) {
   const handleDeletePromo = async (id) => {
     if (!confirm('Are you sure you want to delete this promo code?')) return;
     try {
-      const { error } = await supabase.from('promo_codes').delete().eq('id', id);
-      if (error) throw error;
+      const res = await adminFetch('/api/admin/promo/manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `Delete failed (${res.status})`);
+
       setPromoCodes(promoCodes.filter(p => p.id !== id));
     } catch (err) {
       alert('Error deleting promo code: ' + err.message);
