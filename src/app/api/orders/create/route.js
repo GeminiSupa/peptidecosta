@@ -5,6 +5,7 @@ import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRe
 export const runtime = 'nodejs';
 
 const REQUIRED_FIELDS = ['order_number', 'customer_name', 'customer_phone', 'items'];
+const DEFAULT_SALES_TEAM_WHATSAPP_NUMBERS = ['50684046973', '50660604775', '18314715559'];
 
 function isFkViolation(error) {
   const msg = error?.message || '';
@@ -72,10 +73,13 @@ async function sendAdminOrderEmail(baseUrl, order, orderNumber) {
 }
 
 async function sendSalesOrderAlerts(order, orderNumber) {
-  const recipients = (process.env.SALES_TEAM_WHATSAPP_NUMBERS || '')
-    .split(',')
+  const recipients = [
+    ...DEFAULT_SALES_TEAM_WHATSAPP_NUMBERS,
+    ...(process.env.SALES_TEAM_WHATSAPP_NUMBERS || '').split(','),
+  ]
     .map((phone) => phone.replace(/\D/g, ''))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((phone, index, all) => all.indexOf(phone) === index);
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 

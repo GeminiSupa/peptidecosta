@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 
 const DEFAULT_BUSINESS_LINKS = {
   whatsappNumber: "50684046973",
-  whatsappDisplay: "+506 8404-6973",
+  whatsappDisplay: "+506 8404-6973 (CR) / +506 6060-4775 (CR) / +1 831-471-5559 (US AI)",
   googleMapsUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
   facebookUrl: "",
   instagramUrl: "",

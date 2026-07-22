@@ -51,7 +51,7 @@ export async function POST(request) {
     const catalogUrl = `${origin}/catalog`;
     
     // Fallback message text for DB logging
-    const message = `¡Bienvenido a Péptidos Costa Rica! Accede al catálogo aquí: ${catalogUrl}. Para consultas 24/7 contáctanos al +506 8404-6973.`;
+    const message = `¡Bienvenido a Péptidos Costa Rica! Accede al catálogo aquí: ${catalogUrl}. Para consultas 24/7 contáctanos al +506 8404-6973 / +506 6060-4775 / +1 (831) 471-5559.`;
 
     console.log(`[Welcome WhatsApp] Sending automated WhatsApp template welcome to ${cleanPhone}...`);
 

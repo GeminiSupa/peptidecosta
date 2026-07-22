@@ -86,6 +86,7 @@ export async function POST(request) {
         <div style="padding:20px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
           <h4 style="margin:0 0 6px;color:#047857;font-size:15px;font-weight:bold;">🔬 Professional Peptide Solutions</h4>
           <p style="margin:0 0 14px;color:#64748b;font-size:12.5px;">Need more help? Reply to this email or chat with us directly on WhatsApp.</p>
+          <p style="margin:0 0 14px;color:#0f172a;font-size:13px;font-weight:600;">WhatsApp: ${links.whatsappDisplay}</p>
           <a href="https://api.whatsapp.com/send?phone=${links.whatsappNumber}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:13.5px;box-shadow:0 2px 4px rgba(37,211,102,0.15);">
             💬 Chat on WhatsApp
           </a>
