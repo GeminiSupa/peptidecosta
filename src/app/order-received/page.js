@@ -44,7 +44,7 @@ function OrderReceivedContent() {
       note: 'Please expect slower response times on weekends and outside working hours.',
       button: 'Return to Catalog',
       whatsappText1: 'To speak to a live agent immediately, please message us on ',
-      whatsappLink: 'WhatsApp: +506 8404-6973 / +506 6060-4775 / +1 (831) 471-5559',
+      whatsappLink: 'WhatsApp: +506 8404-6973',
     },
     es: {
       title: 'Gracias por su Pedido',
@@ -52,7 +52,7 @@ function OrderReceivedContent() {
       note: 'Por favor, espere tiempos de respuesta más lentos los fines de semana y fuera del horario laboral.',
       button: 'Volver al Catálogo',
       whatsappText1: 'Para hablar con un agente en vivo de inmediato, por favor envíenos un mensaje por ',
-      whatsappLink: 'WhatsApp: +506 8404-6973 / +506 6060-4775 / +1 (831) 471-5559',
+      whatsappLink: 'WhatsApp: +506 8404-6973',
     },
   }[lang];
 
