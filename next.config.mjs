@@ -31,6 +31,26 @@ const nextConfig = {
     ],
   },
 
+  // Retire the vercel.app URL without killing old links: any request arriving
+  // on the deployment alias is permanently redirected to the live domain, path
+  // and query intact. This covers every stale link in old mailers, QR codes and
+  // bookmarks. The host match is exact, so branch preview deployments
+  // (peptidecosta-git-*.vercel.app etc.) are untouched.
+  //
+  // Do NOT "shut down" the Vercel project itself - catalog.peptidescostarica.net
+  // is a custom domain ON this project; removing the project takes the live
+  // site with it.
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'peptidecosta.vercel.app' }],
+        destination: 'https://catalog.peptidescostarica.net/:path*',
+        permanent: true,
+      },
+    ];
+  },
+
   async headers() {
     return [
       {
