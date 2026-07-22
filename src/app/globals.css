@@ -808,9 +808,15 @@ body {
 
 /* Keep the action row full-width so the button's width:80% is measured against the whole card,
    not the shrink-to-content box that align-items:center would otherwise create */
-.product-grid.list-view .product-actions,
+.product-grid.list-view .product-actions {
+    width: 100%;
+}
+
+/* Match the list-view Add to Cart button's footprint (max-width 240px). */
 .product-grid.list-view .inline-qty-selector {
     width: 100%;
+    max-width: 240px;
+    margin: 0;
 }
 
 /* Cap the button width on wide desktop cards so 80% of a large info column doesn't become oversized.
@@ -4821,44 +4827,60 @@ body {
 
 
 /* Premium Inline Quantity Selector (Instacart-style) */
+/* In-cart quantity stepper. Replaces the Add to Cart button on the card, so it
+   wears the same orange pill in the same footprint - a grey box in the button's
+   place reads as a rendering failure, not a state. */
 .inline-qty-selector {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    width: 100%;
-    max-width: 180px;
-    height: 34px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 18px;
+    width: 80%;
+    margin: 0 auto;
+    min-height: 34px;
+    background: #E05A0C;
+    border: 1px solid #E05A0C;
+    border-radius: 999px;
     overflow: hidden;
-    padding: 2px;
+    padding: 3px;
     box-sizing: border-box;
     align-self: center;
+    box-shadow: 0 2px 8px rgba(224, 90, 12, 0.25);
 }
 
 .product-grid.grid-view .inline-qty-selector {
-    max-width: 100% !important;
+    width: 78%;
+    min-height: 26px;
+    padding: 2px;
 }
 
 .inline-qty-selector .qty-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
     border: none;
-    background: var(--bg-card);
-    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    flex-shrink: 0;
+}
+
+.product-grid.grid-view .inline-qty-selector .qty-btn {
+    width: 20px;
+    height: 20px;
+}
+
+.product-grid.grid-view .inline-qty-selector .qty-btn svg {
+    width: 12px;
+    height: 12px;
 }
 
 .inline-qty-selector .qty-btn:hover {
-    background: var(--accent);
-    color: white;
+    background: #ffffff;
+    color: #E05A0C;
 }
 
 .inline-qty-selector .qty-btn:active {
@@ -4868,10 +4890,14 @@ body {
 .inline-qty-selector .qty-val {
     font-size: 0.85rem;
     font-weight: 800;
-    color: var(--text-main);
+    color: #ffffff;
     min-width: 24px;
     text-align: center;
     user-select: none;
+}
+
+.product-grid.grid-view .inline-qty-selector .qty-val {
+    font-size: 0.7rem;
 }
 
 /* Smart Search Autocomplete Suggestions Dropdown */
