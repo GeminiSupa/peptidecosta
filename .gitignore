@@ -42,3 +42,7 @@ next-env.d.ts
 
 # WhatsApp Baileys session credentials
 .wa-session/
+
+# one-off broadcast recipient exports - customer PII, never commit
+tesa20-recipients.txt
+*-recipients.txt
