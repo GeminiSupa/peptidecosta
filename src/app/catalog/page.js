@@ -3293,10 +3293,16 @@ export default function CatalogPage() {
                       if (p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd) {
                         const original = typeof p.originalPriceUsd === 'string' ? parseFloat(p.originalPriceUsd.replace(/[^0-9.]/g, '')) : p.originalPriceUsd;
                         const current = typeof p.priceUsd === 'string' ? parseFloat(p.priceUsd.replace(/[^0-9.]/g, '')) : p.priceUsd;
-                        text = original && current && original > current
-                          ? (lang === 'en' ? `Save ${Math.round((1 - (current / original)) * 100)}%` : `Ahorra ${Math.round((1 - (current / original)) * 100)}%`)
-                          : (lang === 'en' ? 'Sale' : 'Oferta');
-                      } else {
+                        // Only a genuine markdown earns the product ribbon. An
+                        // original equal to (or below) the price - e.g. both set
+                        // to 150 by mistake - used to fall back to a bare
+                        // "Oferta" that meant nothing; now it falls through to
+                        // any promo ribbon instead.
+                        if (original && current && original > current) {
+                          text = lang === 'en' ? `Save ${Math.round((1 - (current / original)) * 100)}%` : `Ahorra ${Math.round((1 - (current / original)) * 100)}%`;
+                        }
+                      }
+                      if (!text) {
                         text = getPromoBadgeForProduct(promoBadges, p.product, lang)?.text || null;
                       }
                       if (!text) return null;
