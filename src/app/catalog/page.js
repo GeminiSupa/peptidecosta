@@ -1260,8 +1260,8 @@ export default function CatalogPage() {
               category: item.category,
               priceUsd: item.price_usd,
               priceCrc: item.price_crc,
-              originalPriceUsd: isSaleActive ? item.original_price_usd : null,
-              originalPriceCrc: isSaleActive ? item.original_price_crc : null,
+              originalPriceUsd: isSaleActive ? (String(item.original_price_usd || '').trim() || null) : null,
+              originalPriceCrc: isSaleActive ? (String(item.original_price_crc || '').trim() || null) : null,
               discount: isSaleActive ? item.discount : null,
               status: item.inventory_count === 0 ? 'Out of Stock' : item.status,
               inventoryCount: item.inventory_count !== undefined ? item.inventory_count : null,
@@ -3307,13 +3307,23 @@ export default function CatalogPage() {
                       }
                       if (!text) return null;
 
-                      // Code-bearing wording ("15% con TESA15") runs twice the
-                      // length of "Save 15%" and overflows the diagonal, so the
-                      // font steps down as the label grows.
-                      const ribbonFont = text.length >= 16 ? '0.5rem' : text.length >= 12 ? '0.56rem' : undefined;
+                      // Code-bearing wording ("15% con TESA15") is twice the
+                      // length of "Save 15%"; font shrinking alone still clipped
+                      // on real devices, so long labels break onto two lines at
+                      // the last space - two short lines always fit the diagonal.
+                      let lines = [text];
+                      if (text.length >= 12) {
+                        const cut = text.lastIndexOf(' ');
+                        if (cut > 0) lines = [text.slice(0, cut), text.slice(cut + 1)];
+                      }
+                      const ribbonFont = text.length >= 12 ? '0.55rem' : undefined;
                       return (
                         <div className="sale-badge">
-                          <span style={ribbonFont ? { fontSize: ribbonFont, letterSpacing: '0.2px' } : undefined}>{text}</span>
+                          <span style={ribbonFont ? { fontSize: ribbonFont, letterSpacing: '0.2px', lineHeight: 1.15 } : undefined}>
+                            {lines.map((line, i) => (
+                              <React.Fragment key={i}>{i > 0 && <br />}{line}</React.Fragment>
+                            ))}
+                          </span>
                         </div>
                       );
                     })()}
