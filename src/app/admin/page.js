@@ -1,4 +1,5 @@
 "use client";
+import { crWallToIso, isoToCrWall } from '@/lib/crTime.mjs';
 
 import '@/app/admin.css';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -1809,8 +1810,8 @@ Core Rules:
             originalPriceUsd: item.original_price_usd || '',
             originalPriceCrc: item.original_price_crc || '',
             discount: item.discount || '',
-            saleStartTime: item.sale_start_time ? new Date(new Date(item.sale_start_time).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '',
-            saleEndTime: item.sale_end_time ? new Date(new Date(item.sale_end_time).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '',
+            saleStartTime: isoToCrWall(item.sale_start_time),
+            saleEndTime: isoToCrWall(item.sale_end_time),
             status: item.status || 'In Stock',
             coa: item.coa || '',
             imageUrl: item.image_url || '',
@@ -3576,8 +3577,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             original_price_usd: p.originalPriceUsd || null,
             original_price_crc: p.originalPriceCrc || null,
             discount: p.discount || null,
-            sale_start_time: p.saleStartTime ? new Date(p.saleStartTime).toISOString() : null,
-            sale_end_time: p.saleEndTime ? new Date(p.saleEndTime).toISOString() : null,
+            sale_start_time: crWallToIso(p.saleStartTime),
+            sale_end_time: crWallToIso(p.saleEndTime),
             status: p.status,
             inventory_count: p.inventoryCount === '' ? null : p.inventoryCount,
             low_stock_threshold: p.lowStockThreshold === '' ? 5 : p.lowStockThreshold,

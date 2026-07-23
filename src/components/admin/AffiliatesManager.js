@@ -4,6 +4,7 @@ import { adminFetch } from '@/lib/adminApi';
 import QRCode from 'qrcode';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check, QrCode, Copy, Download, X } from 'lucide-react';
 import { getBadgeStyleOptions, resolvePromoBadgeText } from '@/lib/promoBadge.mjs';
+import { crWallToIso, isoToCrWall, crEndOfDayIso as crEndOfDayIsoLib } from '@/lib/crTime.mjs';
 import ReferralAnalytics from '@/components/admin/ReferralAnalytics';
 
 const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://catalog.peptidescostarica.net/catalog?lang=es';
@@ -146,8 +147,8 @@ export default function AffiliatesManager({ products = [] }) {
           discount_pct: editingPromo.discount_pct,
           is_flash_sale: !!target_product,
           target_product,
-          valid_from: editingPromo.valid_from ? new Date(editingPromo.valid_from).toISOString() : null,
-          valid_until: editingPromo.valid_until ? new Date(editingPromo.valid_until).toISOString() : null,
+          valid_from: crWallToIso(editingPromo.valid_from),
+          valid_until: crWallToIso(editingPromo.valid_until),
           affiliate_id: editingPromo.affiliate_id || null
         })
       });
@@ -288,9 +289,7 @@ export default function AffiliatesManager({ products = [] }) {
   // Costa Rica is UTC−6 year-round: turn a YYYY-MM-DD into that day's last
   // moment in CR time, so "valid until Sunday" means Sunday night in CR
   // regardless of which timezone the admin creating the code sits in.
-  const crEndOfDayIso = (dateStr) => (dateStr
-    ? new Date(Date.parse(`${dateStr}T23:59:59.999Z`) + 6 * 60 * 60 * 1000).toISOString()
-    : null);
+  const crEndOfDayIso = crEndOfDayIsoLib;
 
   const handleCreatePromo = async (e) => {
     e.preventDefault();
@@ -718,8 +717,8 @@ export default function AffiliatesManager({ products = [] }) {
                       <button onClick={() => setEditingPromo({
                         ...promo, 
                         targetProducts: promo.target_product ? promo.target_product.split(',').map(s => s.trim()) : [],
-                        valid_from: promo.valid_from ? new Date(promo.valid_from).toISOString().slice(0, 16) : '',
-                        valid_until: promo.valid_until ? new Date(promo.valid_until).toISOString().slice(0, 16) : ''
+                        valid_from: isoToCrWall(promo.valid_from),
+                        valid_until: isoToCrWall(promo.valid_until)
                       })} style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', cursor: 'pointer', padding: '8px', transition: 'all 0.2s' }}>
                         <Edit2 size={18} />
                       </button>
@@ -954,12 +953,12 @@ export default function AffiliatesManager({ products = [] }) {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid From (Optional)</label>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid From (Costa Rica time)</label>
                 <input type="datetime-local" className="admin-input" style={{ width: '100%' }} value={editingPromo.valid_from} onChange={e => setEditingPromo({...editingPromo, valid_from: e.target.value})} />
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid Until (Optional)</label>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid Until (Costa Rica time)</label>
                 <input type="datetime-local" className="admin-input" style={{ width: '100%' }} value={editingPromo.valid_until} onChange={e => setEditingPromo({...editingPromo, valid_until: e.target.value})} />
               </div>
 

@@ -164,8 +164,8 @@ export default function ProductsManager({
                 <th style={{ width: '100px' }}>CRC Auto</th>
                 <th style={{ width: '110px' }}>Orig. Price (USD)</th>
                 <th style={{ width: '110px' }}>Orig. CRC Auto</th>
-                <th style={{ width: '130px' }}>Sale Start</th>
-                <th style={{ width: '130px' }}>Sale End</th>
+                <th style={{ width: '130px' }}>Sale Start (CR)</th>
+                <th style={{ width: '130px' }}>Sale End (CR)</th>
                 <th style={{ minWidth: '180px' }}>Stock Status</th>
                 <th style={{ width: '100px' }}>Inventory Count</th>
                 <th style={{ width: '100px' }}>Low Stock Alert</th>
