@@ -3289,17 +3289,27 @@ export default function CatalogPage() {
                       // A product-level sale wins: its price has genuinely dropped,
                       // so reporting the gap is accurate. A promo ribbon only
                       // applies when there is no real markdown to show.
+                      let text = null;
                       if (p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd) {
                         const original = typeof p.originalPriceUsd === 'string' ? parseFloat(p.originalPriceUsd.replace(/[^0-9.]/g, '')) : p.originalPriceUsd;
                         const current = typeof p.priceUsd === 'string' ? parseFloat(p.priceUsd.replace(/[^0-9.]/g, '')) : p.priceUsd;
-                        const text = original && current && original > current
+                        text = original && current && original > current
                           ? (lang === 'en' ? `Save ${Math.round((1 - (current / original)) * 100)}%` : `Ahorra ${Math.round((1 - (current / original)) * 100)}%`)
                           : (lang === 'en' ? 'Sale' : 'Oferta');
-                        return <div className="sale-badge"><span>{text}</span></div>;
+                      } else {
+                        text = getPromoBadgeForProduct(promoBadges, p.product, lang)?.text || null;
                       }
+                      if (!text) return null;
 
-                      const promoBadge = getPromoBadgeForProduct(promoBadges, p.product, lang);
-                      return promoBadge ? <div className="sale-badge"><span>{promoBadge.text}</span></div> : null;
+                      // Code-bearing wording ("15% con TESA15") runs twice the
+                      // length of "Save 15%" and overflows the diagonal, so the
+                      // font steps down as the label grows.
+                      const ribbonFont = text.length >= 16 ? '0.5rem' : text.length >= 12 ? '0.56rem' : undefined;
+                      return (
+                        <div className="sale-badge">
+                          <span style={ribbonFont ? { fontSize: ribbonFont, letterSpacing: '0.2px' } : undefined}>{text}</span>
+                        </div>
+                      );
                     })()}
                   </div>
                   <div className="product-info">
