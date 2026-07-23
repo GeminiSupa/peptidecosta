@@ -3266,6 +3266,23 @@ export default function CatalogPage() {
               const pMain = getPriceLabel(p, currency);
               const pSub = currency === 'USD' ? getPriceLabel(p, 'CRC') : getPriceLabel(p, 'USD');
 
+              // Promo-driven sale pricing: when an advertised (badged) promo
+              // targets this product and there is no genuine product-level
+              // markdown, the card shows the shelf price struck through and
+              // the after-code price as the main price — the ribbon already
+              // names the code that unlocks it.
+              const cardOriginalUsd = parsePrice(p.originalPriceUsd);
+              const cardPriceUsd = parsePrice(p.priceUsd);
+              const hasRealMarkdown = cardOriginalUsd > 0 && cardPriceUsd > 0 && cardOriginalUsd > cardPriceUsd;
+              const promoSale = !isBac && inStock && !hasRealMarkdown
+                ? getPromoBadgeForProduct(promoBadges, p.product, lang)
+                : null;
+              const promoPct = promoSale && promoSale.discountPct > 0 ? promoSale.discountPct : 0;
+              const promoPriceLabel = (cur) => {
+                const value = getPriceAsNumber(p, cur) * (1 - promoPct / 100);
+                return formatPriceVal(cur === 'USD' ? (Number.isInteger(value) ? value : Number(value.toFixed(2))) : Math.round(value), cur);
+              };
+
               return (
                 <div 
                   key={idx} 
@@ -3350,10 +3367,20 @@ export default function CatalogPage() {
                             {getOriginalPriceLabel(p, currency)}
                           </span>
                         </div>
+                      ) : promoPct > 0 ? (
+                        // Identical styling to the product-level markdown
+                        // branch above, so promo sales and Products-tab sales
+                        // look the same on the shelf.
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
+                          <span className="price-main" style={{ color: '#ef4444' }}>{promoPriceLabel(currency)}</span>
+                          <span style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '0.8rem', fontWeight: '500' }}>
+                            {pMain}
+                          </span>
+                        </div>
                       ) : (
                         <span className="price-main">{pMain}</span>
                       )}
-                      {!isBac && pSub && <span className="price-sub">{pSub}</span>}
+                      {!isBac && pSub && <span className="price-sub">{promoPct > 0 ? promoPriceLabel(currency === 'USD' ? 'CRC' : 'USD') : pSub}</span>}
                     </div>
                     <div className="stock-badges-slot" style={{ display: 'flex', gap: '8px', justifyContent: viewMode === 'grid' ? 'center' : 'flex-start', marginBottom: '8px' }}>
                       <div className={`stock-badge ${isBac ? 'stock-in' : inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`} style={{ position: 'relative', top: 'auto', right: 'auto', margin: 0, height: 'fit-content' }}>
@@ -4250,9 +4277,35 @@ export default function CatalogPage() {
                 <span style={{ fontWeight: '700', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                   {lang === 'en' ? 'PRICE' : 'PRECIO'}
                 </span>
-                <span style={{ fontSize: '1.4rem', color: 'var(--text-primary)', fontWeight: '700' }}>
-                  {getPriceLabel(selectedProduct, currency)}
-                </span>
+                {(() => {
+                  // Same promo-sale pricing rule as the product cards: struck
+                  // shelf price + after-code price when a badged promo targets
+                  // this product and there is no real product-level markdown.
+                  const originalUsd = parsePrice(selectedProduct.originalPriceUsd);
+                  const priceUsd = parsePrice(selectedProduct.priceUsd);
+                  const hasRealMarkdown = originalUsd > 0 && priceUsd > 0 && originalUsd > priceUsd;
+                  const promoSale = !hasRealMarkdown && !isBacWater(selectedProduct.product) && isInStock(selectedProduct.status)
+                    ? getPromoBadgeForProduct(promoBadges, selectedProduct.product, lang)
+                    : null;
+                  const pct = promoSale && promoSale.discountPct > 0 ? promoSale.discountPct : 0;
+                  if (pct <= 0) {
+                    return (
+                      <span style={{ fontSize: '1.4rem', color: 'var(--text-primary)', fontWeight: '700' }}>
+                        {getPriceLabel(selectedProduct, currency)}
+                      </span>
+                    );
+                  }
+                  const value = getPriceAsNumber(selectedProduct, currency) * (1 - pct / 100);
+                  const discounted = formatPriceVal(currency === 'USD' ? (Number.isInteger(value) ? value : Number(value.toFixed(2))) : Math.round(value), currency);
+                  return (
+                    <span style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                      <span style={{ fontSize: '1.4rem', color: '#ef4444', fontWeight: '700' }}>{discounted}</span>
+                      <span style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '0.95rem', fontWeight: '600' }}>
+                        {getPriceLabel(selectedProduct, currency)}
+                      </span>
+                    </span>
+                  );
+                })()}
               </div>
               {selectedProduct.discount && (
                 <div style={{ color: 'var(--text-main)', fontWeight: '800', fontSize: '0.85rem', textAlign: 'right', marginTop: '6px' }}>
