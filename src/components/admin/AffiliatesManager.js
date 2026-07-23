@@ -13,7 +13,7 @@ const EMPTY_PROMO = {
   code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '',
   once_per_customer: false, hidden: false,
   show_sale_badge: false, badge_style: 'code', badge_text: '', badge_text_es: '',
-  min_units: '', valid_until_time: '23:59',
+  min_units: '', valid_until_time: '23:59', targetProducts: [],
 };
 
 const slugify = (value) => String(value || '')
@@ -315,6 +315,7 @@ export default function AffiliatesManager({ products = [] }) {
           badge_style: newPromo.badge_style || 'code',
           badge_text: newPromo.badge_text,
           badge_text_es: newPromo.badge_text_es,
+          target_product: (newPromo.targetProducts || []).join(', ') || null,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -560,7 +561,7 @@ export default function AffiliatesManager({ products = [] }) {
                     value={newPromo.valid_until_time || '23:59'}
                     onChange={e => setNewPromo({...newPromo, valid_until_time: e.target.value})}
                     disabled={!newPromo.valid_until}
-                    style={{...inputStyle, color: newPromo.valid_until ? '#f8fafc' : '#64748b', maxWidth: '110px'}}
+                    style={{...inputStyle, color: newPromo.valid_until ? '#f8fafc' : '#64748b', maxWidth: '150px'}}
                   />
                   <button type="submit" style={btnStyle('#059669')}><Plus size={16} /> Create Code</button>
                 </div>
@@ -569,6 +570,38 @@ export default function AffiliatesManager({ products = [] }) {
                     Expires: {formatCrWall(`${newPromo.valid_until}T${newPromo.valid_until_time || '23:59'}`)}
                   </div>
                 )}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>
+                    Applicable Products — leave all unticked to apply to every product
+                  </label>
+                  <div className="admin-input" style={{ width: '100%', maxHeight: '150px', overflowY: 'auto', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}>
+                    {products.map(p => {
+                      const isChecked = newPromo.targetProducts?.includes(p.product);
+                      return (
+                        <label key={p.id || p.product} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 0', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f8fafc' }}>
+                          <input
+                            type="checkbox"
+                            style={{ width: '16px', height: '16px', accentColor: '#38bdf8', cursor: 'pointer' }}
+                            checked={!!isChecked}
+                            onChange={(e) => {
+                              let updated = [...(newPromo.targetProducts || [])];
+                              if (e.target.checked) updated.push(p.product);
+                              else updated = updated.filter(item => item !== p.product);
+                              setNewPromo({ ...newPromo, targetProducts: updated });
+                            }}
+                          />
+                          <span style={{ fontSize: '0.85rem', fontWeight: isChecked ? 'bold' : 'normal', color: isChecked ? '#38bdf8' : '#e2e8f0' }}>{p.product}</span>
+                        </label>
+                      );
+                    })}
+                    {products.length === 0 && <div style={{ color: '#94a3b8', fontSize: '0.85rem', padding: '8px' }}>No products found to select...</div>}
+                  </div>
+                  {(newPromo.targetProducts || []).length > 0 && (
+                    <div style={{ marginTop: '4px', fontSize: '0.78rem', color: '#38bdf8' }}>
+                      Applies to: {newPromo.targetProducts.join(', ')}
+                    </div>
+                  )}
+                </div>
                 {Number(newPromo.min_units) > 0 && (
                   <div style={{ padding: '10px 14px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '10px', fontSize: '0.82rem', color: '#a7f3d0' }}>
                     Bulk deal: this replaces the automatic volume discount rather than adding to it, so the

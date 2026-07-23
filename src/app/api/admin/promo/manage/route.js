@@ -52,6 +52,8 @@ export async function POST(request) {
           badge_style: BADGE_STYLES.includes(body.badge_style) ? body.badge_style : 'code',
           badge_text: body.badge_style === 'custom' ? (String(body.badge_text || '').trim() || null) : null,
           badge_text_es: body.badge_style === 'custom' ? (String(body.badge_text_es || '').trim() || null) : null,
+          target_product: String(body.target_product || '').trim().slice(0, 500) || null,
+          is_flash_sale: !!String(body.target_product || '').trim(),
         }])
         .select('*, affiliates(name)')
         .single();
