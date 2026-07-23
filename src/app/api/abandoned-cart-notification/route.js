@@ -58,6 +58,37 @@ const normalizeOrigin = (request) => {
   return rawOrigin.replace(/\/$/, '');
 };
 
+const identifySmtpProvider = (host = '') => {
+  if (/elasticemail/i.test(host)) return 'Elastic Email';
+  if (/rackspace|emailsrvr/i.test(host)) return 'Rackspace';
+  return 'SMTP';
+};
+
+const getRackspaceFallbackSmtpConfig = (primary) => {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 465);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (!host || !user || !pass) return null;
+
+  const isSameAsPrimary = primary
+    && primary.host === host
+    && Number(primary.port) === port
+    && primary.user === user;
+  if (isSameAsPrimary) return null;
+
+  const fromEmail = process.env.SMTP_FROM || user || 'info@peptidescostarica.net';
+  return {
+    host,
+    port,
+    secure: process.env.SMTP_SECURE !== 'false',
+    user,
+    pass,
+    from: process.env.RECOVERY_SMTP_FROM || `Peptides Costa Rica <${fromEmail}>`,
+    replyTo: process.env.RECOVERY_SMTP_REPLY_TO || process.env.SMTP_REPLY_TO || fromEmail,
+  };
+};
+
 const buildItemsRows = (items = [], currency, exchangeRate = 454.48) => items.map((item) => {
   // Parse item price
   let price = 0;
@@ -248,17 +279,6 @@ export async function POST(request) {
       return NextResponse.json({ sent: false, error: 'Campaign SMTP settings missing' }, { status: 500 });
     }
 
-    // Connect to SMTP
-    const transporter = nodemailer.createTransport({
-      host: smtp.host,
-      port: smtp.port,
-      secure: smtp.secure,
-      auth: {
-        user: smtp.user,
-        pass: smtp.pass,
-      }
-    });
-
     const isEn = lang === 'en';
     const customerSubject = isEn
       ? `Forgot something? 🧪 Your Peptides Costa Rica cart is waiting!`
@@ -296,16 +316,73 @@ export async function POST(request) {
         : '¿Necesita ayuda? Contacte a soporte al +506 8404-6973 o responda a este correo.'
     ].join('\n');
 
-    const mailInfo = await transporter.sendMail({
-      from: smtp.from,
-      replyTo: smtp.replyTo,
-      to: customer_email.trim(),
-      subject: customerSubject,
-      html: recoveryHtml,
-      text: recoveryText,
-    });
+    const sendWithSmtp = (smtpConfig) => {
+      const transporter = nodemailer.createTransport({
+        host: smtpConfig.host,
+        port: smtpConfig.port,
+        secure: smtpConfig.secure,
+        auth: {
+          user: smtpConfig.user,
+          pass: smtpConfig.pass,
+        }
+      });
 
-    console.log(`[Abandoned Cart Notification] Recovery email sent to ${customer_email}: ${mailInfo.messageId}`);
+      return transporter.sendMail({
+        from: smtpConfig.from,
+        replyTo: smtpConfig.replyTo,
+        to: customer_email.trim(),
+        subject: customerSubject,
+        html: recoveryHtml,
+        text: recoveryText,
+      });
+    };
+
+    let mailInfo;
+    let mailProvider = identifySmtpProvider(smtp.host);
+    try {
+      mailInfo = await sendWithSmtp(smtp);
+    } catch (mailError) {
+      const provider = identifySmtpProvider(smtp.host);
+      console.error('[Abandoned Cart Notification] Email provider failed:', {
+        provider,
+        host: smtp.host,
+        port: smtp.port,
+        code: mailError.code,
+        command: mailError.command,
+        responseCode: mailError.responseCode,
+        message: mailError.message,
+      });
+
+      const fallbackSmtp = getRackspaceFallbackSmtpConfig(smtp);
+      if (fallbackSmtp) {
+        try {
+          mailInfo = await sendWithSmtp(fallbackSmtp);
+          mailProvider = identifySmtpProvider(fallbackSmtp.host);
+        } catch (fallbackError) {
+          const fallbackProvider = identifySmtpProvider(fallbackSmtp.host);
+          console.error('[Abandoned Cart Notification] Fallback email provider failed:', {
+            provider: fallbackProvider,
+            host: fallbackSmtp.host,
+            port: fallbackSmtp.port,
+            code: fallbackError.code,
+            command: fallbackError.command,
+            responseCode: fallbackError.responseCode,
+            message: fallbackError.message,
+          });
+          return NextResponse.json({
+            error: `${provider} and ${fallbackProvider} failed to send the recovery email`,
+            details: `${provider}: ${mailError.message || 'Email provider error'}; ${fallbackProvider}: ${fallbackError.message || 'Email provider error'}`,
+          }, { status: 502 });
+        }
+      } else {
+        return NextResponse.json({
+          error: `${provider} failed to send the recovery email`,
+          details: mailError.message || 'Email provider error',
+        }, { status: 502 });
+      }
+    }
+
+    console.log(`[Abandoned Cart Notification] Recovery email sent to ${customer_email} via ${mailProvider}: ${mailInfo.messageId}`);
 
     // Update database row
     if (supabase) {

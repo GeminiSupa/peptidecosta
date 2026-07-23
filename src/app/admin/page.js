@@ -2655,7 +2655,7 @@ Core Rules:
         alert('Recovery email sent successfully!');
         loadAdminData();
       } else {
-        alert('Failed to send recovery email: ' + (result.error || 'Unknown error'));
+        alert('Failed to send recovery email: ' + (result.details || result.error || 'Unknown error'));
       }
     } catch (err) {
       console.error(err);
@@ -2752,6 +2752,8 @@ Core Rules:
     
     setBulkProcessing(true);
     let successCount = 0;
+    let failCount = 0;
+    let lastError = '';
     for (let i = 0; i < cartsToProcess.length; i++) {
       const acart = cartsToProcess[i];
       setBulkProgressText(`Sending email ${i + 1}/${cartsToProcess.length} to ${acart.customer_name || 'Customer'}...`);
@@ -2768,17 +2770,25 @@ Core Rules:
             currency: acart.currency || 'CRC',
           }),
         });
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success) successCount++;
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && result.success) {
+          successCount++;
+        } else {
+          failCount++;
+          lastError = result.details || result.error || `HTTP ${response.status}`;
+          console.error('Failed to send recovery email:', lastError);
         }
       } catch (err) {
+        failCount++;
+        lastError = err.message;
         console.error(err);
       }
       await new Promise(r => setTimeout(r, 400));
     }
     setBulkProcessing(false);
-    alert(`✅ Sent ${successCount} recovery emails successfully!`);
+    alert(failCount > 0
+      ? `Sent ${successCount} recovery emails. Failed ${failCount}. Last error: ${lastError || 'Unknown error'}`
+      : `✅ Sent ${successCount} recovery emails successfully!`);
     setSelectedCartIds([]);
     loadAdminData();
   };
