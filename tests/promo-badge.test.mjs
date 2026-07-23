@@ -130,3 +130,16 @@ test('wording options fall back to a placeholder before a code is typed', () => 
 test('wording options survive a zero discount without showing 0%', () => {
   assert.equal(getBadgeStyleOptions(0, 'X')[0].label, '25% off with X');
 });
+
+test('custom wording serves each language its own text', () => {
+  const p = promo({ badge_style: 'custom', badge_text: 'Ask us for bulk pricing', badge_text_es: 'Pregunta por mayoreo' });
+  assert.equal(resolvePromoBadgeText(p, 'en'), 'Ask us for bulk pricing');
+  assert.equal(resolvePromoBadgeText(p, 'es'), 'Pregunta por mayoreo');
+});
+
+test('a half-filled custom wording falls back to the other language', () => {
+  const onlyEn = promo({ badge_style: 'custom', badge_text: 'English only', badge_text_es: '' });
+  assert.equal(resolvePromoBadgeText(onlyEn, 'es'), 'English only', 'better than a blank ribbon');
+  const onlyEs = promo({ badge_style: 'custom', badge_text: '', badge_text_es: 'Solo español' });
+  assert.equal(resolvePromoBadgeText(onlyEs, 'en'), 'Solo español');
+});

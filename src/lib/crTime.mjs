@@ -65,3 +65,16 @@ export function formatCrWall(wall) {
   }).format(new Date(iso));
   return `${formatted} (Costa Rica)`;
 }
+
+/** A stored instant shown as Costa Rica local time, 24-hour: "25/07/2026, 23:59 (CR)". */
+export function formatCrInstant(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const formatted = new Intl.DateTimeFormat('es-CR', {
+    timeZone: 'America/Costa_Rica',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(date);
+  return `${formatted} (CR)`;
+}

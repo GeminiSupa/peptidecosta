@@ -4,7 +4,7 @@ import { adminFetch } from '@/lib/adminApi';
 import QRCode from 'qrcode';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check, QrCode, Copy, Download, X } from 'lucide-react';
 import { getBadgeStyleOptions, resolvePromoBadgeText } from '@/lib/promoBadge.mjs';
-import { crWallToIso, isoToCrWall, crEndOfDayIso as crEndOfDayIsoLib, formatCrWall } from '@/lib/crTime.mjs';
+import { crWallToIso, isoToCrWall, formatCrWall, formatCrInstant } from '@/lib/crTime.mjs';
 import ReferralAnalytics from '@/components/admin/ReferralAnalytics';
 
 const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://catalog.peptidescostarica.net/catalog?lang=es';
@@ -12,8 +12,8 @@ const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https
 const EMPTY_PROMO = {
   code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '',
   once_per_customer: false, hidden: false,
-  show_sale_badge: false, badge_style: 'code', badge_text: '',
-  min_units: '',
+  show_sale_badge: false, badge_style: 'code', badge_text: '', badge_text_es: '',
+  min_units: '', valid_until_time: '23:59',
 };
 
 const slugify = (value) => String(value || '')
@@ -289,7 +289,6 @@ export default function AffiliatesManager({ products = [] }) {
   // Costa Rica is UTC−6 year-round: turn a YYYY-MM-DD into that day's last
   // moment in CR time, so "valid until Sunday" means Sunday night in CR
   // regardless of which timezone the admin creating the code sits in.
-  const crEndOfDayIso = crEndOfDayIsoLib;
 
   const handleCreatePromo = async (e) => {
     e.preventDefault();
@@ -308,13 +307,14 @@ export default function AffiliatesManager({ products = [] }) {
           code: newPromo.code.trim().toUpperCase(),
           discount_pct: newPromo.discount_pct,
           affiliate_id: newPromo.affiliate_id || null,
-          valid_until: crEndOfDayIso(newPromo.valid_until),
+          valid_until: newPromo.valid_until ? crWallToIso(`${newPromo.valid_until}T${newPromo.valid_until_time || '23:59'}`) : null,
           once_per_customer: !!newPromo.once_per_customer,
           hidden: !!newPromo.hidden,
           min_units: newPromo.min_units,
           show_sale_badge: !!newPromo.show_sale_badge,
           badge_style: newPromo.badge_style || 'code',
           badge_text: newPromo.badge_text,
+          badge_text_es: newPromo.badge_text_es,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -549,13 +549,26 @@ export default function AffiliatesManager({ products = [] }) {
                   />
                   <input
                     type="date"
-                    title="Optional: last day the code works (expires 11:59pm Costa Rica time). Leave empty for no expiry."
+                    title="Optional: last day the code works, Costa Rica time. Leave empty for no expiry."
                     value={newPromo.valid_until}
                     onChange={e => setNewPromo({...newPromo, valid_until: e.target.value})}
                     style={{...inputStyle, color: newPromo.valid_until ? '#f8fafc' : '#94a3b8'}}
                   />
+                  <input
+                    type="time"
+                    title="Time of day the code expires, Costa Rica time. Defaults to 23:59 (midnight)."
+                    value={newPromo.valid_until_time || '23:59'}
+                    onChange={e => setNewPromo({...newPromo, valid_until_time: e.target.value})}
+                    disabled={!newPromo.valid_until}
+                    style={{...inputStyle, color: newPromo.valid_until ? '#f8fafc' : '#64748b', maxWidth: '110px'}}
+                  />
                   <button type="submit" style={btnStyle('#059669')}><Plus size={16} /> Create Code</button>
                 </div>
+                {newPromo.valid_until && (
+                  <div style={{ fontSize: '0.78rem', color: '#38bdf8' }}>
+                    Expires: {formatCrWall(`${newPromo.valid_until}T${newPromo.valid_until_time || '23:59'}`)}
+                  </div>
+                )}
                 {Number(newPromo.min_units) > 0 && (
                   <div style={{ padding: '10px 14px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '10px', fontSize: '0.82rem', color: '#a7f3d0' }}>
                     Bulk deal: this replaces the automatic volume discount rather than adding to it, so the
@@ -608,17 +621,29 @@ export default function AffiliatesManager({ products = [] }) {
                       ))}
                     </select>
                     {newPromo.badge_style === 'custom' && (
-                      <input
-                        placeholder="e.g. Ask us for bulk pricing"
-                        maxLength={40}
-                        value={newPromo.badge_text || ''}
-                        onChange={e => setNewPromo({ ...newPromo, badge_text: e.target.value })}
-                        style={inputStyle}
-                      />
+                      <>
+                        <input
+                          placeholder="English — e.g. Ask us for bulk pricing"
+                          maxLength={40}
+                          value={newPromo.badge_text || ''}
+                          onChange={e => setNewPromo({ ...newPromo, badge_text: e.target.value })}
+                          style={inputStyle}
+                        />
+                        <input
+                          placeholder="Español — p. ej. Pregúntanos por precios de mayoreo"
+                          maxLength={40}
+                          value={newPromo.badge_text_es || ''}
+                          onChange={e => setNewPromo({ ...newPromo, badge_text_es: e.target.value })}
+                          style={inputStyle}
+                        />
+                      </>
                     )}
                     <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                      Preview: <strong style={{ color: '#f58220' }}>
+                      EN: <strong style={{ color: '#f58220' }}>
                         {resolvePromoBadgeText({ ...newPromo, is_active: true, show_sale_badge: true }, 'en') || '(nothing — enter some text)'}
+                      </strong>
+                      {' · '}ES: <strong style={{ color: '#f58220' }}>
+                        {resolvePromoBadgeText({ ...newPromo, is_active: true, show_sale_badge: true }, 'es') || '(nada — escribe un texto)'}
                       </strong>
                     </span>
                     <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
@@ -677,8 +702,8 @@ export default function AffiliatesManager({ products = [] }) {
                     </div>
                     {(promo.valid_from || promo.valid_until) && (
                       <div style={{ fontSize: '0.8rem', color: '#fca5a5', marginTop: '4px', fontWeight: 'bold' }}>
-                        ⏱️ {promo.valid_from ? `Starts: ${new Date(promo.valid_from).toLocaleDateString()} ` : ''} 
-                        {promo.valid_until ? `Expires: ${new Date(promo.valid_until).toLocaleString()}` : ''}
+                        ⏱️ {promo.valid_from ? `Starts: ${formatCrInstant(promo.valid_from)} ` : ''} 
+                        {promo.valid_until ? `Expires: ${formatCrInstant(promo.valid_until)}` : ''}
                       </div>
                     )}
                     {promo.target_product && (

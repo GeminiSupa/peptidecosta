@@ -83,8 +83,12 @@ export function resolvePromoBadgeText(promo, lang = 'es') {
   const isEn = String(lang).toLowerCase().startsWith('en');
 
   if (style === 'custom') {
-    const custom = String(promo.badge_text || '').trim();
-    return custom || null;
+    const en = String(promo.badge_text || '').trim();
+    const es = String(promo.badge_text_es || '').trim();
+    // Each language falls back to the other so a half-filled promo still
+    // shows something rather than a blank ribbon.
+    const chosen = isEn ? (en || es) : (es || en);
+    return chosen || null;
   }
 
   if (style === 'limited') return isEn ? 'Limited offer' : 'Oferta limitada';

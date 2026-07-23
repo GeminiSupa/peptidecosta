@@ -52,6 +52,7 @@ export default function BroadcastsPanel({ products = [] }) {
   };
 
   const [editingBannerId, setEditingBannerId] = useState(null);
+  const bannerEnInputRef = React.useRef(null);
 
   const handleCreateOrUpdateBanner = () => {
     if (!newBannerEn || !newBannerEs) return alert('Please fill both EN and ES text');
@@ -76,6 +77,12 @@ export default function BroadcastsPanel({ products = [] }) {
     setNewBannerEn(b.textEn);
     setNewBannerEs(b.textEs);
     setEditingBannerId(b.id);
+    // The form sits above the list; without this, clicking Edit appears to do
+    // nothing because the populated fields are off-screen.
+    setTimeout(() => {
+      bannerEnInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      bannerEnInputRef.current?.focus();
+    }, 60);
   };
   
   const cancelEditBanner = () => {
@@ -318,7 +325,7 @@ export default function BroadcastsPanel({ products = [] }) {
         <div style={{ display: 'grid', gap: '12px', marginBottom: '20px', background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '12px' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>English Banner Text (Use {'{{usd_200}}'} for dynamic currency)</label>
-            <input type="text" value={newBannerEn} onChange={e => setNewBannerEn(e.target.value)} className="admin-input" placeholder="e.g. Free shipping over {{usd_200}}!" style={{ width: '100%' }} />
+            <input ref={bannerEnInputRef} type="text" value={newBannerEn} onChange={e => setNewBannerEn(e.target.value)} className="admin-input" placeholder="e.g. Free shipping over {{usd_200}}!" style={{ width: '100%' }} />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Spanish Banner Text (Use {'{{usd_200}}'} for dynamic currency)</label>

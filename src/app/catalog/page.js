@@ -1291,7 +1291,7 @@ export default function CatalogPage() {
         // must never reach the public catalog, so it is filtered twice.
         const { data: badgePromos } = await supabase
           .from('promo_codes')
-          .select('code, discount_pct, is_active, hidden, show_sale_badge, badge_style, badge_text, target_product, valid_from, valid_until, usage_limit, usage_count')
+          .select('code, discount_pct, is_active, hidden, show_sale_badge, badge_style, badge_text, badge_text_es, target_product, valid_from, valid_until, usage_limit, usage_count')
           .eq('show_sale_badge', true)
           .eq('is_active', true)
           .eq('hidden', false);
