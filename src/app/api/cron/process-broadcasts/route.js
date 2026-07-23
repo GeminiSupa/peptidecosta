@@ -100,7 +100,10 @@ function addTrackingToHtml(html, tracking) {
     : `${trackedHtml}${trackingPixel}`;
 }
 
-async function sendEmail(to, message, subject, tracking = null, htmlContent = null) {
+async function sendEmail(to, message, subject, tracking = null, htmlContent = null, imageUrl = null) {
+  // Optional product image for the default wrapper; quotes stripped so an
+  // admin-pasted URL cannot break out of the src attribute.
+  const productImage = imageUrl ? String(imageUrl).trim().replace(/["'<>]/g, '') : null;
   const smtp = getCampaignSmtpConfig();
   if (!smtp.configured) return false;
 
@@ -123,6 +126,7 @@ async function sendEmail(to, message, subject, tracking = null, htmlContent = nu
         <div style="text-align: center; margin-bottom: 24px;">
           <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height: 60px; border-radius: 8px; background: #0f172a; padding: 8px;" />
         </div>
+${productImage ? `<div style="text-align: center; margin: 0 0 24px;"><img src="${productImage}" alt="" width="220" style="max-width: 220px; width: 220px; height: auto; border: 0;" /></div>` : ''}
         <div style="color: #334155; line-height: 1.6; font-size: 16px; margin-bottom: 32px; white-space: pre-wrap;">
           ${escapedMessage}
         </div>
@@ -386,7 +390,8 @@ export async function GET(request) {
                 stepId: broadcast.journey_step_id,
                 contactKey: normalizeMarketingIdentity(contact.email, 'email'),
               } : null,
-              channels.emailHtmlContent || null
+              channels.emailHtmlContent || null,
+              channels.emailImageUrl || null
             ),
           });
           sentEmail = result.sent;

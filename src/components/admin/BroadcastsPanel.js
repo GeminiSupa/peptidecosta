@@ -9,6 +9,7 @@ export default function BroadcastsPanel({ products = [] }) {
   const [channels, setChannels] = useState({ whatsapp: true, email: false });
   const [message, setMessage] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
+  const [emailImageUrl, setEmailImageUrl] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [scheduledBroadcasts, setScheduledBroadcasts] = useState([]);
   const [isSending, setIsSending] = useState(false);
@@ -179,6 +180,7 @@ export default function BroadcastsPanel({ products = [] }) {
   const buildChannelsPayload = () => ({
     ...channels,
     emailSubject,
+    emailImageUrl,
     whatsappCategory: channels.whatsapp ? whatsappCategory : null,
     whatsappCategoryReason: channels.whatsapp ? whatsappCategoryReason : null
   });
@@ -600,6 +602,21 @@ export default function BroadcastsPanel({ products = [] }) {
               value={emailSubject}
               onChange={e => setEmailSubject(e.target.value)}
             />
+            <label style={{ display: 'block', fontWeight: 'bold', margin: '14px 0 8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Product Image URL (Optional)</label>
+            <input
+              type="text"
+              className="admin-input"
+              style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '12px 16px', borderRadius: '8px', fontSize: '0.95rem' }}
+              placeholder="Paste an image link — shown centered above the message"
+              value={emailImageUrl}
+              onChange={e => setEmailImageUrl(e.target.value)}
+            />
+            {emailImageUrl.trim() && (
+              <div style={{ marginTop: '10px', textAlign: 'center', background: '#ffffff', borderRadius: '8px', padding: '12px' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={emailImageUrl.trim()} alt="Email image preview" style={{ maxWidth: '160px', height: 'auto' }} />
+              </div>
+            )}
           </div>
         )}
 

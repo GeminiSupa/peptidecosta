@@ -71,7 +71,8 @@ async function sendWhatsApp(to, message, templateName = null, firstName = 'Custo
 let globalTransporter = null;
 
 // Helper for sending Emails
-async function sendEmail(to, message, subject) {
+async function sendEmail(to, message, subject, imageUrl = null) {
+  const productImage = imageUrl ? String(imageUrl).trim().replace(/["'<>]/g, '') : null;
   const smtp = getCampaignSmtpConfig();
   if (!smtp.configured) return false;
 
@@ -96,6 +97,7 @@ async function sendEmail(to, message, subject) {
         <div style="text-align: center; margin-bottom: 24px;">
           <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height: 60px; border-radius: 8px; background: #0f172a; padding: 8px;" />
         </div>
+${productImage ? `<div style="text-align: center; margin: 0 0 24px;"><img src="${productImage}" alt="" width="220" style="max-width: 220px; width: 220px; height: auto; border: 0;" /></div>` : ''}
         <div style="color: #334155; line-height: 1.6; font-size: 16px; margin-bottom: 32px; white-space: pre-wrap;">
           ${message.replace(/\n/g, '<br>')}
         </div>
@@ -333,7 +335,7 @@ export async function POST(request) {
       }
       
       if (channels.email && contact.email && message) {
-        sentEmail = await sendEmail(contact.email, message, channels.emailSubject);
+        sentEmail = await sendEmail(contact.email, message, channels.emailSubject, channels.emailImageUrl || null);
       }
 
       if (sentWhatsapp || sentEmail) queuedCount++;
