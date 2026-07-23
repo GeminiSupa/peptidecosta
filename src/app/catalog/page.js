@@ -1791,6 +1791,10 @@ export default function CatalogPage() {
   };
 
   const handleApplyPromo = async (codeOverride = null) => {
+    // Only a string can be a code. A click event slipping in here stringified
+    // to "[object Object]", overwrote the input, and failed validation - which
+    // read as "my promo codes are broken" during a live sale.
+    if (codeOverride && typeof codeOverride !== 'string') codeOverride = null;
     const codeToApply = String(codeOverride || promoCodeInput || '').trim().toUpperCase();
     if (!codeToApply) return;
     setPromoCodeInput(codeToApply);
@@ -3307,24 +3311,22 @@ export default function CatalogPage() {
                       }
                       if (!text) return null;
 
-                      // Neither font-shrinking nor line-splitting survived real
-                      // devices, so the label is SVG text with textLength: the
-                      // browser compresses the glyphs to exactly the ribbon's
-                      // width, whatever the string, language or screen size.
-                      // Short labels render plain so "Sale" is not stretched.
-                      const squeeze = text.length >= 10;
+                      // The label is SVG scaled uniformly to the ribbon: the
+                      // viewBox is sized to the text, and the height cap stops
+                      // short labels from scaling up. Long text shrinks to fit,
+                      // short text stays natural - it can never stretch wide.
+                      const label = text.toUpperCase();
+                      const vbWidth = Math.max(56, Math.round(label.length * 7.4) + 8);
                       return (
                         <div className="sale-badge">
                           <span aria-label={text}>
-                            {squeeze ? (
-                              <svg viewBox="0 0 120 14" preserveAspectRatio="xMidYMid meet" aria-hidden="true"
-                                   style={{ display: 'block', width: '100%', height: 'auto' }}>
-                                <text x="60" y="11" textAnchor="middle" textLength="114" lengthAdjust="spacingAndGlyphs"
-                                      style={{ fill: '#ffffff', fontSize: '10.5px', fontWeight: 800, letterSpacing: '0.3px' }}>
-                                  {text.toUpperCase()}
-                                </text>
-                              </svg>
-                            ) : text}
+                            <svg viewBox={`0 0 ${vbWidth} 14`} preserveAspectRatio="xMidYMid meet" aria-hidden="true"
+                                 style={{ display: 'block', width: '100%', height: '0.8rem', margin: '0 auto' }}>
+                              <text x={vbWidth / 2} y="11" textAnchor="middle"
+                                    style={{ fill: '#ffffff', fontSize: '11px', fontWeight: 800, letterSpacing: '0.3px' }}>
+                                {label}
+                              </text>
+                            </svg>
                           </span>
                         </div>
                       );
@@ -3796,7 +3798,7 @@ export default function CatalogPage() {
                 {!promoData?.valid ? (
                   <button
                     type="button"
-                    onClick={handleApplyPromo}
+                    onClick={() => handleApplyPromo()}
                     disabled={promoLoading || !promoCodeInput}
                     style={{
                       background: promoCodeInput && !promoLoading ? '#38bdf8' : '#334155',
