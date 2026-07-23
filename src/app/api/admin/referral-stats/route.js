@@ -56,7 +56,13 @@ export async function GET(request) {
       return NextResponse.json({ error: ordersResult.error.message }, { status: 500 });
     }
 
-    const stats = buildReferralStats(scansResult.data || [], ordersResult.data || [], rate);
+    const allStats = buildReferralStats(scansResult.data || [], ordersResult.data || [], rate);
+
+    // This dashboard is for PEOPLE's QR/referral performance - sales reps and
+    // named referral partners. Bare promo-code rows (e.g. TESA20, TESA15) are
+    // marketing codes, not people, so they are excluded here to keep the view
+    // about the team. Promo-code performance lives in the Affiliates section.
+    const stats = allStats.filter((row) => row.kind !== 'promo');
 
     return NextResponse.json({
       ok: true,
