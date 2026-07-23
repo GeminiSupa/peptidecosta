@@ -149,6 +149,10 @@ export default function AffiliatesManager({ products = [] }) {
           target_product,
           valid_from: crWallToIso(editingPromo.valid_from),
           valid_until: crWallToIso(editingPromo.valid_until),
+          show_sale_badge: !editingPromo.hidden && !!editingPromo.show_sale_badge,
+          badge_style: editingPromo.badge_style || 'code',
+          badge_text: editingPromo.badge_text || null,
+          badge_text_es: editingPromo.badge_text_es || null,
           affiliate_id: editingPromo.affiliate_id || null
         })
       });
@@ -1023,6 +1027,55 @@ export default function AffiliatesManager({ products = [] }) {
               </div>
 
               <div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', color: editingPromo.hidden ? '#64748b' : '#e2e8f0', cursor: editingPromo.hidden ? 'not-allowed' : 'pointer', marginBottom: '10px' }}>
+                  <input
+                    type="checkbox"
+                    disabled={!!editingPromo.hidden}
+                    checked={!editingPromo.hidden && !!editingPromo.show_sale_badge}
+                    onChange={e => setEditingPromo({ ...editingPromo, show_sale_badge: e.target.checked })}
+                    style={{ width: '16px', height: '16px', cursor: editingPromo.hidden ? 'not-allowed' : 'pointer' }}
+                  />
+                  <span><strong>Show sale ribbon</strong> — put a ribbon on this code&apos;s products in the catalog</span>
+                </label>
+                {!editingPromo.hidden && editingPromo.show_sale_badge && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 14px', marginBottom: '12px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px' }}>
+                    <select
+                      value={editingPromo.badge_style || 'code'}
+                      onChange={e => setEditingPromo({ ...editingPromo, badge_style: e.target.value })}
+                      className="admin-input" style={{ width: '100%' }}
+                    >
+                      {getBadgeStyleOptions(editingPromo.discount_pct, editingPromo.code).map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    {editingPromo.badge_style === 'custom' && (
+                      <>
+                        <input
+                          placeholder="English — e.g. Ask us for bulk pricing"
+                          maxLength={40}
+                          value={editingPromo.badge_text || ''}
+                          onChange={e => setEditingPromo({ ...editingPromo, badge_text: e.target.value })}
+                          className="admin-input" style={{ width: '100%' }}
+                        />
+                        <input
+                          placeholder="Español — p. ej. Pregúntanos por precios de mayoreo"
+                          maxLength={40}
+                          value={editingPromo.badge_text_es || ''}
+                          onChange={e => setEditingPromo({ ...editingPromo, badge_text_es: e.target.value })}
+                          className="admin-input" style={{ width: '100%' }}
+                        />
+                      </>
+                    )}
+                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                      EN: <strong style={{ color: '#f58220' }}>
+                        {resolvePromoBadgeText({ ...editingPromo, is_active: true, show_sale_badge: true }, 'en') || '(nothing — enter some text)'}
+                      </strong>
+                      {' · '}ES: <strong style={{ color: '#f58220' }}>
+                        {resolvePromoBadgeText({ ...editingPromo, is_active: true, show_sale_badge: true }, 'es') || '(nada — escribe un texto)'}
+                      </strong>
+                    </span>
+                  </div>
+                )}
                 <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Target Products (Optional Flash Sale Constraint)</label>
                 <div className="admin-input" style={{ width: '100%', maxHeight: '180px', overflowY: 'auto', padding: '8px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}>
                   {products.map(p => {

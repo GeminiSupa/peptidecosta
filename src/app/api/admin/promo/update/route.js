@@ -25,7 +25,11 @@ export async function POST(request) {
         target_product: target_product || null,
         valid_from: valid_from || null,
         valid_until: valid_until || null,
-        affiliate_id: affiliate_id || null
+        affiliate_id: affiliate_id || null,
+        show_sale_badge: !!body.show_sale_badge,
+        badge_style: ['code', 'save', 'limited', 'custom'].includes(body.badge_style) ? body.badge_style : 'code',
+        badge_text: String(body.badge_text || '').trim() || null,
+        badge_text_es: String(body.badge_text_es || '').trim() || null
       })
       .eq('id', id)
       .select('*')

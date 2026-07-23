@@ -3307,22 +3307,24 @@ export default function CatalogPage() {
                       }
                       if (!text) return null;
 
-                      // Code-bearing wording ("15% con TESA15") is twice the
-                      // length of "Save 15%"; font shrinking alone still clipped
-                      // on real devices, so long labels break onto two lines at
-                      // the last space - two short lines always fit the diagonal.
-                      let lines = [text];
-                      if (text.length >= 12) {
-                        const cut = text.lastIndexOf(' ');
-                        if (cut > 0) lines = [text.slice(0, cut), text.slice(cut + 1)];
-                      }
-                      const ribbonFont = text.length >= 12 ? '0.55rem' : undefined;
+                      // Neither font-shrinking nor line-splitting survived real
+                      // devices, so the label is SVG text with textLength: the
+                      // browser compresses the glyphs to exactly the ribbon's
+                      // width, whatever the string, language or screen size.
+                      // Short labels render plain so "Sale" is not stretched.
+                      const squeeze = text.length >= 10;
                       return (
                         <div className="sale-badge">
-                          <span style={ribbonFont ? { fontSize: ribbonFont, letterSpacing: '0.2px', lineHeight: 1.15 } : undefined}>
-                            {lines.map((line, i) => (
-                              <React.Fragment key={i}>{i > 0 && <br />}{line}</React.Fragment>
-                            ))}
+                          <span aria-label={text}>
+                            {squeeze ? (
+                              <svg viewBox="0 0 120 14" preserveAspectRatio="xMidYMid meet" aria-hidden="true"
+                                   style={{ display: 'block', width: '100%', height: 'auto' }}>
+                                <text x="60" y="11" textAnchor="middle" textLength="114" lengthAdjust="spacingAndGlyphs"
+                                      style={{ fill: '#ffffff', fontSize: '10.5px', fontWeight: 800, letterSpacing: '0.3px' }}>
+                                  {text.toUpperCase()}
+                                </text>
+                              </svg>
+                            ) : text}
                           </span>
                         </div>
                       );
