@@ -22,7 +22,7 @@ import {
   AlertCircle, ChevronRight, ChevronUp, ChevronDown, MessageSquare, Database,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
-  KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send,
+  KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send, QrCode,
   Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft, Megaphone,
   PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
@@ -32,6 +32,7 @@ import ExportModal from '@/components/admin/ExportModal';
 import TeamManagement from '@/components/admin/TeamManagement';
 import TeamChat from '@/components/admin/TeamChat';
 import AffiliatesManager from '@/components/admin/AffiliatesManager';
+import MyReferralQr from '@/components/admin/MyReferralQr';
 import InquiriesManager from '@/components/admin/InquiriesManager';
 import DashboardHome from '@/components/admin/DashboardHome';
 import AgentDashboard from '@/components/admin/AgentDashboard';
@@ -4127,8 +4128,17 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   <span className="tab-label">Affiliates and Promotions</span>
                 </button>
               )}
+              {hasAccess('my_qr') && (
+                <button
+                  className={`admin-tab-btn ${activeTab === 'my_qr' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('my_qr')}
+                >
+                  <QrCode size={14} />
+                  <span className="tab-label">My QR & Scans</span>
+                </button>
+              )}
               {hasAccess('broadcasts') && (
-                <button 
+                <button
                   className={`admin-tab-btn ${activeTab === 'broadcasts' ? 'active' : ''}`}
                   onClick={() => navigateToTab('broadcasts')}
                 >
@@ -5307,6 +5317,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'affiliates' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
             <AffiliatesManager products={products} />
+          </div>
+        )}
+
+        {activeTab === 'my_qr' && (
+          <div className="admin-orders-tab">
+            <MyReferralQr />
           </div>
         )}
 
