@@ -4,7 +4,7 @@ import { adminFetch } from '@/lib/adminApi';
 import QRCode from 'qrcode';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check, QrCode, Copy, Download, X } from 'lucide-react';
 import { getBadgeStyleOptions, resolvePromoBadgeText } from '@/lib/promoBadge.mjs';
-import { crWallToIso, isoToCrWall, crEndOfDayIso as crEndOfDayIsoLib } from '@/lib/crTime.mjs';
+import { crWallToIso, isoToCrWall, crEndOfDayIso as crEndOfDayIsoLib, formatCrWall } from '@/lib/crTime.mjs';
 import ReferralAnalytics from '@/components/admin/ReferralAnalytics';
 
 const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://catalog.peptidescostarica.net/catalog?lang=es';
@@ -955,11 +955,13 @@ export default function AffiliatesManager({ products = [] }) {
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid From (Costa Rica time)</label>
                 <input type="datetime-local" className="admin-input" style={{ width: '100%' }} value={editingPromo.valid_from} onChange={e => setEditingPromo({...editingPromo, valid_from: e.target.value})} />
+                {editingPromo.valid_from && <div style={{ marginTop: '4px', fontSize: '0.78rem', color: '#38bdf8' }}>= {formatCrWall(editingPromo.valid_from)}</div>}
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid Until (Costa Rica time)</label>
                 <input type="datetime-local" className="admin-input" style={{ width: '100%' }} value={editingPromo.valid_until} onChange={e => setEditingPromo({...editingPromo, valid_until: e.target.value})} />
+                {editingPromo.valid_until && <div style={{ marginTop: '4px', fontSize: '0.78rem', color: '#38bdf8' }}>= {formatCrWall(editingPromo.valid_until)}</div>}
               </div>
 
               <div>

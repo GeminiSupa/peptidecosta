@@ -48,3 +48,12 @@ test('garbage in, null out', () => {
   assert.equal(isoToCrWall(null), '');
   assert.equal(crEndOfDayIso(''), null);
 });
+
+test('preview line confirms the CR meaning in 24-hour clock', async () => {
+  const { formatCrWall } = await import('../src/lib/crTime.mjs');
+  const text = formatCrWall('2026-07-25T23:59');
+  assert.match(text, /23:59/, 'must be 24-hour, never 11:59 PM');
+  assert.match(text, /25/);
+  assert.match(text, /Costa Rica/);
+  assert.equal(formatCrWall(''), '');
+});

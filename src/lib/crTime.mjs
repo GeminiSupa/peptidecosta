@@ -48,3 +48,20 @@ export function crStartOfDayIso(dateStr) {
   if (!dateStr) return null;
   return crWallToIso(`${dateStr}T00:00`);
 }
+
+/**
+ * Human-readable confirmation of a typed CR wall time, in 24-hour clock:
+ * "2026-07-25T23:59" -> like "sab 25 jul 2026, 23:59 (Costa Rica)".
+ * The browser's own picker follows the admin's OS locale (often AM/PM), so
+ * this line under the field is what removes the ambiguity.
+ */
+export function formatCrWall(wall) {
+  const iso = crWallToIso(wall);
+  if (!iso) return '';
+  const formatted = new Intl.DateTimeFormat('es', {
+    timeZone: 'America/Costa_Rica',
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(iso));
+  return `${formatted} (Costa Rica)`;
+}
