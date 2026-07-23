@@ -10,6 +10,8 @@ export default function BroadcastsPanel({ products = [] }) {
   const [message, setMessage] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
   const [emailImageUrl, setEmailImageUrl] = useState('');
+  const [emailFormat, setEmailFormat] = useState('simple'); // 'simple' | 'html'
+  const [emailHtmlContent, setEmailHtmlContent] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [scheduledBroadcasts, setScheduledBroadcasts] = useState([]);
   const [isSending, setIsSending] = useState(false);
@@ -184,10 +186,13 @@ export default function BroadcastsPanel({ products = [] }) {
     };
   }, [audience]);
 
+  const hasEmailHtml = Boolean(channels.email && emailFormat === 'html' && emailHtmlContent.trim());
+
   const buildChannelsPayload = () => ({
     ...channels,
     emailSubject,
     emailImageUrl,
+    emailHtmlContent: hasEmailHtml ? emailHtmlContent : null,
     whatsappCategory: channels.whatsapp ? whatsappCategory : null,
     whatsappCategoryReason: channels.whatsapp ? whatsappCategoryReason : null
   });
@@ -229,7 +234,7 @@ export default function BroadcastsPanel({ products = [] }) {
   };
 
   const handleSendTest = async () => {
-    if (!message && !channels.whatsappTemplateName) return alert("Please enter a message or template name first.");
+    if (!message && !channels.whatsappTemplateName && !hasEmailHtml) return alert("Please enter a message, template name, or custom email HTML first.");
     const testNumber = window.prompt("Enter your test phone number (e.g., 50688888888) or email:");
     if (!testNumber) return;
     
@@ -261,7 +266,8 @@ export default function BroadcastsPanel({ products = [] }) {
   };
 
   const handleBroadcast = async () => {
-    if (!message && !channels.whatsappTemplateName) return alert("Please enter a message or template name first.");
+    if (!message && !channels.whatsappTemplateName && !hasEmailHtml) return alert("Please enter a message, template name, or custom email HTML first.");
+    if (channels.whatsapp && !message && !channels.whatsappTemplateName) return alert("WhatsApp is ticked but has nothing to send. Untick WhatsApp or write a message.");
     if (audience === 'custom' && !customContacts.trim()) return alert("Please enter custom contacts.");
     const estimateText = displayedEstimate
       ? `${displayedEstimate.totalTargets} total, ${displayedEstimate.whatsappTargets} WhatsApp candidates, ${displayedEstimate.emailTargets} email candidates`
@@ -609,19 +615,75 @@ export default function BroadcastsPanel({ products = [] }) {
               value={emailSubject}
               onChange={e => setEmailSubject(e.target.value)}
             />
-            <label style={{ display: 'block', fontWeight: 'bold', margin: '14px 0 8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Product Image URL (Optional)</label>
-            <input
-              type="text"
-              className="admin-input"
-              style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '12px 16px', borderRadius: '8px', fontSize: '0.95rem' }}
-              placeholder="Paste an image link — shown centered above the message"
-              value={emailImageUrl}
-              onChange={e => setEmailImageUrl(e.target.value)}
-            />
-            {emailImageUrl.trim() && (
-              <div style={{ marginTop: '10px', textAlign: 'center', background: '#ffffff', borderRadius: '8px', padding: '12px' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={emailImageUrl.trim()} alt="Email image preview" style={{ maxWidth: '160px', height: 'auto' }} />
+            <label style={{ display: 'block', fontWeight: 'bold', margin: '14px 0 8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Email Design</label>
+            <div style={{ display: 'flex', gap: '16px', background: '#0f172a', padding: '10px 16px', borderRadius: '8px', border: '1px solid #334155', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#f8fafc', fontSize: '0.9rem' }}>
+                <input
+                  type="radio"
+                  name="email-format"
+                  checked={emailFormat === 'simple'}
+                  onChange={() => setEmailFormat('simple')}
+                  style={{ accentColor: '#38bdf8' }}
+                />
+                Simple (auto-styled text)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#f8fafc', fontSize: '0.9rem' }}>
+                <input
+                  type="radio"
+                  name="email-format"
+                  checked={emailFormat === 'html'}
+                  onChange={() => setEmailFormat('html')}
+                  style={{ accentColor: '#38bdf8' }}
+                />
+                Custom HTML (paste a designed template)
+              </label>
+            </div>
+
+            {emailFormat === 'simple' && (
+              <>
+                <label style={{ display: 'block', fontWeight: 'bold', margin: '14px 0 8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Product Image URL (Optional)</label>
+                <input
+                  type="text"
+                  className="admin-input"
+                  style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '12px 16px', borderRadius: '8px', fontSize: '0.95rem' }}
+                  placeholder="Paste an image link — shown centered above the message"
+                  value={emailImageUrl}
+                  onChange={e => setEmailImageUrl(e.target.value)}
+                />
+                {emailImageUrl.trim() && (
+                  <div style={{ marginTop: '10px', textAlign: 'center', background: '#ffffff', borderRadius: '8px', padding: '12px' }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={emailImageUrl.trim()} alt="Email image preview" style={{ maxWidth: '160px', height: 'auto' }} />
+                  </div>
+                )}
+              </>
+            )}
+
+            {emailFormat === 'html' && (
+              <div style={{ marginTop: '14px' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Custom Email HTML</label>
+                <textarea
+                  className="admin-input"
+                  style={{ width: '100%', minHeight: '220px', resize: 'vertical', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '16px', fontSize: '0.8rem', lineHeight: '1.4', fontFamily: 'monospace' }}
+                  placeholder="Paste the full HTML of your email here..."
+                  value={emailHtmlContent}
+                  onChange={e => setEmailHtmlContent(e.target.value)}
+                />
+                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '6px 0 0' }}>
+                  The unsubscribe footer is added automatically — you do not need to include one.
+                  The plain Message box below is still used as the text-only fallback (and for WhatsApp, if ticked).
+                </p>
+                {emailHtmlContent.trim() && (
+                  <div style={{ marginTop: '12px' }}>
+                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Preview</label>
+                    <iframe
+                      title="Email HTML preview"
+                      sandbox=""
+                      srcDoc={emailHtmlContent}
+                      style={{ width: '100%', height: '420px', background: '#ffffff', border: '1px solid #334155', borderRadius: '8px' }}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -693,7 +755,7 @@ export default function BroadcastsPanel({ products = [] }) {
         <button 
           className="admin-btn" 
           onClick={handleSendTest}
-          disabled={isSending || (!message && !channels.whatsappTemplateName)}
+          disabled={isSending || (!message && !channels.whatsappTemplateName && !hasEmailHtml)}
           style={{ background: 'rgba(51, 65, 85, 0.8)', color: '#f8fafc', border: '1px solid #475569', padding: '12px 24px', fontSize: '0.95rem', borderRadius: '8px' }}
         >
           {isSending ? 'Sending...' : 'Send Test To Admin'}
@@ -701,7 +763,7 @@ export default function BroadcastsPanel({ products = [] }) {
         <button 
           className="admin-btn" 
           onClick={handleBroadcast}
-          disabled={isSending || (!message && !channels.whatsappTemplateName) || (!channels.whatsapp && !channels.email)}
+          disabled={isSending || (!message && !channels.whatsappTemplateName && !hasEmailHtml) || (!channels.whatsapp && !channels.email)}
           style={{ background: '#0ea5e9', color: '#fff', border: 'none', padding: '12px 32px', fontSize: '1rem', fontWeight: 'bold', borderRadius: '8px', boxShadow: '0 4px 14px rgba(14, 165, 233, 0.3)' }}
         >
           {isSending ? (scheduledAt ? 'Scheduling...' : 'Broadcasting...') : (scheduledAt ? 'Schedule Broadcast' : 'Blast Broadcast Now')}

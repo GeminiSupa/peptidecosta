@@ -3,6 +3,12 @@ import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
+import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
+import { createEmailUnsubscribeToken } from '@/lib/marketingTokens';
+import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
+
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -71,7 +77,7 @@ async function sendWhatsApp(to, message, templateName = null, firstName = 'Custo
 let globalTransporter = null;
 
 // Helper for sending Emails
-async function sendEmail(to, message, subject, imageUrl = null) {
+async function sendEmail(to, message, subject, imageUrl = null, htmlContent = null) {
   const productImage = imageUrl ? String(imageUrl).trim().replace(/["'<>]/g, '') : null;
   const smtp = getCampaignSmtpConfig();
   if (!smtp.configured) return false;
@@ -92,7 +98,7 @@ async function sendEmail(to, message, subject, imageUrl = null) {
       });
     }
 
-    const htmlMessage = `
+    const htmlMessage = htmlContent ? clampOutlookButtonSizes(htmlContent) : `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #ffffff;">
         <div style="text-align: center; margin-bottom: 24px;">
           <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height: 60px; border-radius: 8px; background: #0f172a; padding: 8px;" />
@@ -109,6 +115,18 @@ ${productImage ? `<div style="text-align: center; margin: 0 0 24px;"><img src="$
       </div>
     `;
 
+    // Same unsubscribe treatment the real (cron) sends get, so a test email
+    // is representative: visible footer link + one-click headers.
+    const unsubscribeToken = encodeURIComponent(createEmailUnsubscribeToken(to));
+    const unsubscribePageUrl = `${BASE_URL}/unsubscribe?t=${unsubscribeToken}`;
+    const unsubscribeApiUrl = `${BASE_URL}/api/unsubscribe?t=${unsubscribeToken}`;
+    const htmlWithFooter = applyMarketingEmailFooter(htmlMessage, {
+      domain: BASE_URL,
+      unsubscribeUrl: unsubscribePageUrl,
+      preferencesUrl: unsubscribePageUrl,
+      viewEmailUrl: BASE_URL,
+    });
+
     const res = await globalTransporter.sendMail({
       bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
       from: smtp.from,
@@ -116,7 +134,11 @@ ${productImage ? `<div style="text-align: center; margin: 0 0 24px;"><img src="$
       to: to.trim(),
       subject: subject || 'Flash Sale! Exclusive Offer Inside',
       text: message,
-      html: htmlMessage
+      html: htmlWithFooter,
+      headers: {
+        'List-Unsubscribe': `<${unsubscribeApiUrl}>, <mailto:${smtp.replyTo}?subject=unsubscribe>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      }
     });
     return !!res.messageId;
   } catch (err) {
@@ -250,8 +272,8 @@ export async function POST(request) {
   try {
     const { audience, channels, message, testContact, customContacts, scheduledAt, enableBatching, whatsappTemplateName, whatsappTemplateLanguage } = await request.json();
 
-    if (!message && !whatsappTemplateName) {
-      return NextResponse.json({ error: 'Message or Template Name is required' }, { status: 400 });
+    if (!message && !whatsappTemplateName && !(channels?.email && channels?.emailHtmlContent)) {
+      return NextResponse.json({ error: 'Message, Template Name, or custom email HTML is required' }, { status: 400 });
     }
 
     if (scheduledAt && audience !== 'test') {
@@ -334,8 +356,8 @@ export async function POST(request) {
         sentWhatsapp = await sendWhatsApp(contact.phone, message, whatsappTemplateName, contact.name, whatsappTemplateLanguage);
       }
       
-      if (channels.email && contact.email && message) {
-        sentEmail = await sendEmail(contact.email, message, channels.emailSubject, channels.emailImageUrl || null);
+      if (channels.email && contact.email && (message || channels.emailHtmlContent)) {
+        sentEmail = await sendEmail(contact.email, message, channels.emailSubject, channels.emailImageUrl || null, channels.emailHtmlContent || null);
       }
 
       if (sentWhatsapp || sentEmail) queuedCount++;

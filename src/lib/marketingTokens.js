@@ -31,6 +31,28 @@ export function verifyUnsubscribeToken(token) {
   return id;
 }
 
+// Broadcast recipients (order customers, custom lists) are not always in
+// email_subscribers, so their unsubscribe link cannot carry a subscriber id.
+// These tokens embed the email address itself, signed with the same secret.
+const EMAIL_TOKEN_PREFIX = 'em!';
+
+export function createEmailUnsubscribeToken(email) {
+  const id = `${EMAIL_TOKEN_PREFIX}${Buffer.from(String(email || '').trim().toLowerCase()).toString('base64url')}`;
+  return `${id}.${sign(id)}`;
+}
+
+// Returns the email address when the verified token id is an email-based one,
+// otherwise null (meaning: treat the id as a subscriber id, the classic path).
+export function decodeEmailUnsubscribeId(id) {
+  if (!String(id || '').startsWith(EMAIL_TOKEN_PREFIX)) return null;
+  try {
+    const email = Buffer.from(String(id).slice(EMAIL_TOKEN_PREFIX.length), 'base64url').toString('utf8');
+    return email.includes('@') ? email : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createJourneyTrackingToken(payload) {
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return `${encoded}.${sign(encoded)}`;

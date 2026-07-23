@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { verifyUnsubscribeToken } from '@/lib/marketingTokens';
+import { decodeEmailUnsubscribeId, verifyUnsubscribeToken } from '@/lib/marketingTokens';
 
 export async function POST(request) {
   try {
@@ -19,6 +19,34 @@ export async function POST(request) {
     }
 
     const supabaseAdmin = getSupabaseAdmin();
+
+    // Email-based tokens come from broadcast emails, whose recipients are not
+    // always in email_subscribers. Suppress the address globally and also
+    // unsubscribe any matching subscriber record.
+    const emailIdentity = decodeEmailUnsubscribeId(subscriberId);
+    if (emailIdentity) {
+      const identity = emailIdentity.trim().toLowerCase();
+      const { error: suppressionError } = await supabaseAdmin
+        .from('marketing_suppressions')
+        .upsert({
+          identity,
+          channel: 'email',
+          reason: 'unsubscribe',
+          source: 'unsubscribe_link',
+          active: true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'identity,channel' });
+      if (suppressionError) throw suppressionError;
+
+      const { error: subscriberUpdateError } = await supabaseAdmin
+        .from('email_subscribers')
+        .update({ status: 'unsubscribed', updated_at: new Date().toISOString() })
+        .eq('email', identity);
+      if (subscriberUpdateError) console.error('Could not unsubscribe matching subscriber record:', subscriberUpdateError);
+
+      return NextResponse.json({ success: true });
+    }
+
     const { data: subscriber, error: lookupError } = await supabaseAdmin
       .from('email_subscribers')
       .select('email')

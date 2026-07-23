@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { canRetryDelivery, isMarketingSuppressed, normalizeMarketingIdentity } from '@/lib/marketingDelivery.mjs';
-import { createJourneyTrackingToken } from '@/lib/marketingTokens';
+import { createEmailUnsubscribeToken, createJourneyTrackingToken } from '@/lib/marketingTokens';
+import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { hasWhatsAppOptIn } from '@/lib/whatsappCompliance';
 import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
 import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
@@ -139,6 +140,20 @@ ${productImage ? `<div style="text-align: center; margin: 0 0 24px;"><img src="$
       </div>
     `;
 
+    // Every broadcast email gets a working unsubscribe: a visible footer link
+    // plus the one-click headers Gmail/Yahoo require for bulk senders. The
+    // token embeds the recipient's address, so it works for order customers
+    // and custom lists that are not in email_subscribers.
+    const unsubscribeToken = encodeURIComponent(createEmailUnsubscribeToken(to));
+    const unsubscribePageUrl = `${BASE_URL}/unsubscribe?t=${unsubscribeToken}`;
+    const unsubscribeApiUrl = `${BASE_URL}/api/unsubscribe?t=${unsubscribeToken}`;
+    const htmlWithFooter = applyMarketingEmailFooter(htmlMessage, {
+      domain: BASE_URL,
+      unsubscribeUrl: unsubscribePageUrl,
+      preferencesUrl: unsubscribePageUrl,
+      viewEmailUrl: BASE_URL,
+    });
+
     const res = await transporter.sendMail({
             bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
       from: smtp.from,
@@ -146,7 +161,11 @@ ${productImage ? `<div style="text-align: center; margin: 0 0 24px;"><img src="$
       to: to.trim(),
       subject: subject || 'Flash Sale! Exclusive Offer Inside',
       text: message || '',
-      html: htmlMessage
+      html: htmlWithFooter,
+      headers: {
+        'List-Unsubscribe': `<${unsubscribeApiUrl}>, <mailto:${smtp.replyTo}?subject=unsubscribe>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      }
     });
     return { sent: Boolean(res.messageId), providerId: res.messageId || null };
   } catch (err) {
