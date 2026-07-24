@@ -30,7 +30,7 @@ new_admin = """
       
       <!-- Premium Admin Header Banner -->
       <div style="background-color:#0f172a;padding:40px 32px;text-align:center;">
-        <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" width="140" height="118" style="display:block;width:140px;height:118px;margin:0 auto 16px auto;border-radius:12px;">
+        <img src="https://catalog.peptidescostarica.net/logo.png?v=2" alt="Peptides Costa Rica" width="140" height="118" style="display:block;width:140px;height:118px;margin:0 auto 16px auto;border-radius:12px;">
         <h1 style="color:#ffffff !important;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">New Order Received!</h1>
         <p style="color:#e0e7ff !important;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">A new order has been placed on the Peptides Costa Rica catalog.</p>
       </div>
@@ -189,7 +189,7 @@ new_customer = """
       
       <!-- Premium Science Theme Header Banner -->
       <div style="background-color:#0f172a;padding:40px 32px;text-align:center;">
-        <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" width="140" height="118" style="display:block;width:140px;height:118px;margin:0 auto 16px auto;border-radius:12px;">
+        <img src="https://catalog.peptidescostarica.net/logo.png?v=2" alt="Peptides Costa Rica" width="140" height="118" style="display:block;width:140px;height:118px;margin:0 auto 16px auto;border-radius:12px;">
         <h1 style="color:#ffffff !important;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">${strings.title}</h1>
         <p style="color:#e2e8f0 !important;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">${strings.subtitle}</p>
       </div>
