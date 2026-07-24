@@ -1472,6 +1472,11 @@
 .admin-wa-filter-tabs button span { margin-left: 3px; color: #475569; font-size: .62rem; }
 .admin-wa-filter-tabs button.active { border-color: rgba(45,212,191,.23); background: rgba(45,212,191,.1); color: #99f6e4; }
 .admin-wa-filter-tabs button.active span { color: #5eead4; }
+.admin-wa-owner-filter { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; padding: 8px 12px 10px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.admin-wa-owner-filter button { min-width: 0; min-height: 40px; padding: 0 8px; border: 1px solid rgba(255,255,255,.07); border-radius: 10px; background: rgba(255,255,255,.025); color: #94a3b8; font: inherit; font-size: .68rem; font-weight: 800; cursor: pointer; touch-action: manipulation; }
+.admin-wa-owner-filter button span { margin-left: 3px; color: #64748b; font-size: .6rem; }
+.admin-wa-owner-filter button.active { border-color: rgba(96,165,250,.28); background: rgba(59,130,246,.1); color: #bfdbfe; }
+.admin-wa-owner-filter button.active span { color: #93c5fd; }
 .admin-wa-chat-item-identity { display: flex; min-width: 0; align-items: center; gap: 6px; }
 .admin-wa-stage { flex: 0 0 auto; padding: 2px 5px; border-radius: 5px; background: rgba(100,116,139,.14); color: #94a3b8; font-size: .55rem; font-weight: 800; text-transform: uppercase; }
 .admin-wa-stage--customer { background: rgba(16,185,129,.13); color: #6ee7b7; }
@@ -1482,6 +1487,21 @@
 .admin-wa-chat-more { position: absolute; z-index: 3; right: 5px; top: 50%; display: grid; width: 40px; height: 40px; place-items: center; padding: 0; border: 0; border-radius: 9px; opacity: 0; transform: translateY(-50%); background: #172237; color: #94a3b8; cursor: pointer; transition: opacity .15s ease; }
 .admin-wa-chat-item-shell:hover .admin-wa-chat-more,
 .admin-wa-chat-more:focus-visible { opacity: 1; }
+.admin-wa-chat-item-shell--claimable .admin-wa-chat-item { min-height: 82px; padding-right: 72px; }
+.admin-wa-chat-item-shell--claimable .admin-wa-chat-more { top: 28px; }
+.admin-wa-chat-claim { position: absolute; z-index: 4; right: 8px; bottom: 8px; min-width: 56px; min-height: 30px; padding: 0 10px; border: 1px solid rgba(45,212,191,.26); border-radius: 999px; background: rgba(45,212,191,.1); color: #99f6e4; font: inherit; font-size: .66rem; font-weight: 850; cursor: pointer; touch-action: manipulation; }
+.admin-wa-chat-item-workflow { display: flex; min-width: 0; align-items: center; gap: 5px; margin-top: 5px; overflow: hidden; }
+.admin-wa-owner-chip,
+.admin-wa-sla-chip { display: inline-flex; min-height: 22px; align-items: center; padding: 0 7px; border-radius: 999px; font-size: .58rem; font-weight: 850; white-space: nowrap; }
+.admin-wa-owner-chip { border: 1px solid rgba(148,163,184,.16); background: rgba(148,163,184,.08); color: #cbd5e1; }
+.admin-wa-owner-chip--mine { border-color: rgba(96,165,250,.28); background: rgba(59,130,246,.13); color: #bfdbfe; }
+.admin-wa-owner-chip--unassigned { border-color: rgba(251,191,36,.24); background: rgba(251,191,36,.1); color: #fde68a; }
+.admin-wa-sla-chip { border: 1px solid rgba(45,212,191,.16); background: rgba(45,212,191,.07); color: #99f6e4; }
+.admin-wa-sla-chip--urgent { border-color: rgba(251,191,36,.3); background: rgba(251,191,36,.11); color: #fbbf24; }
+.admin-wa-sla-chip--closed { border-color: rgba(248,113,113,.3); background: rgba(248,113,113,.11); color: #fecaca; }
+.admin-wa-inline-action { min-height: 30px; padding: 0 9px; border: 1px solid rgba(45,212,191,.24); border-radius: 999px; background: rgba(45,212,191,.09); color: #99f6e4; font: inherit; font-size: .66rem; font-weight: 850; cursor: pointer; touch-action: manipulation; }
+.admin-wa-inline-action--muted { border-color: rgba(148,163,184,.18); background: rgba(148,163,184,.07); color: #cbd5e1; }
+.admin-wa-template-required-btn { margin-left: auto; min-height: 36px; padding: 0 12px; border: 1px solid rgba(248,113,113,.28); border-radius: 999px; background: rgba(248,113,113,.12); color: #fecaca; font: inherit; font-size: .7rem; font-weight: 850; cursor: pointer; touch-action: manipulation; }
 .admin-wa-composer { background: rgba(8,13,23,.96); backdrop-filter: blur(18px); }
 .admin-wa-composer-row { display: flex; align-items: flex-end; gap: 7px; }
 .admin-wa-composer-row--mobile { display: grid; grid-template-columns: 44px minmax(0,1fr) 44px 48px; gap: 7px; }
@@ -5088,6 +5108,25 @@
     line-height: 1.35;
 }
 
+.admin-wa-profile-shortcut {
+    display: flex;
+    width: 100%;
+    min-height: 46px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 4px;
+    border: 1px solid rgba(96, 165, 250, .26);
+    border-radius: 10px;
+    background: rgba(59, 130, 246, .1);
+    color: #bfdbfe;
+    font: inherit;
+    font-size: .78rem;
+    font-weight: 850;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
 .admin-wa-chat-header-text {
     min-width: 0;
 }
@@ -8670,6 +8709,17 @@
         height: 100% !important;
     }
 
+    .admin-whatsapp-inbox:not(.admin-wa-chat-open) .admin-wa-owner-filter {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #0e1626;
+    }
+
+    .admin-whatsapp-inbox:not(.admin-wa-chat-open) .admin-wa-chat-item-name {
+        max-width: 42vw;
+    }
+
     .admin-whatsapp-inbox:not(.admin-wa-chat-open) .admin-wa-chat-pane {
         display: none !important;
     }
@@ -8697,6 +8747,22 @@
         min-height: 0 !important;
         flex: 1 1 auto !important;
         padding: 14px 12px 18px !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-chat-header-row1 {
+        padding: 8px 10px !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-chat-status-row {
+        gap: 6px !important;
+        padding: 0 10px 8px !important;
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        scrollbar-width: none;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-chat-status-row::-webkit-scrollbar {
+        display: none;
     }
 
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-composer {
@@ -8741,6 +8807,27 @@
         flex: none !important;
         resize: none !important;
         box-sizing: border-box !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-window-blocked {
+        align-items: flex-start;
+        gap: 9px;
+        padding: 10px;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-window-blocked-icon {
+        width: 34px;
+        height: 34px;
+        flex-basis: 34px;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-window-blocked-text {
+        flex: 1 1 150px;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-template-required-btn {
+        width: calc(100% - 43px);
+        margin-left: 43px;
     }
 }
 

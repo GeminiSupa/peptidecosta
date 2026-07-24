@@ -6,6 +6,8 @@ import { Brain, Check, CheckCheck, ChevronLeft, Clock, MessageCircle, Search, Se
 const INITIAL_CHAT_LIMIT = 30;
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SERVICE_WINDOW_URGENT_MS = 2 * 60 * 60 * 1000;
+const WA_OWNER_STORAGE_KEY = 'peptides_wa_conversation_owners_v1';
+const WA_UNASSIGNED_OWNER = 'unassigned';
 const GENERIC_CONTACT_NAMES = new Set([
   'administrator',
   'ai copilot',
@@ -170,6 +172,30 @@ function formatMoney(value) {
   return `$${amount.toLocaleString(undefined, { maximumFractionDigits: amount >= 100 ? 0 : 2 })}`;
 }
 
+function readStoredConversationOwners() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(WA_OWNER_STORAGE_KEY) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function getOwnerDisplay(ownerKey, currentAgentKey) {
+  if (!ownerKey || ownerKey === WA_UNASSIGNED_OWNER) return 'Unassigned';
+  if (ownerKey === currentAgentKey) return 'Mine';
+  return ownerKey.includes('@') ? ownerKey.split('@')[0] : ownerKey;
+}
+
+function getPriorityScore(chat, isUnread, replyWindow) {
+  if (chat.direction === 'inbound' && replyWindow.state === 'urgent') return 0;
+  if (chat.direction === 'inbound' && isUnread) return 1;
+  if (chat.direction === 'inbound') return 2;
+  if (chat.stage === 'Cart') return 3;
+  return 4;
+}
+
 function useIsMobileWa() {
   const [isMobile, setIsMobile] = useState(false);
 
@@ -184,7 +210,18 @@ function useIsMobileWa() {
   return isMobile;
 }
 
-const WaChatItem = ({ chat, isActive, isUnread, onClick, onMarkUnread }) => {
+const WaChatItem = ({
+  chat,
+  isActive,
+  isUnread,
+  onClick,
+  onMarkUnread,
+  ownerLabel,
+  isMine,
+  isUnassigned,
+  replyWindow,
+  onAssignToMe,
+}) => {
   const [offset, setOffset] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const startX = useRef(null);
@@ -215,7 +252,7 @@ const WaChatItem = ({ chat, isActive, isUnread, onClick, onMarkUnread }) => {
   };
 
   return (
-    <div className="admin-wa-chat-item-shell">
+    <div className={`admin-wa-chat-item-shell${isUnassigned ? ' admin-wa-chat-item-shell--claimable' : ''}`}>
       <div className="admin-wa-chat-swipe-action">
         <button 
           onClick={(e) => { e.stopPropagation(); onMarkUnread(); setOffset(0); }}
@@ -258,8 +295,31 @@ const WaChatItem = ({ chat, isActive, isUnread, onClick, onMarkUnread }) => {
               ) : null}
             </span>
           </div>
+          <div className="admin-wa-chat-item-workflow">
+            <span className={`admin-wa-owner-chip${isMine ? ' admin-wa-owner-chip--mine' : ''}${isUnassigned ? ' admin-wa-owner-chip--unassigned' : ''}`}>
+              {ownerLabel}
+            </span>
+            <span className={`admin-wa-sla-chip admin-wa-sla-chip--${replyWindow.state}`}>
+              {replyWindow.label}
+            </span>
+          </div>
         </div>
       </button>
+      {isUnassigned && (
+        <button
+          type="button"
+          className="admin-wa-chat-claim"
+          onClick={(event) => {
+            event.stopPropagation();
+            onAssignToMe();
+            setOffset(0);
+          }}
+          aria-label={`Claim conversation with ${chat.displayName}`}
+          title="Claim conversation"
+        >
+          Claim
+        </button>
+      )}
       <button
         type="button"
         className="admin-wa-chat-more"
@@ -298,12 +358,16 @@ export default function WhatsAppInbox({
   sendingMessage = false,
   sendFeedback,
   onDismissSendFeedback,
+  currentUserEmail,
+  onOpenCustomerProfile,
 }) {
   const isMobile = useIsMobileWa();
   const messagesEndRef = useRef(null);
   const composerRef = useRef(null);
+  const currentAgentKey = currentUserEmail || 'me';
   const [chatSearch, setChatSearch] = useState('');
   const [inboxFilter, setInboxFilter] = useState('needs_reply');
+  const [ownerFilter, setOwnerFilter] = useState('all');
   const [messageSearch, setMessageSearch] = useState('');
   const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [visibleChatCount, setVisibleChatCount] = useState(INITIAL_CHAT_LIMIT);
@@ -312,6 +376,7 @@ export default function WhatsAppInbox({
   const [showContactActions, setShowContactActions] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showComposerTools, setShowComposerTools] = useState(false);
+  const [conversationOwners, setConversationOwners] = useState(() => readStoredConversationOwners());
   const [now, setNow] = useState(() => Date.now());
 
   // Pull-to-refresh state
@@ -438,9 +503,56 @@ export default function WhatsAppInbox({
     () => chatsList.filter((chat) => chat.stage === 'Cart').length,
     [chatsList]
   );
+  const urgentCount = useMemo(
+    () => chatsList.filter((chat) => chat.direction === 'inbound' && getReplyWindow(chat.lastInboundAt, now).state === 'urgent').length,
+    [chatsList, now]
+  );
+
+  const getConversationOwner = useCallback((waId) => {
+    return conversationOwners[waId] || WA_UNASSIGNED_OWNER;
+  }, [conversationOwners]);
+
+  const assignConversationOwner = useCallback((waId, ownerKey = currentAgentKey) => {
+    if (!waId) return;
+    setConversationOwners((prev) => {
+      const next = { ...prev, [waId]: ownerKey };
+      try {
+        window.localStorage.setItem(WA_OWNER_STORAGE_KEY, JSON.stringify(next));
+      } catch (err) {
+        console.warn('Could not persist WhatsApp conversation owner:', err);
+      }
+      return next;
+    });
+  }, [currentAgentKey]);
+
+  const releaseConversationOwner = useCallback((waId) => {
+    if (!waId) return;
+    setConversationOwners((prev) => {
+      const next = { ...prev };
+      delete next[waId];
+      try {
+        window.localStorage.setItem(WA_OWNER_STORAGE_KEY, JSON.stringify(next));
+      } catch (err) {
+        console.warn('Could not persist WhatsApp conversation owner:', err);
+      }
+      return next;
+    });
+  }, []);
+
+  const mineCount = useMemo(
+    () => chatsList.filter((chat) => getConversationOwner(chat.waId) === currentAgentKey).length,
+    [chatsList, currentAgentKey, getConversationOwner]
+  );
+  const unassignedCount = useMemo(
+    () => chatsList.filter((chat) => getConversationOwner(chat.waId) === WA_UNASSIGNED_OWNER).length,
+    [chatsList, getConversationOwner]
+  );
 
   const filteredChats = useMemo(() => {
     let result = chatsList;
+    if (ownerFilter === 'mine') result = result.filter((chat) => getConversationOwner(chat.waId) === currentAgentKey);
+    if (ownerFilter === 'unassigned') result = result.filter((chat) => getConversationOwner(chat.waId) === WA_UNASSIGNED_OWNER);
+    if (inboxFilter === 'urgent') result = result.filter((chat) => chat.direction === 'inbound' && getReplyWindow(chat.lastInboundAt, now).state === 'urgent');
     if (inboxFilter === 'unread') result = result.filter(hasUnread);
     if (inboxFilter === 'needs_reply') result = result.filter((chat) => chat.direction === 'inbound');
     if (inboxFilter === 'hot_cart') result = result.filter((chat) => chat.stage === 'Cart');
@@ -453,8 +565,13 @@ export default function WhatsAppInbox({
         (digits && chat.waId.includes(digits))
       );
     }
-    return result;
-  }, [chatSearch, chatsList, hasUnread, inboxFilter]);
+    return [...result].sort((a, b) => {
+      const aPriority = getPriorityScore(a, hasUnread(a), getReplyWindow(a.lastInboundAt, now));
+      const bPriority = getPriorityScore(b, hasUnread(b), getReplyWindow(b.lastInboundAt, now));
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
+    });
+  }, [chatSearch, chatsList, currentAgentKey, getConversationOwner, hasUnread, inboxFilter, now, ownerFilter]);
 
   const visibleChats = filteredChats.slice(0, visibleChatCount);
 
@@ -498,6 +615,10 @@ export default function WhatsAppInbox({
     () => getReplyWindow(currentChat?.lastInboundAt, now),
     [currentChat?.lastInboundAt, now]
   );
+  const currentOwnerKey = activeChatWaId ? getConversationOwner(activeChatWaId) : WA_UNASSIGNED_OWNER;
+  const currentOwnerLabel = getOwnerDisplay(currentOwnerKey, currentAgentKey);
+  const currentChatIsMine = currentOwnerKey === currentAgentKey;
+  const currentChatIsUnassigned = currentOwnerKey === WA_UNASSIGNED_OWNER;
 
   const customerContextSummary = useMemo(() => {
     if (!customerContext) return null;
@@ -558,7 +679,18 @@ export default function WhatsAppInbox({
     return () => clearInterval(timer);
   }, [activeChatWaId]);
 
-  const sendButtonDisabled = sendingMessage || !chatInputText.trim();
+  const sendButtonDisabled = sendingMessage || replyWindow.state === 'closed' || !chatInputText.trim();
+
+  const openActiveCustomerProfile = () => {
+    if (!activeChatWaId || !onOpenCustomerProfile) return;
+    onOpenCustomerProfile({
+      search: activeChatWaId,
+      customer_phone: activeChatWaId,
+      name: currentChat?.displayName,
+    });
+    setShowCustomerContext(false);
+    setShowContactActions(false);
+  };
 
   const copyActiveChatPhone = async () => {
     if (!activeChatWaId) return;
@@ -580,6 +712,8 @@ export default function WhatsAppInbox({
   const quickReplyTemplates = [
     { label: 'Greeting', text: 'Hello! How can I help you today?' },
     { label: 'Price list', text: 'Here is our full catalog and price list: https://peptidescostarica.net/' },
+    { label: 'Cart help', text: 'I can help finish your order. Do you want delivery or pickup?' },
+    { label: 'Payment', text: 'Once payment is complete, send the receipt here and we will process your order.' },
     { label: 'Delivery', text: 'We offer fast local delivery in Costa Rica.' },
   ];
 
@@ -591,14 +725,26 @@ export default function WhatsAppInbox({
 
   const filterTabs = [
     { id: 'needs_reply', label: 'Waiting', count: waitingCount },
+    { id: 'urgent', label: 'Urgent', count: urgentCount },
     { id: 'hot_cart', label: 'Hot carts', count: hotCartCount },
     { id: 'unread', label: 'Unread', count: unreadCount },
     { id: 'all', label: 'All', count: chatsList.length },
   ];
+  const ownerTabs = [
+    { id: 'all', label: 'All', count: chatsList.length },
+    { id: 'mine', label: 'Mine', count: mineCount },
+    { id: 'unassigned', label: 'Open', count: unassignedCount },
+  ];
   const emptyCopy = chatSearch
     ? 'No conversations match your search.'
+    : ownerFilter === 'mine'
+      ? 'No conversations are assigned to you yet.'
+      : ownerFilter === 'unassigned'
+        ? 'No open unassigned conversations right now.'
     : inboxFilter === 'needs_reply'
       ? 'No customers are waiting for a reply.'
+      : inboxFilter === 'urgent'
+        ? 'No urgent reply windows right now.'
       : inboxFilter === 'hot_cart'
         ? 'No active cart conversations right now.'
         : 'No conversations yet. Incoming messages will appear here.';
@@ -662,6 +808,24 @@ export default function WhatsAppInbox({
             ))}
           </div>
 
+          <div className="admin-wa-owner-filter" role="tablist" aria-label="Conversation ownership filters">
+            {ownerTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={ownerFilter === tab.id}
+                className={ownerFilter === tab.id ? 'active' : ''}
+                onClick={() => {
+                  setOwnerFilter(tab.id);
+                  setVisibleChatCount(INITIAL_CHAT_LIMIT);
+                }}
+              >
+                {tab.label} <span>{tab.count}</span>
+              </button>
+            ))}
+          </div>
+
           <div 
             className="admin-wa-conversations-scroll" 
             ref={scrollRef}
@@ -687,6 +851,10 @@ export default function WhatsAppInbox({
                 {visibleChats.map((chat) => {
                   const isActive = activeChatWaId === chat.waId;
                   const chatIsUnread = hasUnread(chat);
+                  const ownerKey = getConversationOwner(chat.waId);
+                  const isMine = ownerKey === currentAgentKey;
+                  const isUnassigned = ownerKey === WA_UNASSIGNED_OWNER;
+                  const chatReplyWindow = getReplyWindow(chat.lastInboundAt, now);
 
                   return (
                     <WaChatItem
@@ -694,14 +862,19 @@ export default function WhatsAppInbox({
                       chat={chat}
                       isActive={isActive}
                       isUnread={chatIsUnread}
+                      ownerLabel={getOwnerDisplay(ownerKey, currentAgentKey)}
+                      isMine={isMine}
+                      isUnassigned={isUnassigned}
+                      replyWindow={chatReplyWindow}
                       onClick={() => {
                         setActiveChatWaId(chat.waId);
                         setShowContactActions(false);
                         if (markSeen) markSeen(chat.waId, chat.lastInboundAt);
                       }}
                       onMarkUnread={() => {
-                        if (markSeen) markSeen(chat.waId, new Date(0).toISOString()); // Resets seen state
+                          if (markSeen) markSeen(chat.waId, new Date(0).toISOString()); // Resets seen state
                       }}
+                      onAssignToMe={() => assignConversationOwner(chat.waId)}
                     />
                   );
                 })}
@@ -797,6 +970,18 @@ export default function WhatsAppInbox({
                 {currentChat && (
                   <span className={`admin-wa-stage admin-wa-stage--${currentChat.stage.toLowerCase()}`}>{currentChat.stage}</span>
                 )}
+                <span className={`admin-wa-owner-chip${currentChatIsMine ? ' admin-wa-owner-chip--mine' : ''}${currentChatIsUnassigned ? ' admin-wa-owner-chip--unassigned' : ''}`}>
+                  {currentOwnerLabel}
+                </span>
+                {currentChatIsUnassigned ? (
+                  <button type="button" className="admin-wa-inline-action" onClick={() => assignConversationOwner(activeChatWaId)}>
+                    Claim
+                  </button>
+                ) : currentChatIsMine ? (
+                  <button type="button" className="admin-wa-inline-action admin-wa-inline-action--muted" onClick={() => releaseConversationOwner(activeChatWaId)}>
+                    Release
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -920,6 +1105,16 @@ export default function WhatsAppInbox({
                     <strong>Window closed</strong>
                     <span>Use an approved template before sending a free-form follow-up.</span>
                   </div>
+                  <button
+                    type="button"
+                    className="admin-wa-template-required-btn"
+                    onClick={() => {
+                      setShowQuickReplies(true);
+                      if (isMobile) setShowComposerTools(true);
+                    }}
+                  >
+                    Templates
+                  </button>
                 </div>
               )}
               {replyWindow.state === 'urgent' && (
@@ -1095,6 +1290,12 @@ export default function WhatsAppInbox({
                 <div><span>Sales signal</span><strong>{customerContext?.cart ? 'Active abandoned cart' : customerContext?.lead ? 'Marketing lead' : 'WhatsApp contact'}</strong></div>
               </div>
               {customerContext?.lead?.utm_source && <p className="admin-wa-context-source">Source: {customerContext.lead.utm_source}</p>}
+              {onOpenCustomerProfile && (
+                <button type="button" className="admin-wa-profile-shortcut" onClick={openActiveCustomerProfile}>
+                  <UserRound size={18} />
+                  <span>Open full customer profile</span>
+                </button>
+              )}
             </div>
           </aside>
         </div>
@@ -1114,6 +1315,23 @@ export default function WhatsAppInbox({
               </button>
             </header>
             <div className="admin-wa-action-list">
+              {currentChatIsUnassigned ? (
+                <button type="button" className="admin-wa-action-row" onClick={() => {
+                  assignConversationOwner(activeChatWaId);
+                  setShowContactActions(false);
+                }}>
+                  <span><UserRound size={20} /></span>
+                  <div><strong>Claim conversation</strong><small>Move this chat into your mobile work queue.</small></div>
+                </button>
+              ) : currentChatIsMine ? (
+                <button type="button" className="admin-wa-action-row" onClick={() => {
+                  releaseConversationOwner(activeChatWaId);
+                  setShowContactActions(false);
+                }}>
+                  <span><UserRound size={20} /></span>
+                  <div><strong>Release conversation</strong><small>Return it to the open queue for another agent.</small></div>
+                </button>
+              ) : null}
               <a href={activeChatCallHref} className="admin-wa-action-row admin-wa-action-row--call">
                 <span><PhoneCall size={20} /></span>
                 <div><strong>Phone call</strong><small>Uses this device dialer. On Apple devices this may open FaceTime.</small></div>
@@ -1144,6 +1362,12 @@ export default function WhatsAppInbox({
                 <span><Info size={20} /></span>
                 <div><strong>Customer details</strong><small>Order history, cart signal, and source.</small></div>
               </button>
+              {onOpenCustomerProfile && (
+                <button type="button" className="admin-wa-action-row" onClick={openActiveCustomerProfile}>
+                  <span><UserRound size={20} /></span>
+                  <div><strong>Open customer profile</strong><small>Timeline, orders, carts, and lead context.</small></div>
+                </button>
+              )}
               <button type="button" className="admin-wa-action-row" onClick={copyActiveChatPhone}>
                 <span><Copy size={20} /></span>
                 <div><strong>Copy number</strong><small>Use it in WhatsApp, phone, or notes.</small></div>

@@ -5569,6 +5569,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 sendingMessage={sendingBaileysMsg}
                 sendFeedback={baileysSendFeedback}
                 onDismissSendFeedback={() => setBaileysSendFeedback({ status: 'idle', message: '' })}
+                currentUserEmail={loggedInEmail.current}
+                onOpenCustomerProfile={openCustomerProfileHandoff}
               />
             </div>
           </div>
@@ -5759,6 +5761,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               sendFeedback={liveWaSendFeedback}
               sendingMessage={liveWaSendFeedback.status === 'sending'}
               onDismissSendFeedback={() => setLiveWaSendFeedback({ status: 'idle', message: '' })}
+              currentUserEmail={loggedInEmail.current}
+              onOpenCustomerProfile={openCustomerProfileHandoff}
             />
             <div className="admin-whatsapp-analytics-shell">
               <WhatsAppAnalyticsPanel />
