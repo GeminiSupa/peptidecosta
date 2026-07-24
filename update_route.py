@@ -51,7 +51,7 @@ def main():
       
       <!-- Premium Science Theme Header Banner -->
       <div style="background:linear-gradient(135deg, #0f172a, #022c22);padding:40px 32px;text-align:center;">
-        <img src="https://peptidecosta.vercel.app/logo.png" alt="Peptides Costa Rica" style="max-height:56px;border-radius:8px;margin-bottom:20px;background:rgba(255,255,255,0.08);padding:6px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+        <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height:56px;border-radius:8px;margin-bottom:20px;background:rgba(255,255,255,0.08);padding:6px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
         <h1 style="color:#ffffff;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">\${strings.title}</h1>
         <p style="color:#e2e8f0;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">\${strings.subtitle}</p>
       </div>
@@ -212,7 +212,7 @@ def main():
       
       <!-- Premium Admin Header Banner -->
       <div style="background:linear-gradient(135deg, #0f172a, #4338ca);padding:40px 32px;text-align:center;">
-        <img src="https://peptidecosta.vercel.app/logo.png" alt="Peptides Costa Rica" style="max-height:56px;border-radius:8px;margin-bottom:20px;background:rgba(255,255,255,0.08);padding:6px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+        <img src="https://catalog.peptidescostarica.net/logo.png" alt="Peptides Costa Rica" style="max-height:56px;border-radius:8px;margin-bottom:20px;background:rgba(255,255,255,0.08);padding:6px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
         <h1 style="color:#ffffff;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">New Order Received!</h1>
         <p style="color:#e0e7ff;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">A new order has been placed on the Peptides Costa Rica catalog.</p>
       </div>
