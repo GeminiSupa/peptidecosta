@@ -215,20 +215,47 @@ body {
     filter: drop-shadow(0 2px 8px rgba(0, 212, 255, 0.4));
 }
 
-/* Logo image — clean on both light and dark */
+/* Logo image — v2 emblem carries its own navy background, so no white card */
 .logo-img-custom {
-    background: rgba(255, 255, 255, 0.95);
-    padding: 4px;
-    border-radius: 12px;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.12);
+    background: transparent;
+    padding: 0;
+    border-radius: 10px;
+    box-shadow: 0 3px 16px rgba(20, 40, 90, 0.22);
     max-height: 50px;
     width: auto;
     object-fit: contain;
 }
 
 [data-theme="dark"] .logo-img-custom {
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+    background: transparent;
+    box-shadow: 0 3px 20px rgba(0, 0, 0, 0.45);
+}
+
+/* v2 square emblem — carries its own navy background, so no white card */
+.logo--emblem {
+    filter: none;
+}
+.logo-emblem {
+    display: block;
+    height: 72px;
+    width: auto;
+    object-fit: contain;
+    border-radius: 14px;
+    box-shadow: 0 3px 18px rgba(20, 40, 90, 0.28);
+}
+[data-theme="dark"] .logo-emblem {
+    box-shadow: 0 3px 22px rgba(0, 0, 0, 0.5);
+}
+/* Extra room on very large monitors */
+@media (min-width: 1280px) {
+    .logo-emblem { height: 80px; }
+}
+/* Keep the wordmark legible when the header stacks on phones */
+@media (max-width: 768px) {
+    .logo-emblem { height: 54px; border-radius: 11px; }
+}
+@media (max-width: 400px) {
+    .logo-emblem { height: 48px; }
 }
 
 /* Category icon (SVG) styling */

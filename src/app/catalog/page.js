@@ -2823,11 +2823,11 @@ export default function CatalogPage() {
         </div>
 
         <div className="header-content container">
-          <a href="/" className="logo">
-            <img 
-              src="/logo.png" 
-              alt="Peptides Costa Rica Logo" 
-              className="logo-img-custom"
+          <a href="/" className="logo logo--emblem">
+            <img
+              src="/logo.webp"
+              alt="Peptides Costa Rica Logo"
+              className="logo-emblem"
             />
           </a>
 

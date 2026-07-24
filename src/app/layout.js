@@ -123,7 +123,7 @@ export default async function RootLayout({ children }) {
                   "@id": "https://peptidescostarica.net/#organization",
                   "name": "Peptides Costa Rica",
                   "url": "https://peptidescostarica.net",
-                  "logo": "https://peptidescostarica.net/logo.png",
+                  "logo": "https://peptidecosta.vercel.app/logo.png",
                   "contactPoint": {
                     "@type": "ContactPoint",
                     "telephone": businessLinks.whatsappDisplay,
