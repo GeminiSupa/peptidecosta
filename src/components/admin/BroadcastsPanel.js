@@ -313,12 +313,17 @@ export default function BroadcastsPanel({ products = [] }) {
         <div>
           <h2 className="admin-section-title" style={{ fontSize: '1.75rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Send size={28} color="#38bdf8" />
-            Marketing Broadcasts
+            One-Time Announcements
           </h2>
           <p className="admin-page-subtitle" style={{ margin: 0, fontSize: '0.95rem' }}>
-            Send bulk messages for Flash Sales, promotions, or general updates to your contacts.
+            Send one-off email or WhatsApp announcements. Durable campaigns, journeys, and lifecycle automation belong in Marketing Studio.
           </p>
         </div>
+      </div>
+
+      <div className="broadcast-positioning-note">
+        <strong>Use this for one-time sends only.</strong>
+        <span>For reusable promos, saved journeys, or attribution-heavy campaigns, use Marketing Studio and Promo Codes.</span>
       </div>
 
       {/* Announcement Banners Section */}
@@ -377,7 +382,7 @@ export default function BroadcastsPanel({ products = [] }) {
       {/* Flash Sale Generator Section */}
       <div style={{ background: 'rgba(30, 41, 59, 0.5)', padding: '24px', borderRadius: '16px', marginBottom: '24px', border: '1px dashed rgba(16, 185, 129, 0.3)' }}>
         <h3 style={{ margin: '0 0 16px', fontSize: '1.05rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Sparkles size={18} /> Quick Flash Sale Generator
+          <Sparkles size={18} /> One-Time Promo Helper
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'flex-end' }}>
           <div>
@@ -766,7 +771,7 @@ export default function BroadcastsPanel({ products = [] }) {
           disabled={isSending || (!message && !channels.whatsappTemplateName && !hasEmailHtml) || (!channels.whatsapp && !channels.email)}
           style={{ background: '#0ea5e9', color: '#fff', border: 'none', padding: '12px 32px', fontSize: '1rem', fontWeight: 'bold', borderRadius: '8px', boxShadow: '0 4px 14px rgba(14, 165, 233, 0.3)' }}
         >
-          {isSending ? (scheduledAt ? 'Scheduling...' : 'Broadcasting...') : (scheduledAt ? 'Schedule Broadcast' : 'Blast Broadcast Now')}
+          {isSending ? (scheduledAt ? 'Scheduling...' : 'Sending...') : (scheduledAt ? 'Schedule Once' : 'Send One-Time Announcement')}
         </button>
       </div>
 
@@ -791,7 +796,7 @@ export default function BroadcastsPanel({ products = [] }) {
       {scheduledBroadcasts.length > 0 && (
         <div style={{ marginTop: '32px', padding: '24px', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '16px', border: '1px solid rgba(56, 189, 248, 0.15)' }}>
           <h3 style={{ margin: '0 0 16px', fontSize: '1.1rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Calendar size={18} color="#38bdf8" /> Scheduled Broadcasts
+            <Calendar size={18} color="#38bdf8" /> Scheduled One-Time Announcements
           </h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {scheduledBroadcasts.map(sb => (

@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { 
   Users, Trash2, Upload, Brain, Sparkles, 
-  Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp, Columns3, List
+  Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp, Columns3, List, Clock, User
 } from 'lucide-react';
 
 const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) => (
@@ -48,7 +48,8 @@ export default function LeadsManager({
   getReferralLabel,
   getReferralBadgeStyles,
   formatRelativeTime,
-  setSelectedOrderDetails
+  setSelectedOrderDetails,
+  onOpenCustomerProfile
 }) {
 
   const uniqueAreas = Array.from(new Set((leads || []).map(l => l.region || l.city).filter(Boolean))).sort();
@@ -71,7 +72,7 @@ export default function LeadsManager({
   const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
   const [localContactedFilter, setLocalContactedFilter] = useState('All');
   const [lastSelectedLeadIndex, setLastSelectedLeadIndex] = useState(null);
-  const [viewMode, setViewMode] = useState('table');
+  const [viewMode, setViewMode] = useState('kanban');
 
   const filteredAndSortedLeads = useMemo(() => {
     const safeLeads = leads || [];
@@ -121,28 +122,60 @@ export default function LeadsManager({
     });
 
     return result;
-  }, [leads, leadsSearch, leadsSourceFilter, leadsAreaFilter, localContactedFilter, sortDir]);
+  }, [leads, leadsSearch, leadsSourceFilter, leadsAreaFilter, localContactedFilter, sortDir, getLeadConversion]);
 
   const filteredLeads = filteredAndSortedLeads;
+
+  const normalizeLeadStage = useCallback((lead, conversion) => {
+    if (conversion?.converted) return 'Won';
+    const raw = String(lead.status || (lead.last_contacted_at ? 'Contacted' : 'New')).trim();
+    if (['New', 'Contacted', 'Interested', 'Quoted', 'Won', 'Lost'].includes(raw)) return raw;
+    if (raw === 'Recovered' || raw === 'Converted') return 'Won';
+    if (raw === 'Processing') return 'Quoted';
+    return 'New';
+  }, []);
+
+  const getLeadOwner = (lead) => lead.owner || lead.sales_agent || lead.assigned_to || 'Unassigned';
+
+  const getLeadFollowUp = (lead) => {
+    const explicit = lead.next_follow_up_at || lead.follow_up_at;
+    if (explicit) return new Date(explicit).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    if (!lead.last_contacted_at) return 'Today';
+    const next = new Date(lead.last_contacted_at);
+    next.setDate(next.getDate() + 2);
+    return next.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  const openCustomerFromLead = (lead) => {
+    onOpenCustomerProfile?.({
+      contact_value: lead.contact_value,
+      email: lead.email,
+      phone: lead.phone,
+      name: lead.name,
+      search: lead.contact_value || lead.email || lead.phone || lead.name
+    });
+  };
 
   const pipelineColumns = useMemo(() => {
     const columns = [
       { id: 'New', label: 'New', color: '#38bdf8', helper: 'Fresh leads waiting for first touch' },
-      { id: 'Contacted', label: 'Contacted', color: '#f59e0b', helper: 'Already reached by the team' },
-      { id: 'Recovered', label: 'Recovered', color: '#22c55e', helper: 'Converted or moved to recovered' },
+      { id: 'Contacted', label: 'Contacted', color: '#f59e0b', helper: 'Reached by the team' },
+      { id: 'Interested', label: 'Interested', color: '#a78bfa', helper: 'Asked questions or showed buying intent' },
+      { id: 'Quoted', label: 'Quoted', color: '#fb7185', helper: 'Needs price, stock, or checkout push' },
+      { id: 'Won', label: 'Won', color: '#22c55e', helper: 'Converted to an order' },
       { id: 'Lost', label: 'Lost', color: '#f87171', helper: 'Not a fit or no response' },
     ];
 
     const buckets = Object.fromEntries(columns.map(column => [column.id, []]));
     filteredLeads.forEach(lead => {
       const conversion = getLeadConversion(lead);
-      const status = conversion.converted ? 'Recovered' : (lead.status || (lead.last_contacted_at ? 'Contacted' : 'New'));
+      const status = normalizeLeadStage(lead, conversion);
       const bucket = buckets[status] ? status : 'New';
       buckets[bucket].push(lead);
     });
 
     return columns.map(column => ({ ...column, leads: buckets[column.id] || [] }));
-  }, [filteredLeads, getLeadConversion]);
+  }, [filteredLeads, getLeadConversion, normalizeLeadStage]);
 
   const handleDropLead = (event, status) => {
     event.preventDefault();
@@ -393,6 +426,7 @@ export default function LeadsManager({
                   const conversion = getLeadConversion(lead);
                   const views = productViews.filter(v => v.contact_value === lead.contact_value);
                   const contactValue = lead.contact_value || lead.phone || lead.email || 'Lead';
+                  const currentStage = normalizeLeadStage(lead, conversion);
                   return (
                     <article
                       key={lead.id}
@@ -414,16 +448,47 @@ export default function LeadsManager({
                         <span>{lead.contact_method === 'whatsapp' ? 'WhatsApp' : 'Email'}</span>
                         <span>{lead.city || lead.country || 'Unknown area'}</span>
                       </div>
+                      <div className="lead-mobile-summary">
+                        <span><Users size={12} /> {getLeadOwner(lead)}</span>
+                        <span><Clock size={12} /> Follow up {getLeadFollowUp(lead)}</span>
+                      </div>
                       <div className="leads-kanban-tags">
                         <span>{getReferralLabel ? getReferralLabel(lead) : 'Organic'}</span>
                         {lead.whatsapp_consent === true && <span>WA opt-in</span>}
                         {conversion.converted && <span className="success">Converted</span>}
                         {views.length > 0 && <span>{views.length} views</span>}
                       </div>
+                      {handleLeadFieldUpdate && (
+                        <div className="lead-stage-row" aria-label="Lead stage">
+                          {pipelineColumns.map(stage => (
+                            <button
+                              key={stage.id}
+                              type="button"
+                              className={currentStage === stage.id ? 'active' : ''}
+                              onClick={() => handleLeadFieldUpdate(lead.id, 'status', stage.id)}
+                              title={`Move to ${stage.label}`}
+                            >
+                              {stage.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <div className="leads-kanban-actions">
+                        <button type="button" onClick={() => openCustomerFromLead(lead)}>
+                          <User size={13} /> Profile
+                        </button>
                         <button type="button" onClick={() => openLeadOutreachComposer(lead, lead.contact_method === 'whatsapp' ? 'whatsapp' : 'email')}>
                           <MessageCircle size={13} /> Contact
                         </button>
+                        {conversion.converted ? (
+                          <button type="button" onClick={() => setSelectedOrderDetails && setSelectedOrderDetails(conversion.order)}>
+                            Order
+                          </button>
+                        ) : (
+                          <button type="button" onClick={() => handleLeadFieldUpdate ? handleLeadFieldUpdate(lead.id, 'status', 'Quoted') : setSelectedLeadDetails?.(lead)}>
+                            Convert
+                          </button>
+                        )}
                         <button type="button" onClick={() => setSelectedLeadDetails?.(lead)}>
                           Details
                         </button>
@@ -701,6 +766,13 @@ export default function LeadsManager({
                     
                     <td data-label="Actions" style={{ padding: '10px 12px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                        <button
+                          onClick={() => openCustomerFromLead(lead)}
+                          className="admin-btn admin-btn-secondary"
+                          style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '6px', border: 'none', background: 'rgba(56,189,248,0.08)', color: '#38bdf8' }}
+                        >
+                          <User size={12} /> Profile
+                        </button>
                         <button 
                           onClick={() => setSelectedLeadDetails?.(lead)}
                           className="admin-btn admin-btn-secondary"

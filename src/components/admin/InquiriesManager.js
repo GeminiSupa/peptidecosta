@@ -5,7 +5,7 @@ import { adminFetch } from '@/lib/adminApi';
 import { 
   Mail, Search, Filter, Trash2, Send, Eye, Clock, CheckCircle, 
   XCircle, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Inbox,
-  ArrowLeft, User, Calendar, Sparkles
+  ArrowLeft, User, Calendar, Sparkles, ArrowRight
 } from 'lucide-react';
 
 const STATUS_CONFIG = {
@@ -42,7 +42,29 @@ const extractPhone = (message) => {
   return `+506${digits}`;
 };
 
-export default function InquiriesManager({ adminEmail, products = [] }) {
+const INQUIRY_ASSIGNMENTS_KEY = 'peptides_inquiry_assignments_v1';
+
+const readInquiryAssignments = () => {
+  if (typeof window === 'undefined') return {};
+  try {
+    return JSON.parse(window.localStorage.getItem(INQUIRY_ASSIGNMENTS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+};
+
+const getSlaInfo = (inquiry) => {
+  if (!inquiry?.created_at) return { label: 'No age', tone: 'neutral' };
+  if (inquiry.status === 'Closed' || inquiry.status === 'Replied') {
+    return { label: inquiry.status, tone: 'done' };
+  }
+  const ageHours = Math.floor((Date.now() - new Date(inquiry.created_at).getTime()) / 3600000);
+  if (ageHours >= 24) return { label: `${Math.floor(ageHours / 24)}d open`, tone: 'danger' };
+  if (ageHours >= 4) return { label: `${ageHours}h open`, tone: 'warn' };
+  return { label: ageHours <= 0 ? 'New' : `${ageHours}h open`, tone: 'ok' };
+};
+
+export default function InquiriesManager({ adminEmail, products = [], onOpenCustomerProfile, onCreateOrderFromInquiry, onNavigate }) {
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,6 +74,7 @@ export default function InquiriesManager({ adminEmail, products = [] }) {
   const [sending, setSending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [draftingReply, setDraftingReply] = useState(false);
+  const [assignmentMap, setAssignmentMap] = useState(() => readInquiryAssignments());
   const replyInputRef = React.useRef(null);
 
   useEffect(() => {
@@ -80,7 +103,10 @@ export default function InquiriesManager({ adminEmail, products = [] }) {
     }
   };
 
-  useEffect(() => { fetchInquiries(); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => fetchInquiries(), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const handleMarkAsRead = async (inquiry) => {
     if (inquiry.status !== 'New') return;
@@ -182,6 +208,51 @@ export default function InquiriesManager({ adminEmail, products = [] }) {
     if (inquiry.status === 'New') handleMarkAsRead(inquiry);
   };
 
+  const saveAssignment = (inquiryId, assignee) => {
+    setAssignmentMap(prev => {
+      const next = { ...prev, [inquiryId]: assignee };
+      try {
+        localStorage.setItem(INQUIRY_ASSIGNMENTS_KEY, JSON.stringify(next));
+      } catch (err) {
+        console.warn('Could not save inquiry assignment:', err);
+      }
+      return next;
+    });
+  };
+
+  const getAssignee = (inquiry) => assignmentMap[inquiry.id] || inquiry.assigned_to || 'Unassigned';
+
+  const openCustomerFromInquiry = (inquiry) => {
+    onOpenCustomerProfile?.({
+      customer_email: inquiry.customer_email,
+      customer_name: inquiry.customer_name,
+      phone: extractPhone(inquiry.message),
+      search: inquiry.customer_email || extractPhone(inquiry.message) || inquiry.customer_name
+    });
+  };
+
+  const convertInquiry = (inquiry, target) => {
+    try {
+      localStorage.setItem('admin_inquiry_conversion_context', JSON.stringify({
+        target,
+        inquiryId: inquiry.id,
+        name: inquiry.customer_name,
+        email: inquiry.customer_email,
+        phone: extractPhone(inquiry.message),
+        subject: inquiry.subject,
+        message: inquiry.message
+      }));
+    } catch (err) {
+      console.warn('Could not save inquiry conversion context:', err);
+    }
+    if (target === 'order') {
+      onCreateOrderFromInquiry?.(inquiry);
+      onNavigate?.('orders');
+    } else {
+      onNavigate?.('leads');
+    }
+  };
+
   // Filtering
   const filtered = inquiries.filter(i => {
     if (statusFilter !== 'All' && i.status !== statusFilter) return false;
@@ -272,7 +343,7 @@ export default function InquiriesManager({ adminEmail, products = [] }) {
   // Detail view
   if (selectedInquiry) {
     const inq = selectedInquiry;
-    const cfg = STATUS_CONFIG[inq.status] || STATUS_CONFIG['New'];
+    const sla = getSlaInfo(inq);
     return (
       <div style={styles.container}>
         <div style={styles.detailPanel}>
@@ -306,18 +377,44 @@ export default function InquiriesManager({ adminEmail, products = [] }) {
             </div>
           </div>
 
-          {/* Customer Message */}
-          <div style={styles.messageBody}>{inq.message}</div>
+          <div className="inquiry-action-rail">
+            <label className="inquiry-assignment-control">
+              <span>Owner</span>
+              <select value={getAssignee(inq)} onChange={(event) => saveAssignment(inq.id, event.target.value)}>
+                <option value="Unassigned">Unassigned</option>
+                <option value={adminEmail || 'Me'}>{adminEmail || 'Me'}</option>
+                <option value="Sales">Sales</option>
+                <option value="Support">Support</option>
+              </select>
+            </label>
+            <span className={`inquiry-sla-pill ${sla.tone}`}><Clock size={13} /> {sla.label}</span>
+            <button type="button" className="admin-btn" onClick={() => openCustomerFromInquiry(inq)}>
+              <User size={13} /> Profile
+            </button>
+            <button type="button" className="admin-btn" onClick={() => convertInquiry(inq, 'lead')}>
+              <ArrowRight size={13} /> Lead
+            </button>
+            <button type="button" className="admin-btn admin-btn-primary" onClick={() => convertInquiry(inq, 'order')}>
+              <ArrowRight size={13} /> Order
+            </button>
+          </div>
 
-          {/* Previous Reply */}
-          {inq.admin_reply && (
-            <div style={styles.previousReply}>
-              <div style={styles.prevReplyLabel}>
-                <CheckCircle size={14} /> Replied by {inq.replied_by || 'Admin'} · {formatDate(inq.replied_at)}
+          <div className="inquiry-thread">
+            <div className="inquiry-thread-message customer">
+              <div className="inquiry-thread-meta">
+                <User size={13} /> {inq.customer_name || 'Customer'} · {formatDate(inq.created_at)}
               </div>
-              <div style={styles.prevReplyText}>{inq.admin_reply}</div>
+              <div>{inq.message}</div>
             </div>
-          )}
+            {inq.admin_reply && (
+              <div className="inquiry-thread-message admin">
+                <div className="inquiry-thread-meta">
+                  <CheckCircle size={13} /> {inq.replied_by || 'Admin'} · {formatDate(inq.replied_at)}
+                </div>
+                <div>{inq.admin_reply}</div>
+              </div>
+            )}
+          </div>
 
           {/* Reply Composer */}
           {inq.status !== 'Closed' && (
@@ -434,7 +531,10 @@ export default function InquiriesManager({ adminEmail, products = [] }) {
         </div>
       ) : (
         <div style={styles.list}>
-          {filtered.map(inq => (
+          {filtered.map(inq => {
+            const sla = getSlaInfo(inq);
+            const assignee = getAssignee(inq);
+            return (
             <div key={inq.id} style={styles.card(inq.status === 'New')} onClick={() => openInquiry(inq)}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(16, 185, 129, 0.3)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = inq.status === 'New' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255,255,255,0.06)'; e.currentTarget.style.transform = 'none'; }}
@@ -456,6 +556,18 @@ export default function InquiriesManager({ adminEmail, products = [] }) {
               </div>
               {inq.subject && <p style={styles.cardSubject}>{inq.subject}</p>}
               <p style={styles.cardPreview}>{inq.message}</p>
+              <div className="inquiry-card-ops" onClick={(e) => e.stopPropagation()}>
+                <span className={`inquiry-sla-pill ${sla.tone}`}><Clock size={12} /> {sla.label}</span>
+                <label className="inquiry-assignment-control compact">
+                  <span>Owner</span>
+                  <select value={assignee} onChange={(event) => saveAssignment(inq.id, event.target.value)}>
+                    <option value="Unassigned">Unassigned</option>
+                    <option value={adminEmail || 'Me'}>{adminEmail || 'Me'}</option>
+                    <option value="Sales">Sales</option>
+                    <option value="Support">Support</option>
+                  </select>
+                </label>
+              </div>
 
               {/* Quick Actions CTA Row */}
               <div 
@@ -557,9 +669,63 @@ export default function InquiriesManager({ adminEmail, products = [] }) {
                     <MessageSquare size={12} /> WhatsApp
                   </button>
                 )}
+                <button
+                  onClick={() => openCustomerFromInquiry(inq)}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    background: 'rgba(56, 189, 248, 0.12)',
+                    border: '1px solid rgba(56, 189, 248, 0.25)',
+                    color: '#38bdf8',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <User size={12} /> Profile
+                </button>
+                <button
+                  onClick={() => convertInquiry(inq, 'lead')}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    background: 'rgba(245, 158, 11, 0.12)',
+                    border: '1px solid rgba(245, 158, 11, 0.28)',
+                    color: '#fbbf24',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <ArrowRight size={12} /> Lead
+                </button>
+                <button
+                  onClick={() => convertInquiry(inq, 'order')}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    color: '#34d399',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <ArrowRight size={12} /> Order
+                </button>
               </div>
             </div>
-          ))}
+          );})}
         </div>
       )}
     </div>

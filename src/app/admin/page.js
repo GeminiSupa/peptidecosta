@@ -68,6 +68,27 @@ function AdminTabLoading({ label = 'Loading tab…' }) {
 const dynamicTab = (loader, label) =>
   dynamic(loader, { ssr: false, loading: () => <AdminTabLoading label={label} /> });
 
+const SHARE_PRESETS_KEY = 'peptides_admin_campaign_link_presets_v1';
+
+const readSharePresets = () => {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(window.localStorage.getItem(SHARE_PRESETS_KEY) || '[]');
+  } catch {
+    return [];
+  }
+};
+
+const isValidOptionalUrl = (value) => {
+  if (!String(value || '').trim()) return true;
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol);
+  } catch {
+    return false;
+  }
+};
+
 const OrdersManager = dynamicTab(() => import('@/components/admin/OrdersManager'), 'Loading orders…');
 const ProductsManager = dynamicTab(() => import('@/components/admin/ProductsManager'), 'Loading products…');
 const EmailMarketingStudio = dynamicTab(() => import('@/components/admin/marketing/EmailMarketingStudio'), 'Loading marketing studio…');
@@ -394,6 +415,7 @@ export default function AdminPage() {
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [cmsSaveStatus, setCmsSaveStatus] = useState('');
   const [cmsSaveLoading, setCmsSaveLoading] = useState(false);
+  const [cmsChangeHistory, setCmsChangeHistory] = useState([]);
   const [editingBlog, setEditingBlog] = useState(null);
   const [businessLinks, setBusinessLinks] = useState(null);  
   // CSV Import States
@@ -911,6 +933,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [shareCampaign, setShareCampaign] = useState('');
   const [shareProduct, setShareProduct] = useState('all');
   const [shareCopied, setShareCopied] = useState(false);
+  const [sharePresetName, setSharePresetName] = useState('');
+  const [sharePresets, setSharePresets] = useState(() => readSharePresets());
+  const [sharePresetSaved, setSharePresetSaved] = useState(false);
+  const [reviewStatusFilter, setReviewStatusFilter] = useState('Pending');
+  const [reviewProductFilter, setReviewProductFilter] = useState('all');
+  const [reviewModerationReasons, setReviewModerationReasons] = useState({});
 
   // Password change states
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -1410,6 +1438,18 @@ Core Rules:
     if (linkRef) query.set('ref', String(linkRef));
     router.replace(`/admin?${query.toString()}`, { scroll: false });
   }, [router]);
+
+  const openCustomerProfileHandoff = useCallback((contact = {}) => {
+    const lookupValue = contact.search || contact.customer_email || contact.user_email || contact.email || contact.customer_phone || contact.user_phone || contact.phone || contact.contact_value || contact.customer_name || contact.name || '';
+    if (lookupValue) {
+      try {
+        localStorage.setItem('admin_customer_search', String(lookupValue).replace(/^\+/, ''));
+      } catch (err) {
+        console.warn('Could not persist customer handoff search:', err);
+      }
+    }
+    navigateToTab('customers');
+  }, [navigateToTab]);
 
   useEffect(() => {
     if (activeTab !== 'messenger' || fbView !== 'alerts' || !focusedFacebookNotificationId) return;
@@ -3653,17 +3693,23 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
   const handleApproveReview = async (id) => {
     if (!supabase) return;
+    const reason = reviewModerationReasons[id]?.trim();
     try {
       const { error } = await supabase.from('product_reviews').update({ status: 'Approved' }).eq('id', id);
       if (!error) {
         setReviews(reviews.map(r => r.id === id ? { ...r, status: 'Approved' } : r));
+        if (reason) {
+          console.info(`Review ${id} approved. Moderation note: ${reason}`);
+        }
       }
     } catch (err) { console.error(err); }
   };
 
   const handleDeleteReview = async (id) => {
     if (!supabase) return;
-    if (!confirm('Are you sure you want to delete this review?')) return;
+    const reason = reviewModerationReasons[id]?.trim();
+    const reasonText = reason ? `\nReason: ${reason}` : '\nNo moderation reason entered.';
+    if (!confirm(`Delete this review?${reasonText}`)) return;
     try {
       const { error } = await supabase.from('product_reviews').delete().eq('id', id);
       if (!error) {
@@ -3671,6 +3717,22 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       }
     } catch (err) { console.error(err); }
   };
+
+  const reviewProducts = useMemo(
+    () => Array.from(new Set(reviews.map(r => r.product_name).filter(Boolean))).sort(),
+    [reviews]
+  );
+
+  const visibleReviews = useMemo(() => {
+    return [...reviews]
+      .filter(review => reviewStatusFilter === 'All' || review.status === reviewStatusFilter)
+      .filter(review => reviewProductFilter === 'all' || review.product_name === reviewProductFilter)
+      .sort((a, b) => {
+        const pendingDelta = (a.status === 'Pending' ? 0 : 1) - (b.status === 'Pending' ? 0 : 1);
+        if (pendingDelta !== 0) return pendingDelta;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+  }, [reviews, reviewProductFilter, reviewStatusFilter]);
 
   const handleMarkNotificationRead = async (id) => {
     if (!isSupabaseConfigured || !supabase) return;
@@ -3759,8 +3821,58 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     setTimeout(() => setShareCopied(false), 2000);
   };
 
+  const persistSharePresets = (nextPresets) => {
+    setSharePresets(nextPresets);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(SHARE_PRESETS_KEY, JSON.stringify(nextPresets));
+    }
+  };
+
+  const handleSaveSharePreset = () => {
+    const name = sharePresetName.trim() || shareCampaign.trim() || `${shareSource === 'none' ? 'Catalog' : shareSource} link`;
+    const preset = {
+      id: `${Date.now()}`,
+      name,
+      lang: shareLang,
+      currency: shareCurrency,
+      source: shareSource,
+      medium: shareMedium,
+      campaign: shareCampaign,
+      product: shareProduct,
+      url: getShareUrl(),
+      savedAt: new Date().toISOString(),
+    };
+    persistSharePresets([preset, ...sharePresets.filter(item => item.name.toLowerCase() !== name.toLowerCase())].slice(0, 12));
+    setSharePresetName('');
+    setSharePresetSaved(true);
+    setTimeout(() => setSharePresetSaved(false), 2000);
+  };
+
+  const handleApplySharePreset = (preset) => {
+    setShareLang(preset.lang || 'es');
+    setShareCurrency(preset.currency || 'CRC');
+    setShareSource(preset.source || 'none');
+    setShareMedium(preset.medium || '');
+    setShareCampaign(preset.campaign || '');
+    setShareProduct(preset.product || 'all');
+  };
+
+  const handleDeleteSharePreset = (presetId) => {
+    persistSharePresets(sharePresets.filter(preset => preset.id !== presetId));
+  };
+
   // CMS Handlers
   const handleSaveBusinessLinks = async () => {
+    const invalidFields = ['googleMapsUrl', 'facebookUrl', 'instagramUrl']
+      .filter(key => !isValidOptionalUrl(businessLinks?.[key]));
+    if (invalidFields.length > 0) {
+      setCmsSaveStatus(`error:Invalid URL in ${invalidFields.join(', ')}. Use full https:// links.`);
+      return;
+    }
+    if (businessLinks?.supportEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(businessLinks.supportEmail)) {
+      setCmsSaveStatus('error:Support email is not valid.');
+      return;
+    }
     setCmsSaveLoading(true);
     setCmsSaveStatus('');
     try {
@@ -3771,6 +3883,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         });
         if (!error) {
           setCmsSaveStatus('success:Business links saved successfully.');
+          setCmsChangeHistory(prev => [{ area: 'Business links', at: new Date().toISOString() }, ...prev].slice(0, 6));
           return;
         }
         throw error;
@@ -3794,6 +3907,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         });
         if (error) throw error;
         setCmsSaveStatus('success:Settings saved successfully.');
+        setCmsChangeHistory(prev => [{ area: 'Landing page', at: new Date().toISOString() }, ...prev].slice(0, 6));
       } catch (err) {
         console.error("Failed to save settings:", err);
         setCmsSaveStatus(`error:Failed to save settings (${err.message})`);
@@ -4079,7 +4193,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   onClick={() => navigateToTab('share')}
                 >
                   <Link2 size={14} />
-                  <span className="tab-label">Share</span>
+                  <span className="tab-label">Campaign Links</span>
                 </button>
               )}
               {hasAccess('reviews') && (
@@ -4102,7 +4216,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   onClick={() => navigateToTab('messenger')}
                 >
                   <FacebookIcon size={14} style={{ color: activeTab === 'messenger' ? 'inherit' : '#1877f2' }} />
-                  <span className="tab-label">Facebook</span>
+                  <span className="tab-label">Facebook Inbox</span>
                   {facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
                     <span className="tab-count badge-info">
                       {facebookNotifications.filter(n => n.status === 'unread').length}
@@ -4125,7 +4239,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   onClick={() => navigateToTab('affiliates')}
                 >
                   <UserPlus size={14} />
-                  <span className="tab-label">Affiliates and Promotions</span>
+                  <span className="tab-label">Affiliates</span>
                 </button>
               )}
               {hasAccess('my_qr') && (
@@ -4143,7 +4257,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   onClick={() => navigateToTab('broadcasts')}
                 >
                   <Megaphone size={14} />
-                  <span className="tab-label">Broadcasts</span>
+                  <span className="tab-label">One-Time Announcements</span>
                 </button>
               )}
             </div>
@@ -4169,7 +4283,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   onClick={() => navigateToTab('cms')}
                 >
                   <FileText size={14} />
-                  <span className="tab-label">Content (CMS)</span>
+                  <span className="tab-label">CMS</span>
                 </button>
               )}
             </div>
@@ -4199,7 +4313,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   onClick={() => navigateToTab('wa_session')}
                 >
                   <Smartphone size={14} style={{ color: activeTab === 'wa_session' ? 'inherit' : '#34d399' }} />
-                  <span className="tab-label" style={{ color: activeTab === 'wa_session' ? 'inherit' : '#34d399', fontWeight: '600' }}>WA Session (2nd Device)</span>
+                  <span className="tab-label" style={{ color: activeTab === 'wa_session' ? 'inherit' : '#34d399', fontWeight: '600' }}>WhatsApp Device</span>
                 </button>
               )}
               {adminProfile?.is_superadmin && (
@@ -4360,14 +4474,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <div>
             <div className="admin-toolbar">
               <div>
-                <h3>Share Catalog Overrides Links</h3>
+                <h3>Campaign Links</h3>
                 <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
-                  Generate custom pre-configured links for different user groups (such as English speakers or currency preferences) to share directly in WhatsApp or bio pages.
+                  Save reusable tracked catalog links for ads, WhatsApp, bio pages, and one-time announcements.
                 </p>
               </div>
             </div>
 
-            <div className="order-card" style={{ maxWidth: '600px', margin: '0 auto' }}>
+            <div className="order-card campaign-links-card" style={{ maxWidth: '840px', margin: '0 auto' }}>
               <div className="share-link-builder">
                 <div className="share-select-row">
                   <div className="filter-group">
@@ -4482,6 +4596,44 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   </div>
                 </div>
 
+                <div className="campaign-preset-panel">
+                  <div className="campaign-preset-save">
+                    <input
+                      className="admin-input"
+                      type="text"
+                      placeholder="Preset name, e.g. Instagram July Bio"
+                      value={sharePresetName}
+                      onChange={(e) => setSharePresetName(e.target.value)}
+                    />
+                    <button type="button" className="admin-btn admin-btn-primary" onClick={handleSaveSharePreset}>
+                      <Save size={15} /> {sharePresetSaved ? 'Saved' : 'Save preset'}
+                    </button>
+                  </div>
+                  {sharePresets.length > 0 && (
+                    <div className="campaign-preset-list">
+                      {sharePresets.map(preset => (
+                        <article key={preset.id} className="campaign-preset-card">
+                          <div>
+                            <strong>{preset.name}</strong>
+                            <span>{[preset.source !== 'none' ? preset.source : 'catalog', preset.medium, preset.campaign].filter(Boolean).join(' / ')}</span>
+                          </div>
+                          <div className="campaign-preset-actions">
+                            <button type="button" className="admin-btn" onClick={() => handleApplySharePreset(preset)}>
+                              <Check size={13} /> Apply
+                            </button>
+                            <button type="button" className="admin-btn" onClick={() => navigator.clipboard.writeText(preset.url)}>
+                              <Clipboard size={13} /> Copy
+                            </button>
+                            <button type="button" className="admin-btn campaign-preset-delete" onClick={() => handleDeleteSharePreset(preset.id)}>
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ background: 'rgba(0, 212, 255, 0.05)', border: '1px solid rgba(0, 212, 255, 0.1)', padding: '16px', borderRadius: '8px', fontSize: '0.8rem', color: '#cbd5e1', lineHeight: '1.5', marginTop: '16px' }}>
                   💡 **Sharing Pro-Tip:** Placing `lang=en` inside links will automatically translate all category names, buttons, and stock badges to English, and toggle the catalog to prioritize USD pricing immediately for international clients!
                   
@@ -4535,6 +4687,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             selectedCarts={selectedCartIds}
             handleSendRecoveryEmail={handleSendRecoveryEmail}
             handleDeleteCart={handleDeleteCart}
+            onOpenCustomerProfile={openCustomerProfileHandoff}
           />
             </ErrorBoundary>
           )
@@ -4551,10 +4704,30 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <div className="admin-orders-tab">
           
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-              <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0 }}>⭐ Product Reviews Moderation</h2>
+              <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0 }}>Product Reviews Moderation</h2>
               <button className="admin-btn" onClick={loadAdminData} style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}>
                 Refresh
               </button>
+            </div>
+
+            <div className="reviews-filter-bar">
+              <label>
+                <span>Status</span>
+                <select value={reviewStatusFilter} onChange={(e) => setReviewStatusFilter(e.target.value)}>
+                  <option value="Pending">Pending first</option>
+                  <option value="Approved">Approved</option>
+                  <option value="All">All reviews</option>
+                </select>
+              </label>
+              <label>
+                <span>Product</span>
+                <select value={reviewProductFilter} onChange={(e) => setReviewProductFilter(e.target.value)}>
+                  <option value="all">All products</option>
+                  {reviewProducts.map(productName => (
+                    <option key={productName} value={productName}>{productName}</option>
+                  ))}
+                </select>
+              </label>
             </div>
             
             {loadingReviews ? (
@@ -4563,8 +4736,51 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <div style={{ textAlign: 'center', padding: '40px', background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8' }}>
                 No reviews found.
               </div>
+            ) : visibleReviews.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px', background: '#0e1626', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', color: '#94a3b8' }}>
+                No reviews match these filters.
+              </div>
             ) : (
-              <div className="spreadsheet-container">
+              <>
+              <div className="review-mobile-list admin-mobile-only">
+                {visibleReviews.map(r => (
+                  <article key={r.id} className={`review-mobile-card ${r.status === 'Pending' ? 'pending' : 'approved'}`}>
+                    <div className="review-mobile-top">
+                      <div>
+                        <strong>{r.product_name}</strong>
+                        <span>{r.customer_name} · {new Date(r.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <span className="review-status-pill">{r.status}</span>
+                    </div>
+                    <div className="review-public-preview">
+                      <div className="review-preview-stars">
+                        {[1, 2, 3, 4, 5].map(star => (
+                          <Star key={star} size={13} fill={star <= r.rating ? '#fbbf24' : 'transparent'} color="#fbbf24" />
+                        ))}
+                      </div>
+                      <p>{r.comment}</p>
+                      <small>Public preview: {r.customer_name || 'Customer'} on {r.product_name}</small>
+                    </div>
+                    <textarea
+                      className="review-moderation-reason"
+                      placeholder="Moderation reason or note..."
+                      value={reviewModerationReasons[r.id] || ''}
+                      onChange={(e) => setReviewModerationReasons(prev => ({ ...prev, [r.id]: e.target.value }))}
+                    />
+                    <div className="review-mobile-actions">
+                      {r.status !== 'Approved' && (
+                        <button type="button" className="admin-btn review-approve-btn" onClick={() => handleApproveReview(r.id)}>
+                          <Check size={13} /> Approve
+                        </button>
+                      )}
+                      <button type="button" className="admin-btn review-delete-btn" onClick={() => handleDeleteReview(r.id)}>
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <div className="spreadsheet-container admin-desktop-table">
                 <table className="spreadsheet-table responsive-table">
                   <thead>
                     <tr>
@@ -4573,12 +4789,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       <th style={{ width: '150px' }}>Author</th>
                       <th style={{ width: '100px', textAlign: 'center' }}>Rating</th>
                       <th style={{ minWidth: '300px' }}>Review Comment</th>
+                      <th style={{ minWidth: '220px' }}>Public Preview / Reason</th>
                       <th style={{ width: '90px', textAlign: 'center' }}>Status</th>
                       <th style={{ width: '160px', textAlign: 'center' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {reviews.map(r => (
+                    {visibleReviews.map(r => (
                       <tr key={r.id} style={{ opacity: r.status === 'Approved' ? 0.75 : 1 }}>
                         <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
                           {new Date(r.created_at).toLocaleDateString()}
@@ -4596,6 +4813,22 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                            <div style={{ maxHeight: '60px', overflowY: 'auto', paddingRight: '4px', lineHeight: '1.4' }}>
                              {r.comment}
                            </div>
+                        </td>
+                        <td>
+                          <div className="review-public-preview desktop">
+                            <div className="review-preview-stars">
+                              {[1, 2, 3, 4, 5].map(star => (
+                                <Star key={star} size={11} fill={star <= r.rating ? '#fbbf24' : 'transparent'} color="#fbbf24" />
+                              ))}
+                            </div>
+                            <small>{r.customer_name || 'Customer'} on {r.product_name}</small>
+                          </div>
+                          <input
+                            className="review-moderation-input"
+                            placeholder="Moderation reason"
+                            value={reviewModerationReasons[r.id] || ''}
+                            onChange={(e) => setReviewModerationReasons(prev => ({ ...prev, [r.id]: e.target.value }))}
+                          />
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           <span style={{ 
@@ -4623,12 +4856,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
           )
         )}
 
-        {/* TAB: Facebook Notifications */}
+        {/* TAB: One-Time Announcements */}
         {activeTab === 'broadcasts' && (
           <BroadcastsPanel products={products} />
         )}
@@ -4637,9 +4871,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <div className="admin-orders-tab">
             <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
               {[
-                { id: 'inbox', label: 'Inbox', count: null, Icon: MessageCircle },
-                { id: 'posts', label: 'Content & Engagement', count: null, Icon: Megaphone },
-                { id: 'alerts', label: 'Alerts', count: facebookNotifications.filter(n => n.status === 'unread').length, Icon: Bell },
+                { id: 'inbox', label: 'Facebook Inbox', count: null, Icon: MessageCircle },
+                { id: 'posts', label: 'Facebook Posts', count: null, Icon: Megaphone },
+                { id: 'alerts', label: 'Facebook Alerts', count: facebookNotifications.filter(n => n.status === 'unread').length, Icon: Bell },
               ].map((v) => {
                 const Icon = v.Icon;
                 return (
@@ -4689,10 +4923,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
               <div>
                 <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <MessageCircle size={22} style={{ color: '#0ea5e9' }} /> Facebook Alerts & Leads
+                  <MessageCircle size={22} style={{ color: '#0ea5e9' }} /> Facebook Alerts
                 </h2>
                 <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '4px 0 0 0' }}>
-                  Real-time Messenger conversations, feed comments, and Lead Ads submissions
+                  Lead ads, comment alerts, and Messenger events that need review.
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '12px' }}>
@@ -5048,6 +5282,31 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             )}
 
+            <div className="cms-safety-panel">
+              <div className="cms-preview-card">
+                <div className="cms-panel-kicker">Draft preview</div>
+                <h3>{siteSettings?.heroTitleEn || 'Landing page title'}</h3>
+                <p>{siteSettings?.heroSubEn || 'Landing page subtitle preview'}</p>
+                <small>{siteSettings?.heroTextEn || 'Hero description will preview here as you edit.'}</small>
+              </div>
+              <div className="cms-preview-card">
+                <div className="cms-panel-kicker">Publish safety</div>
+                <ul>
+                  <li>URLs must use full http:// or https:// links.</li>
+                  <li>Changes stay in draft fields until you press Save.</li>
+                  <li>Blog posts still use their own published toggle.</li>
+                </ul>
+              </div>
+              <div className="cms-preview-card">
+                <div className="cms-panel-kicker">Recent changes</div>
+                {cmsChangeHistory.length === 0 ? (
+                  <p>No changes saved in this session.</p>
+                ) : cmsChangeHistory.map(entry => (
+                  <p key={`${entry.area}-${entry.at}`}><strong>{entry.area}</strong> saved {new Date(entry.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                ))}
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
               
               {/* Landing Page Settings */}
@@ -5079,7 +5338,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     </div>
 
                     <button onClick={handleSaveSiteSettings} disabled={cmsSaveLoading} className="admin-btn admin-btn-primary" style={{ padding: '12px', justifyContent: 'center' }}>
-                      {cmsSaveLoading ? 'Saving...' : <><Save size={16} /> Save Landing Page Settings</>}
+                      {cmsSaveLoading ? 'Publishing...' : <><Save size={16} /> Publish Landing Page</>}
                     </button>
                   </div>
                 ) : null}
@@ -5129,7 +5388,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     </div>
 
                     <button onClick={handleSaveBusinessLinks} disabled={cmsSaveLoading} className="admin-btn admin-btn-primary" style={{ padding: '12px', justifyContent: 'center' }}>
-                      {cmsSaveLoading ? 'Saving...' : <><Save size={16} /> Save Business Links</>}
+                      {cmsSaveLoading ? 'Publishing...' : <><Save size={16} /> Publish Business Links</>}
                     </button>
                   </div>
                 ) : null}
@@ -5189,7 +5448,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             ) : (
               <ErrorBoundary>
-              <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} productViews={productViews} />
+              <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} productViews={productViews} onNavigate={navigateToTab} />
               </ErrorBoundary>
             )}
 
@@ -5256,6 +5515,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             getReferralBadgeStyles={getReferralBadgeStyles}
             formatRelativeTime={formatRelativeTime}
             setSelectedOrderDetails={setSelectedOrderDetails}
+            onOpenCustomerProfile={openCustomerProfileHandoff}
           />
           </ErrorBoundary>
         )}
@@ -5329,7 +5589,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {/* TAB: CUSTOMER INQUIRIES */}
         {activeTab === 'inquiries' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
-            <InquiriesManager adminEmail={loggedInEmail.current} products={products} />
+            <InquiriesManager
+              adminEmail={loggedInEmail.current}
+              products={products}
+              onOpenCustomerProfile={openCustomerProfileHandoff}
+              onCreateOrderFromInquiry={() => setManualOrderOpen(true)}
+              onNavigate={navigateToTab}
+            />
           </div>
         )}
 

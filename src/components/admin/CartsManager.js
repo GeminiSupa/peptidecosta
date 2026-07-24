@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
   ShoppingCart, Trash2, Upload, Brain, Sparkles, AlertCircle, 
-  Clock, Mail, MessageCircle, ArrowRight, Package, CreditCard, Eye, Search, ArrowDownUp
+  Clock, Mail, MessageCircle, ArrowRight, Package, CreditCard, Eye, Search, ArrowDownUp, User
 } from 'lucide-react';
 
 export default function CartsManager({
@@ -24,7 +24,8 @@ export default function CartsManager({
   selectedCarts,
   handleSendRecoveryEmail,
   handleDeleteCart,
-  setSelectedCartDetails
+  setSelectedCartDetails,
+  onOpenCustomerProfile
 }) {
 
 
@@ -153,8 +154,25 @@ export default function CartsManager({
     return [];
   };
 
+  const untouchedRecoverableCount = filteredAndSortedCarts.filter(cart => {
+    const hasContact = !!(cart.user_phone || cart.customer_phone || cart.user_email || cart.customer_email);
+    const contacted = cart.recovery_whatsapp_sent || cart.recovery_email_sent || cart.status === 'recovered' || cart.status === 'converted';
+    return hasContact && !contacted;
+  }).length;
+
+  const openCustomerFromCart = (cart) => {
+    onOpenCustomerProfile?.({
+      customer_email: cart.customer_email,
+      user_email: cart.user_email,
+      customer_phone: cart.customer_phone,
+      user_phone: cart.user_phone,
+      customer_name: cart.customer_name,
+      search: cart.user_email || cart.customer_email || cart.user_phone || cart.customer_phone || cart.customer_name
+    });
+  };
+
   return (
-    <div className="admin-tab-panel">
+    <div className="admin-tab-panel carts-manager-panel">
       
       {/* HEADER ACTIONS */}
       <div className="admin-section-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
@@ -192,7 +210,7 @@ export default function CartsManager({
       </div>
 
       {/* AI RECOVERY MODULE */}
-      <div style={{ marginBottom: '30px' }}>
+      <div className="carts-ai-module" style={{ marginBottom: '30px' }}>
         {generatingCartsAi ? (
           <div style={{ background: 'linear-gradient(135deg, rgba(14, 22, 38, 0.9) 0%, rgba(30, 41, 59, 0.9) 100%)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '16px', padding: '24px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -281,7 +299,7 @@ export default function CartsManager({
 
       
       {/* Search and Sort Toolbar */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+      <div className="carts-filter-row" style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 200px', position: 'relative' }}>
           <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
           <input 
@@ -348,8 +366,80 @@ export default function CartsManager({
           <p>Your checkout funnel is completely clear right now.</p>
         </div>
       ) : (
+        <div className="carts-recovery-section">
+        <div className="cart-recovery-heading">
+          <div>
+            <h3>Recoverable carts</h3>
+            <p>{untouchedRecoverableCount} untouched carts with contact details</p>
+          </div>
+          <button type="button" className="admin-btn admin-btn-primary" onClick={handleGenerateCartsAi}>
+            <MessageCircle size={14} /> Recovery playbook
+          </button>
+        </div>
+        <div className="cart-mobile-list admin-mobile-only">
+          {filteredAndSortedCarts.map((cart, index) => {
+            const total = calculateCartTotal(cart.cart_data);
+            const items = getCartItems(cart.cart_data);
+            const isSelected = selectedCarts && selectedCarts.includes(cart.session_id || cart.id);
+            const rs = getRecoveryStatus(cart);
+            const phone = cart.user_phone || cart.customer_phone;
+            const email = cart.user_email || cart.customer_email;
+            return (
+              <article key={cart.id} className={`cart-mobile-card${isSelected ? ' selected' : ''}`}>
+                <div className="cart-mobile-top">
+                  <label className="cart-mobile-check">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => handleLocalSelectCart(cart.session_id || cart.id, e.target.checked, e.nativeEvent.shiftKey, index)}
+                    />
+                  </label>
+                  <button type="button" className="cart-mobile-customer" onClick={() => setSelectedCartDetails && setSelectedCartDetails(cart)}>
+                    <strong>{email || cart.customer_name || 'Guest Checkout'}</strong>
+                    <span>{phone || 'No phone'} · {new Date(cart.created_at).toLocaleDateString()}</span>
+                  </button>
+                  <span className="cart-mobile-total">${total.toFixed(2)}</span>
+                </div>
+                <div className="cart-mobile-items">
+                  {items.slice(0, 3).map((item, idx) => (
+                    <span key={idx}><Package size={11} /> {item.qty || item.quantity || 1}x {item.product || item.name || item.product_name || 'Product'}</span>
+                  ))}
+                  {items.length > 3 && <span>+ {items.length - 3} more</span>}
+                </div>
+                <div className="cart-mobile-status" style={{ color: rs.color }}>
+                  {rs.icon} {rs.label}
+                </div>
+                <div className="cart-mobile-actions">
+                  <button type="button" className="admin-btn" onClick={() => openCustomerFromCart(cart)}>
+                    <User size={13} /> Profile
+                  </button>
+                  {phone && (
+                    <button
+                      type="button"
+                      className="admin-btn cart-mobile-whatsapp"
+                      onClick={() => window.open(`https://wa.me/${phone.replace(/\D/g, '')}?text=Hi! We noticed you left some items in your Costa Peptides cart. Can we help you complete your order?`, '_blank')}
+                    >
+                      <MessageCircle size={13} /> WhatsApp
+                    </button>
+                  )}
+                  {email && (
+                    <button type="button" className="admin-btn" onClick={() => handleSendRecoveryEmail && handleSendRecoveryEmail(cart)}>
+                      <Mail size={13} /> Email
+                    </button>
+                  )}
+                  <button type="button" className="admin-btn" onClick={() => setSelectedCartDetails && setSelectedCartDetails(cart)}>
+                    <Eye size={13} /> Details
+                  </button>
+                  <button type="button" className="admin-btn cart-mobile-delete" onClick={() => handleDeleteCart && handleDeleteCart(cart.session_id || cart.id)}>
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
         
-        <div className="table-responsive" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+        <div className="table-responsive admin-desktop-table" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
           <table className="spreadsheet-table responsive-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead style={{ background: 'rgba(30, 41, 59, 0.8)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
               <tr>
@@ -437,6 +527,13 @@ export default function CartsManager({
                     </td>
                     <td data-label="Actions" style={{ padding: '12px 16px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                        <button
+                          onClick={() => openCustomerFromCart(cart)}
+                          style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
+                          title="Open Customer Profile"
+                        >
+                          <User size={14} />
+                        </button>
                         {(cart.user_phone || cart.customer_phone) && (
                           <button 
                             onClick={() => window.open(`https://wa.me/${(cart.user_phone || cart.customer_phone).replace(/\D/g, '')}?text=Hi! We noticed you left some items in your Costa Peptides cart. Can we help you complete your order?`, '_blank')}
@@ -476,6 +573,7 @@ export default function CartsManager({
               })}
             </tbody>
           </table>
+        </div>
         </div>
 
       )}

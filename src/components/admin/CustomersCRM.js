@@ -15,6 +15,26 @@ import { supabase } from '@/lib/supabase';
 const CRM_REMINDERS_KEY = 'peptides_crm_follow_up_reminders_v1';
 const CRM_ACTIVITY_KEY = 'peptides_crm_staff_activity_v1';
 
+const readStoredJson = (key, fallback) => {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    return JSON.parse(window.localStorage.getItem(key) || JSON.stringify(fallback));
+  } catch {
+    return fallback;
+  }
+};
+
+const takeCustomerHandoffSearch = () => {
+  if (typeof window === 'undefined') return '';
+  try {
+    const value = window.localStorage.getItem('admin_customer_search') || '';
+    if (value) window.localStorage.removeItem('admin_customer_search');
+    return value;
+  } catch {
+    return '';
+  }
+};
+
 const resolveRecommendation = (cust) => {
   // Combine past purchases and cart items to search for keywords
   const items = [
@@ -143,7 +163,7 @@ const buildSalesScript = (cust) => {
 };
 
 export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhatsAppClick }) {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => takeCustomerHandoffSearch());
   const [currentPage, setCurrentPage] = useState(1);
   const [customersPerPage, setCustomersPerPage] = useState(25);
   const [editingCustomer, setEditingCustomer] = useState(null);
@@ -168,20 +188,9 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
   const [timelineData, setTimelineData] = useState(null);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineError, setTimelineError] = useState('');
-  const [reminders, setReminders] = useState([]);
-  const [staffActivity, setStaffActivity] = useState([]);
+  const [reminders, setReminders] = useState(() => readStoredJson(CRM_REMINDERS_KEY, []));
+  const [staffActivity, setStaffActivity] = useState(() => readStoredJson(CRM_ACTIVITY_KEY, []));
   const [newReminder, setNewReminder] = useState({ dueAt: '', note: '' });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      setReminders(JSON.parse(window.localStorage.getItem(CRM_REMINDERS_KEY) || '[]'));
-      setStaffActivity(JSON.parse(window.localStorage.getItem(CRM_ACTIVITY_KEY) || '[]'));
-    } catch {
-      setReminders([]);
-      setStaffActivity([]);
-    }
-  }, []);
 
   const saveReminders = useCallback((next) => {
     setReminders(next);
@@ -1322,7 +1331,95 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           No customers found matching your search.
         </div>
       ) : (
-        <div className="crm-table-wrapper">
+        <>
+        <div className="crm-mobile-list admin-mobile-only">
+          {paginatedCustomers.map(cust => {
+            const contactPhone = cust.whatsappWaId || cust.phone;
+            const tags = getCustomerTags(cust);
+            const rec = resolveRecommendation(cust);
+            return (
+              <article key={cust.id} className={`crm-mobile-card${selectedCustomerIds.includes(cust.id) ? ' selected' : ''}`}>
+                <div className="crm-mobile-card-top">
+                  <button
+                    type="button"
+                    className="crm-mobile-profile"
+                    onClick={() => openCustomerWorkspace(cust)}
+                  >
+                    <span className="cust-avatar-mini" style={{ background: cust.isLead ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)' }}>
+                      {cust.name.charAt(0).toUpperCase()}
+                    </span>
+                    <span>
+                      <strong>{cust.name}</strong>
+                      <small>{cust.isLead ? 'Cart lead profile' : `${cust.orderCount} order${cust.orderCount === 1 ? '' : 's'} profile`}</small>
+                    </span>
+                  </button>
+                  <label className="crm-mobile-select">
+                    <input
+                      type="checkbox"
+                      checked={selectedCustomerIds.includes(cust.id)}
+                      onChange={() => handleToggleSelect(cust.id)}
+                    />
+                  </label>
+                </div>
+
+                <div className="crm-mobile-tags">
+                  {tags.map(tag => (
+                    <span key={tag.key} className={`crm-tag ${tag.tone}`}>
+                      {tag.key === 'vip' && <Crown size={9} />}
+                      {tag.key === 'repeat' && <ShoppingBag size={9} />}
+                      {tag.key === 'lead' && <Target size={9} />}
+                      {tag.key === 'inactive' && <AlertTriangle size={9} />}
+                      {tag.key === 'customer' && <BadgeCheck size={9} />}
+                      {tag.label}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="crm-mobile-facts">
+                  {cust.email && <span><Mail size={12} /> {cust.email}</span>}
+                  {contactPhone && <span><MessageCircle size={12} /> +{contactPhone}</span>}
+                  {cust.location && <span><MapPin size={12} /> {cust.location}</span>}
+                </div>
+
+                <div className="crm-mobile-metrics">
+                  <span><ShoppingBag size={12} /> {cust.orderCount} orders</span>
+                  <span><DollarSign size={12} /> {cust.totalSpentUsd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                  <span><Sparkles size={12} /> {rec.product}</span>
+                </div>
+
+                <div className="crm-mobile-actions">
+                  <button type="button" className="admin-btn admin-btn-primary" onClick={() => openCustomerWorkspace(cust)}>
+                    <History size={13} /> Profile
+                  </button>
+                  <button type="button" className="admin-btn" onClick={() => openEditModal(cust)}>
+                    <Edit2 size={13} /> Edit
+                  </button>
+                  {contactPhone && (
+                    <button
+                      type="button"
+                      className="admin-btn crm-mobile-wa"
+                      onClick={() => {
+                        if (onWhatsAppClick) {
+                          onWhatsAppClick({ name: cust.name, phone: contactPhone, cartItems: cust.cartItems || [] });
+                        } else {
+                          window.open(`https://wa.me/${contactPhone.replace(/[^0-9]/g, '')}?text=Hi ${cust.name}, `, '_blank');
+                        }
+                      }}
+                    >
+                      <MessageCircle size={13} /> WhatsApp
+                    </button>
+                  )}
+                  {cust.email && (
+                    <a href={`mailto:${cust.email}`} className="admin-btn crm-mobile-email">
+                      <Mail size={13} /> Email
+                    </a>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+        <div className="crm-table-wrapper admin-desktop-table">
           <table className="crm-table responsive-table">
             <thead>
               <tr>
@@ -1626,6 +1723,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
             </div>
           )}
         </div>
+        </>
       )}
 
       {/* Customer Workspace Modal */}

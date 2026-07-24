@@ -1,5 +1,5 @@
 import React from 'react';
-import { Database, Plus, Download } from 'lucide-react';
+import { Database, Download, MessageCircle, Plus, Trash2 } from 'lucide-react';
 
 const ORDER_STATUS_OPTIONS = [
   'Pending',
@@ -13,6 +13,69 @@ const ORDER_STATUS_OPTIONS = [
   'Order Complete',
   'Cancelled',
 ];
+
+const ORDER_STATUS_GROUPS = [
+  {
+    id: 'needs_payment',
+    label: 'Needs Payment',
+    filterLabel: 'Needs payment',
+    statuses: ['Pending', 'Payment Pending', 'Pending - Card', 'Pending - Card 3DS'],
+    nextStatus: 'Payment Pending',
+  },
+  {
+    id: 'paid',
+    label: 'Paid',
+    filterLabel: 'Paid',
+    statuses: ['Paid'],
+    nextStatus: 'Paid',
+  },
+  {
+    id: 'processing',
+    label: 'Processing',
+    filterLabel: 'Processing',
+    statuses: ['Processing'],
+    nextStatus: 'Processing',
+  },
+  {
+    id: 'complete',
+    label: 'Complete',
+    filterLabel: 'Complete',
+    statuses: ['Order Complete', 'Completed'],
+    nextStatus: 'Order Complete',
+  },
+  {
+    id: 'failed',
+    label: 'Failed / Cancelled',
+    filterLabel: 'Failed / cancelled',
+    statuses: ['Declined', 'Error', 'Cancelled'],
+    nextStatus: 'Cancelled',
+  },
+];
+
+const ORDER_GROUP_BY_STATUS = ORDER_STATUS_GROUPS.reduce((map, group) => {
+  group.statuses.forEach((status) => map.set(status.toLowerCase(), group));
+  return map;
+}, new Map());
+
+function getOrderStatusGroup(status) {
+  return ORDER_GROUP_BY_STATUS.get(String(status || 'Pending').toLowerCase()) || ORDER_STATUS_GROUPS[0];
+}
+
+function getOrderDateLabel(order) {
+  return new Date(order.created_at).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function getOrderDisplayTotal(order) {
+  const stored = order.currency === 'USD' ? Number(order.total_usd || 0) : Number(order.total_crc || 0);
+  return order.currency === 'USD'
+    ? `$${stored.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+    : `₡${Math.round(stored).toLocaleString('en-US')}`;
+}
 
 function getStatusSelectStyle(status) {
   const normalized = String(status || 'Pending').toLowerCase();
@@ -112,7 +175,14 @@ export default function OrdersManager({
 }) {
   const scopedOrders = visibleOrders;
   const filteredOrders = scopedOrders.filter(o => {
-    if (orderStatusFilter !== 'All' && o.status !== orderStatusFilter) return false;
+    if (orderStatusFilter !== 'All') {
+      if (String(orderStatusFilter).startsWith('group:')) {
+        const groupId = orderStatusFilter.replace('group:', '');
+        if (getOrderStatusGroup(o.status).id !== groupId) return false;
+      } else if (o.status !== orderStatusFilter) {
+        return false;
+      }
+    }
     if (orderSearch) {
       const s = orderSearch.toLowerCase();
       return (
@@ -133,6 +203,32 @@ export default function OrdersManager({
     (ordersCurrentPage - 1) * ordersPerPage,
     ordersCurrentPage * ordersPerPage
   );
+  const groupCounts = ORDER_STATUS_GROUPS.reduce((acc, group) => {
+    acc[group.id] = scopedOrders.filter((order) => getOrderStatusGroup(order.status).id === group.id).length;
+    return acc;
+  }, {});
+  const setGroupFilter = (groupId) => {
+    setOrderStatusFilter(`group:${groupId}`);
+    setOrdersCurrentPage(1);
+  };
+  const formatItemsCount = (order) => {
+    const items = Array.isArray(order.items) ? order.items : [];
+    return `${items.length} ${items.length === 1 ? 'item' : 'items'}`;
+  };
+  const openPaymentReminder = (order) => openWhatsAppComposer({
+    name: order.customer_name,
+    phone: order.customer_phone,
+    orderNumber: order.order_number,
+    orderDbId: order.id,
+    cartItems: order.cart_data || [],
+  }, 'payment');
+  const openOrderWhatsapp = (order) => openWhatsAppComposer({
+    name: order.customer_name,
+    phone: order.customer_phone,
+    orderNumber: order.order_number,
+    orderDbId: order.id,
+    cartItems: order.cart_data || [],
+  });
 
   return (
     <div className="admin-tab-panel admin-tab-orders-panel">
@@ -180,6 +276,10 @@ export default function OrdersManager({
               }}
             >
               <option value="All">All Statuses</option>
+              {ORDER_STATUS_GROUPS.map(group => (
+                <option key={group.id} value={`group:${group.id}`}>{group.filterLabel}</option>
+              ))}
+              <option disabled>──────────</option>
               {ORDER_STATUS_OPTIONS.map(status => (
                 <option key={status} value={status}>{status}</option>
               ))}
@@ -220,7 +320,112 @@ export default function OrdersManager({
           No orders registered in the system yet.
         </div>
       ) : (
-        <div className="table-responsive admin-table-wrap" style={{ background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <>
+        <div className="order-mobile-status-strip admin-mobile-only" aria-label="Order status filters">
+          <button
+            type="button"
+            className={orderStatusFilter === 'All' ? 'active' : ''}
+            onClick={() => {
+              setOrderStatusFilter('All');
+              setOrdersCurrentPage(1);
+            }}
+          >
+            All <span>{scopedOrders.length}</span>
+          </button>
+          {ORDER_STATUS_GROUPS.map((group) => (
+            <button
+              key={group.id}
+              type="button"
+              className={orderStatusFilter === `group:${group.id}` ? 'active' : ''}
+              onClick={() => setGroupFilter(group.id)}
+            >
+              {group.label} <span>{groupCounts[group.id] || 0}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="order-mobile-list admin-mobile-only">
+          {paginatedOrders.map((order) => {
+            const group = getOrderStatusGroup(order.status);
+            const cardBadge = getCardPaymentBadge(order);
+            const status = String(order.status || '').toLowerCase();
+            const isActionRequired = order.payment_method === 'card' &&
+              cardBadge?.label === 'Paid' &&
+              !status.includes('complete') &&
+              !status.includes('cancel');
+
+            return (
+              <article key={order.id} className={`order-mobile-card order-status-${group.id}`}>
+                <button type="button" className="order-mobile-card-main" onClick={() => setSelectedOrderDetails(order)}>
+                  <div className="order-mobile-card-top">
+                    <div>
+                      <div className="order-mobile-number">
+                        #{order.order_number || order.id.slice(0, 8)}
+                        {isActionRequired && <span className="order-action-dot" title="Card payment approved" />}
+                      </div>
+                      <div className="order-mobile-date">{getOrderDateLabel(order)}</div>
+                    </div>
+                    <span className="order-mobile-total">{getOrderDisplayTotal(order)}</span>
+                  </div>
+                  <div className="order-mobile-customer">{order.customer_name || 'Customer'}</div>
+                  <div className="order-mobile-meta">
+                    <span>{formatItemsCount(order)}</span>
+                    <span>{order.customer_phone || 'No phone'}</span>
+                  </div>
+                  <div className="order-mobile-badges">
+                    <span className="order-mobile-status">{group.label}</span>
+                    {cardBadge && <span className="order-mobile-payment" style={{ color: cardBadge.color, background: cardBadge.bg }}>{cardBadge.label}</span>}
+                    {order.sales_agent && <span className="order-mobile-agent">{order.sales_agent}</span>}
+                  </div>
+                </button>
+                <div className="order-mobile-actions">
+                  {group.id === 'needs_payment' && (
+                    <button type="button" className="admin-btn admin-btn-secondary" onClick={() => openPaymentReminder(order)}>
+                      <MessageCircle size={14} /> Ask payment
+                    </button>
+                  )}
+                  {group.id !== 'complete' && (
+                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => handleOrderStatusUpdate(order.id, group.id === 'needs_payment' ? 'Processing' : 'Order Complete')}>
+                      {group.id === 'needs_payment' ? 'Process' : 'Complete'}
+                    </button>
+                  )}
+                  {!order.sales_agent && (
+                    <button
+                      type="button"
+                      className="admin-btn"
+                      onClick={() => {
+                        const claimEmail = loggedInEmailRef?.current || localStorage.getItem('admin_email') || 'info@peptidescostarica.net';
+                        handleOrderSalesAgentUpdate(order.id, claimEmail);
+                      }}
+                    >
+                      Claim
+                    </button>
+                  )}
+                  <button type="button" className="admin-btn" onClick={() => openOrderWhatsapp(order)}>
+                    WhatsApp
+                  </button>
+                  <button type="button" className="admin-btn order-mobile-delete" onClick={() => handleDeleteOrder(order.id)} aria-label="Delete order">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+                <div className="order-mobile-stage-buttons" aria-label="Update order status">
+                  {ORDER_STATUS_GROUPS.map((nextGroup) => (
+                    <button
+                      type="button"
+                      key={nextGroup.id}
+                      className={group.id === nextGroup.id ? 'active' : ''}
+                      onClick={() => handleOrderStatusUpdate(order.id, nextGroup.nextStatus)}
+                    >
+                      {nextGroup.filterLabel}
+                    </button>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="table-responsive admin-table-wrap admin-desktop-table" style={{ background: '#0e1626', borderRadius: '12px', overflowX: 'auto', border: '1px solid rgba(255,255,255,0.05)' }}>
           <table className="spreadsheet-table responsive-table admin-orders-table">
             <thead>
               <tr>
@@ -237,16 +442,13 @@ export default function OrdersManager({
             <tbody>
               {paginatedOrders.map(order => {
                   const items = Array.isArray(order.items) ? order.items : [];
-                  const orderDate = new Date(order.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+                  const orderDate = getOrderDateLabel(order);
 
                   const _vialCount = items.reduce((s, i) => s + (Number(i.qty) || 1), 0);
                   let _discountPct = 0;
                   if (_vialCount >= 10) _discountPct = 20;
                   else if (_vialCount >= 5) _discountPct = 15;
                   
-                  const _storedTotal = order.currency === 'USD' ? Number(order.total_usd || 0) : Number(order.total_crc || 0);
-                  const _displayTotal = _storedTotal;
-
                   const status = String(order.status || '').toLowerCase();
                   const cardBadge = getCardPaymentBadge(order);
                   const isActionRequired = order.payment_method === 'card' && 
@@ -308,10 +510,7 @@ export default function OrdersManager({
                         </div>
                       </td>
                       <td data-label="Total Amount" style={{ padding: '10px 12px', fontWeight: 'bold', color: '#38bdf8', fontSize: '0.9rem' }}>
-                        {order.currency === 'USD'
-                          ? `$${_displayTotal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
-                          : `₡${Math.round(_displayTotal).toLocaleString('en-US')}`
-                        }
+                        {getOrderDisplayTotal(order)}
                         {_discountPct > 0 && (
                           <span style={{ display: 'block', fontSize: '0.65rem', color: '#4ade80', fontWeight: '700', marginTop: '2px' }}>
                             -{_discountPct}% vol. discount
@@ -427,13 +626,7 @@ export default function OrdersManager({
                           {(order.status || 'Pending') === 'Payment Pending' && (
                             <button 
                               className="admin-btn admin-cta-btn" 
-                              onClick={() => openWhatsAppComposer({ 
-                                name: order.customer_name, 
-                                phone: order.customer_phone, 
-                                orderNumber: order.order_number, 
-                                orderDbId: order.id, 
-                                cartItems: order.cart_data || [] 
-                              }, 'payment')}
+                              onClick={() => openPaymentReminder(order)}
                               style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                             >
                               💬 Ask Payment
@@ -456,13 +649,7 @@ export default function OrdersManager({
                           )}
 
                            <button 
-                            onClick={() => openWhatsAppComposer({ 
-                              name: order.customer_name, 
-                              phone: order.customer_phone, 
-                              orderNumber: order.order_number, 
-                              orderDbId: order.id, 
-                              cartItems: order.cart_data || [] 
-                            })}
+                            onClick={() => openOrderWhatsapp(order)}
                             className="admin-btn"
                             style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.2)', color: '#4ade80', borderRadius: '6px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                           >
@@ -483,6 +670,7 @@ export default function OrdersManager({
             </tbody>
           </table>
         </div>
+        </>
       )}
       
       {filteredOrders.length > 0 && (

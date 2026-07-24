@@ -372,7 +372,7 @@ export default function AffiliatesManager({ products = [] }) {
           <h1 style={{ fontSize: '1.5rem', fontWeight: '800', margin: '0 0 4px', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Users size={24} style={{ color: '#38bdf8' }} /> Affiliates Program
           </h1>
-          <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.9rem' }}>Manage your partners, commission rates, and promo codes.</p>
+          <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.9rem' }}>Manage affiliate partners and keep promo-code ownership clear.</p>
         </div>
         <button 
           onClick={loadData}
@@ -395,7 +395,7 @@ export default function AffiliatesManager({ products = [] }) {
             cursor: 'pointer'
           }}
         >
-          👥 Partners & Codes
+          Affiliates
         </button>
         <button 
           onClick={() => setActiveSubTab('payouts')}
@@ -410,7 +410,7 @@ export default function AffiliatesManager({ products = [] }) {
             cursor: 'pointer'
           }}
         >
-          💰 Commission Payouts
+          Commission Payouts
         </button>
       </div>
 
@@ -493,6 +493,7 @@ export default function AffiliatesManager({ products = [] }) {
           <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', padding: '8px', borderRadius: '8px' }}><Tag size={18} /></div>
             <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', margin: 0, color: '#f8fafc' }}>Promo Codes</h2>
+            <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700 }}>Reusable discounts owned here</span>
           </div>
           
           <div style={{ padding: '20px' }}>

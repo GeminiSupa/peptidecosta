@@ -112,14 +112,14 @@ export default function WhatsAppSessionTab() {
       <div className="mkt-panel" style={{ marginBottom: '16px' }}>
         <div className="mkt-panel-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <div className="mkt-panel-kicker">Second Device</div>
+            <div className="mkt-panel-kicker">WhatsApp connection</div>
             <h3 className="mkt-panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <MessageCircle size={17} style={{ color: '#34d399' }} />
-              WhatsApp Session
+              WhatsApp Device
             </h3>
             <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', margin: '4px 0 0', lineHeight: '1.5' }}>
-              Connect a second WhatsApp number by scanning a QR code once.
-              The session stays alive on the server — no re-scanning needed.
+              Connect a WhatsApp number by scanning a QR code once.
+              The device connection stays alive on the server after setup.
             </p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
@@ -229,7 +229,7 @@ export default function WhatsAppSessionTab() {
         <div className="mkt-panel" style={{ marginBottom: '16px', textAlign: 'center', padding: '32px 20px' }}>
           <Loader2 size={36} className="animate-spin" style={{ color: '#34d399', marginBottom: '12px' }} />
           <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px', margin: 0 }}>
-            Initialising session… QR code will appear shortly.
+            Initialising connection... QR code will appear shortly.
           </p>
         </div>
       )}
@@ -312,7 +312,7 @@ export default function WhatsAppSessionTab() {
       {isDisconnected && !error && !loading && (
         <div className="mkt-empty-state" style={{ marginTop: 0 }}>
           <MessageCircle size={36} />
-          <h4>No session active</h4>
+          <h4>No WhatsApp device connected</h4>
           <p>Click <strong>Connect &amp; Get QR</strong> above, then scan<br />with any WhatsApp number to get started.</p>
         </div>
       )}

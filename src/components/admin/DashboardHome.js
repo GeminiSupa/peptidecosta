@@ -3,7 +3,7 @@
 import React, { useMemo } from 'react';
 import {
   ClipboardList, ShoppingCart, Target, DollarSign, Package,
-  AlertTriangle, Inbox, MessageSquare, TrendingUp, ChevronRight, Star,
+  AlertTriangle, Inbox, MessageSquare, TrendingUp, ChevronRight, Star, CheckCircle,
 } from 'lucide-react';
 import { COMMISSION_ELIGIBLE_ORDER_STATUSES } from '@/lib/agentOrders';
 
@@ -169,6 +169,7 @@ export default function DashboardHome({
       color: '#f59e0b',
       title: `${stats.pendingOrders.length} pending order${stats.pendingOrders.length > 1 ? 's' : ''}`,
       sub: 'Need confirmation or payment',
+      action: 'Open orders',
       tab: 'orders',
     },
     stats.recoverableCarts.length > 0 && {
@@ -177,6 +178,7 @@ export default function DashboardHome({
       color: '#38bdf8',
       title: `${stats.recoverableCarts.length} abandoned cart${stats.recoverableCarts.length > 1 ? 's' : ''}`,
       sub: `~$${Math.round(stats.recoverableValue)} recoverable`,
+      action: 'Recover carts',
       tab: 'carts',
     },
     inquiryCount > 0 && {
@@ -185,6 +187,7 @@ export default function DashboardHome({
       color: '#c084fc',
       title: `${inquiryCount} new inquir${inquiryCount > 1 ? 'ies' : 'y'}`,
       sub: 'Contact form messages',
+      action: 'Reply now',
       tab: 'inquiries',
     },
     stats.hotLeads.length > 0 && {
@@ -193,6 +196,7 @@ export default function DashboardHome({
       color: '#4ade80',
       title: `${stats.hotLeads.length} hot lead${stats.hotLeads.length > 1 ? 's' : ''}`,
       sub: 'Not yet contacted',
+      action: 'Follow up',
       tab: 'leads',
     },
     stats.stockAlerts.length > 0 && {
@@ -201,6 +205,7 @@ export default function DashboardHome({
       color: '#f87171',
       title: `${stats.stockAlerts.length} stock alert${stats.stockAlerts.length > 1 ? 's' : ''}`,
       sub: 'Out of stock or coming soon',
+      action: 'Fix stock',
       tab: 'spreadsheet',
     },
   ].filter(Boolean);
@@ -214,10 +219,49 @@ export default function DashboardHome({
             {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
         </div>
-        <button type="button" className="admin-btn admin-btn-primary" onClick={onCreateOrder}>
+        <button type="button" className="admin-btn admin-btn-primary dashboard-manual-order-btn" onClick={onCreateOrder}>
           + Manual Order
         </button>
       </div>
+
+      <section className="dashboard-section dashboard-next-actions">
+        <div className="dashboard-section-heading-row">
+          <h3 className="dashboard-section-title">Next Actions</h3>
+          <span className="dashboard-section-count">{attention.length || 'Clear'}</span>
+        </div>
+        {attention.length > 0 ? (
+          <div className="dashboard-attention-list">
+            {attention.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className="dashboard-attention-item"
+                onClick={() => onNavigate(item.tab)}
+              >
+                <span className="dashboard-attention-icon" style={{ background: `${item.color}1f`, color: item.color }}>
+                  <item.icon size={20} />
+                </span>
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <div className="dashboard-attention-title">{item.title}</div>
+                  <div className="dashboard-attention-sub">{item.sub}</div>
+                </div>
+                <span className="dashboard-attention-action">
+                  {item.action}
+                  <ChevronRight size={15} />
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="dashboard-empty-card">
+            <CheckCircleFallback />
+            <div>
+              <div className="dashboard-empty-title">No urgent work waiting</div>
+              <div className="dashboard-empty-copy">Orders, carts, inquiries, leads, and stock alerts are clear.</div>
+            </div>
+          </div>
+        )}
+      </section>
 
       <div className="dashboard-kpi-grid">
         <div className="dashboard-kpi-card">
@@ -256,47 +300,24 @@ export default function DashboardHome({
             <div className="dashboard-kpi-label">Recoverable Carts</div>
           </div>
         </div>
-        {/* Trustpilot review-invitation quota (Free plan = 50/month). Estimate only —
-            the Free plan has no API, so we approximate from completed orders. */}
-        <div className="dashboard-kpi-card" title={`Estimate (~${trustpilotRemaining} left): ${stats.trustpilotUsed} of ${TRUSTPILOT_MONTHLY_LIMIT} invitations approx. sent this month. Free plan has no Trustpilot API, so this is not the exact count.`}>
+      </div>
+
+      <section className="dashboard-section dashboard-health-section">
+        <div className="dashboard-section-heading-row">
+          <h3 className="dashboard-section-title">Health</h3>
+        </div>
+        <div className="dashboard-health-card" title={`Estimate (~${trustpilotRemaining} left): ${stats.trustpilotUsed} of ${TRUSTPILOT_MONTHLY_LIMIT} invitations approx. sent this month. Free plan has no Trustpilot API, so this is not the exact count.`}>
           <div className="dashboard-kpi-icon" style={{ background: 'rgba(52, 211, 153, 0.15)', color: trustpilotColor }}>
             <Star size={20} />
           </div>
           <div>
-            <div className="dashboard-kpi-value" style={{ color: trustpilotColor }}>≈{trustpilotRemaining}</div>
-            <div className="dashboard-kpi-label">Trustpilot invites left (est.) · {stats.trustpilotUsed}/{TRUSTPILOT_MONTHLY_LIMIT}</div>
+            <div className="dashboard-health-title" style={{ color: trustpilotColor }}>~{trustpilotRemaining} Trustpilot invites left</div>
+            <div className="dashboard-health-copy">
+              Estimate only from completed orders this month. Used {stats.trustpilotUsed}/{TRUSTPILOT_MONTHLY_LIMIT}.
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Honesty note: the Trustpilot number is an estimate, not the real count. */}
-      <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '10px 2px 0', lineHeight: 1.5 }}>
-        ★ <strong style={{ color: '#cbd5e1' }}>Trustpilot invites left</strong> is an <strong style={{ color: '#cbd5e1' }}>estimate</strong>, not the exact count.
-        The Free plan has no Trustpilot API, so we approximate it from completed orders this month. For the real number, check your Trustpilot dashboard.
-      </p>
-
-      {attention.length > 0 && (
-        <section className="dashboard-section">
-          <h3 className="dashboard-section-title">Needs Attention</h3>
-          <div className="dashboard-attention-list">
-            {attention.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className="dashboard-attention-item"
-                onClick={() => onNavigate(item.tab)}
-              >
-                <item.icon size={18} style={{ color: item.color, flexShrink: 0 }} />
-                <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div className="dashboard-attention-title">{item.title}</div>
-                  <div className="dashboard-attention-sub">{item.sub}</div>
-                </div>
-                <ChevronRight size={16} style={{ color: '#64748b' }} />
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+      </section>
 
       <div className="dashboard-two-col">
         <section className="dashboard-section">
@@ -381,5 +402,13 @@ export default function DashboardHome({
         </section>
       )}
     </div>
+  );
+}
+
+function CheckCircleFallback() {
+  return (
+    <span className="dashboard-empty-icon" aria-hidden="true">
+      <CheckCircle size={18} />
+    </span>
   );
 }

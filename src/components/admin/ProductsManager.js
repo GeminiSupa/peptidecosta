@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, Trash2, FileText, Eye, EyeOff } from 'lucide-react';
 
 const CATEGORY_TRANSLATIONS = {
@@ -37,6 +37,9 @@ export default function ProductsManager({
   handleMoveRow, handleDeleteRow,
   handleToggleHidden
 }) {
+  const [mobileEditProduct, setMobileEditProduct] = useState(null);
+  const [mobileProductError, setMobileProductError] = useState('');
+
   const formatDerivedCrc = (usdPrice) => {
     const usdNum = parseFloat(String(usdPrice || '').replace(/[^0-9.]/g, '')) || 0;
     if (!usdNum) return 'Auto';
@@ -46,6 +49,93 @@ export default function ProductsManager({
   const exchangeUpdatedLabel = exchangeRateUpdatedAt
     ? new Date(exchangeRateUpdatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     : 'loading';
+  const filteredProducts = useMemo(
+    () => products.filter(p =>
+      !productSearch ||
+      p.product.toLowerCase().includes(productSearch.toLowerCase()) ||
+      (p.category && p.category.toLowerCase().includes(productSearch.toLowerCase()))
+    ),
+    [products, productSearch]
+  );
+  const categoryOptions = useMemo(
+    () => Array.from(new Set([
+      ...Object.keys(CATEGORY_TRANSLATIONS),
+      ...products.map(prod => prod.category).filter(Boolean)
+    ])).sort(),
+    [products]
+  );
+  const mobileDirty = Boolean(mobileEditProduct && products.find((p) => p.id === mobileEditProduct.id && (
+    p.product !== mobileEditProduct.product ||
+    p.category !== mobileEditProduct.category ||
+    String(p.priceUsd || '') !== String(mobileEditProduct.priceUsd || '') ||
+    String(p.originalPriceUsd || '') !== String(mobileEditProduct.originalPriceUsd || '') ||
+    String(p.saleStartTime || '') !== String(mobileEditProduct.saleStartTime || '') ||
+    String(p.saleEndTime || '') !== String(mobileEditProduct.saleEndTime || '') ||
+    String(p.status || '') !== String(mobileEditProduct.status || '') ||
+    String(p.inventoryCount ?? '') !== String(mobileEditProduct.inventoryCount ?? '') ||
+    String(p.lowStockThreshold ?? 5) !== String(mobileEditProduct.lowStockThreshold ?? 5) ||
+    String(p.discount || '') !== String(mobileEditProduct.discount || '') ||
+    String(p.imageUrl || '') !== String(mobileEditProduct.imageUrl || '') ||
+    String(p.coa || '') !== String(mobileEditProduct.coa || '')
+  )));
+  const openMobileEditor = (product) => {
+    setMobileProductError('');
+    setMobileEditProduct({ ...product });
+  };
+  const updateMobileDraft = (field, value) => {
+    setMobileProductError('');
+    setMobileEditProduct((current) => current ? { ...current, [field]: value } : current);
+  };
+  const validateMobileProduct = () => {
+    const p = mobileEditProduct;
+    if (!p?.product?.trim()) return 'Product name is required.';
+    const price = parseFloat(String(p.priceUsd || '').replace(/[^0-9.]/g, ''));
+    if (Number.isNaN(price) || price <= 0) return 'Enter a valid USD price.';
+    if (p.originalPriceUsd) {
+      const original = parseFloat(String(p.originalPriceUsd).replace(/[^0-9.]/g, ''));
+      if (Number.isNaN(original) || original < 0) return 'Original USD price must be a valid number.';
+    }
+    if (p.saleStartTime && p.saleEndTime && new Date(p.saleStartTime) > new Date(p.saleEndTime)) {
+      return 'Sale end must be after sale start.';
+    }
+    if (p.inventoryCount !== null && p.inventoryCount !== undefined && Number.isNaN(Number(p.inventoryCount))) {
+      return 'Inventory must be a number.';
+    }
+    if (p.lowStockThreshold !== null && p.lowStockThreshold !== undefined && Number.isNaN(Number(p.lowStockThreshold))) {
+      return 'Low stock alert must be a number.';
+    }
+    if (p.imageUrl && !/^https?:\/\//i.test(p.imageUrl)) return 'Image URL must start with http:// or https://.';
+    if (p.coa && !/^https?:\/\//i.test(p.coa)) return 'COA URL must start with http:// or https://.';
+    return '';
+  };
+  const saveMobileProduct = () => {
+    const error = validateMobileProduct();
+    if (error) {
+      setMobileProductError(error);
+      return;
+    }
+    const original = products.find((p) => p.id === mobileEditProduct.id);
+    if (!original) return;
+    [
+      'product',
+      'category',
+      'priceUsd',
+      'originalPriceUsd',
+      'saleStartTime',
+      'saleEndTime',
+      'status',
+      'inventoryCount',
+      'lowStockThreshold',
+      'discount',
+      'imageUrl',
+      'coa',
+    ].forEach((field) => {
+      if (String(original[field] ?? '') !== String(mobileEditProduct[field] ?? '')) {
+        handleCellChange(mobileEditProduct.id, field, mobileEditProduct[field]);
+      }
+    });
+    setMobileEditProduct(null);
+  };
 
   return (
     <div>
@@ -153,6 +243,41 @@ export default function ProductsManager({
           <div>Fetching master inventory table...</div>
         </div>
       ) : (
+        <>
+        <div className="products-mobile-list admin-mobile-only">
+          {filteredProducts.map((p) => (
+            <article key={p.id || p.product} className={`product-mobile-card${p.hidden ? ' is-hidden' : ''}`}>
+              <button type="button" className="product-mobile-main" onClick={() => openMobileEditor(p)}>
+                <div className="product-mobile-thumb">
+                  {p.imageUrl && p.imageUrl.startsWith('http') ? (
+                    <img src={p.imageUrl} alt="" />
+                  ) : (
+                    getCategoryIcon(p.category)
+                  )}
+                </div>
+                <div className="product-mobile-copy">
+                  <div className="product-mobile-name">{p.product || 'Untitled product'}</div>
+                  <div className="product-mobile-category">{p.category || 'No category'}</div>
+                  <div className="product-mobile-meta">
+                    <span>{p.priceUsd ? `$${p.priceUsd}` : 'No price'}</span>
+                    <span>{formatDerivedCrc(p.priceUsd)}</span>
+                    <span>{p.status || 'In Stock'}</span>
+                  </div>
+                </div>
+              </button>
+              <div className="product-mobile-actions">
+                <button type="button" className="admin-btn" onClick={() => openMobileEditor(p)}>
+                  Edit
+                </button>
+                <button type="button" className="admin-btn" onClick={() => handleToggleHidden(p.id)}>
+                  {p.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
+                  {p.hidden ? 'Show' : 'Hide'}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+
         <div className="spreadsheet-container">
           <table className="spreadsheet-table responsive-table">
             <thead>
@@ -178,7 +303,7 @@ export default function ProductsManager({
               </tr>
             </thead>
             <tbody>
-              {products.filter(p => !productSearch || p.product.toLowerCase().includes(productSearch.toLowerCase()) || (p.category && p.category.toLowerCase().includes(productSearch.toLowerCase()))).map((p, filteredIdx) => {
+              {filteredProducts.map((p) => {
                 const idx = products.findIndex(prod => prod.id === p.id);
                 return (
                 <tr
@@ -217,10 +342,7 @@ export default function ProductsManager({
                         }
                       }}
                     >
-                      {Array.from(new Set([
-                        ...Object.keys(CATEGORY_TRANSLATIONS),
-                        ...products.map(prod => prod.category).filter(Boolean)
-                      ])).sort().map(cat => (
+                      {categoryOptions.map(cat => (
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                       <option disabled>──────────</option>
@@ -527,6 +649,129 @@ export default function ProductsManager({
               )})}
             </tbody>
           </table>
+        </div>
+        </>
+      )}
+
+      {mobileEditProduct && (
+        <div className="product-mobile-drawer-overlay admin-mobile-only" onClick={() => setMobileEditProduct(null)}>
+          <div className="product-mobile-drawer" role="dialog" aria-label="Edit product" onClick={(e) => e.stopPropagation()}>
+            <div className="product-mobile-drawer-header">
+              <div>
+                <h3>{mobileEditProduct.product || 'Edit product'}</h3>
+                <p>{mobileDirty ? 'Unsaved grid changes' : 'No changes yet'}</p>
+              </div>
+              <button type="button" className="product-mobile-close" onClick={() => setMobileEditProduct(null)} aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+
+            {mobileProductError && (
+              <div className="product-mobile-error">
+                <AlertCircle size={15} />
+                {mobileProductError}
+              </div>
+            )}
+
+            <div className="product-mobile-form">
+              <div className="product-mobile-hint">
+                Drawer edits apply to the product grid. Use the main Save Changes button to sync them to the database.
+              </div>
+              <label>
+                <span>Name</span>
+                <input value={mobileEditProduct.product || ''} onChange={(e) => updateMobileDraft('product', e.target.value)} />
+              </label>
+              <label>
+                <span>Category</span>
+                <select
+                  value={mobileEditProduct.category || ''}
+                  onChange={(e) => updateMobileDraft('category', e.target.value)}
+                >
+                  <option value="">No category</option>
+                  {categoryOptions.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="product-mobile-field-grid">
+                <label>
+                  <span>USD price</span>
+                  <input inputMode="decimal" value={mobileEditProduct.priceUsd || ''} onChange={(e) => updateMobileDraft('priceUsd', e.target.value)} />
+                  <small>{formatDerivedCrc(mobileEditProduct.priceUsd)}</small>
+                </label>
+                <label>
+                  <span>Original USD</span>
+                  <input inputMode="decimal" value={mobileEditProduct.originalPriceUsd || ''} onChange={(e) => updateMobileDraft('originalPriceUsd', e.target.value)} />
+                  <small>{formatDerivedCrc(mobileEditProduct.originalPriceUsd)}</small>
+                </label>
+              </div>
+              <label>
+                <span>Status</span>
+                <select value={mobileEditProduct.status || 'In Stock'} onChange={(e) => updateMobileDraft('status', e.target.value)}>
+                  <option value="In Stock">In Stock / Disponible</option>
+                  <option value="Out of Stock">Out of Stock / Agotado</option>
+                  <option value="Coming Soon">Coming Soon / Proximamente</option>
+                </select>
+              </label>
+              <div className="product-mobile-field-grid">
+                <label>
+                  <span>Inventory</span>
+                  <input inputMode="numeric" value={mobileEditProduct.inventoryCount ?? ''} onChange={(e) => updateMobileDraft('inventoryCount', e.target.value === '' ? null : parseInt(e.target.value, 10))} />
+                </label>
+                <label>
+                  <span>Low stock alert</span>
+                  <input inputMode="numeric" value={mobileEditProduct.lowStockThreshold ?? 5} onChange={(e) => updateMobileDraft('lowStockThreshold', parseInt(e.target.value, 10) || 5)} />
+                </label>
+              </div>
+              <div className="product-mobile-field-grid">
+                <label>
+                  <span>Sale start</span>
+                  <input type="datetime-local" value={mobileEditProduct.saleStartTime || ''} onChange={(e) => updateMobileDraft('saleStartTime', e.target.value)} />
+                </label>
+                <label>
+                  <span>Sale end</span>
+                  <input type="datetime-local" value={mobileEditProduct.saleEndTime || ''} onChange={(e) => updateMobileDraft('saleEndTime', e.target.value)} />
+                </label>
+              </div>
+              <label>
+                <span>Bulk discount info</span>
+                <textarea rows="3" value={mobileEditProduct.discount || ''} onChange={(e) => updateMobileDraft('discount', e.target.value)} />
+              </label>
+              <label>
+                <span>Image</span>
+                <select
+                  value={bucketImages.find(img => img.url === mobileEditProduct.imageUrl)?.url || (mobileEditProduct.imageUrl ? 'custom' : '')}
+                  onChange={(e) => {
+                    if (e.target.value !== 'custom') updateMobileDraft('imageUrl', e.target.value);
+                  }}
+                >
+                  <option value="">No image</option>
+                  {mobileEditProduct.imageUrl && !bucketImages.some(img => img.url === mobileEditProduct.imageUrl) && (
+                    <option value="custom">Custom URL</option>
+                  )}
+                  {bucketImages.map((img) => (
+                    <option key={img.name} value={img.url}>{img.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Custom image URL</span>
+                <input value={mobileEditProduct.imageUrl || ''} onChange={(e) => updateMobileDraft('imageUrl', e.target.value)} />
+              </label>
+              <label>
+                <span>COA URL</span>
+                <input value={mobileEditProduct.coa || ''} onChange={(e) => updateMobileDraft('coa', e.target.value)} />
+              </label>
+            </div>
+
+            <div className="product-mobile-drawer-actions">
+              <button type="button" className="admin-btn" onClick={() => setMobileEditProduct(null)}>Discard</button>
+              <button type="button" className="admin-btn admin-btn-primary" onClick={saveMobileProduct} disabled={!mobileDirty}>
+                <Save size={15} />
+                Save product
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

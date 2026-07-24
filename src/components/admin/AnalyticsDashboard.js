@@ -14,7 +14,7 @@ import ExportModal from './ExportModal';
 import { adminFetch } from '@/lib/adminApi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 
-export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [] }) {
+export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [], onNavigate }) {
   const [explainerTopic, setExplainerTopic] = useState(null);
 
   const EXPLAINER_DATA = {
@@ -2138,6 +2138,24 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               </button>
             </div>
           </div>
+        </div>
+
+        <div className="analytics-drilldown-grid">
+          <button type="button" onClick={() => onNavigate?.('orders')}>
+            <BarChart2 size={15} />
+            <span>Dashboard analytics</span>
+            <small>Revenue, orders, and checkout health</small>
+          </button>
+          <button type="button" onClick={() => onNavigate?.('marketing')}>
+            <Target size={15} />
+            <span>Marketing attribution</span>
+            <small>Campaigns, journeys, and source performance</small>
+          </button>
+          <button type="button" onClick={() => onNavigate?.('carts')}>
+            <ShoppingCart size={15} />
+            <span>Cart recovery records</span>
+            <small>Open the recoverable carts behind this KPI</small>
+          </button>
         </div>
 
         <div className="analytics-header-status">
