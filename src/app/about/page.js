@@ -104,7 +104,7 @@ export default function AboutPage() {
 
       <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`}>
         <div className="lp-header-inner">
-          <Link href="/" className="lp-logo"><Image src="/logo.webp" alt="Peptides Costa Rica" width={416} height={205} className="logo-img-custom" priority /></Link>
+          <Link href="/" className="lp-logo"><Image src="/logo.webp" alt="Peptides Costa Rica" width={240} height={202} className="logo-img-custom" priority /></Link>
           <nav className="lp-nav about-nav">
             <Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Catalog' : 'Catálogo'}</Link>
             <Link href={`/about?lang=${lang}`}>{lang === 'en' ? 'About Us' : 'Sobre Nosotros'}</Link>

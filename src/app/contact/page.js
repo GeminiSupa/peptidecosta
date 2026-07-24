@@ -115,7 +115,7 @@ export default function ContactPage() {
       <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`}>
         <div className="lp-header-inner">
           <Link href="/" className="lp-logo">
-            <Image src="/logo.webp" alt="Peptides Costa Rica" width={416} height={205} priority className="logo-img-custom" style={{ maxHeight: '34px', width: 'auto', borderRadius: '4px' }} />
+            <Image src="/logo.webp" alt="Peptides Costa Rica" width={240} height={202} priority className="logo-img-custom" style={{ maxHeight: '40px', width: 'auto', borderRadius: '8px' }} />
           </Link>
 
           <nav className="lp-nav contact-nav" aria-label="Main navigation">
