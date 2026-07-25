@@ -8770,16 +8770,50 @@
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-messages {
         min-height: 0 !important;
         flex: 1 1 auto !important;
-        padding: 14px 12px 18px !important;
+        padding: 10px 10px 12px !important;
     }
 
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-chat-header-row1 {
-        padding: 8px 10px !important;
+        min-height: 48px !important;
+        padding: 6px 8px !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-chat-header-meta {
+        min-width: 0 !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-chat-title-row {
+        min-width: 0 !important;
+        gap: 8px !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-header-avatar {
+        width: 34px !important;
+        height: 34px !important;
+        flex: 0 0 34px !important;
+        font-size: 0.65rem !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-chat-title {
+        max-width: 44vw !important;
+        min-width: 0 !important;
+        font-size: 0.86rem !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-chat-header-actions {
+        gap: 6px !important;
+        flex: 0 0 auto !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-icon-btn {
+        width: 40px !important;
+        height: 40px !important;
+        min-width: 40px !important;
     }
 
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-chat-status-row {
         gap: 6px !important;
-        padding: 0 10px 8px !important;
+        padding: 0 8px 6px !important;
         overflow-x: auto;
         flex-wrap: nowrap;
         scrollbar-width: none;
@@ -8792,7 +8826,7 @@
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-composer {
         flex: 0 0 auto !important;
         width: 100% !important;
-        padding: 8px 8px max(10px, env(safe-area-inset-bottom, 0px)) !important;
+        padding: 6px 8px max(8px, env(safe-area-inset-bottom, 0px)) !important;
         box-sizing: border-box !important;
     }
 
@@ -8834,24 +8868,74 @@
     }
 
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-window-blocked {
-        align-items: flex-start;
-        gap: 9px;
-        padding: 10px;
+        display: grid !important;
+        grid-template-columns: 28px minmax(0, 1fr) auto !important;
+        align-items: center !important;
+        gap: 8px !important;
+        margin-bottom: 6px !important;
+        padding: 8px !important;
+        border-radius: 12px !important;
     }
 
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-window-blocked-icon {
-        width: 34px;
-        height: 34px;
-        flex-basis: 34px;
+        width: 28px !important;
+        height: 28px !important;
+        flex-basis: 28px !important;
+        border-radius: 9px !important;
     }
 
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-window-blocked-text {
-        flex: 1 1 150px;
+        min-width: 0 !important;
+        flex: 1 1 auto !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-window-blocked-text strong {
+        display: block !important;
+        font-size: 0.78rem !important;
+        white-space: nowrap !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-window-blocked-text span {
+        display: block !important;
+        overflow: hidden !important;
+        max-width: 100% !important;
+        font-size: 0.66rem !important;
+        line-height: 1.2 !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
     }
 
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-template-required-btn {
-        width: calc(100% - 43px);
-        margin-left: 43px;
+        width: auto !important;
+        min-height: 34px !important;
+        margin-left: 0 !important;
+        padding: 0 12px !important;
+        font-size: 0.68rem !important;
+        white-space: nowrap !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-quick-replies {
+        display: flex !important;
+        gap: 6px !important;
+        margin: 0 0 6px !important;
+        overflow-x: auto !important;
+        padding-bottom: 2px !important;
+        scrollbar-width: none !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-quick-replies::-webkit-scrollbar {
+        display: none;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-quick-replies button {
+        min-height: 34px !important;
+        flex: 0 0 auto !important;
+        padding: 0 12px !important;
+        font-size: 0.7rem !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-mobile-tool-tray {
+        display: none !important;
     }
 }
 
