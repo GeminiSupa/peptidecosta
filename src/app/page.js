@@ -55,6 +55,8 @@ const CATS = [
   { icon:<FlaskConical size={24} strokeWidth={1.8}/>,en:'Laboratory Supplies',es:'Insumos de Laboratorio',den:'Bacteriostatic water, syringes, and essential lab accessories.',des:'Agua bacteriostática, jeringas y accesorios esenciales de laboratorio.' },
 ];
 
+const USER_SELECTED_LANG_KEY = 'lang_user_selected';
+
 const WaIcon = () => (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style={{flexShrink:0}}>
     <path d="M12.031 2a9.992 9.992 0 0 0-8.675 14.901L2 22l5.256-1.378A9.972 9.972 0 0 0 12.03 22c5.523 0 10-4.477 10-10S17.554 2 12.03 2Zm5.535 14.288c-.247.697-1.218 1.282-1.687 1.332-.469.052-.937.28-3.007-.582-2.483-1.034-4.045-3.565-4.168-3.73-.124-.165-1.007-1.34-1.007-2.555 0-1.217.638-1.815.865-2.062.227-.247.495-.309.66-.309.165 0 .33.003.475.01.155.007.361-.059.567.433.206.495.701 1.71.763 1.834.062.124.103.268.02.433-.082.165-.124.268-.247.412-.124.144-.262.32-.375.43-.124.124-.253.258-.108.505.144.248.643 1.056 1.382 1.713.953.847 1.753 1.109 2.001 1.233.247.124.392.103.536-.062.144-.165.619-.722.784-.969.165-.247.33-.206.557-.124.227.082 1.443.68 1.691.804.247.124.412.185.474.289.062.103.062.597-.186 1.294Z"/>
@@ -84,7 +86,9 @@ export default function LandingPage() {
 
   useEffect(() => {
     const sv = localStorage.getItem('theme') || 'light';
-    const sl = localStorage.getItem('lang') || 'es';
+    const sl = localStorage.getItem(USER_SELECTED_LANG_KEY) === 'true'
+      ? localStorage.getItem('lang') || 'es'
+      : 'es';
     const frame = requestAnimationFrame(() => setLang(sl));
     document.documentElement.setAttribute('data-theme', sv);
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -135,7 +139,11 @@ export default function LandingPage() {
     load();
   }, []);
 
-  const handleLang = (v) => { setLang(v); localStorage.setItem('lang',v); };
+  const handleLang = (v) => {
+    setLang(v);
+    localStorage.setItem('lang', v);
+    localStorage.setItem(USER_SELECTED_LANG_KEY, 'true');
+  };
 
   const faqs = [
     { q:t.faq_q1,a:t.faq_a1 },{ q:t.faq_q2,a:t.faq_a2 },{ q:t.faq_q3,a:t.faq_a3 },

@@ -30,6 +30,7 @@ const FREE_SHIPPING_USD_THRESHOLD = 200;
 const FLAT_SHIPPING_CRC = 2500;
 const CARD_CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CARD_CHECKOUT === 'true';
 const GATE_BYPASS_VALUES = new Set(['1', 'true', 'yes', 'skip', 'bypass']);
+const USER_SELECTED_LANG_KEY = 'lang_user_selected';
 
 const CATEGORY_TRANSLATIONS = {
   'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
@@ -529,7 +530,8 @@ export default function CatalogClient({
     const langParam = urlParams.get('lang');
     const currencyParam = urlParams.get('currency');
 
-    let initialLang = localStorage.getItem('lang') || 'es';
+    const hasUserSelectedLang = localStorage.getItem(USER_SELECTED_LANG_KEY) === 'true';
+    let initialLang = hasUserSelectedLang ? localStorage.getItem('lang') || 'es' : 'es';
     let initialCurrency = 'CRC';
 
     if (langParam === 'en') {
@@ -545,7 +547,9 @@ export default function CatalogClient({
 
     setLang(initialLang);
     setCurrency(initialCurrency);
-    localStorage.setItem('lang', initialLang);
+    if (!langParam) {
+      localStorage.setItem('lang', initialLang);
+    }
 
     // Theme loaded from localStorage
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -1299,7 +1303,10 @@ export default function CatalogClient({
       setLang(selectedLang);
       setCurrency(selectedLang === 'en' ? 'USD' : 'CRC');
     });
-    queueMicrotask(() => localStorage.setItem('lang', selectedLang));
+    queueMicrotask(() => {
+      localStorage.setItem('lang', selectedLang);
+      localStorage.setItem(USER_SELECTED_LANG_KEY, 'true');
+    });
   };
 
   const handleThemeToggle = (selectedTheme) => {

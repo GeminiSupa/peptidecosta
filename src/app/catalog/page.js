@@ -31,6 +31,7 @@ const CARD_CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CARD_CHECKOUT === '
 // Shield Hub Pay credentials are in place, then set NEXT_PUBLIC_CARD_CHECKOUT_MODE=live.
 const CARD_CHECKOUT_LIVE = process.env.NEXT_PUBLIC_CARD_CHECKOUT_MODE === 'live';
 const GATE_BYPASS_VALUES = new Set(['1', 'true', 'yes', 'skip', 'bypass']);
+const USER_SELECTED_LANG_KEY = 'lang_user_selected';
 
 const CATEGORY_TRANSLATIONS = {
   'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
@@ -725,7 +726,8 @@ export default function CatalogPage() {
     const langParam = urlParams.get('lang');
     const currencyParam = urlParams.get('currency');
 
-    let initialLang = localStorage.getItem('lang') || 'es';
+    const hasUserSelectedLang = localStorage.getItem(USER_SELECTED_LANG_KEY) === 'true';
+    let initialLang = hasUserSelectedLang ? localStorage.getItem('lang') || 'es' : 'es';
     let initialCurrency = 'CRC';
 
     if (langParam === 'en') {
@@ -741,7 +743,9 @@ export default function CatalogPage() {
 
     setLang(initialLang);
     setCurrency(initialCurrency);
-    localStorage.setItem('lang', initialLang);
+    if (!langParam) {
+      localStorage.setItem('lang', initialLang);
+    }
 
     // Theme loaded from localStorage
     const savedTheme = localStorage.getItem('theme') || 'light';
@@ -1508,6 +1512,7 @@ export default function CatalogPage() {
     setLang(selectedLang);
     setCurrency(selectedLang === 'en' ? 'USD' : 'CRC');
     localStorage.setItem('lang', selectedLang);
+    localStorage.setItem(USER_SELECTED_LANG_KEY, 'true');
   };
 
   const handleThemeToggle = (selectedTheme) => {

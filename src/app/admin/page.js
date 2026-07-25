@@ -4474,7 +4474,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <div>
             <div className="admin-toolbar">
               <div>
-                <h3>Campaign Links</h3>
+                <h3>Share Links</h3>
                 <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
                   Save reusable tracked catalog links for ads, WhatsApp, bio pages, and one-time announcements.
                 </p>

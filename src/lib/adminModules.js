@@ -6,7 +6,7 @@ export const ADMIN_MODULES = [
   { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
   { id: 'leads', label: 'Leads', title: 'Leads', group: 'Core Operations' },
   { id: 'carts', label: 'Abandoned Carts', title: 'Abandoned Carts', group: 'Sales & Marketing' },
-  { id: 'share', label: 'Campaign Links', title: 'Campaign Links', group: 'Sales & Marketing' },
+  { id: 'share', label: 'Share Links', title: 'Share Links', group: 'Sales & Marketing' },
   { id: 'reviews', label: 'Reviews', title: 'Reviews', group: 'Sales & Marketing' },
   { id: 'facebook', label: 'FB Alerts', title: 'Facebook Alerts', group: 'Sales & Marketing', hiddenFromNav: true },
   { id: 'messenger', label: 'Facebook Inbox', title: 'Facebook Inbox', group: 'Sales & Marketing', alwaysAvailable: true },
