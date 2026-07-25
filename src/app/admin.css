@@ -8748,6 +8748,32 @@
         display: none !important;
     }
 
+    .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-conversations-header {
+        min-height: 58px !important;
+        padding: 10px 12px !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-inbox-heading small,
+    .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-search-row,
+    .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-filter-tabs,
+    .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-owner-filter {
+        display: none !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-inbox-heading span {
+        font-size: 1rem !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-new-count {
+        min-width: auto !important;
+        padding: 7px 12px !important;
+        font-size: 0.72rem !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-conversations-scroll {
+        padding-top: 8px !important;
+    }
+
     .admin-whatsapp-inbox.admin-wa-chat-open {
         height: 100dvh !important;
         gap: 0 !important;

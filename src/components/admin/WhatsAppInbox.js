@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, Check, CheckCheck, ChevronLeft, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus } from 'lucide-react';
+import { Brain, Check, CheckCheck, ChevronLeft, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus, Maximize2, Minimize2 } from 'lucide-react';
 
 const INITIAL_CHAT_LIMIT = 30;
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -376,6 +376,7 @@ export default function WhatsAppInbox({
   const [showContactActions, setShowContactActions] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showComposerTools, setShowComposerTools] = useState(false);
+  const [focusListMode, setFocusListMode] = useState(false);
   const [conversationOwners, setConversationOwners] = useState(() => readStoredConversationOwners());
   const [now, setNow] = useState(() => Date.now());
 
@@ -753,6 +754,8 @@ export default function WhatsAppInbox({
     <div
       className={`admin-split-layout admin-whatsapp-inbox${
         activeChatWaId ? ' admin-wa-chat-open' : ''
+      }${
+        !activeChatWaId && isMobile && focusListMode ? ' admin-wa-focus-list' : ''
       }`}
     >
       <div className="admin-wa-list-pane">
@@ -767,6 +770,18 @@ export default function WhatsAppInbox({
                 <span className="admin-wa-new-count">
                   {unreadCount} new
                 </span>
+              )}
+              {isMobile && (
+                <button
+                  type="button"
+                  className="admin-wa-icon-btn admin-wa-focus-toggle"
+                  onClick={() => setFocusListMode((value) => !value)}
+                  aria-label={focusListMode ? 'Show inbox controls' : 'Hide inbox controls'}
+                  aria-pressed={focusListMode}
+                  title={focusListMode ? 'Show controls' : 'Full screen list'}
+                >
+                  {focusListMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                </button>
               )}
               <button type="button" className="admin-wa-icon-btn" onClick={() => setShowAiSettings(true)} aria-label="WhatsApp AI settings">
                 <Settings size={17} />
