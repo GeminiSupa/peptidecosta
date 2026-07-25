@@ -8680,6 +8680,24 @@
    This block intentionally sits last because admin.css contains older repeated
    CRM rules above. The active component class is the source of truth on mobile. */
 @media (max-width: 1023px) {
+    body.admin-wa-tab-active {
+        overflow: hidden;
+    }
+
+    body.admin-wa-tab-active .admin-whatsapp-workspace {
+        height: calc(100dvh - 132px - env(safe-area-inset-bottom, 0px));
+        min-height: 0;
+        gap: 0;
+    }
+
+    body.admin-wa-tab-active .admin-whatsapp-analytics-shell {
+        display: none !important;
+    }
+
+    body.admin-wa-tab-active .admin-container {
+        padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+
     body.admin-wa-conversation-open .admin-whatsapp-analytics-shell {
         display: none !important;
     }
@@ -8690,6 +8708,12 @@
         gap: 8px !important;
         min-width: 0 !important;
         min-height: 0 !important;
+    }
+
+    body.admin-wa-tab-active .admin-whatsapp-inbox:not(.admin-wa-chat-open) {
+        height: 100% !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
     }
 
     .admin-whatsapp-inbox:not(.admin-wa-chat-open) {
