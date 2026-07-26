@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { checkMinUnits, minUnitsMessage } from '@/lib/promoEligibility.mjs';
+import { checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -31,6 +31,7 @@ export async function POST(request) {
         target_product,
         is_flash_sale,
         min_units,
+        max_units,
         usage_limit,
         usage_count,
         affiliate_id,
@@ -60,14 +61,16 @@ export async function POST(request) {
       return NextResponse.json({ valid: false, error: 'Promo code has already been used or reached its usage limit.' });
     }
 
-    // Minimum-units condition. Checked here rather than only in the browser so
-    // the requirement cannot be sidestepped by calling this endpoint directly.
-    const unitCheck = checkMinUnits(promo, body?.unitCount);
+    // Unit conditions (minimum and maximum). Checked here rather than only in
+    // the browser so they cannot be sidestepped by calling this endpoint
+    // directly.
+    const unitCheck = checkUnitLimits(promo, body?.unitCount);
     if (!unitCheck.ok) {
       return NextResponse.json({
         valid: false,
-        error: minUnitsMessage(promo, unitCheck.unitCount, body?.lang || 'es'),
+        error: unitLimitsMessage(promo, unitCheck.unitCount, body?.lang || 'es'),
         min_units: unitCheck.minUnits,
+        max_units: unitCheck.maxUnits,
         unit_count: unitCheck.unitCount,
       });
     }

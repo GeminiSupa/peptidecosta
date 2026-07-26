@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { parseUnitLimit, validateUnitRange } from '@/lib/promoEligibility.mjs';
 
 export const runtime = 'nodejs';
 
@@ -34,7 +35,13 @@ export async function POST(request) {
       }
 
       const hidden = !!body.hidden;
-      const minUnits = Number(body.min_units) > 0 ? Math.floor(Number(body.min_units)) : null;
+      const minUnits = parseUnitLimit(body.min_units);
+      const maxUnits = parseUnitLimit(body.max_units);
+
+      const rangeError = validateUnitRange(minUnits, maxUnits);
+      if (rangeError) {
+        return NextResponse.json({ error: rangeError }, { status: 400 });
+      }
 
       const { data, error } = await supabase
         .from('promo_codes')
@@ -47,6 +54,7 @@ export async function POST(request) {
           once_per_customer: !!body.once_per_customer,
           hidden,
           min_units: minUnits,
+          max_units: maxUnits,
           // A hidden code is private, so it can never carry a public ribbon.
           show_sale_badge: !hidden && !!body.show_sale_badge,
           badge_style: BADGE_STYLES.includes(body.badge_style) ? body.badge_style : 'code',

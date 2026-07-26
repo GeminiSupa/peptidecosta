@@ -13,7 +13,21 @@ const EMPTY_PROMO = {
   code: '', affiliate_id: '', discount_pct: 0.10, is_active: true, valid_until: '',
   once_per_customer: false, hidden: false,
   show_sale_badge: false, badge_style: 'code', badge_text: '', badge_text_es: '',
-  min_units: '', valid_until_time: '23:59', targetProducts: [],
+  min_units: '', max_units: '', valid_until_time: '23:59', targetProducts: [],
+};
+
+/**
+ * A code demanding "at least 10" and "at most 4" is one nobody can ever use.
+ * Caught here so the admin sees it while typing, rather than a customer
+ * discovering it at checkout.
+ */
+const unitRangeError = (promo) => {
+  const min = Number(promo?.min_units) > 0 ? Math.floor(Number(promo.min_units)) : 0;
+  const max = Number(promo?.max_units) > 0 ? Math.floor(Number(promo.max_units)) : 0;
+  if (min && max && max < min) {
+    return `Max units (${max}) cannot be lower than min units (${min}) — no cart could ever qualify.`;
+  }
+  return null;
 };
 
 const slugify = (value) => String(value || '')
@@ -133,7 +147,13 @@ export default function AffiliatesManager({ products = [] }) {
   const handleUpdatePromo = async (e) => {
     e.preventDefault();
     if (!editingPromo || !editingPromo.id) return;
-    
+
+    const rangeError = unitRangeError(editingPromo);
+    if (rangeError) {
+      alert(rangeError);
+      return;
+    }
+
     try {
       const target_product = Array.isArray(editingPromo.targetProducts) 
         ? editingPromo.targetProducts.join(', ') 
@@ -149,6 +169,8 @@ export default function AffiliatesManager({ products = [] }) {
           target_product,
           valid_from: crWallToIso(editingPromo.valid_from),
           valid_until: crWallToIso(editingPromo.valid_until),
+          min_units: editingPromo.min_units,
+          max_units: editingPromo.max_units,
           show_sale_badge: !editingPromo.hidden && !!editingPromo.show_sale_badge,
           badge_style: editingPromo.badge_style || 'code',
           badge_text: editingPromo.badge_text || null,
@@ -300,6 +322,12 @@ export default function AffiliatesManager({ products = [] }) {
     // (FLASH10 etc.) intentionally have no affiliate and pay no commission.
     if (!newPromo.code) return;
 
+    const rangeError = unitRangeError(newPromo);
+    if (rangeError) {
+      alert(rangeError);
+      return;
+    }
+
     try {
       // Writes go through the server (admin session + service role) so the
       // browser key needs no write access to promo_codes at all.
@@ -315,6 +343,7 @@ export default function AffiliatesManager({ products = [] }) {
           once_per_customer: !!newPromo.once_per_customer,
           hidden: !!newPromo.hidden,
           min_units: newPromo.min_units,
+          max_units: newPromo.max_units,
           show_sale_badge: !!newPromo.show_sale_badge,
           badge_style: newPromo.badge_style || 'code',
           badge_text: newPromo.badge_text,
@@ -554,6 +583,16 @@ export default function AffiliatesManager({ products = [] }) {
                     style={inputStyle}
                   />
                   <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Max units (optional)"
+                    title="Optional: the cart may contain at most this many units in total, across any products. Use for capped intro offers like '15% off your first order of up to 4 products'. Leave empty for no maximum."
+                    value={newPromo.max_units}
+                    onChange={e => setNewPromo({...newPromo, max_units: e.target.value})}
+                    style={inputStyle}
+                  />
+                  <input
                     type="date"
                     title="Optional: last day the code works, Costa Rica time. Leave empty for no expiry."
                     value={newPromo.valid_until}
@@ -612,6 +651,18 @@ export default function AffiliatesManager({ products = [] }) {
                     Bulk deal: this replaces the automatic volume discount rather than adding to it, so the
                     customer gets exactly <strong>{Math.round((Number(newPromo.discount_pct) || 0) * 100)}%</strong> off
                     once their cart reaches {Math.floor(Number(newPromo.min_units))} units.
+                  </div>
+                )}
+                {Number(newPromo.max_units) > 0 && (
+                  <div style={{ padding: '10px 14px', background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.25)', borderRadius: '10px', fontSize: '0.82rem', color: '#bae6fd' }}>
+                    Capped offer: the code is refused once the cart passes {Math.floor(Number(newPromo.max_units))} units,
+                    so it cannot be spent on a large order.
+                    {Math.floor(Number(newPromo.max_units)) < 5 && ' The automatic volume discount starts at 5 units, so it can never apply alongside this code.'}
+                  </div>
+                )}
+                {unitRangeError(newPromo) && (
+                  <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', fontSize: '0.82rem', color: '#fca5a5' }}>
+                    {unitRangeError(newPromo)}
                   </div>
                 )}
                 <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.85rem', color: '#e2e8f0', cursor: 'pointer' }}>
@@ -1014,6 +1065,43 @@ export default function AffiliatesManager({ products = [] }) {
                   <option value={0.50}>50% Off</option>
                 </select>
               </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Min units</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="admin-input"
+                    style={{ width: '100%' }}
+                    placeholder="No minimum"
+                    title="The cart must contain at least this many units in total before the code works. Leave empty for no minimum."
+                    value={editingPromo.min_units ?? ''}
+                    onChange={e => setEditingPromo({ ...editingPromo, min_units: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Max units</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className="admin-input"
+                    style={{ width: '100%' }}
+                    placeholder="No maximum"
+                    title="The cart may contain at most this many units in total. Use for capped intro offers like '15% off your first order of up to 4 products'. Leave empty for no maximum."
+                    value={editingPromo.max_units ?? ''}
+                    onChange={e => setEditingPromo({ ...editingPromo, max_units: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {unitRangeError(editingPromo) && (
+                <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', fontSize: '0.82rem', color: '#fca5a5' }}>
+                  {unitRangeError(editingPromo)}
+                </div>
+              )}
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Valid From (Costa Rica time)</label>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { parseUnitLimit, validateUnitRange } from '@/lib/promoEligibility.mjs';
 
 export const runtime = 'nodejs';
 
@@ -16,11 +17,21 @@ export async function POST(request) {
       return NextResponse.json({ error: 'ID and discount_pct are required' }, { status: 400 });
     }
 
+    const minUnits = parseUnitLimit(body.min_units);
+    const maxUnits = parseUnitLimit(body.max_units);
+
+    const rangeError = validateUnitRange(minUnits, maxUnits);
+    if (rangeError) {
+      return NextResponse.json({ error: rangeError }, { status: 400 });
+    }
+
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from('promo_codes')
       .update({
         discount_pct,
+        min_units: minUnits,
+        max_units: maxUnits,
         is_flash_sale: is_flash_sale || false,
         target_product: target_product || null,
         valid_from: valid_from || null,

@@ -32,6 +32,89 @@ export function checkMinUnits(promo, unitCount) {
 }
 
 /**
+ * Turn an admin form value into what the column stores: a positive whole
+ * number, or null for "no limit". Empty string, 0, and rubbish all mean no
+ * limit. Shared by the create and edit endpoints so a value saved through one
+ * screen behaves identically when saved through the other.
+ */
+export function parseUnitLimit(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? Math.floor(num) : null;
+}
+
+/**
+ * Guards against a code nobody can ever use ("at least 10" AND "at most 4").
+ * @returns {string|null} an error message, or null when the pair is usable.
+ */
+export function validateUnitRange(minUnits, maxUnits) {
+  if (minUnits && maxUnits && maxUnits < minUnits) {
+    return `max_units (${maxUnits}) cannot be lower than min_units (${minUnits}) — no cart could satisfy both.`;
+  }
+  return null;
+}
+
+export function getMaxUnits(promo) {
+  const value = Number(promo?.max_units ?? 0);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+/**
+ * The mirror of checkMinUnits, for capped introductory offers - "15% off your
+ * first order of up to 4 products". The cap is the point of the offer: without
+ * it the code meant to buy a small first purchase gets spent on a thirty-vial
+ * order at full discount.
+ *
+ * @returns {{ok: boolean, maxUnits: number, unitCount: number, excess: number}}
+ */
+export function checkMaxUnits(promo, unitCount) {
+  const maxUnits = getMaxUnits(promo);
+  const units = Number.isFinite(Number(unitCount)) ? Number(unitCount) : 0;
+  const ok = maxUnits === 0 || units <= maxUnits;
+  return { ok, maxUnits, unitCount: units, excess: ok ? 0 : units - maxUnits };
+}
+
+/** Customer-facing wording. Returns null when the cart is within the cap. */
+export function maxUnitsMessage(promo, unitCount, lang = 'es') {
+  const { ok, maxUnits, excess } = checkMaxUnits(promo, unitCount);
+  if (ok) return null;
+
+  const isEn = String(lang).toLowerCase().startsWith('en');
+  return isEn
+    ? `This code covers up to ${maxUnits} units — remove ${excess} to use it.`
+    : `Este código cubre hasta ${maxUnits} unidades — quitá ${excess} para usarlo.`;
+}
+
+/**
+ * Both unit conditions in one call.
+ *
+ * Every caller has to check the minimum AND the maximum, and there are four of
+ * them (validate endpoint, cart re-check, order creation, admin preview).
+ * Checking them one at a time is how a condition ends up enforced in three
+ * places out of four, so callers get a single function instead.
+ *
+ * @returns {{ok: boolean, reason: null|'min'|'max', minUnits: number, maxUnits: number, unitCount: number}}
+ */
+export function checkUnitLimits(promo, unitCount) {
+  const min = checkMinUnits(promo, unitCount);
+  const max = checkMaxUnits(promo, unitCount);
+  return {
+    ok: min.ok && max.ok,
+    reason: !min.ok ? 'min' : (!max.ok ? 'max' : null),
+    minUnits: min.minUnits,
+    maxUnits: max.maxUnits,
+    unitCount: min.unitCount,
+  };
+}
+
+/** Customer-facing wording for whichever limit failed. Null when both pass. */
+export function unitLimitsMessage(promo, unitCount, lang = 'es') {
+  const { reason, unitCount: units } = checkUnitLimits(promo, unitCount);
+  if (reason === 'min') return minUnitsMessage(promo, units, lang);
+  if (reason === 'max') return maxUnitsMessage(promo, units, lang);
+  return null;
+}
+
+/**
  * A promo with a unit minimum is a negotiated bulk deal, so it REPLACES the
  * automatic volume discount rather than stacking on top of it.
  *

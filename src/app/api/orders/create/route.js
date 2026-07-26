@@ -1,6 +1,7 @@
 import { after, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
+import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 
 export const runtime = 'nodejs';
 
@@ -218,7 +219,7 @@ export async function POST(request) {
     if (order.promo_code) {
       const { data: promoData } = await supabase
         .from('promo_codes')
-        .select('is_active, valid_from, valid_until, usage_limit, usage_count, once_per_customer')
+        .select('is_active, valid_from, valid_until, usage_limit, usage_count, once_per_customer, min_units, max_units')
         .eq('code', order.promo_code.toUpperCase())
         .single();
         
@@ -240,6 +241,16 @@ export async function POST(request) {
       }
       if (promoData.usage_limit !== null && promoData.usage_count >= promoData.usage_limit) {
         return NextResponse.json({ error: 'Promo code has reached its usage limit' }, { status: 400 });
+      }
+      // Unit conditions, re-checked against the items actually being ordered.
+      // The browser already blocks this, but the browser is not the authority:
+      // a capped intro code ("up to 4") is worth real money on a 30-vial order,
+      // so the cart size is verified once more before anything is saved.
+      const unitCheck = checkUnitLimits(promoData, countCartUnits(order.items));
+      if (!unitCheck.ok) {
+        return NextResponse.json({
+          error: unitLimitsMessage(promoData, unitCheck.unitCount, order.lang || 'es'),
+        }, { status: 400 });
       }
       // One-time-per-customer codes: block if this customer (by email or phone)
       // already has a prior order using this code.

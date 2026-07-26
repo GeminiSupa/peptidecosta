@@ -11,7 +11,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, cleanPhoneNumber } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
-import { checkMinUnits, minUnitsMessage, effectiveVolumeDiscountPct } from '@/lib/promoEligibility.mjs';
+import { checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct } from '@/lib/promoEligibility.mjs';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
@@ -1853,14 +1853,15 @@ export default function CatalogPage() {
   };
 
   // A cart can stop qualifying after the code was accepted — someone applies a
-  // 20-unit code then removes items. Without this the discount would silently
-  // survive, so the minimum has to be re-checked whenever the cart changes.
+  // 20-unit code then removes items, or applies a 4-unit-cap code then adds
+  // six more. Without this the discount would silently survive, so both unit
+  // limits have to be re-checked whenever the cart changes.
   useEffect(() => {
     if (!promoData?.valid) return;
-    const check = checkMinUnits(promoData, getCartVialCount());
+    const check = checkUnitLimits(promoData, getCartVialCount());
     if (check.ok) return;
     setPromoData(null);
-    setPromoError(minUnitsMessage(promoData, check.unitCount, lang));
+    setPromoError(unitLimitsMessage(promoData, check.unitCount, lang));
   }, [cart, promoData, lang]);
 
   useEffect(() => {
