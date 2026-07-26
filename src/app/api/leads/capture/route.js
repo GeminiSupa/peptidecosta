@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import nodemailer from 'nodemailer';
+import { sendCatalogWelcomeCampaign } from '@/lib/campaignDelivery';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
-import { getBusinessLinks } from '@/lib/settings';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,12 +10,6 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = supabaseUrl && supabaseServiceKey
   ? createClient(supabaseUrl, supabaseServiceKey)
   : null;
-
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
 
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -80,6 +73,19 @@ export async function POST(request) {
             console.error('[Leads Capture] Error updating existing lead consent:', updateErr);
           }
         }
+        if (contact_method === 'email' && whatsapp_consent) {
+          try {
+            const result = await sendCatalogWelcomeCampaign(cleanContact);
+            console.log('[Leads Capture] Existing lead welcome campaign result:', {
+              email: cleanContact,
+              sent: result.sent,
+              skipped: result.skipped || null,
+              campaignId: result.campaignId || result.campaign?.id || null,
+            });
+          } catch (mailErr) {
+            console.error('[Leads Capture] Existing lead welcome campaign failed:', mailErr);
+          }
+        }
         console.log(`[Leads Capture] Contact ${cleanContact} already exists. Updated consent if provided.`);
         return NextResponse.json({ success: true, message: 'Already registered' });
       }
@@ -111,48 +117,21 @@ export async function POST(request) {
       if (leadErr) console.error('[Leads Capture] Error saving lead:', leadErr);
     }
 
-    const links = await getBusinessLinks();
-
-    // Send Welcome Email
+    // Send the saved Marketing Studio welcome campaign to opted-in email leads.
     if (contact_method === 'email') {
-      if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-        console.warn('[Leads Capture] SMTP not configured. Cannot send welcome email.');
+      if (!whatsapp_consent) {
+        console.log(`[Leads Capture] Email ${cleanContact} captured without marketing opt-in; welcome campaign skipped.`);
       } else {
-        const transporter = nodemailer.createTransport({
-          host: SMTP_HOST,
-          port: SMTP_PORT,
-          secure: SMTP_SECURE,
-          auth: { user: SMTP_USER, pass: SMTP_PASS }
-        });
-
-        const subject = language === 'en'
-          ? 'Welcome to Peptides Costa Rica!'
-          : '¡Bienvenido a Péptidos Costa Rica!';
-
-        const html = `
-          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
-            <h1 style="color:#0f172a;font-size:24px;">${language === 'en' ? 'Welcome to our Catalog!' : '¡Bienvenido a nuestro Catálogo!'}</h1>
-            <p style="color:#334155;font-size:16px;">
-              ${language === 'en'
-                ? 'Thank you for signing up. Explore our full catalog of research peptides, live prices, and real-time availability.'
-                : 'Gracias por registrarte. Explora nuestro catálogo completo de péptidos de investigación, precios en vivo y disponibilidad en tiempo real.'}
-            </p>
-            <a href="${links.catalogUrl}" style="display:inline-block;margin-top:20px;background:#059669;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;">
-              ${language === 'en' ? 'Shop Now' : 'Comprar Ahora'}
-            </a>
-          </div>
-        `;
-
         try {
-          await transporter.sendMail({
-            from: `Peptides Costa Rica <${SMTP_USER}>`,
-            to: cleanContact,
-            subject,
-            html,
+          const result = await sendCatalogWelcomeCampaign(cleanContact);
+          console.log('[Leads Capture] Catalog welcome campaign result:', {
+            email: cleanContact,
+            sent: result.sent,
+            skipped: result.skipped || null,
+            campaignId: result.campaignId || result.campaign?.id || null,
           });
-          console.log(`[Leads Capture] Welcome email sent to ${cleanContact}`);
         } catch (mailErr) {
-          console.error('[Leads Capture] Welcome email failed:', mailErr);
+          console.error('[Leads Capture] Welcome campaign failed:', mailErr);
         }
       }
     } 

@@ -31,6 +31,11 @@ function truncateError(error, maxLength = 500) {
   return String(error?.message || error || '').slice(0, maxLength);
 }
 
+function normalizeEmail(value) {
+  const email = String(value || '').trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+}
+
 function isMissingHealthTableError(error) {
   const code = String(error?.code || '');
   const message = String(error?.message || '');
@@ -127,6 +132,10 @@ function personalize(value, subscriber) {
   });
 }
 
+function mergeTags(existingTags, nextTags) {
+  return [...new Set([...(Array.isArray(existingTags) ? existingTags : []), ...nextTags].filter(Boolean))];
+}
+
 function trackedHtml(campaign, subscriber) {
   const safeHtml = stabilizeSimpleLinkRows(clampOutlookButtonSizes(campaign.html_content));
   const content = personalize(safeHtml, subscriber).replace(/href="([^"]+)"/g, (match, url) => {
@@ -144,6 +153,236 @@ function trackedHtml(campaign, subscriber) {
     viewEmailUrl: DOMAIN,
   });
   return `${withFooter}<img src="${DOMAIN}/api/tracking/open?c=${campaign.id}&s=${subscriber.id}" width="1" height="1" alt="" />`;
+}
+
+async function findWelcomeCampaign(supabase, options = {}) {
+  const campaignId = options.campaignId || process.env.CATALOG_WELCOME_CAMPAIGN_ID;
+  if (campaignId) {
+    const { data, error } = await supabase.from('email_campaigns').select('*').eq('id', campaignId).maybeSingle();
+    if (error) throw error;
+    if (data) return data;
+  }
+
+  const subjectLine = options.subjectLine || 'Peptides Costa Rica: 15% de descuento en tu primer pedido';
+  const { data, error } = await supabase
+    .from('email_campaigns')
+    .select('*')
+    .eq('subject_line', subjectLine)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function upsertCatalogEmailSubscriber(supabase, email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    return { subscriber: null, subscribed: false, skipped: 'invalid_email' };
+  }
+
+  const tags = ['catalog_gate', 'welcome_a'];
+  const { data: existing, error: lookupError } = await supabase
+    .from('email_subscribers')
+    .select('*')
+    .eq('email', normalizedEmail)
+    .maybeSingle();
+  if (lookupError) throw lookupError;
+
+  if (existing) {
+    if (String(existing.status || '').toLowerCase() === 'unsubscribed') {
+      return { subscriber: existing, subscribed: false, skipped: 'unsubscribed' };
+    }
+
+    const { data, error } = await supabase
+      .from('email_subscribers')
+      .update({
+        status: 'subscribed',
+        source: existing.source || 'catalog_gate',
+        tags: mergeTags(existing.tags, tags),
+      })
+      .eq('id', existing.id)
+      .select()
+      .single();
+    if (error) throw error;
+    return { subscriber: data, subscribed: true, skipped: null };
+  }
+
+  const { data, error } = await supabase
+    .from('email_subscribers')
+    .insert([{
+      email: normalizedEmail,
+      source: 'catalog_gate',
+      status: 'subscribed',
+      tags,
+    }])
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      return upsertCatalogEmailSubscriber(supabase, normalizedEmail);
+    }
+    throw error;
+  }
+
+  return { subscriber: data, subscribed: true, skipped: null };
+}
+
+async function hasActiveEmailSuppression(supabase, email) {
+  const { data, error } = await supabase
+    .from('marketing_suppressions')
+    .select('id')
+    .eq('active', true)
+    .eq('identity', String(email || '').trim().toLowerCase())
+    .in('channel', ['email', 'all'])
+    .limit(1);
+  if (error) throw error;
+  return Array.isArray(data) && data.length > 0;
+}
+
+async function deliverSingleCampaignToSubscriber(supabase, campaign, subscriber, options = {}) {
+  if (!campaign?.id || !subscriber?.id || !subscriber?.email) {
+    throw new CampaignDeliveryError('Campaign and subscriber are required', 400);
+  }
+  if (!campaign.subject_line || !campaign.html_content) {
+    throw new CampaignDeliveryError('Welcome campaign must have a subject and saved email body before sending', 400);
+  }
+
+  const smtp = getCampaignSmtpConfig();
+  if (!smtp.configured) throw new CampaignDeliveryError('Campaign email sender credentials are not configured', 500);
+
+  if (await hasActiveEmailSuppression(supabase, subscriber.email)) {
+    return { sent: false, skipped: 'suppressed' };
+  }
+
+  const { data: previousSend, error: previousSendError } = await supabase
+    .from('campaign_sends')
+    .select('id')
+    .eq('campaign_id', campaign.id)
+    .eq('subscriber_id', subscriber.id)
+    .limit(1)
+    .maybeSingle();
+  if (previousSendError) throw previousSendError;
+  if (previousSend) return { sent: false, skipped: 'already_sent' };
+
+  const safety = campaignSafetyConfig();
+  const fallbackSmtp = getCampaignRackspaceFallbackSmtpConfig(smtp);
+  const primaryProvider = identifyCampaignSmtpProvider(smtp.host);
+  const fallbackProvider = fallbackSmtp ? identifyCampaignSmtpProvider(fallbackSmtp.host) : null;
+  const batchLogId = await createDeliveryBatchLog(supabase, {
+    campaign_id: campaign.id,
+    trigger_type: options.triggerType || 'catalog_welcome',
+    status: 'processing',
+    provider: primaryProvider,
+    fallback_provider: fallbackProvider,
+    fallback_used: false,
+    batch_size: 1,
+    attempted: 1,
+    sent: 0,
+    failed: 0,
+    total_eligible: 1,
+    already_sent: 0,
+    remaining_before_batch: 1,
+    sender_host: smtp.host,
+    fallback_host: fallbackSmtp?.host || null,
+  });
+
+  const transporter = createCampaignTransporter(smtp, safety);
+  const fallbackTransporter = fallbackSmtp ? createCampaignTransporter(fallbackSmtp, safety) : null;
+  let fallbackUsed = false;
+  const providerErrors = [];
+  const unsubscribeUrl = `${DOMAIN}/api/unsubscribe?t=${encodeURIComponent(createUnsubscribeToken(subscriber.id))}`;
+  const mail = {
+    ...(process.env.CAMPAIGN_BCC_EMAIL ? { bcc: process.env.CAMPAIGN_BCC_EMAIL } : {}),
+    from: smtp.from,
+    to: subscriber.email,
+    subject: personalize(campaign.subject_line, subscriber),
+    html: trackedHtml(campaign, subscriber),
+    replyTo: campaign.reply_to || smtp.replyTo,
+    headers: {
+      'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:${smtp.replyTo}?subject=unsubscribe>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    },
+  };
+
+  try {
+    try {
+      await transporter.sendMail(mail);
+    } catch (primaryError) {
+      providerErrors.push({
+        provider: primaryProvider,
+        message: truncateError(primaryError, 220),
+        at: new Date().toISOString(),
+      });
+      if (!fallbackTransporter) throw primaryError;
+      fallbackUsed = true;
+      await fallbackTransporter.sendMail({
+        ...mail,
+        from: fallbackSmtp.from,
+        replyTo: campaign.reply_to || fallbackSmtp.replyTo,
+        headers: {
+          ...mail.headers,
+          'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:${fallbackSmtp.replyTo}?subject=unsubscribe>`,
+        },
+      });
+    }
+
+    const { error: sendInsertError } = await supabase
+      .from('campaign_sends')
+      .insert({ campaign_id: campaign.id, subscriber_id: subscriber.id, subject_variant: 'A' });
+    if (sendInsertError) throw sendInsertError;
+
+    await updateDeliveryBatchLog(supabase, batchLogId, {
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      sent: 1,
+      failed: 0,
+      remaining_after_batch: 0,
+      fallback_used: fallbackUsed,
+      provider_errors: providerErrors.length ? providerErrors : null,
+    });
+
+    return { sent: true, skipped: null, campaignId: campaign.id, subscriberId: subscriber.id, fallbackUsed };
+  } catch (error) {
+    await updateDeliveryBatchLog(supabase, batchLogId, {
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+      sent: 0,
+      failed: 1,
+      remaining_after_batch: 1,
+      fallback_used: fallbackUsed,
+      error_message: truncateError(error),
+      provider_errors: providerErrors.length ? providerErrors : null,
+    });
+    throw error;
+  } finally {
+    await closeTransporter(transporter);
+    await closeTransporter(fallbackTransporter);
+  }
+}
+
+export async function sendCatalogWelcomeCampaign(email, options = {}) {
+  const supabase = getSupabaseAdmin();
+  const subscriberResult = await upsertCatalogEmailSubscriber(supabase, email);
+  if (!subscriberResult.subscribed) {
+    return { sent: false, skipped: subscriberResult.skipped, subscriber: subscriberResult.subscriber };
+  }
+
+  const campaign = await findWelcomeCampaign(supabase, options);
+  if (!campaign) {
+    return { sent: false, skipped: 'welcome_campaign_missing', subscriber: subscriberResult.subscriber };
+  }
+
+  const delivery = await deliverSingleCampaignToSubscriber(supabase, campaign, subscriberResult.subscriber, {
+    triggerType: options.triggerType || 'catalog_welcome',
+  });
+
+  return {
+    ...delivery,
+    subscriber: subscriberResult.subscriber,
+    campaign,
+  };
 }
 
 export async function deliverCampaign(campaignId, options = {}) {
