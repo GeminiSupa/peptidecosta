@@ -12,6 +12,27 @@ import nodemailer from 'nodemailer';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
+const COMPLETION_MESSAGE_RE = /paid|complet/i;
+const COMPLETE_STATUSES = ['Order Complete', 'Completed'];
+
+function getReviewEligibilityDate(order) {
+  let when = order?.created_at ? new Date(order.created_at) : new Date(0);
+
+  if (Array.isArray(order?.activity_log)) {
+    const completionLogs = order.activity_log.filter(
+      (log) => log?.type === 'status_change' && COMPLETION_MESSAGE_RE.test(log?.message || '')
+    );
+
+    if (completionLogs.length > 0) {
+      // activity_log is newest-first, so the last match is the first completion event.
+      const firstCompletion = completionLogs[completionLogs.length - 1];
+      if (firstCompletion?.at) when = new Date(firstCompletion.at);
+    }
+  }
+
+  return Number.isNaN(when.getTime()) ? new Date(0) : when;
+}
+
 export async function GET(request) {
   const denied = verifyCronRequest(request);
   if (denied) return denied;
@@ -19,24 +40,27 @@ export async function GET(request) {
   try {
     const supabase = getSupabaseAdmin();
 
-    // Find orders that are:
-    // - Order Complete
-    // - Updated at least 5 days ago
-    // - Have not been asked for a review yet
+    // Find completed orders that have not been asked for a review yet. The
+    // orders table does not have updated_at, so we fetch candidates and derive
+    // the completion date from activity_log, falling back to created_at.
     const fiveDaysAgo = new Date();
     fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
 
-    const { data: eligibleOrders, error } = await supabase
+    const { data: candidateOrders, error } = await supabase
       .from('orders')
-      .select('id, order_number, customer_email, customer_name, customer_phone, currency, payment_method, total_usd, total_crc, created_at, updated_at')
-      .eq('status', 'Order Complete')
+      .select('id, order_number, customer_email, customer_name, customer_phone, currency, payment_method, total_usd, total_crc, created_at, activity_log')
+      .in('status', COMPLETE_STATUSES)
       .is('review_requested_at', null)
-      .lte('updated_at', fiveDaysAgo.toISOString())
-      .limit(50); // Process in batches to avoid timeouts
+      .order('created_at', { ascending: true })
+      .limit(100); // Process in batches to avoid timeouts
 
     if (error) {
       throw error;
     }
+
+    const eligibleOrders = (candidateOrders || [])
+      .filter((order) => getReviewEligibilityDate(order) <= fiveDaysAgo)
+      .slice(0, 50);
 
     if (!eligibleOrders || eligibleOrders.length === 0) {
       return NextResponse.json({ message: 'No eligible orders for review requests.' });
