@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { canSendWhatsAppMarketing } from '@/lib/whatsappCompliance';
+import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { findPaidOrderMatchForCart, markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
 
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -163,14 +164,13 @@ export async function POST(request) {
 
           // Log the outbound reply to CRM messages
           const metaMessageId = metaData?.messages?.[0]?.id || null;
-          const { error: logErr } = await supabase
-            .from('whatsapp_messages')
-            .insert({
+          const { error: logErr } = await insertWhatsAppMessage(supabase, {
               wa_id: cleanPhone,
               display_name: customerDisplayName === 'Cliente' ? 'Peptides Customer' : customerDisplayName,
               message_text: message,
               message_type: 'text',
               direction: 'outbound',
+              source: 'cloud_api',
               matched_order_id: null,
               raw_payload: metaData,
               meta_message_id: metaMessageId,

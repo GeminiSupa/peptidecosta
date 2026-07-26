@@ -25,6 +25,7 @@ import {
   OPT_OUT_CONFIRMATION,
   OPT_IN_CONFIRMATION,
 } from './whatsappCompliance';
+import { insertWhatsAppMessage } from './whatsappMessageLog';
 
 // ── Lazy imports (Baileys is ESM-only, load dynamically) ──────────────────
 let makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore,
@@ -102,17 +103,30 @@ function isWithinSendWindow() {
 /** Count outbound Baileys sends in the last 24h (DB-backed, restart-proof). */
 async function outboundSendsLast24h() {
   if (!supabase) return 0;
-  try {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { count } = await supabase
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const countOutbound = async (withSource) => {
+    let query = supabase
       .from('whatsapp_messages')
       .select('id', { count: 'exact', head: true })
       .eq('direction', 'outbound')
-      .eq('source', 'baileys_session')
       .gte('created_at', since);
+
+    if (withSource) query = query.eq('source', 'baileys_session');
+    return query;
+  };
+
+  try {
+    const { count, error } = await countOutbound(true);
+    if (error) throw error;
     return count || 0;
-  } catch (_) {
-    return 0;
+  } catch (err) {
+    if (!`${err?.message || ''}`.includes('source')) return 0;
+    try {
+      const { count } = await countOutbound(false);
+      return count || 0;
+    } catch (_) {
+      return 0;
+    }
   }
 }
 
@@ -450,9 +464,7 @@ export async function startSession() {
       }
 
       // Save to Database
-      const { error: insertError } = await supabase
-        .from('whatsapp_messages')
-        .insert({
+      const { error: insertError } = await insertWhatsAppMessage(supabase, {
           wa_id: waId,
           display_name: displayName,
           message_text: messageText,
@@ -627,7 +639,7 @@ export function sendWAMessage(to, text, opts = {}) {
     // 7) Audit trail: log every outbound send with who triggered it. This also
     //    feeds the 24h volume cap and keeps sent messages visible in the inbox.
     if (supabase) {
-      const { error: logErr } = await supabase.from('whatsapp_messages').insert({
+      const { error: logErr } = await insertWhatsAppMessage(supabase, {
         wa_id: digits,
         display_name: 'Peptides Costa Rica',
         message_text: text,

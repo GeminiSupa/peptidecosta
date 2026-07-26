@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
+import { getWhatsAppMessageSource } from '@/lib/whatsappMessageLog';
 import {
   getAbandonedCartConversion,
   getLeadConversion as resolveLeadConversion,
@@ -5544,7 +5545,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             {/* Full Baileys inbox */}
             <div style={{ flex: 1, minHeight: 0 }}>
               <WhatsAppInbox
-                whatsappMessages={whatsappMessages.filter(m => m.source === 'baileys_session')}
+                whatsappMessages={whatsappMessages.filter(m => getWhatsAppMessageSource(m) === 'baileys_session')}
                 orders={orders}
                 leads={leads}
                 abandonedCarts={abandonedCarts}

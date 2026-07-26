@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
+import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { canSendWhatsAppMarketing } from '@/lib/whatsappCompliance';
 
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -120,12 +121,13 @@ export async function POST(request) {
           
           // Log to DB
           if (supabase) {
-            await supabase.from('whatsapp_messages').insert({
+            await insertWhatsAppMessage(supabase, {
               wa_id: cleanPhone,
               display_name: name || 'Peptides Customer',
               message_text: message,
               message_type: 'text',
               direction: 'outbound',
+              source: 'cloud_api',
               raw_payload: metaData
             });
           }

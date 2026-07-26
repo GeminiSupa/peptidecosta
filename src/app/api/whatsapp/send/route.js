@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
+import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 
 const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -93,15 +94,14 @@ export async function POST(request) {
         }
 
         const metaMessageId = metaData?.messages?.[0]?.id || null;
-        const { error: logErr } = await supabase
-          .from('whatsapp_messages')
-          .insert({
+        const { error: logErr } = await insertWhatsAppMessage(supabase, {
             wa_id: cleanPhone,
             display_name: cleanDisplayName,
             message_text: message || '',
             media_url: mediaUrl || null,
             message_type: mediaUrl ? 'image' : 'text',
             direction: 'outbound',
+            source: 'cloud_api',
             matched_order_id: orderId || null,
             raw_payload: metaData,
             meta_message_id: metaMessageId,

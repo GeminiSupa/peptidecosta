@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
+import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { getBusinessLinks } from '@/lib/settings';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -186,16 +187,17 @@ export async function POST(request) {
             console.log('[Leads Capture] WhatsApp welcome sent:', metaData.messages?.[0]?.id);
             if (supabase) {
               const metaMessageId = metaData?.messages?.[0]?.id || null;
-              await supabase.from('whatsapp_messages').insert([{
+              await insertWhatsAppMessage(supabase, {
                 wa_id: cleanContact,
                 display_name: 'Catalog Lead',
                 message_text: `¡Bienvenido a Péptidos Costa Rica! Explora nuestro catálogo. Para consultas 24/7 contáctanos al +506 8404-6973.`,
                 message_type: 'template',
                 direction: 'outbound',
+                source: 'cloud_api',
                 raw_payload: metaData,
                 meta_message_id: metaMessageId,
                 delivery_status: 'sent'
-              }]);
+              });
             }
           }
         } catch (waErr) {

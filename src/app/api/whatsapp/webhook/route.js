@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 import { buildWhatsAppCustomerContext } from '@/lib/whatsappAiContext';
+import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import {
   detectWhatsAppIntent,
   setWhatsAppSuppression,
@@ -164,14 +165,13 @@ export async function POST(request) {
               .or(`customer_phone.ilike.%${cleanNum.slice(-8)}%,customer_phone.ilike.%${cleanNum}%`);
 
             // ── Log the message to whatsapp_messages table ──
-            const { error: insertError } = await supabase
-              .from('whatsapp_messages')
-              .insert({
+            const { error: insertError } = await insertWhatsAppMessage(supabase, {
                 wa_id: waId,
                 display_name: displayName,
                 message_text: messageText,
                 message_type: messageType,
                 direction: 'inbound',
+                source: 'cloud_api',
                 matched_order_id: matchedOrderId,
                 raw_payload: body,
               });
@@ -210,12 +210,13 @@ export async function POST(request) {
                   }),
                 });
                 if (supabase) {
-                  await supabase.from('whatsapp_messages').insert({
+                  await insertWhatsAppMessage(supabase, {
                     wa_id: waId,
                     display_name: 'System',
                     message_text: confirmation,
                     message_type: 'text',
                     direction: 'outbound',
+                    source: 'cloud_api',
                     raw_payload: { compliance: intent },
                   });
                 }
@@ -423,12 +424,13 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
               // Log the outbound reply in Supabase
               if (supabase) {
                 const metaMessageId = metaData?.messages?.[0]?.id || null;
-                await supabase.from('whatsapp_messages').insert({
+                await insertWhatsAppMessage(supabase, {
                   wa_id: waId,
                   display_name: isAiGenerated ? 'AI Copilot' : 'Peptides Costa Rica',
                   message_text: replyText,
                   message_type: 'text',
                   direction: 'outbound',
+                  source: 'cloud_api',
                   matched_order_id: matchedOrderId,
                   meta_message_id: metaMessageId,
                   delivery_status: 'sent'
