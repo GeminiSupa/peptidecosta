@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Briefcase, TrendingUp, DollarSign, Target, ClipboardList,
-  ChevronRight, ChevronLeft, Wallet,
+  ChevronRight, ChevronLeft, Wallet, Camera, Upload,
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { getOrderSalesAmounts } from '@/lib/agentOrders';
@@ -33,6 +33,12 @@ export default function AgentDashboard({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [weekOffset, setWeekOffset] = useState(0);
+  const [avatarUrl, setAvatarUrl] = useState(currentUserProfile?.avatar_url || '');
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  useEffect(() => {
+    setAvatarUrl(currentUserProfile?.avatar_url || '');
+  }, [currentUserProfile?.avatar_url]);
 
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
@@ -114,14 +120,78 @@ export default function AgentDashboard({
     );
   };
 
+  const handleAvatarUpload = async (file) => {
+    if (!file) return;
+    setAvatarUploading(true);
+    setError('');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const response = await adminFetch('/api/admin/users/avatar', {
+        method: 'POST',
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error || 'Avatar upload failed');
+      setAvatarUrl(data.avatarUrl);
+    } catch (err) {
+      setError(err.message || 'Could not upload profile photo');
+    }
+    setAvatarUploading(false);
+  };
+
   return (
     <div className="dashboard-home agent-dashboard">
       <div className="dashboard-home-header">
-        <div>
-          <h2 className="dashboard-home-title">{title}</h2>
-          <p className="dashboard-home-subtitle">
-            Welcome back, {name} · {viewingPastWeek ? 'Viewing week of' : 'Week of'} {weekRange}
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+          <label
+            title="Upload profile photo"
+            style={{
+              width: '58px',
+              height: '58px',
+              borderRadius: '50%',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              cursor: avatarUploading ? 'wait' : 'pointer',
+              background: 'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: '#fff',
+              fontWeight: 900,
+              position: 'relative',
+            }}
+          >
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : name.charAt(0).toUpperCase()}
+            {avatarUploading && (
+              <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,0.55)' }}>
+                <Upload size={17} />
+              </span>
+            )}
+            <span style={{ position: 'absolute', right: '-2px', bottom: '-2px', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#38bdf8', color: '#082f49', border: '2px solid #0f172a', boxShadow: '0 4px 12px rgba(0,0,0,0.25)' }}>
+              {avatarUploading ? <Upload size={13} /> : <Camera size={13} />}
+            </span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              disabled={avatarUploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) handleAvatarUpload(file);
+              }}
+              style={{ display: 'none' }}
+            />
+          </label>
+          <div style={{ minWidth: 0 }}>
+            <h2 className="dashboard-home-title">{title}</h2>
+            <p className="dashboard-home-subtitle">
+              Welcome back, {name} · {viewingPastWeek ? 'Viewing week of' : 'Week of'} {weekRange}
+            </p>
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <button

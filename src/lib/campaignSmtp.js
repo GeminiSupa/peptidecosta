@@ -39,3 +39,35 @@ export function getCampaignSmtpConfig() {
 export function isCampaignRackspaceSmtp(config = getCampaignSmtpConfig()) {
   return /(emailsrvr|rackspace)/i.test(config.host || '');
 }
+
+export function identifyCampaignSmtpProvider(host = '') {
+  if (/elasticemail/i.test(host)) return 'Elastic Email';
+  if (/rackspace|emailsrvr/i.test(host)) return 'Rackspace';
+  return 'SMTP';
+}
+
+export function getCampaignRackspaceFallbackSmtpConfig(primary) {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 465);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (!host || !user || !pass) return null;
+
+  const isSameAsPrimary = primary
+    && primary.host === host
+    && Number(primary.port) === port
+    && primary.user === user;
+  if (isSameAsPrimary) return null;
+
+  const fromEmail = process.env.SMTP_FROM || user || 'info@peptidescostarica.net';
+  return {
+    host,
+    port,
+    secure: process.env.SMTP_SECURE !== 'false',
+    user,
+    pass,
+    from: process.env.CAMPAIGN_FROM || `Peptides Costa Rica <${fromEmail}>`,
+    replyTo: process.env.CAMPAIGN_REPLY_TO || process.env.SMTP_REPLY_TO || fromEmail,
+    configured: true,
+  };
+}

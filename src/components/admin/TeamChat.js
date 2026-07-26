@@ -389,6 +389,16 @@ export default function TeamChat({ profile }) {
 
   const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
 
+  const renderUserAvatar = (person, iconSize = 17) => (
+    <div className="tc-avatar user">
+      {person?.avatar_url ? (
+        <img src={person.avatar_url} alt="" />
+      ) : (
+        <User size={iconSize} />
+      )}
+    </div>
+  );
+
   if (!profile) return null;
 
   // ─── Render ───────────────────────────────────────────────────────────────────
@@ -460,6 +470,12 @@ export default function TeamChat({ profile }) {
         }
         .tc-avatar.global { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
         .tc-avatar.user  { background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%); }
+        .tc-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
         .tc-online-dot {
           position: absolute; bottom: 1px; right: 1px;
           width: 10px; height: 10px;
@@ -832,7 +848,7 @@ export default function TeamChat({ profile }) {
                 onClick={() => selectContact(c)}
               >
                 <div className="tc-avatar-wrap">
-                  <div className="tc-avatar user"><User size={17} /></div>
+                  {renderUserAvatar(c)}
                   <span className={`tc-online-dot ${isOnline ? 'online' : 'offline'}`} />
                 </div>
                 <div className="tc-contact-info">
@@ -861,7 +877,11 @@ export default function TeamChat({ profile }) {
               color: selectedContact === null ? '#a78bfa' : '#38bdf8',
             }}
           >
-            {selectedContact === null ? <Users size={19} /> : <User size={19} />}
+            {selectedContact === null
+              ? <Users size={19} />
+              : selectedContact.avatar_url
+                ? <img src={selectedContact.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                : <User size={19} />}
           </div>
 
           <div style={{ flex: 1, minWidth: 0 }}>

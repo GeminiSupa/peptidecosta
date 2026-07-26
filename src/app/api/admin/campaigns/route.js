@@ -17,6 +17,12 @@ function stripOptionalCampaignColumns(row) {
   return safeRow;
 }
 
+function isMissingDeliveryHealthTableError(error) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '');
+  return code === '42P01' || code === '42703' || message.includes('campaign_delivery_batches');
+}
+
 async function insertCampaignWithSchemaFallback(supabaseAdmin, row) {
   let result = await supabaseAdmin
     .from('email_campaigns')
@@ -79,6 +85,7 @@ export async function GET(request) {
     // Fetch E-commerce attribution data (orders linked to campaigns)
     const campaignIds = data.map(c => c.id);
     let revenueMap = {};
+    let deliveryHealthMap = {};
     if (campaignIds.length > 0) {
       const { data: orderData } = await supabaseAdmin
         .from('orders')
@@ -94,6 +101,25 @@ export async function GET(request) {
           revenueMap[ord.campaign_id].revenue += parseFloat(ord.total_usd || 0);
         }
       }
+
+      const { data: deliveryBatches, error: deliveryHealthError } = await supabaseAdmin
+        .from('campaign_delivery_batches')
+        .select('*')
+        .in('campaign_id', campaignIds)
+        .order('started_at', { ascending: false })
+        .limit(250);
+
+      if (deliveryHealthError) {
+        if (!isMissingDeliveryHealthTableError(deliveryHealthError)) {
+          console.warn('[Campaigns] Delivery health lookup failed:', deliveryHealthError.message);
+        }
+      } else {
+        for (const batch of deliveryBatches || []) {
+          if (!deliveryHealthMap[batch.campaign_id]) {
+            deliveryHealthMap[batch.campaign_id] = batch;
+          }
+        }
+      }
     }
 
     // Merge revenue data into campaigns
@@ -101,6 +127,7 @@ export async function GET(request) {
       ...c,
       orders_count: revenueMap[c.id]?.count || 0,
       orders_revenue: revenueMap[c.id]?.revenue || 0,
+      latest_delivery_batch: deliveryHealthMap[c.id] || null,
     }));
 
     return NextResponse.json({ campaigns: enrichedCampaigns });

@@ -2852,13 +2852,13 @@ export default function CatalogPage() {
         </div>
 
         <div className="header-content container">
-          <a href="/" className="logo logo--emblem">
+          <Link href="/" className="logo logo--emblem">
             <img
               src="/logo.webp"
               alt="Peptides Costa Rica Logo"
               className="logo-emblem"
             />
-          </a>
+          </Link>
 
           <div className="header-proof-column">
             {/* Trust Seals */}

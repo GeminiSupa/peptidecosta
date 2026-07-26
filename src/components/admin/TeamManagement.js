@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
-import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp, Camera, Upload } from 'lucide-react';
 import AgentDashboard from './AgentDashboard';
 import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { getOrderSalesAmounts, isCommissionEligibleOrder, orderBelongsToAgent } from '@/lib/agentOrders';
@@ -42,6 +42,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [formWeeklySalary, setFormWeeklySalary] = useState(0);
   const [formSalaryCurrency, setFormSalaryCurrency] = useState('USD');
   const [formCommissionStructure, setFormCommissionStructure] = useState('');
+  const [formAvatarUrl, setFormAvatarUrl] = useState('');
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
 
@@ -256,6 +258,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormWeeklySalary(user.weekly_salary || 0);
       setFormSalaryCurrency(user.salary_currency || 'USD');
       setFormCommissionStructure(user.commission_structure || '');
+      setFormAvatarUrl(user.avatar_url || '');
     } else {
       setEditingUserId(null);
       setFormEmail('');
@@ -267,8 +270,32 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormWeeklySalary(0);
       setFormSalaryCurrency('USD');
       setFormCommissionStructure('');
+      setFormAvatarUrl('');
     }
     setIsModalOpen(true);
+  };
+
+  const uploadAvatar = async (file, userId = editingUserId) => {
+    if (!file || !userId) return;
+    setAvatarUploading(true);
+    setFormError('');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('userId', userId);
+      const res = await adminFetch('/api/admin/users/avatar', {
+        method: 'POST',
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Avatar upload failed');
+      setFormAvatarUrl(data.avatarUrl);
+      setUsers(prev => prev.map(u => u.user_id === userId ? { ...u, avatar_url: data.avatarUrl } : u));
+      onTeamChanged?.();
+    } catch (err) {
+      setFormError(err.message);
+    }
+    setAvatarUploading(false);
   };
 
   const handleTogglePermission = (tabId) => {
@@ -296,7 +323,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             commission_rate: formCommissionRate,
             weekly_salary: formWeeklySalary,
             salary_currency: formSalaryCurrency,
-            commission_structure: formCommissionStructure
+            commission_structure: formCommissionStructure,
+            avatar_url: formAvatarUrl || null
           })
         });
         const data = await res.json();
@@ -315,7 +343,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             commission_rate: formCommissionRate,
             weekly_salary: formWeeklySalary,
             salary_currency: formSalaryCurrency,
-            commission_structure: formCommissionStructure
+            commission_structure: formCommissionStructure,
+            avatar_url: formAvatarUrl || undefined
           })
         });
         const data = await res.json();
@@ -357,6 +386,39 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     const num = Number(val || 0);
     if (curr === 'USD') return `$${num.toFixed(2)}`;
     return `₡${Math.round(num).toLocaleString('en-US')}`;
+  };
+
+  const getAccessSummary = (user) => {
+    if (user.is_superadmin) return 'Full Access';
+    if (!user.permissions || user.permissions.length === 0) return 'No Access';
+    const preview = user.permissions.slice(0, 2).join(', ');
+    const extra = user.permissions.length > 2 ? ` +${user.permissions.length - 2}` : '';
+    return `${preview}${extra}`;
+  };
+
+  const renderAvatar = (user, size = 38) => {
+    const initials = (user?.name || user?.email || 'A').trim().charAt(0).toUpperCase();
+    const style = {
+      width: `${size}px`,
+      height: `${size}px`,
+      borderRadius: '50%',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      background: 'linear-gradient(135deg, #0ea5e9 0%, #3b82f6 100%)',
+      border: '1px solid rgba(255,255,255,0.12)',
+      color: '#fff',
+      fontWeight: 800,
+      flexShrink: 0,
+    };
+    return (
+      <span style={style} aria-hidden>
+        {user?.avatar_url ? (
+          <img src={user.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : initials}
+      </span>
+    );
   };
 
   return (
@@ -498,62 +560,113 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
         loading ? (
           <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading team members...</div>
         ) : (
-          <div className="table-responsive" style={{ background: 'linear-gradient(145deg, rgba(14, 22, 38, 0.8) 0%, rgba(10, 15, 28, 0.9) 100%)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', overflow: 'hidden' }}>
-            <table className="spreadsheet-table responsive-table">
-              <thead style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <tr>
-                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Name</th>
-                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Email</th>
-                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Role</th>
-                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Base Salary</th>
-                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Commission</th>
-                  <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Access</th>
-                  <th style={{ padding: '18px 16px', textAlign: 'right', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map(u => (
-                  <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s', ':hover': { background: 'rgba(255,255,255,0.01)' } }}>
-                    <td data-label="Name" style={{ padding: '16px', fontWeight: 'bold', color: '#f8fafc' }}>{u.name || 'N/A'}</td>
-                    <td data-label="Email" style={{ padding: '16px', wordBreak: 'break-all', color: '#cbd5e1' }}>{u.email}</td>
-                    <td data-label="Role" style={{ padding: '16px' }}>
-                      {u.is_superadmin ? (
-                        <span className="status-badge" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
-                          <Shield size={12} /> Superadmin
-                        </span>
-                      ) : (
-                        <span className="status-badge" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', width: 'fit-content' }}>
-                          Staff
-                        </span>
-                      )}
-                    </td>
-                    <td data-label="Base Salary" style={{ padding: '16px', fontWeight: 'bold' }}>
-                      {formatMoneyUI(u.weekly_salary, u.salary_currency)} / wk
-                    </td>
-                    <td data-label="Commission" style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>
-                      {u.commission_rate !== undefined ? `${u.commission_rate}%` : '0%'}
-                      {u.commission_structure && <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>{u.commission_structure}</div>}
-                    </td>
-                    <td data-label="Access" style={{ padding: '16px', fontSize: '0.8rem', color: '#94a3b8', maxWidth: '200px' }}>
-                      {u.is_superadmin ? 'Full Access' : (u.permissions && u.permissions.length > 0 ? u.permissions.join(', ') : 'No Access')}
-                    </td>
-                    <td data-label="Actions" style={{ padding: '16px', textAlign: 'right' }}>
-                      <div className="admin-card-actions">
-                        <button className="admin-btn" onClick={() => handleOpenModal(u)} style={{ padding: '6px 10px' }}>
-                          <Edit2 size={14} /> Edit
-                        </button>
-                        {u.user_id !== currentUserProfile?.user_id && (
-                          <button className="admin-btn" onClick={() => handleDelete(u.user_id)} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 10px' }}>
-                            <Trash2 size={14} /> Delete
-                          </button>
-                        )}
-                      </div>
-                    </td>
+          <>
+            <div className="table-responsive admin-team-members-table" style={{ background: 'linear-gradient(145deg, rgba(14, 22, 38, 0.8) 0%, rgba(10, 15, 28, 0.9) 100%)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', overflow: 'hidden' }}>
+              <table className="spreadsheet-table responsive-table">
+                <thead style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <tr>
+                    <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Name</th>
+                    <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Email</th>
+                    <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Role</th>
+                    <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Base Salary</th>
+                    <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Commission</th>
+                    <th style={{ padding: '18px 16px', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Access</th>
+                    <th style={{ padding: '18px 16px', textAlign: 'right', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.75rem' }}>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {users.map(u => (
+                    <tr key={u.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s', ':hover': { background: 'rgba(255,255,255,0.01)' } }}>
+                      <td data-label="Name" style={{ padding: '16px', fontWeight: 'bold', color: '#f8fafc' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {renderAvatar(u)}
+                          <span>{u.name || 'N/A'}</span>
+                        </div>
+                      </td>
+                      <td data-label="Email" style={{ padding: '16px', wordBreak: 'break-all', color: '#cbd5e1' }}>{u.email}</td>
+                      <td data-label="Role" style={{ padding: '16px' }}>
+                        {u.is_superadmin ? (
+                          <span className="status-badge" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
+                            <Shield size={12} /> Superadmin
+                          </span>
+                        ) : (
+                          <span className="status-badge" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', width: 'fit-content' }}>
+                            Staff
+                          </span>
+                        )}
+                      </td>
+                      <td data-label="Base Salary" style={{ padding: '16px', fontWeight: 'bold' }}>
+                        {formatMoneyUI(u.weekly_salary, u.salary_currency)} / wk
+                      </td>
+                      <td data-label="Commission" style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>
+                        {u.commission_rate !== undefined ? `${u.commission_rate}%` : '0%'}
+                        {u.commission_structure && <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>{u.commission_structure}</div>}
+                      </td>
+                      <td data-label="Access" style={{ padding: '16px', fontSize: '0.8rem', color: '#94a3b8', maxWidth: '200px' }}>
+                        {getAccessSummary(u)}
+                      </td>
+                      <td data-label="Actions" style={{ padding: '16px', textAlign: 'right' }}>
+                        <div className="admin-card-actions">
+                          <button className="admin-btn" onClick={() => handleOpenModal(u)} style={{ padding: '6px 10px' }}>
+                            <Edit2 size={14} /> Edit
+                          </button>
+                          {u.user_id !== currentUserProfile?.user_id && (
+                            <button className="admin-btn" onClick={() => handleDelete(u.user_id)} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '6px 10px' }}>
+                              <Trash2 size={14} /> Delete
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="admin-team-mobile-cards" aria-label="Team members">
+              {users.map((u) => (
+                <article key={u.id} className="admin-team-member-card">
+                  <div className="admin-team-member-card__top">
+                    {renderAvatar(u, 54)}
+                    <div className="admin-team-member-card__identity">
+                      <h3>{u.name || 'N/A'}</h3>
+                      <p>{u.email}</p>
+                    </div>
+                    <span className={`admin-team-member-card__role ${u.is_superadmin ? 'is-superadmin' : ''}`}>
+                      {u.is_superadmin ? 'Superadmin' : 'Staff'}
+                    </span>
+                  </div>
+                  <div className="admin-team-member-card__details">
+                    <div>
+                      <span>Salary</span>
+                      <strong>{formatMoneyUI(u.weekly_salary, u.salary_currency)} / wk</strong>
+                    </div>
+                    <div>
+                      <span>Commission</span>
+                      <strong>{u.commission_rate !== undefined ? `${u.commission_rate}%` : '0%'}</strong>
+                    </div>
+                    <div>
+                      <span>Access</span>
+                      <strong>{getAccessSummary(u)}</strong>
+                    </div>
+                  </div>
+                  {u.commission_structure && (
+                    <div className="admin-team-member-card__note">{u.commission_structure}</div>
+                  )}
+                  <div className="admin-team-member-card__actions">
+                    <button className="admin-btn" onClick={() => handleOpenModal(u)}>
+                      <Edit2 size={15} /> Edit
+                    </button>
+                    {u.user_id !== currentUserProfile?.user_id && (
+                      <button className="admin-btn admin-team-member-card__delete" onClick={() => handleDelete(u.user_id)}>
+                        <Trash2 size={15} /> Delete
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
         )
       ) : (
         <>
@@ -892,6 +1005,42 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
               )}
               
               <form onSubmit={handleSubmit}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px', padding: '14px', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  {renderAvatar({ name: formName, email: formEmail, avatar_url: formAvatarUrl }, 58)}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: '800', color: '#f8fafc', marginBottom: '6px' }}>Profile photo</div>
+                    <label
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(56,189,248,0.25)',
+                        background: editingUserId ? 'rgba(56,189,248,0.12)' : 'rgba(255,255,255,0.04)',
+                        color: editingUserId ? '#38bdf8' : '#64748b',
+                        fontSize: '0.8rem',
+                        fontWeight: 700,
+                        cursor: editingUserId ? 'pointer' : 'not-allowed',
+                      }}
+                    >
+                      {avatarUploading ? <Upload size={14} /> : <Camera size={14} />}
+                      {avatarUploading ? 'Uploading...' : editingUserId ? 'Upload photo' : 'Save member first'}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        disabled={!editingUserId || avatarUploading}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = '';
+                          if (file) uploadAvatar(file);
+                        }}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                  </div>
+                </div>
+
                 <div className="admin-form-grid-2" style={{ marginBottom: '20px' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Full Name</label>

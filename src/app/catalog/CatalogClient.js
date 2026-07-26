@@ -18,7 +18,7 @@ import {
 import {
   ShoppingBag, X, Search, SlidersHorizontal,
   List, LayoutGrid, Sparkles, Phone, FileText,
-  Plus, Minus, Trash2, Check, AlertCircle, ArrowLeft,
+  Plus, Minus, Trash2, Check, CheckCircle, AlertCircle, ArrowLeft,
   Dna, FlaskConical, Syringe, TestTubes, Atom,
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
   CreditCard, MessageCircle, Lock, Share2
@@ -2619,7 +2619,7 @@ export default function CatalogClient({
         </div>
 
         <div className="header-content container">
-          <a href="/" className="logo">
+          <Link href="/" className="logo">
             <Image
               src="/logo.webp"
               alt="Peptides Costa Rica Logo"
@@ -2629,7 +2629,7 @@ export default function CatalogClient({
               priority
               style={{ height: 'auto' }}
             />
-          </a>
+          </Link>
 
           {/* Trust Seals */}
           <div className="trust-badges-container">

@@ -3,7 +3,12 @@ import { createUnsubscribeToken } from '@/lib/marketingTokens';
 import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { clampOutlookButtonSizes, personalizeMergeTags, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
-import { getCampaignSmtpConfig, isCampaignRackspaceSmtp } from '@/lib/campaignSmtp';
+import {
+  getCampaignRackspaceFallbackSmtpConfig,
+  getCampaignSmtpConfig,
+  identifyCampaignSmtpProvider,
+  isCampaignRackspaceSmtp,
+} from '@/lib/campaignSmtp';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
@@ -22,6 +27,45 @@ function wait(ms) {
   return ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve();
 }
 
+function truncateError(error, maxLength = 500) {
+  return String(error?.message || error || '').slice(0, maxLength);
+}
+
+function isMissingHealthTableError(error) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '');
+  return code === '42P01' || code === '42703' || message.includes('campaign_delivery_batches');
+}
+
+async function createDeliveryBatchLog(supabase, row) {
+  const { data, error } = await supabase
+    .from('campaign_delivery_batches')
+    .insert(row)
+    .select('id')
+    .single();
+
+  if (error) {
+    if (!isMissingHealthTableError(error)) {
+      console.warn('[Campaign delivery] Batch health insert failed:', error.message);
+    }
+    return null;
+  }
+
+  return data?.id || null;
+}
+
+async function updateDeliveryBatchLog(supabase, id, updates) {
+  if (!id) return;
+  const { error } = await supabase
+    .from('campaign_delivery_batches')
+    .update(updates)
+    .eq('id', id);
+
+  if (error && !isMissingHealthTableError(error)) {
+    console.warn('[Campaign delivery] Batch health update failed:', error.message);
+  }
+}
+
 function campaignSafetyConfig() {
   const rackspace = isCampaignRackspaceSmtp();
   return {
@@ -38,11 +82,35 @@ function campaignSafetyConfig() {
       process.env.EMAIL_CAMPAIGN_SEND_DELAY_MS,
       rackspace ? 2500 : 0,
     ),
+    fallbackSendDelayMs: positiveInteger(
+      process.env.EMAIL_CAMPAIGN_FALLBACK_SEND_DELAY_MS,
+      2500,
+    ),
     maxConnections: positiveInteger(
       process.env.EMAIL_CAMPAIGN_SMTP_CONNECTIONS,
       rackspace ? 1 : 5,
     ),
   };
+}
+
+function createCampaignTransporter(smtpConfig, safety) {
+  return nodemailer.createTransport({
+    pool: true,
+    maxConnections: safety.maxConnections,
+    host: smtpConfig.host,
+    port: smtpConfig.port,
+    secure: smtpConfig.secure,
+    auth: { user: smtpConfig.user, pass: smtpConfig.pass },
+  });
+}
+
+async function closeTransporter(transporter) {
+  if (!transporter) return;
+  try {
+    transporter.close();
+  } catch {
+    // Nodemailer close is best-effort; send errors are handled separately.
+  }
 }
 
 export class CampaignDeliveryError extends Error {
@@ -126,6 +194,9 @@ export async function deliverCampaign(campaignId, options = {}) {
   if (!targets.length) throw new CampaignDeliveryError('No remaining subscribers to send to.', 400);
 
   const safety = campaignSafetyConfig();
+  const fallbackSmtp = getCampaignRackspaceFallbackSmtpConfig(smtp);
+  const primaryProvider = identifyCampaignSmtpProvider(smtp.host);
+  const fallbackProvider = fallbackSmtp ? identifyCampaignSmtpProvider(fallbackSmtp.host) : null;
   const remainingBeforeBatch = targets.length;
   const batchTargets = targets.slice(0, safety.batchSize);
 
@@ -138,20 +209,37 @@ export async function deliverCampaign(campaignId, options = {}) {
   if (claimError) throw claimError;
   if (!claimed?.length) throw new CampaignDeliveryError('Campaign was claimed by another sender', 409);
 
-  const transporter = nodemailer.createTransport({
-    pool: true,
-    maxConnections: safety.maxConnections,
-    host: smtp.host,
-    port: smtp.port,
-    secure: smtp.secure,
-    auth: { user: smtp.user, pass: smtp.pass },
+  const triggerType = isTestBatch ? 'test_batch' : sendWinner ? 'winner' : campaign.status === 'scheduled' ? 'scheduled' : 'manual';
+  const batchLogId = await createDeliveryBatchLog(supabase, {
+    campaign_id: campaign.id,
+    trigger_type: triggerType,
+    status: 'processing',
+    provider: primaryProvider,
+    fallback_provider: fallbackProvider,
+    fallback_used: false,
+    batch_size: safety.batchSize,
+    attempted: batchTargets.length,
+    sent: 0,
+    failed: 0,
+    total_eligible: totalEligible,
+    already_sent: alreadySent,
+    remaining_before_batch: remainingBeforeBatch,
+    sender_host: smtp.host,
+    fallback_host: fallbackSmtp?.host || null,
   });
+
+  const transporter = createCampaignTransporter(smtp, safety);
+  const fallbackTransporter = fallbackSmtp ? createCampaignTransporter(fallbackSmtp, safety) : null;
   let sent = 0;
   let failed = 0;
+  let fallbackUsed = false;
+  let lastError = null;
+  const providerErrors = [];
 
   try {
     for (let index = 0; index < batchTargets.length; index += 1) {
       const subscriber = batchTargets[index];
+      let sentViaFallback = false;
       try {
         const useVariantB = campaign.is_ab_test && ((isTestBatch && index % 2 !== 0) || (sendWinner && winnerVariant === 'B'));
         const variant = useVariantB ? 'B' : 'A';
@@ -159,7 +247,7 @@ export async function deliverCampaign(campaignId, options = {}) {
         // Gmail/Yahoo bulk-sender rules REQUIRE one-click unsubscribe headers —
         // without them, campaigns land in spam and the domain gets rate-limited.
         const unsubscribeUrl = `${DOMAIN}/api/unsubscribe?t=${encodeURIComponent(createUnsubscribeToken(subscriber.id))}`;
-        await transporter.sendMail({
+        const mail = {
           ...(process.env.CAMPAIGN_BCC_EMAIL ? { bcc: process.env.CAMPAIGN_BCC_EMAIL } : {}),
           from: smtp.from,
           to: subscriber.email,
@@ -170,18 +258,45 @@ export async function deliverCampaign(campaignId, options = {}) {
             'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:${smtp.replyTo}?subject=unsubscribe>`,
             'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
           },
-        });
+        };
+        try {
+          await transporter.sendMail(mail);
+        } catch (primaryError) {
+          providerErrors.push({
+            provider: primaryProvider,
+            message: truncateError(primaryError, 220),
+            at: new Date().toISOString(),
+          });
+
+          if (!fallbackTransporter) throw primaryError;
+
+          fallbackUsed = true;
+          sentViaFallback = true;
+          await fallbackTransporter.sendMail({
+            ...mail,
+            from: fallbackSmtp.from,
+            replyTo: campaign.reply_to || fallbackSmtp.replyTo,
+            headers: {
+              ...mail.headers,
+              'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:${fallbackSmtp.replyTo}?subject=unsubscribe>`,
+            },
+          });
+        }
         const { error } = await supabase.from('campaign_sends').insert({ campaign_id: campaign.id, subscriber_id: subscriber.id, subject_variant: variant });
         if (error) throw error;
         sent += 1;
       } catch (error) {
         failed += 1;
+        lastError = truncateError(error);
         console.error('[Campaign delivery] Subscriber send failed', { campaignId: campaign.id, subscriberId: subscriber.id, error: error.message });
       }
-      if (index < batchTargets.length - 1) await wait(safety.sendDelayMs);
+      if (index < batchTargets.length - 1) {
+        await wait(sentViaFallback ? safety.fallbackSendDelayMs : safety.sendDelayMs);
+      }
     }
   } finally {
-    transporter.close();
+    await closeTransporter(transporter);
+    await closeTransporter(fallbackTransporter);
   }
 
   const sentTotal = alreadySent + sent;
@@ -195,11 +310,26 @@ export async function deliverCampaign(campaignId, options = {}) {
     .update({ status: nextStatus, scheduled_for: nextBatchAt })
     .eq('id', campaign.id);
 
+  const healthStatus = failed === 0 ? 'completed' : sent > 0 ? 'partial' : 'failed';
+  await updateDeliveryBatchLog(supabase, batchLogId, {
+    status: healthStatus,
+    completed_at: new Date().toISOString(),
+    sent,
+    failed,
+    remaining_after_batch: remaining,
+    fallback_used: fallbackUsed,
+    error_message: lastError,
+    provider_errors: providerErrors.length ? providerErrors.slice(-10) : null,
+  });
+
   return {
     campaignId,
-    provider: safety.rackspace ? 'rackspace' : 'smtp',
+    provider: primaryProvider,
+    fallbackProvider,
+    fallbackUsed,
     batchSize: safety.batchSize,
     batchIntervalMinutes: safety.batchIntervalMinutes,
+    fallbackSendDelayMs: safety.fallbackSendDelayMs,
     targeted: batchTargets.length,
     totalEligible,
     alreadySent,

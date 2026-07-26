@@ -161,7 +161,7 @@ export function getSessionStatus() {
 }
 
 // ── Custom Supabase Auth State Adapter ────────────────────────────────────
-async function useSupabaseAuthState(supabaseClient, sessionId = 'default') {
+async function createSupabaseAuthState(supabaseClient, sessionId = 'default') {
   const writeData = async (data, key) => {
     try {
       await supabaseClient.from('wa_auth_state').upsert({
@@ -265,7 +265,7 @@ export async function startSession() {
   g.__waSession.error     = null;
 
   try {
-    const { state, saveCreds } = await useSupabaseAuthState(supabase, 'default');
+    const { state, saveCreds } = await createSupabaseAuthState(supabase, 'default');
 
     // Pin the WhatsApp Web protocol version so we don't look like a stale client.
     let version;

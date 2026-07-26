@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/adminApi';
 import {
   BarChart2, Eye, MousePointerClick, Send, Loader2,
-  Trophy, RefreshCw, TrendingUp,
+  Trophy, RefreshCw, TrendingUp, Activity,
 } from 'lucide-react';
 
 function RateBar({ value, max = 100, className }) {
@@ -16,6 +16,59 @@ function RateBar({ value, max = 100, className }) {
           style={{ width: `${Math.min(value, 100)}%` }}
         />
       </div>
+    </div>
+  );
+}
+
+function formatBatchTime(value) {
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
+
+function CampaignHealthCell({ batch }) {
+  if (!batch) {
+    return <span className="mkt-text-xs mkt-text-muted">No batch yet</span>;
+  }
+
+  const failed = Number(batch.failed || 0);
+  const attempted = Number(batch.attempted || 0);
+  const sent = Number(batch.sent || 0);
+  const statusClass = batch.status === 'failed'
+    ? 'mkt-badge-danger'
+    : failed > 0 || batch.status === 'partial'
+      ? 'mkt-badge-warning'
+      : 'mkt-badge-success';
+  const providerText = [
+    batch.provider,
+    batch.fallback_used && batch.fallback_provider ? `fallback ${batch.fallback_provider}` : null,
+  ].filter(Boolean).join(' + ');
+
+  return (
+    <div style={{ minWidth: '150px' }}>
+      <span className={`mkt-badge ${statusClass}`} style={{ marginBottom: '5px' }}>
+        <Activity size={11} /> {batch.status}
+      </span>
+      <div className="mkt-text-xs" style={{ color: '#cbd5e1', lineHeight: 1.45 }}>
+        {providerText || 'SMTP'} · {sent}/{attempted} sent
+        {failed > 0 ? ` · ${failed} failed` : ''}
+      </div>
+      <div className="mkt-text-xs mkt-text-muted">
+        {formatBatchTime(batch.completed_at || batch.started_at)}
+      </div>
+      {batch.error_message && (
+        <div className="mkt-text-xs" title={batch.error_message} style={{ color: '#f87171', marginTop: '3px', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {batch.error_message}
+        </div>
+      )}
     </div>
   );
 }
@@ -121,6 +174,7 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
             <tr>
               <th>Campaign</th>
               <th>Status</th>
+              <th>Health</th>
               <th className="mkt-text-right">Sends</th>
               <th>Open Rate</th>
               <th>Click Rate</th>
@@ -131,13 +185,13 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan="6" className="mkt-text-center mkt-text-muted" style={{ padding: '40px' }}>
+                <td colSpan="8" className="mkt-text-center mkt-text-muted" style={{ padding: '40px' }}>
                   <Loader2 className="animate-spin" size={22} style={{ display: 'inline-block', color: '#34d399' }} />
                 </td>
               </tr>
             ) : campaigns.length === 0 ? (
               <tr>
-                <td colSpan="6">
+                <td colSpan="8">
                   <div className="mkt-empty-state">
                     <BarChart2 size={36} />
                     <h4>No campaigns yet</h4>
@@ -181,6 +235,9 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
                         }`}>
                           {camp.status}
                         </span>
+                      </td>
+                      <td data-label="Health">
+                        <CampaignHealthCell batch={camp.latest_delivery_batch} />
                       </td>
                       <td data-label="Sends" className="mkt-text-right">
                         <span style={{ fontWeight: '700', fontSize: '15px' }}>{sends.toLocaleString()}</span>
@@ -228,7 +285,7 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
                     {/* A/B winner picker */}
                     {camp.status === 'testing' && camp.is_ab_test && (
                       <tr>
-                        <td colSpan="6">
+                        <td colSpan="8">
                           <div style={{
                             background: 'rgba(251,191,36,0.07)',
                             border: '1px solid rgba(251,191,36,0.18)',

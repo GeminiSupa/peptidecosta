@@ -4346,7 +4346,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         <div className="admin-sidebar-footer">
           <div className="admin-user-info">
             <div className="admin-user-avatar">
-              {adminProfile?.email?.charAt(0).toUpperCase() || 'A'}
+              {adminProfile?.avatar_url ? (
+                <img src={adminProfile.avatar_url} alt="" />
+              ) : (
+                adminProfile?.email?.charAt(0).toUpperCase() || 'A'
+              )}
             </div>
             <div className="admin-user-details">
               <span className="admin-user-name" title={adminProfile?.email || 'Administrator'}>

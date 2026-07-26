@@ -8,7 +8,7 @@ export async function PUT(request) {
 
   try {
     const body = await request.json();
-    const { userId, email, password, name, permissions, is_superadmin, commission_rate, weekly_salary, salary_currency, commission_structure } = body;
+    const { userId, email, password, name, permissions, is_superadmin, commission_rate, weekly_salary, salary_currency, commission_structure, avatar_url } = body;
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
@@ -37,6 +37,7 @@ export async function PUT(request) {
     if (weekly_salary !== undefined) updateData.weekly_salary = parseFloat(weekly_salary) || 0;
     if (salary_currency !== undefined) updateData.salary_currency = salary_currency;
     if (commission_structure !== undefined) updateData.commission_structure = commission_structure;
+    if (avatar_url !== undefined) updateData.avatar_url = avatar_url || null;
 
     if (Object.keys(updateData).length > 0) {
       const { data: profileData, error: profileError } = await supabaseAdmin
