@@ -49,6 +49,16 @@ const CATEGORY_TRANSLATIONS = {
   'Reconstitution Supply': 'Suministro de reconstitución'
 };
 
+const isWeightLossCategory = (catText) => {
+  const normalized = String(catText || '').toLowerCase();
+  return (
+    normalized.includes('weight loss') ||
+    normalized.includes('perder peso') ||
+    normalized.includes('perdida de peso') ||
+    normalized.includes('pérdida de peso')
+  );
+};
+
 const STATUS_TRANSLATIONS = {
   es: {
     'in stock': 'Disponible',
@@ -1226,6 +1236,13 @@ export default function CatalogClient({
     return catText;
   };
 
+  const getCategoryChipLabel = (catText) => {
+    if (isWeightLossCategory(catText)) {
+      return lang === 'en' ? 'Weight Loss' : 'Perder Peso';
+    }
+    return translateCategory(catText);
+  };
+
   const parsePrice = (priceStr) => {
     if (!priceStr) return 0;
     const clean = priceStr.replace(/[^0-9.]/g, '');
@@ -2317,10 +2334,15 @@ export default function CatalogClient({
   };
 
   // Categories + filtering (memoized + deferred search for INP)
-  const categoriesList = useMemo(
-    () => ['all', ...Array.from(new Set(products.map((p) => p.category))).filter(Boolean).sort()],
-    [products]
-  );
+  const categoriesList = useMemo(() => {
+    const sortedCategories = Array.from(new Set(products.map((p) => p.category))).filter(Boolean).sort();
+    const weightLossCategory = sortedCategories.find(isWeightLossCategory);
+    return [
+      'all',
+      ...(weightLossCategory ? [weightLossCategory] : []),
+      ...sortedCategories.filter(cat => cat !== weightLossCategory),
+    ];
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     const query = deferredSearchQuery.toLowerCase();
@@ -2870,7 +2892,7 @@ export default function CatalogClient({
               >
                 {cat === 'all' 
                   ? (lang === 'en' ? 'All Products' : 'Todos los Productos')
-                  : translateCategory(cat)
+                  : getCategoryChipLabel(cat)
                 }
               </button>
             ))}

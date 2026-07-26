@@ -229,6 +229,10 @@ export default function OrdersManager({
     orderDbId: order.id,
     cartItems: order.cart_data || [],
   });
+  const claimOrder = (orderId) => {
+    const claimEmail = loggedInEmailRef?.current || localStorage.getItem('admin_email') || 'info@peptidescostarica.net';
+    handleOrderSalesAgentUpdate(orderId, claimEmail);
+  };
 
   return (
     <div className="admin-tab-panel admin-tab-orders-panel">
@@ -378,6 +382,18 @@ export default function OrdersManager({
                     {order.sales_agent && <span className="order-mobile-agent">{order.sales_agent}</span>}
                   </div>
                 </button>
+                {!order.sales_agent && (
+                  <div className="order-mobile-claim-zone">
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-primary order-mobile-claim-primary"
+                      onClick={() => claimOrder(order.id)}
+                      title="Assign this order to yourself"
+                    >
+                      Claim this order
+                    </button>
+                  </div>
+                )}
                 <div className="order-mobile-actions">
                   {group.id === 'needs_payment' && (
                     <button type="button" className="admin-btn admin-btn-secondary" onClick={() => openPaymentReminder(order)}>
@@ -387,18 +403,6 @@ export default function OrdersManager({
                   {group.id !== 'complete' && (
                     <button type="button" className="admin-btn admin-btn-primary" onClick={() => handleOrderStatusUpdate(order.id, group.id === 'needs_payment' ? 'Processing' : 'Order Complete')}>
                       {group.id === 'needs_payment' ? 'Process' : 'Complete'}
-                    </button>
-                  )}
-                  {!order.sales_agent && (
-                    <button
-                      type="button"
-                      className="admin-btn"
-                      onClick={() => {
-                        const claimEmail = loggedInEmailRef?.current || localStorage.getItem('admin_email') || 'info@peptidescostarica.net';
-                        handleOrderSalesAgentUpdate(order.id, claimEmail);
-                      }}
-                    >
-                      Claim
                     </button>
                   )}
                   <button type="button" className="admin-btn" onClick={() => openOrderWhatsapp(order)}>
@@ -637,10 +641,7 @@ export default function OrdersManager({
                           {!order.sales_agent && (
                             <button 
                               className="admin-btn admin-cta-btn" 
-                              onClick={() => {
-                                const claimEmail = loggedInEmailRef?.current || localStorage.getItem('admin_email') || 'info@peptidescostarica.net';
-                                handleOrderSalesAgentUpdate(order.id, claimEmail);
-                              }}
+                              onClick={() => claimOrder(order.id)}
                               style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#a855f7', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
                               title="Assign this order to yourself"
                             >

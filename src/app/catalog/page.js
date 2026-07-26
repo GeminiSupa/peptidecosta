@@ -50,6 +50,16 @@ const CATEGORY_TRANSLATIONS = {
   'Reconstitution Supply': 'Suministro de reconstitución'
 };
 
+const isWeightLossCategory = (catText) => {
+  const normalized = String(catText || '').toLowerCase();
+  return (
+    normalized.includes('weight loss') ||
+    normalized.includes('perder peso') ||
+    normalized.includes('perdida de peso') ||
+    normalized.includes('pérdida de peso')
+  );
+};
+
 const STATUS_TRANSLATIONS = {
   es: {
     'in stock': 'Disponible',
@@ -1436,6 +1446,13 @@ export default function CatalogPage() {
     return catText;
   };
 
+  const getCategoryChipLabel = (catText) => {
+    if (isWeightLossCategory(catText)) {
+      return lang === 'en' ? 'Weight Loss' : 'Perder Peso';
+    }
+    return translateCategory(catText);
+  };
+
   const parsePrice = (priceStr) => {
     if (!priceStr) return 0;
     const clean = priceStr.replace(/[^0-9.]/g, '');
@@ -2540,7 +2557,13 @@ export default function CatalogPage() {
   };
 
   // Categories (exclude categories that only exist on admin-hidden products)
-  const categoriesList = ['all', ...Array.from(new Set(products.filter(p => !hiddenProducts.includes(p.product)).map(p => p.category))).filter(Boolean).sort()];
+  const sortedCategories = Array.from(new Set(products.filter(p => !hiddenProducts.includes(p.product)).map(p => p.category))).filter(Boolean).sort();
+  const weightLossCategory = sortedCategories.find(isWeightLossCategory);
+  const categoriesList = [
+    'all',
+    ...(weightLossCategory ? [weightLossCategory] : []),
+    ...sortedCategories.filter(cat => cat !== weightLossCategory),
+  ];
 
   // Filtering + Sorting Logic
   const baseFilteredProducts = products.filter(p => {
@@ -3108,7 +3131,7 @@ export default function CatalogPage() {
               >
                 {cat === 'all'
                   ? (lang === 'en' ? 'All Products' : 'Todos los Productos')
-                  : translateCategory(cat)
+                  : getCategoryChipLabel(cat)
                 }
               </button>
             ))}
