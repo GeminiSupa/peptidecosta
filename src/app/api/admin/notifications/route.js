@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { orderBelongsToAgent, orderVisibleToAgent } from '@/lib/agentOrders';
+import { orderVisibleToAgent } from '@/lib/agentOrders';
+import { resolveAdminTabAccess } from '@/lib/adminModules';
 
 export const runtime = 'nodejs';
 
@@ -41,6 +42,92 @@ async function dismissKeys(supabase, adminUserId, keys) {
   }
 }
 
+const NOTIFICATION_TYPE_TABS = {
+  low_inventory: 'spreadsheet',
+  order_save_failed: 'orders',
+  payment_received: 'orders',
+  pending_order: 'orders',
+  inquiry: 'inquiries',
+  whatsapp: 'whatsapp_ai',
+  facebook: 'facebook',
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function notificationTargetTab(notification) {
+  const explicit = String(notification?.link_tab || '').trim();
+  if (explicit) return explicit;
+  return NOTIFICATION_TYPE_TABS[notification?.type] || null;
+}
+
+function canAccessNotificationTarget(notification, profile) {
+  if (!profile) return false;
+  if (profile.is_superadmin) return true;
+  const tab = notificationTargetTab(notification);
+  if (!tab) return false;
+  return resolveAdminTabAccess(tab, profile);
+}
+
+function isOrderNotification(notification) {
+  return notificationTargetTab(notification) === 'orders';
+}
+
+async function getPersistedOrderMap(supabase, notifications, profile) {
+  if (!profile || profile.is_superadmin) return new Map();
+
+  const refs = [
+    ...new Set(
+      (notifications || [])
+        .filter(isOrderNotification)
+        .map((n) => String(n.link_ref || '').trim())
+        .filter(Boolean)
+    ),
+  ];
+  if (!refs.length) return new Map();
+
+  const byRef = new Map();
+  const addRows = (rows = []) => {
+    for (const order of rows) {
+      if (order.id) byRef.set(String(order.id), order);
+      if (order.order_number) byRef.set(String(order.order_number), order);
+    }
+  };
+
+  const uuidRefs = refs.filter((ref) => UUID_RE.test(ref));
+  if (uuidRefs.length) {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id, order_number, sales_agent')
+      .in('id', uuidRefs);
+    if (error) {
+      console.warn('[admin/notifications] order id visibility lookup:', error.message);
+    } else {
+      addRows(data);
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('orders')
+    .select('id, order_number, sales_agent')
+    .in('order_number', refs);
+  if (error) {
+    console.warn('[admin/notifications] order number visibility lookup:', error.message);
+  } else {
+    addRows(data);
+  }
+
+  return byRef;
+}
+
+function canSeeNotification(notification, profile, orderMap = new Map()) {
+  if (!canAccessNotificationTarget(notification, profile)) return false;
+  if (!profile || profile.is_superadmin || !isOrderNotification(notification)) return true;
+
+  const ref = String(notification.link_ref || '').trim();
+  const order = ref ? orderMap.get(ref) : null;
+  return order ? orderVisibleToAgent(order, profile) : true;
+}
+
 async function buildNotifications(supabase, profile = null) {
   const since = new Date(Date.now() - 7 * 24 * 3600000).toISOString();
 
@@ -53,7 +140,7 @@ async function buildNotifications(supabase, profile = null) {
       .limit(50),
     supabase
       .from('orders')
-      .select('id, order_number, customer_name, status, created_at')
+      .select('id, order_number, customer_name, status, sales_agent, created_at')
       .eq('status', 'Pending')
       .order('created_at', { ascending: false })
       .limit(20),
@@ -79,12 +166,14 @@ async function buildNotifications(supabase, profile = null) {
       .limit(15),
   ]);
 
-  const persisted = notifRes.data || [];
+  const persistedOrderMap = await getPersistedOrderMap(supabase, notifRes.data || [], profile);
+  const persisted = (notifRes.data || []).filter((n) => canSeeNotification(n, profile, persistedOrderMap));
   const dynamic = [];
 
-    for (const o of ordersRes.data || []) {
-      if (profile && !profile.is_superadmin && !orderVisibleToAgent(o, profile)) continue;
-      dynamic.push({
+  for (const o of ordersRes.data || []) {
+    if (!resolveAdminTabAccess('orders', profile)) continue;
+    if (profile && !profile.is_superadmin && !orderVisibleToAgent(o, profile)) continue;
+    dynamic.push({
       id: `order-pending-${o.id}`,
       type: 'pending_order',
       title: `Pending order #${o.order_number || o.id.slice(0, 8)}`,
@@ -97,6 +186,7 @@ async function buildNotifications(supabase, profile = null) {
   }
 
   for (const q of inquiriesRes.data || []) {
+    if (!resolveAdminTabAccess('inquiries', profile)) continue;
     dynamic.push({
       id: `inquiry-${q.id}`,
       type: 'inquiry',
@@ -110,6 +200,7 @@ async function buildNotifications(supabase, profile = null) {
   }
 
   for (const m of waRes.data || []) {
+    if (!resolveAdminTabAccess('whatsapp_ai', profile)) continue;
     dynamic.push({
       id: `wa-${m.id}`,
       type: 'whatsapp',
@@ -123,6 +214,7 @@ async function buildNotifications(supabase, profile = null) {
   }
 
   for (const item of facebookRes.data || []) {
+    if (!resolveAdminTabAccess('facebook', profile)) continue;
     const typeLabel = item.type === 'message' ? 'Messenger' : item.type === 'comment' ? 'Facebook comment' : 'Facebook lead';
     dynamic.push({
       id: `facebook-${item.id}`,
@@ -184,14 +276,20 @@ export async function PATCH(request) {
       const dismissed = await getDismissedKeys(supabase, adminUserId);
       const visible = merged.filter((n) => !dismissed.has(n.id));
       const keys = visible.map((n) => n.id);
+      const persistedIds = visible
+        .filter((n) => n.id && !n.dynamic)
+        .map((n) => n.id);
 
-      const { error: readError } = await supabase
-        .from('admin_notifications')
-        .update({ read_at: new Date().toISOString() })
-        .is('read_at', null);
+      if (persistedIds.length) {
+        const { error: readError } = await supabase
+          .from('admin_notifications')
+          .update({ read_at: new Date().toISOString() })
+          .in('id', persistedIds)
+          .is('read_at', null);
 
-      if (readError && readError.code !== '42P01' && !readError.message?.includes('does not exist')) {
-        console.warn('[admin/notifications] mark all persisted:', readError.message);
+        if (readError && readError.code !== '42P01' && !readError.message?.includes('does not exist')) {
+          console.warn('[admin/notifications] mark all persisted:', readError.message);
+        }
       }
 
       await dismissKeys(supabase, adminUserId, keys);
@@ -201,6 +299,12 @@ export async function PATCH(request) {
 
     if (!id) {
       return NextResponse.json({ error: 'Missing notification id' }, { status: 400 });
+    }
+
+    const visibleNotifications = await buildNotifications(supabase, auth.profile);
+    const targetNotification = visibleNotifications.find((n) => String(n.id) === String(id));
+    if (!targetNotification) {
+      return NextResponse.json({ error: 'Notification not found' }, { status: 404 });
     }
 
     if (isDynamicNotificationId(id)) {

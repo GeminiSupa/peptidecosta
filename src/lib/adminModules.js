@@ -45,3 +45,20 @@ export const SUPERADMIN_ONLY_TAB_IDS = new Set(
 export const ALWAYS_AVAILABLE_TAB_IDS = new Set(
   ADMIN_MODULES.filter((module) => module.alwaysAvailable).map((module) => module.id)
 );
+
+export function resolveAdminTabAccess(tabId, profile) {
+  if (!profile || !ADMIN_TAB_IDS.has(tabId)) return false;
+  if (ALWAYS_AVAILABLE_TAB_IDS.has(tabId)) return true;
+  if (SUPERADMIN_ONLY_TAB_IDS.has(tabId)) return Boolean(profile.is_superadmin);
+  if (profile.is_superadmin) return true;
+  return Array.isArray(profile.permissions) && profile.permissions.includes(tabId);
+}
+
+export function getDefaultAdminTab(profile) {
+  if (!profile) return 'home';
+  if (profile.is_superadmin) return 'home';
+  if (Array.isArray(profile.permissions) && profile.permissions.includes('home')) return 'home';
+  return Array.isArray(profile.permissions) && profile.permissions.length > 0
+    ? profile.permissions[0]
+    : 'home';
+}

@@ -50,8 +50,8 @@ import {
   ADMIN_NAV_GROUPS,
   ADMIN_TAB_IDS,
   ADMIN_TAB_TITLES,
-  ALWAYS_AVAILABLE_TAB_IDS,
-  SUPERADMIN_ONLY_TAB_IDS,
+  getDefaultAdminTab,
+  resolveAdminTabAccess,
 } from '@/lib/adminModules';
 import dynamic from 'next/dynamic';
 
@@ -172,18 +172,11 @@ function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, i
 }
 
 function resolveTabAccess(tabId, profile) {
-  if (!profile || !ADMIN_TAB_IDS.has(tabId)) return false;
-  if (ALWAYS_AVAILABLE_TAB_IDS.has(tabId)) return true;
-  if (SUPERADMIN_ONLY_TAB_IDS.has(tabId)) return profile.is_superadmin;
-  if (profile.is_superadmin) return true;
-  return profile.permissions?.includes(tabId) ?? false;
+  return resolveAdminTabAccess(tabId, profile);
 }
 
 function getDefaultTab(profile) {
-  if (!profile) return 'home';
-  if (profile.is_superadmin) return 'home';
-  if (profile.permissions?.includes('home')) return 'home';
-  return profile.permissions?.[0] || 'home';
+  return getDefaultAdminTab(profile);
 }
 
 const CATEGORY_TRANSLATIONS = {
@@ -1409,6 +1402,9 @@ Core Rules:
   };
 
   const isStaffAgent = adminProfile && !adminProfile.is_superadmin;
+  const adminPermissionKey = Array.isArray(adminProfile?.permissions)
+    ? adminProfile.permissions.join('|')
+    : '';
 
   const visibleOrders = useMemo(
     () => orders,
@@ -1696,6 +1692,11 @@ Core Rules:
         loadAdminData();
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'facebook_notifications' }, (payload) => {
+        if (!resolveTabAccess('facebook', adminProfile)) {
+          loadAdminData();
+          return;
+        }
+
         // Trigger live audio alert
         try {
           const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-600.wav');
@@ -1726,7 +1727,7 @@ Core Rules:
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, adminProfile]);
 
   // Fetch list of files/images in the Supabase product-pics storage bucket
   const fetchBucketImages = async () => {
@@ -2128,7 +2129,9 @@ Core Rules:
 
     // 8. Fetch Facebook Notifications
     setLoadingFbNotifications(true);
-    if (isSupabaseConfigured && supabase) {
+    if (!resolveTabAccess('facebook', adminProfile)) {
+      setFacebookNotifications([]);
+    } else if (isSupabaseConfigured && supabase) {
       try {
         const data = await fetchAllRows('facebook_notifications', 'created_at', false);
         if (data) {
@@ -2154,6 +2157,18 @@ Core Rules:
     }
     setLoadingWhatsappMessages(false);
   };
+
+  useEffect(() => {
+    if (!isAuthenticated || profileLoading || !adminProfile) return;
+    loadAdminData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isAuthenticated,
+    profileLoading,
+    adminProfile?.user_id,
+    adminProfile?.is_superadmin,
+    adminPermissionKey,
+  ]);
 
   // Auth Handlers
   const handleLogin = async (e) => {
