@@ -137,6 +137,7 @@ export async function GET(request) {
       const html = isSpanish 
         ? `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#333;">
+          <img src="https://catalog.peptidescostarica.net/logo.png?v=2" alt="Peptides Costa Rica" width="96" height="81" style="display:block;width:96px;height:81px;margin:0 auto 14px auto;border:0;outline:none;text-decoration:none;border-radius:10px;">
           <h2>¡Nos encantaría saber tu opinión!</h2>
           <p>Hola ${order.customer_name || ''},</p>
           <p>Han pasado unos días desde que se completó tu pedido de Peptides Costa Rica. ¡Esperamos que tu investigación vaya de maravilla!</p>
@@ -149,6 +150,7 @@ export async function GET(request) {
         ` 
         : `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#333;">
+          <img src="https://catalog.peptidescostarica.net/logo.png?v=2" alt="Peptides Costa Rica" width="96" height="81" style="display:block;width:96px;height:81px;margin:0 auto 14px auto;border:0;outline:none;text-decoration:none;border-radius:10px;">
           <h2>We'd love to hear from you!</h2>
           <p>Hi ${order.customer_name || 'there'},</p>
           <p>It's been a few days since your Peptides Costa Rica order was completed. We hope your research is going perfectly!</p>
@@ -162,7 +164,6 @@ export async function GET(request) {
 
       try {
         await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
           from: `Peptides Costa Rica <${SMTP_USER}>`,
           replyTo: 'omerforce@gmail.com',
           to: order.customer_email.trim(),

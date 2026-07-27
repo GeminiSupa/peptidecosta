@@ -98,6 +98,7 @@ export async function GET(request) {
     // 5. Send Admin Summary Report
     const adminHtml = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <img src="https://catalog.peptidescostarica.net/logo.png?v=2" alt="Peptides Costa Rica" width="96" height="81" style="display:block;width:96px;height:81px;margin:0 auto 14px auto;border:0;outline:none;text-decoration:none;border-radius:10px;">
         <h2>Weekly Affiliate Commission Report</h2>
         <p>Total commissions generated this week: <strong style="font-size: 18px; color: #059669;">$${totalCommissionsUsd.toFixed(2)}</strong></p>
         <hr style="border: 1px solid #e2e8f0; margin: 20px 0;" />
@@ -125,6 +126,7 @@ export async function GET(request) {
       if (payout.totalEarned > 0) {
         const affHtml = `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+            <img src="https://catalog.peptidescostarica.net/logo.png?v=2" alt="Peptides Costa Rica" width="96" height="81" style="display:block;width:96px;height:81px;margin:0 auto 14px auto;border:0;outline:none;text-decoration:none;border-radius:10px;">
             <h2 style="color: #0f172a;">Hello ${payout.name},</h2>
             <p style="color: #334155;">Here is your weekly affiliate summary from <strong>Peptides Costa Rica</strong>.</p>
             

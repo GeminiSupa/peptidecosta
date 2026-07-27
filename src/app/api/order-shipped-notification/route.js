@@ -249,8 +249,9 @@ export async function POST(request) {
         : `¿Necesita ayuda? Contacte a soporte al ${links.whatsappDisplay} o responda a este correo.`
     ].join('\n');
 
+    // Customer-facing mail carries no internal BCC. Trustpilot stays: the AFS
+    // invitation is triggered by that BCC'd copy, not by an internal watcher.
     const bccList = [
-      process.env.BCC_EMAIL || 'omerforce@gmail.com',
       alreadyInvited ? null : TRUSTPILOT_AFS_BCC,
     ].filter(Boolean);
 
