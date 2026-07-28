@@ -7,7 +7,7 @@ import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { ArrowRight, MessageCircle, Mail, Send, CheckCircle, User, AtSign, FileText, Loader2 } from 'lucide-react';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import PromoTicker from '@/components/PromoTicker';
+import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import MobileActionBar from '@/components/MobileActionBar';
 import './contact.css';
 
@@ -107,11 +107,6 @@ export default function ContactPage() {
 
   return (
     <div className="landing-layout min-h-screen contact-page">
-      <PromoTicker text={lang === 'en'
-        ? 'Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed.'
-        : 'Descuento por Volumen: compra 5+ viales y recibe 15%, compra 10+ y recibe 20%. Puedes combinar productos.'}
-      />
-
       <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`}>
         <div className="lp-header-inner">
           <Link href="/" className="lp-logo">
@@ -136,6 +131,8 @@ export default function ContactPage() {
           </div>
         </div>
       </header>
+
+      <CatalogPromoBanner lang={lang} className="catalog-promo-image-banner--legacy" forceActive />
 
       <main className="contact-main">
         <div className="container contact-content">

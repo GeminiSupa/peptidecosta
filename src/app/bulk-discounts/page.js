@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { Sun, Moon, ArrowRight, Percent, Package, ShieldCheck } from 'lucide-react';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import PromoTicker from '@/components/PromoTicker';
+import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import MobileActionBar from '@/components/MobileActionBar';
 
 export default function BulkDiscountsPage() {
@@ -39,11 +39,6 @@ export default function BulkDiscountsPage() {
 
   return (
     <div className="landing-layout min-h-screen">
-      <PromoTicker text={lang === 'en'
-        ? 'Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed.'
-        : 'Descuento por Volumen: compra 5+ viales y recibe 15%, compra 10+ y recibe 20%. Puedes combinar productos.'}
-      />
-
       {/* ── HEADER ────────────────────────────────────────── */}
       <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`}>
         <div className="lp-header-inner">
@@ -75,7 +70,9 @@ export default function BulkDiscountsPage() {
         </div>
       </header>
 
-      <main style={{ paddingTop: '120px', paddingBottom: '80px' }}>
+      <CatalogPromoBanner lang={lang} className="catalog-promo-image-banner--legacy" forceActive />
+
+      <main style={{ paddingTop: '48px', paddingBottom: '80px' }}>
         <div className="container" style={{ maxWidth: '800px', margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: '48px' }}>
             <h1 style={{ fontSize: '3rem', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>

@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { ArrowRight, ArrowUpRight, CheckCircle, MessageCircle, ShieldCheck, Truck } from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import PromoTicker from '@/components/PromoTicker';
+import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import TrustFlowBand from '@/components/TrustFlowBand';
 import MobileActionBar from '@/components/MobileActionBar';
 import '../landing.css';
@@ -31,7 +31,6 @@ const COPY = {
     ctaText: 'Browse the catalog or send us a message if you want to ask something first.',
     catalog: 'View the catalog',
     contact: 'Ask on WhatsApp',
-    promo: 'Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed. Free shipping on qualifying orders.',
     proofKicker: 'LOCAL MODEL',
     proofTitle: 'Built for the local reality',
     proofText: 'This is not an anonymous overseas storefront. It is a Costa Rica business built around availability, documentation, and direct communication.',
@@ -60,7 +59,6 @@ const COPY = {
     ctaText: 'Explora el catálogo o escríbenos si prefieres preguntar algo primero.',
     catalog: 'Ver el catálogo',
     contact: 'Preguntar por WhatsApp',
-    promo: 'Descuento por Volumen: compra 5+ viales y recibe 15%, compra 10+ y recibe 20%. Puedes combinar productos. Envío gratis en pedidos calificados.',
     proofKicker: 'MODELO LOCAL',
     proofTitle: 'Creado para la realidad local',
     proofText: 'Esto no es una tienda anónima del exterior. Es un negocio en Costa Rica basado en disponibilidad, documentación y comunicación directa.',
@@ -100,8 +98,6 @@ export default function AboutPage() {
 
   return (
     <div className="landing-layout about-page">
-      <PromoTicker text={t.promo} />
-
       <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`}>
         <div className="lp-header-inner">
           <Link href="/" className="lp-logo"><Image src="/logo.webp" alt="Peptides Costa Rica" width={240} height={202} className="logo-img-custom" priority /></Link>
@@ -120,6 +116,8 @@ export default function AboutPage() {
           </div>
         </div>
       </header>
+
+      <CatalogPromoBanner lang={lang} className="catalog-promo-image-banner--legacy" forceActive />
 
       <main>
         <section className="about-hero">

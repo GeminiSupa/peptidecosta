@@ -53,6 +53,14 @@ import {
   getDefaultAdminTab,
   resolveAdminTabAccess,
 } from '@/lib/adminModules';
+import {
+  DEFAULT_LANDING_PAGE_SETTINGS,
+  DEFAULT_PUBLIC_PAGE_SETTINGS,
+  PUBLIC_PAGE_SETTING_IDS,
+  mergeAllPublicPageSettings,
+  mergeLandingPageSettings,
+  mergePublicPageSettings,
+} from '@/lib/landingContent';
 import dynamic from 'next/dynamic';
 
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -70,6 +78,19 @@ const dynamicTab = (loader, label) =>
   dynamic(loader, { ssr: false, loading: () => <AdminTabLoading label={label} /> });
 
 const SHARE_PRESETS_KEY = 'peptides_admin_campaign_link_presets_v1';
+const DEFAULT_ADMIN_BUSINESS_LINKS = {
+  whatsappNumber: "50684046973",
+  whatsappDisplay: "+506 8404-6973",
+  apiWhatsAppNumber: "18314715559",
+  apiWhatsAppDisplay: "+1 (831) 471-5559",
+  googleMapsUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
+  facebookUrl: "",
+  instagramUrl: "",
+  trustpilotUrl: "https://www.trustpilot.com/review/peptidescostarica.net",
+  googleReviewUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
+  facebookReviewUrl: "https://www.facebook.com/Peptidescostaricaresearch/reviews",
+  supportEmail: "support@peptidescostarica.net"
+};
 
 const readSharePresets = () => {
   if (typeof window === 'undefined') return [];
@@ -412,6 +433,7 @@ export default function AdminPage() {
   const [cmsChangeHistory, setCmsChangeHistory] = useState([]);
   const [editingBlog, setEditingBlog] = useState(null);
   const [businessLinks, setBusinessLinks] = useState(null);  
+  const [publicPageSettings, setPublicPageSettings] = useState(() => mergeAllPublicPageSettings());
   // CSV Import States
   const [csvDragActive, setCsvDragActive] = useState(false);
   const [csvStatus, setCsvStatus] = useState('');
@@ -2072,19 +2094,9 @@ Core Rules:
       try {
         const { data, error } = await supabase.from('site_settings').select('*').eq('id', 'landing_page').single();
         if (!error && data) {
-           setSiteSettings(data.value);
+           setSiteSettings(mergeLandingPageSettings(data.value));
         } else {
-           setSiteSettings({
-              bannerActive: false,
-              bannerTextEn: "Flash Sale: 10% Off All Peptides!",
-              bannerTextEs: "Oferta Relámpago: ¡10% de descuento en todos los péptidos!",
-              heroTitleEn: "Buy Peptides in Costa Rica",
-              heroTitleEs: "Compra Péptidos en Costa Rica",
-              heroSubEn: "Lab-Tested. High Purity. Fast Local Delivery.",
-              heroSubEs: "Testados en Laboratorio. Alta Pureza. Entrega Local Rápida.",
-              heroTextEn: "Your trusted local source for premium, research-grade peptides. Verified quality, transparent pricing, and secure checkout.",
-              heroTextEs: "Tu fuente local de confianza para péptidos premium de grado investigación. Calidad verificada, precios transparentes y pago seguro."
-           });
+           setSiteSettings(DEFAULT_LANDING_PAGE_SETTINGS);
         }
       } catch (err) { console.error("Failed to load settings:", err); }
 
@@ -2102,19 +2114,28 @@ Core Rules:
       try {
         const { data: linkData, error: linkError } = await supabase.from('site_settings').select('*').eq('id', 'business_links').limit(1).maybeSingle();
         if (!linkError && linkData) {
-          setBusinessLinks(linkData.value);
+          setBusinessLinks({ ...DEFAULT_ADMIN_BUSINESS_LINKS, ...linkData.value });
         } else {
-          setBusinessLinks({
-            whatsappNumber: "50684046973",
-            whatsappDisplay: "+506 8404-6973",
-            googleMapsUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
-            facebookUrl: "",
-            instagramUrl: "",
-            supportEmail: "support@peptidescostarica.net"
-          });
+          setBusinessLinks(DEFAULT_ADMIN_BUSINESS_LINKS);
         }
       } catch (err) {
         console.error("Failed to load business links:", err);
+      }
+
+      try {
+        const { data: pageRows, error: pageError } = await supabase
+          .from('site_settings')
+          .select('id, value')
+          .in('id', PUBLIC_PAGE_SETTING_IDS);
+        if (!pageError) {
+          const records = Object.fromEntries((pageRows || []).map((row) => [row.id, row.value]));
+          setPublicPageSettings(mergeAllPublicPageSettings(records));
+        } else {
+          setPublicPageSettings(mergeAllPublicPageSettings());
+        }
+      } catch (err) {
+        console.error("Failed to load public page settings:", err);
+        setPublicPageSettings(mergeAllPublicPageSettings());
       }
     }
     setLoadingSettings(false);
@@ -3879,7 +3900,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
   // CMS Handlers
   const handleSaveBusinessLinks = async () => {
-    const invalidFields = ['googleMapsUrl', 'facebookUrl', 'instagramUrl']
+    const invalidFields = ['googleMapsUrl', 'facebookUrl', 'instagramUrl', 'trustpilotUrl', 'googleReviewUrl', 'facebookReviewUrl']
       .filter(key => !isValidOptionalUrl(businessLinks?.[key]));
     if (invalidFields.length > 0) {
       setCmsSaveStatus(`error:Invalid URL in ${invalidFields.join(', ')}. Use full https:// links.`);
@@ -3931,6 +3952,191 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     }
     setCmsSaveLoading(false);
     setTimeout(() => setCmsSaveStatus(''), 3000);
+  };
+
+  const updateLandingSetting = (key, value) => {
+    setSiteSettings((prev) => ({
+      ...mergeLandingPageSettings(prev || DEFAULT_LANDING_PAGE_SETTINGS),
+      [key]: value,
+    }));
+  };
+
+  const updateLandingListItem = (listKey, index, key, value) => {
+    setSiteSettings((prev) => {
+      const current = mergeLandingPageSettings(prev || DEFAULT_LANDING_PAGE_SETTINGS);
+      const nextList = [...(current[listKey] || [])];
+      nextList[index] = { ...(nextList[index] || {}), [key]: value };
+      return { ...current, [listKey]: nextList };
+    });
+  };
+
+  const updatePublicPageSetting = (pageId, key, value) => {
+    setPublicPageSettings((prev) => ({
+      ...prev,
+      [pageId]: {
+        ...mergePublicPageSettings(pageId, prev?.[pageId] || DEFAULT_PUBLIC_PAGE_SETTINGS[pageId]),
+        [key]: value,
+      },
+    }));
+  };
+
+  const updatePublicPageListItem = (pageId, listKey, index, key, value) => {
+    setPublicPageSettings((prev) => {
+      const current = mergePublicPageSettings(pageId, prev?.[pageId] || DEFAULT_PUBLIC_PAGE_SETTINGS[pageId]);
+      const nextList = [...(current[listKey] || [])];
+      nextList[index] = { ...(nextList[index] || {}), [key]: value };
+      return {
+        ...prev,
+        [pageId]: { ...current, [listKey]: nextList },
+      };
+    });
+  };
+
+  const handleSavePublicPages = async () => {
+    setCmsSaveLoading(true);
+    setCmsSaveStatus('');
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const rows = PUBLIC_PAGE_SETTING_IDS.map((id) => ({
+          id,
+          value: mergePublicPageSettings(id, publicPageSettings?.[id]),
+        }));
+        const { error } = await supabase.from('site_settings').upsert(rows);
+        if (error) throw error;
+        setCmsSaveStatus('success:Public pages saved successfully.');
+        setCmsChangeHistory(prev => [{ area: 'Public pages', at: new Date().toISOString() }, ...prev].slice(0, 6));
+      }
+    } catch (err) {
+      console.error("Failed to save public page settings:", err);
+      setCmsSaveStatus(`error:Failed to save public pages (${err.message})`);
+    } finally {
+      setCmsSaveLoading(false);
+      setTimeout(() => setCmsSaveStatus(''), 3000);
+    }
+  };
+
+  const cmsInputStyle = {
+    width: '100%',
+    padding: '8px',
+    marginBottom: '8px',
+    borderRadius: '4px',
+    border: '1px solid rgba(255,255,255,0.1)',
+    background: '#0e1626',
+    color: '#f8fafc',
+    fontSize: '0.85rem',
+  };
+
+  const cmsLabelStyle = {
+    display: 'block',
+    fontSize: '0.75rem',
+    color: '#94a3b8',
+    marginBottom: '4px',
+  };
+
+  const cmsField = (label, key, placeholder = label) => (
+    <label style={{ display: 'block' }}>
+      <span style={cmsLabelStyle}>{label}</span>
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={siteSettings?.[key] || ''}
+        onChange={(e) => updateLandingSetting(key, e.target.value)}
+        style={cmsInputStyle}
+      />
+    </label>
+  );
+
+  const cmsTextArea = (label, key, placeholder = label, minHeight = 70) => (
+    <label style={{ display: 'block' }}>
+      <span style={cmsLabelStyle}>{label}</span>
+      <textarea
+        placeholder={placeholder}
+        value={siteSettings?.[key] || ''}
+        onChange={(e) => updateLandingSetting(key, e.target.value)}
+        style={{ ...cmsInputStyle, minHeight, resize: 'vertical' }}
+      />
+    </label>
+  );
+
+  const cmsCardFields = (listKey, index, labels = { titleEn: 'Title EN', titleEs: 'Title ES', textEn: 'Text EN', textEs: 'Text ES' }) => {
+    const item = siteSettings?.[listKey]?.[index] || {};
+    return (
+      <div key={`${listKey}-${index}`} style={{ borderTop: index === 0 ? 0 : '1px solid rgba(255,255,255,0.08)', paddingTop: index === 0 ? 0 : '12px', marginTop: index === 0 ? 0 : '12px' }}>
+        <div style={{ color: '#38bdf8', fontSize: '0.72rem', fontWeight: 900, marginBottom: '8px', textTransform: 'uppercase' }}>Item {index + 1}</div>
+        {Object.entries(labels).map(([fieldKey, label]) => (
+          <label key={fieldKey} style={{ display: 'block' }}>
+            <span style={cmsLabelStyle}>{label}</span>
+            {['text', 'a', 'content', 'excerpt'].some((prefix) => fieldKey.toLowerCase().startsWith(prefix)) ? (
+              <textarea
+                value={item[fieldKey] || ''}
+                onChange={(e) => updateLandingListItem(listKey, index, fieldKey, e.target.value)}
+                style={{ ...cmsInputStyle, minHeight: 56, resize: 'vertical' }}
+              />
+            ) : (
+              <input
+                type="text"
+                value={item[fieldKey] || ''}
+                onChange={(e) => updateLandingListItem(listKey, index, fieldKey, e.target.value)}
+                style={cmsInputStyle}
+              />
+            )}
+          </label>
+        ))}
+      </div>
+    );
+  };
+
+  const publicField = (pageId, label, key, placeholder = label) => (
+    <label style={{ display: 'block' }}>
+      <span style={cmsLabelStyle}>{label}</span>
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={publicPageSettings?.[pageId]?.[key] || ''}
+        onChange={(e) => updatePublicPageSetting(pageId, key, e.target.value)}
+        style={cmsInputStyle}
+      />
+    </label>
+  );
+
+  const publicTextArea = (pageId, label, key, placeholder = label, minHeight = 70) => (
+    <label style={{ display: 'block' }}>
+      <span style={cmsLabelStyle}>{label}</span>
+      <textarea
+        placeholder={placeholder}
+        value={publicPageSettings?.[pageId]?.[key] || ''}
+        onChange={(e) => updatePublicPageSetting(pageId, key, e.target.value)}
+        style={{ ...cmsInputStyle, minHeight, resize: 'vertical' }}
+      />
+    </label>
+  );
+
+  const publicCardFields = (pageId, listKey, index, labels = { titleEn: 'Title EN', titleEs: 'Title ES', textEn: 'Text EN', textEs: 'Text ES' }) => {
+    const item = publicPageSettings?.[pageId]?.[listKey]?.[index] || {};
+    return (
+      <div key={`${pageId}-${listKey}-${index}`} style={{ borderTop: index === 0 ? 0 : '1px solid rgba(255,255,255,0.08)', paddingTop: index === 0 ? 0 : '12px', marginTop: index === 0 ? 0 : '12px' }}>
+        <div style={{ color: '#38bdf8', fontSize: '0.72rem', fontWeight: 900, marginBottom: '8px', textTransform: 'uppercase' }}>Item {index + 1}</div>
+        {Object.entries(labels).map(([fieldKey, label]) => (
+          <label key={fieldKey} style={{ display: 'block' }}>
+            <span style={cmsLabelStyle}>{label}</span>
+            {['text', 'a', 'content', 'excerpt'].some((prefix) => fieldKey.toLowerCase().startsWith(prefix)) ? (
+              <textarea
+                value={item[fieldKey] || ''}
+                onChange={(e) => updatePublicPageListItem(pageId, listKey, index, fieldKey, e.target.value)}
+                style={{ ...cmsInputStyle, minHeight: 56, resize: 'vertical' }}
+              />
+            ) : (
+              <input
+                type="text"
+                value={item[fieldKey] || ''}
+                onChange={(e) => updatePublicPageListItem(pageId, listKey, index, fieldKey, e.target.value)}
+                style={cmsInputStyle}
+              />
+            )}
+          </label>
+        ))}
+      </div>
+    );
   };
 
   const handleSaveBlog = async (e) => {
@@ -5342,19 +5548,133 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     
 
 
-                    {/* Hero Text Controls */}
                     <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
-                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Hero Text (English)</h4>
-                      <input type="text" placeholder="Hero Title" value={siteSettings.heroTitleEn} onChange={e => setSiteSettings({...siteSettings, heroTitleEn: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
-                      <input type="text" placeholder="Hero Subtitle" value={siteSettings.heroSubEn} onChange={e => setSiteSettings({...siteSettings, heroSubEn: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
-                      <textarea placeholder="Hero Description" value={siteSettings.heroTextEn} onChange={e => setSiteSettings({...siteSettings, heroTextEn: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem', minHeight: '60px' }} />
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Header Banner</h4>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#cbd5e1', fontSize: '0.82rem', marginBottom: '12px' }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(siteSettings.bannerActive)}
+                          onChange={(e) => updateLandingSetting('bannerActive', e.target.checked)}
+                        />
+                        Show promo/free-shipping ticker
+                      </label>
+                      {cmsField('Ticker text EN', 'bannerTextEn')}
+                      {cmsField('Ticker text ES', 'bannerTextEs')}
+                      {cmsField('Top blue bar text EN', 'topBarTextEn')}
+                      {cmsField('Top blue bar text ES', 'topBarTextEs')}
                     </div>
 
                     <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
-                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Hero Text (Español)</h4>
-                      <input type="text" placeholder="Hero Title" value={siteSettings.heroTitleEs} onChange={e => setSiteSettings({...siteSettings, heroTitleEs: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
-                      <input type="text" placeholder="Hero Subtitle" value={siteSettings.heroSubEs} onChange={e => setSiteSettings({...siteSettings, heroSubEs: e.target.value})} style={{ width: '100%', padding: '8px', marginBottom: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
-                      <textarea placeholder="Hero Description" value={siteSettings.heroTextEs} onChange={e => setSiteSettings({...siteSettings, heroTextEs: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem', minHeight: '60px' }} />
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Hero</h4>
+                      {cmsField('Hero kicker EN', 'heroKickerEn')}
+                      {cmsField('Hero kicker ES', 'heroKickerEs')}
+                      {cmsField('Hero title EN', 'heroTitleEn')}
+                      {cmsField('Hero title ES', 'heroTitleEs')}
+                      {cmsTextArea('Hero subtitle EN', 'heroSubEn')}
+                      {cmsTextArea('Hero subtitle ES', 'heroSubEs')}
+                      {cmsTextArea('Hero paragraph EN', 'heroTextEn')}
+                      {cmsTextArea('Hero paragraph ES', 'heroTextEs')}
+                      {cmsField('Hero image URL', 'heroImageUrl', '/catalog-promo-banner.webp')}
+                      {cmsField('Hero dropdown label EN', 'heroDropdownLabelEn')}
+                      {cmsField('Hero dropdown label ES', 'heroDropdownLabelEs')}
+                      {cmsField('Hero dropdown placeholder EN', 'heroDropdownPlaceholderEn')}
+                      {cmsField('Hero dropdown placeholder ES', 'heroDropdownPlaceholderEs')}
+                      {(siteSettings.heroDropdownOptions || []).slice(0, 4).map((_, index) => cmsCardFields('heroDropdownOptions', index, { labelEn: 'Option label EN', labelEs: 'Option label ES', href: 'Option URL or whatsapp' }))}
+                      {cmsField('Primary CTA EN', 'primaryCtaEn')}
+                      {cmsField('Primary CTA ES', 'primaryCtaEs')}
+                      {cmsField('WhatsApp CTA EN', 'secondaryCtaEn')}
+                      {cmsField('WhatsApp CTA ES', 'secondaryCtaEs')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Catalog Promo Banner</h4>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#cbd5e1', fontSize: '0.82rem', marginBottom: '12px' }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(siteSettings.catalogBannerActive)}
+                          onChange={(e) => updateLandingSetting('catalogBannerActive', e.target.checked)}
+                        />
+                        Show catalog promo banner on landing page
+                      </label>
+                      {cmsField('Banner image URL', 'catalogBannerImageUrl', '/catalog-promo-banner.webp')}
+                      {cmsField('Banner link URL', 'catalogBannerUrl', '/catalog')}
+                      {cmsField('Banner alt text EN', 'catalogBannerAltEn')}
+                      {cmsField('Banner alt text ES', 'catalogBannerAltEs')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Press Band</h4>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#cbd5e1', fontSize: '0.82rem', marginBottom: '12px' }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(siteSettings.pressActive)}
+                          onChange={(e) => updateLandingSetting('pressActive', e.target.checked)}
+                        />
+                        Show press strip
+                      </label>
+                      {cmsField('Press title EN', 'pressTitleEn')}
+                      {cmsField('Press title ES', 'pressTitleEs')}
+                      {cmsField('Press button EN', 'pressCtaEn')}
+                      {cmsField('Press button ES', 'pressCtaEs')}
+                      {cmsField('Press URL', 'pressUrl')}
+                      {cmsField('Press logo URL', 'pressLogoUrl')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Difference Section</h4>
+                      {cmsField('Section title EN', 'differenceTitleEn')}
+                      {cmsField('Section title ES', 'differenceTitleEs')}
+                      {cmsTextArea('Section text EN', 'differenceTextEn')}
+                      {cmsTextArea('Section text ES', 'differenceTextEs')}
+                      {(siteSettings.differenceCards || []).slice(0, 4).map((_, index) => cmsCardFields('differenceCards', index))}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Offer Cards</h4>
+                      {cmsField('Offer title EN', 'offerTitleEn')}
+                      {cmsField('Offer title ES', 'offerTitleEs')}
+                      {cmsTextArea('Offer text EN', 'offerTextEn')}
+                      {cmsTextArea('Offer text ES', 'offerTextEs')}
+                      {(siteSettings.offerCards || []).slice(0, 6).map((_, index) => cmsCardFields('offerCards', index))}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Audience, Proof & Quality</h4>
+                      {cmsField('Audience title EN', 'audienceTitleEn')}
+                      {cmsField('Audience title ES', 'audienceTitleEs')}
+                      {cmsTextArea('Audience text EN', 'audienceTextEn')}
+                      {cmsTextArea('Audience text ES', 'audienceTextEs')}
+                      {(siteSettings.audienceItems || []).slice(0, 4).map((_, index) => cmsCardFields('audienceItems', index))}
+                      {cmsField('Proof title EN', 'proofTitleEn')}
+                      {cmsField('Proof title ES', 'proofTitleEs')}
+                      {cmsTextArea('Proof text EN', 'proofTextEn')}
+                      {cmsTextArea('Proof text ES', 'proofTextEs')}
+                      {cmsField('Proof image URL', 'proofImageUrl')}
+                      {cmsField('Quality title EN', 'qualityTitleEn')}
+                      {cmsField('Quality title ES', 'qualityTitleEs')}
+                      {cmsTextArea('Quality text EN', 'qualityTextEn')}
+                      {cmsTextArea('Quality text ES', 'qualityTextEs')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>FAQ, Bulk CTA & Footer</h4>
+                      {cmsField('FAQ title EN', 'faqTitleEn')}
+                      {cmsField('FAQ title ES', 'faqTitleEs')}
+                      {(siteSettings.faqItems || []).slice(0, 4).map((_, index) => cmsCardFields('faqItems', index, { qEn: 'Question EN', qEs: 'Question ES', aEn: 'Answer EN', aEs: 'Answer ES' }))}
+                      {cmsField('Bulk title EN', 'bulkTitleEn')}
+                      {cmsField('Bulk title ES', 'bulkTitleEs')}
+                      {cmsTextArea('Bulk text EN', 'bulkTextEn')}
+                      {cmsTextArea('Bulk text ES', 'bulkTextEs')}
+                      {cmsField('Bulk button EN', 'bulkButtonEn')}
+                      {cmsField('Bulk button ES', 'bulkButtonEs')}
+                      {cmsTextArea('Footer description EN', 'footerDescriptionEn', 'Footer description EN', 90)}
+                      {cmsTextArea('Footer description ES', 'footerDescriptionEs', 'Footer description ES', 90)}
+                      {cmsTextArea('Legal notice EN', 'legalNoticeEn', 'Legal notice EN', 120)}
+                      {cmsTextArea('Legal notice ES', 'legalNoticeEs', 'Legal notice ES', 120)}
+                      <h4 style={{ margin: '16px 0 12px 0', color: '#f8fafc', fontSize: '0.9rem' }}>Footer Quick Links</h4>
+                      {(siteSettings.footerQuickLinks || []).slice(0, 5).map((_, index) => cmsCardFields('footerQuickLinks', index, { labelEn: 'Label EN', labelEs: 'Label ES', href: 'URL' }))}
+                      <h4 style={{ margin: '16px 0 12px 0', color: '#f8fafc', fontSize: '0.9rem' }}>Footer Category Links</h4>
+                      {(siteSettings.footerCategoryLinks || []).slice(0, 5).map((_, index) => cmsCardFields('footerCategoryLinks', index, { labelEn: 'Label EN', labelEs: 'Label ES', href: 'URL' }))}
                     </div>
 
                     <button onClick={handleSaveSiteSettings} disabled={cmsSaveLoading} className="admin-btn admin-btn-primary" style={{ padding: '12px', justifyContent: 'center' }}>
@@ -5362,6 +5682,121 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     </button>
                   </div>
                 ) : null}
+              </div>
+
+              {/* Public Page Settings */}
+              <div style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
+                <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <FileText size={18} color="#38bdf8" /> Phase 3 Public Pages
+                </h3>
+
+                {loadingSettings ? (
+                  <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Loading page settings...</div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Info Center</h4>
+                      {publicField('page_info_center', 'Hero title EN', 'heroTitleEn')}
+                      {publicField('page_info_center', 'Hero title ES', 'heroTitleEs')}
+                      {publicTextArea('page_info_center', 'Hero text EN', 'heroTextEn')}
+                      {publicTextArea('page_info_center', 'Hero text ES', 'heroTextEs')}
+                      {publicField('page_info_center', 'Search placeholder EN', 'searchPlaceholderEn')}
+                      {publicField('page_info_center', 'Search placeholder ES', 'searchPlaceholderEs')}
+                      <h4 style={{ margin: '16px 0 12px 0', color: '#f8fafc', fontSize: '0.9rem' }}>Hero Quick Links</h4>
+                      {(publicPageSettings.page_info_center?.quickLinks || []).slice(0, 4).map((_, index) => publicCardFields('page_info_center', 'quickLinks', index, { labelEn: 'Label EN', labelEs: 'Label ES', href: 'URL' }))}
+                      {publicField('page_info_center', 'Start title EN', 'startTitleEn')}
+                      {publicField('page_info_center', 'Start title ES', 'startTitleEs')}
+                      {(publicPageSettings.page_info_center?.steps || []).slice(0, 4).map((_, index) => publicCardFields('page_info_center', 'steps', index))}
+                      {(publicPageSettings.page_info_center?.topics || []).slice(0, 6).map((_, index) => publicCardFields('page_info_center', 'topics', index))}
+                      {publicField('page_info_center', 'COA title EN', 'coaTitleEn')}
+                      {publicField('page_info_center', 'COA title ES', 'coaTitleEs')}
+                      {publicTextArea('page_info_center', 'COA text EN', 'coaTextEn')}
+                      {publicTextArea('page_info_center', 'COA text ES', 'coaTextEs')}
+                      {(publicPageSettings.page_info_center?.coaLinks || []).slice(0, 3).map((_, index) => publicCardFields('page_info_center', 'coaLinks', index, { labelEn: 'Label EN', labelEs: 'Label ES', href: 'COA URL' }))}
+                      {publicField('page_info_center', 'CTA title EN', 'ctaTitleEn')}
+                      {publicField('page_info_center', 'CTA title ES', 'ctaTitleEs')}
+                      {publicTextArea('page_info_center', 'CTA text EN', 'ctaTextEn')}
+                      {publicTextArea('page_info_center', 'CTA text ES', 'ctaTextEs')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Our Story</h4>
+                      {publicField('page_our_story', 'Hero title EN', 'heroTitleEn')}
+                      {publicField('page_our_story', 'Hero title ES', 'heroTitleEs')}
+                      {publicTextArea('page_our_story', 'Hero text EN', 'heroTextEn')}
+                      {publicTextArea('page_our_story', 'Hero text ES', 'heroTextEs')}
+                      {(publicPageSettings.page_our_story?.sections || []).slice(0, 4).map((_, index) => publicCardFields('page_our_story', 'sections', index, { titleEn: 'Title EN', titleEs: 'Title ES', textEn: 'Text EN', textEs: 'Text ES', imageUrl: 'Image URL' }))}
+                      <h4 style={{ margin: '16px 0 12px 0', color: '#f8fafc', fontSize: '0.9rem' }}>Checklist</h4>
+                      {(publicPageSettings.page_our_story?.checklist || []).slice(0, 4).map((_, index) => publicCardFields('page_our_story', 'checklist', index, { labelEn: 'Label EN', labelEs: 'Label ES' }))}
+                      {publicField('page_our_story', 'Tools image URL', 'toolsImageUrl')}
+                      {publicField('page_our_story', 'Tools title EN', 'toolsTitleEn')}
+                      {publicField('page_our_story', 'Tools title ES', 'toolsTitleEs')}
+                      {publicTextArea('page_our_story', 'Tools text EN', 'toolsTextEn')}
+                      {publicTextArea('page_our_story', 'Tools text ES', 'toolsTextEs')}
+                      {publicField('page_our_story', 'CTA title EN', 'ctaTitleEn')}
+                      {publicField('page_our_story', 'CTA title ES', 'ctaTitleEs')}
+                      {publicTextArea('page_our_story', 'CTA text EN', 'ctaTextEn')}
+                      {publicTextArea('page_our_story', 'CTA text ES', 'ctaTextEs')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Affiliate Program</h4>
+                      {publicField('page_affiliate_program', 'Hero title EN', 'heroTitleEn')}
+                      {publicField('page_affiliate_program', 'Hero title ES', 'heroTitleEs')}
+                      {publicTextArea('page_affiliate_program', 'Hero text EN', 'heroTextEn')}
+                      {publicTextArea('page_affiliate_program', 'Hero text ES', 'heroTextEs')}
+                      {publicField('page_affiliate_program', 'Hero image URL', 'heroImageUrl')}
+                      {publicField('page_affiliate_program', 'Primary button EN', 'primaryButtonEn')}
+                      {publicField('page_affiliate_program', 'Primary button ES', 'primaryButtonEs')}
+                      {publicField('page_affiliate_program', 'Secondary button EN', 'secondaryButtonEn')}
+                      {publicField('page_affiliate_program', 'Secondary button ES', 'secondaryButtonEs')}
+                      {publicField('page_affiliate_program', 'Audience title EN', 'audienceTitleEn')}
+                      {publicField('page_affiliate_program', 'Audience title ES', 'audienceTitleEs')}
+                      {(publicPageSettings.page_affiliate_program?.audienceCards || []).slice(0, 4).map((_, index) => publicCardFields('page_affiliate_program', 'audienceCards', index))}
+                      {publicField('page_affiliate_program', 'Benefits title EN', 'benefitsTitleEn')}
+                      {publicField('page_affiliate_program', 'Benefits title ES', 'benefitsTitleEs')}
+                      {(publicPageSettings.page_affiliate_program?.benefits || []).slice(0, 4).map((_, index) => publicCardFields('page_affiliate_program', 'benefits', index))}
+                      {publicField('page_affiliate_program', 'FAQ title EN', 'faqTitleEn')}
+                      {publicField('page_affiliate_program', 'FAQ title ES', 'faqTitleEs')}
+                      {(publicPageSettings.page_affiliate_program?.faqItems || []).slice(0, 3).map((_, index) => publicCardFields('page_affiliate_program', 'faqItems', index, { qEn: 'Question EN', qEs: 'Question ES', aEn: 'Answer EN', aEs: 'Answer ES' }))}
+                      {publicField('page_affiliate_program', 'Talk title EN', 'talkTitleEn')}
+                      {publicField('page_affiliate_program', 'Talk title ES', 'talkTitleEs')}
+                      {publicTextArea('page_affiliate_program', 'Talk text EN', 'talkTextEn')}
+                      {publicTextArea('page_affiliate_program', 'Talk text ES', 'talkTextEs')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Blog Page & Placeholder Posts</h4>
+                      {publicField('page_blog', 'Hero kicker EN', 'heroKickerEn')}
+                      {publicField('page_blog', 'Hero kicker ES', 'heroKickerEs')}
+                      {publicField('page_blog', 'Hero title EN', 'heroTitleEn')}
+                      {publicField('page_blog', 'Hero title ES', 'heroTitleEs')}
+                      {publicTextArea('page_blog', 'Hero text EN', 'heroTextEn')}
+                      {publicTextArea('page_blog', 'Hero text ES', 'heroTextEs')}
+                      {publicField('page_blog', 'Article CTA title EN', 'articleCtaTitleEn')}
+                      {publicField('page_blog', 'Article CTA title ES', 'articleCtaTitleEs')}
+                      {publicTextArea('page_blog', 'Article CTA text EN', 'articleCtaTextEn')}
+                      {publicTextArea('page_blog', 'Article CTA text ES', 'articleCtaTextEs')}
+                      {publicField('page_blog', 'Article CTA button EN', 'articleCtaButtonEn')}
+                      {publicField('page_blog', 'Article CTA button ES', 'articleCtaButtonEs')}
+                      {(publicPageSettings.page_blog?.fallbackPosts || []).slice(0, 3).map((_, index) => publicCardFields('page_blog', 'fallbackPosts', index, {
+                        slug: 'Slug',
+                        title_en: 'Title EN',
+                        title_es: 'Title ES',
+                        excerpt_en: 'Excerpt EN',
+                        excerpt_es: 'Excerpt ES',
+                        content_en: 'Content EN',
+                        content_es: 'Content ES',
+                        image_url: 'Image URL',
+                        created_at: 'Date ISO',
+                      }))}
+                    </div>
+
+                    <button onClick={handleSavePublicPages} disabled={cmsSaveLoading} className="admin-btn admin-btn-primary" style={{ padding: '12px', justifyContent: 'center', gridColumn: '1 / -1' }}>
+                      {cmsSaveLoading ? 'Publishing...' : <><Save size={16} /> Publish Public Pages</>}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Business Links Settings */}
@@ -5386,6 +5821,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         <input type="text" value={businessLinks.whatsappDisplay} onChange={e => setBusinessLinks({...businessLinks, whatsappDisplay: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
                       <div style={{ marginBottom: '8px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>US WhatsApp / Phone Number (Numbers Only)</label>
+                        <input type="text" value={businessLinks.apiWhatsAppNumber || ''} onChange={e => setBusinessLinks({...businessLinks, apiWhatsAppNumber: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                      <div style={{ marginBottom: '8px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>US Display Text</label>
+                        <input type="text" value={businessLinks.apiWhatsAppDisplay || ''} onChange={e => setBusinessLinks({...businessLinks, apiWhatsAppDisplay: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                      <div style={{ marginBottom: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Support Email</label>
                         <input type="text" value={businessLinks.supportEmail} onChange={e => setBusinessLinks({...businessLinks, supportEmail: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
@@ -5404,6 +5847,18 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       <div>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Instagram URL (Optional)</label>
                         <input type="text" value={businessLinks.instagramUrl} onChange={e => setBusinessLinks({...businessLinks, instagramUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                      <div style={{ marginTop: '8px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Trustpilot Review URL (Optional)</label>
+                        <input type="text" value={businessLinks.trustpilotUrl || ''} onChange={e => setBusinessLinks({...businessLinks, trustpilotUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                      <div style={{ marginTop: '8px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Google Review URL (Optional)</label>
+                        <input type="text" value={businessLinks.googleReviewUrl || ''} onChange={e => setBusinessLinks({...businessLinks, googleReviewUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                      <div style={{ marginTop: '8px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Facebook Review URL (Optional)</label>
+                        <input type="text" value={businessLinks.facebookReviewUrl || ''} onChange={e => setBusinessLinks({...businessLinks, facebookReviewUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
                     </div>
 

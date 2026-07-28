@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { Sun, Moon, ArrowRight, FlaskConical, Search, CheckCircle } from 'lucide-react';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import PromoTicker from '@/components/PromoTicker';
+import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import MobileActionBar from '@/components/MobileActionBar';
 
 export default function CoaDatabasePage() {
@@ -39,11 +39,6 @@ export default function CoaDatabasePage() {
 
   return (
     <div className="landing-layout min-h-screen">
-      <PromoTicker text={lang === 'en'
-        ? 'Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed.'
-        : 'Descuento por Volumen: compra 5+ viales y recibe 15%, compra 10+ y recibe 20%. Puedes combinar productos.'}
-      />
-
       {/* ── HEADER ────────────────────────────────────────── */}
       <header className={`lp-header${scrolled ? ' lp-header--scrolled' : ''}`}>
         <div className="lp-header-inner">
@@ -75,7 +70,9 @@ export default function CoaDatabasePage() {
         </div>
       </header>
 
-      <main style={{ paddingTop: '120px', paddingBottom: '80px' }}>
+      <CatalogPromoBanner lang={lang} className="catalog-promo-image-banner--legacy" forceActive />
+
+      <main style={{ paddingTop: '48px', paddingBottom: '80px' }}>
         <div className="container" style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
           <div style={{ background: 'rgba(0, 39, 102, 0.1)', color: 'var(--text-primary)', width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
             <FlaskConical size={40} />
