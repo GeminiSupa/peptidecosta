@@ -351,6 +351,21 @@ export default function CatalogPage() {
     }
   }, [loading]);
 
+  /**
+   * Closing the gate frees the catalog for this visit only — nothing is written
+   * to localStorage, so the prompt returns on the next page load. That keeps the
+   * lead capture working without holding the catalog hostage to it.
+   */
+  const dismissGate = useCallback(() => setGateVisible(false), []);
+
+  // Esc closes the gate, the same as every other dialog on the site.
+  useEffect(() => {
+    if (gateAccessGranted || !gateVisible) return;
+    const onKeyDown = (e) => { if (e.key === 'Escape') dismissGate(); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [gateAccessGranted, gateVisible, dismissGate]);
+
   // Second-chance WhatsApp opt-in re-prompt: for visitors who unlocked the
   // catalog but never opted in. Fires once (after 15s), at most once / 3 days,
   // and stops entirely after 2 dismissals so it never becomes a nuisance.
@@ -3185,18 +3200,45 @@ export default function CatalogPage() {
             <div>{lang === 'en' ? 'Syncing catalog...' : 'Sincronizando catálogo...'}</div>
           </div>
         ) : !gateAccessGranted && gateVisible ? (
-          <div className="access-gate-overlay" style={{
-            position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', 
-            background: theme === 'dark' ? 'rgba(5, 11, 24, 0.8)' : 'rgba(244, 246, 249, 0.8)',
-            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-            zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '20px'
-          }}>
+          <div
+            className="access-gate-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label={lang === 'en' ? 'Exclusive Catalog Access' : 'Acceso Exclusivo al Catálogo'}
+            onClick={(e) => { if (e.target === e.currentTarget) dismissGate(); }}
+            style={{
+              position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh',
+              background: theme === 'dark' ? 'rgba(5, 11, 24, 0.8)' : 'rgba(244, 246, 249, 0.8)',
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '20px'
+            }}
+          >
             <div className="access-gate-card" style={{
               background: 'var(--bg-card)', padding: '0', borderRadius: '24px',
               boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border)',
-              maxWidth: '480px', width: '100%', textAlign: 'center', overflow: 'hidden'
+              maxWidth: '480px', width: '100%', textAlign: 'center', overflow: 'hidden',
+              position: 'relative'
             }}>
+              {/* Without this the gate was a dead end: nothing set gateVisible
+                  back to false except a successful submit, so a visitor who
+                  would not hand over a number simply left. */}
+              <button
+                type="button"
+                onClick={dismissGate}
+                aria-label={lang === 'en' ? 'Close' : 'Cerrar'}
+                title={lang === 'en' ? 'Close' : 'Cerrar'}
+                style={{
+                  position: 'absolute', top: '12px', right: '12px',
+                  width: '36px', height: '36px', borderRadius: '50%',
+                  border: '1px solid var(--border)', background: 'var(--bg-secondary)',
+                  color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1,
+                  cursor: 'pointer', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', padding: 0, zIndex: 1
+                }}
+              >
+                ✕
+              </button>
               <div style={{ padding: '24px 24px 32px 24px' }}>
               <img src="/logo.png" alt="Peptides Costa Rica Logo" style={{ height: '40px', margin: '0 auto 16px auto', display: 'block', borderRadius: '8px' }} />
               <h2 style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px' }}>
@@ -3264,6 +3306,16 @@ export default function CatalogPage() {
                   ) : (
                     lang === 'en' ? 'Unlock Catalog' : 'Desbloquear Catálogo'
                   )}
+                </button>
+                <button
+                  type="button"
+                  onClick={dismissGate}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--text-muted)',
+                    fontSize: '0.85rem', cursor: 'pointer', padding: '4px', textDecoration: 'underline'
+                  }}
+                >
+                  {lang === 'en' ? 'Keep browsing without unlocking' : 'Seguir viendo sin desbloquear'}
                 </button>
               </form>
               </div>
