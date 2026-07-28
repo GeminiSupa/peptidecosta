@@ -9,18 +9,14 @@ import {
   ChevronDown,
   ChevronUp,
   FlaskConical,
-  Mail,
-  Menu,
-  Search,
-  ShoppingBag,
-  X,
 } from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import MobileActionBar from '@/components/MobileActionBar';
-import { CatalogPromoBanner, StorefrontFooter } from '@/components/StorefrontChrome';
+import PressBand from '@/components/PressBand';
+import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
 import {
   DEFAULT_LANDING_PAGE_SETTINGS,
   mergeLandingPageSettings,
@@ -29,21 +25,23 @@ import './landing.css';
 
 const USER_SELECTED_LANG_KEY = 'lang_user_selected';
 
+// Shown until the live categories load, and used to build ?category= links, so
+// these must match the category values stored on products.
 const CATEGORY_FALLBACKS = [
-  'Peptides For Energy',
-  'Peptides For Anti Aging',
-  'Peptides For Fertility',
-  'Peptides For Healing',
-  'Peptides For Muscle Growth',
-  'Peptides For Skin',
-  'Peptides For Weight Loss',
-  'Copper Peptides',
+  'Weight Loss & Metabolism',
+  'Performance & Hormones',
+  'Anti-Aging & Longevity',
+  'Recovery & Healing',
+  'Cognitive & Mood',
+  'Sexual Health',
+  'Skin & Hair',
+  'Sleep',
 ];
 
 const FALLBACK_PRODUCTS = [
   {
     product: 'BPC-157 10mg',
-    category: 'Peptides For Healing',
+    category: 'Recovery & Healing',
     price_usd: '$44.97',
     price_crc: '₡22,500',
     status: 'In Stock',
@@ -51,7 +49,7 @@ const FALLBACK_PRODUCTS = [
   },
   {
     product: 'Retatrutide 10mg',
-    category: 'Peptides For Weight Loss',
+    category: 'Weight Loss & Metabolism',
     price_usd: '$115.00',
     price_crc: '₡58,000',
     status: 'In Stock',
@@ -59,7 +57,7 @@ const FALLBACK_PRODUCTS = [
   },
   {
     product: 'Semaglutide 5mg',
-    category: 'Peptides For Weight Loss',
+    category: 'Weight Loss & Metabolism',
     price_usd: '$84.50',
     price_crc: '₡42,500',
     status: 'In Stock',
@@ -67,7 +65,7 @@ const FALLBACK_PRODUCTS = [
   },
   {
     product: 'GHK-Cu 50mg',
-    category: 'Copper Peptides',
+    category: 'Skin & Hair',
     price_usd: '$64.00',
     price_crc: '₡32,000',
     status: 'In Stock',
@@ -126,9 +124,7 @@ export default function LandingPage() {
   const [settings, setSettings] = useState(DEFAULT_LANDING_PAGE_SETTINGS);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState(CATEGORY_FALLBACKS);
-  const [query, setQuery] = useState('');
   const [heroChoice, setHeroChoice] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState(0);
   const { links } = useBusinessLinks();
 
@@ -143,11 +139,6 @@ export default function LandingPage() {
       : 'es';
     setLang(selectedLang);
   }, []);
-
-  useEffect(() => {
-    document.body.style.overflow = menuOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [menuOpen]);
 
   useEffect(() => {
     async function load() {
@@ -215,86 +206,14 @@ export default function LandingPage() {
     window.location.href = href.startsWith('http') ? href : `${href}${separator}lang=${lang}`;
   };
 
-  const submitSearch = (event) => {
-    event.preventDefault();
-    const search = query.trim();
-    window.location.href = search
-      ? `/catalog?search=${encodeURIComponent(search)}&lang=${lang}`
-      : `/catalog?lang=${lang}`;
-  };
-
-  const navItems = [
-    { label: lang === 'en' ? 'About' : 'Nosotros', href: `/our-story?lang=${lang}` },
-    { label: lang === 'en' ? 'Shop by Product' : 'Comprar por producto', href: `/catalog?lang=${lang}` },
-    { label: lang === 'en' ? 'Shop by Category' : 'Comprar por categoría', href: `/catalog?lang=${lang}` },
-    { label: lang === 'en' ? 'Info Center' : 'Info Center', href: `/info-center?lang=${lang}` },
-    { label: lang === 'en' ? 'Affiliate Program' : 'Afiliados', href: `/affiliate-program?lang=${lang}` },
-  ];
-
   return (
     <div className="clone-home">
-      <header className="clone-site-header">
-        <div className="clone-topbar">
-          <div className="clone-shell clone-topbar-inner is-contact-only">
-            <div>
-              <a href={`mailto:${links.supportEmail}`}><Mail size={14} /> Contact Us</a>
-              <button type="button" onClick={() => openWhatsApp('header_cr')}>CR: {links.whatsappDisplay}</button>
-              <a href={`tel:+${links.apiWhatsAppNumber || '18314715559'}`}>US: {links.apiWhatsAppDisplay || '+1 (831) 471-5559'}</a>
-            </div>
-          </div>
-        </div>
-
-        <div className="clone-nav-wrap">
-          <div className="clone-shell clone-nav">
-            <Link href="/" className="clone-logo" aria-label="Peptides Costa Rica home">
-              <img src="/logo.webp" alt="Peptides Costa Rica" className="logo-img-custom" />
-            </Link>
-
-            <button
-              type="button"
-              className="clone-menu-toggle"
-              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((value) => !value)}
-            >
-              {menuOpen ? <X size={21} /> : <Menu size={21} />}
-            </button>
-
-            <nav className={`clone-nav-links${menuOpen ? ' is-open' : ''}`}>
-              {navItems.map((item) => (
-                <Link key={item.label} href={item.href} onClick={() => setMenuOpen(false)}>
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-
-            <form className="clone-search" onSubmit={submitSearch}>
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={lang === 'en' ? 'Search Peptide Products Or Information' : 'Buscar productos o información'}
-              />
-              <button type="submit" aria-label="Search">
-                <Search size={18} />
-              </button>
-            </form>
-
-            <div className="clone-nav-actions">
-              <button type="button" onClick={() => setLanguage(lang === 'en' ? 'es' : 'en')}>
-                {lang === 'en' ? 'ES' : 'EN'}
-              </button>
-              <Link href={`/catalog?lang=${lang}`} aria-label="Cart">
-                <ShoppingBag size={18} />
-                <span>0</span>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
+      {/* Shared with every other storefront page — the landing page used to
+          carry its own copy of this header, which is how its nav drifted. */}
+      <StorefrontHeader lang={lang} onLanguage={setLanguage} settings={settings} />
 
       <main>
-        <CatalogPromoBanner lang={lang} settings={settings} className="catalog-promo-image-banner--top clone-shell" forceActive />
-
+        {/* StorefrontHeader already renders the promo banner. */}
         <section className="clone-hero clone-shell">
           <div className="clone-hero-copy">
             <span className="clone-red-label">{copy(settings, 'heroKicker', lang)}</span>
@@ -330,14 +249,9 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {settings.pressActive && (
-          <a className="clone-press clone-shell" href={settings.pressUrl} target="_blank" rel="noopener noreferrer">
-            <span>{lang === 'en' ? 'AS SEEN IN' : 'VISTO EN'}</span>
-            <img src={settings.pressLogoUrl || '/costa-rica-news-logo.png'} alt="The Costa Rica News" />
-            <strong>{copy(settings, 'pressTitle', lang)}</strong>
-            <em>{copy(settings, 'pressCta', lang)} <ArrowUpRight size={14} /></em>
-          </a>
-        )}
+        <div className="clone-shell">
+          <PressBand lang={lang} settings={settings} variant="landing" />
+        </div>
 
         <section className="clone-section clone-shell">
           <div className="clone-section-head">

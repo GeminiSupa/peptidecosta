@@ -21,6 +21,9 @@ import {
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
   CreditCard, MessageCircle, Lock, Share2
 } from 'lucide-react';
+import PressBand from '@/components/PressBand';
+import { mergeLandingPageSettings } from '@/lib/landingContent';
+import { readCatalogParams, resolveCategoryParam } from '@/lib/catalogFilters.mjs';
 
 // const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
 const FALLBACK_EXCHANGE_RATE = 454.48;
@@ -223,6 +226,10 @@ export default function CatalogPage() {
   const autoPromoAppliedRef = useRef(false);
   const [catArrows, setCatArrows] = useState({ left: false, right: false });
   const [activeCategory, setActiveCategory] = useState('all');
+  // A ?category= value held until products load, so it can be resolved against
+  // the real category names rather than trusted verbatim.
+  const [pendingCategory, setPendingCategory] = useState(null);
+  const [landingSettings, setLandingSettings] = useState(() => mergeLandingPageSettings());
   const [showFilters, setShowFilters] = useState(false);
   const [priceFilter, setPriceFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState('pop');
@@ -406,6 +413,7 @@ export default function CatalogPage() {
 
         // Check landing_page banner (managed in Admin UI)
         const { data: lpData } = await supabase.from('site_settings').select('value').eq('id', 'landing_page').single();
+        setLandingSettings(mergeLandingPageSettings(lpData?.value));
         if (lpData && lpData.value && lpData.value.bannerActive) {
           let isValid = true;
           if (lpData.value.linkedPromoCode) {
@@ -735,6 +743,12 @@ export default function CatalogPage() {
     const urlParams = new URLSearchParams(window.location.search);
     const langParam = urlParams.get('lang');
     const currencyParam = urlParams.get('currency');
+
+    // Deep links from the site header search box and the category links in the
+    // nav, footer and landing page.
+    const deepLink = readCatalogParams(window.location.search);
+    if (deepLink.search) setSearchQuery(deepLink.search);
+    if (deepLink.category) setPendingCategory(deepLink.category);
 
     const hasUserSelectedLang = localStorage.getItem(USER_SELECTED_LANG_KEY) === 'true';
     let initialLang = hasUserSelectedLang ? localStorage.getItem('lang') || 'es' : 'es';
@@ -1385,6 +1399,15 @@ export default function CatalogPage() {
 
     setLoading(false);
   };
+
+  // Resolve a ?category= deep link once products are in, matching
+  // case-insensitively so links survive casing drift. An unrecognised category
+  // falls back to the full catalog rather than an empty page.
+  useEffect(() => {
+    if (!pendingCategory || !products.length) return;
+    setActiveCategory(resolveCategoryParam(products, pendingCategory));
+    setPendingCategory(null);
+  }, [pendingCategory, products]);
 
   // Science/peptide themed icon for each category (no pills!)
   const getCategoryIcon = (cat, size = 28) => {
@@ -2903,24 +2926,8 @@ export default function CatalogPage() {
               </a>
             </div>
 
-            {/* Press feature band — "As seen in The Costa Rica News" */}
-            <a
-              href="https://thecostaricanews.com/introducing-peptides-costa-rica-bringing-trusted-peptide-products-to-costa-rica/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="press-band catalog-press-band"
-              aria-label={lang === 'en' ? 'As seen in The Costa Rica News' : 'Visto en The Costa Rica News'}
-            >
-              <span className="press-band-label">{lang === 'en' ? 'As seen in' : 'Visto en'}</span>
-              <img
-                src="/costa-rica-news-logo.png"
-                alt="The Costa Rica News"
-                className="press-band-logo"
-              />
-              <span className="press-band-quote">
-                {lang === 'en' ? '"the company we wished existed"' : '"la empresa que queriamos que existiera"'}
-              </span>
-            </a>
+            {/* Press feature band — outlets come from the CMS (site_settings.landing_page) */}
+            <PressBand lang={lang} settings={landingSettings} variant="catalog" />
           </div>
         </div>
       </header>

@@ -110,7 +110,62 @@
     white-space: nowrap;
 }
 
-.clone-nav-links a.is-active {
+.clone-nav-links a.is-active,
+.clone-nav-group > button.is-active {
+    color: #e11d2f;
+}
+
+/* "Shop by Category" opens a menu of real category filters rather than being a
+   second link to the same catalog page. */
+.clone-nav-group {
+    position: relative;
+}
+
+.clone-nav-group > button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    color: #17244b;
+    font-family: inherit;
+    font-size: .78rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.clone-nav-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 70;
+    display: none;
+    flex-direction: column;
+    min-width: 232px;
+    margin-top: 10px;
+    padding: 8px 0;
+    border: 1px solid #dbe3ee;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 14px 34px rgba(12, 34, 78, .16);
+}
+
+.clone-nav-group.is-open .clone-nav-dropdown {
+    display: flex;
+}
+
+.clone-nav-dropdown a {
+    padding: 9px 16px;
+    font-size: .74rem;
+    text-transform: none;
+    white-space: nowrap;
+}
+
+.clone-nav-dropdown a:hover {
+    background: #f2f5fb;
     color: #e11d2f;
 }
 
@@ -902,6 +957,38 @@
     color: #fff;
     text-align: center;
     font-size: .76rem;
+}
+
+.clone-copyright .clone-legal-links {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 14px;
+    margin-left: 14px;
+}
+
+.clone-copyright .clone-legal-links a {
+    color: #fff;
+    opacity: .75;
+    text-decoration: none;
+}
+
+.clone-copyright .clone-legal-links a:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
+
+.clone-copyright .clone-admin-link {
+    margin-left: 10px;
+    color: #fff;
+    opacity: .45;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.clone-copyright .clone-admin-link:hover {
+    opacity: 1;
+    text-decoration: underline;
 }
 
 .clone-page-hero {

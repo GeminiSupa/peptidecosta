@@ -34,12 +34,31 @@ export const DEFAULT_LANDING_PAGE_SETTINGS = {
   catalogBannerAltEn: 'Peptides Costa Rica product vials',
   catalogBannerAltEs: 'Viales de Peptides Costa Rica',
   pressActive: true,
-  pressTitleEn: 'Peptides Costa Rica Was Featured In The Costa Rica News.',
-  pressTitleEs: 'Peptides Costa Rica fue destacado en The Costa Rica News.',
   pressCtaEn: 'Read the article',
   pressCtaEs: 'Leer el articulo',
-  pressUrl: 'https://thecostaricanews.com/introducing-peptides-costa-rica-bringing-trusted-peptide-products-to-costa-rica/',
-  pressLogoUrl: '/costa-rica-news-logo.png',
+  // Each outlet that has covered us. `logoUrl` is optional — an outlet without
+  // one falls back to its name as a wordmark, so a new article can go live
+  // before anyone has sourced the logo asset.
+  pressItems: [
+    {
+      outlet: 'The Costa Rica News',
+      logoUrl: '/costa-rica-news-logo.png',
+      url: 'https://thecostaricanews.com/introducing-peptides-costa-rica-bringing-trusted-peptide-products-to-costa-rica/',
+      titleEn: 'Peptides Costa Rica Was Featured In The Costa Rica News.',
+      titleEs: 'Peptides Costa Rica fue destacado en The Costa Rica News.',
+      quoteEn: '"the company we wished existed"',
+      quoteEs: '"la empresa que queriamos que existiera"',
+    },
+    {
+      outlet: 'The Tico Times',
+      logoUrl: '',
+      url: 'https://ticotimes.net/2026/07/26/why-two-fitness-veterans-chose-costa-rica-to-launch-a-new-peptide-company-peptides-costa-rica',
+      titleEn: 'Why Two Fitness Veterans Chose Costa Rica To Launch A Peptide Company.',
+      titleEs: 'Por que dos veteranos del fitness eligieron Costa Rica para lanzar una empresa de peptidos.',
+      quoteEn: '"Why Two Fitness Veterans Chose Costa Rica"',
+      quoteEs: '"Por que eligieron Costa Rica"',
+    },
+  ],
   differenceTitleEn: 'We Do Things Differently',
   differenceTitleEs: 'Hacemos las cosas diferente',
   differenceTextEn: 'Clear pricing, bulk discounts, direct communication, and reliable local service inside Costa Rica.',
@@ -121,35 +140,58 @@ export const DEFAULT_LANDING_PAGE_SETTINGS = {
   legalNoticeEs: 'Los productos ofrecidos por Peptides Costa Rica son estrictamente para uso de investigación de laboratorio. No están aprobados para prevenir, diagnosticar, tratar o curar enfermedades. La información de este sitio es educativa y no constituye consejo médico o legal. No apto para uso humano o veterinario.',
   footerQuickLinks: [
     { labelEn: 'Home', labelEs: 'Inicio', href: '/' },
-    { labelEn: 'About us', labelEs: 'Nosotros', href: '/our-story' },
+    { labelEn: 'About us', labelEs: 'Nosotros', href: '/about' },
     { labelEn: 'Bulk Discounts', labelEs: 'Descuentos por volumen', href: '/bulk-discounts' },
     { labelEn: 'FAQ', labelEs: 'Preguntas frecuentes', href: '/faq' },
     { labelEn: 'Blog', labelEs: 'Blog', href: '/blog' },
   ],
   footerCategoryLinks: [
-    { labelEn: 'Peptides For Weight Loss', labelEs: 'Péptidos para pérdida de peso', href: '/catalog?category=Peptides%20For%20Weight%20Loss' },
-    { labelEn: 'Peptides For Muscle Growth', labelEs: 'Péptidos para crecimiento muscular', href: '/catalog?category=Peptides%20For%20Muscle%20Growth' },
-    { labelEn: 'Peptides For Anti Aging', labelEs: 'Péptidos anti-aging', href: '/catalog?category=Peptides%20For%20Anti%20Aging' },
-    { labelEn: 'Peptides For Healing', labelEs: 'Péptidos para recuperación', href: '/catalog?category=Peptides%20For%20Healing' },
+    // These must match the category values stored on products, or the
+    // ?category= deep link resolves to the unfiltered catalog.
+    { labelEn: 'Weight Loss & Metabolism', labelEs: 'Perder peso y metabolismo', href: '/catalog?category=Weight%20Loss%20%26%20Metabolism' },
+    { labelEn: 'Performance & Hormones', labelEs: 'Rendimiento y hormonas', href: '/catalog?category=Performance%20%26%20Hormones' },
+    { labelEn: 'Anti-Aging & Longevity', labelEs: 'Antienvejecimiento y longevidad', href: '/catalog?category=Anti-Aging%20%26%20Longevity' },
+    { labelEn: 'Recovery & Healing', labelEs: 'Recuperación y curación', href: '/catalog?category=Recovery%20%26%20Healing' },
     { labelEn: 'View All', labelEs: 'Ver todo', href: '/catalog' },
   ],
 };
 
-export function mergeLandingPageSettings(value = {}) {
-  if (value?.landingVersion !== 'v2') {
-    return {
-      ...DEFAULT_LANDING_PAGE_SETTINGS,
-      bannerActive: value?.bannerActive ?? DEFAULT_LANDING_PAGE_SETTINGS.bannerActive,
-      bannerTextEn: value?.bannerTextEn || DEFAULT_LANDING_PAGE_SETTINGS.bannerTextEn,
-      bannerTextEs: value?.bannerTextEs || DEFAULT_LANDING_PAGE_SETTINGS.bannerTextEs,
-    };
+/** Array fields fall back whole rather than being partially overwritten. */
+const LANDING_LIST_KEYS = [
+  'differenceCards', 'offerCards', 'audienceItems', 'faqItems',
+  'heroDropdownOptions', 'footerQuickLinks', 'footerCategoryLinks', 'pressItems',
+];
+
+/**
+ * Carry a pre-v2 row forward instead of discarding it.
+ *
+ * The old gate kept only the three banner fields and threw the rest away, so
+ * copy an admin had saved and believed was live silently never rendered. Any
+ * saved key that still exists in the v2 schema is preserved; keys the redesign
+ * dropped are ignored, which is what the version gate was protecting against.
+ */
+function migrateLegacyLandingSettings(value = {}) {
+  const migrated = {};
+  for (const [key, saved] of Object.entries(value || {})) {
+    if (key === 'landingVersion') continue;
+    if (!(key in DEFAULT_LANDING_PAGE_SETTINGS)) continue;
+    if (saved === null || saved === undefined || saved === '') continue;
+    if (Array.isArray(saved) && !saved.length) continue;
+    migrated[key] = saved;
   }
+  return migrated;
+}
 
-  const merged = { ...DEFAULT_LANDING_PAGE_SETTINGS, ...(value || {}) };
+export function mergeLandingPageSettings(value = {}) {
+  const source = value?.landingVersion === 'v2'
+    ? (value || {})
+    : migrateLegacyLandingSettings(value);
 
-  for (const key of ['differenceCards', 'offerCards', 'audienceItems', 'faqItems', 'heroDropdownOptions', 'footerQuickLinks', 'footerCategoryLinks']) {
-    merged[key] = Array.isArray(value?.[key]) && value[key].length
-      ? value[key]
+  const merged = { ...DEFAULT_LANDING_PAGE_SETTINGS, ...source, landingVersion: 'v2' };
+
+  for (const key of LANDING_LIST_KEYS) {
+    merged[key] = Array.isArray(source[key]) && source[key].length
+      ? source[key]
       : DEFAULT_LANDING_PAGE_SETTINGS[key];
   }
 
@@ -158,7 +200,6 @@ export function mergeLandingPageSettings(value = {}) {
 
 export const PUBLIC_PAGE_SETTING_IDS = [
   'page_info_center',
-  'page_our_story',
   'page_affiliate_program',
   'page_blog',
   'page_about',
@@ -215,34 +256,6 @@ export const DEFAULT_PUBLIC_PAGE_SETTINGS = {
     ctaTitleEs: '¿No encuentras lo que buscas?',
     ctaTextEn: 'Our team is happy to help with product or dosing questions over a call.',
     ctaTextEs: 'Nuestro equipo puede ayudar con preguntas de productos o dosificación.',
-  },
-  page_our_story: {
-    pageVersion: 'v1',
-    heroTitleEn: 'Our Story',
-    heroTitleEs: 'Nuestra historia',
-    heroTextEn: 'Peptides Costa Rica was built by people who live, train, and work in Costa Rica.',
-    heroTextEs: 'Peptides Costa Rica fue creado por personas que viven, entrenan y trabajan en Costa Rica.',
-    sections: [
-      { titleEn: 'From the Fight World to Peptides Costa Rica', titleEs: 'Del mundo del combate a Peptides Costa Rica', textEn: 'Our business began not in an office, but in gyms, fight camps, and recovery rooms.', textEs: 'Nuestro negocio comenzó no en una oficina, sino en gimnasios, campamentos y recuperación.', imageUrl: '/vials_group_costarica.png' },
-      { titleEn: 'Sean McCully: A Pioneer in Combat Sports', titleEs: 'Sean McCully: pionero en deportes de combate', textEn: 'Sean spent decades competing, coaching, and building businesses in the fight world.', textEs: 'Sean pasó décadas compitiendo, entrenando y creando negocios en el mundo del combate.', imageUrl: '/customer_transformation.webp' },
-      { titleEn: 'Joey Webster: From Wrestling Champion to Fighter', titleEs: 'Joey Webster: de campeón de lucha a peleador', textEn: 'Joey grew up wrestling in California and made Costa Rica his home.', textEs: 'Joey creció en la lucha en California e hizo de Costa Rica su hogar.', imageUrl: '/modern_3d_vials_group.png' },
-      { titleEn: 'Why We Started Peptides Costa Rica', titleEs: 'Por qué empezamos Peptides Costa Rica', textEn: 'We wanted clear pricing, local availability, direct communication, and confirmed product access.', textEs: 'Queríamos precios claros, disponibilidad local, comunicación directa y acceso confirmado.', imageUrl: '/vial_costarica_hero.png' },
-    ],
-    checklist: [
-      { labelEn: 'Clear sourcing', labelEs: 'Origen claro' },
-      { labelEn: 'Direct communication', labelEs: 'Comunicación directa' },
-      { labelEn: 'Fewer delays', labelEs: 'Menos demoras' },
-      { labelEn: 'Confirmed availability', labelEs: 'Disponibilidad confirmada' },
-    ],
-    toolsImageUrl: '/science_lab_about.webp',
-    toolsTitleEn: 'The Tools We Use Ourselves',
-    toolsTitleEs: 'Las herramientas que usamos nosotros',
-    toolsTextEn: 'Everything we offer comes from the world we know best: training, recovery, and performance. We focus on clear communication, reliable access, and honest information.',
-    toolsTextEs: 'Todo lo que ofrecemos viene del mundo que conocemos mejor: entrenamiento, recuperación y rendimiento. Nos enfocamos en comunicación clara, acceso confiable e información honesta.',
-    ctaTitleEn: 'Browse all peptide products',
-    ctaTitleEs: 'Explora todos los productos',
-    ctaTextEn: 'See current local availability in the catalog.',
-    ctaTextEs: 'Mira la disponibilidad local actual en el catálogo.',
   },
   page_affiliate_program: {
     pageVersion: 'v1',

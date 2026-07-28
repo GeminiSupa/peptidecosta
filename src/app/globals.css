@@ -5476,6 +5476,74 @@ body:has(.product-grid.grid-view) {
     text-overflow: ellipsis;
 }
 
+/* Multi-outlet variant: the label stays put and each outlet becomes its own
+   link, so a second or third publication drops in without a layout change. */
+/* The single-outlet band was a fixed 3-column grid. With more than one outlet
+   the middle column can no longer be a fixed fraction, so the multi variant
+   lays out as a flex row and lets the quote absorb the leftover space. */
+.press-band--multi.catalog-press-band {
+    display: flex;
+    justify-content: flex-start;
+    gap: 14px;
+}
+
+.press-band--multi .press-band-outlets {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: 8px 14px;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+/* Outlets must keep their intrinsic width — letting flex shrink them squashes
+   a logo into an illegible thumbnail. */
+.press-band--multi .press-band-outlet {
+    flex: 0 0 auto;
+}
+
+.press-band--multi .press-band-logo {
+    height: 26px;
+    width: auto;
+    max-width: none;
+    flex: 0 0 auto;
+}
+
+.press-band--multi .press-band-label {
+    white-space: nowrap;
+}
+
+.press-band--multi .press-band-quote {
+    flex: 1 1 auto;
+}
+
+.press-band-outlet {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.press-band-outlet:hover {
+    transform: translateY(-1px);
+}
+
+.press-band-outlet + .press-band-outlet {
+    padding-left: 16px;
+    border-left: 1px solid var(--border);
+}
+
+.press-band-wordmark {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 0.86rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--text-main);
+    white-space: nowrap;
+}
+
 .catalog-press-band .press-band-label,
 .catalog-press-band .press-band-logo,
 .catalog-press-band .press-band-quote {
@@ -5538,6 +5606,19 @@ body:has(.product-grid.grid-view) {
         min-height: 44px;
     }
     .landing-press-cta {
+        display: none;
+    }
+    .press-band--multi .press-band-outlets {
+        gap: 6px 10px;
+    }
+    .press-band-outlet + .press-band-outlet {
+        padding-left: 10px;
+    }
+    .press-band-wordmark {
+        font-size: 0.72rem;
+    }
+    /* Three columns of content do not fit next to two outlets on a phone. */
+    .catalog-press-band .press-band-quote {
         display: none;
     }
 }

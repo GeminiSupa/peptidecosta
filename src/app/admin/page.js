@@ -5612,12 +5612,20 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         />
                         Show press strip
                       </label>
-                      {cmsField('Press title EN', 'pressTitleEn')}
-                      {cmsField('Press title ES', 'pressTitleEs')}
                       {cmsField('Press button EN', 'pressCtaEn')}
                       {cmsField('Press button ES', 'pressCtaEs')}
-                      {cmsField('Press URL', 'pressUrl')}
-                      {cmsField('Press logo URL', 'pressLogoUrl')}
+                      <div style={{ color: '#64748b', fontSize: '0.72rem', margin: '12px 0 8px' }}>
+                        One block per publication. Leave the logo URL blank to show the outlet name as text instead.
+                      </div>
+                      {(siteSettings.pressItems || []).slice(0, 4).map((_, index) => cmsCardFields('pressItems', index, {
+                        outlet: 'Outlet name',
+                        url: 'Article URL',
+                        logoUrl: 'Logo URL (optional)',
+                        titleEn: 'Headline EN',
+                        titleEs: 'Headline ES',
+                        quoteEn: 'Short quote EN',
+                        quoteEs: 'Short quote ES',
+                      }))}
                     </div>
 
                     <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
@@ -5717,26 +5725,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {publicField('page_info_center', 'CTA title ES', 'ctaTitleEs')}
                       {publicTextArea('page_info_center', 'CTA text EN', 'ctaTextEn')}
                       {publicTextArea('page_info_center', 'CTA text ES', 'ctaTextEs')}
-                    </div>
-
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
-                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Our Story</h4>
-                      {publicField('page_our_story', 'Hero title EN', 'heroTitleEn')}
-                      {publicField('page_our_story', 'Hero title ES', 'heroTitleEs')}
-                      {publicTextArea('page_our_story', 'Hero text EN', 'heroTextEn')}
-                      {publicTextArea('page_our_story', 'Hero text ES', 'heroTextEs')}
-                      {(publicPageSettings.page_our_story?.sections || []).slice(0, 4).map((_, index) => publicCardFields('page_our_story', 'sections', index, { titleEn: 'Title EN', titleEs: 'Title ES', textEn: 'Text EN', textEs: 'Text ES', imageUrl: 'Image URL' }))}
-                      <h4 style={{ margin: '16px 0 12px 0', color: '#f8fafc', fontSize: '0.9rem' }}>Checklist</h4>
-                      {(publicPageSettings.page_our_story?.checklist || []).slice(0, 4).map((_, index) => publicCardFields('page_our_story', 'checklist', index, { labelEn: 'Label EN', labelEs: 'Label ES' }))}
-                      {publicField('page_our_story', 'Tools image URL', 'toolsImageUrl')}
-                      {publicField('page_our_story', 'Tools title EN', 'toolsTitleEn')}
-                      {publicField('page_our_story', 'Tools title ES', 'toolsTitleEs')}
-                      {publicTextArea('page_our_story', 'Tools text EN', 'toolsTextEn')}
-                      {publicTextArea('page_our_story', 'Tools text ES', 'toolsTextEs')}
-                      {publicField('page_our_story', 'CTA title EN', 'ctaTitleEn')}
-                      {publicField('page_our_story', 'CTA title ES', 'ctaTitleEs')}
-                      {publicTextArea('page_our_story', 'CTA text EN', 'ctaTextEn')}
-                      {publicTextArea('page_our_story', 'CTA text ES', 'ctaTextEs')}
                     </div>
 
                     <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>

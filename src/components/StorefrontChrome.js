@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Mail, Menu, Search, ShoppingBag, Sparkles, X } from 'lucide-react';
+import { ChevronDown, Mail, Menu, Search, ShoppingBag, Sparkles, X } from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
@@ -88,10 +88,38 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
   );
 }
 
+/** Total vials in the cart the catalog persists to localStorage. */
+function readCartCount() {
+  try {
+    const raw = localStorage.getItem('cart');
+    const items = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(items)) return 0;
+    return items.reduce((sum, item) => sum + Number(item?.qty || 0), 0);
+  } catch {
+    return 0;
+  }
+}
+
 export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [cartCount, setCartCount] = useState(0);
   const { links } = useBusinessLinks();
+
+  // The cart only changes on the catalog page, so re-reading on mount, on focus
+  // and on cross-tab writes is enough to keep this honest. Reading in an effect
+  // rather than in initial state keeps the server and client markup identical.
+  useEffect(() => {
+    const sync = () => setCartCount(readCartCount());
+    sync();
+    window.addEventListener('storage', sync);
+    window.addEventListener('focus', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('focus', sync);
+    };
+  }, []);
 
   const openWhatsApp = (source) => {
     logWhatsAppSource(source);
@@ -107,11 +135,27 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
       : `/catalog?lang=${lang}`;
   };
 
+  const withLangParam = (href = '/') => {
+    if (href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return href;
+    const separator = href.includes('?') ? '&' : '?';
+    return `${href}${separator}lang=${lang}`;
+  };
+
+  // Categories for the "Shop by Category" menu. Editable in the CMS alongside
+  // the footer's category column, and shared with it so the two cannot drift.
+  const categoryLinks = Array.isArray(settings?.footerCategoryLinks) && settings.footerCategoryLinks.length
+    ? settings.footerCategoryLinks
+    : DEFAULT_LANDING_PAGE_SETTINGS.footerCategoryLinks;
+
+  // Every entry needs a distinct id — two items sharing one made the active
+  // state highlight both at once.
   const navItems = [
-    { id: 'story', label: lang === 'en' ? 'About' : 'Nosotros', href: `/our-story?lang=${lang}` },
+    { id: 'story', label: lang === 'en' ? 'About' : 'Nosotros', href: `/about?lang=${lang}` },
     { id: 'catalog', label: lang === 'en' ? 'Shop by Product' : 'Comprar por producto', href: `/catalog?lang=${lang}` },
-    { id: 'catalog', label: lang === 'en' ? 'Shop by Category' : 'Comprar por categoría', href: `/catalog?lang=${lang}` },
-    { id: 'info', label: 'Info Center', href: `/info-center?lang=${lang}` },
+    { id: 'categories', label: lang === 'en' ? 'Shop by Category' : 'Comprar por categoría', children: categoryLinks },
+    { id: 'info', label: lang === 'en' ? 'Info Center' : 'Centro de información', href: `/info-center?lang=${lang}` },
+    // Bulk Discounts and FAQ live in the footer: a sixth item overflows the bar
+    // and pushes the search box and cart off screen.
     { id: 'affiliate', label: lang === 'en' ? 'Affiliate Program' : 'Afiliados', href: `/affiliate-program?lang=${lang}` },
   ];
 
@@ -120,7 +164,7 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
         <div className="clone-topbar">
           <div className="clone-shell clone-topbar-inner is-contact-only">
             <div>
-              <a href={`mailto:${links.supportEmail}`}><Mail size={14} /> Contact Us</a>
+              <Link href={`/contact?lang=${lang}`}><Mail size={14} /> {lang === 'en' ? 'Contact Us' : 'Contáctanos'}</Link>
               <button type="button" onClick={() => openWhatsApp('header_cr')}>CR: {links.whatsappDisplay}</button>
               <a href={`tel:+${links.apiWhatsAppNumber || '18314715559'}`}>US: {links.apiWhatsAppDisplay || '+1 (831) 471-5559'}</a>
             </div>
@@ -144,16 +188,43 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
             </button>
 
             <nav className={`clone-nav-links${menuOpen ? ' is-open' : ''}`}>
-              {navItems.map((item, index) => (
+              {navItems.map((item) => (item.children ? (
+                <div
+                  key={item.id}
+                  className={`clone-nav-group${categoriesOpen ? ' is-open' : ''}`}
+                  onMouseEnter={() => setCategoriesOpen(true)}
+                  onMouseLeave={() => setCategoriesOpen(false)}
+                >
+                  <button
+                    type="button"
+                    className={active === item.id ? 'is-active' : ''}
+                    aria-expanded={categoriesOpen}
+                    onClick={() => setCategoriesOpen((value) => !value)}
+                  >
+                    {item.label} <ChevronDown size={14} />
+                  </button>
+                  <div className="clone-nav-dropdown">
+                    {item.children.map((child, childIndex) => (
+                      <Link
+                        key={`${child.href}-${childIndex}`}
+                        href={withLangParam(child.href)}
+                        onClick={() => { setCategoriesOpen(false); setMenuOpen(false); }}
+                      >
+                        {child[`label${lang === 'en' ? 'En' : 'Es'}`] || child.labelEn}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ) : (
                 <Link
-                  key={`${item.href}-${index}`}
+                  key={item.id}
                   href={item.href}
                   className={active && item.id === active ? 'is-active' : ''}
                   onClick={() => setMenuOpen(false)}
                 >
                   {item.label}
                 </Link>
-              ))}
+              )))}
             </nav>
 
             <form className="clone-search" onSubmit={submitSearch}>
@@ -169,7 +240,12 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
               <button type="button" onClick={() => onLanguage(lang === 'en' ? 'es' : 'en')}>
                 {lang === 'en' ? 'ES' : 'EN'}
               </button>
-              <Link href={`/catalog?lang=${lang}`} aria-label="Cart"><ShoppingBag size={18} /><span>0</span></Link>
+              <Link
+                href={`/catalog?lang=${lang}`}
+                aria-label={lang === 'en' ? `Cart, ${cartCount} items` : `Carrito, ${cartCount} artículos`}
+              >
+                <ShoppingBag size={18} /><span>{cartCount}</span>
+              </Link>
             </div>
           </div>
         </div>
@@ -212,7 +288,8 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
   const footerCategoryLinks = Array.isArray(settings?.footerCategoryLinks) ? settings.footerCategoryLinks : [];
   const categoryList = categories.length
     ? categories.slice(0, 5)
-    : ['Peptides For Weight Loss', 'Peptides For Muscle Growth', 'Peptides For Anti Aging', 'Peptides For Healing'];
+    // Fallback only — must match real product categories so the links filter.
+    : ['Weight Loss & Metabolism', 'Performance & Hormones', 'Anti-Aging & Longevity', 'Recovery & Healing'];
   const reviewLinks = [
     { id: 'trustpilot', label: 'Trustpilot', score: '4.2', logo: '★', href: links.trustpilotUrl || 'https://www.trustpilot.com/review/peptidescostarica.net' },
     { id: 'google', label: 'Google', score: '5.0', logo: 'G', href: links.googleReviewUrl || links.googleMapsUrl },
@@ -286,14 +363,34 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
           </div>
         </div>
       </div>
-      <div className="clone-copyright">Copyright © 2026 Peptides Costa Rica, All Rights Reserved.</div>
+      <div className="clone-copyright">
+        Copyright © {new Date().getFullYear()} Peptides Costa Rica, All Rights Reserved.
+        {/* The policy pages were previously linked only from a dead component,
+            leaving them unreachable from anywhere on the site. */}
+        <span className="clone-legal-links">
+          {LEGAL_LINKS.map((item) => (
+            <Link key={item.href} href={withLang(item.href)}>
+              {item[`label${suffix}`] || item.labelEn}
+            </Link>
+          ))}
+        </span>
+        <Link href="/admin" className="clone-admin-link" title="Admin Dashboard">
+          {lang === 'en' ? 'Admin Portal' : 'Portal de Admin'}
+        </Link>
+      </div>
     </footer>
   );
 }
 
+const LEGAL_LINKS = [
+  { labelEn: 'Privacy Policy', labelEs: 'Privacidad', href: '/privacy-policy' },
+  { labelEn: 'Shipping Policy', labelEs: 'Envíos', href: '/shipping-policy' },
+  { labelEn: 'Returns & Refunds', labelEs: 'Devoluciones', href: '/return-refund-policy' },
+];
+
 const DEFAULT_QUICK_LINKS = [
   { labelEn: 'Home', labelEs: 'Inicio', href: '/' },
-  { labelEn: 'About us', labelEs: 'Nosotros', href: '/our-story' },
+  { labelEn: 'About us', labelEs: 'Nosotros', href: '/about' },
   { labelEn: 'Bulk Discounts', labelEs: 'Descuentos por volumen', href: '/bulk-discounts' },
   { labelEn: 'FAQ', labelEs: 'Preguntas frecuentes', href: '/faq' },
   { labelEn: 'Blog', labelEs: 'Blog', href: '/blog' },

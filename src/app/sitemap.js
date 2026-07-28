@@ -20,6 +20,10 @@ export default async function sitemap() {
     '',
     '/catalog',
     '/about',
+    // Primary nav destinations — previously missing, so the pages the header
+    // actually links to were never submitted.
+    '/info-center',
+    '/affiliate-program',
     '/bulk-discounts',
     '/contact',
     '/faq',

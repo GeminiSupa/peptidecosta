@@ -48,6 +48,15 @@ const nextConfig = {
         destination: 'https://catalog.peptidescostarica.net/:path*',
         permanent: true,
       },
+      // /our-story and /about told the same founder story. /about is canonical:
+      // it carries a page-specific <title>, the richer narrative, and the
+      // existing sitemap history. Redirect rather than drop, so any shared
+      // links keep working.
+      {
+        source: '/our-story',
+        destination: '/about',
+        permanent: true,
+      },
     ];
   },
 
