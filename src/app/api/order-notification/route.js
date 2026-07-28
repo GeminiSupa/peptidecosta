@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
+import { getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 // Environment variables will be read inside the POST handler
@@ -446,10 +447,6 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
 
 export async function POST(request) {
   // Read env vars inside the handler to prevent Next.js caching issues
-  const rawNotificationTo = process.env.ORDER_NOTIFICATION_TO || 'omerforce@gmail.com, info@peptidescostarica.net';
-  const NOTIFICATION_TO = rawNotificationTo.includes('surfyesi@hotmail.com')
-    ? rawNotificationTo
-    : `${rawNotificationTo}, surfyesi@hotmail.com`;
   const smtp = getOrderSmtpConfig();
 
   try {
@@ -588,18 +585,20 @@ export async function POST(request) {
         `Total: ${totalPrimary}`,
       ].join('\n');
 
+      const recipients = await getOrderNotificationRecipients();
+
       const adminInfo = await transporter.sendMail({
             bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
         from: smtp.from,
-        to: NOTIFICATION_TO,
+        to: recipients.join(', '),
         subject: adminSubject,
         html: adminHtml,
         text: adminText,
         replyTo: order.customerEmail || undefined,
       });
 
-      results.adminNotification = { sent: true, messageId: adminInfo.messageId };
-      console.log(`[Order notification] Admin email dispatched: ${adminInfo.messageId}`);
+      results.adminNotification = { sent: true, messageId: adminInfo.messageId, recipients: recipients.length };
+      console.log(`[Order notification] Admin email dispatched to ${recipients.length} recipients: ${adminInfo.messageId}`);
     } catch (adminErr) {
       console.error('[Order notification] Admin notification failed to send:', adminErr);
       results.adminNotification = { sent: false, error: adminErr.message };

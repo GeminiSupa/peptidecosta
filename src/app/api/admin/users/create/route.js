@@ -8,7 +8,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const { email, password, name, permissions, is_superadmin, commission_rate, weekly_salary, salary_currency, commission_structure, avatar_url } = body;
+    const { email, password, name, permissions, is_superadmin, commission_rate, weekly_salary, salary_currency, commission_structure, avatar_url, order_email_notifications } = body;
 
     if (!email || !password || !name) {
       return NextResponse.json({ error: 'Email, password, and name are required' }, { status: 400 });
@@ -42,6 +42,8 @@ export async function POST(request) {
       weekly_salary: weekly_salary !== undefined ? parseFloat(weekly_salary) : 0,
       salary_currency: salary_currency || 'USD',
       commission_structure: commission_structure || null,
+      // New agents receive the new-order email unless explicitly opted out.
+      order_email_notifications: order_email_notifications !== false,
     };
     if (avatar_url) profileRow.avatar_url = avatar_url;
 

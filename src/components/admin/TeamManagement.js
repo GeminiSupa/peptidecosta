@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
-import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp, Camera, Upload } from 'lucide-react';
+import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp, Camera, Upload, Mail } from 'lucide-react';
 import AgentDashboard from './AgentDashboard';
 import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { getOrderSalesAmounts, isCommissionEligibleOrder, orderBelongsToAgent } from '@/lib/agentOrders';
@@ -43,6 +43,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [formSalaryCurrency, setFormSalaryCurrency] = useState('USD');
   const [formCommissionStructure, setFormCommissionStructure] = useState('');
   const [formAvatarUrl, setFormAvatarUrl] = useState('');
+  const [formOrderEmails, setFormOrderEmails] = useState(true);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
@@ -259,6 +260,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormSalaryCurrency(user.salary_currency || 'USD');
       setFormCommissionStructure(user.commission_structure || '');
       setFormAvatarUrl(user.avatar_url || '');
+      setFormOrderEmails(user.order_email_notifications !== false);
     } else {
       setEditingUserId(null);
       setFormEmail('');
@@ -271,6 +273,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormSalaryCurrency('USD');
       setFormCommissionStructure('');
       setFormAvatarUrl('');
+      setFormOrderEmails(true);
     }
     setIsModalOpen(true);
   };
@@ -324,7 +327,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             weekly_salary: formWeeklySalary,
             salary_currency: formSalaryCurrency,
             commission_structure: formCommissionStructure,
-            avatar_url: formAvatarUrl || null
+            avatar_url: formAvatarUrl || null,
+            order_email_notifications: formOrderEmails
           })
         });
         const data = await res.json();
@@ -344,7 +348,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             weekly_salary: formWeeklySalary,
             salary_currency: formSalaryCurrency,
             commission_structure: formCommissionStructure,
-            avatar_url: formAvatarUrl || undefined
+            avatar_url: formAvatarUrl || undefined,
+            order_email_notifications: formOrderEmails
           })
         });
         const data = await res.json();
@@ -1153,7 +1158,22 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                     </div>
                   )}
                 </div>
-                
+
+                <div style={{ background: 'rgba(0, 0, 0, 0.2)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: '24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={16} style={{ color: '#38bdf8' }} /> New Order Emails</h3>
+                      <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '4px 0 0 0' }}>Emails this member every time an order comes in. On by default for new members.</p>
+                    </div>
+                    <label className="toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
+                      <input type="checkbox" checked={formOrderEmails} onChange={e => setFormOrderEmails(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                      <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: formOrderEmails ? '#38bdf8' : 'rgba(255,255,255,0.1)', borderRadius: '24px', transition: '0.3s' }}>
+                        <span style={{ position: 'absolute', height: '18px', width: '18px', left: formOrderEmails ? '22px' : '3px', bottom: '3px', backgroundColor: 'white', borderRadius: '50%', transition: '0.3s' }} />
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                   <button type="button" className="admin-btn" onClick={() => setIsModalOpen(false)} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8' }}>Cancel</button>
                   <button type="submit" className="admin-btn admin-btn-primary" disabled={formLoading} style={{ minWidth: '120px', padding: '10px 24px', fontWeight: 'bold' }}>

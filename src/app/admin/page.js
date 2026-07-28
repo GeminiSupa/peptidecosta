@@ -5792,6 +5792,143 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       }))}
                     </div>
 
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>About Us</h4>
+                      {publicField('page_about', 'Hero kicker EN', 'heroKickerEn')}
+                      {publicField('page_about', 'Hero kicker ES', 'heroKickerEs')}
+                      {publicField('page_about', 'Hero title EN', 'heroTitleEn')}
+                      {publicField('page_about', 'Hero title ES', 'heroTitleEs')}
+                      {publicTextArea('page_about', 'Hero text EN', 'heroTextEn')}
+                      {publicTextArea('page_about', 'Hero text ES', 'heroTextEs')}
+                      <h4 style={{ margin: '16px 0 12px 0', color: '#f8fafc', fontSize: '0.9rem' }}>Principles</h4>
+                      {(publicPageSettings.page_about?.principles || []).slice(0, 4).map((_, index) => publicCardFields('page_about', 'principles', index, { labelEn: 'Label EN', labelEs: 'Label ES' }))}
+                      {publicField('page_about', 'Proof kicker EN', 'proofKickerEn')}
+                      {publicField('page_about', 'Proof kicker ES', 'proofKickerEs')}
+                      {publicField('page_about', 'Proof title EN', 'proofTitleEn')}
+                      {publicField('page_about', 'Proof title ES', 'proofTitleEs')}
+                      {publicTextArea('page_about', 'Proof text EN', 'proofTextEn')}
+                      {publicTextArea('page_about', 'Proof text ES', 'proofTextEs')}
+                      {publicField('page_about', 'Origin title EN', 'originTitleEn')}
+                      {publicField('page_about', 'Origin title ES', 'originTitleEs')}
+                      {publicTextArea('page_about', 'Origin text EN', 'originTextEn')}
+                      {publicTextArea('page_about', 'Origin text ES', 'originTextEs')}
+                      <h4 style={{ margin: '16px 0 12px 0', color: '#f8fafc', fontSize: '0.9rem' }}>Founders</h4>
+                      {(publicPageSettings.page_about?.founders || []).slice(0, 2).map((_, index) => publicCardFields('page_about', 'founders', index, { name: 'Name', initials: 'Initials', roleEn: 'Role EN', roleEs: 'Role ES' }))}
+                      {publicTextArea('page_about', 'Quote EN', 'quoteEn')}
+                      {publicTextArea('page_about', 'Quote ES', 'quoteEs')}
+                      {publicField('page_about', 'Quote author', 'quoteAuthor')}
+                      {publicField('page_about', 'Problem title EN', 'problemTitleEn')}
+                      {publicField('page_about', 'Problem title ES', 'problemTitleEs')}
+                      {publicTextArea('page_about', 'Problem text EN', 'problemTextEn')}
+                      {publicTextArea('page_about', 'Problem text ES', 'problemTextEs')}
+                      {publicField('page_about', 'Today title EN', 'todayTitleEn')}
+                      {publicField('page_about', 'Today title ES', 'todayTitleEs')}
+                      {publicTextArea('page_about', 'Today text EN', 'todayTextEn')}
+                      {publicTextArea('page_about', 'Today text ES', 'todayTextEs')}
+                      {publicField('page_about', 'Process title EN', 'processTitleEn')}
+                      {publicField('page_about', 'Process title ES', 'processTitleEs')}
+                      {(publicPageSettings.page_about?.process || []).slice(0, 3).map((_, index) => publicCardFields('page_about', 'process', index))}
+                      {publicField('page_about', 'CTA title EN', 'ctaTitleEn')}
+                      {publicField('page_about', 'CTA title ES', 'ctaTitleEs')}
+                      {publicTextArea('page_about', 'CTA text EN', 'ctaTextEn')}
+                      {publicTextArea('page_about', 'CTA text ES', 'ctaTextEs')}
+                      {publicField('page_about', 'Catalog button EN', 'ctaButtonEn')}
+                      {publicField('page_about', 'Catalog button ES', 'ctaButtonEs')}
+                      {publicField('page_about', 'WhatsApp button EN', 'contactButtonEn')}
+                      {publicField('page_about', 'WhatsApp button ES', 'contactButtonEs')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>FAQ</h4>
+                      {publicField('page_faq', 'Hero title EN', 'heroTitleEn')}
+                      {publicField('page_faq', 'Hero title ES', 'heroTitleEs')}
+                      <div style={{ color: '#64748b', fontSize: '0.72rem', margin: '12px 0 8px' }}>
+                        Type {'{{whatsapp}}'} in an answer to insert the WhatsApp number.
+                      </div>
+                      {(publicPageSettings.page_faq?.faqItems || []).slice(0, 8).map((_, index) => publicCardFields('page_faq', 'faqItems', index, { qEn: 'Question EN', qEs: 'Question ES', aEn: 'Answer EN', aEs: 'Answer ES' }))}
+                      {publicField('page_faq', 'CTA title EN', 'ctaTitleEn')}
+                      {publicField('page_faq', 'CTA title ES', 'ctaTitleEs')}
+                      {publicTextArea('page_faq', 'CTA text EN', 'ctaTextEn')}
+                      {publicTextArea('page_faq', 'CTA text ES', 'ctaTextEs')}
+                      {publicField('page_faq', 'CTA button EN', 'ctaButtonEn')}
+                      {publicField('page_faq', 'CTA button ES', 'ctaButtonEs')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Bulk Discounts</h4>
+                      {publicField('page_bulk_discounts', 'Hero title EN', 'heroTitleEn')}
+                      {publicField('page_bulk_discounts', 'Hero title ES', 'heroTitleEs')}
+                      {publicTextArea('page_bulk_discounts', 'Hero text EN', 'heroTextEn')}
+                      {publicTextArea('page_bulk_discounts', 'Hero text ES', 'heroTextEs')}
+                      <h4 style={{ margin: '16px 0 12px 0', color: '#f8fafc', fontSize: '0.9rem' }}>Discount Tiers</h4>
+                      {(publicPageSettings.page_bulk_discounts?.tiers || []).slice(0, 3).map((_, index) => publicCardFields('page_bulk_discounts', 'tiers', index, { labelEn: 'Label EN', labelEs: 'Label ES', valueEn: 'Discount EN', valueEs: 'Discount ES', textEn: 'Text EN', textEs: 'Text ES' }))}
+                      {publicField('page_bulk_discounts', 'Highlighted tier (0, 1 or 2)', 'featuredTierIndex')}
+                      {publicField('page_bulk_discounts', 'Terms title EN', 'termsTitleEn')}
+                      {publicField('page_bulk_discounts', 'Terms title ES', 'termsTitleEs')}
+                      {(publicPageSettings.page_bulk_discounts?.terms || []).slice(0, 5).map((_, index) => publicCardFields('page_bulk_discounts', 'terms', index, { labelEn: 'Term EN', labelEs: 'Term ES' }))}
+                      {publicField('page_bulk_discounts', 'CTA button EN', 'ctaButtonEn')}
+                      {publicField('page_bulk_discounts', 'CTA button ES', 'ctaButtonEs')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>COA Database</h4>
+                      {publicField('page_coa_database', 'Hero title EN', 'heroTitleEn')}
+                      {publicField('page_coa_database', 'Hero title ES', 'heroTitleEs')}
+                      {publicTextArea('page_coa_database', 'Hero text EN', 'heroTextEn')}
+                      {publicTextArea('page_coa_database', 'Hero text ES', 'heroTextEs')}
+                      {publicField('page_coa_database', 'How-to title EN', 'howTitleEn')}
+                      {publicField('page_coa_database', 'How-to title ES', 'howTitleEs')}
+                      {(publicPageSettings.page_coa_database?.points || []).slice(0, 4).map((_, index) => publicCardFields('page_coa_database', 'points', index))}
+                      {publicField('page_coa_database', 'CTA button EN', 'ctaButtonEn')}
+                      {publicField('page_coa_database', 'CTA button ES', 'ctaButtonEs')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Service Locations</h4>
+                      {publicField('page_service_locations', 'Hero title EN', 'heroTitleEn')}
+                      {publicField('page_service_locations', 'Hero title ES', 'heroTitleEs')}
+                      {publicTextArea('page_service_locations', 'Hero text EN', 'heroTextEn')}
+                      {publicTextArea('page_service_locations', 'Hero text ES', 'heroTextEs')}
+                      {publicField('page_service_locations', 'Coverage title EN', 'coverageTitleEn')}
+                      {publicField('page_service_locations', 'Coverage title ES', 'coverageTitleEs')}
+                      <h4 style={{ margin: '16px 0 12px 0', color: '#f8fafc', fontSize: '0.9rem' }}>Provinces</h4>
+                      {(publicPageSettings.page_service_locations?.provinces || []).slice(0, 7).map((_, index) => publicCardFields('page_service_locations', 'provinces', index, { labelEn: 'Label EN', labelEs: 'Label ES' }))}
+                      {publicTextArea('page_service_locations', 'Courier text EN', 'courierTextEn')}
+                      {publicTextArea('page_service_locations', 'Courier text ES', 'courierTextEs')}
+                      {publicField('page_service_locations', 'CTA button EN', 'ctaButtonEn')}
+                      {publicField('page_service_locations', 'CTA button ES', 'ctaButtonEs')}
+                    </div>
+
+                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Contact</h4>
+                      {publicField('page_contact', 'Hero kicker EN', 'heroKickerEn')}
+                      {publicField('page_contact', 'Hero kicker ES', 'heroKickerEs')}
+                      {publicField('page_contact', 'Hero title EN', 'heroTitleEn')}
+                      {publicField('page_contact', 'Hero title ES', 'heroTitleEs')}
+                      {publicTextArea('page_contact', 'Hero text EN', 'heroTextEn')}
+                      {publicTextArea('page_contact', 'Hero text ES', 'heroTextEs')}
+                      <h4 style={{ margin: '16px 0 12px 0', color: '#f8fafc', fontSize: '0.9rem' }}>Hero Points</h4>
+                      {(publicPageSettings.page_contact?.heroPoints || []).slice(0, 3).map((_, index) => publicCardFields('page_contact', 'heroPoints', index, { labelEn: 'Label EN', labelEs: 'Label ES' }))}
+                      {publicField('page_contact', 'Success title EN', 'successTitleEn')}
+                      {publicField('page_contact', 'Success title ES', 'successTitleEs')}
+                      {publicTextArea('page_contact', 'Success text EN', 'successTextEn')}
+                      {publicTextArea('page_contact', 'Success text ES', 'successTextEs')}
+                      {publicField('page_contact', 'Success button EN', 'successButtonEn')}
+                      {publicField('page_contact', 'Success button ES', 'successButtonEs')}
+                      {publicField('page_contact', 'Methods kicker EN', 'methodsKickerEn')}
+                      {publicField('page_contact', 'Methods kicker ES', 'methodsKickerEs')}
+                      {publicField('page_contact', 'Methods title EN', 'methodsTitleEn')}
+                      {publicField('page_contact', 'Methods title ES', 'methodsTitleEs')}
+                      {publicTextArea('page_contact', 'WhatsApp card text EN', 'whatsappTextEn')}
+                      {publicTextArea('page_contact', 'WhatsApp card text ES', 'whatsappTextEs')}
+                      {publicField('page_contact', 'WhatsApp button EN', 'whatsappButtonEn')}
+                      {publicField('page_contact', 'WhatsApp button ES', 'whatsappButtonEs')}
+                      {publicTextArea('page_contact', 'Email card text EN', 'emailTextEn')}
+                      {publicTextArea('page_contact', 'Email card text ES', 'emailTextEs')}
+                      {publicField('page_contact', 'Email button EN', 'emailButtonEn')}
+                      {publicField('page_contact', 'Email button ES', 'emailButtonEs')}
+                    </div>
+
                     <button onClick={handleSavePublicPages} disabled={cmsSaveLoading} className="admin-btn admin-btn-primary" style={{ padding: '12px', justifyContent: 'center', gridColumn: '1 / -1' }}>
                       {cmsSaveLoading ? 'Publishing...' : <><Save size={16} /> Publish Public Pages</>}
                     </button>
