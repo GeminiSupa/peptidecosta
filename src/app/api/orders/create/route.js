@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 import { agentWhatsAppNumber, selectWithOptionalPreferences, wantsOrderWhatsApp } from '@/lib/notificationPreferences.mjs';
+import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
 
 export const runtime = 'nodejs';
 // The post-order alerts run in `after()`, which is capped by this route's max
@@ -324,15 +325,26 @@ export async function POST(request) {
       }
     }
 
+    // A marketing tag must never cost us the sale. A free-text campaign name
+    // reaching a uuid column used to fail the whole insert, which broke
+    // checkout for every customer who arrived through that link.
+    const { order: orderRow, dropped: droppedAttribution } = sanitizeOrderAttribution(order);
+    if (droppedAttribution.length) {
+      console.warn(
+        '[orders/create] Dropped invalid attribution (order still saved):',
+        droppedAttribution.map(({ field, value }) => `${field}="${value}"`).join(', ')
+      );
+    }
+
     let { data, error } = await supabase
       .from('orders')
-      .insert(order)
+      .insert(orderRow)
       .select('id, order_number')
       .single();
 
-    if (error && isFkViolation(error) && order.affiliate_id) {
+    if (error && isFkViolation(error) && orderRow.affiliate_id) {
       console.warn('[orders/create] Affiliate FK failed, retrying without affiliate fields:', error.message);
-      const { affiliate_id, affiliate_commission_usd, affiliate_commission_crc, ...withoutAffiliate } = order;
+      const { affiliate_id, affiliate_commission_usd, affiliate_commission_crc, ...withoutAffiliate } = orderRow;
       ({ data, error } = await supabase
         .from('orders')
         .insert(withoutAffiliate)
