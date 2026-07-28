@@ -14,6 +14,12 @@ export const maxDuration = 60;
 const REQUIRED_FIELDS = ['order_number', 'customer_name', 'customer_phone', 'items'];
 /** No alert should be able to hold the background block hostage. */
 const ALERT_TIMEOUT_MS = 15000;
+/**
+ * The WhatsApp calls run before the response, so this is time the customer
+ * spends staring at a spinner. The order is already saved by then — if Meta is
+ * slow we give up and let the checkout finish.
+ */
+const WHATSAPP_TIMEOUT_MS = 6000;
 
 function isFkViolation(error) {
   const msg = error?.message || '';
@@ -116,7 +122,10 @@ async function recordNewOrderNotification(supabase, order, orderNumber) {
 async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!accessToken || !phoneNumberId) return;
+  if (!accessToken || !phoneNumberId) {
+    console.warn('[orders/create] Agent WhatsApp skipped: WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID not set');
+    return;
+  }
 
   const { data, error } = await selectWithOptionalPreferences(
     ['name', 'notifications_enabled', 'order_whatsapp_notifications', 'whatsapp_number'],
@@ -133,7 +142,12 @@ async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
     .filter((entry) => entry.phone)
     .filter((entry, index, all) => all.findIndex((other) => other.phone === entry.phone) === index);
 
-  if (recipients.length === 0) return;
+  if (recipients.length === 0) {
+    console.warn(`[orders/create] Agent WhatsApp skipped for ${orderNumber}: nobody has the alert switched on with a usable number`);
+    return;
+  }
+
+  console.log(`[orders/create] Sending agent WhatsApp for ${orderNumber} to ${recipients.length} recipient(s)`);
 
   const templateName = process.env.SALES_TEAM_WHATSAPP_TEMPLATE || 'alerta_nuevo_pedido';
   const templateLanguage = process.env.SALES_TEAM_WHATSAPP_TEMPLATE_LANGUAGE || 'es';
@@ -146,7 +160,7 @@ async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      signal: AbortSignal.timeout(ALERT_TIMEOUT_MS),
+      signal: AbortSignal.timeout(WHATSAPP_TIMEOUT_MS),
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to: phone,
@@ -188,10 +202,17 @@ async function sendCustomerOrderConfirmation(order, orderNumber) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
-  if (!customerPhone || !accessToken || !phoneNumberId) {
+  // Every one of these used to return in silence, which is why a missing
+  // customer confirmation looked identical to one that was never attempted.
+  if (!accessToken || !phoneNumberId) {
+    console.warn('[orders/create] Customer WhatsApp skipped: WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID not set');
     return;
   }
-  
+  if (!customerPhone) {
+    console.warn(`[orders/create] Customer WhatsApp skipped for ${orderNumber}: no phone on the order`);
+    return;
+  }
+
   // Format Costa Rica numbers if lacking country code
   let cleanPhone = customerPhone;
   if (cleanPhone.length === 8) cleanPhone = '506' + cleanPhone;
@@ -212,7 +233,7 @@ async function sendCustomerOrderConfirmation(order, orderNumber) {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      signal: AbortSignal.timeout(ALERT_TIMEOUT_MS),
+      signal: AbortSignal.timeout(WHATSAPP_TIMEOUT_MS),
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to: cleanPhone,
@@ -474,27 +495,29 @@ export async function POST(request) {
 
     // Execute post-order alerts in the background
     const baseUrl = new URL(request.url).origin;
-    // Run in parallel: when these were sequential, a stalled email consumed the
-    // whole background budget and the alerts behind it never ran at all.
+    // The email is delegated to another route, so it completes in its own
+    // invocation and survives whatever happens to this one. The WhatsApp calls
+    // talk to Meta directly, and in `after()` they produced no result and no
+    // log at all — while the identical call in /api/leads/capture, made from
+    // the request path, sends reliably. So they run here, before the response,
+    // capped tightly enough that Meta can never hold up a checkout.
+    const whatsappResults = await Promise.allSettled([
+      sendCustomerOrderConfirmation(order, data.order_number),
+      sendAgentOrderWhatsApp(supabase, order, data.order_number),
+    ]);
+    whatsappResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const label = index === 0 ? 'customer' : 'agent';
+        console.error(`[orders/create] ${label} WhatsApp error:`, result.reason?.message || String(result.reason));
+      }
+    });
+
     after(async () => {
-      const [emailResult, agentWhatsAppResult, customerResult] = await Promise.allSettled([
-        sendAdminOrderEmail(baseUrl, order, data.order_number),
-        sendAgentOrderWhatsApp(supabase, order, data.order_number),
-        sendCustomerOrderConfirmation(order, data.order_number),
-      ]);
-
-      if (emailResult.status === 'rejected') {
-        console.error('[orders/create] Background admin email alert error:', emailResult.reason);
-      } else {
+      try {
+        await sendAdminOrderEmail(baseUrl, order, data.order_number);
         console.log(`[orders/create] Admin order email dispatched for ${data.order_number}`);
-      }
-
-      if (agentWhatsAppResult.status === 'rejected') {
-        console.error('[orders/create] Background agent WhatsApp alert error:', agentWhatsAppResult.reason);
-      }
-
-      if (customerResult.status === 'rejected') {
-        console.error('[orders/create] Background customer alert error:', customerResult.reason);
+      } catch (err) {
+        console.error('[orders/create] Background admin email alert error:', err);
       }
     });
 
