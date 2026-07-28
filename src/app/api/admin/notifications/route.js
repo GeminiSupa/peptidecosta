@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { orderVisibleToAgent } from '@/lib/agentOrders';
 import { resolveAdminTabAccess } from '@/lib/adminModules';
+import { notificationsEnabled } from '@/lib/notificationPreferences.mjs';
 
 export const runtime = 'nodejs';
 
@@ -44,6 +45,7 @@ async function dismissKeys(supabase, adminUserId, keys) {
 
 const NOTIFICATION_TYPE_TABS = {
   low_inventory: 'spreadsheet',
+  new_order: 'orders',
   order_save_failed: 'orders',
   payment_received: 'orders',
   pending_order: 'orders',
@@ -239,6 +241,11 @@ async function buildNotifications(supabase, profile = null) {
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
+
+  // Master switch: this member has asked for no notifications at all.
+  if (!notificationsEnabled(auth.profile)) {
+    return NextResponse.json({ ok: true, notifications: [], unreadCount: 0 });
+  }
 
   try {
     const supabase = getSupabaseAdmin();

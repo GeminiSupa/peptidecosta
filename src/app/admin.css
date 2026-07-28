@@ -8118,6 +8118,44 @@
 
     .order-mobile-claim-zone {
         padding: 0 14px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .order-mobile-agent-label {
+        font-size: 0.68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #94a3b8;
+    }
+
+    /* Full-width and 48px tall so it is a comfortable thumb target on a phone,
+       which is the whole point of this control existing. */
+    .order-mobile-agent-select {
+        width: 100%;
+        min-height: 48px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        font-weight: 800;
+        background: rgba(255, 255, 255, 0.03);
+        color: #94a3b8;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: linear-gradient(45deg, transparent 50%, #94a3b8 50%), linear-gradient(135deg, #94a3b8 50%, transparent 50%);
+        background-position: calc(100% - 18px) 21px, calc(100% - 13px) 21px;
+        background-size: 5px 5px, 5px 5px;
+        background-repeat: no-repeat;
+    }
+
+    .order-mobile-agent-select.is-assigned {
+        background-color: rgba(168, 85, 247, 0.15);
+        color: #c084fc;
+        border-color: rgba(168, 85, 247, 0.3);
+        background-image: linear-gradient(45deg, transparent 50%, #c084fc 50%), linear-gradient(135deg, #c084fc 50%, transparent 50%);
     }
 
     .order-mobile-claim-primary {

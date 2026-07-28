@@ -37,7 +37,12 @@ export async function GET(request) {
     return new NextResponse(challenge, { status: 200 });
   }
 
-  console.warn('[WhatsApp Webhook] ❌ Verification failed — token mismatch');
+  // A bare GET with no handshake params is a bot scanning a public URL, not a
+  // misconfiguration. Logging both cases as "token mismatch" buried the real
+  // signal under dozens of false alarms an hour.
+  if (mode === 'subscribe') {
+    console.warn('[WhatsApp Webhook] ❌ Verification failed — token mismatch');
+  }
   return NextResponse.json({ error: 'Verification failed' }, { status: 403 });
 }
 

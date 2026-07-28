@@ -4691,6 +4691,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             agents={agents}
             formatCustomerIdType={formatCustomerIdType}
             loggedInEmailRef={loggedInEmail}
+            currentAgentName={adminProfile?.name || ''}
           />
           </ErrorBoundary>
         )}

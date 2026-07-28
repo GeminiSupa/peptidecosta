@@ -8,6 +8,16 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 // to ensure they are always fresh in serverless environments.
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
+
+// Nodemailer's defaults (2 min to connect, 10 min socket) outlive any
+// serverless invocation, so a stalled handshake reads as "no email was sent"
+// with nothing in the logs. Fail fast and loudly instead.
+const SMTP_TIMEOUTS = {
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 20000,
+};
 
 function getOrderSmtpConfig() {
   const host = process.env.ORDER_SMTP_HOST || process.env.SMTP_HOST;
@@ -535,7 +545,8 @@ export async function POST(request) {
       auth: {
         user: smtp.user,
         pass: smtp.pass,
-      }
+      },
+      ...SMTP_TIMEOUTS,
     });
 
     const results = {

@@ -8,6 +8,12 @@ import { LIVE_SITE_URL } from '@/lib/publicUrl';
 export const maxDuration = 60; // Vercel limit
 export const dynamic = 'force-dynamic';
 
+// This cron was returning 500 on every run because it filtered on
+// `abandoned_carts.is_recovered`, a column that does not exist. While it was
+// down a backlog built up, so sends are capped per run: draining it as one
+// burst is exactly the pattern that costs a WhatsApp number its quality rating.
+const MAX_RECOVERY_SENDS_PER_RUN = 3;
+
 export async function GET(request) {
   // Optional security: Ensure cron is called via secure cron secret in production
   const authHeader = request.headers.get('authorization');
@@ -29,7 +35,9 @@ export async function GET(request) {
   const { data: abandonedCarts, error } = await supabaseAdmin
     .from('abandoned_carts')
     .select('*')
-    .eq('is_recovered', false)
+    // `status` is the real source of truth — markAbandonedCartsConverted sets
+    // it to 'converted', and the paid-order sweep already queries on it.
+    .eq('status', 'active')
     .eq('recovery_whatsapp_sent', false)
     .lt('created_at', thirtyMinsAgo)
     .gt('created_at', twentyFourHoursAgo);
@@ -82,6 +90,8 @@ export async function GET(request) {
 
   let skippedNoConsent = 0;
   for (const cart of recoverableCarts) {
+    if (sentCount >= MAX_RECOVERY_SENDS_PER_RUN) break;
+
     // We can only send a recovery message if we captured a phone number
     if (!cart.customer_phone) continue;
 

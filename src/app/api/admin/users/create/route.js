@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { writeWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 
 export async function POST(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
@@ -8,7 +9,11 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const { email, password, name, permissions, is_superadmin, commission_rate, weekly_salary, salary_currency, commission_structure, avatar_url, order_email_notifications } = body;
+    const {
+      email, password, name, permissions, is_superadmin, commission_rate, weekly_salary,
+      salary_currency, commission_structure, avatar_url,
+      notifications_enabled, order_email_notifications, order_whatsapp_notifications, whatsapp_number,
+    } = body;
 
     if (!email || !password || !name) {
       return NextResponse.json({ error: 'Email, password, and name are required' }, { status: 400 });
@@ -42,16 +47,23 @@ export async function POST(request) {
       weekly_salary: weekly_salary !== undefined ? parseFloat(weekly_salary) : 0,
       salary_currency: salary_currency || 'USD',
       commission_structure: commission_structure || null,
-      // New agents receive the new-order email unless explicitly opted out.
+      // Notifications are on unless explicitly switched off, except WhatsApp,
+      // which is opt-in so adding a member never starts messaging their phone.
+      notifications_enabled: notifications_enabled !== false,
       order_email_notifications: order_email_notifications !== false,
+      order_whatsapp_notifications: order_whatsapp_notifications === true,
+      whatsapp_number: whatsapp_number ? String(whatsapp_number).trim() : null,
     };
     if (avatar_url) profileRow.avatar_url = avatar_url;
 
-    const { data: profileData, error: profileError } = await supabaseAdmin
-      .from('admin_profiles')
-      .insert([profileRow])
-      .select()
-      .single();
+    const { data: profileData, error: profileError, droppedColumns } = await writeWithOptionalPreferences(
+      profileRow,
+      (row) => supabaseAdmin.from('admin_profiles').insert([row]).select().single()
+    );
+
+    if (droppedColumns?.length) {
+      console.warn('[admin/users/create] Notification columns missing, run add-notification-preferences-to-profiles.sql:', droppedColumns.join(', '));
+    }
 
     if (profileError) {
       console.error('Error creating admin profile:', profileError);

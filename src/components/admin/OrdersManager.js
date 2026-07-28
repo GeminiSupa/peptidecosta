@@ -171,7 +171,8 @@ export default function OrdersManager({
   handleDeleteOrder,
   agents,
   formatCustomerIdType,
-  loggedInEmailRef
+  loggedInEmailRef,
+  currentAgentName
 }) {
   const scopedOrders = visibleOrders;
   const filteredOrders = scopedOrders.filter(o => {
@@ -229,9 +230,24 @@ export default function OrdersManager({
     orderDbId: order.id,
     cartItems: order.cart_data || [],
   });
+  // Claim writes the same value the dropdown offers — the agent's display name.
+  // Storing the raw email instead left the select showing "-- Unassigned --" on
+  // an order that was in fact claimed.
   const claimOrder = (orderId) => {
-    const claimEmail = loggedInEmailRef?.current || localStorage.getItem('admin_email') || 'info@peptidescostarica.net';
-    handleOrderSalesAgentUpdate(orderId, claimEmail);
+    const email = loggedInEmailRef?.current || (typeof window !== 'undefined' ? localStorage.getItem('admin_email') : '') || '';
+    const matchedAgent = agents.find((agent) => {
+      const value = String(agent || '').trim().toLowerCase();
+      const claimEmail = String(email).trim().toLowerCase();
+      return value === claimEmail || value === claimEmail.split('@')[0];
+    });
+    handleOrderSalesAgentUpdate(orderId, matchedAgent || currentAgentName || email || 'info@peptidescostarica.net');
+  };
+
+  /** Orders claimed before this fix hold an email, which is not in `agents`. */
+  const agentOptionsFor = (order) => {
+    const current = String(order?.sales_agent || '').trim();
+    if (!current || agents.some((agent) => String(agent).trim() === current)) return agents;
+    return [current, ...agents];
   };
 
   return (
@@ -382,8 +398,22 @@ export default function OrdersManager({
                     {order.sales_agent && <span className="order-mobile-agent">{order.sales_agent}</span>}
                   </div>
                 </button>
-                {!order.sales_agent && (
-                  <div className="order-mobile-claim-zone">
+                <div className="order-mobile-claim-zone">
+                  <label className="order-mobile-agent-label" htmlFor={`order-agent-${order.id}`}>
+                    Order owner
+                  </label>
+                  <select
+                    id={`order-agent-${order.id}`}
+                    className={`order-mobile-agent-select${order.sales_agent ? ' is-assigned' : ''}`}
+                    value={order.sales_agent || ''}
+                    onChange={(e) => handleOrderSalesAgentUpdate(order.id, e.target.value)}
+                  >
+                    <option value="">-- Unassigned --</option>
+                    {agentOptionsFor(order).map((agent) => (
+                      <option key={agent} value={agent}>{agent}</option>
+                    ))}
+                  </select>
+                  {!order.sales_agent && (
                     <button
                       type="button"
                       className="admin-btn admin-btn-primary order-mobile-claim-primary"
@@ -392,8 +422,8 @@ export default function OrdersManager({
                     >
                       Claim this order
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
                 <div className="order-mobile-actions">
                   {group.id === 'needs_payment' && (
                     <button type="button" className="admin-btn admin-btn-secondary" onClick={() => openPaymentReminder(order)}>
@@ -592,7 +622,7 @@ export default function OrdersManager({
                           }}
                         >
                           <option value="">-- Unassigned --</option>
-                          {agents.map(agent => (
+                          {agentOptionsFor(order).map(agent => (
                             <option key={agent} value={agent}>{agent}</option>
                           ))}
                         </select>

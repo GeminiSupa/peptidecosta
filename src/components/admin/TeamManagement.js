@@ -1,11 +1,36 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
-import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp, Camera, Upload, Mail } from 'lucide-react';
+import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp, Camera, Upload, Mail, Bell, MessageCircle } from 'lucide-react';
 import AgentDashboard from './AgentDashboard';
 import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { getOrderSalesAmounts, isCommissionEligibleOrder, orderBelongsToAgent } from '@/lib/agentOrders';
 import { ASSIGNABLE_ADMIN_MODULES } from '@/lib/adminModules';
+
+/** One labelled on/off row in the member notification panel. */
+function NotificationToggle({ icon, title, hint, checked, onChange, activeColor = '#38bdf8' }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '10px 0' }}>
+      <div>
+        <div style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#e2e8f0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {icon} {title}
+        </div>
+        <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '3px 0 0 0' }}>{hint}</p>
+      </div>
+      <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={e => onChange(e.target.checked)}
+          style={{ opacity: 0, width: 0, height: 0 }}
+        />
+        <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: checked ? activeColor : 'rgba(255,255,255,0.1)', borderRadius: '24px', transition: '0.3s' }}>
+          <span style={{ position: 'absolute', height: '18px', width: '18px', left: checked ? '22px' : '3px', bottom: '3px', backgroundColor: 'white', borderRadius: '50%', transition: '0.3s' }} />
+        </span>
+      </label>
+    </div>
+  );
+}
 
 export default function TeamManagement({ currentUserProfile, currentUserEmail, onTeamChanged }) {
   const [users, setUsers] = useState([]);
@@ -43,7 +68,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [formSalaryCurrency, setFormSalaryCurrency] = useState('USD');
   const [formCommissionStructure, setFormCommissionStructure] = useState('');
   const [formAvatarUrl, setFormAvatarUrl] = useState('');
+  const [formNotificationsEnabled, setFormNotificationsEnabled] = useState(true);
   const [formOrderEmails, setFormOrderEmails] = useState(true);
+  const [formOrderWhatsApp, setFormOrderWhatsApp] = useState(false);
+  const [formWhatsAppNumber, setFormWhatsAppNumber] = useState('');
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState('');
@@ -260,7 +288,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormSalaryCurrency(user.salary_currency || 'USD');
       setFormCommissionStructure(user.commission_structure || '');
       setFormAvatarUrl(user.avatar_url || '');
+      setFormNotificationsEnabled(user.notifications_enabled !== false);
       setFormOrderEmails(user.order_email_notifications !== false);
+      setFormOrderWhatsApp(user.order_whatsapp_notifications === true);
+      setFormWhatsAppNumber(user.whatsapp_number || '');
     } else {
       setEditingUserId(null);
       setFormEmail('');
@@ -273,7 +304,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormSalaryCurrency('USD');
       setFormCommissionStructure('');
       setFormAvatarUrl('');
+      setFormNotificationsEnabled(true);
       setFormOrderEmails(true);
+      setFormOrderWhatsApp(false);
+      setFormWhatsAppNumber('');
     }
     setIsModalOpen(true);
   };
@@ -328,7 +362,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             salary_currency: formSalaryCurrency,
             commission_structure: formCommissionStructure,
             avatar_url: formAvatarUrl || null,
-            order_email_notifications: formOrderEmails
+            notifications_enabled: formNotificationsEnabled,
+            order_email_notifications: formOrderEmails,
+            order_whatsapp_notifications: formOrderWhatsApp,
+            whatsapp_number: formWhatsAppNumber
           })
         });
         const data = await res.json();
@@ -349,7 +386,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             salary_currency: formSalaryCurrency,
             commission_structure: formCommissionStructure,
             avatar_url: formAvatarUrl || undefined,
-            order_email_notifications: formOrderEmails
+            notifications_enabled: formNotificationsEnabled,
+            order_email_notifications: formOrderEmails,
+            order_whatsapp_notifications: formOrderWhatsApp,
+            whatsapp_number: formWhatsAppNumber
           })
         });
         const data = await res.json();
@@ -1160,17 +1200,57 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                 </div>
 
                 <div style={{ background: 'rgba(0, 0, 0, 0.2)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: '24px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div>
-                      <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={16} style={{ color: '#38bdf8' }} /> New Order Emails</h3>
-                      <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '4px 0 0 0' }}>Emails this member every time an order comes in. On by default for new members.</p>
-                    </div>
-                    <label className="toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
-                      <input type="checkbox" checked={formOrderEmails} onChange={e => setFormOrderEmails(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
-                      <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: formOrderEmails ? '#38bdf8' : 'rgba(255,255,255,0.1)', borderRadius: '24px', transition: '0.3s' }}>
-                        <span style={{ position: 'absolute', height: '18px', width: '18px', left: formOrderEmails ? '22px' : '3px', bottom: '3px', backgroundColor: 'white', borderRadius: '50%', transition: '0.3s' }} />
-                      </span>
-                    </label>
+                  <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Bell size={16} style={{ color: '#38bdf8' }} /> Notifications
+                  </h3>
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 16px 0' }}>What this member gets told when something happens.</p>
+
+                  <NotificationToggle
+                    icon={<Bell size={15} style={{ color: formNotificationsEnabled ? '#38bdf8' : '#64748b' }} />}
+                    title="Receive notifications"
+                    hint="Master switch. Off means nothing at all — no bell, no email, no WhatsApp."
+                    checked={formNotificationsEnabled}
+                    onChange={setFormNotificationsEnabled}
+                  />
+
+                  <div style={{ opacity: formNotificationsEnabled ? 1 : 0.4, pointerEvents: formNotificationsEnabled ? 'auto' : 'none', marginTop: '4px' }}>
+                    <NotificationToggle
+                      icon={<Mail size={15} style={{ color: formOrderEmails ? '#38bdf8' : '#64748b' }} />}
+                      title="New order emails"
+                      hint="Emails this member every time an order comes in. On by default."
+                      checked={formOrderEmails}
+                      onChange={setFormOrderEmails}
+                    />
+
+                    <NotificationToggle
+                      icon={<MessageCircle size={15} style={{ color: formOrderWhatsApp ? '#22c55e' : '#64748b' }} />}
+                      title="New order WhatsApp"
+                      hint="Sends a WhatsApp alert to this member's own number. Off by default."
+                      checked={formOrderWhatsApp}
+                      onChange={setFormOrderWhatsApp}
+                      activeColor="#22c55e"
+                    />
+
+                    {formOrderWhatsApp && (
+                      <div style={{ paddingTop: '10px' }}>
+                        <label style={{ display: 'block', fontSize: '0.72rem', color: '#94a3b8', marginBottom: '6px', fontWeight: 'bold' }}>
+                          WhatsApp number (with country code)
+                        </label>
+                        <input
+                          type="tel"
+                          className="admin-input"
+                          value={formWhatsAppNumber}
+                          onChange={e => setFormWhatsAppNumber(e.target.value)}
+                          placeholder="50688881234"
+                          style={{ width: '100%' }}
+                        />
+                        {!formWhatsAppNumber.replace(/\D/g, '') && (
+                          <p style={{ fontSize: '0.72rem', color: '#fbbf24', margin: '6px 0 0 0' }}>
+                            Without a number this switch does nothing.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 

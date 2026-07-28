@@ -2,11 +2,17 @@ import { after, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
+import { agentWhatsAppNumber, selectWithOptionalPreferences, wantsOrderWhatsApp } from '@/lib/notificationPreferences.mjs';
 
 export const runtime = 'nodejs';
+// The post-order alerts run in `after()`, which is capped by this route's max
+// duration. The default was short enough that a slow SMTP handshake could eat
+// the whole budget and silently drop every alert.
+export const maxDuration = 60;
 
 const REQUIRED_FIELDS = ['order_number', 'customer_name', 'customer_phone', 'items'];
-const DEFAULT_SALES_TEAM_WHATSAPP_NUMBERS = ['50684046973', '50660604775', '18314715559'];
+/** No alert should be able to hold the background block hostage. */
+const ALERT_TIMEOUT_MS = 15000;
 
 function isFkViolation(error) {
   const msg = error?.message || '';
@@ -65,6 +71,7 @@ async function sendAdminOrderEmail(baseUrl, order, orderNumber) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(buildOrderNotificationPayload(order, orderNumber)),
+    signal: AbortSignal.timeout(ALERT_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -73,34 +80,72 @@ async function sendAdminOrderEmail(baseUrl, order, orderNumber) {
   }
 }
 
-async function sendSalesOrderAlerts(order, orderNumber) {
-  const recipients = [
-    ...DEFAULT_SALES_TEAM_WHATSAPP_NUMBERS,
-    ...(process.env.SALES_TEAM_WHATSAPP_NUMBERS || '').split(','),
-  ]
-    .map((phone) => phone.replace(/\D/g, ''))
-    .filter(Boolean)
-    .filter((phone, index, all) => all.indexOf(phone) === index);
+/**
+ * The durable "a new order landed" record behind the admin bell.
+ *
+ * This is written on the request path, not in `after()`, precisely because the
+ * email and WhatsApp alerts are best-effort: if both fail, the team still has
+ * one notification that cannot be lost to a timeout. The dynamic pending-order
+ * badge does not cover this — it vanishes the moment the status moves off
+ * "Pending", and never appears for card orders ("Pending - Card").
+ */
+async function recordNewOrderNotification(supabase, order, orderNumber) {
+  const itemCount = (order.items || []).reduce((total, item) => total + Number(item.qty || 0), 0);
+  const method = String(order.payment_method || 'order').toUpperCase();
+
+  const { error } = await supabase.from('admin_notifications').insert({
+    type: 'new_order',
+    title: `New order ${orderNumber} (${method})`,
+    body: `${order.customer_name || 'Customer'} — ${formatSalesAlertTotal(order)} · ${itemCount} ${itemCount === 1 ? 'unit' : 'units'}`.slice(0, 500),
+    link_tab: 'orders',
+    link_ref: orderNumber,
+  });
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * New-order WhatsApp alerts for team members who asked for them.
+ *
+ * The previous version blasted three hardcoded company numbers — one of which
+ * was the business's own WhatsApp number, which Meta rejects on every send.
+ * This is opt-in per member and goes to that member's own number, so it sends
+ * nothing at all until someone switches it on in Team Management.
+ */
+async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!accessToken || !phoneNumberId) return;
 
-  if (recipients.length === 0 || !accessToken || !phoneNumberId) {
-    console.warn('[orders/create] Sales WhatsApp alert skipped: configuration is incomplete.');
-    return;
-  }
+  const { data, error } = await selectWithOptionalPreferences(
+    ['name', 'notifications_enabled', 'order_whatsapp_notifications', 'whatsapp_number'],
+    (columns) => supabase.from('admin_profiles').select(columns)
+  );
+
+  if (error) throw new Error(error.message);
+
+  // Before the migration the opt-in column is absent, so nobody qualifies and
+  // this sends nothing at all.
+  const recipients = (data || [])
+    .filter(wantsOrderWhatsApp)
+    .map((profile) => ({ name: profile.name, phone: agentWhatsAppNumber(profile) }))
+    .filter((entry) => entry.phone)
+    .filter((entry, index, all) => all.findIndex((other) => other.phone === entry.phone) === index);
+
+  if (recipients.length === 0) return;
 
   const templateName = process.env.SALES_TEAM_WHATSAPP_TEMPLATE || 'alerta_nuevo_pedido';
   const templateLanguage = process.env.SALES_TEAM_WHATSAPP_TEMPLATE_LANGUAGE || 'es';
-  const itemCount = order.items.reduce((total, item) => total + Number(item.qty || 0), 0);
-  const itemLabel = `${itemCount} ${itemCount === 1 ? 'articulo' : 'articulos'}`;
+  const itemCount = (order.items || []).reduce((total, item) => total + Number(item.qty || 0), 0);
 
-  const results = await Promise.allSettled(recipients.map(async (phone) => {
+  const results = await Promise.allSettled(recipients.map(async ({ phone }) => {
     const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(ALERT_TIMEOUT_MS),
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to: phone,
@@ -114,29 +159,25 @@ async function sendSalesOrderAlerts(order, orderNumber) {
               { type: 'text', text: orderNumber },
               { type: 'text', text: `${order.customer_name} - ${order.customer_phone || 'N/A'}` },
               { type: 'text', text: formatSalesAlertTotal(order) },
-              { type: 'text', text: itemLabel },
+              { type: 'text', text: `${itemCount} ${itemCount === 1 ? 'articulo' : 'articulos'}` },
             ],
           }],
         },
       }),
     });
     const result = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      throw new Error(result?.error?.message || `Meta API returned ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error(result?.error?.message || `Meta API returned ${response.status}`);
     return { phone, messageId: result.messages?.[0]?.id };
   }));
 
   results.forEach((result, index) => {
     if (result.status === 'fulfilled') {
-      console.log('[orders/create] Sales WhatsApp alert sent:', result.value);
+      console.log('[orders/create] Agent WhatsApp alert sent:', result.value);
     } else {
-      console.error(
-        '[orders/create] Sales WhatsApp alert failed:',
-        { phone: recipients[index], error: result.reason?.message || String(result.reason) }
-      );
+      console.error('[orders/create] Agent WhatsApp alert failed:', {
+        agent: recipients[index].name,
+        error: result.reason?.message || String(result.reason),
+      });
     }
   });
 }
@@ -157,6 +198,12 @@ async function sendCustomerOrderConfirmation(order, orderNumber) {
   // Use Spanish by default, or English if currency is USD
   const templateLanguage = order.currency === 'USD' ? 'en' : 'es';
 
+  // Cart items are stored as { product, qty, price }. Reading `name`/`quantity`
+  // made every confirmation say "1x Producto" instead of what was ordered.
+  const itemSummary = (order.items || [])
+    .map((item) => `${Number(item.qty) || 1}x ${item.product || item.name || 'Producto'}`)
+    .join(', ');
+
   try {
     const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
       method: 'POST',
@@ -164,6 +211,7 @@ async function sendCustomerOrderConfirmation(order, orderNumber) {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(ALERT_TIMEOUT_MS),
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to: cleanPhone,
@@ -176,7 +224,7 @@ async function sendCustomerOrderConfirmation(order, orderNumber) {
             parameters: [
               { type: 'text', text: order.customer_name || 'Cliente' },
               { type: 'text', text: orderNumber },
-              { type: 'text', text: order.items?.map(i => `${i.quantity || 1}x ${i.name || i.product_name || 'Producto'}`).join(', ') || 'Productos varios' },
+              { type: 'text', text: itemSummary || 'Productos varios' },
               { type: 'text', text: formatSalesAlertTotal(order) },
             ],
           }],
@@ -308,6 +356,14 @@ export async function POST(request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Raise the bell before anything that can fail slowly. Email and WhatsApp
+    // are best-effort; this row is the one alert the team is guaranteed to get.
+    try {
+      await recordNewOrderNotification(supabase, order, data.order_number);
+    } catch (notifyErr) {
+      console.error('[orders/create] New order notification insert failed:', notifyErr.message);
+    }
+
     // --- NEW: Deduct Inventory & Check Low Stock Threshold ---
     try {
       for (const item of order.items) {
@@ -406,23 +462,27 @@ export async function POST(request) {
 
     // Execute post-order alerts in the background
     const baseUrl = new URL(request.url).origin;
+    // Run in parallel: when these were sequential, a stalled email consumed the
+    // whole background budget and the alerts behind it never ran at all.
     after(async () => {
-      try {
-        await sendAdminOrderEmail(baseUrl, order, data.order_number);
-      } catch (err) {
-        console.error('[orders/create] Background admin email alert error:', err);
+      const [emailResult, agentWhatsAppResult, customerResult] = await Promise.allSettled([
+        sendAdminOrderEmail(baseUrl, order, data.order_number),
+        sendAgentOrderWhatsApp(supabase, order, data.order_number),
+        sendCustomerOrderConfirmation(order, data.order_number),
+      ]);
+
+      if (emailResult.status === 'rejected') {
+        console.error('[orders/create] Background admin email alert error:', emailResult.reason);
+      } else {
+        console.log(`[orders/create] Admin order email dispatched for ${data.order_number}`);
       }
 
-      try {
-        await sendSalesOrderAlerts(order, data.order_number);
-      } catch (err) {
-        console.error('[orders/create] Background sales alert error:', err);
+      if (agentWhatsAppResult.status === 'rejected') {
+        console.error('[orders/create] Background agent WhatsApp alert error:', agentWhatsAppResult.reason);
       }
-      
-      try {
-        await sendCustomerOrderConfirmation(order, data.order_number);
-      } catch (err) {
-        console.error('[orders/create] Background customer alert error:', err);
+
+      if (customerResult.status === 'rejected') {
+        console.error('[orders/create] Background customer alert error:', customerResult.reason);
       }
     });
 

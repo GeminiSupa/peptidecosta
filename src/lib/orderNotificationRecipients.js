@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { selectWithOptionalPreferences, wantsOrderEmail } from '@/lib/notificationPreferences.mjs';
 
 /**
  * Recipients of the "New Order Received" admin email.
@@ -39,19 +40,26 @@ export async function getOrderNotificationRecipients() {
   let agents = [];
   try {
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from('admin_profiles')
-      .select('email, order_email_notifications');
+
+    // Ask for the preference columns, but never let a missing one cost the team
+    // their order emails — or resurrect an opt-out whose column does exist.
+    const { data, error, droppedColumns } = await selectWithOptionalPreferences(
+      ['email', 'notifications_enabled', 'order_email_notifications'],
+      (columns) => supabase.from('admin_profiles').select(columns)
+    );
+
+    if (droppedColumns?.length) {
+      console.warn('[Order notification] Missing preference columns, run add-notification-preferences-to-profiles.sql:', droppedColumns.join(', '));
+    }
 
     if (error) throw new Error(error.message);
 
     // A null flag counts as subscribed — only an explicit false opts an agent out.
     agents = (data || [])
-      .filter((profile) => profile?.email && profile.order_email_notifications !== false)
+      .filter((profile) => profile?.email && wantsOrderEmail(profile))
       .map((profile) => profile.email.trim());
   } catch (err) {
-    // Falls back to the env list alone. Most likely cause is the
-    // add-order-email-notifications-to-profiles.sql migration not having run yet.
+    // Falls back to the env list alone, so the owner inboxes still get the mail.
     console.warn('[Order notification] Could not load agent recipients:', err.message);
   }
 

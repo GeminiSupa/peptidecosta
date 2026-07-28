@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { writeWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 
 export async function PUT(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
@@ -8,7 +9,11 @@ export async function PUT(request) {
 
   try {
     const body = await request.json();
-    const { userId, email, password, name, permissions, is_superadmin, commission_rate, weekly_salary, salary_currency, commission_structure, avatar_url, order_email_notifications } = body;
+    const {
+      userId, email, password, name, permissions, is_superadmin, commission_rate, weekly_salary,
+      salary_currency, commission_structure, avatar_url,
+      notifications_enabled, order_email_notifications, order_whatsapp_notifications, whatsapp_number,
+    } = body;
 
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
@@ -38,15 +43,20 @@ export async function PUT(request) {
     if (salary_currency !== undefined) updateData.salary_currency = salary_currency;
     if (commission_structure !== undefined) updateData.commission_structure = commission_structure;
     if (avatar_url !== undefined) updateData.avatar_url = avatar_url || null;
+    if (notifications_enabled !== undefined) updateData.notifications_enabled = Boolean(notifications_enabled);
     if (order_email_notifications !== undefined) updateData.order_email_notifications = Boolean(order_email_notifications);
+    if (order_whatsapp_notifications !== undefined) updateData.order_whatsapp_notifications = Boolean(order_whatsapp_notifications);
+    if (whatsapp_number !== undefined) updateData.whatsapp_number = whatsapp_number ? String(whatsapp_number).trim() : null;
 
     if (Object.keys(updateData).length > 0) {
-      const { data: profileData, error: profileError } = await supabaseAdmin
-        .from('admin_profiles')
-        .update(updateData)
-        .eq('user_id', userId)
-        .select()
-        .single();
+      const { data: profileData, error: profileError, droppedColumns } = await writeWithOptionalPreferences(
+        updateData,
+        (row) => supabaseAdmin.from('admin_profiles').update(row).eq('user_id', userId).select().single()
+      );
+
+      if (droppedColumns?.length) {
+        console.warn('[admin/users/update] Notification columns missing, run add-notification-preferences-to-profiles.sql:', droppedColumns.join(', '));
+      }
 
       if (profileError) {
         console.error('Error updating admin profile:', profileError);
