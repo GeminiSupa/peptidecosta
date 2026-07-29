@@ -841,7 +841,15 @@ export default function CatalogPage() {
     // Cart loaded from localStorage
     const savedCart = localStorage.getItem('cart');
     if (savedCart) {
-      try { setCart(JSON.parse(savedCart)); } catch(e) {}
+      // Drop BAC sizes that are no longer sold. A cart saved while the 10ml was
+      // still being offered would otherwise check out at a price for a product
+      // that is not for sale.
+      try {
+        const parsed = JSON.parse(savedCart);
+        setCart(Array.isArray(parsed)
+          ? parsed.filter((item) => !isBacWater(item?.product) || isSellableBacWater(item.product))
+          : parsed);
+      } catch(e) {}
     }
 
     // Session ID loaded from localStorage
@@ -1585,10 +1593,25 @@ export default function CatalogPage() {
     { en: 'Recovery', es: 'Recuperación' }
   ];
 
+  /**
+   * Whether a product may appear anywhere a customer can buy from.
+   *
+   * There are three separate lists — the grid, the search dropdown and the cart
+   * suggestions — and each used to apply its own filters. Only the grid knew
+   * that just the 3ml water is sold, so "BAC Water 10ml" stayed hidden from the
+   * shelf while still being offered in search and recommended inside the cart,
+   * where one click added a product that is not for sale.
+   */
+  const isListableProduct = (p) => {
+    if (!p?.product) return false;
+    if (hiddenProducts.includes(p.product)) return false;
+    if (isBacWater(p.product) && !isSellableBacWater(p.product)) return false;
+    return true;
+  };
+
   const getSearchSuggestions = () => {
     const query = searchQuery.toLowerCase().trim();
-    // Exclude products hidden from the catalog by admin
-    const visible = products.filter(p => !hiddenProducts.includes(p.product));
+    const visible = products.filter(isListableProduct);
     if (!query) {
       return visible.slice(0, 3);
     }
@@ -1626,6 +1649,14 @@ export default function CatalogPage() {
 
   // Cart operations
   const addToCart = (productObj) => {
+    // Last line of defence. Filtering the three product lists is what a customer
+    // sees, but a stale tab, a recovered cart or a saved localStorage cart can
+    // still carry a BAC size that is not for sale.
+    if (isBacWater(productObj?.product) && !isSellableBacWater(productObj.product)) {
+      console.warn('[catalog] Refused a BAC size that is not for sale:', productObj?.product);
+      return;
+    }
+
     const existing = cart.find(item => item.product === productObj.product);
     const newQty = existing ? existing.qty + 1 : 1;
 
@@ -1755,10 +1786,10 @@ export default function CatalogPage() {
     const cartProductNames = new Set(cart.map(c => c.product));
     const cartCategories = new Set(cart.map(c => c.category).filter(Boolean));
     
-    // Find in-stock products from same categories, not already in cart (exclude admin-hidden)
+    // Find in-stock products from same categories, not already in cart
     let suggestions = products.filter(p =>
       !cartProductNames.has(p.product) &&
-      !hiddenProducts.includes(p.product) &&
+      isListableProduct(p) &&
       isInStock(p.status) &&
       cartCategories.has(p.category)
     );
@@ -1767,7 +1798,7 @@ export default function CatalogPage() {
     if (suggestions.length < 3) {
       const more = products.filter(p =>
         !cartProductNames.has(p.product) &&
-        !hiddenProducts.includes(p.product) &&
+        isListableProduct(p) &&
         isInStock(p.status) &&
         !cartCategories.has(p.category)
       );
@@ -2672,11 +2703,9 @@ export default function CatalogPage() {
 
   // Filtering + Sorting Logic
   const baseFilteredProducts = products.filter(p => {
-    // 0. Hidden by admin — kept in the database (can be restocked) but removed from the storefront
-    if (hiddenProducts.includes(p.product)) return false;
-    // 0b. Only the 3ml BAC water is sold. The 2ml/10ml rows are hidden in admin
-    // too, but this keeps a manual step from being load-bearing for pricing.
-    if (isBacWater(p.product) && !isSellableBacWater(p.product)) return false;
+    // 0. Admin-hidden rows, and BAC sizes that are not sold. Shared with the
+    // search dropdown and the cart suggestions so the three lists cannot drift.
+    if (!isListableProduct(p)) return false;
     // 1. Search Query
     const nameMatch = (p.product || '').toLowerCase().includes(searchQuery.toLowerCase());
     const catMatch = (p.category || '').toLowerCase().includes(searchQuery.toLowerCase());
