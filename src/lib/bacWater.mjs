@@ -6,18 +6,24 @@
  * means four rules have to hold identically everywhere a total is computed
  * (cart UI, WhatsApp checkout, card checkout, PayPal create + approve):
  *
- *   1. One free vial per peptide purchased. Syringes and other reconstitution
- *      supplies do NOT earn a free vial — only peptides do.
- *   2. BAC vials beyond that free allowance cost BAC_WATER_UNIT_PRICE_USD each.
+ *   1. One free vial per peptide purchased, given automatically. Syringes and
+ *      other reconstitution supplies do NOT earn a free vial — only peptides do.
+ *   2. The gift is separate from the cart. A vial the customer puts in the cart
+ *      is an EXTRA, on top of their free ones, and costs
+ *      BAC_WATER_UNIT_PRICE_USD. Buy one peptide and add one vial and you
+ *      receive two: one free, one paid.
  *   3. BAC water never counts toward the volume discount, and the volume
  *      discount never applies to the BAC charge. It is a flat side charge.
- *   4. A cart containing only BAC water must hold at least
- *      BAC_WATER_ONLY_MIN_UNITS vials before it can check out.
+ *   4. A cart containing only BAC water has no peptides to earn a gift, so
+ *      every vial is paid, and it must hold at least BAC_WATER_ONLY_MIN_UNITS
+ *      before it can check out.
  *
- * The vials actually shipped are `freeUnits + paidUnits`. Note that freeUnits
- * is the full allowance even when the customer added no BAC water at all, so
- * the "free vial with every peptide" promise survives a customer who never
- * touches the BAC listing — they simply get the gift without being charged.
+ * Rule 2 is the one worth stating plainly, because the obvious alternative is
+ * to let the free allowance absorb what is in the cart — so one peptide plus
+ * one vial would ship a single free vial and charge nothing. That was the
+ * original reading and it confused both sides of the counter: the shopper could
+ * not tell whether the line they had added was going to be billed. The gift is
+ * invisible and automatic; the cart is only ever extras.
  */
 
 export const BAC_WATER_UNIT_PRICE_USD = 10;
@@ -129,8 +135,11 @@ export function summarizeBacWater(cart = [], currency = 'USD', exchangeRate = 1)
   const bacLine = (cart || []).find((item) => isBacWater(item?.product ?? item?.name));
   const unitPrice = bacUnitPrice(currency, exchangeRate, bacLine?.priceUsd ?? bacLine?.price_usd);
 
-  const freeUnits = Math.min(bacUnits, peptideUnits);
-  const paidUnits = Math.max(0, bacUnits - peptideUnits);
+  // The gift is one per peptide regardless of the cart, and everything in the
+  // cart is an extra that is paid for. A customer who never touches the BAC
+  // listing still receives their free vials.
+  const freeUnits = peptideUnits;
+  const paidUnits = bacUnits;
 
   return {
     bacUnits,
@@ -140,8 +149,7 @@ export function summarizeBacWater(cart = [], currency = 'USD', exchangeRate = 1)
     paidUnits,
     unitPrice,
     charge: paidUnits * unitPrice,
-    // Full allowance ships even when the customer added no BAC water at all.
-    shippedUnits: peptideUnits + paidUnits,
+    shippedUnits: freeUnits + paidUnits,
   };
 }
 
@@ -200,11 +208,12 @@ export function buildBacAwareOrderItems(cart = [], opts = {}) {
   if (bac.paidUnits > 0) {
     items.push({ product: bacName, qty: bac.paidUnits, price: bac.unitPrice });
   }
-  // The full allowance ships free, whether or not the customer added it.
-  if (bac.peptideUnits > 0) {
+  // The gift ships whether or not the customer added any, and is listed
+  // separately so the packing list and the order total agree.
+  if (bac.freeUnits > 0) {
     items.push({
       product: `${bacName} ${isEn ? '(Free Gift)' : '(Regalo)'}`,
-      qty: bac.peptideUnits,
+      qty: bac.freeUnits,
       price: 0,
     });
   }

@@ -44,31 +44,42 @@ test('splits units: BAC out of the discount, supplies out of the allowance', () 
   assert.equal(discountUnits, 5, 'peptides + syringes, never BAC water');
 });
 
-test('free allowance is one vial per peptide, extras are billed', () => {
+test('the gift is one per peptide and the cart is all extras', () => {
   const s = summarizeBacWater([peptide(3), bac(5)], 'USD', 1);
 
-  assert.equal(s.freeUnits, 3);
-  assert.equal(s.paidUnits, 2);
-  assert.equal(s.charge, 2 * BAC_WATER_UNIT_PRICE_USD);
-  assert.equal(s.shippedUnits, 5);
+  assert.equal(s.freeUnits, 3, 'one gift per peptide');
+  assert.equal(s.paidUnits, 5, 'everything in the cart is an extra');
+  assert.equal(s.charge, 5 * BAC_WATER_UNIT_PRICE_USD);
+  assert.equal(s.shippedUnits, 8, 'three gifted plus five paid');
 });
 
-test('full allowance still ships when the customer adds no BAC water', () => {
+test('the gift ships when the customer adds no BAC water', () => {
   const s = summarizeBacWater([peptide(3)], 'USD', 1);
 
-  assert.equal(s.freeUnits, 0, 'nothing in the cart to discount');
+  assert.equal(s.freeUnits, 3, 'the gift survives a customer who never adds it');
   assert.equal(s.paidUnits, 0);
   assert.equal(s.charge, 0);
-  assert.equal(s.shippedUnits, 3, 'the gift survives a customer who never adds it');
+  assert.equal(s.shippedUnits, 3);
 });
 
-test('fewer vials than peptides is entirely free', () => {
+test('one peptide plus one added vial ships two and bills one', () => {
+  // The case that decided this rule: the cart line must be billed, or a shopper
+  // cannot tell whether what they added is going to cost them anything.
+  const s = summarizeBacWater([peptide(1), bac(1)], 'USD', 1);
+
+  assert.equal(s.freeUnits, 1);
+  assert.equal(s.paidUnits, 1);
+  assert.equal(s.charge, BAC_WATER_UNIT_PRICE_USD);
+  assert.equal(s.shippedUnits, 2);
+});
+
+test('the gift is never reduced by what the cart holds', () => {
   const s = summarizeBacWater([peptide(4), bac(2)], 'USD', 1);
 
-  assert.equal(s.freeUnits, 2);
-  assert.equal(s.paidUnits, 0);
-  assert.equal(s.charge, 0);
-  assert.equal(s.shippedUnits, 4, 'still entitled to the full four');
+  assert.equal(s.freeUnits, 4, 'four peptides still earn four gifts');
+  assert.equal(s.paidUnits, 2);
+  assert.equal(s.charge, 2 * BAC_WATER_UNIT_PRICE_USD);
+  assert.equal(s.shippedUnits, 6);
 });
 
 test('water-only cart earns no free vials', () => {
@@ -97,8 +108,8 @@ test('unit price converts to CRC and honours an admin-set price', () => {
 test('CRC carts bill the converted price', () => {
   const s = summarizeBacWater([peptide(1), bac(3, 0)], 'CRC', 500);
 
-  assert.equal(s.paidUnits, 2);
-  assert.equal(s.charge, 2 * 5000);
+  assert.equal(s.paidUnits, 3);
+  assert.equal(s.charge, 3 * 5000);
 });
 
 test('water-only orders are held to a five vial floor', () => {
@@ -146,12 +157,12 @@ const priceOf = (item) => (item.product === 'Semaglutide 5mg' ? 90 : 15);
 const build = (cart, lang = 'en') =>
   buildBacAwareOrderItems(cart, { currency: 'USD', exchangeRate: 1, priceOf, lang });
 
-test('a mixed BAC line splits into a billed line and a gift line', () => {
+test('a BAC cart line is billed in full, with the gift listed beside it', () => {
   const items = build([peptide(3), bac(5)]);
 
   assert.deepEqual(items, [
     { product: 'Semaglutide 5mg', qty: 3, price: 90 },
-    { product: 'BAC Water 3ml', qty: 2, price: 10 },
+    { product: 'BAC Water 3ml', qty: 5, price: 10 },
     { product: 'BAC Water 3ml (Free Gift)', qty: 3, price: 0 },
   ]);
 });
