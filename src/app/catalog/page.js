@@ -3514,8 +3514,12 @@ export default function CatalogPage() {
                     </div>
                     <div className="product-pricing">
                       {isBac ? (
+                        // The shelf price is per vial. This card read "FREE"
+                        // with a disabled button left over from the giveaway,
+                        // which contradicted the detail page and the totals: a
+                        // vial past the free allowance is charged for.
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                          <span className="price-main" style={{ color: '#16a34a' }}>{lang === 'en' ? 'FREE' : 'GRATIS'}</span>
+                          <span className="price-main">{pMain}</span>
                         </div>
                       ) : p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd ? (
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
@@ -3537,21 +3541,19 @@ export default function CatalogPage() {
                       ) : (
                         <span className="price-main">{pMain}</span>
                       )}
-                      {!isBac && pSub && <span className="price-sub">{promoPct > 0 ? promoPriceLabel(currency === 'USD' ? 'CRC' : 'USD') : pSub}</span>}
+                      {isBac
+                        ? <span className="price-sub" style={{ color: '#16a34a' }}>{lang === 'en' ? '1 free with every peptide' : '1 gratis con cada péptido'}</span>
+                        : pSub && <span className="price-sub">{promoPct > 0 ? promoPriceLabel(currency === 'USD' ? 'CRC' : 'USD') : pSub}</span>}
                     </div>
                     <div className="stock-badges-slot" style={{ display: 'flex', gap: '8px', justifyContent: viewMode === 'grid' ? 'center' : 'flex-start', marginBottom: '8px' }}>
                       <div className={`stock-badge ${isBac ? 'stock-in' : inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`} style={{ position: 'relative', top: 'auto', right: 'auto', margin: 0, height: 'fit-content' }}>
                         <span>
-                          {isBac ? (lang === 'en' ? 'Auto-Added' : 'Auto-Agregado') : translateStatus(p.status)}
+                          {translateStatus(p.status)}
                         </span>
                       </div>
                     </div>
                     <div className="product-actions">
-                      {isBac ? (
-                        <button className="add-to-cart-btn" style={{ background: 'var(--bg-secondary)', color: 'var(--text-muted)', border: '1px solid var(--border)', cursor: 'default', boxShadow: 'none' }} disabled>
-                          {lang === 'en' ? 'Included in Order' : 'Incluido en Pedido'}
-                        </button>
-                      ) : inStock ? (
+                      {inStock ? (
                         // The card always shows the Add button; quantity is
                         // adjusted inside the cart only. addToCart already
                         // increments (and enforces stock) when the item is
