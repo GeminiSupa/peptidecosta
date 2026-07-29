@@ -1780,6 +1780,22 @@ body {
     border-color: var(--primary);
 }
 
+/* Country picker + national digits read as one field. */
+.checkout-phone-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 8px;
+    width: 100%;
+}
+
+.checkout-phone-country {
+    text-overflow: ellipsis;
+}
+
+.checkout-input[aria-invalid="true"] {
+    border-color: #f87171;
+}
+
 .payment-method-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2274,6 +2290,7 @@ body {
     .payment-method-grid,
     .sinpe-id-grid,
     .checkout-id-grid,
+    .checkout-phone-row,
     .card-payment-fields__row {
         grid-template-columns: 1fr;
     }

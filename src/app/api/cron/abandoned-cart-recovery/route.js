@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { canSendWhatsAppMarketing } from '@/lib/whatsappCompliance';
+import { sendWhatsAppMessage } from '@/lib/whatsappOutbound';
 import { getAbandonedCartConversion } from '@/lib/leadConversion.mjs';
 import { markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
@@ -89,6 +90,7 @@ export async function GET(request) {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
   let skippedNoConsent = 0;
+  let failedCount = 0;
   for (const cart of recoverableCarts) {
     if (sentCount >= MAX_RECOVERY_SENDS_PER_RUN) break;
 
@@ -101,39 +103,40 @@ export async function GET(request) {
     const gate = await canSendWhatsAppMarketing(supabaseAdmin, cart.customer_phone);
     if (!gate.ok) { skippedNoConsent++; continue; }
 
-    // Build the recovery message
+    // Build the recovery message. These are real newlines: the escaped `\\n`
+    // this used to carry put a literal backslash-n in the customer's message.
     let cartItemsText = "";
     try {
       const items = typeof cart.cart_data === 'string' ? JSON.parse(cart.cart_data) : cart.cart_data;
       if (Array.isArray(items)) {
-        cartItemsText = items.map(item => `- ${item.product} (x${item.quantity})`).join('\\n');
+        cartItemsText = items.map(item => `- ${item.product} (x${item.quantity})`).join('\n');
       }
     } catch(e) {
       cartItemsText = "- Tus artículos seleccionados / Your selected items";
     }
 
     const isSpanish = (cart.customer_phone.startsWith('+506') || !cart.customer_phone.startsWith('+1'));
-    
+
     // Recovery link with auto-fill query params
     const recoveryLink = `${baseUrl}/checkout?session_id=${cart.session_id}&recover=true`;
 
-    const msg = isSpanish 
-      ? `¡Hola! Notamos que dejaste algunos artículos en tu carrito en Peptides Costa Rica 🧪:\\n\\n${cartItemsText}\\n\\n¿Tuviste algún problema al completar tu pedido? Usa este enlace para finalizar tu compra y obtén un 5% de descuento extra en tu orden:\\n${recoveryLink}`
-      : `Hi! We noticed you left some items in your cart at Peptides Costa Rica 🧪:\\n\\n${cartItemsText}\\n\\nDid you have any issues completing your order? Use this link to complete your checkout and get an extra 5% off your order:\\n${recoveryLink}`;
+    const msg = isSpanish
+      ? `¡Hola! Notamos que dejaste algunos artículos en tu carrito en Peptides Costa Rica 🧪:\n\n${cartItemsText}\n\n¿Tuviste algún problema al completar tu pedido? Usa este enlace para finalizar tu compra y obtén un 5% de descuento extra en tu orden:\n${recoveryLink}`
+      : `Hi! We noticed you left some items in your cart at Peptides Costa Rica 🧪:\n\n${cartItemsText}\n\nDid you have any issues completing your order? Use this link to complete your checkout and get an extra 5% off your order:\n${recoveryLink}`;
 
-    // Send WhatsApp (using the existing WhatsApp sending API)
+    // Send in-process. Posting to /api/whatsapp/send returned 401 on every run:
+    // that route requires an admin session and a cron has none, so no recovery
+    // message ever went out. The failure was invisible because the only check
+    // here was `res.ok`, with no else branch.
     try {
-      // Internal fetch to our whatsapp/send API
-      const waRes = await fetch(`${baseUrl}/api/whatsapp/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to: cart.customer_phone,
-          message: msg
-        })
+      const result = await sendWhatsAppMessage({
+        to: cart.customer_phone,
+        message: msg,
+        customerName: cart.customer_name || null,
+        supabase: supabaseAdmin,
       });
 
-      if (waRes.ok) {
+      if (result.ok) {
         // Mark as sent
         await supabaseAdmin
           .from('abandoned_carts')
@@ -142,18 +145,25 @@ export async function GET(request) {
             recovery_whatsapp_sent_at: new Date().toISOString()
           })
           .eq('id', cart.id);
-        
+
         sentCount++;
+      } else {
+        failedCount++;
+        console.error(`[abandoned-cart-recovery] Send failed for cart ${cart.id}: ${result.error}`);
       }
     } catch(err) {
+      failedCount++;
       console.error(`Failed to send WhatsApp recovery to cart ${cart.id}:`, err);
     }
   }
+
+  console.log(`[abandoned-cart-recovery] processed=${recoverableCarts.length} sent=${sentCount} failed=${failedCount} skippedNoConsent=${skippedNoConsent} skippedPaidOrders=${convertedCarts.length}`);
 
   return NextResponse.json({
     success: true,
     processed: recoverableCarts.length,
     sent: sentCount,
+    failed: failedCount,
     skippedNoConsent,
     skippedPaidOrders: convertedCarts.length
   });

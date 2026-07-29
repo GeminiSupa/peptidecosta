@@ -13,6 +13,14 @@ import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
 import { checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct } from '@/lib/promoEligibility.mjs';
 import {
+  PHONE_COUNTRIES,
+  DEFAULT_PHONE_COUNTRY,
+  findPhoneCountry,
+  toE164,
+  splitE164,
+  isValidE164,
+} from '@/lib/phoneFormat.mjs';
+import {
   isBacWater,
   isSellableBacWater,
   bacUnitPrice,
@@ -258,6 +266,11 @@ export default function CatalogPage() {
 
   // Checkout inputs
   const [customerName, setCustomerName] = useState('');
+  // The phone box is two controls: a country and the national digits. Everything
+  // downstream still reads `customerPhone`, which is kept as the composed E.164
+  // number so the order, the WhatsApp send and the CRM all agree on one format.
+  const [customerPhoneCountry, setCustomerPhoneCountry] = useState(DEFAULT_PHONE_COUNTRY);
+  const [customerPhoneNational, setCustomerPhoneNational] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [customerMetadata, setCustomerMetadata] = useState(null);
@@ -342,6 +355,25 @@ export default function CatalogPage() {
   const [contactFormSuccess, setContactFormSuccess] = useState(false);
   const [contactFormError, setContactFormError] = useState('');
   
+  // The country picker and the digits box are the inputs; `customerPhone` is
+  // derived from them, never typed into directly.
+  useEffect(() => {
+    setCustomerPhone(toE164(customerPhoneNational, customerPhoneCountry));
+  }, [customerPhoneNational, customerPhoneCountry]);
+
+  /**
+   * Load a stored or recovered number back into the two controls. Numbers saved
+   * before the country picker existed are bare Costa Rica digits, which
+   * `splitE164` reads as such.
+   */
+  const applyStoredPhone = useCallback((stored) => {
+    const { countryCode, nationalNumber } = splitE164(stored);
+    setCustomerPhoneCountry(countryCode);
+    setCustomerPhoneNational(nationalNumber);
+  }, []);
+
+  const phoneLooksValid = !customerPhone || isValidE164(customerPhone, customerPhoneCountry);
+
   // Ref to hold latest checkout data for PayPal callbacks without re-rendering
   const checkoutDataRef = useRef({ cart, currency: 'CRC', exchangeRate: FALLBACK_EXCHANGE_RATE, customerName, customerPhone, customerEmail, shippingAddress, lang: 'en', sessionId, customerMetadata, promoData });
 
@@ -854,9 +886,9 @@ export default function CatalogPage() {
 
     // Pre-fill phone and email dynamically from either saved checkout info or gate input
     if (savedPhone) {
-      setCustomerPhone(savedPhone);
+      applyStoredPhone(savedPhone);
     } else if (leadContact && !leadContact.includes('@')) {
-      setCustomerPhone(leadContact);
+      applyStoredPhone(leadContact);
     }
 
     if (savedEmail) {
@@ -904,7 +936,7 @@ export default function CatalogPage() {
               localStorage.setItem('checkout_customer_name', data.customer_name);
             }
             if (data.customer_phone) {
-              setCustomerPhone(data.customer_phone);
+              applyStoredPhone(data.customer_phone);
               localStorage.setItem('checkout_customer_phone', data.customer_phone);
               localStorage.setItem('catalog_lead_contact', data.customer_phone);
             }
@@ -2019,6 +2051,7 @@ export default function CatalogPage() {
     if (!customerName || !customerEmail || !customerPhone || !shippingAddress || !customerIdNumber) {
       return;
     }
+    if (!phoneLooksValid) return;
 
     if (checkBacOnlyMinimum(cart).blocked) {
       alert(bacOnlyMinimumMessage(cart, lang));
@@ -2175,6 +2208,12 @@ export default function CatalogPage() {
       return;
     }
     if (!customerName || !customerPhone || !shippingAddress || !customerIdNumber || cart.length === 0) return;
+    if (!phoneLooksValid) {
+      alert(lang === 'en'
+        ? `Please check your WhatsApp number — it does not look right for ${findPhoneCountry(customerPhoneCountry).name}.`
+        : `Por favor revisa tu número de WhatsApp — no parece correcto para ${findPhoneCountry(customerPhoneCountry).name}.`);
+      return;
+    }
     if (checkBacOnlyMinimum(cart).blocked) {
       alert(bacOnlyMinimumMessage(cart, lang));
       return;
@@ -2316,7 +2355,8 @@ export default function CatalogPage() {
     if (sessionId) localStorage.setItem('checkout_completed_session_id', sessionId);
     setCart([]);
     setCustomerName('');
-    setCustomerPhone('');
+    setCustomerPhoneNational('');
+    setCustomerPhoneCountry(DEFAULT_PHONE_COUNTRY);
     setCustomerEmail('');
     setShippingAddress('');
     setCustomerIdNumber('');
@@ -2528,7 +2568,8 @@ export default function CatalogPage() {
             if (sid) localStorage.setItem('checkout_completed_session_id', sid);
             setCart([]);
             setCustomerName('');
-            setCustomerPhone('');
+            setCustomerPhoneNational('');
+            setCustomerPhoneCountry(DEFAULT_PHONE_COUNTRY);
             setCustomerEmail('');
             setShippingAddress('');
             setCustomerIdNumber('');
@@ -4041,15 +4082,38 @@ export default function CatalogPage() {
                 value={customerEmail}
                 onChange={(e) => setCustomerEmail(e.target.value)}
               />
-              <input 
-                type="tel" 
-                className="checkout-input" 
-                placeholder={lang === 'en' ? "WhatsApp Phone Number" : "Número de WhatsApp"}
-                required
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-              />
-              
+              <div className="checkout-phone-row">
+                <select
+                  className="checkout-input checkout-phone-country"
+                  value={customerPhoneCountry}
+                  onChange={(e) => setCustomerPhoneCountry(e.target.value)}
+                  style={{ appearance: 'auto' }}
+                  aria-label={lang === 'en' ? 'Country code' : 'Código de país'}
+                >
+                  {PHONE_COUNTRIES.map((country) => (
+                    <option key={country.code} value={country.code}>
+                      {country.flag} +{country.dial} {country.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="tel"
+                  className="checkout-input checkout-phone-number"
+                  placeholder={lang === 'en' ? "WhatsApp Phone Number" : "Número de WhatsApp"}
+                  required
+                  value={customerPhoneNational}
+                  onChange={(e) => setCustomerPhoneNational(e.target.value)}
+                  aria-invalid={!phoneLooksValid}
+                />
+              </div>
+              {!phoneLooksValid && (
+                <div style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '-6px' }}>
+                  {lang === 'en'
+                    ? `Check this number — it does not look right for ${findPhoneCountry(customerPhoneCountry).name}.`
+                    : `Revisa este número — no parece correcto para ${findPhoneCountry(customerPhoneCountry).name}.`}
+                </div>
+              )}
+
               <div className="checkout-id-grid">
                 <div>
                   <select

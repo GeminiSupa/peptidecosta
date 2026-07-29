@@ -5,6 +5,8 @@ import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoE
 import { agentWhatsAppNumbers, selectWithOptionalPreferences, wantsOrderWhatsApp } from '@/lib/notificationPreferences.mjs';
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
+import { toE164, isValidE164, DEFAULT_PHONE_COUNTRY } from '@/lib/phoneFormat.mjs';
+import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
 
 export const runtime = 'nodejs';
 // Every post-order alert now runs before the response, so this budget covers
@@ -61,19 +63,20 @@ async function recordNewOrderNotification(supabase, order, orderNumber) {
 }
 
 /**
- * New-order WhatsApp alerts for team members who asked for them.
+ * Where the new-order WhatsApp alert goes.
  *
- * The previous version blasted three hardcoded company numbers — one of which
- * was the business's own WhatsApp number, which Meta rejects on every send.
- * This is opt-in per member and goes to that member's own number, so it sends
- * nothing at all until someone switches it on in Team Management.
+ * The Notification Settings list is the answer once it exists. Before that
+ * migration is run the old per-member opt-in on admin_profiles still decides,
+ * so deploying ahead of the SQL does not silence the alert.
  */
-async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  if (!accessToken || !phoneNumberId) {
-    console.warn('[orders/create] Agent WhatsApp skipped: WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID not set');
-    return;
+async function resolveAgentWhatsAppRecipients(supabase) {
+  const { available, recipients } = await getNotificationRecipients(supabase, {
+    channel: 'whatsapp',
+    type: 'new_order',
+  });
+
+  if (available) {
+    return recipients.map(({ label, destination }) => ({ name: label, phone: destination }));
   }
 
   const { data, error } = await selectWithOptionalPreferences(
@@ -83,12 +86,29 @@ async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
 
   if (error) throw new Error(error.message);
 
-  // Before the migration the opt-in column is absent, so nobody qualifies and
-  // this sends nothing at all.
-  const recipients = (data || [])
+  return (data || [])
     .filter(wantsOrderWhatsApp)
     .flatMap((profile) => agentWhatsAppNumbers(profile).map((phone) => ({ name: profile.name, phone })))
     .filter((entry, index, all) => all.findIndex((other) => other.phone === entry.phone) === index);
+}
+
+/**
+ * New-order WhatsApp alerts for everyone on the notification list.
+ *
+ * The version before last blasted three hardcoded company numbers — one of
+ * which was the business's own WhatsApp number, which Meta rejects on every
+ * send. Destinations are explicit now, and a destination no longer has to be a
+ * team member with a login.
+ */
+async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!accessToken || !phoneNumberId) {
+    console.warn('[orders/create] Agent WhatsApp skipped: WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID not set');
+    return;
+  }
+
+  const recipients = await resolveAgentWhatsAppRecipients(supabase);
 
   if (recipients.length === 0) {
     console.warn(`[orders/create] Agent WhatsApp skipped for ${orderNumber}: nobody has the alert switched on with a usable number`);
@@ -166,9 +186,17 @@ async function sendCustomerOrderConfirmation(order, orderNumber) {
     return;
   }
 
-  // Format Costa Rica numbers if lacking country code
-  let cleanPhone = customerPhone;
-  if (cleanPhone.length === 8) cleanPhone = '506' + cleanPhone;
+  // Checkout now sends a full international number. Older orders (and the
+  // in-app order forms) can still carry a bare Costa Rica number, so it is
+  // normalised here rather than assumed. The previous rule only knew how to
+  // prefix exactly 8 digits and handed everything else to Meta untouched,
+  // which came back "(#131009) the phone number is malformed".
+  const cleanPhone = toE164(customerPhone, DEFAULT_PHONE_COUNTRY);
+
+  if (!isValidE164(cleanPhone)) {
+    console.warn(`[orders/create] Customer WhatsApp skipped for ${orderNumber}: "${order.customer_phone}" is not a usable WhatsApp number`);
+    return;
+  }
 
   // Use Spanish by default, or English if currency is USD
   const templateLanguage = order.currency === 'USD' ? 'en' : 'es';

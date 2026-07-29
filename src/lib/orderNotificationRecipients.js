@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { selectWithOptionalPreferences, wantsOrderEmail } from '@/lib/notificationPreferences.mjs';
+import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
 
 /**
  * Recipients of the "New Order Received" admin email.
@@ -40,6 +41,14 @@ export async function getOrderNotificationRecipients() {
   let agents = [];
   try {
     const supabase = getSupabaseAdmin();
+
+    // Once Notification Settings exists it is the whole answer — the env base
+    // list and the per-member toggles were seeded into it, so adding them again
+    // here would resurrect anyone removed on that screen.
+    const managed = await getNotificationRecipients(supabase, { channel: 'email', type: 'new_order' });
+    if (managed.available) {
+      return dedupeEmails(managed.recipients.map((entry) => entry.destination));
+    }
 
     // Ask for the preference columns, but never let a missing one cost the team
     // their order emails — or resurrect an opt-out whose column does exist.

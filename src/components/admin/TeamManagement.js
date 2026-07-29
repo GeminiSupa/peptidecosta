@@ -33,12 +33,169 @@ function NotificationToggle({ icon, title, hint, checked, onChange, activeColor 
   );
 }
 
+/** Pretty-print a stored WhatsApp destination without changing what is stored. */
+function displayDestination(recipient) {
+  if (recipient.channel !== 'whatsapp') return recipient.destination;
+  return `+${recipient.destination}`;
+}
+
+/**
+ * Who gets told about a new order — every phone number and address on one
+ * screen, whether or not it belongs to a team member with a login.
+ */
+function NotificationSettings({
+  recipients, tableReady, hint, envBaseEmails, loading, error, savingId, canEdit,
+  newLabel, setNewLabel, newChannel, setNewChannel, newDestination, setNewDestination,
+  adding, onAdd, onUpdate, onRemove,
+}) {
+  const whatsapp = recipients.filter(r => r.channel === 'whatsapp');
+  const emails = recipients.filter(r => r.channel === 'email');
+  const panel = { background: 'linear-gradient(145deg, rgba(14, 22, 38, 0.8) 0%, rgba(10, 15, 28, 0.9) 100%)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', padding: '20px', marginBottom: '16px' };
+
+  const renderGroup = (title, icon, rows, emptyText) => (
+    <div style={panel}>
+      <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {icon} {title} <span style={{ color: '#64748b', fontWeight: 'normal' }}>({rows.filter(r => r.active && r.new_order).length} active)</span>
+      </h3>
+      {rows.length === 0 ? (
+        <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>{emptyText}</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {rows.map(r => (
+            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', padding: '10px 12px', borderRadius: '10px', background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.05)', opacity: savingId === r.id ? 0.5 : 1 }}>
+              <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                <div style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 600 }}>{r.label}</div>
+                <div style={{ fontSize: '0.78rem', color: '#94a3b8', wordBreak: 'break-all' }}>{displayDestination(r)}</div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#94a3b8', cursor: canEdit ? 'pointer' : 'not-allowed' }}>
+                <input
+                  type="checkbox"
+                  checked={!!r.new_order}
+                  disabled={!canEdit || savingId === r.id}
+                  onChange={e => onUpdate(r.id, { new_order: e.target.checked })}
+                />
+                New order alert
+              </label>
+              {canEdit && (
+                <button
+                  className="admin-btn"
+                  onClick={() => onRemove(r)}
+                  disabled={savingId === r.id}
+                  style={{ padding: '4px 10px', fontSize: '0.72rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+                >
+                  <Trash2 size={12} style={{ display: 'inline', marginRight: '4px' }} /> Remove
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  if (loading) {
+    return <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading notification settings...</div>;
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+        Every destination that gets told about a new order. A destination does not have to be a team member — an owner&apos;s
+        second phone can sit here on its own.
+      </p>
+
+      {!tableReady && (
+        <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.25)', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px', fontSize: '0.85rem', color: '#fde68a' }}>
+          <strong>Not set up yet.</strong> {hint} Until then, order alerts keep following the old per-member settings.
+        </div>
+      )}
+
+      {error && (
+        <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px', fontSize: '0.85rem', color: '#fca5a5' }}>
+          {error}
+        </div>
+      )}
+
+      {renderGroup('WhatsApp', <MessageCircle size={16} style={{ color: '#22c55e' }} />, whatsapp, 'Nobody is getting a WhatsApp alert for new orders.')}
+      {renderGroup('Email', <Mail size={16} style={{ color: '#38bdf8' }} />, emails, 'Nobody is getting an email for new orders.')}
+
+      {envBaseEmails.length > 0 && (
+        <div style={{ ...panel, paddingTop: '16px', paddingBottom: '16px' }}>
+          <h3 style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#94a3b8', margin: '0 0 6px 0' }}>Server setting: ORDER_NOTIFICATION_TO</h3>
+          <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0 0 8px 0' }}>
+            {tableReady
+              ? 'No longer used for order emails — the list above replaced it. Safe to delete from Vercel.'
+              : 'Currently added to the order email on top of the per-member settings.'}
+          </p>
+          <div style={{ fontSize: '0.78rem', color: '#cbd5e1', wordBreak: 'break-all' }}>{envBaseEmails.join(', ')}</div>
+        </div>
+      )}
+
+      {canEdit ? (
+        <form onSubmit={onAdd} style={panel}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Plus size={16} style={{ color: '#38bdf8' }} /> Add a destination
+          </h3>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <input
+              className="admin-input"
+              placeholder="Name (e.g. Omer)"
+              value={newLabel}
+              onChange={e => setNewLabel(e.target.value)}
+              style={{ flex: '1 1 160px' }}
+              required
+            />
+            <select
+              className="admin-input"
+              value={newChannel}
+              onChange={e => setNewChannel(e.target.value)}
+              style={{ flex: '0 1 140px', appearance: 'auto' }}
+            >
+              <option value="whatsapp">WhatsApp</option>
+              <option value="email">Email</option>
+            </select>
+            <input
+              className="admin-input"
+              placeholder={newChannel === 'whatsapp' ? '50660626224 (with country code)' : 'name@example.com'}
+              value={newDestination}
+              onChange={e => setNewDestination(e.target.value)}
+              style={{ flex: '1 1 220px' }}
+              required
+            />
+            <button type="submit" className="admin-btn admin-btn-primary" disabled={adding || !tableReady} style={{ flex: '0 0 auto', padding: '8px 20px' }}>
+              {adding ? 'Adding...' : 'Add'}
+            </button>
+          </div>
+          <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '10px 0 0 0' }}>
+            WhatsApp numbers need the country code and no symbols — 50660626224, not 6062-6224.
+          </p>
+        </form>
+      ) : (
+        <p style={{ fontSize: '0.78rem', color: '#64748b' }}>Only a superadmin can change this list.</p>
+      )}
+    </div>
+  );
+}
+
 export default function TeamManagement({ currentUserProfile, currentUserEmail, onTeamChanged }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // Sub-tabs & Payout states
-  const [activeSubTab, setActiveSubTab] = useState('members'); // 'members' or 'payouts'
+  const [activeSubTab, setActiveSubTab] = useState('members'); // 'members', 'payouts' or 'notifications'
+
+  // Notification Settings tab
+  const [recipients, setRecipients] = useState([]);
+  const [recipientsReady, setRecipientsReady] = useState(true);
+  const [recipientsHint, setRecipientsHint] = useState('');
+  const [envBaseEmails, setEnvBaseEmails] = useState([]);
+  const [recipientsLoading, setRecipientsLoading] = useState(false);
+  const [recipientsError, setRecipientsError] = useState('');
+  const [recipientSavingId, setRecipientSavingId] = useState(null);
+  const [newRecipientLabel, setNewRecipientLabel] = useState('');
+  const [newRecipientChannel, setNewRecipientChannel] = useState('whatsapp');
+  const [newRecipientDestination, setNewRecipientDestination] = useState('');
+  const [addingRecipient, setAddingRecipient] = useState(false);
   const [payouts, setPayouts] = useState([]);
   const [loadingPayouts, setLoadingPayouts] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
@@ -100,6 +257,85 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       console.error(err);
     }
     setLoadingPayouts(false);
+  };
+
+  const fetchRecipients = async () => {
+    setRecipientsLoading(true);
+    setRecipientsError('');
+    try {
+      const res = await adminFetch('/api/admin/notification-recipients');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not load the notification list');
+      setRecipients(data.recipients || []);
+      setRecipientsReady(data.tableReady !== false);
+      setRecipientsHint(data.hint || '');
+      setEnvBaseEmails(data.envBaseEmails || []);
+    } catch (err) {
+      setRecipientsError(err.message);
+    }
+    setRecipientsLoading(false);
+  };
+
+  const addRecipient = async (e) => {
+    e.preventDefault();
+    setAddingRecipient(true);
+    setRecipientsError('');
+    try {
+      const res = await adminFetch('/api/admin/notification-recipients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label: newRecipientLabel,
+          channel: newRecipientChannel,
+          destination: newRecipientDestination,
+          new_order: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not add that destination');
+      setNewRecipientLabel('');
+      setNewRecipientDestination('');
+      await fetchRecipients();
+    } catch (err) {
+      setRecipientsError(err.message);
+    }
+    setAddingRecipient(false);
+  };
+
+  const updateRecipient = async (id, patch) => {
+    setRecipientSavingId(id);
+    setRecipientsError('');
+    // Optimistic: the toggles should feel instant, and a failure re-syncs below.
+    setRecipients(prev => prev.map(r => (r.id === id ? { ...r, ...patch } : r)));
+    try {
+      const res = await adminFetch('/api/admin/notification-recipients', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...patch }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not save that change');
+    } catch (err) {
+      setRecipientsError(err.message);
+      await fetchRecipients();
+    }
+    setRecipientSavingId(null);
+  };
+
+  const removeRecipient = async (recipient) => {
+    const ok = await confirmDelete(`Remove ${recipient.label} (${recipient.destination}) from order alerts?`);
+    if (!ok) return;
+    setRecipientSavingId(recipient.id);
+    setRecipientsError('');
+    try {
+      const res = await adminFetch(`/api/admin/notification-recipients?id=${encodeURIComponent(recipient.id)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not remove that destination');
+      await fetchRecipients();
+    } catch (err) {
+      setRecipientsError(err.message);
+    }
+    setRecipientSavingId(null);
   };
 
   const handlePayoutAction = async (payoutId, action) => {
@@ -272,6 +508,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     fetchUsers(); // Always load users (needed for agent dropdown on payouts tab)
     if (activeSubTab === 'payouts') {
       fetchPayouts();
+    }
+    if (activeSubTab === 'notifications') {
+      fetchRecipients();
     }
   }, [activeSubTab]);
 
@@ -605,6 +844,25 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
         >
           💰 Commission Payouts
         </button>
+        <button
+          onClick={() => setActiveSubTab('notifications')}
+          style={{
+            background: activeSubTab === 'notifications' ? 'linear-gradient(135deg, #22c55e 0%, #15803d 100%)' : 'rgba(255,255,255,0.03)',
+            color: activeSubTab === 'notifications' ? '#ffffff' : '#94a3b8',
+            border: activeSubTab === 'notifications' ? '1px solid rgba(34, 197, 94, 0.4)' : '1px solid rgba(255,255,255,0.05)',
+            boxShadow: activeSubTab === 'notifications' ? '0 4px 12px rgba(34, 197, 94, 0.25)' : 'none',
+            fontWeight: '600',
+            padding: '10px 20px',
+            borderRadius: '10px',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease-in-out',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          🔔 Notification Settings
+        </button>
       </div>
 
       {activeSubTab === 'members' ? (
@@ -719,6 +977,27 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             </div>
           </>
         )
+      ) : activeSubTab === 'notifications' ? (
+        <NotificationSettings
+          recipients={recipients}
+          tableReady={recipientsReady}
+          hint={recipientsHint}
+          envBaseEmails={envBaseEmails}
+          loading={recipientsLoading}
+          error={recipientsError}
+          savingId={recipientSavingId}
+          canEdit={!!currentUserProfile?.is_superadmin}
+          newLabel={newRecipientLabel}
+          setNewLabel={setNewRecipientLabel}
+          newChannel={newRecipientChannel}
+          setNewChannel={setNewRecipientChannel}
+          newDestination={newRecipientDestination}
+          setNewDestination={setNewRecipientDestination}
+          adding={addingRecipient}
+          onAdd={addRecipient}
+          onUpdate={updateRecipient}
+          onRemove={removeRecipient}
+        />
       ) : (
         <>
           {pendingDuplicateAgents.length > 0 && (
@@ -1205,59 +1484,14 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   )}
                 </div>
 
-                <div style={{ background: 'rgba(0, 0, 0, 0.2)', padding: '20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: '24px' }}>
+                <div style={{ background: 'rgba(0, 0, 0, 0.2)', padding: '16px 20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: '24px' }}>
                   <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Bell size={16} style={{ color: '#38bdf8' }} /> Notifications
                   </h3>
-                  <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '0 0 16px 0' }}>What this member gets told when something happens.</p>
-
-                  <NotificationToggle
-                    icon={<Bell size={15} style={{ color: formNotificationsEnabled ? '#38bdf8' : '#64748b' }} />}
-                    title="Receive notifications"
-                    hint="Master switch. Off means nothing at all — no bell, no email, no WhatsApp."
-                    checked={formNotificationsEnabled}
-                    onChange={setFormNotificationsEnabled}
-                  />
-
-                  <div style={{ opacity: formNotificationsEnabled ? 1 : 0.4, pointerEvents: formNotificationsEnabled ? 'auto' : 'none', marginTop: '4px' }}>
-                    <NotificationToggle
-                      icon={<Mail size={15} style={{ color: formOrderEmails ? '#38bdf8' : '#64748b' }} />}
-                      title="New order emails"
-                      hint="Emails this member every time an order comes in. On by default."
-                      checked={formOrderEmails}
-                      onChange={setFormOrderEmails}
-                    />
-
-                    <NotificationToggle
-                      icon={<MessageCircle size={15} style={{ color: formOrderWhatsApp ? '#22c55e' : '#64748b' }} />}
-                      title="New order WhatsApp"
-                      hint="Sends a WhatsApp alert to this member's own number. Off by default."
-                      checked={formOrderWhatsApp}
-                      onChange={setFormOrderWhatsApp}
-                      activeColor="#22c55e"
-                    />
-
-                    {formOrderWhatsApp && (
-                      <div style={{ paddingTop: '10px' }}>
-                        <label style={{ display: 'block', fontSize: '0.72rem', color: '#94a3b8', marginBottom: '6px', fontWeight: 'bold' }}>
-                          WhatsApp number(s) — with country code, comma-separated for more than one
-                        </label>
-                        <input
-                          type="tel"
-                          className="admin-input"
-                          value={formWhatsAppNumber}
-                          onChange={e => setFormWhatsAppNumber(e.target.value)}
-                          placeholder="50688881234, 50699995678"
-                          style={{ width: '100%' }}
-                        />
-                        {!formWhatsAppNumber.replace(/\D/g, '') && (
-                          <p style={{ fontSize: '0.72rem', color: '#fbbf24', margin: '6px 0 0 0' }}>
-                            Without a number this switch does nothing.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>
+                    Order alerts are managed in the <strong style={{ color: '#94a3b8' }}>Notification Settings</strong> tab, so every phone number and
+                    address in use can be seen on one screen — including ones that do not belong to a team member.
+                  </p>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
