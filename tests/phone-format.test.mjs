@@ -26,6 +26,27 @@ test('a number already carrying its country code is not doubled', () => {
   assert.equal(toE164('923490554719', 'PK'), '923490554719');
 });
 
+test('a foreign international number is respected, not double-prefixed', () => {
+  // 923279940377 typed with Costa Rica selected produced 506923279940377 in
+  // production: fifteen digits, accepted by Meta, delivered nowhere.
+  assert.equal(toE164('923279940377', 'CR'), '923279940377');
+  assert.equal(toE164('+92 327 994 0377', 'CR'), '923279940377');
+  assert.equal(toE164('18314715559', 'CR'), '18314715559');
+  assert.equal(toE164('4917621429442', 'CR'), '4917621429442');
+});
+
+test('an ordinary national number is never mistaken for an international one', () => {
+  // These 8-digit Costa Rica numbers open with other countries' dial codes.
+  assert.equal(toE164('44123456', 'CR'), '50644123456');
+  assert.equal(toE164('52123456', 'CR'), '50652123456');
+  assert.equal(toE164('12345678', 'CR'), '50612345678');
+});
+
+test('a result past 15 digits is refused outright', () => {
+  assert.equal(toE164('12345678901234567', 'CR'), '');
+  assert.equal(isValidE164(toE164('12345678901234567', 'CR')), false);
+});
+
 test('a short number is prefixed rather than mistaken for a country code', () => {
   // '5065060' starts with '506' but the remainder is far too short to be a
   // Costa Rica number, so it is a typo in the national field.
@@ -59,6 +80,22 @@ test('isValidE164 enforces Meta 8-15 digit limits', () => {
   assert.equal(isValidE164('50683449162'), true);
   assert.equal(isValidE164('6484164'), false);
   assert.equal(isValidE164('1234567890123456'), false);
+});
+
+test('isValidE164 infers the country when none is passed', () => {
+  // The server has no picker to consult. 506923279940377 reached Meta on a bare
+  // length check and was delivered nowhere.
+  assert.equal(isValidE164('506923279940377'), false);
+  assert.equal(isValidE164('5063279940377'), false);
+  assert.equal(isValidE164('50683449162'), true);
+  assert.equal(isValidE164('923490554719'), true);
+  assert.equal(isValidE164('18314715559'), true);
+});
+
+test('a country with no fixed length still passes on length alone', () => {
+  assert.equal(isValidE164('4917621429442'), true);
+  // A dial code outside the list is not judged against another country.
+  assert.equal(isValidE164('919876543210'), true);
 });
 
 test('isValidE164 catches a short Costa Rica number', () => {

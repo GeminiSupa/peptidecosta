@@ -66,8 +66,35 @@ export function toE164(nationalNumber, countryCode = DEFAULT_PHONE_COUNTRY) {
     if (country.nationalDigits && remainder.length === country.nationalDigits) return digits;
   }
 
+  // A number that already carries a *different* country's code. Browsers
+  // autofill full international numbers, and people paste them: a customer put
+  // 923279940377 in the box with Costa Rica selected and got 506923279940377
+  // sent to Meta — fifteen digits, accepted, delivered nowhere.
+  //
+  // The chosen country wins whenever the input is a plausible national number
+  // for it, because the customer said which country they are in. This only
+  // rescues input that cannot be a national number there — otherwise a German
+  // typing 176 214 29442 would be read as a US number, since it opens with a 1.
+  const plausibleNationally = country.nationalDigits
+    ? digits.replace(/^0+/, '').length === country.nationalDigits
+    : true;
+
+  if (!plausibleNationally && digits.length >= 10) {
+    for (const other of DIALS_BY_LENGTH) {
+      if (other.code === country.code || !digits.startsWith(other.dial)) continue;
+      const remainder = digits.slice(other.dial.length);
+      if (other.nationalDigits ? remainder.length === other.nationalDigits : remainder.length >= 7) {
+        return digits;
+      }
+    }
+  }
+
   digits = digits.replace(/^0+/, '');
-  return country.dial + digits;
+  const composed = country.dial + digits;
+
+  // Past E.164's ceiling nothing can be a real number, and returning it would
+  // hand Meta something it accepts and cannot deliver.
+  return composed.length > 15 ? '' : composed;
 }
 
 /**
@@ -113,6 +140,16 @@ export function isValidE164(value, countryCode = null) {
       const expected = country.dial.length + country.nationalDigits;
       return digits.length === expected;
     }
+  }
+
+  // With no country supplied, infer one from the leading digits. The server has
+  // no picker to consult, and a bare length check passed 506923279940377 — a
+  // Pakistani number with 506 in front of it — straight through to Meta, which
+  // accepted it and delivered nothing. Countries with no fixed national length,
+  // and codes outside this list, still get only the length check.
+  for (const country of DIALS_BY_LENGTH) {
+    if (!digits.startsWith(country.dial) || !country.nationalDigits) continue;
+    return digits.length === country.dial.length + country.nationalDigits;
   }
 
   return true;
