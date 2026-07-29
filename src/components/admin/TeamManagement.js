@@ -1247,7 +1247,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                           className="admin-input"
                           value={formWhatsAppNumber}
                           onChange={e => setFormWhatsAppNumber(e.target.value)}
-                          placeholder="50688881234, 923175162896"
+                          placeholder="50688881234, 50699995678"
                           style={{ width: '100%' }}
                         />
                         {!formWhatsAppNumber.replace(/\D/g, '') && (

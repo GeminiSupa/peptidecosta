@@ -1,19 +1,18 @@
-import { after, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 import { agentWhatsAppNumbers, selectWithOptionalPreferences, wantsOrderWhatsApp } from '@/lib/notificationPreferences.mjs';
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
+import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 
 export const runtime = 'nodejs';
-// The post-order alerts run in `after()`, which is capped by this route's max
-// duration. The default was short enough that a slow SMTP handshake could eat
-// the whole budget and silently drop every alert.
+// Every post-order alert now runs before the response, so this budget covers
+// the whole handler. The default was short enough that a slow SMTP handshake
+// could eat it and silently drop the alerts.
 export const maxDuration = 60;
 
 const REQUIRED_FIELDS = ['order_number', 'customer_name', 'customer_phone', 'items'];
-/** No alert should be able to hold the background block hostage. */
-const ALERT_TIMEOUT_MS = 15000;
 /**
  * The WhatsApp calls run before the response, so this is time the customer
  * spends staring at a spinner. The order is already saved by then — if Meta is
@@ -32,66 +31,11 @@ function formatSalesAlertTotal(order) {
     : `CRC ${Number(order.total_crc || 0).toLocaleString('es-CR')}`;
 }
 
-function buildOrderNotificationPayload(order, orderNumber) {
-  const items = Array.isArray(order.items) ? order.items : [];
-  const currency = order.currency || 'USD';
-  const itemsAmount = items.reduce((sum, item) => {
-    return sum + ((Number(item.price) || 0) * (Number(item.qty) || 0));
-  }, 0);
-  const shipping = currency === 'CRC'
-    ? Number(order.shipping_cost_crc || 0)
-    : Number(order.shipping_cost_usd || 0);
-  const promoDiscount = currency === 'CRC'
-    ? Number(order.discount_amount_crc || 0)
-    : Number(order.discount_amount_usd || 0);
-  const total = currency === 'CRC'
-    ? Number(order.total_crc || 0)
-    : Number(order.total_usd || 0);
-  const volumeDiscount = Math.max(0, itemsAmount - promoDiscount + shipping - total);
-
-  return {
-    orderNumber,
-    customerName: order.customer_name,
-    customerPhone: order.customer_phone,
-    customerEmail: order.customer_email || '',
-    shippingAddress: order.shipping_address,
-    customerIdType: order.customer_id_type,
-    customerIdNumber: order.customer_id_number,
-    items,
-    total,
-    totalUsd: order.total_usd,
-    totalCrc: order.total_crc,
-    subtotal: itemsAmount,
-    volumeDiscount,
-    promoDiscount,
-    shipping,
-    currency,
-    paymentMethod: order.payment_method,
-    status: order.status || 'Pending',
-    adminNotificationOnly: true,
-    lang: currency === 'CRC' ? 'es' : 'en',
-  };
-}
-
-async function sendAdminOrderEmail(baseUrl, order, orderNumber) {
-  const response = await fetch(`${baseUrl}/api/order-notification`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildOrderNotificationPayload(order, orderNumber)),
-    signal: AbortSignal.timeout(ALERT_TIMEOUT_MS),
-  });
-
-  if (!response.ok) {
-    const result = await response.json().catch(() => ({}));
-    throw new Error(result?.error || result?.details || `Order notification returned ${response.status}`);
-  }
-}
-
 /**
  * The durable "a new order landed" record behind the admin bell.
  *
- * This is written on the request path, not in `after()`, precisely because the
- * email and WhatsApp alerts are best-effort: if both fail, the team still has
+ * This is written before any alert is attempted, precisely because the email
+ * and WhatsApp alerts are best-effort: if all of them fail, the team still has
  * one notification that cannot be lost to a timeout. The dynamic pending-order
  * badge does not cover this — it vanishes the moment the status moves off
  * "Pending", and never appears for card orders ("Pending - Card").
@@ -492,31 +436,31 @@ export async function POST(request) {
       console.warn('[orders/create] Paid cart cleanup failed:', paidCartCleanupError.message);
     }
 
-    // Execute post-order alerts in the background
+    // Every post-order alert runs here, before the response.
+    //
+    // In `after()` these produced no result and no log at all — while the
+    // identical WhatsApp call in /api/leads/capture, made from the request
+    // path, sends reliably. The WhatsApp alerts were moved out first; the
+    // admin email was left behind and kept vanishing on its own, which is why
+    // a test order could land in the dashboard, mail the customer, and still
+    // never reach the team.
+    //
+    // They run together so the checkout waits for the slowest one rather than
+    // the sum, and each is capped tightly enough that neither Meta nor SMTP
+    // can hold up a customer.
     const baseUrl = new URL(request.url).origin;
-    // The email is delegated to another route, so it completes in its own
-    // invocation and survives whatever happens to this one. The WhatsApp calls
-    // talk to Meta directly, and in `after()` they produced no result and no
-    // log at all — while the identical call in /api/leads/capture, made from
-    // the request path, sends reliably. So they run here, before the response,
-    // capped tightly enough that Meta can never hold up a checkout.
-    const whatsappResults = await Promise.allSettled([
-      sendCustomerOrderConfirmation(order, data.order_number),
-      sendAgentOrderWhatsApp(supabase, order, data.order_number),
-    ]);
-    whatsappResults.forEach((result, index) => {
+    const alerts = [
+      ['customer WhatsApp', sendCustomerOrderConfirmation(order, data.order_number)],
+      ['agent WhatsApp', sendAgentOrderWhatsApp(supabase, order, data.order_number)],
+      ['admin email', sendAdminOrderEmail(baseUrl, order, data.order_number)],
+    ];
+    const alertResults = await Promise.allSettled(alerts.map(([, promise]) => promise));
+    alertResults.forEach((result, index) => {
+      const label = alerts[index][0];
       if (result.status === 'rejected') {
-        const label = index === 0 ? 'customer' : 'agent';
-        console.error(`[orders/create] ${label} WhatsApp error:`, result.reason?.message || String(result.reason));
-      }
-    });
-
-    after(async () => {
-      try {
-        await sendAdminOrderEmail(baseUrl, order, data.order_number);
-        console.log(`[orders/create] Admin order email dispatched for ${data.order_number}`);
-      } catch (err) {
-        console.error('[orders/create] Background admin email alert error:', err);
+        console.error(`[orders/create] ${label} alert failed for ${data.order_number}:`, result.reason?.message || String(result.reason));
+      } else {
+        console.log(`[orders/create] ${label} alert completed for ${data.order_number}`);
       }
     });
 
