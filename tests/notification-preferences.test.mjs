@@ -172,15 +172,15 @@ test('WhatsApp numbers are normalised, and unusable ones are rejected', () => {
 
 test('one member can be reached on several numbers', () => {
   assert.deepEqual(
-    agentWhatsAppNumbers({ whatsapp_number: '+506 6062 6224, 923175162896' }),
-    ['50660626224', '923175162896']
+    agentWhatsAppNumbers({ whatsapp_number: '+506 6062 6224, +506 9999 5678' }),
+    ['50660626224', '50699995678']
   );
 });
 
 test('junk entries in the list are dropped without losing the good ones', () => {
   assert.deepEqual(
-    agentWhatsAppNumbers({ whatsapp_number: '50660626224, 123, , abc, 923175162896' }),
-    ['50660626224', '923175162896']
+    agentWhatsAppNumbers({ whatsapp_number: '50660626224, 123, , abc, 50699995678' }),
+    ['50660626224', '50699995678']
   );
   assert.deepEqual(agentWhatsAppNumbers({ whatsapp_number: '' }), []);
   assert.deepEqual(agentWhatsAppNumbers({}), []);
