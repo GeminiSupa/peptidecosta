@@ -143,7 +143,7 @@ export default function ProductsManager({
         <div>
           <h3>Master Inventory Products</h3>
           <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '4px' }}>
-            Edit USD prices as the source of truth. CRC is automatic using 1 USD = ₡{Math.round(exchangeRate).toLocaleString('en-US')} · refreshed {exchangeUpdatedLabel}.
+            Edit USD prices as the source of truth. CRC is synced from the database rate: 1 USD = ₡{Math.round(exchangeRate).toLocaleString('en-US')} · refreshed {exchangeUpdatedLabel}.
           </p>
         </div>
         <div className="admin-actions-row">

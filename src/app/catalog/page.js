@@ -12,6 +12,17 @@ import { buildWhatsAppLink, cleanPhoneNumber } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
 import { checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct } from '@/lib/promoEligibility.mjs';
+import {
+  isBacWater,
+  isSellableBacWater,
+  bacUnitPrice,
+  summarizeBacWater,
+  applyBacAwareDiscount,
+  buildBacAwareOrderItems,
+  checkBacOnlyMinimum,
+  bacOnlyMinimumMessage,
+  BAC_WATER_ONLY_MIN_UNITS,
+} from '@/lib/bacWater.mjs';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
@@ -1159,18 +1170,11 @@ export default function CatalogPage() {
   // Live currency exchange rate fetch
   const fetchLiveExchangeRate = async () => {
     try {
-      const cached = localStorage.getItem('exchangeRate_USDCRC');
-      const cachedTime = localStorage.getItem('exchangeRate_USDCRC_time');
-      if (cached && cachedTime && (Date.now() - parseInt(cachedTime)) < 3600000) {
-        setExchangeRate(parseFloat(cached));
-        setExchangeRateUpdatedAt(parseInt(cachedTime));
-        return;
-      }
       const res = await fetch('/api/exchange-rate');
       const data = await res.json();
       if (data.rate) {
         const rate = data.rate;
-        const now = Date.now();
+        const now = data.updatedAt ? Date.parse(data.updatedAt) : Date.now();
         setExchangeRate(rate);
         setExchangeRateUpdatedAt(now);
         localStorage.setItem('exchangeRate_USDCRC', rate.toString());
@@ -1178,7 +1182,14 @@ export default function CatalogPage() {
       }
     } catch (err) {
       console.error('Live exchange rate fetch failed, using fallback:', err);
-      setExchangeRateUpdatedAt(Date.now());
+      const cached = localStorage.getItem('exchangeRate_USDCRC');
+      const cachedTime = localStorage.getItem('exchangeRate_USDCRC_time');
+      if (cached && cachedTime) {
+        setExchangeRate(parseFloat(cached));
+        setExchangeRateUpdatedAt(parseInt(cachedTime, 10));
+      } else {
+        setExchangeRateUpdatedAt(Date.now());
+      }
     }
   };
 
@@ -1442,12 +1453,6 @@ export default function CatalogPage() {
     if (c.includes('supply') || c.includes('suministro') || c.includes('reconstitution')) return <FlaskConical {...props} />;
     return <FlaskConical {...props} />;
   };
-  const isBacWater = (name) => {
-    if (!name) return false;
-    const nameLower = name.toLowerCase();
-    return nameLower.includes('bac water') || nameLower.includes('bacteriostatic') || nameLower.includes('agua bacteriostática');
-  };
-
   // Helper stock check
   const isInStock = (statusText) => {
     const s = (statusText || '').toLowerCase().trim();
@@ -1503,6 +1508,11 @@ export default function CatalogPage() {
   };
 
   const getPriceAsNumber = (prod, cur, rate = exchangeRate) => {
+    // The BAC row is still priced at 0 from its giveaway days, so its shelf
+    // price comes from the pricing rule rather than the product row.
+    if (isBacWater(prod.product)) {
+      return bacUnitPrice(cur, rate, parsePrice(prod.priceUsd));
+    }
     if (cur === 'USD') {
       return parsePrice(prod.priceUsd);
     } else {
@@ -1753,24 +1763,43 @@ export default function CatalogPage() {
     setCart(cart.filter(item => item.product !== productName));
   };
 
-  // Calculate Cart Subtotal (before discount)
-  const getCartTotal = () => {
-    return cart.reduce((acc, item) => {
-      const price = getPriceAsNumber(item, currency);
-      return acc + (price * item.qty);
-    }, 0);
-  };
+  // BAC water is priced by its own rules — a free vial per peptide, a flat
+  // charge beyond that, and no part in the volume discount — so every money
+  // helper below splits the cart rather than summing it flat.
+  const getBacSummary = (cartItems, cur = currency, rate = exchangeRate) =>
+    summarizeBacWater(cartItems || cart, cur, rate);
 
-  // Volume discount tiers: 5+ vials = 15%, 10+ vials = 20%
-  const getCartVialCount = (cartItems) => {
-    return (cartItems || cart).reduce((sum, item) => sum + item.qty, 0);
-  };
+  // Subtotal of everything the volume discount is allowed to touch (i.e. the
+  // cart minus BAC water).
+  const getDiscountableSubtotal = (cartItems, cur = currency, rate = exchangeRate) =>
+    (cartItems || cart).reduce((acc, item) => {
+      if (isBacWater(item.product)) return acc;
+      return acc + (getPriceAsNumber(item, cur, rate) * item.qty);
+    }, 0);
+
+  // Calculate Cart Subtotal (before discount), BAC charge included
+  const getCartTotal = (cartItems, cur = currency, rate = exchangeRate) =>
+    getDiscountableSubtotal(cartItems, cur, rate) + getBacSummary(cartItems, cur, rate).charge;
+
+  // Volume discount tiers: 5+ vials = 15%, 10+ vials = 20%.
+  // BAC water vials are excluded — they never move the customer up a tier.
+  const getCartVialCount = (cartItems) => getBacSummary(cartItems).discountUnits;
 
   const getVolumeDiscountPct = (vialCount) => {
     if (vialCount >= 10) return 20;
     if (vialCount >= 5) return 15;
     return 0;
   };
+
+  // Order lines as the customer, the database and the packing list should see
+  // them — a BAC cart line resolved into its billed and gifted parts.
+  const buildOrderItems = (cartItems, cur = currency, rate = exchangeRate) =>
+    buildBacAwareOrderItems(cartItems || cart, {
+      currency: cur,
+      exchangeRate: rate,
+      priceOf: (item) => getPriceAsNumber(item, cur, rate),
+      lang,
+    });
 
   // A bulk promo (one with a unit minimum) replaces the automatic volume
   // discount instead of stacking with it, so the percentage on the code is the
@@ -1779,12 +1808,14 @@ export default function CatalogPage() {
   const getEffectiveVolumePct = () =>
     effectiveVolumeDiscountPct(promoData?.valid ? promoData : null, getVolumeDiscountPct(getCartVialCount()));
 
-  const getDiscountedTotal = () => {
-    const subtotal = getCartTotal();
-    const pct = getEffectiveVolumePct();
-    if (pct > 0) return Math.round(subtotal * (1 - pct / 100));
-    return subtotal;
-  };
+  // The discount lands on the non-BAC subtotal only; the BAC charge is added
+  // back afterwards at face value.
+  const getDiscountedTotal = () =>
+    applyBacAwareDiscount(
+      getDiscountableSubtotal(),
+      getBacSummary().charge,
+      getEffectiveVolumePct(),
+    ).itemsTotal;
 
   const getShippingFee = () => {
     if (cart.length === 0) return 0;
@@ -1827,12 +1858,14 @@ export default function CatalogPage() {
   const getPromoDiscountAmount = () => {
     if (!promoData || !promoData.valid) return 0;
     
-    let targetTotal = getCartTotal();
-    
+    // The BAC charge is excluded from every promo base — it is a flat side
+    // charge, not discountable merchandise.
+    let targetTotal = getDiscountableSubtotal();
+
     if (promoData.is_flash_sale && promoData.target_product) {
       const targets = promoData.target_product.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
       targetTotal = cart
-        .filter(item => targets.some(t => item.product.toLowerCase().includes(t)))
+        .filter(item => !isBacWater(item.product) && targets.some(t => item.product.toLowerCase().includes(t)))
         .reduce((sum, item) => sum + getPriceAsNumber(item, currency) * item.qty, 0);
     }
     
@@ -1987,6 +2020,11 @@ export default function CatalogPage() {
       return;
     }
 
+    if (checkBacOnlyMinimum(cart).blocked) {
+      alert(bacOnlyMinimumMessage(cart, lang));
+      return;
+    }
+
     const cleanCardNumber = cardDetails.number.replace(/\D/g, '');
     const cleanCvv = cardDetails.cvv.replace(/\D/g, '');
     if (!cardDetails.holder.trim() || cleanCardNumber.length < 12 || !cardDetails.expiry.trim() || cleanCvv.length < 3) {
@@ -2006,11 +2044,7 @@ export default function CatalogPage() {
     const totalUsd = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
     const totalCrc = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
     const shippingCosts = getShippingCostFields(currency, exchangeRate, getShippingFee());
-    const orderItems = cart.map(item => ({
-      product: item.product,
-      qty: item.qty,
-      price: getPriceAsNumber(item, currency),
-    }));
+    const orderItems = buildOrderItems(cart);
 
     const cardSave = await saveOrderToDatabase({
       order_number: orderNum,
@@ -2141,6 +2175,10 @@ export default function CatalogPage() {
       return;
     }
     if (!customerName || !customerPhone || !shippingAddress || !customerIdNumber || cart.length === 0) return;
+    if (checkBacOnlyMinimum(cart).blocked) {
+      alert(bacOnlyMinimumMessage(cart, lang));
+      return;
+    }
 
     setOrderSubmitting(true);
 
@@ -2150,11 +2188,7 @@ export default function CatalogPage() {
     const totalVal = getFinalTotal();
     const vialCount = getCartVialCount();
     const discountPct = getEffectiveVolumePct();
-    const orderItems = cart.map(item => ({
-      product: item.product,
-      qty: item.qty,
-      price: getPriceAsNumber(item, currency)
-    }));
+    const orderItems = buildOrderItems(cart);
     const totalUsd = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
     const totalCrc = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
     const shippingCosts = getShippingCostFields(currency, exchangeRate, getShippingFee());
@@ -2323,33 +2357,30 @@ export default function CatalogPage() {
       },
       createOrder: async () => {
         const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, customerEmail: cEmail, shippingAddress: sAddress, lang: cLang } = checkoutDataRef.current;
-        const subtotalVal = currentCart.reduce((sum, item) => {
-          const p = getPriceAsNumber(item, cur, rate);
-          return sum + (p * item.qty);
-        }, 0);
-        
+        if (checkBacOnlyMinimum(currentCart).blocked) {
+          alert(bacOnlyMinimumMessage(currentCart, cLang));
+          throw new Error('BAC-only order below minimum');
+        }
+
         const vials = getCartVialCount(currentCart);
         const pct = effectiveVolumeDiscountPct(
           checkoutDataRef.current.promoData?.valid ? checkoutDataRef.current.promoData : null,
           getVolumeDiscountPct(vials),
         );
-        const itemsTotal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
+        const { subtotal: subtotalVal, itemsTotal } = applyBacAwareDiscount(
+          getDiscountableSubtotal(currentCart, cur, rate),
+          getBacSummary(currentCart, cur, rate).charge,
+          pct,
+        );
         const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
-        
+
         let shippingFee = 0;
         if (itemsTotalUsd < 200) {
           shippingFee = cur === 'USD' ? parseFloat((FLAT_SHIPPING_CRC / rate).toFixed(2)) : FLAT_SHIPPING_CRC;
         }
         const totalVal = itemsTotal + shippingFee;
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
-        const orderItems = currentCart.map(item => {
-          const p = getPriceAsNumber(item, cur, rate);
-          return {
-            product: item.product,
-            qty: item.qty,
-            price: p
-          };
-        });
+        const orderItems = buildOrderItems(currentCart, cur, rate);
 
         try {
           const res = await fetch('/api/paypal/create-order', {
@@ -2374,23 +2405,24 @@ export default function CatalogPage() {
       onApprove: async (data) => {
         const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, customerEmail: cEmail, shippingAddress: sAddress, lang: cLang, sessionId: sid, customerMetadata } = checkoutDataRef.current;
         
-        const subtotalVal = currentCart.reduce((sum, item) => {
-          const p = getPriceAsNumber(item, cur, rate);
-          return sum + (p * item.qty);
-        }, 0);
-        
         const vials = getCartVialCount(currentCart);
         const pct = effectiveVolumeDiscountPct(
           checkoutDataRef.current.promoData?.valid ? checkoutDataRef.current.promoData : null,
           getVolumeDiscountPct(vials),
         );
-        const itemsTotal = pct > 0 ? Math.round(subtotalVal * (1 - pct / 100)) : subtotalVal;
-        
+        const { subtotal: subtotalVal, itemsTotal } = applyBacAwareDiscount(
+          getDiscountableSubtotal(currentCart, cur, rate),
+          getBacSummary(currentCart, cur, rate).charge,
+          pct,
+        );
+
         const pData = checkoutDataRef.current.promoData;
         let targetTotalForPromo = itemsTotal;
         if (pData?.valid && pData.is_flash_sale && pData.target_product) {
           const rawTargetSum = currentCart
             .filter(item => {
+              // BAC water is a flat side charge — promo codes never touch it.
+              if (isBacWater(item.product)) return false;
               const targets = pData.target_product.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
               return targets.some(target => item.product.toLowerCase().includes(target));
             })
@@ -2410,14 +2442,7 @@ export default function CatalogPage() {
         const totalVal = (itemsTotal - promoDiscount) + shippingFee;
         const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
         const paypalShippingUsd = cur === 'USD' ? shippingFee : shippingFee / rate;
-        const orderItems = currentCart.map(item => {
-          const p = getPriceAsNumber(item, cur, rate);
-          return {
-            product: item.product,
-            qty: item.qty,
-            price: p
-          };
-        });
+        const orderItems = buildOrderItems(currentCart, cur, rate);
 
         try {
           setOrderSubmitting(true);
@@ -2608,6 +2633,9 @@ export default function CatalogPage() {
   const baseFilteredProducts = products.filter(p => {
     // 0. Hidden by admin — kept in the database (can be restocked) but removed from the storefront
     if (hiddenProducts.includes(p.product)) return false;
+    // 0b. Only the 3ml BAC water is sold. The 2ml/10ml rows are hidden in admin
+    // too, but this keeps a manual step from being load-bearing for pricing.
+    if (isBacWater(p.product) && !isSellableBacWater(p.product)) return false;
     // 1. Search Query
     const nameMatch = (p.product || '').toLowerCase().includes(searchQuery.toLowerCase());
     const catMatch = (p.category || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -3898,6 +3926,35 @@ export default function CatalogPage() {
               </div>
             )}
 
+            {/* BAC water breakdown — what is gifted vs. what is billed */}
+            {getBacSummary().bacUnits > 0 && (
+              <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', fontSize: '0.75rem', color: theme === 'dark' ? '#7dd3fc' : '#0369a1', fontWeight: '600' }}>
+                {getBacSummary().freeUnits > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>🎁 {lang === 'en'
+                      ? `${getBacSummary().freeUnits} free vial${getBacSummary().freeUnits > 1 ? 's' : ''} (1 per peptide)`
+                      : `${getBacSummary().freeUnits} vial${getBacSummary().freeUnits > 1 ? 'es' : ''} gratis (1 por péptido)`}</span>
+                    <span>{formatPriceVal(0, currency)}</span>
+                  </div>
+                )}
+                {getBacSummary().paidUnits > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: getBacSummary().freeUnits > 0 ? '4px' : 0 }}>
+                    <span>{lang === 'en'
+                      ? `${getBacSummary().paidUnits} extra vial${getBacSummary().paidUnits > 1 ? 's' : ''} × ${formatPriceVal(getBacSummary().unitPrice, currency)}`
+                      : `${getBacSummary().paidUnits} vial${getBacSummary().paidUnits > 1 ? 'es' : ''} extra × ${formatPriceVal(getBacSummary().unitPrice, currency)}`}</span>
+                    <span>{formatPriceVal(getBacSummary().charge, currency)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Water-only orders have a floor */}
+            {checkBacOnlyMinimum(cart).blocked && (
+              <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: '#f87171', fontWeight: '700' }}>
+                {bacOnlyMinimumMessage(cart, lang)}
+              </div>
+            )}
+
             {/* Promo Code UI */}
             <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ display: 'flex', gap: '8px' }}>
@@ -4199,7 +4256,7 @@ export default function CatalogPage() {
                     <button
                       type="submit"
                       className="whatsapp-btn"
-                      disabled={orderSubmitting || cart.length === 0}
+                      disabled={orderSubmitting || cart.length === 0 || checkBacOnlyMinimum(cart).blocked}
                       style={{ width: '100%' }}
                     >
                       {orderSubmitting ? (
@@ -4273,7 +4330,7 @@ export default function CatalogPage() {
                   ) : (
                     <button
                       type="button"
-                      disabled={cardSubmitting || cart.length === 0}
+                      disabled={cardSubmitting || cart.length === 0 || checkBacOnlyMinimum(cart).blocked}
                       onClick={startCardCheckout}
                       className="card-payment-btn"
                     >
@@ -4306,7 +4363,7 @@ export default function CatalogPage() {
                     type="submit" 
                     form="checkout-form-main"
                     className="whatsapp-btn"
-                    disabled={orderSubmitting}
+                    disabled={orderSubmitting || checkBacOnlyMinimum(cart).blocked}
                     style={{ width: '100%', padding: '16px', fontSize: '1.05rem', boxShadow: '0 -4px 20px rgba(0,0,0,0.1)' }}
                   >
                     {orderSubmitting ? (
@@ -4413,7 +4470,7 @@ export default function CatalogPage() {
                 {lang === 'en' ? 'Status' : 'Estado'}
               </span>
               <div className={`stock-badge ${isBacWater(selectedProduct.product) || isInStock(selectedProduct.status) ? 'stock-in' : isComingSoon(selectedProduct.status) ? 'stock-soon' : 'stock-out'}`} style={{ position: 'static' }}>
-                {isBacWater(selectedProduct.product) ? (lang === 'en' ? 'In Stock (Free)' : 'Disponible (Gratis)') : translateStatus(selectedProduct.status)}
+                {isBacWater(selectedProduct.product) ? (lang === 'en' ? 'In Stock' : 'Disponible') : translateStatus(selectedProduct.status)}
               </div>
               {isInStock(selectedProduct.status) && selectedProduct.inventoryCount !== null && selectedProduct.inventoryCount <= (selectedProduct.lowStockThreshold || 5) && selectedProduct.inventoryCount > 0 && (
                 <div className="stock-badge stock-soon" style={{ position: 'static', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
@@ -4435,15 +4492,23 @@ export default function CatalogPage() {
             )}
 
             {isBacWater(selectedProduct.product) ? (
-              <div style={{ marginBottom: '24px', padding: '16px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)', fontSize: '0.85rem', color: '#38bdf8', textAlign: 'center', lineHeight: '1.5' }}>
-                <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🎁</div>
-                <strong style={{ display: 'block', marginBottom: '4px', fontSize: '0.95rem' }}>{lang === 'en' ? 'Complimentary With Every Order' : 'De Cortesía con Cada Pedido'}</strong>
-                <p style={{ margin: 0, color: '#e0f2fe' }}>
-                  {lang === 'en' 
-                    ? 'We provide complimentary BAC water with every order as our gift to you. No need to add it to your cart!' 
-                    : 'Proporcionamos agua BAC de cortesía con cada pedido como nuestro regalo. ¡No es necesario añadirla al carrito!'}
-                </p>
-              </div>
+              <>
+                <div style={{ marginBottom: '16px', padding: '16px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)', fontSize: '0.85rem', color: '#38bdf8', textAlign: 'center', lineHeight: '1.5' }}>
+                  <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🎁</div>
+                  <strong style={{ display: 'block', marginBottom: '4px', fontSize: '0.95rem' }}>{lang === 'en' ? 'One Free With Every Peptide' : 'Una Gratis con Cada Péptido'}</strong>
+                  <p style={{ margin: 0, color: '#e0f2fe' }}>
+                    {lang === 'en'
+                      ? `Every peptide you buy includes a free 3ml vial. Need more? Extra vials are ${formatPriceVal(getBacSummary().unitPrice, currency)} each. Water-only orders start at ${BAC_WATER_ONLY_MIN_UNITS} vials.`
+                      : `Cada péptido que compres incluye un vial de 3ml gratis. ¿Necesitás más? Los viales adicionales cuestan ${formatPriceVal(getBacSummary().unitPrice, currency)} cada uno. Los pedidos de solo agua empiezan en ${BAC_WATER_ONLY_MIN_UNITS} viales.`}
+                  </p>
+                </div>
+                <button
+                  className="whatsapp-btn product-detail-cart-button"
+                  onClick={() => addToCart(selectedProduct)}
+                >
+                  {lang === 'en' ? 'Add to Cart' : 'Añadir al Carrito'}
+                </button>
+              </>
             ) : isInStock(selectedProduct.status) && (
               <button 
                 className="whatsapp-btn product-detail-cart-button"

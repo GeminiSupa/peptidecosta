@@ -9,7 +9,7 @@ import {
 } from '@/lib/agentOrders';
 import { formatPayoutPeriod, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
-import { getUsdToCrcRate } from '@/lib/pricing';
+import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
 // Email Configuration from Environment variables
 const SMTP_HOST = process.env.SMTP_HOST;
@@ -33,7 +33,7 @@ export async function POST(request) {
     }
 
     const supabaseAdmin = getSupabaseAdmin();
-    const currentExchangeRate = await getUsdToCrcRate();
+    const { rate: currentExchangeRate } = await getDatabaseBackedUsdToCrcRate();
 
     // 1. Fetch the payout record
     const { data: payout, error: fetchError } = await supabaseAdmin

@@ -46,3 +46,6 @@ next-env.d.ts
 # one-off broadcast recipient exports - customer PII, never commit
 tesa20-recipients.txt
 *-recipients.txt
+
+# Claude Code local-only settings (machine-specific permission grants)
+.claude/settings.local.json

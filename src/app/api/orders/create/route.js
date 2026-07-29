@@ -41,7 +41,12 @@ function formatSalesAlertTotal(order) {
  * "Pending", and never appears for card orders ("Pending - Card").
  */
 async function recordNewOrderNotification(supabase, order, orderNumber) {
-  const itemCount = (order.items || []).reduce((total, item) => total + Number(item.qty || 0), 0);
+  // Counts what the customer paid for. Orders carry an explicit zero-price line
+  // for the free BAC water, and counting it would report a 5-vial order as
+  // "10 articulos" — inflating every alert the team reads.
+  const itemCount = (order.items || []).reduce((total, item) => (
+    Number(item.price || 0) > 0 ? total + Number(item.qty || 0) : total
+  ), 0);
   const method = String(order.payment_method || 'order').toUpperCase();
 
   const { error } = await supabase.from('admin_notifications').insert({
@@ -94,7 +99,12 @@ async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
 
   const templateName = process.env.SALES_TEAM_WHATSAPP_TEMPLATE || 'alerta_nuevo_pedido';
   const templateLanguage = process.env.SALES_TEAM_WHATSAPP_TEMPLATE_LANGUAGE || 'es';
-  const itemCount = (order.items || []).reduce((total, item) => total + Number(item.qty || 0), 0);
+  // Counts what the customer paid for. Orders carry an explicit zero-price line
+  // for the free BAC water, and counting it would report a 5-vial order as
+  // "10 articulos" — inflating every alert the team reads.
+  const itemCount = (order.items || []).reduce((total, item) => (
+    Number(item.price || 0) > 0 ? total + Number(item.qty || 0) : total
+  ), 0);
 
   const results = await Promise.allSettled(recipients.map(async ({ phone }) => {
     const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {

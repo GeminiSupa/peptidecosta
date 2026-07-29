@@ -18,7 +18,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { authorizeBot } from '@/lib/botAuth';
-import { parsePrice, getUsdToCrcRate, FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
+import { parsePrice, FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
+import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -125,7 +126,8 @@ export async function GET(req) {
     return NextResponse.json({ error: 'Server configuration error' }, { status: 503 });
   }
 
-  const exchangeRate = await getUsdToCrcRate();
+  const exchangeRateResult = await getDatabaseBackedUsdToCrcRate();
+  const exchangeRate = exchangeRateResult.rate || FALLBACK_EXCHANGE_RATE;
 
   // Run only the requested section queries, in parallel.
   const tasks = {};
@@ -174,7 +176,8 @@ export async function GET(req) {
   const payload = {
     meta: {
       generatedAt: new Date().toISOString(),
-      exchangeRate: exchangeRate || FALLBACK_EXCHANGE_RATE,
+      exchangeRate,
+      exchangeRateUpdatedAt: exchangeRateResult.updatedAt,
       sections: keys,
     },
   };

@@ -944,18 +944,11 @@ export default function CatalogClient({
   // Live currency exchange rate fetch
   const fetchLiveExchangeRate = async () => {
     try {
-      const cached = localStorage.getItem('exchangeRate_USDCRC');
-      const cachedTime = localStorage.getItem('exchangeRate_USDCRC_time');
-      if (cached && cachedTime && (Date.now() - parseInt(cachedTime)) < 3600000) {
-        setExchangeRate(parseFloat(cached));
-        setExchangeRateUpdatedAt(parseInt(cachedTime));
-        return;
-      }
       const res = await fetch('/api/exchange-rate');
       const data = await res.json();
       if (data.rate) {
         const rate = data.rate;
-        const now = Date.now();
+        const now = data.updatedAt ? Date.parse(data.updatedAt) : Date.now();
         setExchangeRate(rate);
         setExchangeRateUpdatedAt(now);
         localStorage.setItem('exchangeRate_USDCRC', rate.toString());
@@ -963,7 +956,14 @@ export default function CatalogClient({
       }
     } catch (err) {
       console.error('Live exchange rate fetch failed, using fallback:', err);
-      setExchangeRateUpdatedAt(Date.now());
+      const cached = localStorage.getItem('exchangeRate_USDCRC');
+      const cachedTime = localStorage.getItem('exchangeRate_USDCRC_time');
+      if (cached && cachedTime) {
+        setExchangeRate(parseFloat(cached));
+        setExchangeRateUpdatedAt(parseInt(cachedTime, 10));
+      } else {
+        setExchangeRateUpdatedAt(Date.now());
+      }
     }
   };
 

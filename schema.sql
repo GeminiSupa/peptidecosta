@@ -275,6 +275,10 @@ INSERT INTO public.site_settings (id, value) VALUES
 ('landing_page', '{"bannerActive": false, "bannerTextEn": "Flash Sale: 10% Off All Peptides!", "bannerTextEs": "Oferta Relámpago: ¡10% de descuento en todos los péptidos!", "heroTitleEn": "Buy Peptides in Costa Rica", "heroTitleEs": "Compra Péptidos en Costa Rica", "heroSubEn": "Lab-Tested. High Purity. Fast Local Delivery.", "heroSubEs": "Testados en Laboratorio. Alta Pureza. Entrega Local Rápida.", "heroTextEn": "Your trusted local source for premium, research-grade peptides. Verified quality, transparent pricing, and secure checkout.", "heroTextEs": "Tu fuente local de confianza para péptidos premium de grado investigación. Calidad verificada, precios transparentes y pago seguro."}'::jsonb)
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO public.site_settings (id, value) VALUES
+('exchange_rate', '{"base":"USD","quote":"CRC","usd_crc":454.48,"source":"schema-default","fetched_at":"2026-01-01T00:00:00.000Z"}'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+
 -- =========================================================================
 -- 7. BLOGS TABLE
 -- =========================================================================

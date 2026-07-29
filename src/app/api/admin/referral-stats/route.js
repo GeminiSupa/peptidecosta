@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { buildReferralStats } from '@/lib/referralStats.mjs';
-import { getUsdToCrcRate } from '@/lib/pricing';
+import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,7 +20,7 @@ export async function GET(request) {
 
     const supabase = getSupabaseAdmin();
 
-    const [scansResult, ordersResult, rate] = await Promise.all([
+    const [scansResult, ordersResult, exchangeRateResult] = await Promise.all([
       supabase
         .from('referral_scans')
         .select('sales_agent, promo_code, referral, session_id, is_first_visit, device_type, country, created_at')
@@ -34,7 +34,7 @@ export async function GET(request) {
         .select('sales_agent, promo_code, status, total_usd, total_crc, currency, created_at')
         .gte('created_at', since)
         .limit(20000),
-      getUsdToCrcRate(),
+      getDatabaseBackedUsdToCrcRate(),
     ]);
 
     if (scansResult.error) {
@@ -56,6 +56,7 @@ export async function GET(request) {
       return NextResponse.json({ error: ordersResult.error.message }, { status: 500 });
     }
 
+    const rate = exchangeRateResult.rate;
     const allStats = buildReferralStats(scansResult.data || [], ordersResult.data || [], rate);
 
     // This dashboard is for PEOPLE's QR/referral performance - sales reps and

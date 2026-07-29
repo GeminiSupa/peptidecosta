@@ -9,7 +9,7 @@ import {
 } from '@/lib/agentOrders';
 import { getPeriodLabel, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
-import { getUsdToCrcRate } from '@/lib/pricing';
+import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -57,7 +57,7 @@ export async function GET(request) {
   try {
     // 1. Initialize Supabase Admin Client
     const supabaseAdmin = getSupabaseAdmin();
-    const currentExchangeRate = await getUsdToCrcRate();
+    const { rate: currentExchangeRate } = await getDatabaseBackedUsdToCrcRate();
 
     // 2. Parse query parameters to support period selection
     const { searchParams } = new URL(request.url);

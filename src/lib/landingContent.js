@@ -433,8 +433,8 @@ export const DEFAULT_PUBLIC_PAGE_SETTINGS = {
       {
         qEn: 'Do you include reconstitution supplies?',
         qEs: '¿Incluyen suministros de reconstitución?',
-        aEn: 'Yes! We provide complimentary bacteriostatic water with every order — no need to add it to your cart. You can also find syringes in the Reconstitution Supply category.',
-        aEs: 'Sí. Proporcionamos agua bacteriostática de cortesía con cada pedido — no es necesario agregarla al carrito. También puede encontrar jeringas en la categoría Suministros de Reconstitución.',
+        aEn: 'Yes! Every peptide you buy includes a free 3ml vial of bacteriostatic water. Need extra vials? Add them to your cart for $10 each. You can also find syringes in the Reconstitution Supply category.',
+        aEs: 'Sí. Cada péptido que compre incluye un vial de 3ml de agua bacteriostática gratis. ¿Necesita viales adicionales? Agréguelos al carrito por $10 cada uno. También puede encontrar jeringas en la categoría Suministros de Reconstitución.',
       },
       {
         qEn: 'Can I order via WhatsApp?',
@@ -468,7 +468,7 @@ export const DEFAULT_PUBLIC_PAGE_SETTINGS = {
     terms: [
       { labelEn: 'Discounts apply automatically in the catalog cart when thresholds are met.', labelEs: 'Los descuentos se aplican automáticamente en el carrito del catálogo.' },
       { labelEn: 'You can mix and match different peptides to reach the required vial count.', labelEs: 'Puedes combinar diferentes péptidos para alcanzar la cantidad requerida.' },
-      { labelEn: 'All bulk orders still include complimentary BAC water and priority local shipping.', labelEs: 'Todos los pedidos al por mayor incluyen agua BAC gratis y envío local prioritario.' },
+      { labelEn: 'All bulk orders still include a free BAC water vial per peptide and priority local shipping.', labelEs: 'Todos los pedidos al por mayor incluyen un vial de agua BAC gratis por péptido y envío local prioritario.' },
     ],
     ctaButtonEn: 'Start Shopping',
     ctaButtonEs: 'Comenzar a Comprar',

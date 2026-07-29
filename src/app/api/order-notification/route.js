@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
 import { getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
+import { splitCartUnits } from '@/lib/bacWater.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
 // Environment variables will be read inside the POST handler
@@ -501,23 +502,23 @@ export async function POST(request) {
     // Use order.lang if provided, otherwise check currency (CRC -> Spanish, USD -> English)
     const orderLang = order.lang || (order.currency === 'CRC' ? 'es' : 'en');
 
-    // Add free Bac Water per peptide purchased
-    const peptideCount = order.items.reduce((count, item) => {
-      const name = (item.product || '').toLowerCase();
-      if (name.includes('bac water') || name.includes('bacteriostatic') || name.includes('syringe') || name.includes('supply')) {
-        return count;
-      }
-      return count + Number(item.qty || 0);
-    }, 0);
+    // Add the free Bac Water entitlement — one vial per peptide.
+    //
+    // The storefront already resolves this into explicit paid and gift lines
+    // before it posts, so only orders that arrived without any BAC line at all
+    // (agent-entered orders, older clients) need it filled in here. Injecting
+    // unconditionally would bill the customer for vials and then gift them the
+    // same count on top.
+    const { peptideUnits, bacUnits } = splitCartUnits(order.items);
 
-    if (peptideCount > 0) {
-      const productName = orderLang === 'en' 
-        ? 'Bacteriostatic Water 3ml (Free Gift)' 
-        : 'Agua Bacteriosttica 3ml (Regalo)';
-      
+    if (peptideUnits > 0 && bacUnits === 0) {
+      const productName = orderLang === 'en'
+        ? 'Bacteriostatic Water 3ml (Free Gift)'
+        : 'Agua Bacteriostática 3ml (Regalo)';
+
       order.items.push({
         product: productName,
-        qty: peptideCount,
+        qty: peptideUnits,
         price: 0
       });
     }
