@@ -7,6 +7,7 @@ import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { toE164, isValidE164, DEFAULT_PHONE_COUNTRY } from '@/lib/phoneFormat.mjs';
 import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
+import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 
 export const runtime = 'nodejs';
 // Every post-order alert now runs before the response, so this budget covers
@@ -63,6 +64,37 @@ async function recordNewOrderNotification(supabase, order, orderNumber) {
 }
 
 /**
+ * Records an order alert in whatsapp_messages so its delivery can be seen.
+ *
+ * Meta returning a message id only means "accepted for delivery" — the real
+ * `sent -> delivered -> read` trail arrives later as webhook status callbacks,
+ * and /api/whatsapp/webhook applies them by matching `meta_message_id`. Order
+ * alerts were the one send path that never wrote such a row, so their statuses
+ * had nowhere to land and "did that number actually get the alert?" was
+ * unanswerable. Best-effort: a logging failure must not fail the order.
+ */
+async function logOrderAlert(supabase, { phone, messageId, summary, orderId, raw }) {
+  if (!supabase || !messageId) return;
+  try {
+    const { error } = await insertWhatsAppMessage(supabase, {
+      wa_id: phone,
+      display_name: 'Order alert',
+      message_text: summary,
+      message_type: 'template',
+      direction: 'outbound',
+      source: 'cloud_api',
+      matched_order_id: orderId || null,
+      raw_payload: raw || null,
+      meta_message_id: messageId,
+      delivery_status: 'sent',
+    });
+    if (error) console.warn('[orders/create] Could not log order alert:', error.message);
+  } catch (err) {
+    console.warn('[orders/create] Could not log order alert:', err.message);
+  }
+}
+
+/**
  * Where the new-order WhatsApp alert goes.
  *
  * The Notification Settings list is the answer once it exists. Before that
@@ -100,7 +132,7 @@ async function resolveAgentWhatsAppRecipients(supabase) {
  * send. Destinations are explicit now, and a destination no longer has to be a
  * team member with a login.
  */
-async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
+async function sendAgentOrderWhatsApp(supabase, order, orderNumber, orderId = null) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!accessToken || !phoneNumberId) {
@@ -155,7 +187,17 @@ async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result?.error?.message || `Meta API returned ${response.status}`);
-    return { phone, messageId: result.messages?.[0]?.id };
+    const messageId = result.messages?.[0]?.id;
+
+    await logOrderAlert(supabase, {
+      phone,
+      messageId,
+      summary: `New order alert ${orderNumber} — ${order.customer_name} · ${formatSalesAlertTotal(order)} · ${itemCount} ${itemCount === 1 ? 'articulo' : 'articulos'}`,
+      orderId,
+      raw: result,
+    });
+
+    return { phone, messageId };
   }));
 
   results.forEach((result, index) => {
@@ -170,7 +212,7 @@ async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
   });
 }
 
-async function sendCustomerOrderConfirmation(order, orderNumber) {
+async function sendCustomerOrderConfirmation(supabase, order, orderNumber, orderId = null) {
   const customerPhone = order.customer_phone?.replace(/\D/g, '');
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -235,11 +277,19 @@ async function sendCustomerOrderConfirmation(order, orderNumber) {
       }),
     });
     
+    const result = await response.json().catch(() => ({}));
+
     if (!response.ok) {
-      const result = await response.json().catch(() => ({}));
       console.error('[orders/create] Customer WhatsApp alert failed:', result);
     } else {
       console.log('[orders/create] Customer WhatsApp alert sent successfully to', cleanPhone);
+      await logOrderAlert(supabase, {
+        phone: cleanPhone,
+        messageId: result.messages?.[0]?.id,
+        summary: `Order confirmation ${orderNumber} — ${itemSummary || 'Productos varios'} · ${formatSalesAlertTotal(order)}`,
+        orderId,
+        raw: result,
+      });
     }
   } catch (error) {
     console.error('[orders/create] Customer WhatsApp alert error:', error.message);
@@ -488,8 +538,8 @@ export async function POST(request) {
     // can hold up a customer.
     const baseUrl = new URL(request.url).origin;
     const alerts = [
-      ['customer WhatsApp', sendCustomerOrderConfirmation(order, data.order_number)],
-      ['agent WhatsApp', sendAgentOrderWhatsApp(supabase, order, data.order_number)],
+      ['customer WhatsApp', sendCustomerOrderConfirmation(supabase, order, data.order_number, data.id)],
+      ['agent WhatsApp', sendAgentOrderWhatsApp(supabase, order, data.order_number, data.id)],
       ['admin email', sendAdminOrderEmail(baseUrl, order, data.order_number)],
     ];
     const alertResults = await Promise.allSettled(alerts.map(([, promise]) => promise));
