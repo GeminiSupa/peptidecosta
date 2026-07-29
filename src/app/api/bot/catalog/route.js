@@ -19,6 +19,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { authorizeBot } from '@/lib/botAuth';
 import { parsePrice, FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
+import { isBacWater, isSellableBacWater, bacUnitPrice } from '@/lib/bacWater.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
 export const runtime = 'nodejs';
@@ -35,7 +36,13 @@ function parseInclude(searchParams) {
 }
 
 function shapeProduct(p, exchangeRate) {
-  const priceUsd = parsePrice(p.price_usd);
+  // BAC water is priced by rule, not by its product row: that row still reads
+  // "FREE with any purchase" from the giveaway days, and parsing it yields 0.
+  // Reporting 0 here taught the bot to tell customers the water is free while
+  // checkout charged them BAC_WATER_UNIT_PRICE_USD a vial past the allowance.
+  const priceUsd = isBacWater(p.product)
+    ? bacUnitPrice('USD', exchangeRate, parsePrice(p.price_usd))
+    : parsePrice(p.price_usd);
   const priceCrc = Math.round(priceUsd * exchangeRate);
   return {
     id: p.id,
@@ -184,7 +191,11 @@ export async function GET(req) {
 
   if (include.has('products')) {
     const rows = results.products.data || [];
-    let shaped = rows.map(p => shapeProduct(p, exchangeRate));
+    // Only the 3ml water is sold. The 2ml and 10ml rows still exist, and listing
+    // them here let the bot offer sizes that cannot be bought.
+    let shaped = rows
+      .filter(p => !isBacWater(p.product) || isSellableBacWater(p.product))
+      .map(p => shapeProduct(p, exchangeRate));
     // Exclude products the admin has hidden from the public catalog (hidden, not deleted)
     try {
       const { data: hp } = await supabase.from('site_settings').select('value').eq('id', 'hidden_products').maybeSingle();

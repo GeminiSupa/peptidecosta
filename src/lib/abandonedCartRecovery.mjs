@@ -2,6 +2,45 @@ import { getAbandonedCartConversion, normalizeEmail, normalizePhone, orderIsPaid
 
 const ORDER_MATCH_FIELDS = 'id, order_number, status, created_at, customer_email, customer_phone';
 
+/**
+ * Identity of a recovery destination, for "have we already messaged them?".
+ *
+ * One customer can leave several carts behind, and the first run after the 401
+ * fix messaged the same number twice within two seconds. Comparison is on the
+ * last 8 digits so the same person stored as `8888-8888` on one cart and
+ * `+506 8888 8888` on another is recognised as one destination.
+ */
+export function recoveryPhoneKey(phone) {
+  return String(phone ?? '').replace(/\D/g, '').slice(-8);
+}
+
+/**
+ * Picks the carts to message this run: at most one per person, capped.
+ *
+ * The skipped duplicates are returned separately because their carts still need
+ * marking as sent — left alone, the next run picks them up and messages the
+ * customer a second time anyway.
+ */
+export function selectRecoveryTargets(carts = [], maxSends = 3) {
+  const seen = new Set();
+  const targets = [];
+  const duplicates = [];
+
+  for (const cart of carts || []) {
+    if (!cart?.customer_phone) continue;
+    const key = recoveryPhoneKey(cart.customer_phone);
+    if (key && seen.has(key)) {
+      duplicates.push(cart);
+      continue;
+    }
+    if (targets.length >= maxSends) continue;
+    if (key) seen.add(key);
+    targets.push(cart);
+  }
+
+  return { targets, duplicates };
+}
+
 export async function findPaidOrderMatchForCart(supabase, cart, { limit = 500 } = {}) {
   if (!supabase || !cart) return { match: null, error: null };
 

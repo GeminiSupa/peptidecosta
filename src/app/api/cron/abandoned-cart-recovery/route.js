@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { canSendWhatsAppMarketing } from '@/lib/whatsappCompliance';
 import { sendWhatsAppMessage } from '@/lib/whatsappOutbound';
 import { getAbandonedCartConversion } from '@/lib/leadConversion.mjs';
-import { markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
+import { markAbandonedCartsConverted, selectRecoveryTargets } from '@/lib/abandonedCartRecovery.mjs';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
 
 export const maxDuration = 60; // Vercel limit
@@ -91,12 +91,20 @@ export async function GET(request) {
 
   let skippedNoConsent = 0;
   let failedCount = 0;
-  for (const cart of recoverableCarts) {
-    if (sentCount >= MAX_RECOVERY_SENDS_PER_RUN) break;
 
-    // We can only send a recovery message if we captured a phone number
-    if (!cart.customer_phone) continue;
+  // One person with two abandoned carts is still one person. Their extra carts
+  // are marked as sent rather than left alone, or the next run would pick them
+  // up and message the customer a second time anyway.
+  const { targets, duplicates } = selectRecoveryTargets(recoverableCarts, MAX_RECOVERY_SENDS_PER_RUN);
 
+  for (const cart of duplicates) {
+    await supabaseAdmin
+      .from('abandoned_carts')
+      .update({ recovery_whatsapp_sent: true, recovery_whatsapp_sent_at: new Date().toISOString() })
+      .eq('id', cart.id);
+  }
+
+  for (const cart of targets) {
     // Compliance gate: only message people who explicitly opted in to WhatsApp.
     // This is a marketing (promo) message, so it must never go to a non-opted-in
     // number — that is what gets the WhatsApp number flagged for spam.
@@ -157,7 +165,7 @@ export async function GET(request) {
     }
   }
 
-  console.log(`[abandoned-cart-recovery] processed=${recoverableCarts.length} sent=${sentCount} failed=${failedCount} skippedNoConsent=${skippedNoConsent} skippedPaidOrders=${convertedCarts.length}`);
+  console.log(`[abandoned-cart-recovery] processed=${recoverableCarts.length} sent=${sentCount} failed=${failedCount} skippedNoConsent=${skippedNoConsent} skippedDuplicatePhone=${duplicates.length} skippedPaidOrders=${convertedCarts.length}`);
 
   return NextResponse.json({
     success: true,
@@ -165,6 +173,7 @@ export async function GET(request) {
     sent: sentCount,
     failed: failedCount,
     skippedNoConsent,
+    skippedDuplicatePhone: duplicates.length,
     skippedPaidOrders: convertedCarts.length
   });
 }
