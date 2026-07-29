@@ -47,6 +47,7 @@ import WhatsAppInbox from '@/components/admin/WhatsAppInbox';
 import WhatsAppAnalyticsPanel from '@/components/admin/WhatsAppAnalyticsPanel';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 import { confirmDelete, confirmBulkDelete } from '@/lib/confirmDelete.mjs';
+import { claimOrderInDb } from '@/lib/claimOrder';
 import {
   ADMIN_NAV_GROUPS,
   ADMIN_TAB_IDS,
@@ -2634,12 +2635,20 @@ Core Rules:
   };
 
   // Order sales agent update
-  const handleOrderSalesAgentUpdate = async (orderId, agentName) => {
+  //
+  // `onlyIfUnassigned` is for the agent-facing "Claim this order" button: the
+  // write is conditional on the order still being unclaimed, so two agents
+  // racing the same order cannot silently overwrite each other. Without it the
+  // update is an unconditional overwrite (admin reassigning via the dropdown).
+  // Resolves to { ok, takenBy } so the caller can tell the loser who won.
+  const handleOrderSalesAgentUpdate = async (orderId, agentName, { onlyIfUnassigned = false } = {}) => {
     let finalAgentName = agentName;
 
     setOrders(orders.map(o => o.id === orderId ? { ...o, sales_agent: finalAgentName } : o));
 
-    if (isSupabaseConfigured && supabase) {
+    if (!isSupabaseConfigured || !supabase) return { ok: true };
+
+    if (!onlyIfUnassigned) {
       try {
         const { error } = await supabase
           .from('orders')
@@ -2652,6 +2661,24 @@ Core Rules:
       } catch (err) {
         console.error("Order sales agent update error:", err);
       }
+      return { ok: true };
+    }
+
+    try {
+      const result = await claimOrderInDb(supabase, orderId, finalAgentName);
+      if (!result.ok) {
+        // Put the real owner back on screen instead of our optimistic guess.
+        setOrders(prev => prev.map(
+          o => o.id === orderId ? { ...o, sales_agent: result.takenBy || null } : o
+        ));
+      }
+      return result;
+    } catch (err) {
+      console.error("Order claim error:", err);
+      setOrders(prev => prev.map(
+        o => o.id === orderId ? { ...o, sales_agent: null } : o
+      ));
+      return { ok: false, takenBy: '' };
     }
   };
 

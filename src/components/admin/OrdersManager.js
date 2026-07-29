@@ -233,14 +233,19 @@ export default function OrdersManager({
   // Claim writes the same value the dropdown offers — the agent's display name.
   // Storing the raw email instead left the select showing "-- Unassigned --" on
   // an order that was in fact claimed.
-  const claimOrder = (orderId) => {
+  const claimOrder = async (orderId) => {
     const email = loggedInEmailRef?.current || (typeof window !== 'undefined' ? localStorage.getItem('admin_email') : '') || '';
     const matchedAgent = agents.find((agent) => {
       const value = String(agent || '').trim().toLowerCase();
       const claimEmail = String(email).trim().toLowerCase();
       return value === claimEmail || value === claimEmail.split('@')[0];
     });
-    handleOrderSalesAgentUpdate(orderId, matchedAgent || currentAgentName || email || 'info@peptidescostarica.net');
+    const claimName = matchedAgent || currentAgentName || email || 'info@peptidescostarica.net';
+    const result = await handleOrderSalesAgentUpdate(orderId, claimName, { onlyIfUnassigned: true });
+    // Losing a race hides the order from this agent, so say who took it.
+    if (result?.ok === false && result.takenBy) {
+      alert(`This order was just claimed by ${result.takenBy}. It has moved to their queue.`);
+    }
   };
 
   /** Orders claimed before this fix hold an email, which is not in `agents`. */
