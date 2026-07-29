@@ -107,8 +107,23 @@ export function wantsOrderWhatsApp(profile) {
   return notificationsEnabled(profile) && profile?.order_whatsapp_notifications === true;
 }
 
-/** Digits-only WhatsApp destination, or '' when unusable. */
+/**
+ * Digits-only WhatsApp destinations for a member.
+ *
+ * The field accepts several numbers separated by commas so one person can be
+ * reached on more than one handset — an owner's phone plus whoever is covering
+ * for them, for instance — without inventing a placeholder team member for
+ * each extra number.
+ */
+export function agentWhatsAppNumbers(profile) {
+  return String(profile?.whatsapp_number || '')
+    .split(',')
+    .map((entry) => entry.replace(/\D/g, ''))
+    .filter((digits) => digits.length >= 8)
+    .filter((digits, index, all) => all.indexOf(digits) === index);
+}
+
+/** First usable destination, or '' when there is none. */
 export function agentWhatsAppNumber(profile) {
-  const digits = String(profile?.whatsapp_number || '').replace(/\D/g, '');
-  return digits.length >= 8 ? digits : '';
+  return agentWhatsAppNumbers(profile)[0] || '';
 }

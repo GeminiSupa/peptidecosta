@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   agentWhatsAppNumber,
+  agentWhatsAppNumbers,
   missingColumnFrom,
   notificationsEnabled,
   selectWithOptionalPreferences,
@@ -167,4 +168,27 @@ test('WhatsApp numbers are normalised, and unusable ones are rejected', () => {
   assert.equal(agentWhatsAppNumber({ whatsapp_number: '123' }), '', 'too short to be a real number');
   assert.equal(agentWhatsAppNumber({ whatsapp_number: null }), '');
   assert.equal(agentWhatsAppNumber({}), '');
+});
+
+test('one member can be reached on several numbers', () => {
+  assert.deepEqual(
+    agentWhatsAppNumbers({ whatsapp_number: '+506 6062 6224, 923175162896' }),
+    ['50660626224', '923175162896']
+  );
+});
+
+test('junk entries in the list are dropped without losing the good ones', () => {
+  assert.deepEqual(
+    agentWhatsAppNumbers({ whatsapp_number: '50660626224, 123, , abc, 923175162896' }),
+    ['50660626224', '923175162896']
+  );
+  assert.deepEqual(agentWhatsAppNumbers({ whatsapp_number: '' }), []);
+  assert.deepEqual(agentWhatsAppNumbers({}), []);
+});
+
+test('the same number listed twice is only messaged once', () => {
+  assert.deepEqual(
+    agentWhatsAppNumbers({ whatsapp_number: '50660626224, +506 6062-6224' }),
+    ['50660626224']
+  );
 });

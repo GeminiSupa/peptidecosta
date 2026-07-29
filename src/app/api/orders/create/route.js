@@ -2,7 +2,7 @@ import { after, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
-import { agentWhatsAppNumber, selectWithOptionalPreferences, wantsOrderWhatsApp } from '@/lib/notificationPreferences.mjs';
+import { agentWhatsAppNumbers, selectWithOptionalPreferences, wantsOrderWhatsApp } from '@/lib/notificationPreferences.mjs';
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
 
 export const runtime = 'nodejs';
@@ -138,8 +138,7 @@ async function sendAgentOrderWhatsApp(supabase, order, orderNumber) {
   // this sends nothing at all.
   const recipients = (data || [])
     .filter(wantsOrderWhatsApp)
-    .map((profile) => ({ name: profile.name, phone: agentWhatsAppNumber(profile) }))
-    .filter((entry) => entry.phone)
+    .flatMap((profile) => agentWhatsAppNumbers(profile).map((phone) => ({ name: profile.name, phone })))
     .filter((entry, index, all) => all.findIndex((other) => other.phone === entry.phone) === index);
 
   if (recipients.length === 0) {

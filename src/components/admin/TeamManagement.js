@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { confirmDelete } from '@/lib/confirmDelete.mjs';
 import { supabase } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp, Camera, Upload, Mail, Bell, MessageCircle } from 'lucide-react';
@@ -406,7 +407,12 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   };
 
   const handleDelete = async (userId) => {
-    if (!window.confirm("Are you sure you want to completely delete this user? This cannot be undone.")) return;
+    const member = users.find((u) => u.user_id === userId);
+    if (!confirmDelete('team member', [
+      member?.name,
+      member?.email,
+      member?.is_superadmin && 'Superadmin — full access to everything',
+    ])) return;
     
     try {
       const res = await adminFetch(`/api/admin/users/delete?userId=${userId}`, { method: 'DELETE' });
@@ -1234,14 +1240,14 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                     {formOrderWhatsApp && (
                       <div style={{ paddingTop: '10px' }}>
                         <label style={{ display: 'block', fontSize: '0.72rem', color: '#94a3b8', marginBottom: '6px', fontWeight: 'bold' }}>
-                          WhatsApp number (with country code)
+                          WhatsApp number(s) — with country code, comma-separated for more than one
                         </label>
                         <input
                           type="tel"
                           className="admin-input"
                           value={formWhatsAppNumber}
                           onChange={e => setFormWhatsAppNumber(e.target.value)}
-                          placeholder="50688881234"
+                          placeholder="50688881234, 923175162896"
                           style={{ width: '100%' }}
                         />
                         {!formWhatsAppNumber.replace(/\D/g, '') && (
