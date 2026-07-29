@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { confirmDelete } from '@/lib/confirmDelete.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import QRCode from 'qrcode';
@@ -301,7 +302,13 @@ export default function AffiliatesManager({ products = [] }) {
   };
 
   const handleDeleteAffiliate = async (id) => {
-    if (!confirm('Are you sure you want to delete this affiliate? All their promo codes will also be deleted.')) return;
+    const affiliate = affiliates.find((a) => a.id === id);
+    const ownedCodes = promoCodes.filter((p) => p.affiliate_id === id);
+    if (!confirmDelete('affiliate', [
+      affiliate?.name,
+      affiliate?.email || affiliate?.phone,
+      `${ownedCodes.length} promo code${ownedCodes.length === 1 ? '' : 's'} will be deleted too${ownedCodes.length ? `: ${ownedCodes.map((p) => p.code).join(', ')}` : ''}`,
+    ])) return;
     try {
       const { error } = await supabase.from('affiliates').delete().eq('id', id);
       if (error) throw error;
@@ -378,7 +385,12 @@ export default function AffiliatesManager({ products = [] }) {
   };
 
   const handleDeletePromo = async (id) => {
-    if (!confirm('Are you sure you want to delete this promo code?')) return;
+    const promo = promoCodes.find((p) => p.id === id);
+    if (!confirmDelete('promo code', [
+      promo?.code,
+      promo?.discount_pct != null && `${Math.round(promo.discount_pct * 100)}% off`,
+      promo?.usage_count != null && `Used ${promo.usage_count} time${promo.usage_count === 1 ? '' : 's'}`,
+    ])) return;
     try {
       const res = await adminFetch('/api/admin/promo/manage', {
         method: 'POST',

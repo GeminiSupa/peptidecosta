@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { confirmDelete } from '@/lib/confirmDelete.mjs';
 import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader, Calendar, Trash2 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import BroadcastProgress from '@/components/admin/BroadcastProgress';
@@ -94,7 +95,12 @@ export default function BroadcastsPanel({ products = [] }) {
   };
 
   const handleDeleteBanner = (id) => {
-    if (!window.confirm("Delete this banner?")) return;
+    const banner = banners.find((b) => b.id === id);
+    if (!confirmDelete('banner', [
+      banner?.textEn,
+      banner?.textEs,
+      banner?.isActive ? 'Currently live on the site' : 'Not active',
+    ])) return;
     saveBanners(banners.filter(b => b.id !== id));
   };
 
@@ -198,7 +204,12 @@ export default function BroadcastsPanel({ products = [] }) {
   });
 
   const handleDeleteScheduled = async (id) => {
-    if (!window.confirm("Delete this scheduled broadcast?")) return;
+    const item = scheduledBroadcasts.find((s) => s.id === id);
+    if (!confirmDelete('scheduled broadcast', [
+      item?.scheduled_at && `Scheduled for ${new Date(item.scheduled_at).toLocaleString()}`,
+      item?.audience && `Audience: ${String(item.audience).replace(/_/g, ' ')}`,
+      item?.message && `"${String(item.message).slice(0, 80)}"`,
+    ])) return;
     try {
       const res = await adminFetch(`/api/admin/broadcast?id=${id}`, { method: 'DELETE' });
       if (res.ok) fetchScheduled();

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { confirmDelete } from '@/lib/confirmDelete.mjs';
 import { adminFetch } from '@/lib/adminApi';
 import { 
   Mail, Search, Filter, Trash2, Send, Eye, Clock, CheckCircle, 
@@ -132,7 +133,12 @@ export default function InquiriesManager({ adminEmail, products = [], onOpenCust
   };
 
   const handleDelete = async (inquiryId) => {
-    if (!confirm('Delete this inquiry permanently?')) return;
+    const inquiry = inquiries.find((i) => i.id === inquiryId);
+    if (!confirmDelete('inquiry', [
+      inquiry?.name,
+      inquiry?.email || inquiry?.phone,
+      inquiry?.message && `"${String(inquiry.message).slice(0, 80)}"`,
+    ])) return;
     try {
       await adminFetch(`/api/admin/inquiries/update?id=${inquiryId}`, { method: 'DELETE' });
       setInquiries(prev => prev.filter(i => i.id !== inquiryId));

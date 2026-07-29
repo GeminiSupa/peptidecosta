@@ -46,6 +46,7 @@ import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
 import WhatsAppInbox from '@/components/admin/WhatsAppInbox';
 import WhatsAppAnalyticsPanel from '@/components/admin/WhatsAppAnalyticsPanel';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
+import { confirmDelete, confirmBulkDelete } from '@/lib/confirmDelete.mjs';
 import {
   ADMIN_NAV_GROUPS,
   ADMIN_TAB_IDS,
@@ -2672,7 +2673,17 @@ Core Rules:
 
   // Delete a single order
   const handleDeleteOrder = async (orderId) => {
-    if (!confirm('Delete this order? This cannot be undone.')) return;
+    const order = orders.find((o) => o.id === orderId);
+    if (!confirmDelete('order', [
+      order?.order_number && `#${order.order_number}`,
+      order?.customer_name,
+      order?.customer_phone,
+      order && (order.currency === 'USD'
+        ? `$${Number(order.total_usd || 0).toLocaleString('en-US')}`
+        : `₡${Number(order.total_crc || 0).toLocaleString('es-CR')}`),
+      order?.status && `Status: ${order.status}`,
+      order?.sales_agent && `Agent: ${order.sales_agent}`,
+    ])) return;
     setOrders(prev => prev.filter(o => o.id !== orderId));
     if (isSupabaseConfigured && supabase) {
       try {
@@ -2685,7 +2696,12 @@ Core Rules:
 
   // Delete a single abandoned cart entry
   const handleDeleteCart = async (cartKey) => {
-    if (!confirm('Remove this cart entry? This cannot be undone.')) return;
+    const cart = abandonedCarts.find((c) => (c.session_id || c.id) === cartKey || c.id === cartKey);
+    if (!confirmDelete('cart entry', [
+      cart?.customer_name,
+      cart?.customer_phone || cart?.customer_email,
+      cart?.status && `Status: ${cart.status}`,
+    ])) return;
     try {
       const matchedCart = abandonedCarts.find((c) => (c.session_id || c.id) === cartKey || c.id === cartKey);
       const res = await adminFetch('/api/admin/abandoned-carts/update', {
@@ -3427,7 +3443,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   };
   
   const handleLeadDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this lead?")) return;
+    const lead = leads.find((l) => l.id === id);
+    if (!confirmDelete('lead', [
+      lead?.name,
+      lead?.phone || lead?.email,
+      lead?.status && `Status: ${lead.status}`,
+    ])) return;
     
     setLeads(prev => prev.filter(l => l.id !== id));
     
@@ -3745,8 +3766,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   const handleDeleteReview = async (id) => {
     if (!supabase) return;
     const reason = reviewModerationReasons[id]?.trim();
-    const reasonText = reason ? `\nReason: ${reason}` : '\nNo moderation reason entered.';
-    if (!confirm(`Delete this review?${reasonText}`)) return;
+    const review = reviews.find((r) => r.id === id);
+    if (!confirmDelete('review', [
+      review?.product,
+      review?.author_name || review?.customer_name,
+      review?.rating && `Rating: ${review.rating}`,
+      review?.comment && `"${String(review.comment).slice(0, 80)}"`,
+      reason ? `Reason: ${reason}` : 'No moderation reason entered.',
+    ])) return;
     try {
       const { error } = await supabase.from('product_reviews').delete().eq('id', id);
       if (!error) {
@@ -3801,7 +3828,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
   const handleDeleteNotification = async (id) => {
     if (!isSupabaseConfigured || !supabase) return;
-    if (!confirm('Are you sure you want to delete this notification?')) return;
+    const note = facebookNotifications?.find((n) => n.id === id);
+    if (!confirmDelete('notification', [
+      note?.sender_name,
+      note?.type,
+      note?.content && `"${String(note.content).slice(0, 80)}"`,
+    ])) return;
     try {
       const { error } = await supabase
         .from('facebook_notifications')
@@ -4182,7 +4214,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   };
 
   const handleDeleteBlog = async (id) => {
-    if (!confirm('Are you sure you want to delete this blog post?')) return;
+    const post = blogs.find((b) => b.id === id);
+    if (!confirmDelete('blog post', [post?.title, post?.slug && `/${post.slug}`])) return;
     if (isSupabaseConfigured && supabase) {
       try {
         await supabase.from('blogs').delete().eq('id', id);

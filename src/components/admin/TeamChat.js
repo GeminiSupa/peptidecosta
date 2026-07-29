@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { confirmDelete } from '@/lib/confirmDelete.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   Send, User, Users, ChevronLeft, Search, Smile,
@@ -349,7 +350,11 @@ export default function TeamChat({ profile }) {
   };
 
   const handleDelete = async (msgId) => {
-    if (!window.confirm('Delete this message?')) return;
+    const msg = messages.find((m) => m.id === msgId);
+    if (!confirmDelete('message', [
+      msg?.sender_name && `From: ${msg.sender_name}`,
+      msg?.message_text && `"${String(msg.message_text).slice(0, 80)}"`,
+    ])) return;
     setMessages(prev => prev.filter(m => m.id !== msgId));
     setHoveredMsgId(null);
     await supabase.from('team_messages')
