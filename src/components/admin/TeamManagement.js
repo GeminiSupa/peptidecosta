@@ -44,7 +44,7 @@ function displayDestination(recipient) {
  * screen, whether or not it belongs to a team member with a login.
  */
 function NotificationSettings({
-  recipients, tableReady, hint, envBaseEmails, loading, error, savingId, canEdit,
+  recipients, tableReady, hint, loading, error, savingId, canEdit,
   newLabel, setNewLabel, newChannel, setNewChannel, newDestination, setNewDestination,
   adding, onAdd, onUpdate, onRemove,
 }) {
@@ -119,18 +119,6 @@ function NotificationSettings({
       {renderGroup('WhatsApp', <MessageCircle size={16} style={{ color: '#22c55e' }} />, whatsapp, 'Nobody is getting a WhatsApp alert for new orders.')}
       {renderGroup('Email', <Mail size={16} style={{ color: '#38bdf8' }} />, emails, 'Nobody is getting an email for new orders.')}
 
-      {envBaseEmails.length > 0 && (
-        <div style={{ ...panel, paddingTop: '16px', paddingBottom: '16px' }}>
-          <h3 style={{ fontSize: '0.82rem', fontWeight: 'bold', color: '#94a3b8', margin: '0 0 6px 0' }}>Server setting: ORDER_NOTIFICATION_TO</h3>
-          <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0 0 8px 0' }}>
-            {tableReady
-              ? 'No longer used for order emails — the list above replaced it. Safe to delete from Vercel.'
-              : 'Currently added to the order email on top of the per-member settings.'}
-          </p>
-          <div style={{ fontSize: '0.78rem', color: '#cbd5e1', wordBreak: 'break-all' }}>{envBaseEmails.join(', ')}</div>
-        </div>
-      )}
-
       {canEdit ? (
         <form onSubmit={onAdd} style={panel}>
           <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -188,7 +176,6 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [recipients, setRecipients] = useState([]);
   const [recipientsReady, setRecipientsReady] = useState(true);
   const [recipientsHint, setRecipientsHint] = useState('');
-  const [envBaseEmails, setEnvBaseEmails] = useState([]);
   const [recipientsLoading, setRecipientsLoading] = useState(false);
   const [recipientsError, setRecipientsError] = useState('');
   const [recipientSavingId, setRecipientSavingId] = useState(null);
@@ -269,7 +256,6 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setRecipients(data.recipients || []);
       setRecipientsReady(data.tableReady !== false);
       setRecipientsHint(data.hint || '');
-      setEnvBaseEmails(data.envBaseEmails || []);
     } catch (err) {
       setRecipientsError(err.message);
     }
@@ -982,7 +968,6 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
           recipients={recipients}
           tableReady={recipientsReady}
           hint={recipientsHint}
-          envBaseEmails={envBaseEmails}
           loading={recipientsLoading}
           error={recipientsError}
           savingId={recipientSavingId}

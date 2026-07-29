@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { getBaseOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
 import {
   NOTIFICATION_CHANNELS,
   isMissingRecipientsTable,
@@ -25,12 +24,9 @@ function validate({ label, channel, destination }) {
 }
 
 /**
- * The list, plus the owner inboxes still coming from ORDER_NOTIFICATION_TO.
- *
- * Showing that env value matters: it is invisible in the Vercel dashboard once
- * saved, so before this screen existed nobody could see who was actually on the
- * order email. It is reported as `envBaseEmails` so the UI can display it as
- * read-only and prompt for it to be folded into the managed list.
+ * The managed list. ORDER_NOTIFICATION_TO is deliberately not reported: once
+ * this table exists it is the whole answer for order emails, and echoing a
+ * server setting the screen no longer obeys only invites confusion.
  */
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
@@ -45,17 +41,13 @@ export async function GET(request) {
 
   if (error) {
     if (isMissingRecipientsTable(error)) {
-      return NextResponse.json({ recipients: [], tableReady: false, hint: MIGRATION_HINT, envBaseEmails: getBaseOrderNotificationRecipients() });
+      return NextResponse.json({ recipients: [], tableReady: false, hint: MIGRATION_HINT });
     }
     console.error('[notification-recipients] List failed:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({
-    recipients: data || [],
-    tableReady: true,
-    envBaseEmails: getBaseOrderNotificationRecipients(),
-  });
+  return NextResponse.json({ recipients: data || [], tableReady: true });
 }
 
 export async function POST(request) {
