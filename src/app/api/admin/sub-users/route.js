@@ -25,6 +25,7 @@ import {
 } from '@/lib/agentOrders';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { SUB_USER_PROFILE_COLUMNS, missingColumnFrom } from '@/lib/optionalColumns.mjs';
+import { writeWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 
 /**
  * The whole tier lives in columns from add-sub-user-tier.sql. If that has not
@@ -34,9 +35,19 @@ import { SUB_USER_PROFILE_COLUMNS, missingColumnFrom } from '@/lib/optionalColum
  */
 const MIGRATION_HINT = 'Sub-users are not switched on yet. Run add-sub-user-tier.sql in the Supabase SQL Editor.';
 
-function migrationNotRun(error) {
+/**
+ * Any missing column means a migration has not been run, not that the code is
+ * broken — so say which column, and which script to run when we know it.
+ *
+ * The earlier version of this only recognised columns on a fixed list, so a
+ * database missing whatsapp_number answered "Could not load your team", which
+ * tells the reader nothing and cost real debugging time.
+ */
+function migrationError(error) {
   const missing = missingColumnFrom(error);
-  return missing ? SUB_USER_PROFILE_COLUMNS.includes(missing) : false;
+  if (!missing) return null;
+  if (SUB_USER_PROFILE_COLUMNS.includes(missing)) return MIGRATION_HINT;
+  return `Your database is missing the "${missing}" column on admin_profiles. Run the migration that adds it, then try again.`;
 }
 
 export const runtime = 'nodejs';
@@ -55,7 +66,18 @@ export const dynamic = 'force-dynamic';
  * have sub-users, and no hand-crafted request can change that.
  */
 
-const PROFILE_FIELDS = 'id, user_id, email, name, tier, status, parent_agent_id, commission_rate, override_rate, sub_user_cap, whatsapp_number, avatar_url, invited_by, approved_at, approved_by, created_at, is_superadmin';
+/**
+ * Deliberately '*' rather than a column list.
+ *
+ * admin_profiles has grown by hand-applied migration, so several of its columns
+ * are optional in practice — whatsapp_number arrives with
+ * add-notification-preferences-to-profiles.sql, avatar_url with
+ * team-profile-avatars-migration.sql, and naming either one in a select breaks
+ * this whole route on a database that never ran them. TeamManagement already
+ * reads the table with select('*') for the same reason, and RLS exposes it to
+ * any authenticated admin regardless, so nothing is widened by doing it here.
+ */
+const PROFILE_FIELDS = '*';
 
 const cleanText = (value) => (value == null ? null : String(value).trim() || null);
 const normEmail = (value) => String(value || '').trim().toLowerCase();
@@ -164,11 +186,12 @@ export async function GET(request) {
       .order('created_at', { ascending: false });
 
     if (error) {
-      if (migrationNotRun(error)) {
-        return NextResponse.json({ error: MIGRATION_HINT, migrationRequired: true }, { status: 503 });
+      const hint = migrationError(error);
+      if (hint) {
+        return NextResponse.json({ error: hint, migrationRequired: true }, { status: 503 });
       }
       console.error('[sub-users] Failed to load profiles:', error);
-      return NextResponse.json({ error: 'Could not load your team' }, { status: 500 });
+      return NextResponse.json({ error: `Could not load your team: ${error.message}` }, { status: 500 });
     }
 
     const all = profiles || [];
@@ -236,11 +259,12 @@ export async function POST(request) {
       .select(PROFILE_FIELDS);
 
     if (loadError) {
-      if (migrationNotRun(loadError)) {
-        return NextResponse.json({ error: MIGRATION_HINT, migrationRequired: true }, { status: 503 });
+      const hint = migrationError(loadError);
+      if (hint) {
+        return NextResponse.json({ error: hint, migrationRequired: true }, { status: 503 });
       }
       console.error('[sub-users] Failed to load profiles for invite:', loadError);
-      return NextResponse.json({ error: 'Could not check your team' }, { status: 500 });
+      return NextResponse.json({ error: `Could not check your team: ${loadError.message}` }, { status: 500 });
     }
 
     const all = profiles || [];
@@ -275,9 +299,11 @@ export async function POST(request) {
       );
     }
 
-    const { data: created, error: insertError } = await supabaseAdmin
-      .from('admin_profiles')
-      .insert([{
+    // whatsapp_number is one of the optional notification columns, so the write
+    // goes through the same helper member creation uses — an invite must not
+    // fail just because add-notification-preferences-to-profiles.sql is missing.
+    const { data: created, error: insertError, droppedColumns } = await writeWithOptionalPreferences(
+      {
         // user_id stays null until approval creates the auth user.
         email,
         name,
@@ -292,14 +318,19 @@ export async function POST(request) {
         salary_currency: 'USD',
         whatsapp_number: whatsapp,
         invited_by: auth.profile.email,
-      }])
-      .select(PROFILE_FIELDS)
-      .single();
+      },
+      (row) => supabaseAdmin.from('admin_profiles').insert([row]).select(PROFILE_FIELDS).single()
+    );
+
+    if (droppedColumns?.length) {
+      console.warn('[sub-users] Optional columns missing on invite:', droppedColumns.join(', '));
+    }
 
     if (insertError) {
       console.error('[sub-users] Invite failed:', insertError);
       // The depth trigger and the unique-name index both surface here.
-      return NextResponse.json({ error: insertError.message }, { status: 400 });
+      const hint = migrationError(insertError);
+      return NextResponse.json({ error: hint || insertError.message }, { status: 400 });
     }
 
     return NextResponse.json({ success: true, subUser: created });
