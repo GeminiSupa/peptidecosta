@@ -22,9 +22,14 @@ export const ADMIN_MODULES = [
   { id: 'affiliates', label: 'Affiliates', title: 'Affiliates & Promo Codes', group: 'Sales & Marketing' },
   { id: 'deals', label: 'Deal of the Week', title: 'Deal of the Week', group: 'Sales & Marketing' },
   { id: 'my_qr', label: 'My QR & Scans', title: 'My QR & Scans', group: 'Sales & Marketing', alwaysAvailable: true },
-  // Staff recruit and track their own sub-users here. Assignable rather than
-  // alwaysAvailable, so the owner decides which staff may recruit at all.
-  { id: 'my_team', label: 'My Team (Sub-Users)', title: 'My Team', group: 'Sales & Marketing' },
+  // Every staff member recruits and tracks their own sub-users here — no
+  // permission to tick first. The owner still gates the thing that costs money,
+  // which is approval: an invite earns nobody anything until it is approved.
+  //
+  // alwaysAvailable is safe against the two-level cap because the tier check in
+  // resolveAdminTabAccess runs BEFORE this flag is consulted, so a sub-user
+  // still cannot reach My Team and still has no invite button.
+  { id: 'my_team', label: 'My Team (Sub-Users)', title: 'My Team', group: 'Sales & Marketing', alwaysAvailable: true },
   { id: 'broadcasts', label: 'One-Time Announcements', title: 'One-Time Announcements', group: 'Sales & Marketing' },
   { id: 'analytics', label: 'Analytics', title: 'Analytics & Attribution', group: 'Analytics & Content' },
   { id: 'cms', label: 'CMS', title: 'CMS Drafts & Preview', group: 'Analytics & Content' },

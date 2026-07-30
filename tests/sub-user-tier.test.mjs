@@ -105,6 +105,22 @@ test('there is no invite button for a sub-user to find', () => {
   assert.equal(resolveAdminTabAccess('my_team', LUIS), false);
 });
 
+test('every staff member can reach My Team without a permission being ticked', () => {
+  // A brand-new staff member with an empty permissions array still recruits.
+  // The owner gates approval, which is the step that costs money — not the tab.
+  const fresh = { user_id: 'new-uuid', name: 'Nueva', tier: 'staff', status: 'active', permissions: [] };
+  assert.equal(resolveAdminTabAccess('my_team', fresh), true);
+  assert.equal(canInviteSubUsers(fresh), true);
+});
+
+test('making My Team always-available did not open it to sub-users', () => {
+  // alwaysAvailable short-circuits to true for staff, so the tier check has to
+  // stay ahead of it or the two-level cap dies quietly right here.
+  assert.equal(resolveAdminTabAccess('my_team', LUIS), false);
+  assert.equal(resolveAdminTabAccess('my_team', { ...LUIS, permissions: ['my_team'] }), false);
+  assert.equal(resolveAdminTabAccess('my_team', { ...LUIS, status: 'pending' }), false);
+});
+
 test('a permission granted by mistake still cannot open a tab for a sub-user', () => {
   // The allow-list is not advisory. Even if my_team lands in their permissions
   // array — a bad edit, a copied profile — the tier check refuses first.
