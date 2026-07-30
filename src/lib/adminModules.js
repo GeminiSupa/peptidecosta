@@ -32,9 +32,12 @@ export const ADMIN_MODULES = [
   { id: 'wa_session', label: 'WhatsApp Device', title: 'WhatsApp Device', group: 'System & AI' },
   { id: 'team', label: 'Team Management', title: 'Team Management', group: 'System & AI', superadminOnly: true },
   { id: 'team_chat', label: 'Team Chat', title: 'Team Chat', group: 'System & AI', alwaysAvailable: true },
-  // A sub-user's entire dashboard: this plus my_qr, and nothing else. Hidden
-  // from the staff nav because sub-users get their own two-tab shell.
-  { id: 'my_earnings', label: 'My Earnings', title: 'My Earnings', group: 'Overview', hiddenFromNav: true, subUserOnly: true },
+  // A sub-user's entire dashboard: this plus my_qr, and nothing else.
+  // Deliberately NOT hiddenFromNav — the mobile "More" sheet is built from
+  // ADMIN_NAV_GROUPS, which drops hidden modules, and hiding this one left a
+  // sub-user on a phone with no way back to their own earnings screen. Staff
+  // never see it regardless, because resolveAdminTabAccess gates it by tier.
+  { id: 'my_earnings', label: 'My Earnings', title: 'My Earnings', group: 'Overview', subUserOnly: true },
 ];
 
 export const ASSIGNABLE_ADMIN_MODULES = ADMIN_MODULES.filter(

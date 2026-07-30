@@ -57,6 +57,7 @@ import {
   getDefaultAdminTab,
   resolveAdminTabAccess,
 } from '@/lib/adminModules';
+import { isSubUser } from '@/lib/subUserTier.mjs';
 import {
   DEFAULT_LANDING_PAGE_SETTINGS,
   DEFAULT_PUBLIC_PAGE_SETTINGS,
@@ -1432,6 +1433,7 @@ Core Rules:
   };
 
   const isStaffAgent = adminProfile && !adminProfile.is_superadmin;
+  const isSubUserProfile = isSubUser(adminProfile);
   const adminPermissionKey = Array.isArray(adminProfile?.permissions)
     ? adminProfile.permissions.join('|')
     : '';
@@ -4390,6 +4392,16 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   <span className="tab-label">{isStaffAgent ? 'My Pay' : 'Today'}</span>
                 </button>
               )}
+              {/* Sub-users only — their equivalent of Today. */}
+              {hasAccess('my_earnings') && (
+                <button
+                  className={`admin-tab-btn ${activeTab === 'my_earnings' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('my_earnings')}
+                >
+                  <Wallet size={14} />
+                  <span className="tab-label">My Earnings</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -4546,18 +4558,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 >
                   <QrCode size={14} />
                   <span className="tab-label">My QR & Scans</span>
-                </button>
-              )}
-              {/* Sub-users only: their earnings screen. resolveAdminTabAccess
-                  grants my_earnings to that tier alone, so this never appears
-                  for staff or the owner. */}
-              {hasAccess('my_earnings') && (
-                <button
-                  className={`admin-tab-btn ${activeTab === 'my_earnings' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('my_earnings')}
-                >
-                  <Wallet size={14} />
-                  <span className="tab-label">My Earnings</span>
                 </button>
               )}
               {hasAccess('my_team') && (
@@ -7560,6 +7560,30 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             {unreadTeamMsgCount > 0 && (
               <span className="admin-quick-nav-badge">{unreadTeamMsgCount}</span>
             )}
+          </button>
+        )}
+        {/* A sub-user has access to none of the five buttons above, so without
+            these two their phone shows a bottom bar containing only "More".
+            my_qr is gated on the tier as well, otherwise every staff member
+            would gain a bottom tab they never asked for. */}
+        {hasAccess('my_earnings') && (
+          <button
+            type="button"
+            className={`admin-quick-nav-btn${activeTab === 'my_earnings' ? ' active' : ''}`}
+            onClick={() => navigateToTab('my_earnings')}
+          >
+            <Wallet size={18} />
+            <span>Earnings</span>
+          </button>
+        )}
+        {isSubUserProfile && hasAccess('my_qr') && (
+          <button
+            type="button"
+            className={`admin-quick-nav-btn${activeTab === 'my_qr' ? ' active' : ''}`}
+            onClick={() => navigateToTab('my_qr')}
+          >
+            <QrCode size={18} />
+            <span>My Link</span>
           </button>
         )}
         <button

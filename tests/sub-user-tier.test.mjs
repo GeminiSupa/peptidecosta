@@ -13,7 +13,12 @@ import {
   validateReassignment,
   validateSubUserParent,
 } from '../src/lib/subUserTier.mjs';
-import { getDefaultAdminTab, resolveAdminTabAccess } from '../src/lib/adminModules.js';
+import {
+  ADMIN_NAV_GROUPS,
+  SUB_USER_TAB_IDS,
+  getDefaultAdminTab,
+  resolveAdminTabAccess,
+} from '../src/lib/adminModules.js';
 
 const MARIA = {
   user_id: 'maria-uuid',
@@ -110,6 +115,39 @@ test('a permission granted by mistake still cannot open a tab for a sub-user', (
 
 test('the sub-user screen is not offered to staff', () => {
   assert.equal(resolveAdminTabAccess('my_earnings', MARIA), false);
+});
+
+test('every tab a sub-user can open is reachable from the mobile nav', () => {
+  // The phone's "More" sheet is built from ADMIN_NAV_GROUPS, which drops any
+  // module marked hiddenFromNav. Marking my_earnings hidden left a sub-user on
+  // a phone with no route back to their own earnings screen — the quick-nav bar
+  // offers them nothing, so the sheet is their only way around.
+  const reachable = new Set(ADMIN_NAV_GROUPS.flatMap((group) => group.tabs));
+
+  for (const tabId of SUB_USER_TAB_IDS) {
+    assert.equal(
+      reachable.has(tabId),
+      true,
+      `${tabId} is open to sub-users but missing from the mobile nav — they would be stranded`
+    );
+  }
+});
+
+test('the mobile nav never offers a tab the viewer cannot open', () => {
+  // The sheet filters by hasAccess, so a staff member must not see my_earnings
+  // listed even though it now appears in ADMIN_NAV_GROUPS.
+  const visibleToStaff = ADMIN_NAV_GROUPS
+    .flatMap((group) => group.tabs)
+    .filter((tabId) => resolveAdminTabAccess(tabId, MARIA));
+
+  assert.ok(!visibleToStaff.includes('my_earnings'));
+  assert.ok(visibleToStaff.includes('my_team'));
+
+  const visibleToSubUser = ADMIN_NAV_GROUPS
+    .flatMap((group) => group.tabs)
+    .filter((tabId) => resolveAdminTabAccess(tabId, LUIS));
+
+  assert.deepEqual(visibleToSubUser.sort(), ['my_earnings', 'my_qr']);
 });
 
 test('each tier lands on the right first screen', () => {
