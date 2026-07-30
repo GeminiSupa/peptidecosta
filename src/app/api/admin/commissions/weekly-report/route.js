@@ -8,6 +8,14 @@ import {
   orderBelongsToAgent,
 } from '@/lib/agentOrders';
 import { getPeriodLabel, recalcPayoutAmounts } from '@/lib/commissionPayouts';
+import {
+  buildPaidOrderIndex,
+  computeOverrideAmounts,
+  hasBeenPaid,
+  overrideRateFor,
+  payableChildrenOf,
+} from '@/lib/subUserCommission.mjs';
+import { isActiveProfile, profileTier } from '@/lib/subUserTier.mjs';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
@@ -174,26 +182,24 @@ export async function GET(request) {
     }) : null;
 
     // 5. Calculate weekly gross sales and commissions for each agent
-    // First, get all already approved payout orders so we don't double count
+    // First, get all already approved payout orders so we don't double count.
+    // The index is keyed PER AGENT, not by order id alone: a sub-user's order
+    // legitimately pays two people (their 8% and their parent's 2% override), so
+    // one order can be settled for one person and still outstanding for another.
+    // A flat set of order ids would make approving the sub-user's payout first
+    // silently erase the parent's override on the next scan.
     const { data: approvedPayouts } = await supabaseAdmin
       .from('commission_payouts')
-      .select('orders_data')
+      .select('agent_email, orders_data, override_orders_data')
       .eq('status', 'Approved');
 
-    const paidOrderIds = new Set();
-    if (approvedPayouts) {
-      for (const p of approvedPayouts) {
-        if (p.orders_data && Array.isArray(p.orders_data)) {
-          for (const order of p.orders_data) {
-            if (order && order.id) {
-              paidOrderIds.add(order.id);
-            }
-          }
-        }
-      }
-    }
+    const paidIndex = buildPaidOrderIndex(approvedPayouts || []);
 
-    for (const agent of profiles) {
+    // Pending and suspended people earn nothing at all — approval is the gate on
+    // money, not just on login. An unapproved invite therefore costs nothing.
+    const payableProfiles = (profiles || []).filter(isActiveProfile);
+
+    for (const agent of payableProfiles) {
       // If a specific agent is targeted, skip other agents
       if (targetAgentEmail && agent.email?.trim().toLowerCase() !== targetAgentEmail.trim().toLowerCase()) {
         continue;
@@ -204,14 +210,76 @@ export async function GET(request) {
       
       const agentOrders = (orders || [])
         .filter((order) => {
-          if (paidOrderIds.has(order.id)) return false;
+          if (hasBeenPaid(paidIndex, agent.email, order.id)) return false;
           return orderBelongsToAgent(order, agent);
         })
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
+      // The 2% override: this agent's cut of orders her sub-users brought in.
+      // Their orders carry the sub-user's name as sales_agent, so they are never
+      // matched by orderBelongsToAgent above — which is exactly why a staff
+      // member cannot earn both her own rate and the override on one order.
+      const overrideRate = overrideRateFor(agent);
+      const children = payableChildrenOf(agent, payableProfiles);
+
+      // Broken down per person, so her statement can answer "why is my number
+      // this?" without anyone having to reopen the dashboard.
+      const overrideOrders = [];
+      const overrideBreakdown = [];
+      let overrideSalesUsd = 0;
+      let overrideSalesCrc = 0;
+
+      for (const child of children) {
+        const childOrders = (orders || []).filter((order) => {
+          if (hasBeenPaid(paidIndex, agent.email, order.id)) return false;
+          return orderBelongsToAgent(order, child);
+        });
+        if (childOrders.length === 0) continue;
+
+        let childUsd = 0;
+        let childCrc = 0;
+        for (const order of childOrders) {
+          const amounts = getOrderSalesAmounts(order, currentExchangeRate);
+          childUsd += amounts.usd;
+          childCrc += amounts.crc;
+        }
+
+        const childShare = computeOverrideAmounts({
+          usdSales: childUsd,
+          crcSales: childCrc,
+          overrideRate,
+        });
+
+        overrideOrders.push(...childOrders);
+        overrideSalesUsd += childUsd;
+        overrideSalesCrc += childCrc;
+        overrideBreakdown.push({
+          name: child.name || child.email,
+          ordersCount: childOrders.length,
+          salesUsd: childUsd,
+          salesCrc: childCrc,
+          overrideUsd: childShare.overrideUsd,
+          overrideCrc: childShare.overrideCrc,
+        });
+      }
+
+      overrideOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      const { overrideUsd, overrideCrc } = computeOverrideAmounts({
+        usdSales: overrideSalesUsd,
+        crcSales: overrideSalesCrc,
+        overrideRate,
+      });
+
       // Ignore non-commission staff, but keep configured agents in the all-agent report
-      // even when their result for the week is zero.
-      if (agentOrders.length === 0 && weeklySalary === 0 && rate === 0) continue;
+      // even when their result for the week is zero. An agent with no sales of her
+      // own but an override owed must not be skipped.
+      if (
+        agentOrders.length === 0
+        && overrideOrders.length === 0
+        && weeklySalary === 0
+        && rate === 0
+      ) continue;
 
       // Group totals by currency
       let usdSales = 0;
@@ -236,6 +304,8 @@ export async function GET(request) {
         weeklySalary,
         salaryCurrency,
         exchangeRate: currentExchangeRate,
+        overrideUsd,
+        overrideCrc,
       });
 
       // Individual report: Outlook-safe, light, and limited to this agent.
@@ -252,6 +322,10 @@ export async function GET(request) {
         totalPayoutUsd,
         totalPayoutCrc,
         orders: agentOrders,
+        overrideRate,
+        overrideUsd,
+        overrideCrc,
+        overrideBreakdown,
       });
 
       // 6. Save or update pending payout for this agent + period (dedupe duplicates)
@@ -280,6 +354,7 @@ export async function GET(request) {
       const payoutPayload = {
         agent_id: agent.user_id || null,
         agent_name: agent.name || null,
+        agent_tier: profileTier(agent),
         start_date: startDateStr,
         end_date: endDateStr,
         usd_sales: usdSales,
@@ -292,6 +367,14 @@ export async function GET(request) {
         total_payout_usd: totalPayoutUsd,
         total_payout_crc: totalPayoutCrc,
         orders_data: agentOrders,
+        // Kept separate from orders_data so approving this payout marks these
+        // orders paid for THIS agent only, leaving the sub-user's own 8% intact.
+        override_rate: overrideRate,
+        override_usd: overrideUsd,
+        override_crc: overrideCrc,
+        override_sales_usd: overrideSalesUsd,
+        override_sales_crc: overrideSalesCrc,
+        override_orders_data: overrideOrders,
         email_html: emailHtml,
       };
 
@@ -342,6 +425,12 @@ export async function GET(request) {
         crcSales: formatMoney(crcSales, 'CRC'),
         usdCommission: formatMoney(usdCommission, 'USD'),
         crcCommission: formatMoney(crcCommission, 'CRC'),
+        tier: profileTier(agent),
+        overrideRate: `${overrideRate}%`,
+        overrideOrdersCount: overrideOrders.length,
+        overrideUsd: formatMoney(overrideUsd, 'USD'),
+        overrideCrc: formatMoney(overrideCrc, 'CRC'),
+        overrideBreakdown,
         totalPayoutUsd,
         totalPayoutCrc,
         agentEmailSent,

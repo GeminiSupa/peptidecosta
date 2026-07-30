@@ -25,7 +25,7 @@ import {
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send, QrCode,
   Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft, Megaphone,
-  PanelLeftClose, PanelLeftOpen
+  PanelLeftClose, PanelLeftOpen, Wallet
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
@@ -34,6 +34,7 @@ import TeamManagement from '@/components/admin/TeamManagement';
 import TeamChat from '@/components/admin/TeamChat';
 import AffiliatesManager from '@/components/admin/AffiliatesManager';
 import MyReferralQr from '@/components/admin/MyReferralQr';
+import MyTeamManager from '@/components/admin/MyTeamManager';
 import InquiriesManager from '@/components/admin/InquiriesManager';
 import DashboardHome from '@/components/admin/DashboardHome';
 import AgentDashboard from '@/components/admin/AgentDashboard';
@@ -4547,6 +4548,27 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   <span className="tab-label">My QR & Scans</span>
                 </button>
               )}
+              {/* Sub-users only: their earnings screen. resolveAdminTabAccess
+                  grants my_earnings to that tier alone, so this never appears
+                  for staff or the owner. */}
+              {hasAccess('my_earnings') && (
+                <button
+                  className={`admin-tab-btn ${activeTab === 'my_earnings' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('my_earnings')}
+                >
+                  <Wallet size={14} />
+                  <span className="tab-label">My Earnings</span>
+                </button>
+              )}
+              {hasAccess('my_team') && (
+                <button
+                  className={`admin-tab-btn ${activeTab === 'my_team' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('my_team')}
+                >
+                  <Users size={14} />
+                  <span className="tab-label">{adminProfile?.is_superadmin ? 'Sub-Users' : 'My Team'}</span>
+                </button>
+              )}
               {hasAccess('broadcasts') && (
                 <button
                   className={`admin-tab-btn ${activeTab === 'broadcasts' ? 'active' : ''}`}
@@ -6279,6 +6301,32 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'my_qr' && (
           <div className="admin-orders-tab">
             <MyReferralQr />
+          </div>
+        )}
+
+        {/* TAB: MY EARNINGS — the sub-user tier's own screen. Same analytics as
+            staff "My Pay", trimmed of salary and store-wide figures. */}
+        {activeTab === 'my_earnings' && (
+          <div className="admin-orders-tab admin-tab-panel">
+            <ErrorBoundary>
+              <AgentDashboard
+                variant="sub_user"
+                title="My Earnings"
+                currentUserProfile={adminProfile}
+                currentUserEmail={loggedInEmail.current}
+                onNavigate={navigateToTab}
+              />
+            </ErrorBoundary>
+          </div>
+        )}
+
+        {/* TAB: MY TEAM — staff recruit and track their sub-users; the owner
+            approves them from the same screen. */}
+        {activeTab === 'my_team' && (
+          <div className="admin-orders-tab admin-tab-panel" style={{ padding: '20px 0' }}>
+            <ErrorBoundary>
+              <MyTeamManager currentUserProfile={adminProfile} onTeamChanged={fetchAgents} />
+            </ErrorBoundary>
           </div>
         )}
 

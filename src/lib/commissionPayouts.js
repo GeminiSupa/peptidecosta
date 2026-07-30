@@ -28,6 +28,11 @@ export function formatPayoutPeriod(startDate, endDate) {
 
 import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
 
+/**
+ * overrideUsd / overrideCrc are a staff member's 2% on her sub-users' orders.
+ * They default to 0, so every existing caller keeps its current behaviour and
+ * only the weekly scan passes them.
+ */
 export function recalcPayoutAmounts({
   usdSales = 0,
   crcSales = 0,
@@ -35,21 +40,28 @@ export function recalcPayoutAmounts({
   weeklySalary = 0,
   salaryCurrency = 'USD',
   exchangeRate = FALLBACK_EXCHANGE_RATE,
+  overrideUsd = 0,
+  overrideCrc = 0,
 }) {
   const rate = Number(commissionRate || 0);
   const usdCommission = Number(usdSales || 0) * (rate / 100);
   const crcCommission = Number(crcSales || 0) * (rate / 100);
-  
+
   const salary = Number(weeklySalary || 0);
   const salaryUsd = salaryCurrency === 'USD' ? salary : salary / exchangeRate;
   const salaryCrc = salaryCurrency === 'CRC' ? salary : salary * exchangeRate;
 
-  const totalPayoutUsd = usdCommission + salaryUsd;
-  const totalPayoutCrc = crcCommission + salaryCrc;
+  const overrideUsdAmount = Number(overrideUsd || 0);
+  const overrideCrcAmount = Number(overrideCrc || 0);
+
+  const totalPayoutUsd = usdCommission + salaryUsd + overrideUsdAmount;
+  const totalPayoutCrc = crcCommission + salaryCrc + overrideCrcAmount;
 
   return {
     usd_commission: usdCommission,
     crc_commission: crcCommission,
+    override_usd: overrideUsdAmount,
+    override_crc: overrideCrcAmount,
     total_payout_usd: totalPayoutUsd,
     total_payout_crc: totalPayoutCrc,
   };

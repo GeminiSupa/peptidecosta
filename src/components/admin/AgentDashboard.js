@@ -28,6 +28,9 @@ export default function AgentDashboard({
   title = 'My Pay',
   onOpenOrder,
   onNavigate,
+  // 'sub_user' trims the screen to what that tier actually has: commission on
+  // their own referred orders, no salary, no store-wide anything.
+  variant = 'staff',
 }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -71,6 +74,7 @@ export default function AgentDashboard({
   if (!stats) return null;
 
   const name = currentUserProfile?.name || currentUserEmail?.split('@')[0] || 'Agent';
+  const isSubUser = variant === 'sub_user';
   const salaryCurr = stats.salaryCurrency || 'USD';
   const viewingPastWeek = (stats.weekOffset || 0) > 0;
   const weekRange = stats.weekStartDate
@@ -280,7 +284,11 @@ export default function AgentDashboard({
             </div>
             <div className="dashboard-kpi-label">{payLabelWord} {weekWord}</div>
             <div className="dashboard-mini-sub">
-              {wp ? `From payout report · ${wp.status === 'Approved' ? 'Paid' : 'Pending'}` : `${stats.commissionRate}% commission + salary`}
+              {wp
+                ? `From payout report · ${wp.status === 'Approved' ? 'Paid' : 'Pending'}`
+                : isSubUser
+                  ? `${stats.commissionRate}% of your orders`
+                  : `${stats.commissionRate}% commission + salary`}
             </div>
           </div>
         </div>
@@ -298,16 +306,20 @@ export default function AgentDashboard({
 
       <div className="dashboard-two-col">
         <section className="dashboard-section">
-          <h3 className="dashboard-section-title">Pay structure</h3>
+          <h3 className="dashboard-section-title">{isSubUser ? 'How you get paid' : 'Pay structure'}</h3>
           <div className="dashboard-mini-list" style={{ maxHeight: "400px", overflowY: "auto", paddingRight: "8px" }}>
-            <div className="dashboard-mini-row" style={{ cursor: 'default' }}>
-              <Briefcase size={16} style={{ color: '#38bdf8' }} />
-              <div style={{ flex: 1 }}>
-                <div className="dashboard-mini-title">Base weekly salary</div>
-                <div className="dashboard-mini-sub">Guaranteed Mon–Sun</div>
+            {/* A sub-user is commission-only, so a salary row of $0.00 would only
+                raise a question that has no answer. */}
+            {!isSubUser && (
+              <div className="dashboard-mini-row" style={{ cursor: 'default' }}>
+                <Briefcase size={16} style={{ color: '#38bdf8' }} />
+                <div style={{ flex: 1 }}>
+                  <div className="dashboard-mini-title">Base weekly salary</div>
+                  <div className="dashboard-mini-sub">Guaranteed Mon–Sun</div>
+                </div>
+                <div className="dashboard-mini-val">{formatMoney(stats.weeklySalary, salaryCurr)}</div>
               </div>
-              <div className="dashboard-mini-val">{formatMoney(stats.weeklySalary, salaryCurr)}</div>
-            </div>
+            )}
             <div className="dashboard-mini-row" style={{ cursor: 'default' }}>
               <Target size={16} style={{ color: '#c084fc' }} />
               <div style={{ flex: 1 }}>
@@ -414,7 +426,9 @@ export default function AgentDashboard({
       </section>
 
       <p className="dashboard-mini-sub" style={{ marginTop: '8px' }}>
-        Only orders assigned to you as sales agent count toward your pay. Store-wide totals are not shown here.
+        {isSubUser
+          ? 'Only orders that came through your own link count toward your pay. Orders count once they are marked paid.'
+          : 'Only orders assigned to you as sales agent count toward your pay. Store-wide totals are not shown here.'}
       </p>
     </div>
   );

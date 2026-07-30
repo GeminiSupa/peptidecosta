@@ -67,7 +67,9 @@ function orderCompletedAtMs(order) {
 const MAX_WEEK_OFFSET = 52;
 
 export async function GET(request) {
-  const auth = await verifyAdminSession(request);
+  // Sub-users need this: it is their earnings screen. Scoped to the caller's own
+  // profile throughout, so it shows their orders and nobody else's.
+  const auth = await verifyAdminSession(request, { allowSubUser: true });
   if (auth.error) return auth.error;
 
   try {

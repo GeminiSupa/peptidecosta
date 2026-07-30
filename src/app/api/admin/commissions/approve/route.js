@@ -8,6 +8,7 @@ import {
   isCommissionEligibleOrder,
 } from '@/lib/agentOrders';
 import { formatPayoutPeriod, recalcPayoutAmounts } from '@/lib/commissionPayouts';
+import { buildOverrideBreakdown, computeOverrideAmounts } from '@/lib/subUserCommission.mjs';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
@@ -101,6 +102,43 @@ export async function POST(request) {
       crcSales += amounts.crc;
     }
 
+    // The 2% override on sub-users' orders gets the same treatment as her own
+    // sales: re-check eligibility at approval time so an order that slipped back
+    // to pending since the scan is not paid on.
+    const savedOverrideOrders = Array.isArray(payout.override_orders_data)
+      ? payout.override_orders_data
+      : [];
+    const savedOverrideIds = savedOverrideOrders.map((order) => order?.id).filter(Boolean);
+    let eligibleOverrideOrders = savedOverrideOrders.filter(isCommissionEligibleOrder);
+
+    if (savedOverrideIds.length > 0) {
+      const { data: currentOverrideOrders, error: overrideOrdersError } = await supabaseAdmin
+        .from('orders')
+        .select('*')
+        .in('id', savedOverrideIds)
+        .in('status', COMMISSION_ELIGIBLE_ORDER_STATUSES)
+        .order('created_at', { ascending: false });
+
+      if (overrideOrdersError) {
+        console.error('[Commission Approval] Could not refresh sub-user order statuses:', overrideOrdersError);
+      } else {
+        eligibleOverrideOrders = currentOverrideOrders || [];
+      }
+    }
+
+    let overrideSalesUsd = 0;
+    let overrideSalesCrc = 0;
+    for (const order of eligibleOverrideOrders) {
+      const amounts = getOrderSalesAmounts(order, currentExchangeRate);
+      overrideSalesUsd += amounts.usd;
+      overrideSalesCrc += amounts.crc;
+    }
+    const { overrideUsd, overrideCrc } = computeOverrideAmounts({
+      usdSales: overrideSalesUsd,
+      crcSales: overrideSalesCrc,
+      overrideRate: payout.override_rate,
+    });
+
     const recalculated = recalcPayoutAmounts({
       usdSales,
       crcSales,
@@ -108,6 +146,8 @@ export async function POST(request) {
       weeklySalary: payout.weekly_salary_paid,
       salaryCurrency: payout.salary_currency,
       exchangeRate: currentExchangeRate,
+      overrideUsd,
+      overrideCrc,
     });
     const periodDisplay = formatPayoutPeriod(payout.start_date, payout.end_date);
     const { html: refreshedEmailHtml, text: refreshedEmailText } = buildAgentCommissionEmail({
@@ -123,6 +163,14 @@ export async function POST(request) {
       totalPayoutUsd: recalculated.total_payout_usd,
       totalPayoutCrc: recalculated.total_payout_crc,
       orders: eligibleOrders,
+      overrideRate: payout.override_rate,
+      overrideUsd,
+      overrideCrc,
+      overrideBreakdown: buildOverrideBreakdown(
+        eligibleOverrideOrders,
+        payout.override_rate,
+        (order) => getOrderSalesAmounts(order, currentExchangeRate)
+      ),
     });
 
     // 3. Handle Approval & Outbound Email
@@ -176,6 +224,14 @@ export async function POST(request) {
         total_payout_usd: recalculated.total_payout_usd,
         total_payout_crc: recalculated.total_payout_crc,
         orders_data: eligibleOrders,
+        // Written back so the per-agent paid index in weekly-report knows these
+        // orders are settled for THIS agent, without touching the sub-user's own
+        // outstanding 8% on the same orders.
+        override_usd: overrideUsd,
+        override_crc: overrideCrc,
+        override_sales_usd: overrideSalesUsd,
+        override_sales_crc: overrideSalesCrc,
+        override_orders_data: eligibleOverrideOrders,
         email_html: refreshedEmailHtml,
         approved_at: new Date().toISOString(),
         approved_by: 'Super Admin' // Can be customized if user authentication details are available

@@ -16,7 +16,9 @@ function extensionFor(file) {
 }
 
 export async function POST(request) {
-  const auth = await verifyAdminSession(request);
+  // Sub-users may set their own profile photo; this route only ever writes to
+  // the caller's own row.
+  const auth = await verifyAdminSession(request, { allowSubUser: true });
   if (auth.error) return auth.error;
 
   try {

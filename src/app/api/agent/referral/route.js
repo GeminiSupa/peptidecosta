@@ -52,7 +52,8 @@ function buildReferralLink(name) {
  * numbers for links attributed to them.
  */
 export async function GET(request) {
-  const auth = await verifyAdminSession(request);
+  // Sub-users need this: sharing their referral link is the whole job.
+  const auth = await verifyAdminSession(request, { allowSubUser: true });
   if (auth.error) return auth.error;
 
   try {
