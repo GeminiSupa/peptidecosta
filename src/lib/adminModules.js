@@ -1,3 +1,11 @@
+// Relative rather than the '@/lib' alias so tests/ can import this module
+// directly under `node --test`, which does not resolve jsconfig paths.
+import {
+  SUB_USER_TAB_IDS,
+  isActiveProfile,
+  isSubUser,
+} from './subUserTier.mjs';
+
 export const ADMIN_MODULES = [
   { id: 'home', label: 'Today (Home)', title: 'Today', group: 'Overview', alwaysAvailable: true },
   { id: 'spreadsheet', label: 'Products', title: 'Products', group: 'Core Operations' },
@@ -14,6 +22,9 @@ export const ADMIN_MODULES = [
   { id: 'affiliates', label: 'Affiliates', title: 'Affiliates & Promo Codes', group: 'Sales & Marketing' },
   { id: 'deals', label: 'Deal of the Week', title: 'Deal of the Week', group: 'Sales & Marketing' },
   { id: 'my_qr', label: 'My QR & Scans', title: 'My QR & Scans', group: 'Sales & Marketing', alwaysAvailable: true },
+  // Staff recruit and track their own sub-users here. Assignable rather than
+  // alwaysAvailable, so the owner decides which staff may recruit at all.
+  { id: 'my_team', label: 'My Team (Sub-Users)', title: 'My Team', group: 'Sales & Marketing' },
   { id: 'broadcasts', label: 'One-Time Announcements', title: 'One-Time Announcements', group: 'Sales & Marketing' },
   { id: 'analytics', label: 'Analytics', title: 'Analytics & Attribution', group: 'Analytics & Content' },
   { id: 'cms', label: 'CMS', title: 'CMS Drafts & Preview', group: 'Analytics & Content' },
@@ -21,10 +32,13 @@ export const ADMIN_MODULES = [
   { id: 'wa_session', label: 'WhatsApp Device', title: 'WhatsApp Device', group: 'System & AI' },
   { id: 'team', label: 'Team Management', title: 'Team Management', group: 'System & AI', superadminOnly: true },
   { id: 'team_chat', label: 'Team Chat', title: 'Team Chat', group: 'System & AI', alwaysAvailable: true },
+  // A sub-user's entire dashboard: this plus my_qr, and nothing else. Hidden
+  // from the staff nav because sub-users get their own two-tab shell.
+  { id: 'my_earnings', label: 'My Earnings', title: 'My Earnings', group: 'Overview', hiddenFromNav: true, subUserOnly: true },
 ];
 
 export const ASSIGNABLE_ADMIN_MODULES = ADMIN_MODULES.filter(
-  (module) => !module.alwaysAvailable && !module.superadminOnly
+  (module) => !module.alwaysAvailable && !module.superadminOnly && !module.subUserOnly
 );
 
 export const ADMIN_TAB_IDS = new Set(ADMIN_MODULES.map((module) => module.id));
@@ -47,16 +61,43 @@ export const ALWAYS_AVAILABLE_TAB_IDS = new Set(
   ADMIN_MODULES.filter((module) => module.alwaysAvailable).map((module) => module.id)
 );
 
+export const SUB_USER_ONLY_TAB_IDS = new Set(
+  ADMIN_MODULES.filter((module) => module.subUserOnly).map((module) => module.id)
+);
+
+// Re-exported so callers have one import for tab access questions.
+export { SUB_USER_TAB_IDS };
+
 export function resolveAdminTabAccess(tabId, profile) {
   if (!profile || !ADMIN_TAB_IDS.has(tabId)) return false;
+
+  // A pending or suspended account reaches nothing at all. Checked before
+  // everything else so an approval that has not happened yet cannot be
+  // sidestepped by an alwaysAvailable tab.
+  if (!isActiveProfile(profile)) return false;
+
+  // Sub-users get a closed allow-list, and this must stay ahead of the
+  // ALWAYS_AVAILABLE branch below — home, messenger (Facebook Inbox), my_qr
+  // and team_chat are alwaysAvailable, so checking that first would drop a new
+  // sub-user straight into the Facebook inbox and internal team chat.
+  //
+  // The list also has no 'my_team', which is the UI half of the two-level cap:
+  // a sub-user has no invite button to find.
+  if (isSubUser(profile)) return SUB_USER_TAB_IDS.has(tabId);
+
   if (ALWAYS_AVAILABLE_TAB_IDS.has(tabId)) return true;
   if (SUPERADMIN_ONLY_TAB_IDS.has(tabId)) return Boolean(profile.is_superadmin);
   if (profile.is_superadmin) return true;
+
+  // my_earnings is the sub-user screen; staff read the same numbers on My Pay.
+  if (SUB_USER_ONLY_TAB_IDS.has(tabId)) return false;
+
   return Array.isArray(profile.permissions) && profile.permissions.includes(tabId);
 }
 
 export function getDefaultAdminTab(profile) {
   if (!profile) return 'home';
+  if (isSubUser(profile)) return 'my_earnings';
   if (profile.is_superadmin) return 'home';
   if (Array.isArray(profile.permissions) && profile.permissions.includes('home')) return 'home';
   return Array.isArray(profile.permissions) && profile.permissions.length > 0
