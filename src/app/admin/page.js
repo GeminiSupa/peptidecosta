@@ -48,6 +48,7 @@ import DealOfWeekPanel from '@/components/admin/DealOfWeekPanel';
 import WhatsAppInbox from '@/components/admin/WhatsAppInbox';
 import WhatsAppAnalyticsPanel from '@/components/admin/WhatsAppAnalyticsPanel';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
+import { DEFAULT_BUSINESS_LINKS, normalizeBusinessLinks } from '@/lib/businessLinks';
 import { confirmDelete, confirmBulkDelete } from '@/lib/confirmDelete.mjs';
 import { claimOrderInDb } from '@/lib/claimOrder';
 import {
@@ -83,19 +84,7 @@ const dynamicTab = (loader, label) =>
   dynamic(loader, { ssr: false, loading: () => <AdminTabLoading label={label} /> });
 
 const SHARE_PRESETS_KEY = 'peptides_admin_campaign_link_presets_v1';
-const DEFAULT_ADMIN_BUSINESS_LINKS = {
-  whatsappNumber: "50684046973",
-  whatsappDisplay: "+506 8404-6973",
-  apiWhatsAppNumber: "18314715559",
-  apiWhatsAppDisplay: "+1 (831) 471-5559",
-  googleMapsUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
-  facebookUrl: "",
-  instagramUrl: "",
-  trustpilotUrl: "https://www.trustpilot.com/review/peptidescostarica.net",
-  googleReviewUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
-  facebookReviewUrl: "https://www.facebook.com/Peptidescostaricaresearch/reviews",
-  supportEmail: "support@peptidescostarica.net"
-};
+const DEFAULT_ADMIN_BUSINESS_LINKS = DEFAULT_BUSINESS_LINKS;
 
 const readSharePresets = () => {
   if (typeof window === 'undefined') return [];
@@ -2124,7 +2113,7 @@ Core Rules:
       try {
         const { data: linkData, error: linkError } = await supabase.from('site_settings').select('*').eq('id', 'business_links').limit(1).maybeSingle();
         if (!linkError && linkData) {
-          setBusinessLinks({ ...DEFAULT_ADMIN_BUSINESS_LINKS, ...linkData.value });
+          setBusinessLinks(normalizeBusinessLinks(linkData.value));
         } else {
           setBusinessLinks(DEFAULT_ADMIN_BUSINESS_LINKS);
         }
@@ -3967,8 +3956,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
   // CMS Handlers
   const handleSaveBusinessLinks = async () => {
-    const invalidFields = ['googleMapsUrl', 'facebookUrl', 'instagramUrl', 'trustpilotUrl', 'googleReviewUrl', 'facebookReviewUrl']
-      .filter(key => !isValidOptionalUrl(businessLinks?.[key]));
+    const linksToSave = normalizeBusinessLinks(businessLinks);
+    const invalidFields = ['googleMapsUrl', 'facebookUrl', 'instagramUrl', 'trustpilotUrl', 'trustpilotUrlEn', 'trustpilotUrlEs', 'googleReviewUrl', 'facebookReviewUrl']
+      .filter(key => !isValidOptionalUrl(linksToSave?.[key]));
     if (invalidFields.length > 0) {
       setCmsSaveStatus(`error:Invalid URL in ${invalidFields.join(', ')}. Use full https:// links.`);
       return;
@@ -3983,9 +3973,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       if (isSupabaseConfigured && supabase) {
         const { error } = await supabase.from('site_settings').upsert({
           id: 'business_links',
-          value: businessLinks
+          value: linksToSave
         });
         if (!error) {
+          setBusinessLinks(linksToSave);
           setCmsSaveStatus('success:Business links saved successfully.');
           setCmsChangeHistory(prev => [{ area: 'Business links', at: new Date().toISOString() }, ...prev].slice(0, 6));
           return;
@@ -6090,8 +6081,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         <input type="text" value={businessLinks.instagramUrl} onChange={e => setBusinessLinks({...businessLinks, instagramUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
                       <div style={{ marginTop: '8px' }}>
-                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Trustpilot Review URL (Optional)</label>
-                        <input type="text" value={businessLinks.trustpilotUrl || ''} onChange={e => setBusinessLinks({...businessLinks, trustpilotUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Trustpilot Review URL - English</label>
+                        <input type="text" value={businessLinks.trustpilotUrlEn || businessLinks.trustpilotUrl || ''} onChange={e => setBusinessLinks({...businessLinks, trustpilotUrl: e.target.value, trustpilotUrlEn: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
+                      </div>
+                      <div style={{ marginTop: '8px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Trustpilot Review URL - Spanish</label>
+                        <input type="text" value={businessLinks.trustpilotUrlEs || ''} onChange={e => setBusinessLinks({...businessLinks, trustpilotUrlEs: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
                       <div style={{ marginTop: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Google Review URL (Optional)</label>

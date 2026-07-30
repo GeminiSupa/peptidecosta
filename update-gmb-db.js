@@ -9,16 +9,26 @@ const env = fs.readFileSync('.env.local', 'utf8').split('\n').reduce((acc, line)
 const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function run() {
-  const { data: current } = await supabase.from('site_settings').select('value').eq('id', 'business_links').single();
+  const { data: current, error: readError } = await supabase.from('site_settings').select('value').eq('id', 'business_links').single();
+  if (readError) throw readError;
   
   if (current && current.value) {
     const newVal = {
       ...current.value,
-      googleMapsUrl: 'https://maps.app.goo.gl/AgpzEd8NNRKYNbJj9'
+      googleMapsUrl: 'https://maps.app.goo.gl/jJCMHBM8aPXx67G3A',
+      googleReviewUrl: 'https://maps.app.goo.gl/jJCMHBM8aPXx67G3A',
+      trustpilotUrl: 'https://www.trustpilot.com/review/peptidescostarica.net',
+      trustpilotUrlEn: 'https://www.trustpilot.com/review/peptidescostarica.net',
+      trustpilotUrlEs: 'https://es.trustpilot.com/review/peptidescostarica.net'
     };
     const { error } = await supabase.from('site_settings').update({ value: newVal }).eq('id', 'business_links');
-    if (error) console.error("Error updating:", error);
-    else console.log("Updated successfully!");
+    if (error) throw error;
+    console.log("Updated successfully!");
+  } else {
+    console.log("No business_links row found.");
   }
 }
-run();
+run().catch((error) => {
+  console.error("Error updating:", error);
+  process.exit(1);
+});

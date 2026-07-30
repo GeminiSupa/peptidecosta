@@ -2,20 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-
-const DEFAULT_BUSINESS_LINKS = {
-  whatsappNumber: "50684046973",
-  whatsappDisplay: "+506 8404-6973",
-  apiWhatsAppNumber: "18314715559",
-  apiWhatsAppDisplay: "+1 (831) 471-5559",
-  googleMapsUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
-  facebookUrl: "",
-  instagramUrl: "",
-  trustpilotUrl: "https://www.trustpilot.com/review/peptidescostarica.net",
-  googleReviewUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
-  facebookReviewUrl: "https://www.facebook.com/Peptidescostaricaresearch/reviews",
-  supportEmail: "support@peptidescostarica.net"
-};
+import { DEFAULT_BUSINESS_LINKS, normalizeBusinessLinks } from '@/lib/businessLinks';
 
 // Simple global cache to prevent redundant fetches across components mounting simultaneously
 let globalCache = null;
@@ -45,7 +32,7 @@ export function useBusinessLinks() {
             .single();
 
           if (!error && data?.value) {
-            return { ...DEFAULT_BUSINESS_LINKS, ...data.value };
+            return normalizeBusinessLinks(data.value);
           }
         } catch (err) {
           console.error("Failed to fetch business links in hook", err);

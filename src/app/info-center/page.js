@@ -5,6 +5,7 @@ import { ArrowRight, BookOpen, Search } from 'lucide-react';
 import MobileActionBar from '@/components/MobileActionBar';
 import { StorefrontBulkBand, StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
+import { isExternalHttpUrl } from '@/lib/businessLinks';
 import { usePublicPageContent, localized } from '@/hooks/usePublicPageContent';
 import '../landing.css';
 
@@ -81,7 +82,12 @@ export default function InfoCenterPage() {
           <p className="clone-section-intro">{localized(pageSettings, 'coaText', lang)}</p>
           <div className="clone-coa-grid">
             {(pageSettings.coaLinks || []).map((item, index) => (
-              <a key={`${item.href}-${index}`} href={withLang(item.href)}>
+              <a
+                key={`${item.href}-${index}`}
+                href={withLang(item.href)}
+                target={isExternalHttpUrl(item.href) ? '_blank' : undefined}
+                rel={isExternalHttpUrl(item.href) ? 'noopener noreferrer' : undefined}
+              >
                 {localized(item, 'label', lang)} <ArrowRight size={14} />
               </a>
             ))}

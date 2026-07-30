@@ -1,15 +1,5 @@
 import { supabase } from './supabase';
-
-const DEFAULT_BUSINESS_LINKS = {
-  whatsappNumber: "50684046973",
-  whatsappDisplay: "+506 8404-6973",
-  apiWhatsAppNumber: "18314715559",
-  apiWhatsAppDisplay: "+1 831-471-5559",
-  googleMapsUrl: "https://maps.app.goo.gl/i52poGFKvSdytYnK6",
-  facebookUrl: "",
-  instagramUrl: "",
-  supportEmail: "support@peptidescostarica.net"
-};
+import { DEFAULT_BUSINESS_LINKS, normalizeBusinessLinks } from './businessLinks';
 
 /**
  * Server-side / async helper to get business links
@@ -28,10 +18,7 @@ export async function getBusinessLinks() {
       return DEFAULT_BUSINESS_LINKS;
     }
 
-    return {
-      ...DEFAULT_BUSINESS_LINKS,
-      ...data.value
-    };
+    return normalizeBusinessLinks(data.value);
   } catch (err) {
     console.error("Error fetching business links:", err);
     return DEFAULT_BUSINESS_LINKS;

@@ -6,6 +6,7 @@ import { ChevronDown, Mail, Menu, Search, ShoppingBag, Sparkles, X } from 'lucid
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
+import { getTrustpilotReviewUrl, isExternalHttpUrl } from '@/lib/businessLinks';
 import { DEFAULT_LANDING_PAGE_SETTINGS } from '@/lib/landingContent';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 
@@ -72,9 +73,13 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
     return `${rawHref}${separator}lang=${lang}`;
   })();
 
+  const externalLinkProps = isExternalHttpUrl(href)
+    ? { target: '_blank', rel: 'noopener noreferrer' }
+    : {};
+
   if (activeText && !activeImageBanner) {
     return (
-      <a className={`catalog-promo-text-banner ${className}`.trim()} href={href}>
+      <a className={`catalog-promo-text-banner ${className}`.trim()} href={href} {...externalLinkProps}>
         <Sparkles size={16} />
         <span>{activeText}</span>
       </a>
@@ -82,7 +87,7 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
   }
 
   return (
-    <a className={`catalog-promo-image-banner ${className}`.trim()} href={href}>
+    <a className={`catalog-promo-image-banner ${className}`.trim()} href={href} {...externalLinkProps}>
       <img src={imageUrl} alt={alt} />
     </a>
   );
@@ -291,7 +296,7 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
     // Fallback only — must match real product categories so the links filter.
     : ['Weight Loss & Metabolism', 'Performance & Hormones', 'Anti-Aging & Longevity', 'Recovery & Healing'];
   const reviewLinks = [
-    { id: 'trustpilot', label: 'Trustpilot', score: '4.2', logo: '★', href: links.trustpilotUrl || 'https://www.trustpilot.com/review/peptidescostarica.net' },
+    { id: 'trustpilot', label: 'Trustpilot', score: '4.2', logo: '★', href: getTrustpilotReviewUrl(lang, links) },
     { id: 'google', label: 'Google', score: '5.0', logo: 'G', href: links.googleReviewUrl || links.googleMapsUrl },
     { id: 'facebook', label: 'Facebook', score: '5.0', logo: 'f', href: links.facebookReviewUrl || links.facebookUrl || 'https://www.facebook.com/Peptidescostaricaresearch/reviews' },
   ];
