@@ -16,6 +16,7 @@ import {
   payableChildrenOf,
 } from '@/lib/subUserCommission.mjs';
 import { isActiveProfile, profileTier } from '@/lib/subUserTier.mjs';
+import { SUB_USER_PAYOUT_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
@@ -378,22 +379,27 @@ export async function GET(request) {
         email_html: emailHtml,
       };
 
+      // The override columns arrive with add-sub-user-override-to-payouts.sql.
+      // Until that is run they are dropped rather than failing the write, so a
+      // deploy that lands before the SQL cannot take down the weekly scan for
+      // staff whose commissions have nothing to do with sub-users.
       let saveError = null;
-      if (primaryPayout) {
-        const { error } = await supabaseAdmin
-          .from('commission_payouts')
-          .update(payoutPayload)
-          .eq('id', primaryPayout.id);
-        saveError = error;
-      } else {
-        const { error } = await supabaseAdmin
-          .from('commission_payouts')
-          .insert([{
-            ...payoutPayload,
-            agent_email: agent.email,
-            status: 'Pending',
-          }]);
-        saveError = error;
+      const { error: writeError, droppedColumns } = await writeDroppingMissingColumns(
+        primaryPayout
+          ? payoutPayload
+          : { ...payoutPayload, agent_email: agent.email, status: 'Pending' },
+        SUB_USER_PAYOUT_COLUMNS,
+        (row) => (primaryPayout
+          ? supabaseAdmin.from('commission_payouts').update(row).eq('id', primaryPayout.id)
+          : supabaseAdmin.from('commission_payouts').insert([row]))
+      );
+      saveError = writeError;
+
+      if (droppedColumns?.length) {
+        console.warn(
+          '[Weekly Commissions] Sub-user override columns missing, run add-sub-user-override-to-payouts.sql:',
+          droppedColumns.join(', ')
+        );
       }
 
       let agentEmailSent = false;

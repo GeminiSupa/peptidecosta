@@ -24,7 +24,20 @@ import {
   orderBelongsToAgent,
 } from '@/lib/agentOrders';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
-import { missingColumnFrom } from '@/lib/notificationPreferences.mjs';
+import { SUB_USER_PROFILE_COLUMNS, missingColumnFrom } from '@/lib/optionalColumns.mjs';
+
+/**
+ * The whole tier lives in columns from add-sub-user-tier.sql. If that has not
+ * been run, say so plainly instead of returning a 500 that reads like a bug —
+ * migrations here are applied by hand, so this is a normal state to be in
+ * between a deploy and a visit to the SQL editor.
+ */
+const MIGRATION_HINT = 'Sub-users are not switched on yet. Run add-sub-user-tier.sql in the Supabase SQL Editor.';
+
+function migrationNotRun(error) {
+  const missing = missingColumnFrom(error);
+  return missing ? SUB_USER_PROFILE_COLUMNS.includes(missing) : false;
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -151,6 +164,9 @@ export async function GET(request) {
       .order('created_at', { ascending: false });
 
     if (error) {
+      if (migrationNotRun(error)) {
+        return NextResponse.json({ error: MIGRATION_HINT, migrationRequired: true }, { status: 503 });
+      }
       console.error('[sub-users] Failed to load profiles:', error);
       return NextResponse.json({ error: 'Could not load your team' }, { status: 500 });
     }
@@ -220,6 +236,9 @@ export async function POST(request) {
       .select(PROFILE_FIELDS);
 
     if (loadError) {
+      if (migrationNotRun(loadError)) {
+        return NextResponse.json({ error: MIGRATION_HINT, migrationRequired: true }, { status: 503 });
+      }
       console.error('[sub-users] Failed to load profiles for invite:', loadError);
       return NextResponse.json({ error: 'Could not check your team' }, { status: 500 });
     }

@@ -9,6 +9,7 @@ import {
 } from '@/lib/agentOrders';
 import { formatPayoutPeriod, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { buildOverrideBreakdown, computeOverrideAmounts } from '@/lib/subUserCommission.mjs';
+import { SUB_USER_PAYOUT_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
@@ -212,10 +213,12 @@ export async function POST(request) {
       }
     }
 
-    // 4. Update payout status to Approved
-    const { error: updateError } = await supabaseAdmin
-      .from('commission_payouts')
-      .update({
+    // 4. Update payout status to Approved.
+    // The override columns are dropped if add-sub-user-override-to-payouts.sql
+    // has not been run yet, so approving an ordinary staff payout keeps working
+    // on a database that has never heard of sub-users.
+    const { error: updateError, droppedColumns } = await writeDroppingMissingColumns(
+      {
         status: 'Approved',
         usd_sales: usdSales,
         crc_sales: crcSales,
@@ -235,8 +238,17 @@ export async function POST(request) {
         email_html: refreshedEmailHtml,
         approved_at: new Date().toISOString(),
         approved_by: 'Super Admin' // Can be customized if user authentication details are available
-      })
-      .eq('id', payoutId);
+      },
+      SUB_USER_PAYOUT_COLUMNS,
+      (row) => supabaseAdmin.from('commission_payouts').update(row).eq('id', payoutId)
+    );
+
+    if (droppedColumns?.length) {
+      console.warn(
+        '[Commission Approval] Sub-user override columns missing, run add-sub-user-override-to-payouts.sql:',
+        droppedColumns.join(', ')
+      );
+    }
 
     if (updateError) {
       console.error('[Commission Approval] Error saving approval state:', updateError);
