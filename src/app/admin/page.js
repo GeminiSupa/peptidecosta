@@ -35,6 +35,7 @@ import TeamChat from '@/components/admin/TeamChat';
 import AffiliatesManager from '@/components/admin/AffiliatesManager';
 import MyReferralQr from '@/components/admin/MyReferralQr';
 import MyTeamManager from '@/components/admin/MyTeamManager';
+import TeamQrCodes from '@/components/admin/TeamQrCodes';
 import InquiriesManager from '@/components/admin/InquiriesManager';
 import DashboardHome from '@/components/admin/DashboardHome';
 import AgentDashboard from '@/components/admin/AgentDashboard';
@@ -6296,6 +6297,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'my_qr' && (
           <div className="admin-orders-tab">
             <MyReferralQr />
+            {/* Owner-only: every rep's QR in one place, for printing cards.
+                Lives under the personal QR so there is a single tab anyone
+                goes to for "where is my link". */}
+            {adminProfile?.is_superadmin && (
+              <ErrorBoundary>
+                <TeamQrCodes />
+              </ErrorBoundary>
+            )}
           </div>
         )}
 

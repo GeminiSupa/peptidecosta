@@ -2,15 +2,10 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { agentMatchKeys, orderBelongsToAgent, getOrderSalesAmounts } from '@/lib/agentOrders';
+import { buildReferralLink, catalogBaseUrl } from '@/lib/referralLink.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-// Same catalog origin the admin Affiliates QR builder uses, so a rep's personal
-// QR points at exactly the same storefront as every other referral link.
-const CATALOG_BASE_URL =
-  process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL ||
-  'https://catalog.peptidescostarica.net/catalog?lang=es';
 
 const MAX_DAYS = 365;
 
@@ -19,30 +14,6 @@ const MAX_DAYS = 365;
 const PAID = new Set(['paid', 'completed', 'order complete', 'processing']);
 const norm = (v) => String(v || '').trim().toLowerCase();
 
-const slugify = (value) =>
-  String(value || '')
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
-
-/**
- * The rep's personal catalog link. sales_agent carries their team-profile name,
- * which is the exact value that lands on an order at checkout
- * (catalog reads ?sales_agent= into localStorage, then onto the order). So a
- * scan of this QR and the order it produces are attributed to the same key.
- */
-function buildReferralLink(name) {
-  const url = new URL(CATALOG_BASE_URL);
-  if (!url.searchParams.get('lang')) url.searchParams.set('lang', 'es');
-  url.searchParams.set('sales_agent', name);
-  url.searchParams.set('utm_source', 'sales_rep');
-  url.searchParams.set('utm_medium', 'qr');
-  url.searchParams.set('utm_campaign', slugify(name) || 'rep');
-  url.searchParams.set('referral', name);
-  url.searchParams.set('gate', 'skip');
-  return url.toString();
-}
 
 /**
  * A single sales rep's own referral link + their own scan/conversion numbers.
@@ -73,7 +44,7 @@ export async function GET(request) {
     const url = new URL(request.url);
     const days = Math.min(MAX_DAYS, Math.max(1, Number(url.searchParams.get('days')) || 30));
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    const link = buildReferralLink(name);
+    const link = buildReferralLink(name, catalogBaseUrl(process.env));
 
     const supabase = getSupabaseAdmin();
     const keys = agentMatchKeys(profile);
