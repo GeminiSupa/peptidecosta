@@ -10,6 +10,7 @@ import {
   isSubUser,
   profileTier,
   subUserSpotsUsed,
+  validateReassignment,
   validateSubUserParent,
 } from '../src/lib/subUserTier.mjs';
 import { getDefaultAdminTab, resolveAdminTabAccess } from '../src/lib/adminModules.js';
@@ -188,6 +189,58 @@ test('a full roster is refused with the number in the message', () => {
   const refusal = assertCanInvite(MARIA, full);
   assert.equal(refusal.ok, false);
   assert.match(refusal.reason, new RegExp(String(DEFAULT_SUB_USER_CAP)));
+});
+
+// ---------------------------------------------------------------------------
+// Reassignment — what happens when a staff member leaves
+// ---------------------------------------------------------------------------
+
+const JOSE = { ...MARIA, user_id: 'jose-uuid', name: 'José Solano' };
+
+test('a sub-user moves to another staff member when theirs leaves', () => {
+  const check = validateReassignment(LUIS, JOSE, [MARIA, JOSE, LUIS]);
+  assert.equal(check.ok, true);
+});
+
+test('reassigning to a sub-user is refused — that would be a third level', () => {
+  const otherSub = { ...LUIS, user_id: 'sofia-uuid', name: 'Sofía' };
+  const check = validateReassignment(LUIS, otherSub, [MARIA, LUIS, otherSub]);
+  assert.equal(check.ok, false);
+  assert.match(check.reason, /cannot have sub-users/i);
+});
+
+test('nobody becomes their own staff member', () => {
+  const check = validateReassignment(LUIS, { ...LUIS }, [MARIA, LUIS]);
+  assert.equal(check.ok, false);
+  assert.match(check.reason, /their own staff member/i);
+});
+
+test('moving someone to the team they are already on is refused', () => {
+  const check = validateReassignment(LUIS, MARIA, [MARIA, LUIS]);
+  assert.equal(check.ok, false);
+  assert.match(check.reason, /already on that staff member/i);
+});
+
+test('a suspended staff member cannot inherit someone', () => {
+  const check = validateReassignment(LUIS, { ...JOSE, status: 'suspended' }, [MARIA, JOSE, LUIS]);
+  assert.equal(check.ok, false);
+  assert.match(check.reason, /not active/i);
+});
+
+test('reassignment respects the receiving staff member\'s cap', () => {
+  const full = [MARIA, JOSE, LUIS];
+  for (let i = 0; i < DEFAULT_SUB_USER_CAP; i += 1) {
+    full.push({ ...LUIS, user_id: `jose-sub-${i}`, name: `José Sub ${i}`, parent_agent_id: 'jose-uuid' });
+  }
+  const check = validateReassignment(LUIS, JOSE, full);
+  assert.equal(check.ok, false);
+  assert.match(check.reason, new RegExp(String(DEFAULT_SUB_USER_CAP)));
+});
+
+test('a staff member cannot be reassigned — only sub-users move', () => {
+  const check = validateReassignment(MARIA, JOSE, [MARIA, JOSE]);
+  assert.equal(check.ok, false);
+  assert.match(check.reason, /staff member, not a sub-user/i);
 });
 
 test("one staff member's people are not counted against another's cap", () => {

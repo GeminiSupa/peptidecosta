@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Check, Clock, DollarSign, Pause, Play, Plus, Trash2, Users, X,
+  ArrowLeftRight, Check, Clock, DollarSign, Pause, Play, Plus, Trash2, Users, X,
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
@@ -17,6 +17,9 @@ import { adminFetch } from '@/lib/adminApi';
  * button in thumb reach, and the split is restated wherever money is decided so
  * nobody has to remember the deal.
  */
+
+const money = (value) =>
+  `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const STATUS_STYLES = {
   active: { label: 'Active', bg: 'rgba(74,222,128,0.14)', color: '#4ade80' },
@@ -70,6 +73,12 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
 
   const [approving, setApproving] = useState(null);
   const [approvePassword, setApprovePassword] = useState('');
+
+  // Reassignment: who is being moved, where to, and the unpaid override the
+  // outgoing staff member has earned that the owner needs to see first.
+  const [moving, setMoving] = useState(null);
+  const [moveTarget, setMoveTarget] = useState('');
+  const [moveWarning, setMoveWarning] = useState(null);
 
   const isOwner = Boolean(currentUserProfile?.is_superadmin);
 
@@ -139,9 +148,25 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
         body: JSON.stringify({ id, action, ...extra }),
       });
       const json = await res.json();
+
+      // Reassigning someone with unpaid override: the API asks once before
+      // moving money from the outgoing staff member to the incoming one.
+      if (json.needsConfirmation) {
+        setMoveWarning({ id, ...json });
+        setBusyId(null);
+        return;
+      }
+
       if (!res.ok || json.error) throw new Error(json.error || 'That did not work');
+
       setApproving(null);
       setApprovePassword('');
+      setMoving(null);
+      setMoveTarget('');
+      setMoveWarning(null);
+      if (action === 'reassign') {
+        flash(`${json.subUser?.name || 'They'} now report to ${json.movedTo}.`);
+      }
       await load();
       onTeamChanged?.();
     } catch (err) {
@@ -149,6 +174,10 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
     }
     setBusyId(null);
   };
+
+  /** Staff this person could be moved to — everyone except their current one. */
+  const moveOptions = (person) =>
+    (data?.staff || []).filter((member) => member.user_id !== person.parent_agent_id);
 
   if (loading) return <p className="dashboard-empty" style={{ padding: '32px 0' }}>Loading your team…</p>;
 
@@ -346,46 +375,156 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
         ) : (
           <div className="dashboard-mini-list">
             {settled.map((person) => (
-              <div key={person.id} className="dashboard-mini-row" style={{ cursor: 'default', alignItems: 'center' }}>
-                <Avatar name={person.name} status={person.status} url={person.avatar_url} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="dashboard-mini-title">{person.name}</div>
-                  <div className="dashboard-mini-sub">
-                    {Number(person.commission_rate ?? subRate)}% · {person.email}
-                    {isOwner && person.parent_name ? ` · under ${person.parent_name}` : ''}
+              <div key={person.id} style={{ marginBottom: 8 }}>
+                <div className="dashboard-mini-row" style={{ cursor: 'default', alignItems: 'center' }}>
+                  <Avatar name={person.name} status={person.status} url={person.avatar_url} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="dashboard-mini-title">{person.name}</div>
+                    <div className="dashboard-mini-sub">
+                      {Number(person.commission_rate ?? subRate)}% · {person.email}
+                      {isOwner && person.parent_name ? ` · under ${person.parent_name}` : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <StatusPill status={person.status} />
+                    {isOwner && (
+                      <>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-secondary"
+                          title="Move to another staff member"
+                          disabled={busyId === person.id}
+                          style={{ padding: '6px 9px' }}
+                          onClick={() => {
+                            setMoving(moving === person.id ? null : person.id);
+                            setMoveTarget('');
+                            setMoveWarning(null);
+                          }}
+                        >
+                          <ArrowLeftRight size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-secondary"
+                          title={person.status === 'suspended' ? 'Switch back on' : 'Stop future commission'}
+                          disabled={busyId === person.id}
+                          style={{ padding: '6px 9px' }}
+                          onClick={() => act(person.id, person.status === 'suspended' ? 'reactivate' : 'suspend')}
+                        >
+                          {person.status === 'suspended' ? <Play size={14} /> : <Pause size={14} />}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-secondary"
+                          title="Remove completely"
+                          disabled={busyId === person.id}
+                          style={{ padding: '6px 9px', color: '#f87171' }}
+                          onClick={() => {
+                            if (window.confirm(`Remove ${person.name} for good? Approved payouts are kept, but their login stops working.`)) {
+                              act(person.id, 'decline');
+                            }
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <StatusPill status={person.status} />
-                  {isOwner && (
-                    <>
-                      <button
-                        type="button"
-                        className="admin-btn admin-btn-secondary"
-                        title={person.status === 'suspended' ? 'Switch back on' : 'Stop future commission'}
-                        disabled={busyId === person.id}
-                        style={{ padding: '6px 9px' }}
-                        onClick={() => act(person.id, person.status === 'suspended' ? 'reactivate' : 'suspend')}
-                      >
-                        {person.status === 'suspended' ? <Play size={14} /> : <Pause size={14} />}
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-btn admin-btn-secondary"
-                        title="Remove completely"
-                        disabled={busyId === person.id}
-                        style={{ padding: '6px 9px', color: '#f87171' }}
-                        onClick={() => {
-                          if (window.confirm(`Remove ${person.name} for good? Approved payouts are kept, but their login stops working.`)) {
-                            act(person.id, 'decline');
-                          }
-                        }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </>
-                  )}
-                </div>
+
+                {isOwner && moving === person.id && (
+                  <div style={{
+                    marginTop: 6, padding: '12px 13px', borderRadius: 11,
+                    background: 'rgba(56,189,248,0.05)', border: '1px solid rgba(56,189,248,0.24)',
+                    display: 'flex', flexDirection: 'column', gap: 9,
+                  }}>
+                    <div>
+                      <div className="dashboard-mini-title">Move {person.name}</div>
+                      <div className="dashboard-mini-sub">
+                        They keep their {Number(person.commission_rate ?? subRate)}%, their link and their login.
+                        Only who earns the {overrideRate}% changes.
+                      </div>
+                    </div>
+
+                    {moveOptions(person).length === 0 ? (
+                      <p className="dashboard-mini-sub">
+                        There is no other staff member to move them to yet.
+                      </p>
+                    ) : (
+                      <>
+                        <select
+                          aria-label={`New staff member for ${person.name}`}
+                          value={moveTarget}
+                          onChange={(e) => { setMoveTarget(e.target.value); setMoveWarning(null); }}
+                          style={{
+                            padding: '10px 12px', borderRadius: 9, fontSize: '0.9rem',
+                            background: '#0c141f', border: '1px solid rgba(255,255,255,0.1)', color: '#e7edf5',
+                          }}
+                        >
+                          <option value="">Choose a staff member…</option>
+                          {moveOptions(person).map((member) => (
+                            <option key={member.user_id} value={member.user_id} style={{ color: '#0f172a' }}>
+                              {member.name || member.email}
+                            </option>
+                          ))}
+                        </select>
+
+                        {moveWarning?.id === person.id && (
+                          <div style={{
+                            padding: '11px 13px', borderRadius: 9, fontSize: '0.84rem',
+                            background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.34)', color: '#fbbf24',
+                          }}>
+                            <strong>{moveWarning.outstanding.parentName} has not been paid yet</strong>
+                            <div style={{ marginTop: 5, color: '#e7edf5' }}>
+                              {person.name} has {moveWarning.outstanding.ordersCount} paid order
+                              {moveWarning.outstanding.ordersCount === 1 ? '' : 's'} worth{' '}
+                              <strong>{money(moveWarning.outstanding.usd)}</strong> of override that no payout
+                              has covered. Move them now and {moveWarning.newParentName} collects it instead.
+                            </div>
+                            <div style={{ marginTop: 7, color: '#93a2b6', fontSize: '0.8rem' }}>
+                              Run the weekly payout scan and approve {moveWarning.outstanding.parentName}&apos;s
+                              week first if that money is hers.
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: 7 }}>
+                          <button
+                            type="button"
+                            className="admin-btn"
+                            disabled={!moveTarget || busyId === person.id}
+                            style={{
+                              flex: 1,
+                              background: moveWarning?.id === person.id
+                                ? 'linear-gradient(135deg,#fbbf24,#f59e0b)'
+                                : 'linear-gradient(135deg,#38bdf8,#2563eb)',
+                              color: moveWarning?.id === person.id ? '#2a1f05' : '#04222e',
+                              fontWeight: 800,
+                              opacity: !moveTarget ? 0.5 : 1,
+                            }}
+                            onClick={() => act(person.id, 'reassign', {
+                              parent_agent_id: moveTarget,
+                              ...(moveWarning?.id === person.id ? { confirm: true } : {}),
+                            })}
+                          >
+                            {busyId === person.id
+                              ? 'Moving…'
+                              : moveWarning?.id === person.id
+                                ? 'Move anyway'
+                                : 'Move'}
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-secondary"
+                            onClick={() => { setMoving(null); setMoveTarget(''); setMoveWarning(null); }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

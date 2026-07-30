@@ -166,6 +166,50 @@ export function assertCanInvite(inviter, allProfiles = []) {
   return { ok: true, reason: null };
 }
 
+/**
+ * Move a sub-user to a different staff member. Superadmin only — a staff member
+ * cannot hand her people to someone else, or take someone else's.
+ *
+ * The reason this exists is staff departures: when María leaves, Luis keeps his
+ * 8% and his link, and the 2% override moves to whoever takes him on.
+ *
+ * The new parent must be staff, which is the two-level cap showing up again:
+ * reassigning to a sub-user would create a third level just as surely as
+ * inviting one.
+ */
+export function validateReassignment(subUser, newParent, allProfiles = []) {
+  if (!subUser) return { ok: false, reason: 'Unknown sub-user.' };
+  if (!isSubUser(subUser)) {
+    return { ok: false, reason: 'That person is a staff member, not a sub-user.' };
+  }
+  if (!newParent) {
+    return { ok: false, reason: 'Choose the staff member who will take them on.' };
+  }
+  if (newParent.user_id === subUser.user_id) {
+    return { ok: false, reason: 'Nobody can be their own staff member.' };
+  }
+  if (newParent.user_id === subUser.parent_agent_id) {
+    return { ok: false, reason: `${subUser.name || 'They'} is already on that staff member's team.` };
+  }
+  if (isSubUser(newParent)) {
+    return {
+      ok: false,
+      reason: 'You can only move someone to a staff member. Sub-users cannot have sub-users.',
+    };
+  }
+  if (!isActiveProfile(newParent)) {
+    return { ok: false, reason: 'That staff member is not active, so they cannot take on sub-users.' };
+  }
+  // The person being moved will occupy a spot on the new team once they land.
+  if (!hasSubUserSpotFree(newParent, allProfiles)) {
+    return {
+      ok: false,
+      reason: `${newParent.name || 'That staff member'} has used all ${subUserCapFor(newParent)} of their spots. Raise their limit first.`,
+    };
+  }
+  return { ok: true, reason: null };
+}
+
 /** Tabs a sub-user may reach. Deliberately short, and deliberately no 'my_team'. */
 export const SUB_USER_TAB_IDS = new Set(['my_earnings', 'my_qr']);
 

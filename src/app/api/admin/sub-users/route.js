@@ -9,8 +9,22 @@ import {
   isSubUser,
   subUserCapFor,
   subUserSpotsUsed,
+  validateReassignment,
   validateSubUserParent,
 } from '@/lib/subUserTier.mjs';
+import {
+  buildPaidOrderIndex,
+  computeOverrideAmounts,
+  hasBeenPaid,
+  overrideRateFor,
+} from '@/lib/subUserCommission.mjs';
+import {
+  COMMISSION_ELIGIBLE_ORDER_STATUSES,
+  getOrderSalesAmounts,
+  orderBelongsToAgent,
+} from '@/lib/agentOrders';
+import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
+import { missingColumnFrom } from '@/lib/notificationPreferences.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,6 +46,97 @@ const PROFILE_FIELDS = 'id, user_id, email, name, tier, status, parent_agent_id,
 
 const cleanText = (value) => (value == null ? null : String(value).trim() || null);
 const normEmail = (value) => String(value || '').trim().toLowerCase();
+
+/**
+ * The audit columns arrive with add-sub-user-reassignment.sql. Moving someone
+ * only really needs parent_agent_id, so if that migration has not been run the
+ * write drops the audit fields and still does the useful thing — same tolerance
+ * writeWithOptionalPreferences gives member creation. One column at a time, and
+ * only ones from this list; anything else is a real bug and is surfaced.
+ */
+const REASSIGN_AUDIT_COLUMNS = [
+  'parent_since',
+  'previous_parent_agent_id',
+  'reassigned_by',
+  'reassigned_at',
+];
+
+async function updateTolerantOfMissingAudit(payload, run) {
+  let current = { ...payload };
+  const dropped = [];
+
+  for (let attempt = 0; attempt <= REASSIGN_AUDIT_COLUMNS.length; attempt += 1) {
+    const result = await run(current);
+    if (!result.error) return { ...result, droppedColumns: dropped };
+
+    const missing = missingColumnFrom(result.error);
+    if (!missing || !REASSIGN_AUDIT_COLUMNS.includes(missing) || !(missing in current)) {
+      return { ...result, droppedColumns: dropped };
+    }
+
+    delete current[missing];
+    dropped.push(missing);
+  }
+
+  return { ...(await run(current)), droppedColumns: dropped };
+}
+
+/**
+ * Override this sub-user has earned their current staff member that has not been
+ * paid out yet.
+ *
+ * This matters on reassignment. The weekly scan always credits the override to
+ * whoever is the parent at scan time, so moving someone mid-week hands the
+ * outgoing staff member's unpaid override to the incoming one. That is usually
+ * wrong — she worked that week. Rather than build parent history to model it, the
+ * API reports the figure and the UI makes the owner acknowledge it, with the fix
+ * being obvious: run the payout scan and approve her week first, then reassign.
+ */
+async function outstandingOverrideFor(supabaseAdmin, subUser, currentParent) {
+  const empty = { ordersCount: 0, usd: 0, crc: 0, parentName: currentParent?.name || null };
+  if (!currentParent?.email) return empty;
+
+  const { rate: exchangeRate } = await getDatabaseBackedUsdToCrcRate();
+
+  const [{ data: orders }, { data: approved }] = await Promise.all([
+    supabaseAdmin
+      .from('orders')
+      .select('id, sales_agent, status, currency, total, total_usd, total_crc')
+      .in('status', COMMISSION_ELIGIBLE_ORDER_STATUSES),
+    supabaseAdmin
+      .from('commission_payouts')
+      .select('agent_email, orders_data, override_orders_data')
+      .eq('status', 'Approved')
+      .eq('agent_email', currentParent.email),
+  ]);
+
+  const paidIndex = buildPaidOrderIndex(approved || []);
+  const unpaid = (orders || []).filter(
+    (order) => orderBelongsToAgent(order, subUser)
+      && !hasBeenPaid(paidIndex, currentParent.email, order.id)
+  );
+
+  let salesUsd = 0;
+  let salesCrc = 0;
+  for (const order of unpaid) {
+    const amounts = getOrderSalesAmounts(order, exchangeRate);
+    salesUsd += amounts.usd;
+    salesCrc += amounts.crc;
+  }
+
+  const { overrideUsd, overrideCrc } = computeOverrideAmounts({
+    usdSales: salesUsd,
+    crcSales: salesCrc,
+    overrideRate: overrideRateFor(currentParent),
+  });
+
+  return {
+    ordersCount: unpaid.length,
+    usd: overrideUsd,
+    crc: overrideCrc,
+    parentName: currentParent.name || currentParent.email,
+  };
+}
 
 /** GET — the caller's own people; the whole roster for a superadmin. */
 export async function GET(request) {
@@ -198,7 +303,7 @@ export async function PATCH(request) {
   try {
     const body = await request.json();
     const { id, action } = body;
-    const VALID = ['approve', 'decline', 'suspend', 'reactivate', 'set_rates'];
+    const VALID = ['approve', 'decline', 'suspend', 'reactivate', 'set_rates', 'reassign'];
 
     if (!id || !VALID.includes(action)) {
       return NextResponse.json({ error: `id and one of ${VALID.join(', ')} are required.` }, { status: 400 });
@@ -231,6 +336,79 @@ export async function PATCH(request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
       return NextResponse.json({ success: true, removed: true });
+    }
+
+    // Move someone to a different staff member — the answer to "María left".
+    // The sub-user keeps their 8%, their link and their login; only who collects
+    // the 2% changes, and only from the next weekly scan onward.
+    if (action === 'reassign') {
+      const { data: allProfiles, error: profilesError } = await supabaseAdmin
+        .from('admin_profiles')
+        .select(PROFILE_FIELDS);
+
+      if (profilesError) {
+        console.error('[sub-users] Could not load profiles for reassign:', profilesError);
+        return NextResponse.json({ error: 'Could not load the team' }, { status: 500 });
+      }
+
+      const all = allProfiles || [];
+      const newParent = all.find((row) => row.user_id === body.parent_agent_id);
+      const currentParent = all.find((row) => row.user_id === subUser.parent_agent_id);
+
+      const check = validateReassignment(subUser, newParent, all);
+      if (!check.ok) {
+        return NextResponse.json({ error: check.reason }, { status: 400 });
+      }
+
+      // Warn once about override the outgoing staff member has earned but not
+      // been paid. Approving her week first is almost always what you want.
+      const outstanding = await outstandingOverrideFor(supabaseAdmin, subUser, currentParent);
+      if (!body.confirm && outstanding.ordersCount > 0) {
+        return NextResponse.json({
+          success: false,
+          needsConfirmation: true,
+          outstanding,
+          newParentName: newParent.name || newParent.email,
+        });
+      }
+
+      const movedAt = new Date().toISOString();
+      const { data, error, droppedColumns } = await updateTolerantOfMissingAudit(
+        {
+          parent_agent_id: newParent.user_id,
+          previous_parent_agent_id: subUser.parent_agent_id || null,
+          parent_since: movedAt,
+          reassigned_by: auth.profile.email,
+          reassigned_at: movedAt,
+        },
+        (row) => supabaseAdmin
+          .from('admin_profiles')
+          .update(row)
+          .eq('id', id)
+          .select(PROFILE_FIELDS)
+          .single()
+      );
+
+      if (droppedColumns?.length) {
+        console.warn(
+          '[sub-users] Reassignment audit columns missing, run add-sub-user-reassignment.sql:',
+          droppedColumns.join(', ')
+        );
+      }
+
+      if (error) {
+        // The depth trigger surfaces here if the target turned out not to be staff.
+        console.error('[sub-users] Reassign failed:', error);
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        subUser: data,
+        movedFrom: currentParent?.name || null,
+        movedTo: newParent.name || newParent.email,
+        outstandingMoved: outstanding.ordersCount,
+      });
     }
 
     if (action === 'suspend' || action === 'reactivate') {
