@@ -4,7 +4,7 @@ import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader, Calenda
 import { adminFetch } from '@/lib/adminApi';
 import BroadcastProgress from '@/components/admin/BroadcastProgress';
 
-export default function BroadcastsPanel({ products = [] }) {
+export default function BroadcastsPanel({ products = [], draft = null, onDraftApplied }) {
   const [audience, setAudience] = useState('all_customers');
   const [customContacts, setCustomContacts] = useState('');
   const [channels, setChannels] = useState({ whatsapp: true, email: false });
@@ -191,6 +191,21 @@ export default function BroadcastsPanel({ products = [] }) {
       cancelled = true;
     };
   }, [audience]);
+
+  // Copy handed over from another tab — currently a Deal of the Week launch,
+  // which drafts the announcement but deliberately does not send it. Only the
+  // fields are filled in; the admin still picks the audience and presses send,
+  // so arriving here is a review step and not a queued message.
+  useEffect(() => {
+    if (!draft) return;
+    if (draft.message) setMessage(draft.message);
+    if (draft.emailSubject) setEmailSubject(draft.emailSubject);
+    if (Array.isArray(draft.targetProducts)) setTargetProducts(draft.targetProducts);
+    // A deal is worth announcing on both channels; either can still be unticked.
+    setChannels((current) => ({ ...current, whatsapp: true, email: true }));
+    setEmailFormat('simple');
+    onDraftApplied?.();
+  }, [draft, onDraftApplied]);
 
   const hasEmailHtml = Boolean(channels.email && emailFormat === 'html' && emailHtmlContent.trim());
 

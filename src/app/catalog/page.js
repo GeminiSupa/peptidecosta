@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import PressBand from '@/components/PressBand';
 import { mergeLandingPageSettings } from '@/lib/landingContent';
-import { readCatalogParams, resolveCategoryParam } from '@/lib/catalogFilters.mjs';
+import { readCatalogParams, resolveCategoryParam, compareBySaleAndStock } from '@/lib/catalogFilters.mjs';
 
 // const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
 const FALLBACK_EXCHANGE_RATE = 454.48;
@@ -2734,23 +2734,36 @@ export default function CatalogPage() {
     return true;
   });
 
-  // Sorting — always put in-stock items first, out-of-stock at bottom
+  // Sorting — on-sale in-stock items first, then the rest of the in-stock
+  // items, out-of-stock at the bottom. The banding is shared with the tests in
+  // tests/catalog-filters.test.mjs; only the tie-break inside a band differs
+  // between the sort modes.
+  //
+  // "On sale" deliberately covers both ways a card can end up wearing the
+  // ribbon: a genuine markdown (which is what Deal of the Week creates) and an
+  // advertised promo code. Anything showing a struck-through price sorts up,
+  // so the shelf order matches what the customer can see.
+  const sortPredicates = {
+    isInStock: (p) => isBacWater(p.product) || isInStock(p.status),
+    isOnSale: (p) => {
+      if (isBacWater(p.product)) return false;
+      const original = parsePrice(p.originalPriceUsd);
+      const current = parsePrice(p.priceUsd);
+      if (original > 0 && current > 0 && original > current) return true;
+      return Boolean(getPromoBadgeForProduct(promoBadges, p.product, lang));
+    },
+  };
+
   let filteredProducts;
   if (sortOrder === 'pop') {
-    filteredProducts = [...baseFilteredProducts].sort((a, b) => {
-      const stockA = isInStock(a.status);
-      const stockB = isInStock(b.status);
-      if (stockA && !stockB) return -1;
-      if (!stockA && stockB) return 1;
-      return 0;
-    });
+    filteredProducts = [...baseFilteredProducts].sort(
+      (a, b) => compareBySaleAndStock(a, b, sortPredicates)
+    );
   } else {
-    // Price sort, but still group in-stock first
+    // Price sort, but still banded by sale and stock first
     filteredProducts = [...baseFilteredProducts].sort((a, b) => {
-      const stockA = isInStock(a.status);
-      const stockB = isInStock(b.status);
-      if (stockA && !stockB) return -1;
-      if (!stockA && stockB) return 1;
+      const banded = compareBySaleAndStock(a, b, sortPredicates);
+      if (banded !== 0) return banded;
       const priceA = getPriceAsNumber(a, currency);
       const priceB = getPriceAsNumber(b, currency);
       return sortOrder === 'lowToHigh' ? priceA - priceB : priceB - priceA;

@@ -12,6 +12,7 @@ export const ADMIN_MODULES = [
   { id: 'messenger', label: 'Facebook Inbox', title: 'Facebook Inbox', group: 'Sales & Marketing', alwaysAvailable: true },
   { id: 'marketing', label: 'Marketing Studio', title: 'Marketing Studio', group: 'Sales & Marketing' },
   { id: 'affiliates', label: 'Affiliates', title: 'Affiliates & Promo Codes', group: 'Sales & Marketing' },
+  { id: 'deals', label: 'Deal of the Week', title: 'Deal of the Week', group: 'Sales & Marketing' },
   { id: 'my_qr', label: 'My QR & Scans', title: 'My QR & Scans', group: 'Sales & Marketing', alwaysAvailable: true },
   { id: 'broadcasts', label: 'One-Time Announcements', title: 'One-Time Announcements', group: 'Sales & Marketing' },
   { id: 'analytics', label: 'Analytics', title: 'Analytics & Attribution', group: 'Analytics & Content' },

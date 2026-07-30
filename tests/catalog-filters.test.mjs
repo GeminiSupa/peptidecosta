@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readCatalogParams, resolveCategoryParam } from '../src/lib/catalogFilters.mjs';
+import {
+  readCatalogParams,
+  resolveCategoryParam,
+  productSortRank,
+  compareBySaleAndStock,
+} from '../src/lib/catalogFilters.mjs';
 
 // The real category names on the products table — deliberately not the
 // "Peptides For Weight Loss" style the old links used.
@@ -58,4 +63,57 @@ test('a stale link shows the whole catalog instead of an empty page', () => {
 test('products with no category never match', () => {
   assert.equal(resolveCategoryParam(products, 'null'), 'all');
   assert.equal(resolveCategoryParam(products, '   '), 'all');
+});
+
+// --- Grid ordering: on-sale to the top -----------------------------------
+
+// The predicates the catalog supplies, reduced to flags on the fixtures.
+const rank = { isInStock: (p) => p.inStock, isOnSale: (p) => p.onSale };
+
+const onSaleInStock = { product: 'GHK-Cu', inStock: true, onSale: true };
+const plainInStock = { product: 'BPC-157', inStock: true, onSale: false };
+const onSaleSoldOut = { product: 'TB-500', inStock: false, onSale: true };
+const plainSoldOut = { product: 'DSIP', inStock: false, onSale: false };
+
+test('an on-sale product outranks its in-stock peers', () => {
+  assert.ok(productSortRank(onSaleInStock, rank) < productSortRank(plainInStock, rank));
+  assert.ok(compareBySaleAndStock(onSaleInStock, plainInStock, rank) < 0);
+});
+
+test('being on sale never lifts a product above the in-stock line', () => {
+  // The best position on the page must not go to something nobody can buy.
+  assert.ok(productSortRank(plainInStock, rank) < productSortRank(onSaleSoldOut, rank));
+  assert.ok(compareBySaleAndStock(plainInStock, onSaleSoldOut, rank) < 0);
+});
+
+test('out-of-stock products are not ranked among themselves by sale status', () => {
+  assert.equal(productSortRank(onSaleSoldOut, rank), productSortRank(plainSoldOut, rank));
+  assert.equal(compareBySaleAndStock(onSaleSoldOut, plainSoldOut, rank), 0);
+});
+
+test('sorting a mixed grid gives sale, then in stock, then sold out', () => {
+  const grid = [plainSoldOut, plainInStock, onSaleSoldOut, onSaleInStock];
+  const sorted = [...grid].sort((a, b) => compareBySaleAndStock(a, b, rank));
+  assert.deepEqual(sorted.map((p) => p.product), ['GHK-Cu', 'BPC-157', 'DSIP', 'TB-500']);
+});
+
+test('products in the same band keep their incoming order', () => {
+  // The default view leans on this: the comparator returns 0 within a band and
+  // Array.sort is stable, so the database `priority` ordering survives.
+  const a = { product: 'First', inStock: true, onSale: false };
+  const b = { product: 'Second', inStock: true, onSale: false };
+  const c = { product: 'Third', inStock: true, onSale: false };
+  const sorted = [a, b, c].sort((x, y) => compareBySaleAndStock(x, y, rank));
+  assert.deepEqual(sorted.map((p) => p.product), ['First', 'Second', 'Third']);
+});
+
+test('banding survives a price tie-break, matching the price-sort branch', () => {
+  const cheapPlain = { product: 'Cheap', inStock: true, onSale: false, price: 50 };
+  const pricySale = { product: 'Pricy', inStock: true, onSale: true, price: 300 };
+  const sorted = [cheapPlain, pricySale].sort((a, b) => {
+    const banded = compareBySaleAndStock(a, b, rank);
+    return banded !== 0 ? banded : a.price - b.price;
+  });
+  // Low-to-high price would put Cheap first; the sale band wins.
+  assert.deepEqual(sorted.map((p) => p.product), ['Pricy', 'Cheap']);
 });

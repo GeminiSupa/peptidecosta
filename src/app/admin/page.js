@@ -43,6 +43,7 @@ import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
 import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
 import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
+import DealOfWeekPanel from '@/components/admin/DealOfWeekPanel';
 import WhatsAppInbox from '@/components/admin/WhatsAppInbox';
 import WhatsAppAnalyticsPanel from '@/components/admin/WhatsAppAnalyticsPanel';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
@@ -355,6 +356,10 @@ export default function AdminPage() {
 
   // Dashboard state tabs: 'spreadsheet', 'orders', 'share'
   const [activeTab, setActiveTab] = useState('spreadsheet');
+
+  // Announcement copy handed over from another tab (currently Deal of the Week),
+  // for the Announcements panel to pre-fill so the send still happens there.
+  const [broadcastDraft, setBroadcastDraft] = useState(null);
 
   // Spreadsheet product editor states
   const [products, setProducts] = useState([]);
@@ -4451,7 +4456,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           </div>
           )}
 
-          {['carts','share','reviews','messenger','marketing','affiliates','broadcasts'].some(hasAccess) && (
+          {['carts','share','reviews','messenger','marketing','affiliates','deals','broadcasts'].some(hasAccess) && (
           <div className="admin-nav-section">
             <div className="admin-nav-section-title">Sales & Marketing</div>
             <div className="admin-nav-section-items">
@@ -4522,6 +4527,15 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 >
                   <UserPlus size={14} />
                   <span className="tab-label">Affiliates</span>
+                </button>
+              )}
+              {hasAccess('deals') && (
+                <button
+                  className={`admin-tab-btn ${activeTab === 'deals' ? 'active' : ''}`}
+                  onClick={() => navigateToTab('deals')}
+                >
+                  <Zap size={14} />
+                  <span className="tab-label">Deal of the Week</span>
                 </button>
               )}
               {hasAccess('my_qr') && (
@@ -5149,9 +5163,28 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           )
         )}
 
+        {/* TAB: Deal of the Week */}
+        {activeTab === 'deals' && (
+          <DealOfWeekPanel
+            products={products}
+            onSendAnnouncement={(draft) => {
+              // Launching a deal only drafts the announcement. Handing it to the
+              // Announcements panel keeps the actual send behind that screen's
+              // audience picker and confirmation, so no single click can mail
+              // the whole customer list.
+              setBroadcastDraft(draft);
+              navigateToTab('broadcasts');
+            }}
+          />
+        )}
+
         {/* TAB: One-Time Announcements */}
         {activeTab === 'broadcasts' && (
-          <BroadcastsPanel products={products} />
+          <BroadcastsPanel
+            products={products}
+            draft={broadcastDraft}
+            onDraftApplied={() => setBroadcastDraft(null)}
+          />
         )}
 
         {activeTab === 'messenger' && (
