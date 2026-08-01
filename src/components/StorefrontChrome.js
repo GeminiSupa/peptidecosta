@@ -2,16 +2,25 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Mail, Menu, Search, ShoppingBag, Sparkles, X } from 'lucide-react';
+import { ChevronDown, Mail, Menu, Search, ShoppingBag, X } from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getTrustpilotReviewUrl, isExternalHttpUrl } from '@/lib/businessLinks';
 import { DEFAULT_LANDING_PAGE_SETTINGS } from '@/lib/landingContent';
+import { normalizeBannerCopy, replaceUsdPlaceholders, sanitizeBannerHref } from '@/lib/bannerText';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import PromoTicker from '@/components/PromoTicker';
 
 function parseBannerText(text = '') {
-  return text.replace(/\{\{usd_(\d+)\}\}/g, (_, amount) => `$${amount}`);
+  return replaceUsdPlaceholders(text, (amount) => `$${amount}`);
+}
+
+function textTickerClassName(className = '') {
+  return className
+    .split(/\s+/)
+    .filter((name) => name && !name.startsWith('catalog-promo-image-banner') && name !== 'clone-shell')
+    .join(' ');
 }
 
 export function CatalogPromoBanner({ lang = 'es', settings, className = '', forceActive = false }) {
@@ -43,11 +52,14 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
   const activeImageBanner = promoBanners.find((banner) => (
     banner?.imageUrl || banner?.image_url || banner?.bannerImageUrl
   ));
-  const activeText = promoBanners
+  const activeTextItems = promoBanners
     .map((banner) => banner?.[`text${suffix}`] || banner?.textEn || banner?.textEs || banner?.text)
     .filter(Boolean)
     .map(parseBannerText)
-    .join(' • ');
+    .map(normalizeBannerCopy)
+    .filter((item) => item.text);
+  const activeText = activeTextItems.map((item) => item.text).join(' • ');
+  const activeTextHref = activeTextItems.find((item) => item.href)?.href || '';
 
   const imageUrl = activeImageBanner?.imageUrl
     || activeImageBanner?.image_url
@@ -58,19 +70,25 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
     || activeImageBanner?.alt
     || settings?.[`catalogBannerAlt${suffix}`]
     || DEFAULT_LANDING_PAGE_SETTINGS[`catalogBannerAlt${suffix}`];
-  const rawHref = activeImageBanner?.href
-    || activeImageBanner?.url
-    || activeImageBanner?.link
-    || settings?.catalogBannerUrl
-    || DEFAULT_LANDING_PAGE_SETTINGS.catalogBannerUrl;
+  const rawHref = activeImageBanner
+    ? (activeImageBanner?.href
+      || activeImageBanner?.url
+      || activeImageBanner?.link
+      || settings?.catalogBannerUrl
+      || DEFAULT_LANDING_PAGE_SETTINGS.catalogBannerUrl)
+    : (activeTextHref
+      || settings?.catalogBannerUrl
+      || DEFAULT_LANDING_PAGE_SETTINGS.catalogBannerUrl);
 
   const href = (() => {
     if (rawHref === 'whatsapp') return buildWhatsAppLink(links.whatsappNumber);
-    if (rawHref.startsWith('http') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:') || rawHref.startsWith('#')) {
-      return rawHref;
+    const safeHref = sanitizeBannerHref(rawHref);
+    if (!safeHref) return `/catalog?lang=${lang}`;
+    if (safeHref.startsWith('http') || safeHref.startsWith('mailto:') || safeHref.startsWith('tel:') || safeHref.startsWith('#')) {
+      return safeHref;
     }
-    const separator = rawHref.includes('?') ? '&' : '?';
-    return `${rawHref}${separator}lang=${lang}`;
+    const separator = safeHref.includes('?') ? '&' : '?';
+    return `${safeHref}${separator}lang=${lang}`;
   })();
 
   const externalLinkProps = isExternalHttpUrl(href)
@@ -78,12 +96,7 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
     : {};
 
   if (activeText && !activeImageBanner) {
-    return (
-      <a className={`catalog-promo-text-banner ${className}`.trim()} href={href} {...externalLinkProps}>
-        <Sparkles size={16} />
-        <span>{activeText}</span>
-      </a>
-    );
+    return <PromoTicker active text={activeText} href={href} className={textTickerClassName(className)} />;
   }
 
   return (

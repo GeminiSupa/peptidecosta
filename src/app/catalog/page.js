@@ -42,7 +42,9 @@ import {
   CreditCard, MessageCircle, Lock, Share2
 } from 'lucide-react';
 import PressBand from '@/components/PressBand';
+import PromoTicker from '@/components/PromoTicker';
 import { mergeLandingPageSettings } from '@/lib/landingContent';
+import { normalizeBannerCopy, replaceUsdPlaceholders } from '@/lib/bannerText';
 import { readCatalogParams, resolveCategoryParam, compareBySaleAndStock } from '@/lib/catalogFilters.mjs';
 
 // const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
@@ -2916,33 +2918,21 @@ export default function CatalogPage() {
       {(() => {
         const parseBannerText = (text) => {
           if (!text) return '';
-          return text.replace(/\{\{usd_(\d+)\}\}/g, (match, amountStr) => {
-            const usdAmount = parseFloat(amountStr);
+          return replaceUsdPlaceholders(text, (usdAmount) => {
             if (currency === 'USD') return `$${usdAmount.toLocaleString()}`;
             const crcAmount = Math.round(usdAmount * exchangeRate);
             return `₡${crcAmount.toLocaleString()}`;
           });
         };
-        const bannerText = cmsSettings?.bannerActive
+        const rawBannerText = cmsSettings?.bannerActive
           ? (lang === 'en' ? parseBannerText(cmsSettings.bannerTextEn) : parseBannerText(cmsSettings.bannerTextEs))
           : '';
-        const textLength = bannerText.length || 100;
-        const duration = Math.round(textLength * (80 / 140));
+        const banner = normalizeBannerCopy(rawBannerText);
 
         return cmsSettings?.bannerActive && (
-        <div className="promo-banner-global">
-          <div className="promo-banner-ticker">
-            <div className="promo-banner-track" style={{ animationDuration: `${duration}s` }}>
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="promo-banner-text" style={{ padding: '0 20px' }}>
-                  <Sparkles size={14} className="promo-icon" />
-                  <span>{bannerText}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      );})()}
+          <PromoTicker active text={banner.text} href={banner.href} />
+        );
+      })()}
       {/* Static Top Header Section */}
       <header className="header-top-section">
         <div className="header-top container">
