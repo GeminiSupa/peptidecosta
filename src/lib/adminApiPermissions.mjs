@@ -23,6 +23,7 @@ const rules = [
   { pattern: /^\/api\/admin\/sub-users(?:\/|$)/, permissions: ['my_team'] },
   { pattern: /^\/api\/admin\/notification-recipients(?:\/|$)/, permissions: ['team'] },
   { pattern: /^\/api\/admin\/whatsapp-analytics$/, permissions: ['whatsapp_ai'] },
+  { pattern: /^\/api\/admin\/whatsapp-conversations(?:\/|$)/, permissions: ['whatsapp_ai', 'wa_session'] },
   { pattern: /^\/api\/admin\/whatsapp-session(?:\/|$)/, permissions: ['wa_session'] },
   { pattern: /^\/api\/messenger(?:\/|$)/, permissions: ['messenger'] },
   { pattern: /^\/api\/facebook(?:\/|$)/, permissions: ['messenger'] },

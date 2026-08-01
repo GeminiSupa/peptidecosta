@@ -542,8 +542,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
             cartItems: cust.cartItems || []
           });
         } else {
-          // Fallback if callback is not wired
-          window.open(`https://wa.me/${contactPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(data.text.trim())}`, '_blank');
+          alert('WhatsApp composer is not available in this view.');
         }
       } else {
         alert('Failed to generate AI pitch: ' + (data.error || 'Unknown error'));
@@ -1402,7 +1401,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                         if (onWhatsAppClick) {
                           onWhatsAppClick({ name: cust.name, phone: contactPhone, cartItems: cust.cartItems || [] });
                         } else {
-                          window.open(`https://wa.me/${contactPhone.replace(/[^0-9]/g, '')}?text=Hi ${cust.name}, `, '_blank');
+                          alert('WhatsApp composer is not available in this view.');
                         }
                       }}
                     >
@@ -1631,7 +1630,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                                   cartItems: cust.cartItems || []
                                 });
                               } else {
-                                window.open(`https://wa.me/${contactPhone.replace(/[^0-9]/g, '')}?text=Hi ${cust.name}, `, '_blank');
+                                alert('WhatsApp composer is not available in this view.');
                               }
                             }}
                             className="crm-icon-btn wa"
@@ -1857,7 +1856,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                               cartItems: selectedCustomer.cartItems || []
                             });
                           } else {
-                            window.open(`https://wa.me/${selectedCustomerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(selectedCustomerScript)}`, '_blank');
+                            alert('WhatsApp composer is not available in this view.');
                           }
                         }}
                       >

@@ -6,7 +6,6 @@ import { Brain, Check, CheckCheck, ChevronLeft, Clock, MessageCircle, Search, Se
 const INITIAL_CHAT_LIMIT = 30;
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const SERVICE_WINDOW_URGENT_MS = 2 * 60 * 60 * 1000;
-const WA_OWNER_STORAGE_KEY = 'peptides_wa_conversation_owners_v1';
 const WA_UNASSIGNED_OWNER = 'unassigned';
 const GENERIC_CONTACT_NAMES = new Set([
   'administrator',
@@ -172,16 +171,6 @@ function formatMoney(value) {
   return `$${amount.toLocaleString(undefined, { maximumFractionDigits: amount >= 100 ? 0 : 2 })}`;
 }
 
-function readStoredConversationOwners() {
-  if (typeof window === 'undefined') return {};
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(WA_OWNER_STORAGE_KEY) || '{}');
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
 function getOwnerDisplay(ownerKey, currentAgentKey) {
   if (!ownerKey || ownerKey === WA_UNASSIGNED_OWNER) return 'Unassigned';
   if (ownerKey === currentAgentKey) return 'Mine';
@@ -335,6 +324,9 @@ const WaChatItem = ({
 
 export default function WhatsAppInbox({
   whatsappMessages,
+  whatsappConversations = [],
+  conversationRoutingAvailable = true,
+  onConversationAction,
   orders = [],
   leads = [],
   abandonedCarts = [],
@@ -377,7 +369,8 @@ export default function WhatsAppInbox({
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [showComposerTools, setShowComposerTools] = useState(false);
   const [focusListMode, setFocusListMode] = useState(false);
-  const [conversationOwners, setConversationOwners] = useState(() => readStoredConversationOwners());
+  const [conversationActionWaId, setConversationActionWaId] = useState(null);
+  const [conversationActionError, setConversationActionError] = useState('');
   const [now, setNow] = useState(() => Date.now());
 
   // Pull-to-refresh state
@@ -448,6 +441,17 @@ export default function WhatsAppInbox({
     return stages;
   }, [abandonedCarts, leads, orders]);
 
+  const conversationsByWaId = useMemo(() => {
+    const map = new Map();
+    whatsappConversations.forEach((conversation) => {
+      const waId = normalizePhone(conversation.wa_id);
+      if (!waId) return;
+      map.set(waId, conversation);
+      if (waId.length >= 8) map.set(waId.slice(-8), conversation);
+    });
+    return map;
+  }, [whatsappConversations]);
+
   const chatsList = useMemo(() => {
     const chatsMap = new Map();
     const chronological = [...whatsappMessages].sort(
@@ -461,6 +465,7 @@ export default function WhatsAppInbox({
       const messageName = cleanContactName(m.display_name);
       const inboundName = m.direction === 'inbound' ? messageName : existing?.inboundName;
       const crmName = contactNamesByPhone.get(waId) || contactNamesByPhone.get(waId.slice(-8));
+      const conversation = conversationsByWaId.get(waId) || conversationsByWaId.get(waId.slice(-8));
       // Track the most-recent inbound message timestamp per chat
       const lastInboundAt = m.direction === 'inbound'
         ? m.created_at
@@ -468,7 +473,7 @@ export default function WhatsAppInbox({
 
       chatsMap.set(waId, {
         waId,
-        displayName: crmName || inboundName || existing?.displayName || messageName || `Customer ${waId.slice(-4)}`,
+        displayName: crmName || conversation?.display_name || inboundName || existing?.displayName || messageName || `Customer ${waId.slice(-4)}`,
         inboundName,
         lastMessageText: m.message_text,
         lastMessageAt: m.created_at,
@@ -476,13 +481,15 @@ export default function WhatsAppInbox({
         direction: m.direction,
         isAiLast: m.direction === 'outbound' && m.display_name === 'AI Copilot',
         stage: contactStageByPhone.get(waId) || contactStageByPhone.get(waId.slice(-8)) || 'Contact',
+        conversation,
+        status: conversation?.status || 'open',
       });
     });
 
     return Array.from(chatsMap.values()).sort(
       (a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt)
     );
-  }, [contactNamesByPhone, contactStageByPhone, whatsappMessages]);
+  }, [contactNamesByPhone, contactStageByPhone, conversationsByWaId, whatsappMessages]);
 
   // A chat has "unseen" inbound messages when lastInboundAt > the timestamp stored in seenMap
   const hasUnread = useCallback((chat) => {
@@ -510,35 +517,43 @@ export default function WhatsAppInbox({
   );
 
   const getConversationOwner = useCallback((waId) => {
-    return conversationOwners[waId] || WA_UNASSIGNED_OWNER;
-  }, [conversationOwners]);
+    const conversation = conversationsByWaId.get(waId) || conversationsByWaId.get(String(waId || '').slice(-8));
+    return conversation?.assigned_to_email || conversation?.assigned_to_name || WA_UNASSIGNED_OWNER;
+  }, [conversationsByWaId]);
 
-  const assignConversationOwner = useCallback((waId, ownerKey = currentAgentKey) => {
+  const assignConversationOwner = useCallback(async (waId) => {
     if (!waId) return;
-    setConversationOwners((prev) => {
-      const next = { ...prev, [waId]: ownerKey };
-      try {
-        window.localStorage.setItem(WA_OWNER_STORAGE_KEY, JSON.stringify(next));
-      } catch (err) {
-        console.warn('Could not persist WhatsApp conversation owner:', err);
-      }
-      return next;
-    });
-  }, [currentAgentKey]);
+    if (!conversationRoutingAvailable || !onConversationAction) {
+      setConversationActionError('Conversation routing is not installed yet. Run the WhatsApp conversations SQL migration.');
+      return;
+    }
+    setConversationActionError('');
+    setConversationActionWaId(waId);
+    try {
+      await onConversationAction(waId, 'claim');
+    } catch (err) {
+      setConversationActionError(err.message || 'Could not claim conversation.');
+    } finally {
+      setConversationActionWaId(null);
+    }
+  }, [conversationRoutingAvailable, onConversationAction]);
 
-  const releaseConversationOwner = useCallback((waId) => {
+  const releaseConversationOwner = useCallback(async (waId) => {
     if (!waId) return;
-    setConversationOwners((prev) => {
-      const next = { ...prev };
-      delete next[waId];
-      try {
-        window.localStorage.setItem(WA_OWNER_STORAGE_KEY, JSON.stringify(next));
-      } catch (err) {
-        console.warn('Could not persist WhatsApp conversation owner:', err);
-      }
-      return next;
-    });
-  }, []);
+    if (!conversationRoutingAvailable || !onConversationAction) {
+      setConversationActionError('Conversation routing is not installed yet. Run the WhatsApp conversations SQL migration.');
+      return;
+    }
+    setConversationActionError('');
+    setConversationActionWaId(waId);
+    try {
+      await onConversationAction(waId, 'release');
+    } catch (err) {
+      setConversationActionError(err.message || 'Could not release conversation.');
+    } finally {
+      setConversationActionWaId(null);
+    }
+  }, [conversationRoutingAvailable, onConversationAction]);
 
   const mineCount = useMemo(
     () => chatsList.filter((chat) => getConversationOwner(chat.waId) === currentAgentKey).length,
@@ -595,7 +610,6 @@ export default function WhatsAppInbox({
 
   const currentChat = chatsList.find((c) => c.waId === activeChatWaId);
   const activeChatCallHref = activeChatWaId ? `tel:+${activeChatWaId}` : null;
-  const activeChatWhatsAppHref = activeChatWaId ? `https://wa.me/${activeChatWaId}` : null;
 
   const customerContext = useMemo(() => {
     if (!activeChatWaId) return null;
@@ -841,6 +855,19 @@ export default function WhatsAppInbox({
             ))}
           </div>
 
+          {!conversationRoutingAvailable && (
+            <div className="admin-wa-send-feedback admin-wa-send-feedback--error" role="alert">
+              <span>Conversation routing is not installed yet. Run the WhatsApp conversations SQL migration to enable shared ownership.</span>
+            </div>
+          )}
+
+          {conversationActionError && (
+            <div className="admin-wa-send-feedback admin-wa-send-feedback--error" role="alert">
+              <span>{conversationActionError}</span>
+              <button type="button" onClick={() => setConversationActionError('')}>Dismiss</button>
+            </div>
+          )}
+
           <div 
             className="admin-wa-conversations-scroll" 
             ref={scrollRef}
@@ -989,12 +1016,12 @@ export default function WhatsAppInbox({
                   {currentOwnerLabel}
                 </span>
                 {currentChatIsUnassigned ? (
-                  <button type="button" className="admin-wa-inline-action" onClick={() => assignConversationOwner(activeChatWaId)}>
-                    Claim
+                  <button type="button" className="admin-wa-inline-action" onClick={() => assignConversationOwner(activeChatWaId)} disabled={conversationActionWaId === activeChatWaId}>
+                    {conversationActionWaId === activeChatWaId ? 'Claiming...' : 'Claim'}
                   </button>
                 ) : currentChatIsMine ? (
-                  <button type="button" className="admin-wa-inline-action admin-wa-inline-action--muted" onClick={() => releaseConversationOwner(activeChatWaId)}>
-                    Release
+                  <button type="button" className="admin-wa-inline-action admin-wa-inline-action--muted" onClick={() => releaseConversationOwner(activeChatWaId)} disabled={conversationActionWaId === activeChatWaId}>
+                    {conversationActionWaId === activeChatWaId ? 'Releasing...' : 'Release'}
                   </button>
                 ) : null}
               </div>
@@ -1350,10 +1377,6 @@ export default function WhatsAppInbox({
               <a href={activeChatCallHref} className="admin-wa-action-row admin-wa-action-row--call">
                 <span><PhoneCall size={20} /></span>
                 <div><strong>Phone call</strong><small>Uses this device dialer. On Apple devices this may open FaceTime.</small></div>
-              </a>
-              <a href={activeChatWhatsAppHref} target="_blank" rel="noopener noreferrer" className="admin-wa-action-row">
-                <span><MessageCircle size={20} /></span>
-                <div><strong>Open WhatsApp chat</strong><small>Jump to the customer conversation in WhatsApp.</small></div>
               </a>
               <button
                 type="button"

@@ -1,5 +1,6 @@
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
+import { upsertWhatsAppConversation } from '@/lib/whatsappConversations.mjs';
 
 /**
  * One outbound WhatsApp send, shared by the admin route and the crons.
@@ -127,6 +128,22 @@ export async function sendWhatsAppMessage({
         } else {
           console.log(`[WhatsApp Outbound] Successfully updated abandoned cart status for session ${sessionId}`);
         }
+      }
+
+      const { error: conversationErr } = await upsertWhatsAppConversation(supabase, {
+        waId: cleanPhone,
+        displayName: cleanDisplayName,
+        direction: 'outbound',
+        matchedOrderId: orderId || null,
+        source: 'cloud_api',
+        metadata: {
+          session_id: sessionId || null,
+          meta_message_id: messageId,
+        },
+      });
+
+      if (conversationErr) {
+        console.error('[WhatsApp Outbound] Failed to update conversation routing:', conversationErr);
       }
     } catch (dbCrash) {
       console.error('[WhatsApp Outbound] Unexpected crash during CRM DB logging:', dbCrash);

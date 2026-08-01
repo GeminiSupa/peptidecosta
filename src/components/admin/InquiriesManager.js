@@ -65,7 +65,7 @@ const getSlaInfo = (inquiry) => {
   return { label: ageHours <= 0 ? 'New' : `${ageHours}h open`, tone: 'ok' };
 };
 
-export default function InquiriesManager({ adminEmail, products = [], onOpenCustomerProfile, onCreateOrderFromInquiry, onNavigate }) {
+export default function InquiriesManager({ adminEmail, products = [], onOpenCustomerProfile, onCreateOrderFromInquiry, onNavigate, onWhatsAppClick }) {
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -237,6 +237,22 @@ export default function InquiriesManager({ adminEmail, products = [], onOpenCust
     });
   };
 
+  const openInquiryWhatsApp = (inquiry) => {
+    const phone = extractPhone(inquiry.message);
+    if (!phone) return;
+    const text = `Hola ${inquiry.customer_name}, te saluda el equipo de Peptides Costa Rica sobre tu consulta: "${inquiry.subject || 'Contacto'}". ¿Cómo te podemos ayudar?`;
+    if (onWhatsAppClick) {
+      onWhatsAppClick({
+        name: inquiry.customer_name || 'Cliente',
+        phone,
+        prefilledText: text,
+        context: 'inquiry',
+      });
+      return;
+    }
+    alert('WhatsApp composer is not available in this view.');
+  };
+
   const convertInquiry = (inquiry, target) => {
     try {
       localStorage.setItem('admin_inquiry_conversion_context', JSON.stringify({
@@ -367,11 +383,7 @@ export default function InquiriesManager({ adminEmail, products = [], onOpenCust
                   {extractPhone(inq.message) && (
                     <span 
                       style={{ ...styles.metaItem, color: '#4ade80', cursor: 'pointer', fontWeight: 'bold' }}
-                      onClick={() => {
-                        const phone = extractPhone(inq.message);
-                        const waMsg = encodeURIComponent(`Hola ${inq.customer_name}, te saluda el equipo de Peptides Costa Rica sobre tu consulta: "${inq.subject || 'Contacto'}". ¿Cómo te podemos ayudar?`);
-                        window.open(`https://wa.me/${phone.replace('+', '')}?text=${waMsg}`, '_blank');
-                      }}
+                      onClick={() => openInquiryWhatsApp(inq)}
                       title="WhatsApp Customer"
                     >
                       <MessageSquare size={14} /> WhatsApp ({extractPhone(inq.message)})
@@ -653,11 +665,7 @@ export default function InquiriesManager({ adminEmail, products = [], onOpenCust
 
                 {extractPhone(inq.message) && (
                   <button
-                    onClick={() => {
-                      const phone = extractPhone(inq.message);
-                      const waMsg = encodeURIComponent(`Hola ${inq.customer_name}, te saluda el equipo de Peptides Costa Rica sobre tu consulta: "${inq.subject || 'Contacto'}". ¿Cómo te podemos ayudar?`);
-                      window.open(`https://wa.me/${phone.replace('+', '')}?text=${waMsg}`, '_blank');
-                    }}
+                    onClick={() => openInquiryWhatsApp(inq)}
                     style={{
                       padding: '4px 8px',
                       borderRadius: '6px',

@@ -186,7 +186,7 @@ export default function CartsManager({
       }, 'discount');
       return;
     }
-    window.open(`https://wa.me/${phone.replace(/\D/g, '')}`, '_blank');
+    alert('WhatsApp composer is not available in this view.');
   };
 
   return (

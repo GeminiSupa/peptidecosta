@@ -18,6 +18,7 @@ test('admin API path rules map sensitive routes to dashboard modules', () => {
   assert.deepEqual(adminPermissionsForPath('/api/admin/abandoned-carts/update'), ['carts']);
   assert.deepEqual(adminPermissionsForPath('/api/admin/products'), ['spreadsheet']);
   assert.deepEqual(adminPermissionsForPath('/api/admin/promo/create'), ['affiliates', 'broadcasts', 'deals']);
+  assert.deepEqual(adminPermissionsForPath('/api/admin/whatsapp-conversations'), ['whatsapp_ai', 'wa_session']);
   assert.deepEqual(adminPermissionsForPath('/api/messenger/inbox'), ['messenger']);
   assert.deepEqual(adminPermissionsForPath('/api/admin/users/avatar'), []);
 });

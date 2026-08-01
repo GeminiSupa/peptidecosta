@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 import { buildWhatsAppCustomerContext } from '@/lib/whatsappAiContext';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
+import { upsertWhatsAppConversation } from '@/lib/whatsappConversations.mjs';
 import {
   detectWhatsAppIntent,
   setWhatsAppSuppression,
@@ -184,6 +185,21 @@ export async function POST(request) {
             if (insertError) {
               console.error('[WhatsApp Webhook] Failed to log message:', insertError);
             }
+
+            const { error: conversationError } = await upsertWhatsAppConversation(supabase, {
+              waId,
+              displayName,
+              messageAt: timestamp ? new Date(Number(timestamp) * 1000).toISOString() : null,
+              direction: 'inbound',
+              source: 'cloud_api',
+              matchedOrderId,
+              metadata: {
+                webhook_message_id: msg.id || null,
+              },
+            });
+            if (conversationError) {
+              console.error('[WhatsApp Webhook] Failed to route conversation:', conversationError);
+            }
           }
 
           // ── Honor opt-out (STOP/BAJA) and opt-in (ALTA) requests ──
@@ -223,6 +239,13 @@ export async function POST(request) {
                     direction: 'outbound',
                     source: 'cloud_api',
                     raw_payload: { compliance: intent },
+                  });
+                  await upsertWhatsAppConversation(supabase, {
+                    waId,
+                    displayName: 'System',
+                    direction: 'outbound',
+                    source: 'cloud_api',
+                    metadata: { compliance: intent },
                   });
                 }
               } catch (confirmErr) {
@@ -439,6 +462,14 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
                   matched_order_id: matchedOrderId,
                   meta_message_id: metaMessageId,
                   delivery_status: 'sent'
+                });
+                await upsertWhatsAppConversation(supabase, {
+                  waId,
+                  displayName: displayName || (isAiGenerated ? 'AI Copilot' : 'Peptides Costa Rica'),
+                  direction: 'outbound',
+                  source: 'cloud_api',
+                  matchedOrderId,
+                  metadata: { meta_message_id: metaMessageId },
                 });
               }
             } catch (replyErr) {

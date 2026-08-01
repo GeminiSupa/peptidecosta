@@ -1,12 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { MessageCircle, Plus, Send, Trash2 } from 'lucide-react';
+import { Plus, Send, Trash2 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import {
   buildCartRecoveryLink,
   buildCartRecoveryWhatsAppMessage,
-  buildWhatsAppDeepLink,
   formatPhoneForWhatsApp,
 } from '@/lib/whatsappRecovery';
 
@@ -193,27 +192,6 @@ export default function AbandonedCartEditPanel({ cart, products = [], onClose, o
     }
   };
 
-  const openWhatsAppRecovery = () => {
-    const waPhone = formatPhoneForWhatsApp(phone);
-    if (!waPhone || waPhone.length < 8) {
-      setError('Add a valid customer phone number before opening WhatsApp.');
-      return;
-    }
-    const message = buildCartRecoveryWhatsAppMessage({
-      name,
-      items,
-      recoveryLink,
-      updated: true,
-    });
-    const link = buildWhatsAppDeepLink(phone, message);
-    if (!link) {
-      setError('Could not build WhatsApp link — check the phone number.');
-      return;
-    }
-    setError('');
-    window.open(link, '_blank', 'noopener,noreferrer');
-  };
-
   return (
     <div className="modal active" onClick={onClose} style={{ zIndex: 210 }}>
       <div className="modal-content order-detail-panel" onClick={(e) => e.stopPropagation()}>
@@ -329,23 +307,6 @@ export default function AbandonedCartEditPanel({ cart, products = [], onClose, o
           <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '8px 0 0' }}>
             Saves your edits first, then sends from your business number. Uses a custom message when the customer is in the 24h chat window; otherwise sends the approved recovery template (same as bulk Send WA).
           </p>
-          <button
-            type="button"
-            className="admin-btn admin-btn-secondary"
-            onClick={openWhatsAppRecovery}
-            disabled={!phone.trim() || items.length === 0}
-            style={{
-              width: '100%',
-              marginTop: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-            }}
-          >
-            <MessageCircle size={16} />
-            Open personal WhatsApp (fallback)
-          </button>
           {(!phone.trim() || items.length === 0) && (
             <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '8px 0 0' }}>
               Add a phone number and at least one cart item to enable WhatsApp.

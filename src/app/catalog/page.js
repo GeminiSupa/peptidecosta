@@ -4758,7 +4758,7 @@ export default function CatalogPage() {
               )}
             </div>
             <a 
-              href={`https://wa.me/${links.whatsappNumber}`} 
+              href={buildWhatsAppLink(links.whatsappNumber, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.')}
               target="_blank" 
               rel="noreferrer"
               className="whatsapp-btn" 
@@ -4786,7 +4786,7 @@ export default function CatalogPage() {
             <a href="#" onClick={(e) => { e.preventDefault(); setContactModalOpen(true); setContactFormSuccess(false); }}>
               {lang === 'en' ? 'Contact Us' : 'Contáctanos'}
             </a>
-            <a href={`https://wa.me/${links.whatsappNumber}`} target="_blank" rel="noreferrer" onClick={(e) => {
+            <a href={buildWhatsAppLink(links.whatsappNumber, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.')} target="_blank" rel="noreferrer" onClick={(e) => {
               e.preventDefault();
               window.open(buildWhatsAppLink(links.whatsappNumber, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
             }}>

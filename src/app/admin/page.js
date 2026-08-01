@@ -477,6 +477,8 @@ export default function AdminPage() {
 
   // WhatsApp AI Live Inbox States
   const [whatsappMessages, setWhatsappMessages] = useState([]);
+  const [whatsappConversations, setWhatsappConversations] = useState([]);
+  const [whatsappConversationRoutingAvailable, setWhatsappConversationRoutingAvailable] = useState(true);
   const [loadingWhatsappMessages, setLoadingWhatsappMessages] = useState(true);
   const [activeChatWaId, setActiveChatWaId] = useState(null);
   const [whatsappSettings, setWhatsappSettings] = useState({
@@ -501,6 +503,24 @@ export default function AdminPage() {
       try { localStorage.setItem('wa_seen_map', JSON.stringify(next)); } catch {}
       return next;
     });
+  };
+
+  const handleWhatsAppConversationAction = async (waId, action, extra = {}) => {
+    const res = await adminFetch('/api/admin/whatsapp-conversations', {
+      method: 'PATCH',
+      body: JSON.stringify({ waId, action, ...extra }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not update conversation');
+    if (data.conversation) {
+      setWhatsappConversations((prev) => {
+        const next = prev.filter((item) => item.wa_id !== data.conversation.wa_id);
+        return [data.conversation, ...next].sort(
+          (a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0)
+        );
+      });
+    }
+    return data.conversation;
   };
 
   // Auto-mark current open chat as seen when new messages arrive
@@ -1238,13 +1258,25 @@ Core Rules:
     try {
       if (leadOutreachMethod === 'whatsapp') {
         const formattedPhone = cleanPhoneNumber(leadOutreachActive.contact_value);
-        window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(leadOutreachMessage)}`, '_blank');
+        const res = await adminFetch('/api/whatsapp/send', {
+          method: 'POST',
+          body: JSON.stringify({
+            to: formattedPhone,
+            message: leadOutreachMessage,
+            customerName: leadOutreachActive.name || leadOutreachActive.contact_value || 'Lead',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || 'WhatsApp delivery failed');
+        }
         
         await logOutreachToNotes(leadOutreachActive, 'whatsapp', leadOutreachMessage);
         await handleMarkAsContacted(leadOutreachActive.id);
         
-        alert('✅ WhatsApp outreach window opened!');
+        alert('✅ WhatsApp outreach sent from the business number and logged in Sales WhatsApp.');
         setLeadOutreachModalOpen(false);
+        loadAdminData();
       } else {
         try {
           const res = await adminFetch('/api/admin/send-email', {
@@ -1282,6 +1314,7 @@ Core Rules:
       }
     } catch(err) {
       console.error(err);
+      alert(`❌ ${leadOutreachMethod === 'whatsapp' ? 'WhatsApp' : 'Lead'} outreach failed: ${err.message}`);
     } finally {
       setLeadOutreachSending(false);
     }
@@ -1840,6 +1873,7 @@ Core Rules:
       setProductViews([]);
       setFacebookNotifications([]);
       setWhatsappMessages([]);
+      setWhatsappConversations([]);
       return;
     }
 
@@ -2196,17 +2230,32 @@ Core Rules:
     }
     setLoadingFbNotifications(false);
 
-    // 9. Fetch WhatsApp Messages log
+    // 9. Fetch WhatsApp conversations and visible message log through the
+    // admin API so assignment filtering is enforced server-side.
     setLoadingWhatsappMessages(true);
-    if (isSupabaseConfigured && supabase) {
+    const canLoadSalesWhatsApp = resolveTabAccess('whatsapp_ai', adminProfile);
+    const canLoadWhatsAppDevice = resolveTabAccess('wa_session', adminProfile);
+    if (isSupabaseConfigured && (canLoadSalesWhatsApp || canLoadWhatsAppDevice)) {
       try {
-        const data = await fetchAllRows('whatsapp_messages', 'created_at', false);
-        if (data) {
-          setWhatsappMessages(data);
-        }
+        const sourceQuery = !canLoadSalesWhatsApp && canLoadWhatsAppDevice
+          ? '?source=baileys_session'
+          : '';
+        const res = await adminFetch(`/api/admin/whatsapp-conversations${sourceQuery}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not load WhatsApp conversations');
+        setWhatsappConversationRoutingAvailable(data.available !== false);
+        setWhatsappConversations(data.conversations || []);
+        setWhatsappMessages(data.messages || []);
       } catch (err) {
-        console.error("Failed to load whatsapp messages:", err);
+        console.error("Failed to load WhatsApp conversations:", err);
+        setWhatsappConversationRoutingAvailable(false);
+        setWhatsappConversations([]);
+        setWhatsappMessages([]);
       }
+    } else {
+      setWhatsappConversationRoutingAvailable(false);
+      setWhatsappConversations([]);
+      setWhatsappMessages([]);
     }
     setLoadingWhatsappMessages(false);
   };
@@ -3105,6 +3154,9 @@ Core Rules:
   // WhatsApp Template Generator Spanish
   const generateWhatsAppTemplateText = (recipient, templateType, agentName) => {
     if (!recipient) return '';
+    if (recipient.prefilledText && typeof recipient.prefilledText === 'string') {
+      return recipient.prefilledText.trim();
+    }
     
     // Sanitize recipient name
     let cleanName = 'Cliente';
@@ -6230,6 +6282,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <div style={{ flex: 1, minHeight: 0 }}>
               <WhatsAppInbox
                 whatsappMessages={whatsappMessages.filter(m => getWhatsAppMessageSource(m) === 'baileys_session')}
+                whatsappConversations={whatsappConversations}
+                conversationRoutingAvailable={whatsappConversationRoutingAvailable}
+                onConversationAction={handleWhatsAppConversationAction}
                 orders={orders}
                 leads={leads}
                 abandonedCarts={abandonedCarts}
@@ -6316,6 +6371,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               onOpenCustomerProfile={openCustomerProfileHandoff}
               onCreateOrderFromInquiry={() => setManualOrderOpen(true)}
               onNavigate={navigateToTab}
+              onWhatsAppClick={openWhatsAppComposer}
             />
           </div>
         )}
@@ -6457,6 +6513,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <div className="admin-whatsapp-workspace">
             <WhatsAppInbox
               whatsappMessages={whatsappMessages}
+              whatsappConversations={whatsappConversations}
+              conversationRoutingAvailable={whatsappConversationRoutingAvailable}
+              onConversationAction={handleWhatsAppConversationAction}
               orders={orders}
               leads={leads}
               abandonedCarts={abandonedCarts}
@@ -6781,9 +6840,27 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         <button
                           onClick={async () => {
                             const formattedPhone = cleanPhoneNumber(currentLead.contact_value);
-                            window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(individualAiText)}`, '_blank');
-                            await logOutreachToNotes(currentLead, 'whatsapp', individualAiText);
-                            await handleMarkAsContacted(currentLead.id);
+                            try {
+                              const res = await adminFetch('/api/whatsapp/send', {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                  to: formattedPhone,
+                                  message: individualAiText,
+                                  customerName: currentLead.name || currentLead.contact_value || 'Lead',
+                                }),
+                              });
+                              const data = await res.json();
+                              if (!res.ok || !data.success) {
+                                throw new Error(data.error || 'WhatsApp delivery failed');
+                              }
+                              await logOutreachToNotes(currentLead, 'whatsapp', individualAiText);
+                              await handleMarkAsContacted(currentLead.id);
+                              alert('WhatsApp sent from the business number and logged in Sales WhatsApp.');
+                              loadAdminData();
+                            } catch (err) {
+                              console.error(err);
+                              alert('Could not send WhatsApp from the business number: ' + err.message);
+                            }
                           }}
                           className="admin-btn admin-btn-success"
                         >
@@ -7327,14 +7404,16 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 </button>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                  <a
-                    href={`https://wa.me/${waRecipient.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(waMessageText)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ fontSize: '0.75rem', color: '#38bdf8', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(waMessageText);
+                      alert('Message copied.');
+                    }}
+                    style={{ background: 'none', border: 'none', padding: 0, fontSize: '0.75rem', color: '#38bdf8', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
                   >
-                    🔗 Open manually in WhatsApp (wa.me fallback)
-                  </a>
+                    <Clipboard size={12} /> Copy message
+                  </button>
                   <button
                     onClick={() => setWaModalOpen(false)}
                     style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}
