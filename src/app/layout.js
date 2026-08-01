@@ -2,6 +2,7 @@ import { Montserrat, Inter } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import UTMTracker from "@/components/UTMTracker";
+import { LIVE_SITE_URL } from "@/lib/publicUrl";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
@@ -20,7 +21,11 @@ const inter = Inter({
 });
 
 export const metadata = {
-  metadataBase: new URL('https://peptidescostarica.net'),
+  // This app IS the catalog site, so every canonical, hreflang and og:url it
+  // emits has to resolve to its own origin. Pointing metadataBase at the main
+  // WordPress domain made each page tell Google "the real version of me lives
+  // somewhere else", which is exactly the instruction not to rank this site.
+  metadataBase: new URL(LIVE_SITE_URL),
   title: {
     default: "Péptidos de Investigación en Costa Rica | Peptides Costa Rica",
     template: "%s | Peptides Costa Rica",
@@ -120,10 +125,10 @@ export default async function RootLayout({ children }) {
               "@graph": [
                 {
                   "@type": "Organization",
-                  "@id": "https://peptidescostarica.net/#organization",
+                  "@id": `${LIVE_SITE_URL}/#organization`,
                   "name": "Peptides Costa Rica",
-                  "url": "https://peptidescostarica.net",
-                  "logo": "https://peptidescostarica.net/logo.png",
+                  "url": LIVE_SITE_URL,
+                  "logo": `${LIVE_SITE_URL}/logo.png`,
                   "contactPoint": {
                     "@type": "ContactPoint",
                     "telephone": businessLinks.whatsappDisplay,
@@ -134,20 +139,20 @@ export default async function RootLayout({ children }) {
                 },
                 {
                   "@type": "WebSite",
-                  "@id": "https://peptidescostarica.net/#website",
-                  "url": "https://peptidescostarica.net",
+                  "@id": `${LIVE_SITE_URL}/#website`,
+                  "url": LIVE_SITE_URL,
                   "name": "Peptides Costa Rica",
                   "publisher": {
-                    "@id": "https://peptidescostarica.net/#organization"
+                    "@id": `${LIVE_SITE_URL}/#organization`
                   },
                   "inLanguage": ["es-CR", "en-US"]
                 },
                 {
                   "@type": "Store",
-                  "@id": "https://peptidescostarica.net/#store",
+                  "@id": `${LIVE_SITE_URL}/#store`,
                   "name": "Peptides Costa Rica",
-                  "url": "https://peptidescostarica.net/catalog",
-                  "image": "https://peptidescostarica.net/catalog-promo-banner.webp",
+                  "url": `${LIVE_SITE_URL}/catalog`,
+                  "image": `${LIVE_SITE_URL}/catalog-promo-banner.webp`,
                   "telephone": businessLinks.whatsappDisplay,
                   "areaServed": {
                     "@type": "Country",
@@ -155,7 +160,7 @@ export default async function RootLayout({ children }) {
                   },
                   "availableLanguage": ["Spanish", "English"],
                   "parentOrganization": {
-                    "@id": "https://peptidescostarica.net/#organization"
+                    "@id": `${LIVE_SITE_URL}/#organization`
                   }
                 }
               ]

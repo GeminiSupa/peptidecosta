@@ -1,7 +1,10 @@
 import { supabase } from '@/lib/supabase';
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
 
 export default async function sitemap() {
-  const baseUrl = 'https://peptidescostarica.net';
+  // Must match the canonicals in layout.js. Submitting main-site URLs from the
+  // catalog's own sitemap asked Google to index pages that live elsewhere.
+  const baseUrl = LIVE_SITE_URL;
 
   // Fetch blog posts for dynamic routes
   const { data: posts } = await supabase
