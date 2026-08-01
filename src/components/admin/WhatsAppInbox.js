@@ -481,6 +481,27 @@ export default function WhatsAppInbox({
 
   const chatsList = useMemo(() => {
     const chatsMap = new Map();
+    whatsappConversations.forEach((conversation) => {
+      const waId = normalizePhone(conversation.wa_id);
+      if (!waId) return;
+      const crmName = contactNamesByPhone.get(waId) || contactNamesByPhone.get(waId.slice(-8));
+      chatsMap.set(waId, {
+        waId,
+        displayName: crmName || conversation.display_name || `Customer ${waId.slice(-4)}`,
+        inboundName: cleanContactName(conversation.display_name),
+        lastMessageText: conversation.status === 'resolved' ? 'Resolved conversation' : 'No recent message loaded',
+        lastMessageAt: conversation.last_message_at || conversation.updated_at || conversation.created_at,
+        lastInboundAt: conversation.last_inbound_at || null,
+        direction: conversation.last_inbound_at && (!conversation.last_outbound_at || new Date(conversation.last_inbound_at) > new Date(conversation.last_outbound_at))
+          ? 'inbound'
+          : 'outbound',
+        isAiLast: false,
+        stage: contactStageByPhone.get(waId) || contactStageByPhone.get(waId.slice(-8)) || 'Contact',
+        conversation,
+        status: conversation.status || 'open',
+      });
+    });
+
     const chronological = [...whatsappMessages].sort(
       (a, b) => new Date(a.created_at) - new Date(b.created_at)
     );
@@ -516,7 +537,7 @@ export default function WhatsAppInbox({
     return Array.from(chatsMap.values()).sort(
       (a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt)
     );
-  }, [contactNamesByPhone, contactStageByPhone, conversationsByWaId, whatsappMessages]);
+  }, [contactNamesByPhone, contactStageByPhone, conversationsByWaId, whatsappConversations, whatsappMessages]);
 
   // A chat has "unseen" inbound messages when lastInboundAt > the timestamp stored in seenMap
   const hasUnread = useCallback((chat) => {

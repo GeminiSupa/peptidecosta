@@ -13,6 +13,8 @@ import {
 export const runtime = 'nodejs';
 
 const MESSAGE_LIMIT = 2500;
+const MESSAGE_WA_ID_CHUNK_SIZE = 100;
+const DIRECT_MESSAGE_FILTER_LIMIT = 300;
 const ALLOWED_SOURCES = new Set(['cloud_api', 'baileys_session']);
 
 function requestedStatus(value) {
@@ -74,6 +76,60 @@ async function fetchRoutableAgents(supabase) {
     .filter((profile) => profile.user_id && (profile.email || profile.name));
 }
 
+function chunkArray(items, size) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+async function fetchConversationMessages(supabase, waIds, source = null) {
+  const uniqueWaIds = [...new Set((waIds || []).filter(Boolean))];
+  if (uniqueWaIds.length === 0) return [];
+
+  if (uniqueWaIds.length > DIRECT_MESSAGE_FILTER_LIMIT) {
+    const visibleWaIds = new Set(uniqueWaIds);
+    let messageQuery = supabase
+      .from('whatsapp_messages')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(MESSAGE_LIMIT * 2);
+
+    if (source) messageQuery = messageQuery.eq('source', source);
+
+    const { data, error } = await messageQuery;
+    if (error) throw new Error(error.message);
+
+    return (data || [])
+      .filter((message) => visibleWaIds.has(normalizeWaId(message.wa_id)))
+      .slice(0, MESSAGE_LIMIT);
+  }
+
+  const chunks = chunkArray(uniqueWaIds, MESSAGE_WA_ID_CHUNK_SIZE);
+  const perChunkLimit = Math.min(MESSAGE_LIMIT, Math.max(200, Math.ceil(MESSAGE_LIMIT / chunks.length) + 50));
+  const batches = [];
+  for (const chunk of chunks) {
+    let messageQuery = supabase
+      .from('whatsapp_messages')
+      .select('*')
+      .in('wa_id', chunk)
+      .order('created_at', { ascending: false })
+      .limit(perChunkLimit);
+
+    if (source) messageQuery = messageQuery.eq('source', source);
+
+    const { data, error } = await messageQuery;
+    if (error) throw new Error(error.message);
+    batches.push(data || []);
+  }
+
+  return batches
+    .flat()
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+    .slice(0, MESSAGE_LIMIT);
+}
+
 export async function GET(request) {
   const auth = await verifyAdminSession(request, { requireAnyPermission: ['whatsapp_ai', 'wa_session'] });
   if (auth.error) return auth.error;
@@ -94,22 +150,7 @@ export async function GET(request) {
     const agents = await fetchRoutableAgents(supabase);
 
     const waIds = conversations.map((conversation) => conversation.wa_id).filter(Boolean);
-    let messages = [];
-    if (waIds.length > 0) {
-      let messageQuery = supabase
-        .from('whatsapp_messages')
-        .select('*')
-        .in('wa_id', waIds)
-        .order('created_at', { ascending: false })
-        .limit(MESSAGE_LIMIT);
-
-      if (source) messageQuery = messageQuery.eq('source', source);
-
-      const { data, error } = await messageQuery;
-
-      if (error) throw new Error(error.message);
-      messages = data || [];
-    }
+    const messages = await fetchConversationMessages(supabase, waIds, source);
 
     return NextResponse.json({ available: true, conversations, messages, agents });
   } catch (err) {
