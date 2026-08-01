@@ -43,7 +43,7 @@ const nextConfig = {
   async redirects() {
     return [
       {
-        source: '/:path*',
+        source: '/:path((?!api(?:/|$)).*)',
         has: [{ type: 'host', value: 'peptidecosta.vercel.app' }],
         destination: 'https://catalog.peptidescostarica.net/:path*',
         permanent: true,
