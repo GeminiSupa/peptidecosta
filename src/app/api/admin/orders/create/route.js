@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
+import { agentMatchKeys } from '@/lib/agentOrders';
 
 export const runtime = 'nodejs';
 
@@ -32,6 +33,14 @@ export async function POST(request) {
       payment_method: order.payment_method || 'whatsapp',
       activity_log: activityLog,
     };
+
+    if (!auth.profile.is_superadmin) {
+      const requestedAgent = String(row.sales_agent || '').trim().toLowerCase();
+      if (requestedAgent && !agentMatchKeys(auth.profile).has(requestedAgent)) {
+        return NextResponse.json({ error: 'Forbidden: staff can only create orders assigned to themselves' }, { status: 403 });
+      }
+      row.sales_agent = row.sales_agent || auth.profile.name || auth.profile.email || auth.user.email;
+    }
 
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase

@@ -2,6 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isActiveProfile, isPendingApproval, isSubUser } from '@/lib/subUserTier.mjs';
+import {
+  adminPermissionsForPath,
+  profileHasAnyAdminPermission,
+} from '@/lib/adminApiPermissions.mjs';
 
 /**
  * Verify the caller is an authenticated admin via Supabase JWT (Bearer token).
@@ -21,7 +25,13 @@ import { isActiveProfile, isPendingApproval, isSubUser } from '@/lib/subUserTier
  */
 export async function verifyAdminSession(
   request,
-  { requireSuperadmin = false, allowSubUser = false } = {}
+  {
+    requireSuperadmin = false,
+    allowSubUser = false,
+    requirePermission = null,
+    requireAnyPermission = null,
+    skipPathPermission = false,
+  } = {}
 ) {
   const authHeader = request.headers.get('authorization');
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
@@ -70,6 +80,25 @@ export async function verifyAdminSession(
 
   if (requireSuperadmin && !profile.is_superadmin) {
     return { error: NextResponse.json({ error: 'Forbidden: superadmin required' }, { status: 403 }) };
+  }
+
+  const explicitPermissions = requireAnyPermission
+    || (requirePermission ? [requirePermission] : null);
+  const pathPermissions = skipPathPermission
+    ? []
+    : adminPermissionsForPath(request.nextUrl?.pathname || new URL(request.url).pathname);
+  const requiredPermissions = explicitPermissions || pathPermissions;
+
+  if (
+    requiredPermissions.length > 0
+    && !profileHasAnyAdminPermission(profile, requiredPermissions)
+  ) {
+    return {
+      error: NextResponse.json(
+        { error: `Forbidden: ${requiredPermissions.join(' or ')} permission required` },
+        { status: 403 }
+      ),
+    };
   }
 
   return { user, profile };

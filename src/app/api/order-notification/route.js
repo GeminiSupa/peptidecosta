@@ -678,7 +678,7 @@ export async function POST(request) {
     //  3. SEND CUSTOMER WHATSAPP NOTIFICATION (DISABLED)
     // Note: Meta WhatsApp Business API requires a pre-approved template for business-initiated 
     // messages (outside the 24h customer window). Sending a free-form 'text' message will be 
-    // blocked by Meta with error 131047. The frontend `CatalogClient.js` already opens a 
+    // blocked by Meta with error 131047. The frontend catalog already opens a
     // WhatsApp window for the user to initiate the chat, which is the correct approach.
 
     return NextResponse.json({

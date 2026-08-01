@@ -1,5 +1,5 @@
 "use client";
-import { crWallToIso, isoToCrWall } from '@/lib/crTime.mjs';
+import { isoToCrWall } from '@/lib/crTime.mjs';
 
 import '@/app/admin.css';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -2367,10 +2367,14 @@ Core Rules:
     setHiddenProductNames(names);
 
     // Persist immediately so hiding/showing takes effect without needing "Save Changes"
-    if (isSupabaseConfigured && supabase) {
+    if (isSupabaseConfigured) {
       try {
-        const { error } = await supabase.from('site_settings').upsert({ id: 'hidden_products', value: { names } });
-        if (error) throw error;
+        const res = await adminFetch('/api/admin/products', {
+          method: 'PATCH',
+          body: JSON.stringify({ hiddenNames: names }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Failed to update catalog visibility');
         setSaveStatus(nextHidden ? `Hidden "${target.product}" from catalog` : `"${target.product}" is now visible in catalog`);
       } catch (err) {
         console.error('Failed to update hidden products:', err);
@@ -3715,72 +3719,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     // Update state so the UI reflects the auto-filled values
     setProducts(filled);
 
-    if (isSupabaseConfigured && supabase) {
+    if (isSupabaseConfigured) {
       try {
-        // Get all currently existing database UUIDs from the active list
-        const activeIds = filled
-          .map(p => p.id)
-          .filter(id => id && !id.toString().startsWith('temp-') && !id.toString().startsWith('local-'));
-
-        // 1. Delete products that were removed in the editor
-        let deleteQuery = supabase.from('products').delete();
-        if (activeIds.length > 0) {
-          deleteQuery = deleteQuery.not('id', 'in', `(${activeIds.join(',')})`);
-        } else {
-          // If no products remain, delete all safely
-          deleteQuery = deleteQuery.neq('id', '00000000-0000-0000-0000-000000000000');
-        }
-        const { error: deleteError } = await deleteQuery;
-        if (deleteError) throw deleteError;
-
-        // 2. Format row fields
-        const itemsToUpdate = [];
-        const itemsToInsert = [];
-
-        filled.forEach((p, idx) => {
-          const row = {
-            product: p.product,
-            category: p.category,
-            price_usd: p.priceUsd,
-            price_crc: p.priceCrc,
-            original_price_usd: String(p.originalPriceUsd || '').trim() || null,
-            original_price_crc: String(p.originalPriceCrc || '').trim() || null,
-            discount: p.discount || null,
-            sale_start_time: crWallToIso(p.saleStartTime),
-            sale_end_time: crWallToIso(p.saleEndTime),
-            status: p.status,
-            inventory_count: p.inventoryCount === '' ? null : p.inventoryCount,
-            low_stock_threshold: p.lowStockThreshold === '' ? 5 : p.lowStockThreshold,
-            coa: p.coa,
-            image_url: p.imageUrl,
-            description_en: p.descriptionEn || '',
-            description_es: p.descriptionEs || '',
-            emoji: p.imageUrl ? '' : getEmojiForCategory(p.category),
-            priority: idx
-          };
-          if (p.id && !p.id.toString().startsWith('temp-') && !p.id.toString().startsWith('local-')) {
-            row.id = p.id;
-            itemsToUpdate.push(row);
-          } else {
-            itemsToInsert.push(row);
-          }
+        const res = await adminFetch('/api/admin/products', {
+          method: 'PUT',
+          body: JSON.stringify({ products: filled }),
         });
-
-        // 3. Batch upsert existing records
-        if (itemsToUpdate.length > 0) {
-          const { error: upsertError } = await supabase
-            .from('products')
-            .upsert(itemsToUpdate);
-          if (upsertError) throw upsertError;
-        }
-
-        // 4. Batch insert new records
-        if (itemsToInsert.length > 0) {
-          const { error: insertError } = await supabase
-            .from('products')
-            .insert(itemsToInsert);
-          if (insertError) throw insertError;
-        }
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Failed to save products');
 
         setSaveStatus("Changes successfully saved to database!");
         loadAdminData(); // reload fresh rows
@@ -3794,19 +3740,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
     setSaveLoading(false);
     setTimeout(() => setSaveStatus(''), 4000);
-  };
-
-  const getEmojiForCategory = (cat) => {
-    const c = (cat || '').toLowerCase();
-    if (c.includes('weight') || c.includes('peso')) return '⚖️';
-    if (c.includes('sleep') || c.includes('sueño')) return '🌙';
-    if (c.includes('sexual')) return '🔥';
-    if (c.includes('skin') || c.includes('piel')) return '✨';
-    if (c.includes('immune') || c.includes('inmune')) return '🛡️';
-    if (c.includes('supply') || c.includes('suministro')) return '💧';
-    if (c.includes('brain') || c.includes('cerebro')) return '🧠';
-    if (c.includes('muscle') || c.includes('músculo')) return '💪';
-    return '🧪';
   };
 
   const handleApproveReview = async (id) => {

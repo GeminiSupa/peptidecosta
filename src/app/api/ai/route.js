@@ -4,6 +4,17 @@ import { verifyAdminSession, PUBLIC_AI_MODES } from '@/lib/adminAuth';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
+const AI_MODE_PERMISSIONS = {
+  translate: ['spreadsheet', 'cms', 'marketing', 'broadcasts'],
+  generate_info: ['spreadsheet', 'cms'],
+  chat: ['home'],
+  cross_sell: ['customers', 'carts', 'whatsapp_ai'],
+  draft_inquiry_reply: ['inquiries'],
+  generate_email_template: ['marketing'],
+  draft_broadcast: ['broadcasts'],
+  generate_journey: ['marketing'],
+};
+
 export async function POST(request) {
   try {
     if (!GEMINI_API_KEY) {
@@ -15,7 +26,10 @@ export async function POST(request) {
     const { mode, prompt, text, sourceLang = 'en', targetLang = 'es', context = {} } = body;
 
     if (!PUBLIC_AI_MODES.has(mode)) {
-      const auth = await verifyAdminSession(request);
+      const auth = await verifyAdminSession(request, {
+        requireAnyPermission: AI_MODE_PERMISSIONS[mode] || ['home'],
+        skipPathPermission: true,
+      });
       if (auth.error) return auth.error;
     }
 

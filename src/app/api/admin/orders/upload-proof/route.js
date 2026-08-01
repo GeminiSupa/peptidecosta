@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { orderVisibleToAgent } from '@/lib/agentOrders';
 
 export const runtime = 'nodejs';
 
@@ -22,6 +23,20 @@ export async function POST(request) {
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const supabase = getSupabaseAdmin();
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .select('id, sales_agent')
+      .eq('id', orderId)
+      .single();
+
+    if (orderError || !order) {
+      return NextResponse.json({ error: orderError?.message || 'Order not found' }, { status: 404 });
+    }
+
+    if (!orderVisibleToAgent(order, auth.profile)) {
+      return NextResponse.json({ error: 'Forbidden: order is not visible to this staff member' }, { status: 403 });
+    }
+
     const { error: uploadErr } = await supabase.storage
       .from('product-pics')
       .upload(path, buffer, { contentType: file.type || 'image/jpeg', upsert: true });

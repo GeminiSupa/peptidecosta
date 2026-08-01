@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { buildCardPaymentPath, canSignCardPaymentLinks, getPublicBaseUrl } from '@/lib/cardPaymentLink';
+import { orderVisibleToAgent } from '@/lib/agentOrders';
 
 export const runtime = 'nodejs';
 
@@ -22,7 +23,7 @@ export async function POST(request) {
     const supabase = getSupabaseAdmin();
     const { data: order, error } = await supabase
       .from('orders')
-      .select('id, order_number, status')
+      .select('id, order_number, status, sales_agent')
       .eq('id', orderId)
       .single();
 
@@ -32,6 +33,10 @@ export async function POST(request) {
 
     if (!order.order_number) {
       return NextResponse.json({ error: 'Order number is missing' }, { status: 400 });
+    }
+
+    if (!orderVisibleToAgent(order, auth.profile)) {
+      return NextResponse.json({ error: 'Forbidden: order is not visible to this staff member' }, { status: 403 });
     }
 
     const status = String(order.status || '').toLowerCase();

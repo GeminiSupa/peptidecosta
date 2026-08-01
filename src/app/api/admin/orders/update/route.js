@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
+import { agentMatchKeys, orderVisibleToAgent } from '@/lib/agentOrders';
 
 export const runtime = 'nodejs';
 
@@ -33,6 +34,27 @@ export async function PATCH(request) {
 
     const supabase = getSupabaseAdmin();
 
+    const { data: currentOrder, error: currentOrderError } = await supabase
+      .from('orders')
+      .select('id, status, sales_agent')
+      .eq('id', orderId)
+      .single();
+
+    if (currentOrderError || !currentOrder) {
+      return NextResponse.json({ error: currentOrderError?.message || 'Order not found' }, { status: 404 });
+    }
+
+    if (!orderVisibleToAgent(currentOrder, auth.profile)) {
+      return NextResponse.json({ error: 'Forbidden: order is not visible to this staff member' }, { status: 403 });
+    }
+
+    if (!auth.profile.is_superadmin && patch.sales_agent !== undefined) {
+      const requestedAgent = String(patch.sales_agent || '').trim().toLowerCase();
+      if (requestedAgent && !agentMatchKeys(auth.profile).has(requestedAgent)) {
+        return NextResponse.json({ error: 'Forbidden: staff can only assign orders to themselves' }, { status: 403 });
+      }
+    }
+
     let activityLog;
     if (activity) {
       const { data: current } = await supabase
@@ -47,12 +69,6 @@ export async function PATCH(request) {
       });
       patch.activity_log = activityLog;
     }
-
-    const { data: currentOrder } = await supabase
-      .from('orders')
-      .select('status')
-      .eq('id', orderId)
-      .single();
 
     const { data, error } = await supabase
       .from('orders')
