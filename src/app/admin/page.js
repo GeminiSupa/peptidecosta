@@ -478,6 +478,7 @@ export default function AdminPage() {
   // WhatsApp AI Live Inbox States
   const [whatsappMessages, setWhatsappMessages] = useState([]);
   const [whatsappConversations, setWhatsappConversations] = useState([]);
+  const [whatsappAgents, setWhatsappAgents] = useState([]);
   const [whatsappConversationRoutingAvailable, setWhatsappConversationRoutingAvailable] = useState(true);
   const [loadingWhatsappMessages, setLoadingWhatsappMessages] = useState(true);
   const [activeChatWaId, setActiveChatWaId] = useState(null);
@@ -1874,6 +1875,7 @@ Core Rules:
       setFacebookNotifications([]);
       setWhatsappMessages([]);
       setWhatsappConversations([]);
+      setWhatsappAgents([]);
       return;
     }
 
@@ -2246,16 +2248,19 @@ Core Rules:
         setWhatsappConversationRoutingAvailable(data.available !== false);
         setWhatsappConversations(data.conversations || []);
         setWhatsappMessages(data.messages || []);
+        setWhatsappAgents(data.agents || []);
       } catch (err) {
         console.error("Failed to load WhatsApp conversations:", err);
         setWhatsappConversationRoutingAvailable(false);
         setWhatsappConversations([]);
         setWhatsappMessages([]);
+        setWhatsappAgents([]);
       }
     } else {
       setWhatsappConversationRoutingAvailable(false);
       setWhatsappConversations([]);
       setWhatsappMessages([]);
+      setWhatsappAgents([]);
     }
     setLoadingWhatsappMessages(false);
   };
@@ -6283,6 +6288,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <WhatsAppInbox
                 whatsappMessages={whatsappMessages.filter(m => getWhatsAppMessageSource(m) === 'baileys_session')}
                 whatsappConversations={whatsappConversations}
+                whatsappAgents={whatsappAgents}
                 conversationRoutingAvailable={whatsappConversationRoutingAvailable}
                 onConversationAction={handleWhatsAppConversationAction}
                 orders={orders}
@@ -6514,6 +6520,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <WhatsAppInbox
               whatsappMessages={whatsappMessages}
               whatsappConversations={whatsappConversations}
+              whatsappAgents={whatsappAgents}
               conversationRoutingAvailable={whatsappConversationRoutingAvailable}
               onConversationAction={handleWhatsAppConversationAction}
               orders={orders}

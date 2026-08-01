@@ -178,6 +178,7 @@ function getOwnerDisplay(ownerKey, currentAgentKey) {
 }
 
 function getPriorityScore(chat, isUnread, replyWindow) {
+  if (chat.status === 'resolved') return 5;
   if (chat.direction === 'inbound' && replyWindow.state === 'urgent') return 0;
   if (chat.direction === 'inbound' && isUnread) return 1;
   if (chat.direction === 'inbound') return 2;
@@ -272,7 +273,7 @@ const WaChatItem = ({
           <div className="admin-wa-chat-item-bottom">
             <span className="admin-wa-chat-item-preview">{chat.lastMessageText || 'Photo'}</span>
             <span className="admin-wa-chat-flags">
-              {chat.direction === 'inbound' && (
+              {chat.direction === 'inbound' && chat.status !== 'resolved' && (
                 <span className="admin-wa-waiting-chip">Waiting</span>
               )}
               {chat.isAiLast ? (
@@ -289,7 +290,7 @@ const WaChatItem = ({
               {ownerLabel}
             </span>
             <span className={`admin-wa-sla-chip admin-wa-sla-chip--${replyWindow.state}`}>
-              {replyWindow.label}
+              {chat.status === 'resolved' ? 'Resolved' : replyWindow.label}
             </span>
           </div>
         </div>
@@ -325,6 +326,7 @@ const WaChatItem = ({
 export default function WhatsAppInbox({
   whatsappMessages,
   whatsappConversations = [],
+  whatsappAgents = [],
   conversationRoutingAvailable = true,
   onConversationAction,
   orders = [],
@@ -371,6 +373,7 @@ export default function WhatsAppInbox({
   const [focusListMode, setFocusListMode] = useState(false);
   const [conversationActionWaId, setConversationActionWaId] = useState(null);
   const [conversationActionError, setConversationActionError] = useState('');
+  const [selectedTransferAgent, setSelectedTransferAgent] = useState('');
   const [now, setNow] = useState(() => Date.now());
 
   // Pull-to-refresh state
@@ -500,20 +503,24 @@ export default function WhatsAppInbox({
   }, [seenMap]);
 
   const unreadCount = useMemo(
-    () => chatsList.filter(hasUnread).length,
+    () => chatsList.filter((chat) => chat.status !== 'resolved' && hasUnread(chat)).length,
     [chatsList, hasUnread]
   );
   const waitingCount = useMemo(
-    () => chatsList.filter((chat) => chat.direction === 'inbound').length,
+    () => chatsList.filter((chat) => chat.status !== 'resolved' && chat.direction === 'inbound').length,
     [chatsList]
   );
   const hotCartCount = useMemo(
-    () => chatsList.filter((chat) => chat.stage === 'Cart').length,
+    () => chatsList.filter((chat) => chat.status !== 'resolved' && chat.stage === 'Cart').length,
     [chatsList]
   );
   const urgentCount = useMemo(
-    () => chatsList.filter((chat) => chat.direction === 'inbound' && getReplyWindow(chat.lastInboundAt, now).state === 'urgent').length,
+    () => chatsList.filter((chat) => chat.status !== 'resolved' && chat.direction === 'inbound' && getReplyWindow(chat.lastInboundAt, now).state === 'urgent').length,
     [chatsList, now]
+  );
+  const resolvedCount = useMemo(
+    () => chatsList.filter((chat) => chat.status === 'resolved').length,
+    [chatsList]
   );
 
   const getConversationOwner = useCallback((waId) => {
@@ -555,6 +562,43 @@ export default function WhatsAppInbox({
     }
   }, [conversationRoutingAvailable, onConversationAction]);
 
+  const transferConversationOwner = useCallback(async (waId, assignedTo) => {
+    if (!waId || !assignedTo) return;
+    if (!conversationRoutingAvailable || !onConversationAction) {
+      setConversationActionError('Conversation routing is not installed yet. Run the WhatsApp conversations SQL migration.');
+      return;
+    }
+    setConversationActionError('');
+    setConversationActionWaId(waId);
+    try {
+      await onConversationAction(waId, 'transfer', { assignedTo });
+      setSelectedTransferAgent('');
+      setShowContactActions(false);
+    } catch (err) {
+      setConversationActionError(err.message || 'Could not transfer conversation.');
+    } finally {
+      setConversationActionWaId(null);
+    }
+  }, [conversationRoutingAvailable, onConversationAction]);
+
+  const updateConversationStatus = useCallback(async (waId, status) => {
+    if (!waId || !status) return;
+    if (!conversationRoutingAvailable || !onConversationAction) {
+      setConversationActionError('Conversation routing is not installed yet. Run the WhatsApp conversations SQL migration.');
+      return;
+    }
+    setConversationActionError('');
+    setConversationActionWaId(waId);
+    try {
+      await onConversationAction(waId, 'status', { status });
+      setShowContactActions(false);
+    } catch (err) {
+      setConversationActionError(err.message || 'Could not update conversation status.');
+    } finally {
+      setConversationActionWaId(null);
+    }
+  }, [conversationRoutingAvailable, onConversationAction]);
+
   const mineCount = useMemo(
     () => chatsList.filter((chat) => getConversationOwner(chat.waId) === currentAgentKey).length,
     [chatsList, currentAgentKey, getConversationOwner]
@@ -568,10 +612,11 @@ export default function WhatsAppInbox({
     let result = chatsList;
     if (ownerFilter === 'mine') result = result.filter((chat) => getConversationOwner(chat.waId) === currentAgentKey);
     if (ownerFilter === 'unassigned') result = result.filter((chat) => getConversationOwner(chat.waId) === WA_UNASSIGNED_OWNER);
-    if (inboxFilter === 'urgent') result = result.filter((chat) => chat.direction === 'inbound' && getReplyWindow(chat.lastInboundAt, now).state === 'urgent');
-    if (inboxFilter === 'unread') result = result.filter(hasUnread);
-    if (inboxFilter === 'needs_reply') result = result.filter((chat) => chat.direction === 'inbound');
-    if (inboxFilter === 'hot_cart') result = result.filter((chat) => chat.stage === 'Cart');
+    if (inboxFilter === 'urgent') result = result.filter((chat) => chat.status !== 'resolved' && chat.direction === 'inbound' && getReplyWindow(chat.lastInboundAt, now).state === 'urgent');
+    if (inboxFilter === 'unread') result = result.filter((chat) => chat.status !== 'resolved' && hasUnread(chat));
+    if (inboxFilter === 'needs_reply') result = result.filter((chat) => chat.status !== 'resolved' && chat.direction === 'inbound');
+    if (inboxFilter === 'hot_cart') result = result.filter((chat) => chat.status !== 'resolved' && chat.stage === 'Cart');
+    if (inboxFilter === 'resolved') result = result.filter((chat) => chat.status === 'resolved');
     const query = chatSearch.trim().toLowerCase();
     if (query) {
       const digits = normalizePhone(query);
@@ -634,6 +679,7 @@ export default function WhatsAppInbox({
   const currentOwnerLabel = getOwnerDisplay(currentOwnerKey, currentAgentKey);
   const currentChatIsMine = currentOwnerKey === currentAgentKey;
   const currentChatIsUnassigned = currentOwnerKey === WA_UNASSIGNED_OWNER;
+  const currentChatIsResolved = currentChat?.status === 'resolved';
 
   const customerContextSummary = useMemo(() => {
     if (!customerContext) return null;
@@ -743,6 +789,7 @@ export default function WhatsAppInbox({
     { id: 'urgent', label: 'Urgent', count: urgentCount },
     { id: 'hot_cart', label: 'Hot carts', count: hotCartCount },
     { id: 'unread', label: 'Unread', count: unreadCount },
+    { id: 'resolved', label: 'Resolved', count: resolvedCount },
     { id: 'all', label: 'All', count: chatsList.length },
   ];
   const ownerTabs = [
@@ -762,6 +809,8 @@ export default function WhatsAppInbox({
         ? 'No urgent reply windows right now.'
       : inboxFilter === 'hot_cart'
         ? 'No active cart conversations right now.'
+        : inboxFilter === 'resolved'
+          ? 'No resolved conversations yet.'
         : 'No conversations yet. Incoming messages will appear here.';
 
   return (
@@ -1012,6 +1061,11 @@ export default function WhatsAppInbox({
                 {currentChat && (
                   <span className={`admin-wa-stage admin-wa-stage--${currentChat.stage.toLowerCase()}`}>{currentChat.stage}</span>
                 )}
+                {currentChatIsResolved && (
+                  <span className="admin-wa-owner-chip admin-wa-owner-chip--unassigned">
+                    Resolved
+                  </span>
+                )}
                 <span className={`admin-wa-owner-chip${currentChatIsMine ? ' admin-wa-owner-chip--mine' : ''}${currentChatIsUnassigned ? ' admin-wa-owner-chip--unassigned' : ''}`}>
                   {currentOwnerLabel}
                 </span>
@@ -1024,6 +1078,15 @@ export default function WhatsAppInbox({
                     {conversationActionWaId === activeChatWaId ? 'Releasing...' : 'Release'}
                   </button>
                 ) : null}
+                {currentChatIsResolved ? (
+                  <button type="button" className="admin-wa-inline-action" onClick={() => updateConversationStatus(activeChatWaId, 'open')} disabled={conversationActionWaId === activeChatWaId}>
+                    Reopen
+                  </button>
+                ) : (
+                  <button type="button" className="admin-wa-inline-action admin-wa-inline-action--muted" onClick={() => updateConversationStatus(activeChatWaId, 'resolved')} disabled={conversationActionWaId === activeChatWaId}>
+                    Resolve
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1374,6 +1437,53 @@ export default function WhatsAppInbox({
                   <div><strong>Release conversation</strong><small>Return it to the open queue for another agent.</small></div>
                 </button>
               ) : null}
+              {whatsappAgents.length > 0 && (
+                <div className="admin-wa-action-row">
+                  <span><UserRound size={20} /></span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                    <strong>Transfer conversation</strong>
+                    <select
+                      value={selectedTransferAgent}
+                      onChange={(event) => setSelectedTransferAgent(event.target.value)}
+                      style={{
+                        width: '100%',
+                        background: '#0a1120',
+                        color: '#e2e8f0',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        borderRadius: '8px',
+                        padding: '8px 10px',
+                      }}
+                    >
+                      <option value="">Choose agent</option>
+                      {whatsappAgents.map((agent) => (
+                        <option key={agent.user_id} value={agent.user_id}>
+                          {agent.name || agent.email}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="admin-wa-inline-action"
+                      onClick={() => transferConversationOwner(activeChatWaId, selectedTransferAgent)}
+                      disabled={!selectedTransferAgent || conversationActionWaId === activeChatWaId}
+                      style={{ alignSelf: 'flex-start' }}
+                    >
+                      Transfer
+                    </button>
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                className="admin-wa-action-row"
+                onClick={() => updateConversationStatus(activeChatWaId, currentChatIsResolved ? 'open' : 'resolved')}
+              >
+                <span><Check size={20} /></span>
+                <div>
+                  <strong>{currentChatIsResolved ? 'Reopen conversation' : 'Resolve conversation'}</strong>
+                  <small>{currentChatIsResolved ? 'Move it back into active queues.' : 'Clear it from waiting and urgent queues.'}</small>
+                </div>
+              </button>
               <a href={activeChatCallHref} className="admin-wa-action-row admin-wa-action-row--call">
                 <span><PhoneCall size={20} /></span>
                 <div><strong>Phone call</strong><small>Uses this device dialer. On Apple devices this may open FaceTime.</small></div>

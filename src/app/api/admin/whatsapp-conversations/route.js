@@ -52,6 +52,28 @@ async function fetchVisibleConversations(supabase, profile, source = null) {
   };
 }
 
+async function fetchRoutableAgents(supabase) {
+  const { data, error } = await supabase
+    .from('admin_profiles')
+    .select('*')
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.warn('[admin/whatsapp-conversations] Could not load routable agents:', error.message);
+    return [];
+  }
+
+  return (data || [])
+    .filter((profile) => resolveAdminTabAccess('whatsapp_ai', profile))
+    .map((profile) => ({
+      user_id: profile.user_id,
+      email: profile.email || null,
+      name: profile.name || profile.email || null,
+      is_superadmin: Boolean(profile.is_superadmin),
+    }))
+    .filter((profile) => profile.user_id && (profile.email || profile.name));
+}
+
 export async function GET(request) {
   const auth = await verifyAdminSession(request, { requireAnyPermission: ['whatsapp_ai', 'wa_session'] });
   if (auth.error) return auth.error;
@@ -68,6 +90,8 @@ export async function GET(request) {
         error: 'WhatsApp conversation routing table is not installed yet.',
       });
     }
+
+    const agents = await fetchRoutableAgents(supabase);
 
     const waIds = conversations.map((conversation) => conversation.wa_id).filter(Boolean);
     let messages = [];
@@ -87,7 +111,7 @@ export async function GET(request) {
       messages = data || [];
     }
 
-    return NextResponse.json({ available: true, conversations, messages });
+    return NextResponse.json({ available: true, conversations, messages, agents });
   } catch (err) {
     console.error('[admin/whatsapp-conversations] GET failed:', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
@@ -143,6 +167,26 @@ export async function PATCH(request) {
       patch.assigned_to_email = null;
       patch.assigned_to_name = null;
       patch.assigned_at = null;
+    } else if (action === 'transfer') {
+      const assignedTo = String(body.assignedTo || '').trim();
+      if (!assignedTo) return NextResponse.json({ error: 'assignedTo is required' }, { status: 400 });
+
+      const { data: agent, error: agentError } = await supabase
+        .from('admin_profiles')
+        .select('*')
+        .eq('user_id', assignedTo)
+        .maybeSingle();
+
+      if (agentError) throw new Error(agentError.message);
+      if (!agent || !resolveAdminTabAccess('whatsapp_ai', agent)) {
+        return NextResponse.json({ error: 'Choose an active agent with Sales WhatsApp access' }, { status: 400 });
+      }
+
+      patch.assigned_to = agent.user_id;
+      patch.assigned_to_email = agent.email || null;
+      patch.assigned_to_name = agent.name || agent.email || null;
+      patch.assigned_at = patch.updated_at;
+      patch.status = conversation?.status === 'resolved' ? 'open' : (conversation?.status || 'open');
     } else if (action === 'status') {
       const status = requestedStatus(body.status);
       if (!status) return NextResponse.json({ error: 'Valid status is required' }, { status: 400 });
