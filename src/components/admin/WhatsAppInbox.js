@@ -796,6 +796,7 @@ export default function WhatsAppInbox({
   }, [preferredTemplateUse, whatsappTemplates]);
 
   const canSendApprovedTemplates = Boolean(handleSendWhatsappTemplate) && approvedTemplates.length > 0;
+  const requiresApprovedTemplateForClosedWindow = Boolean(handleSendWhatsappTemplate);
 
   useEffect(() => {
     document.body.classList.add('admin-wa-tab-active');
@@ -823,7 +824,8 @@ export default function WhatsAppInbox({
     return () => clearInterval(timer);
   }, [activeChatWaId]);
 
-  const sendButtonDisabled = sendingMessage || replyWindow.state === 'closed' || !chatInputText.trim();
+  const isComposerWindowClosed = requiresApprovedTemplateForClosedWindow && replyWindow.state === 'closed';
+  const sendButtonDisabled = sendingMessage || isComposerWindowClosed || !chatInputText.trim();
 
   const openActiveCustomerProfile = () => {
     if (!activeChatWaId || !onOpenCustomerProfile) return;
@@ -1326,7 +1328,7 @@ export default function WhatsAppInbox({
             </div>
 
             <div className="admin-wa-composer" ref={composerRef}>
-              {replyWindow.state === 'closed' && (
+              {isComposerWindowClosed && (
                 <div className="admin-wa-window-blocked">
                   <div className="admin-wa-window-blocked-icon"><Clock size={20} aria-hidden /></div>
                   <div className="admin-wa-window-blocked-text">
@@ -1454,7 +1456,7 @@ export default function WhatsAppInbox({
                     type="button"
                     className={`admin-wa-tool-tile${showQuickReplies || showApprovedTemplates ? ' active' : ''}`}
                     onClick={() => {
-                      if (replyWindow.state === 'closed' && canSendApprovedTemplates) {
+                      if (isComposerWindowClosed && canSendApprovedTemplates) {
                         setShowApprovedTemplates(value => !value);
                         setShowQuickReplies(false);
                       } else {
@@ -1462,7 +1464,7 @@ export default function WhatsAppInbox({
                         setShowApprovedTemplates(false);
                       }
                     }}
-                    aria-label={replyWindow.state === 'closed' ? 'Approved WhatsApp templates' : 'Quick reply templates'}
+                    aria-label={isComposerWindowClosed ? 'Approved WhatsApp templates' : 'Quick reply templates'}
                   >
                     <MessagesSquare size={18} />
                     <span>Templates</span>
@@ -1491,7 +1493,7 @@ export default function WhatsAppInbox({
                       type="button"
                       className={`admin-wa-composer-tool${showQuickReplies || showApprovedTemplates ? ' active' : ''}`}
                       onClick={() => {
-                        if (replyWindow.state === 'closed' && canSendApprovedTemplates) {
+                        if (isComposerWindowClosed && canSendApprovedTemplates) {
                           setShowApprovedTemplates(value => !value);
                           setShowQuickReplies(false);
                         } else {
@@ -1499,8 +1501,8 @@ export default function WhatsAppInbox({
                           setShowApprovedTemplates(false);
                         }
                       }}
-                      aria-label={replyWindow.state === 'closed' ? 'Approved WhatsApp templates' : 'Quick reply templates'}
-                      title={replyWindow.state === 'closed' ? 'Approved templates' : 'Quick replies'}
+                      aria-label={isComposerWindowClosed ? 'Approved WhatsApp templates' : 'Quick reply templates'}
+                      title={isComposerWindowClosed ? 'Approved templates' : 'Quick replies'}
                     >
                       <MessagesSquare size={19} />
                     </button>
@@ -1511,10 +1513,10 @@ export default function WhatsAppInbox({
                   value={chatInputText}
                   onChange={(e) => setChatInputText(e.target.value)}
                   onKeyDown={handleComposerKeyDown}
-                  placeholder={replyWindow.state === 'closed' ? 'Window closed — send a template first' : 'Message customer…'}
+                  placeholder={isComposerWindowClosed ? 'Window closed — send a template first' : 'Message customer…'}
                   rows={1}
                   enterKeyHint="send"
-                  disabled={replyWindow.state === 'closed'}
+                  disabled={isComposerWindowClosed}
                 />
                 <button
                   type="button"
