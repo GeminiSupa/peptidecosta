@@ -481,6 +481,7 @@ export default function AdminPage() {
   const [whatsappConversations, setWhatsappConversations] = useState([]);
   const [whatsappAgents, setWhatsappAgents] = useState([]);
   const [whatsappConversationRoutingAvailable, setWhatsappConversationRoutingAvailable] = useState(true);
+  const [whatsappConversationLoadError, setWhatsappConversationLoadError] = useState('');
   const [loadingWhatsappMessages, setLoadingWhatsappMessages] = useState(true);
   const [activeChatWaId, setActiveChatWaId] = useState(null);
   const [whatsappSettings, setWhatsappSettings] = useState({
@@ -2282,20 +2283,29 @@ Core Rules:
           : '';
         const res = await adminFetch(`/api/admin/whatsapp-conversations${sourceQuery}`);
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Could not load WhatsApp conversations');
+        if (!res.ok) {
+          const err = new Error(data.error || 'Could not load WhatsApp conversations');
+          err.routingAvailable = data.available !== false;
+          throw err;
+        }
         setWhatsappConversationRoutingAvailable(data.available !== false);
+        setWhatsappConversationLoadError(data.available === false
+          ? (data.error || 'WhatsApp conversation routing table is not installed yet.')
+          : '');
         setWhatsappConversations(data.conversations || []);
         setWhatsappMessages(data.messages || []);
         setWhatsappAgents(data.agents || []);
       } catch (err) {
         console.error("Failed to load WhatsApp conversations:", err);
-        setWhatsappConversationRoutingAvailable(false);
+        setWhatsappConversationRoutingAvailable(err.routingAvailable !== false);
+        setWhatsappConversationLoadError(err.message || 'Could not load WhatsApp conversations.');
         setWhatsappConversations([]);
         setWhatsappMessages([]);
         setWhatsappAgents([]);
       }
     } else {
       setWhatsappConversationRoutingAvailable(false);
+      setWhatsappConversationLoadError('');
       setWhatsappConversations([]);
       setWhatsappMessages([]);
       setWhatsappAgents([]);
@@ -6329,6 +6339,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 whatsappAgents={whatsappAgents}
                 whatsappTemplates={APPROVED_WHATSAPP_AGENT_TEMPLATES}
                 conversationRoutingAvailable={whatsappConversationRoutingAvailable}
+                conversationRoutingError={whatsappConversationLoadError}
                 onConversationAction={handleWhatsAppConversationAction}
                 orders={orders}
                 leads={leads}
@@ -6562,6 +6573,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               whatsappAgents={whatsappAgents}
               whatsappTemplates={APPROVED_WHATSAPP_AGENT_TEMPLATES}
               conversationRoutingAvailable={whatsappConversationRoutingAvailable}
+              conversationRoutingError={whatsappConversationLoadError}
               onConversationAction={handleWhatsAppConversationAction}
               orders={orders}
               leads={leads}

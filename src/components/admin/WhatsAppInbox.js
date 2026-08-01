@@ -347,6 +347,7 @@ export default function WhatsAppInbox({
   whatsappAgents = [],
   whatsappTemplates = [],
   conversationRoutingAvailable = true,
+  conversationRoutingError = '',
   onConversationAction,
   orders = [],
   leads = [],
@@ -1001,7 +1002,13 @@ export default function WhatsAppInbox({
 
           {!conversationRoutingAvailable && (
             <div className="admin-wa-send-feedback admin-wa-send-feedback--error" role="alert">
-              <span>Conversation routing is not installed yet. Run the WhatsApp conversations SQL migration to enable shared ownership.</span>
+              <span>{conversationRoutingError || 'Conversation routing is not installed yet. Run the WhatsApp conversations SQL migration to enable shared ownership.'}</span>
+            </div>
+          )}
+
+          {conversationRoutingAvailable && conversationRoutingError && (
+            <div className="admin-wa-send-feedback admin-wa-send-feedback--error" role="alert">
+              <span>{conversationRoutingError}</span>
             </div>
           )}
 
