@@ -26,48 +26,18 @@
     color: #fff;
     font-size: .78rem;
     font-weight: 800;
+    overflow: hidden;
 }
 
-.clone-topbar-inner,
-.clone-topbar-inner > span,
-.clone-topbar-inner > div,
-.clone-topbar a,
-.clone-topbar button {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.clone-topbar-inner {
+.clone-topbar .promo-banner-global {
     min-height: 38px;
-    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 0;
+    box-shadow: none;
 }
 
-.clone-topbar-inner.is-contact-only {
-    justify-content: flex-end;
-}
-
-.clone-topbar a,
-.clone-topbar button {
-    color: #fff;
-    text-decoration: none;
-    white-space: nowrap;
-}
-
-.clone-topbar button,
-.clone-topbar a[href^="tel"] {
-    border: 0;
-    border-radius: 4px;
-    padding: 8px 13px;
-    background: #f58220;
-    color: #fff;
-    font: inherit;
-    cursor: pointer;
-}
-
-.clone-topbar a[href^="tel"] {
-    background: #fff;
-    color: #082d74;
+.clone-topbar .promo-banner-text {
+    min-height: 22px;
 }
 
 .clone-nav-wrap {
@@ -1584,18 +1554,6 @@
 }
 
 @media (max-width: 900px) {
-    .clone-topbar-inner {
-        align-items: flex-start;
-        flex-direction: column;
-        padding: 8px 0;
-    }
-
-    .clone-topbar-inner > div {
-        width: 100%;
-        overflow-x: auto;
-        padding-bottom: 2px;
-    }
-
     .clone-nav {
         grid-template-columns: auto auto 1fr;
     }
@@ -1674,22 +1632,14 @@
         font-size: .72rem;
     }
 
-    .clone-topbar-inner > div {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
+    .clone-topbar .promo-banner-global {
+        height: auto;
+        min-height: 30px;
+        padding: 5px 0;
     }
 
-    .clone-topbar-inner > div > a:first-child {
-        display: none;
-    }
-
-    .clone-topbar button,
-    .clone-topbar a[href^="tel"] {
-        min-height: 36px;
-        justify-content: center;
-        padding: 7px 8px;
-        font-size: .69rem;
+    .clone-topbar .promo-banner-text {
+        font-size: .64rem;
     }
 
     .clone-nav-actions button {

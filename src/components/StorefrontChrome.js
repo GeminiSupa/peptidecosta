@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Mail, Menu, Search, ShoppingBag, X } from 'lucide-react';
+import { ChevronDown, Menu, Search, ShoppingBag, X } from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
@@ -23,11 +23,12 @@ function textTickerClassName(className = '') {
     .join(' ');
 }
 
-export function CatalogPromoBanner({ lang = 'es', settings, className = '', forceActive = false }) {
+export function CatalogPromoBanner({ lang = 'es', settings, className = '', forceActive = false, mode = 'auto' }) {
   const { links } = useBusinessLinks();
   const [promoBanners, setPromoBanners] = useState([]);
   const suffix = lang === 'en' ? 'En' : 'Es';
   const active = forceActive || (settings?.catalogBannerActive ?? DEFAULT_LANDING_PAGE_SETTINGS.catalogBannerActive);
+  const textOnly = mode === 'ticker';
 
   useEffect(() => {
     let cancelled = false;
@@ -49,11 +50,15 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
 
   if (!active) return null;
 
-  const activeImageBanner = promoBanners.find((banner) => (
+  const activeImageBanner = textOnly ? null : promoBanners.find((banner) => (
     banner?.imageUrl || banner?.image_url || banner?.bannerImageUrl
   ));
+  const settingsTickerText = (settings?.bannerActive ?? DEFAULT_LANDING_PAGE_SETTINGS.bannerActive)
+    ? (settings?.[`bannerText${suffix}`] || '')
+    : '';
   const activeTextItems = promoBanners
     .map((banner) => banner?.[`text${suffix}`] || banner?.textEn || banner?.textEs || banner?.text)
+    .concat(settingsTickerText)
     .filter(Boolean)
     .map(parseBannerText)
     .map(normalizeBannerCopy)
@@ -99,6 +104,8 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
     return <PromoTicker active text={activeText} href={href} className={textTickerClassName(className)} />;
   }
 
+  if (textOnly) return null;
+
   return (
     <a className={`catalog-promo-image-banner ${className}`.trim()} href={href} {...externalLinkProps}>
       <img src={imageUrl} alt={alt} />
@@ -123,7 +130,6 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [cartCount, setCartCount] = useState(0);
-  const { links } = useBusinessLinks();
 
   // The cart only changes on the catalog page, so re-reading on mount, on focus
   // and on cross-tab writes is enough to keep this honest. Reading in an effect
@@ -138,12 +144,6 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
       window.removeEventListener('focus', sync);
     };
   }, []);
-
-  const openWhatsApp = (source) => {
-    logWhatsAppSource(source);
-    localStorage.setItem('whatsapp_source', source);
-    window.open(buildWhatsAppLink(links.whatsappNumber), '_blank');
-  };
 
   const submitSearch = (event) => {
     event.preventDefault();
@@ -180,13 +180,7 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
   return (
     <header className="clone-site-header">
         <div className="clone-topbar">
-          <div className="clone-shell clone-topbar-inner is-contact-only">
-            <div>
-              <Link href={`/contact?lang=${lang}`}><Mail size={14} /> {lang === 'en' ? 'Contact Us' : 'Contáctanos'}</Link>
-              <button type="button" onClick={() => openWhatsApp('header_cr')}>CR: {links.whatsappDisplay}</button>
-              <a href={`tel:+${links.apiWhatsAppNumber || '18314715559'}`}>US: {links.apiWhatsAppDisplay || '+1 (831) 471-5559'}</a>
-            </div>
-          </div>
+          <CatalogPromoBanner lang={lang} settings={settings} className="clone-topbar-ticker" forceActive mode="ticker" />
         </div>
 
         <div className="clone-nav-wrap">
@@ -267,7 +261,6 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
             </div>
           </div>
         </div>
-        <CatalogPromoBanner lang={lang} settings={settings} className="catalog-promo-image-banner--header clone-shell" forceActive />
     </header>
   );
 }
