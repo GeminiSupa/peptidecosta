@@ -18,11 +18,14 @@ CREATE TABLE IF NOT EXISTS public.whatsapp_conversations (
   last_message_at    TIMESTAMPTZ,
   last_inbound_at    TIMESTAMPTZ,
   last_outbound_at   TIMESTAMPTZ,
-  matched_order_id   UUID REFERENCES public.orders(id) ON DELETE SET NULL,
+  matched_order_id   UUID,
   metadata           JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.whatsapp_conversations
+  DROP CONSTRAINT IF EXISTS whatsapp_conversations_matched_order_id_fkey;
 
 ALTER TABLE public.whatsapp_messages
   ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'cloud_api';
@@ -43,7 +46,7 @@ WITH ranked AS (
     regexp_replace(wa_id, '\D', '', 'g') AS clean_wa_id,
     display_name,
     direction,
-    matched_order_id,
+    matched_order_id AS raw_matched_order_id,
     source,
     created_at,
     row_number() OVER (
@@ -79,7 +82,14 @@ SELECT
   last_message_at,
   last_inbound_at,
   last_outbound_at,
-  matched_order_id
+  CASE
+    WHEN EXISTS (
+      SELECT 1
+      FROM public.orders o
+      WHERE o.id = ranked.raw_matched_order_id
+    ) THEN ranked.raw_matched_order_id
+    ELSE NULL
+  END
 FROM ranked
 WHERE row_rank = 1
 ON CONFLICT (wa_id) DO UPDATE SET
@@ -99,6 +109,17 @@ ON CONFLICT (wa_id) DO UPDATE SET
   ), '-infinity'::timestamptz),
   matched_order_id = COALESCE(EXCLUDED.matched_order_id, whatsapp_conversations.matched_order_id),
   updated_at = now();
+
+UPDATE public.whatsapp_conversations c
+SET
+  matched_order_id = NULL,
+  updated_at = now()
+WHERE c.matched_order_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.orders o
+    WHERE o.id = c.matched_order_id
+  );
 
 WITH candidates AS (
   SELECT
