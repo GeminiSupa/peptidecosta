@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Brain, Check, CheckCheck, ChevronLeft, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus, Maximize2, Minimize2 } from 'lucide-react';
+import { renderWhatsAppTemplateBody } from '@/lib/whatsappTemplates.mjs';
 
 const INITIAL_CHAT_LIMIT = 30;
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -171,6 +172,23 @@ function formatMoney(value) {
   return `$${amount.toLocaleString(undefined, { maximumFractionDigits: amount >= 100 ? 0 : 2 })}`;
 }
 
+function getOrderItemsSummary(order) {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  if (!items.length) return 'Productos Peptides Costa Rica';
+  return items
+    .slice(0, 4)
+    .map((item) => `${item.product || item.name || 'Producto'} x${item.qty || item.quantity || 1}`)
+    .join(', ');
+}
+
+function getOrderTotalLabel(order) {
+  if (!order) return 'Por confirmar';
+  if (order.currency === 'CRC' && order.total_crc) return `CRC ${Number(order.total_crc).toLocaleString()}`;
+  if (order.total_usd) return formatMoney(order.total_usd);
+  if (order.total_crc) return `CRC ${Number(order.total_crc).toLocaleString()}`;
+  return 'Por confirmar';
+}
+
 function getOwnerDisplay(ownerKey, currentAgentKey) {
   if (!ownerKey || ownerKey === WA_UNASSIGNED_OWNER) return 'Unassigned';
   if (ownerKey === currentAgentKey) return 'Mine';
@@ -327,6 +345,7 @@ export default function WhatsAppInbox({
   whatsappMessages,
   whatsappConversations = [],
   whatsappAgents = [],
+  whatsappTemplates = [],
   conversationRoutingAvailable = true,
   onConversationAction,
   orders = [],
@@ -342,6 +361,7 @@ export default function WhatsAppInbox({
   chatInputText,
   setChatInputText,
   handleSendLiveWhatsappMessage,
+  handleSendWhatsappTemplate,
   handleDraftAiChatReply,
   draftingAiReply,
   loadAdminData,
@@ -369,6 +389,9 @@ export default function WhatsAppInbox({
   const [showCustomerContext, setShowCustomerContext] = useState(false);
   const [showContactActions, setShowContactActions] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [showApprovedTemplates, setShowApprovedTemplates] = useState(false);
+  const [templateDraftValues, setTemplateDraftValues] = useState({});
+  const [sendingTemplateId, setSendingTemplateId] = useState(null);
   const [showComposerTools, setShowComposerTools] = useState(false);
   const [focusListMode, setFocusListMode] = useState(false);
   const [conversationActionWaId, setConversationActionWaId] = useState(null);
@@ -714,6 +737,44 @@ export default function WhatsAppInbox({
     };
   }, [customerContext]);
 
+  const templateDefaults = useMemo(() => {
+    const latestOrder = customerContext?.latestOrder;
+    const cart = customerContext?.cart;
+    const checkoutUrl = cart?.session_id
+      ? `https://catalog.peptidescostarica.net/catalog?recover_session=${encodeURIComponent(cart.session_id)}`
+      : 'https://catalog.peptidescostarica.net/catalog';
+
+    return {
+      customerName: cleanContactName(currentChat?.displayName).split(/\s+/)[0] || '',
+      checkoutUrl,
+      orderNumber: latestOrder?.order_number || (latestOrder?.id ? latestOrder.id.slice(0, 8) : 'WPCR'),
+      orderDetails: getOrderItemsSummary(latestOrder),
+      orderTotal: getOrderTotalLabel(latestOrder),
+      reviewUrl: '',
+    };
+  }, [currentChat?.displayName, customerContext]);
+
+  const preferredTemplateUse = customerContext?.cart
+    ? 'Carrito'
+    : customerContext?.latestOrder
+      ? 'Pedido'
+      : customerContext?.lead
+        ? 'Lead nuevo'
+        : 'Catalogo';
+
+  const approvedTemplates = useMemo(() => {
+    const templates = Array.isArray(whatsappTemplates) ? whatsappTemplates : [];
+    return [...templates].sort((a, b) => {
+      const aPreferred = a.use === preferredTemplateUse ? 0 : 1;
+      const bPreferred = b.use === preferredTemplateUse ? 0 : 1;
+      if (aPreferred !== bPreferred) return aPreferred - bPreferred;
+      if (a.category !== b.category) return a.category === 'UTILITY' ? -1 : 1;
+      return a.label.localeCompare(b.label);
+    });
+  }, [preferredTemplateUse, whatsappTemplates]);
+
+  const canSendApprovedTemplates = Boolean(handleSendWhatsappTemplate) && approvedTemplates.length > 0;
+
   useEffect(() => {
     document.body.classList.add('admin-wa-tab-active');
     return () => document.body.classList.remove('admin-wa-tab-active');
@@ -782,6 +843,40 @@ export default function WhatsAppInbox({
     setChatInputText(prev => prev + (prev ? ' ' : '') + text);
     setShowQuickReplies(false);
     if (isMobile) setShowComposerTools(false);
+  };
+
+  const getTemplateValues = (template) => {
+    const draft = templateDraftValues[template.id] || {};
+    return (template.variables || []).reduce((values, variable) => ({
+      ...values,
+      [variable.key]: draft[variable.key] ?? templateDefaults[variable.key] ?? variable.fallback ?? '',
+    }), {});
+  };
+
+  const updateTemplateDraftValue = (templateId, key, value) => {
+    setTemplateDraftValues((prev) => ({
+      ...prev,
+      [templateId]: {
+        ...(prev[templateId] || {}),
+        [key]: value,
+      },
+    }));
+  };
+
+  const sendApprovedTemplate = async (template) => {
+    if (!template || !handleSendWhatsappTemplate) return;
+    setSendingTemplateId(template.id);
+    setConversationActionError('');
+    try {
+      await handleSendWhatsappTemplate(template.id, getTemplateValues(template));
+      setShowApprovedTemplates(false);
+      setShowQuickReplies(false);
+      if (isMobile) setShowComposerTools(false);
+    } catch (err) {
+      setConversationActionError(err.message || 'Could not send approved template.');
+    } finally {
+      setSendingTemplateId(null);
+    }
   };
 
   const filterTabs = [
@@ -1208,18 +1303,21 @@ export default function WhatsAppInbox({
                   <div className="admin-wa-window-blocked-icon"><Clock size={20} aria-hidden /></div>
                   <div className="admin-wa-window-blocked-text">
                     <strong>Window closed</strong>
-                    <span>Use an approved template before sending a free-form follow-up.</span>
+                    <span>Send an approved Meta template. Normal chat unlocks when the customer replies.</span>
                   </div>
-                  <button
-                    type="button"
-                    className="admin-wa-template-required-btn"
-                    onClick={() => {
-                      setShowQuickReplies(true);
-                      if (isMobile) setShowComposerTools(true);
-                    }}
-                  >
-                    Templates
-                  </button>
+                  {canSendApprovedTemplates && (
+                    <button
+                      type="button"
+                      className="admin-wa-template-required-btn"
+                      onClick={() => {
+                        setShowApprovedTemplates(true);
+                        setShowQuickReplies(false);
+                        if (isMobile) setShowComposerTools(true);
+                      }}
+                    >
+                      Templates
+                    </button>
+                  )}
                 </div>
               )}
               {replyWindow.state === 'urgent' && (
@@ -1247,7 +1345,67 @@ export default function WhatsAppInbox({
                 </div>
               )}
 
-              {showQuickReplies && (
+              {showApprovedTemplates && canSendApprovedTemplates && (
+                <div className="admin-wa-approved-templates" aria-label="Approved WhatsApp templates">
+                  <div className="admin-wa-approved-templates-head">
+                    <div>
+                      <strong>Approved templates</strong>
+                      <span>{preferredTemplateUse} options appear first</span>
+                    </div>
+                    <button type="button" onClick={() => setShowApprovedTemplates(false)} aria-label="Close template picker">
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <div className="admin-wa-approved-template-list">
+                    {approvedTemplates.map((template) => {
+                      const values = getTemplateValues(template);
+                      const preview = renderWhatsAppTemplateBody(template, values);
+                      const isSendingThisTemplate = sendingTemplateId === template.id;
+                      const templateHasMissingValues = (template.variables || []).some((variable) => !String(values[variable.key] || '').trim());
+
+                      return (
+                        <article className="admin-wa-approved-template-card" key={template.id}>
+                          <div className="admin-wa-approved-template-meta">
+                            <span>{template.use}</span>
+                            <small>{template.language} · {template.category}</small>
+                          </div>
+                          <strong>{template.label}</strong>
+                          <p>{template.description}</p>
+                          {(template.variables || []).length > 0 && (
+                            <div className="admin-wa-template-fields">
+                              {template.variables.map((variable) => (
+                                <label key={`${template.id}-${variable.key}`}>
+                                  <span>{variable.label}</span>
+                                  <input
+                                    type={variable.key.toLowerCase().includes('url') ? 'url' : 'text'}
+                                    value={values[variable.key]}
+                                    onChange={(event) => updateTemplateDraftValue(template.id, variable.key, event.target.value)}
+                                    placeholder={variable.fallback || variable.label}
+                                  />
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                          <div className="admin-wa-template-preview">
+                            {preview}
+                          </div>
+                          <button
+                            type="button"
+                            className="admin-wa-template-send"
+                            onClick={() => sendApprovedTemplate(template)}
+                            disabled={Boolean(sendingTemplateId) || templateHasMissingValues}
+                          >
+                            {isSendingThisTemplate ? <Loader2 size={16} className="spinner" /> : <Send size={16} />}
+                            <span>{isSendingThisTemplate ? 'Sending...' : 'Send template'}</span>
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {showQuickReplies && replyWindow.state !== 'closed' && (
                 <div className="admin-wa-quick-replies" aria-label="Quick replies">
                   {quickReplyTemplates.map((template) => (
                     <button type="button" key={template.label} onClick={() => appendQuickReply(template.text)}>
@@ -1264,7 +1422,20 @@ export default function WhatsAppInbox({
                     <span>Attach</span>
                     <input type="file" accept="image/*,.heic,.heif" style={{ display: 'none' }} onChange={(e) => { if(handleWaImageUpload) handleWaImageUpload(e.target.files[0]); }} disabled={uploadingWaImage} />
                   </label>
-                  <button type="button" className={`admin-wa-tool-tile${showQuickReplies ? ' active' : ''}`} onClick={() => setShowQuickReplies(value => !value)} aria-label="Quick reply templates">
+                  <button
+                    type="button"
+                    className={`admin-wa-tool-tile${showQuickReplies || showApprovedTemplates ? ' active' : ''}`}
+                    onClick={() => {
+                      if (replyWindow.state === 'closed' && canSendApprovedTemplates) {
+                        setShowApprovedTemplates(value => !value);
+                        setShowQuickReplies(false);
+                      } else {
+                        setShowQuickReplies(value => !value);
+                        setShowApprovedTemplates(false);
+                      }
+                    }}
+                    aria-label={replyWindow.state === 'closed' ? 'Approved WhatsApp templates' : 'Quick reply templates'}
+                  >
                     <MessagesSquare size={18} />
                     <span>Templates</span>
                   </button>
@@ -1288,7 +1459,21 @@ export default function WhatsAppInbox({
                       {uploadingWaImage ? <Loader2 size={20} className="spinner" /> : <Paperclip size={20} />}
                       <input type="file" accept="image/*,.heic,.heif" style={{ display: 'none' }} onChange={(e) => { if(handleWaImageUpload) handleWaImageUpload(e.target.files[0]); }} disabled={uploadingWaImage} />
                     </label>
-                    <button type="button" className={`admin-wa-composer-tool${showQuickReplies ? ' active' : ''}`} onClick={() => setShowQuickReplies(value => !value)} aria-label="Quick reply templates" title="Quick replies">
+                    <button
+                      type="button"
+                      className={`admin-wa-composer-tool${showQuickReplies || showApprovedTemplates ? ' active' : ''}`}
+                      onClick={() => {
+                        if (replyWindow.state === 'closed' && canSendApprovedTemplates) {
+                          setShowApprovedTemplates(value => !value);
+                          setShowQuickReplies(false);
+                        } else {
+                          setShowQuickReplies(value => !value);
+                          setShowApprovedTemplates(false);
+                        }
+                      }}
+                      aria-label={replyWindow.state === 'closed' ? 'Approved WhatsApp templates' : 'Quick reply templates'}
+                      title={replyWindow.state === 'closed' ? 'Approved templates' : 'Quick replies'}
+                    >
                       <MessagesSquare size={19} />
                     </button>
                   </>

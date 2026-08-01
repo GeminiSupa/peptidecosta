@@ -12,6 +12,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { getWhatsAppMessageSource } from '@/lib/whatsappMessageLog';
+import { APPROVED_WHATSAPP_AGENT_TEMPLATES } from '@/lib/whatsappTemplates.mjs';
 import {
   getAbandonedCartConversion,
   getLeadConversion as resolveLeadConversion,
@@ -651,6 +652,43 @@ Please draft a perfect next response to this customer. Match their language (Spa
       alert('Error generating draft: ' + err.message);
     } finally {
       setDraftingAiReply(false);
+    }
+  };
+
+  const handleSendLiveWhatsappTemplate = async (templateId, values = {}) => {
+    if (!activeChatWaId || !templateId) return null;
+
+    setLiveWaSendFeedback({
+      status: 'sending',
+      message: 'Sending approved template...',
+    });
+
+    try {
+      const res = await adminFetch('/api/admin/whatsapp-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: activeChatWaId,
+          templateId,
+          values,
+          customerName: values.customerName || 'Peptides Customer',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Template delivery failed.');
+      }
+
+      setLiveWaSendFeedback({ status: 'idle', message: '' });
+      await loadAdminData();
+      return data;
+    } catch (err) {
+      console.error(err);
+      setLiveWaSendFeedback({
+        status: 'error',
+        message: err.message || 'Template delivery failed. Please try another approved template.',
+      });
+      throw err;
     }
   };
 
@@ -6289,6 +6327,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 whatsappMessages={whatsappMessages.filter(m => getWhatsAppMessageSource(m) === 'baileys_session')}
                 whatsappConversations={whatsappConversations}
                 whatsappAgents={whatsappAgents}
+                whatsappTemplates={APPROVED_WHATSAPP_AGENT_TEMPLATES}
                 conversationRoutingAvailable={whatsappConversationRoutingAvailable}
                 onConversationAction={handleWhatsAppConversationAction}
                 orders={orders}
@@ -6521,6 +6560,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               whatsappMessages={whatsappMessages}
               whatsappConversations={whatsappConversations}
               whatsappAgents={whatsappAgents}
+              whatsappTemplates={APPROVED_WHATSAPP_AGENT_TEMPLATES}
               conversationRoutingAvailable={whatsappConversationRoutingAvailable}
               onConversationAction={handleWhatsAppConversationAction}
               orders={orders}
@@ -6536,6 +6576,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               chatInputText={chatInputText}
               setChatInputText={setChatInputText}
               handleSendLiveWhatsappMessage={handleSendLiveWhatsappMessage}
+              handleSendWhatsappTemplate={handleSendLiveWhatsappTemplate}
               handleDraftAiChatReply={handleDraftAiChatReply}
               draftingAiReply={draftingAiReply}
               loadAdminData={loadAdminData}

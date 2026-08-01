@@ -1525,6 +1525,27 @@
 .admin-wa-send-circle:disabled { background: #1e293b; color: #64748b; box-shadow: none; cursor: not-allowed; }
 .admin-wa-quick-replies { margin: 0 0 9px; padding: 0; }
 .admin-wa-quick-replies button { min-height: 44px; padding: 0 14px; }
+.admin-wa-approved-templates { margin: 0 0 10px; padding: 10px; border: 1px solid rgba(45,212,191,.16); border-radius: 14px; background: rgba(6,18,31,.88); box-shadow: 0 14px 34px rgba(0,0,0,.22); }
+.admin-wa-approved-templates-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+.admin-wa-approved-templates-head div { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.admin-wa-approved-templates-head strong { color: #ecfeff; font-size: .78rem; font-weight: 850; }
+.admin-wa-approved-templates-head span { color: #7dd3fc; font-size: .66rem; }
+.admin-wa-approved-templates-head button { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; background: rgba(255,255,255,.04); color: #94a3b8; cursor: pointer; }
+.admin-wa-approved-template-list { display: grid; grid-template-columns: repeat(auto-fit,minmax(230px,1fr)); gap: 9px; max-height: min(48vh,430px); overflow: auto; padding: 1px; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+.admin-wa-approved-template-card { display: flex; min-width: 0; flex-direction: column; gap: 8px; padding: 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; background: rgba(15,23,42,.82); }
+.admin-wa-approved-template-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.admin-wa-approved-template-meta span { padding: 3px 7px; border-radius: 999px; background: rgba(16,185,129,.13); color: #86efac; font-size: .58rem; font-weight: 850; text-transform: uppercase; }
+.admin-wa-approved-template-meta small { color: #64748b; font-size: .58rem; font-weight: 800; white-space: nowrap; }
+.admin-wa-approved-template-card > strong { color: #f8fafc; font-size: .78rem; font-weight: 850; }
+.admin-wa-approved-template-card > p { margin: -4px 0 0; color: #94a3b8; font-size: .66rem; line-height: 1.35; }
+.admin-wa-template-fields { display: grid; gap: 7px; }
+.admin-wa-template-fields label { display: flex; flex-direction: column; gap: 4px; }
+.admin-wa-template-fields span { color: #93c5fd; font-size: .62rem; font-weight: 800; }
+.admin-wa-template-fields input { min-height: 40px; width: 100%; box-sizing: border-box; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; background: rgba(2,6,23,.45); color: #f8fafc; font: inherit; font-size: .78rem; padding: 0 10px; outline: none; }
+.admin-wa-template-fields input:focus { border-color: rgba(45,212,191,.35); box-shadow: 0 0 0 3px rgba(45,212,191,.08); }
+.admin-wa-template-preview { max-height: 130px; overflow: auto; white-space: pre-wrap; align-self: flex-start; max-width: 100%; padding: 9px 11px; border-radius: 4px 13px 13px 13px; background: #192436; color: #dbeafe; font-size: .72rem; line-height: 1.42; border: 1px solid rgba(148,163,184,.1); }
+.admin-wa-template-send { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 999px; background: #10b981; color: #fff; font: inherit; font-size: .72rem; font-weight: 850; cursor: pointer; touch-action: manipulation; }
+.admin-wa-template-send:disabled { background: #1e293b; color: #64748b; cursor: not-allowed; }
 .admin-wa-mobile-tool-tray { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-bottom: 8px; }
 .admin-wa-tool-tile { display: grid; min-height: 58px; place-items: center; gap: 4px; padding: 8px 6px; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: rgba(255,255,255,.04); color: #cbd5e1; font: inherit; font-size: .7rem; font-weight: 750; cursor: pointer; touch-action: manipulation; }
 .admin-wa-tool-tile.active,
@@ -9166,6 +9187,34 @@
         padding: 0 12px !important;
         font-size: 0.68rem !important;
         white-space: nowrap !important;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-approved-templates {
+        margin-inline: -4px;
+        padding: 9px;
+        border-radius: 13px;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-approved-template-list {
+        display: flex;
+        max-height: 44vh;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-approved-template-list::-webkit-scrollbar {
+        display: none;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-approved-template-card {
+        flex: 0 0 min(86vw, 330px);
+        scroll-snap-align: start;
+    }
+
+    .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-template-preview {
+        max-height: 108px;
     }
 
     .admin-whatsapp-inbox.admin-wa-chat-open .admin-wa-quick-replies {
