@@ -14,7 +14,9 @@ import {
   validateSubUserParent,
 } from '../src/lib/subUserTier.mjs';
 import {
+  ADMIN_MODULE_LABELS,
   ADMIN_NAV_GROUPS,
+  ASSIGNABLE_ADMIN_MODULES,
   SUB_USER_TAB_IDS,
   getDefaultAdminTab,
   resolveAdminTabAccess,
@@ -131,6 +133,21 @@ test('a permission granted by mistake still cannot open a tab for a sub-user', (
 
 test('the sub-user screen is not offered to staff', () => {
   assert.equal(resolveAdminTabAccess('my_earnings', MARIA), false);
+});
+
+test('Products is superadmin-only and is not assignable to staff', () => {
+  const productsOnly = { ...MARIA, permissions: ['spreadsheet'] };
+  const superadmin = { ...MARIA, is_superadmin: true, permissions: [] };
+
+  assert.equal(ADMIN_MODULE_LABELS.spreadsheet, 'Products');
+  assert.equal(resolveAdminTabAccess('spreadsheet', productsOnly), false);
+  assert.equal(resolveAdminTabAccess('spreadsheet', superadmin), true);
+  assert.equal(ASSIGNABLE_ADMIN_MODULES.some((module) => module.id === 'spreadsheet'), false);
+  assert.equal(getDefaultAdminTab(productsOnly), 'home');
+
+  for (const tab of ['orders', 'customers', 'inquiries', 'leads']) {
+    assert.equal(resolveAdminTabAccess(tab, productsOnly), false, `${tab} should need its own permission`);
+  }
 });
 
 test('every tab a sub-user can open is reachable from the mobile nav', () => {

@@ -8,7 +8,7 @@ import {
 
 export const ADMIN_MODULES = [
   { id: 'home', label: 'Today (Home)', title: 'Today', group: 'Overview', alwaysAvailable: true },
-  { id: 'spreadsheet', label: 'Products', title: 'Products', group: 'Core Operations' },
+  { id: 'spreadsheet', label: 'Products', title: 'Products', group: 'Core Operations', superadminOnly: true },
   { id: 'orders', label: 'Orders', title: 'Orders', group: 'Core Operations' },
   { id: 'customers', label: 'Customers', title: 'Customers', group: 'Core Operations' },
   { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
@@ -49,10 +49,18 @@ export const ASSIGNABLE_ADMIN_MODULES = ADMIN_MODULES.filter(
   (module) => !module.alwaysAvailable && !module.superadminOnly && !module.subUserOnly
 );
 
+export const ASSIGNABLE_ADMIN_MODULE_IDS = new Set(
+  ASSIGNABLE_ADMIN_MODULES.map((module) => module.id)
+);
+
 export const ADMIN_TAB_IDS = new Set(ADMIN_MODULES.map((module) => module.id));
 
 export const ADMIN_TAB_TITLES = Object.fromEntries(
   ADMIN_MODULES.map((module) => [module.id, module.title])
+);
+
+export const ADMIN_MODULE_LABELS = Object.fromEntries(
+  ADMIN_MODULES.map((module) => [module.id, module.label])
 );
 
 export const ADMIN_NAV_GROUPS = ['Overview', 'Core Operations', 'Sales & Marketing', 'Analytics & Content', 'System & AI']
@@ -108,7 +116,8 @@ export function getDefaultAdminTab(profile) {
   if (isSubUser(profile)) return 'my_earnings';
   if (profile.is_superadmin) return 'home';
   if (Array.isArray(profile.permissions) && profile.permissions.includes('home')) return 'home';
-  return Array.isArray(profile.permissions) && profile.permissions.length > 0
-    ? profile.permissions[0]
-    : 'home';
+  const firstAllowedPermission = Array.isArray(profile.permissions)
+    ? profile.permissions.find((tabId) => resolveAdminTabAccess(tabId, profile))
+    : null;
+  return firstAllowedPermission || 'home';
 }

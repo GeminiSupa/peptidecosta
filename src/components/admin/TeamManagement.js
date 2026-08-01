@@ -6,7 +6,7 @@ import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp, Camera, Upl
 import AgentDashboard from './AgentDashboard';
 import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { getOrderSalesAmounts, isCommissionEligibleOrder, orderBelongsToAgent } from '@/lib/agentOrders';
-import { ASSIGNABLE_ADMIN_MODULES } from '@/lib/adminModules';
+import { ADMIN_MODULE_LABELS, ASSIGNABLE_ADMIN_MODULE_IDS, ASSIGNABLE_ADMIN_MODULES } from '@/lib/adminModules';
 
 /** One labelled on/off row in the member notification panel. */
 function NotificationToggle({ icon, title, hint, checked, onChange, activeColor = '#38bdf8' }) {
@@ -507,7 +507,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormEmail(user.email);
       setFormPassword(''); // don't show existing password
       setFormName(user.name || '');
-      setFormPermissions(user.permissions || []);
+      setFormPermissions((user.permissions || []).filter(permission => ASSIGNABLE_ADMIN_MODULE_IDS.has(permission)));
       setFormIsSuperadmin(user.is_superadmin || false);
       setFormCommissionRate(user.commission_rate || 0);
       setFormWeeklySalary(user.weekly_salary || 0);
@@ -667,8 +667,12 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const getAccessSummary = (user) => {
     if (user.is_superadmin) return 'Full Access';
     if (!user.permissions || user.permissions.length === 0) return 'No Access';
-    const preview = user.permissions.slice(0, 2).join(', ');
-    const extra = user.permissions.length > 2 ? ` +${user.permissions.length - 2}` : '';
+    const permissionLabels = user.permissions
+      .filter(permission => ASSIGNABLE_ADMIN_MODULE_IDS.has(permission))
+      .map(permission => ADMIN_MODULE_LABELS[permission] || permission);
+    if (permissionLabels.length === 0) return 'No Access';
+    const preview = permissionLabels.slice(0, 2).join(', ');
+    const extra = permissionLabels.length > 2 ? ` +${permissionLabels.length - 2} more` : '';
     return `${preview}${extra}`;
   };
 
