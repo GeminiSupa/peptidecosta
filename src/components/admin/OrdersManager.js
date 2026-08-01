@@ -153,6 +153,14 @@ function getCardPaymentBadge(order) {
   return { label: 'Card Pending', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.14)' };
 }
 
+function hasConfirmedPayment(order, group, cardBadge) {
+  const status = String(order.status || '').toLowerCase();
+  return group.id === 'paid' ||
+    cardBadge?.label === 'Paid' ||
+    status.includes('paid') ||
+    status.includes('complete');
+}
+
 export default function OrdersManager({
   visibleOrders,
   orderStatusFilter, setOrderStatusFilter,
@@ -374,6 +382,9 @@ export default function OrdersManager({
             const group = getOrderStatusGroup(order.status);
             const cardBadge = getCardPaymentBadge(order);
             const status = String(order.status || '').toLowerCase();
+            const paymentConfirmed = hasConfirmedPayment(order, group, cardBadge);
+            const canQuickProcess = group.id === 'paid' || (group.id === 'needs_payment' && paymentConfirmed);
+            const canQuickComplete = group.id === 'processing';
             const isActionRequired = order.payment_method === 'card' &&
               cardBadge?.label === 'Paid' &&
               !status.includes('complete') &&
@@ -430,14 +441,19 @@ export default function OrdersManager({
                   )}
                 </div>
                 <div className="order-mobile-actions">
-                  {group.id === 'needs_payment' && (
+                  {group.id === 'needs_payment' && !paymentConfirmed && (
                     <button type="button" className="admin-btn admin-btn-secondary" onClick={() => openPaymentReminder(order)}>
                       <MessageCircle size={14} /> Ask payment
                     </button>
                   )}
-                  {group.id !== 'complete' && (
-                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => handleOrderStatusUpdate(order.id, group.id === 'needs_payment' ? 'Processing' : 'Order Complete')}>
-                      {group.id === 'needs_payment' ? 'Process' : 'Complete'}
+                  {canQuickProcess && (
+                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => handleOrderStatusUpdate(order.id, 'Processing')}>
+                      Process
+                    </button>
+                  )}
+                  {canQuickComplete && (
+                    <button type="button" className="admin-btn admin-btn-primary" onClick={() => handleOrderStatusUpdate(order.id, 'Order Complete')}>
+                      Complete
                     </button>
                   )}
                   <button type="button" className="admin-btn" onClick={() => openOrderWhatsapp(order)}>
@@ -446,18 +462,6 @@ export default function OrdersManager({
                   <button type="button" className="admin-btn order-mobile-delete" onClick={() => handleDeleteOrder(order.id)} aria-label="Delete order">
                     <Trash2 size={14} />
                   </button>
-                </div>
-                <div className="order-mobile-stage-buttons" aria-label="Update order status">
-                  {ORDER_STATUS_GROUPS.map((nextGroup) => (
-                    <button
-                      type="button"
-                      key={nextGroup.id}
-                      className={group.id === nextGroup.id ? 'active' : ''}
-                      onClick={() => handleOrderStatusUpdate(order.id, nextGroup.nextStatus)}
-                    >
-                      {nextGroup.filterLabel}
-                    </button>
-                  ))}
                 </div>
               </article>
             );
@@ -490,6 +494,8 @@ export default function OrdersManager({
                   
                   const status = String(order.status || '').toLowerCase();
                   const cardBadge = getCardPaymentBadge(order);
+                  const group = getOrderStatusGroup(order.status);
+                  const paymentConfirmed = hasConfirmedPayment(order, group, cardBadge);
                   const isActionRequired = order.payment_method === 'card' && 
                                             cardBadge?.label === 'Paid' && 
                                             !status.includes('complete') && 
@@ -643,15 +649,28 @@ export default function OrdersManager({
                           </button>
                           
                           {/* Quick CTAs based on status */}
-                          {(order.status || 'Pending') === 'Pending' && (
+                          {group.id === 'needs_payment' && !paymentConfirmed && (
+                            <button 
+                              className="admin-btn admin-cta-btn" 
+                              onClick={() => openPaymentReminder(order)}
+                              style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              💬 Ask Payment
+                            </button>
+                          )}
+
+                          {(group.id === 'paid' || (group.id === 'needs_payment' && paymentConfirmed)) && (
+                            <button 
+                              className="admin-btn admin-cta-btn" 
+                              onClick={() => handleOrderStatusUpdate(order.id, 'Processing')}
+                              style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                            >
+                              🚚 Process
+                            </button>
+                          )}
+
+                          {group.id === 'processing' && (
                             <>
-                              <button 
-                                className="admin-btn admin-cta-btn" 
-                                onClick={() => handleOrderStatusUpdate(order.id, 'Processing')}
-                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
-                              >
-                                🚚 Process
-                              </button>
                               <button 
                                 className="admin-btn admin-cta-btn" 
                                 onClick={() => handleOrderStatusUpdate(order.id, 'Order Complete')}
@@ -660,16 +679,6 @@ export default function OrdersManager({
                                 ✅ Complete
                               </button>
                             </>
-                          )}
-
-                          {(order.status || 'Pending') === 'Payment Pending' && (
-                            <button 
-                              className="admin-btn admin-cta-btn" 
-                              onClick={() => openPaymentReminder(order)}
-                              style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              💬 Ask Payment
-                            </button>
                           )}
 
                           {/* Quick Agent Claim CTA */}

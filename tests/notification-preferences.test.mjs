@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   agentWhatsAppNumber,
   agentWhatsAppNumbers,
+  mergeOrderEmailDestinations,
+  mergeOrderWhatsAppDestinations,
   missingColumnFrom,
   notificationsEnabled,
   selectWithOptionalPreferences,
@@ -190,5 +192,39 @@ test('the same number listed twice is only messaged once', () => {
   assert.deepEqual(
     agentWhatsAppNumbers({ whatsapp_number: '50660626224, +506 6062-6224' }),
     ['50660626224']
+  );
+});
+
+test('member email preferences merge with the central notification list', () => {
+  assert.deepEqual(
+    mergeOrderEmailDestinations({
+      managedAvailable: true,
+      managed: ['ops@example.com', 'quiet@example.com'],
+      profiles: [
+        { email: 'agent@example.com', order_email_notifications: true },
+        { email: 'quiet@example.com', order_email_notifications: false },
+      ],
+    }),
+    ['ops@example.com', 'agent@example.com']
+  );
+});
+
+test('member WhatsApp preferences merge with the central notification list', () => {
+  assert.deepEqual(
+    mergeOrderWhatsAppDestinations({
+      managedAvailable: true,
+      managed: [
+        { label: 'Ops', destination: '50611112222' },
+        { label: 'Quiet', destination: '+506 6062-6224' },
+      ],
+      profiles: [
+        { name: 'Agent', order_whatsapp_notifications: true, whatsapp_number: '50688881234' },
+        { name: 'Quiet', order_whatsapp_notifications: false, whatsapp_number: '50660626224' },
+      ],
+    }),
+    [
+      { name: 'Ops', phone: '50611112222' },
+      { name: 'Agent', phone: '50688881234' },
+    ]
   );
 });

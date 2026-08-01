@@ -25,7 +25,8 @@ export default function CartsManager({
   handleSendRecoveryEmail,
   handleDeleteCart,
   setSelectedCartDetails,
-  onOpenCustomerProfile
+  onOpenCustomerProfile,
+  onWhatsAppClick
 }) {
 
 
@@ -169,6 +170,23 @@ export default function CartsManager({
       customer_name: cart.customer_name,
       search: cart.user_email || cart.customer_email || cart.user_phone || cart.customer_phone || cart.customer_name
     });
+  };
+
+  const openCartWhatsApp = (cart) => {
+    const phone = cart.user_phone || cart.customer_phone;
+    if (!phone) return;
+    const items = getCartItems(cart.cart_data);
+    if (onWhatsAppClick) {
+      onWhatsAppClick({
+        name: cart.customer_name || cart.name || cart.user_email || cart.customer_email || 'Cliente',
+        phone,
+        session_id: cart.session_id || cart.id,
+        cartItems: items,
+        context: 'abandoned_cart',
+      }, 'discount');
+      return;
+    }
+    window.open(`https://wa.me/${phone.replace(/\D/g, '')}`, '_blank');
   };
 
   return (
@@ -417,7 +435,7 @@ export default function CartsManager({
                     <button
                       type="button"
                       className="admin-btn cart-mobile-whatsapp"
-                      onClick={() => window.open(`https://wa.me/${phone.replace(/\D/g, '')}?text=Hi! We noticed you left some items in your Costa Peptides cart. Can we help you complete your order?`, '_blank')}
+                      onClick={() => openCartWhatsApp(cart)}
                     >
                       <MessageCircle size={13} /> WhatsApp
                     </button>
@@ -536,7 +554,7 @@ export default function CartsManager({
                         </button>
                         {(cart.user_phone || cart.customer_phone) && (
                           <button 
-                            onClick={() => window.open(`https://wa.me/${(cart.user_phone || cart.customer_phone).replace(/\D/g, '')}?text=Hi! We noticed you left some items in your Costa Peptides cart. Can we help you complete your order?`, '_blank')}
+                            onClick={() => openCartWhatsApp(cart)}
                             style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
                             title="Quick WhatsApp"
                           >

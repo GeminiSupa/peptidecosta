@@ -108,7 +108,7 @@ export default function ProductsManager({
     if (p.coa && !/^https?:\/\//i.test(p.coa)) return 'COA URL must start with http:// or https://.';
     return '';
   };
-  const saveMobileProduct = () => {
+  const saveMobileProduct = async () => {
     const error = validateMobileProduct();
     if (error) {
       setMobileProductError(error);
@@ -116,6 +116,9 @@ export default function ProductsManager({
     }
     const original = products.find((p) => p.id === mobileEditProduct.id);
     if (!original) return;
+    const nextProducts = products.map((product) => (
+      product.id === mobileEditProduct.id ? { ...product, ...mobileEditProduct } : product
+    ));
     [
       'product',
       'category',
@@ -135,6 +138,42 @@ export default function ProductsManager({
       }
     });
     setMobileEditProduct(null);
+    await handleSaveChanges(nextProducts);
+  };
+  const mobileEditIndex = mobileEditProduct
+    ? products.findIndex((p) => p.id === mobileEditProduct.id)
+    : -1;
+  const openMobileDescriptionEditor = () => {
+    if (!mobileEditProduct) return;
+    setEditDescProduct(mobileEditProduct);
+    setEditDescEn(mobileEditProduct.descriptionEn || '');
+    setEditDescEs(mobileEditProduct.descriptionEs || '');
+    setEditDescModalOpen(true);
+  };
+  const uploadMobileImage = async (event) => {
+    if (!mobileEditProduct) return;
+    const imageUrl = await handleImageCellUpload(mobileEditProduct.id, event);
+    if (imageUrl) updateMobileDraft('imageUrl', imageUrl);
+  };
+  const moveMobileProduct = async (direction) => {
+    if (!mobileEditProduct || mobileEditIndex < 0) return;
+    const newIndex = mobileEditIndex + direction;
+    if (newIndex < 0 || newIndex >= products.length) return;
+    const updated = [...products];
+    const [moved] = updated.splice(mobileEditIndex, 1);
+    updated.splice(newIndex, 0, moved);
+    const withPriority = updated.map((product, index) => ({ ...product, priority: index }));
+    handleMoveRow(mobileEditIndex, direction);
+    await handleSaveChanges(withPriority);
+  };
+  const deleteMobileProduct = async () => {
+    if (!mobileEditProduct) return;
+    const confirmed = window.confirm(`Delete "${mobileEditProduct.product || 'this product'}" from the product database?`);
+    if (!confirmed) return;
+    const nextProducts = products.filter((product) => product.id !== mobileEditProduct.id);
+    handleDeleteRow(mobileEditProduct.id);
+    setMobileEditProduct(null);
+    await handleSaveChanges(nextProducts);
   };
 
   return (
@@ -762,13 +801,56 @@ export default function ProductsManager({
                 <span>COA URL</span>
                 <input value={mobileEditProduct.coa || ''} onChange={(e) => updateMobileDraft('coa', e.target.value)} />
               </label>
+              <div className="product-mobile-secondary-actions">
+                <button type="button" className="admin-btn" onClick={openMobileDescriptionEditor}>
+                  <FileText size={14} />
+                  Info/Blog
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn"
+                  onClick={() => document.getElementById(`mobile-imageUpload-${mobileEditProduct.id}`)?.click()}
+                >
+                  <Upload size={14} />
+                  Upload image
+                </button>
+                <input
+                  type="file"
+                  accept="image/*"
+                  id={`mobile-imageUpload-${mobileEditProduct.id}`}
+                  style={{ display: 'none' }}
+                  onChange={uploadMobileImage}
+                />
+                <button
+                  type="button"
+                  className="admin-btn"
+                  onClick={() => moveMobileProduct(-1)}
+                  disabled={saveLoading || mobileEditIndex <= 0 || productSearch !== ''}
+                >
+                  <ChevronUp size={14} />
+                  Move up
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn"
+                  onClick={() => moveMobileProduct(1)}
+                  disabled={saveLoading || mobileEditIndex < 0 || mobileEditIndex >= products.length - 1 || productSearch !== ''}
+                >
+                  <ChevronDown size={14} />
+                  Move down
+                </button>
+                <button type="button" className="admin-btn product-mobile-danger" onClick={deleteMobileProduct} disabled={saveLoading}>
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+              </div>
             </div>
 
             <div className="product-mobile-drawer-actions">
               <button type="button" className="admin-btn" onClick={() => setMobileEditProduct(null)}>Discard</button>
-              <button type="button" className="admin-btn admin-btn-primary" onClick={saveMobileProduct} disabled={!mobileDirty}>
+              <button type="button" className="admin-btn admin-btn-primary" onClick={saveMobileProduct} disabled={!mobileDirty || saveLoading}>
                 <Save size={15} />
-                Save product
+                {saveLoading ? 'Saving...' : 'Save product'}
               </button>
             </div>
           </div>

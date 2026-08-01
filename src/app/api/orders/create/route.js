@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
-import { agentWhatsAppNumbers, selectWithOptionalPreferences, wantsOrderWhatsApp } from '@/lib/notificationPreferences.mjs';
+import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { toE164, isValidE164, DEFAULT_PHONE_COUNTRY } from '@/lib/phoneFormat.mjs';
@@ -97,9 +97,9 @@ async function logOrderAlert(supabase, { phone, messageId, summary, orderId, raw
 /**
  * Where the new-order WhatsApp alert goes.
  *
- * The Notification Settings list is the answer once it exists. Before that
- * migration is run the old per-member opt-in on admin_profiles still decides,
- * so deploying ahead of the SQL does not silence the alert.
+ * Notification Settings covers standalone destinations. Team-member WhatsApp
+ * opt-ins are added from admin_profiles so editing a member controls that
+ * member's own order alerts.
  */
 async function resolveAgentWhatsAppRecipients(supabase) {
   const { available, recipients } = await getNotificationRecipients(supabase, {
@@ -107,21 +107,24 @@ async function resolveAgentWhatsAppRecipients(supabase) {
     type: 'new_order',
   });
 
-  if (available) {
-    return recipients.map(({ label, destination }) => ({ name: label, phone: destination }));
-  }
-
   const { data, error } = await selectWithOptionalPreferences(
     ['name', 'notifications_enabled', 'order_whatsapp_notifications', 'whatsapp_number'],
     (columns) => supabase.from('admin_profiles').select(columns)
   );
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (available) {
+      console.warn('[orders/create] Could not load team WhatsApp preferences:', error.message);
+      return mergeOrderWhatsAppDestinations({ managed: recipients, managedAvailable: true, profiles: [] });
+    }
+    throw new Error(error.message);
+  }
 
-  return (data || [])
-    .filter(wantsOrderWhatsApp)
-    .flatMap((profile) => agentWhatsAppNumbers(profile).map((phone) => ({ name: profile.name, phone })))
-    .filter((entry, index, all) => all.findIndex((other) => other.phone === entry.phone) === index);
+  return mergeOrderWhatsAppDestinations({
+    managed: recipients,
+    managedAvailable: available,
+    profiles: data || [],
+  });
 }
 
 /**

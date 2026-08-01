@@ -103,10 +103,12 @@ export function resolveAdminTabAccess(tabId, profile) {
 
   if (ALWAYS_AVAILABLE_TAB_IDS.has(tabId)) return true;
   if (SUPERADMIN_ONLY_TAB_IDS.has(tabId)) return Boolean(profile.is_superadmin);
-  if (profile.is_superadmin) return true;
 
-  // my_earnings is the sub-user screen; staff read the same numbers on My Pay.
+  // my_earnings is the sub-user screen; staff and superadmins read the same
+  // numbers on Today/My Pay.
   if (SUB_USER_ONLY_TAB_IDS.has(tabId)) return false;
+
+  if (profile.is_superadmin) return true;
 
   return Array.isArray(profile.permissions) && profile.permissions.includes(tabId);
 }

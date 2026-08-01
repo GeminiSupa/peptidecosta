@@ -1477,10 +1477,46 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Bell size={16} style={{ color: '#38bdf8' }} /> Notifications
                   </h3>
-                  <p style={{ fontSize: '0.75rem', color: '#64748b', margin: 0 }}>
-                    Order alerts are managed in the <strong style={{ color: '#94a3b8' }}>Notification Settings</strong> tab, so every phone number and
-                    address in use can be seen on one screen — including ones that do not belong to a team member.
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '4px 0 14px 0' }}>
+                    Controls whether this team member receives new order alerts. Use Notification Settings for extra phone numbers or email addresses that do not belong to a team member.
                   </p>
+                  <NotificationToggle
+                    icon={<Bell size={14} style={{ color: '#38bdf8' }} />}
+                    title="Order alerts"
+                    hint="Master switch for this member."
+                    checked={formNotificationsEnabled}
+                    onChange={setFormNotificationsEnabled}
+                  />
+                  <NotificationToggle
+                    icon={<Mail size={14} style={{ color: '#38bdf8' }} />}
+                    title="Email for new orders"
+                    hint={`Send order emails to ${formEmail || 'this member email'}.`}
+                    checked={formNotificationsEnabled && formOrderEmails}
+                    onChange={setFormOrderEmails}
+                    activeColor="#38bdf8"
+                  />
+                  <NotificationToggle
+                    icon={<MessageCircle size={14} style={{ color: '#22c55e' }} />}
+                    title="WhatsApp for new orders"
+                    hint="Requires a WhatsApp number with country code."
+                    checked={formNotificationsEnabled && formOrderWhatsApp}
+                    onChange={setFormOrderWhatsApp}
+                    activeColor="#22c55e"
+                  />
+                  <input
+                    className="admin-input"
+                    value={formWhatsAppNumber}
+                    onChange={e => setFormWhatsAppNumber(e.target.value)}
+                    disabled={!formNotificationsEnabled || !formOrderWhatsApp}
+                    placeholder="50660626224"
+                    style={{
+                      width: '100%',
+                      marginTop: '8px',
+                      background: (!formNotificationsEnabled || !formOrderWhatsApp) ? 'rgba(255,255,255,0.03)' : '#0e1626',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      color: (!formNotificationsEnabled || !formOrderWhatsApp) ? '#64748b' : '#f8fafc'
+                    }}
+                  />
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>

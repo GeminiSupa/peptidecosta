@@ -26,6 +26,7 @@ export default function GlobalSearch({
   orders = [],
   products = [],
   leads = [],
+  canAccessTab = () => true,
   onSelect,
 }) {
   const [query, setQuery] = useState('');
@@ -55,11 +56,16 @@ export default function GlobalSearch({
     return [...map.values()];
   }, [orders]);
 
+  const quickActions = useMemo(
+    () => QUICK_ACTIONS.filter((action) => !action.payload?.tab || canAccessTab(action.payload.tab)),
+    [canAccessTab]
+  );
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (q.length < 2) return QUICK_ACTIONS.slice(0, 6);
+    if (q.length < 2) return quickActions.slice(0, 6);
 
-    const out = QUICK_ACTIONS.filter(action => `${action.title} ${action.sub}`.toLowerCase().includes(q));
+    const out = quickActions.filter(action => `${action.title} ${action.sub}`.toLowerCase().includes(q));
 
     for (const o of orders) {
       const hay = [
@@ -117,7 +123,7 @@ export default function GlobalSearch({
     }
 
     return out.slice(0, 12);
-  }, [query, orders, products, leads, customers]);
+  }, [query, orders, products, leads, customers, quickActions]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'ArrowDown') {

@@ -1,14 +1,14 @@
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { selectWithOptionalPreferences, wantsOrderEmail } from '@/lib/notificationPreferences.mjs';
+import { mergeOrderEmailDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
 
 /**
  * Recipients of the "New Order Received" admin email.
  *
- * The base list comes from ORDER_NOTIFICATION_TO (the owner/ops inboxes, which
- * are not agent logins). Every agent in admin_profiles is added on top unless
- * their order_email_notifications flag is false, so a newly created agent is
- * subscribed automatically without touching an env var.
+ * The Notification Settings list covers standalone destinations. Every agent
+ * in admin_profiles is added on top unless their member-level order email flag
+ * is false, so a newly created agent can be controlled directly from Team
+ * Management.
  */
 
 const splitList = (value = '') => String(value || '')
@@ -22,32 +22,19 @@ export function getBaseOrderNotificationRecipients() {
   );
 }
 
-/** Case-insensitive dedupe that keeps the first spelling of each address. */
-function dedupeEmails(emails) {
-  const seen = new Set();
-  const unique = [];
-  for (const email of emails) {
-    const key = email.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(email);
-  }
-  return unique;
-}
-
 export async function getOrderNotificationRecipients() {
   const base = getBaseOrderNotificationRecipients();
 
-  let agents = [];
+  let managedAvailable = false;
+  let managedEmails = [];
+  let profiles = [];
   try {
     const supabase = getSupabaseAdmin();
 
-    // Once Notification Settings exists it is the whole answer — the env base
-    // list and the per-member toggles were seeded into it, so adding them again
-    // here would resurrect anyone removed on that screen.
     const managed = await getNotificationRecipients(supabase, { channel: 'email', type: 'new_order' });
     if (managed.available) {
-      return dedupeEmails(managed.recipients.map((entry) => entry.destination));
+      managedAvailable = true;
+      managedEmails = managed.recipients.map((entry) => entry.destination);
     }
 
     // Ask for the preference columns, but never let a missing one cost the team
@@ -63,14 +50,17 @@ export async function getOrderNotificationRecipients() {
 
     if (error) throw new Error(error.message);
 
-    // A null flag counts as subscribed — only an explicit false opts an agent out.
-    agents = (data || [])
-      .filter((profile) => profile?.email && wantsOrderEmail(profile))
-      .map((profile) => profile.email.trim());
+    profiles = data || [];
   } catch (err) {
-    // Falls back to the env list alone, so the owner inboxes still get the mail.
+    // Falls back to whichever list was already readable, so owner inboxes or
+    // managed destinations still get the mail.
     console.warn('[Order notification] Could not load agent recipients:', err.message);
   }
 
-  return dedupeEmails([...base, ...agents]);
+  return mergeOrderEmailDestinations({
+    base,
+    managed: managedEmails,
+    managedAvailable,
+    profiles,
+  });
 }

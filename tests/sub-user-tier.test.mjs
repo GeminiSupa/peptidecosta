@@ -135,6 +135,13 @@ test('the sub-user screen is not offered to staff', () => {
   assert.equal(resolveAdminTabAccess('my_earnings', MARIA), false);
 });
 
+test('the sub-user screen is not offered to superadmins', () => {
+  const superadmin = { ...MARIA, is_superadmin: true };
+
+  assert.equal(resolveAdminTabAccess('my_earnings', superadmin), false);
+  assert.equal(getDefaultAdminTab(superadmin), 'home');
+});
+
 test('Products is superadmin-only and is not assignable to staff', () => {
   const productsOnly = { ...MARIA, permissions: ['spreadsheet'] };
   const superadmin = { ...MARIA, is_superadmin: true, permissions: [] };

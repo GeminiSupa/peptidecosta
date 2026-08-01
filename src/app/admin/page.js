@@ -1433,6 +1433,14 @@ Core Rules:
     [orders]
   );
 
+  const canNavigateToTab = useCallback((tabId) => {
+    if (!ADMIN_TAB_IDS.has(tabId)) return false;
+    let targetTab = tabId;
+    if (tabId === 'facebook') targetTab = 'messenger';
+    if (profileLoading || !adminProfile) return false;
+    return resolveTabAccess(targetTab, adminProfile);
+  }, [adminProfile, profileLoading]);
+
   const navigateToTab = useCallback((tabId, linkRef = null, options = {}) => {
     if (!ADMIN_TAB_IDS.has(tabId)) return;
     let targetTab = tabId;
@@ -1441,6 +1449,7 @@ Core Rules:
       targetTab = 'messenger';
       nextFbView = 'alerts';
     }
+    if (!canNavigateToTab(tabId)) return;
     if (tabId === 'whatsapp_ai' && linkRef) {
       const waId = String(linkRef).replace(/\D/g, '');
       if (waId) setActiveChatWaId(waId);
@@ -1456,7 +1465,7 @@ Core Rules:
     if (targetTab === 'messenger' && nextFbView) query.set('view', nextFbView);
     if (linkRef) query.set('ref', String(linkRef));
     router.replace(`/admin?${query.toString()}`, { scroll: false });
-  }, [router]);
+  }, [canNavigateToTab, router]);
 
   const openCustomerProfileHandoff = useCallback((contact = {}) => {
     const lookupValue = contact.search || contact.customer_email || contact.user_email || contact.email || contact.customer_phone || contact.user_phone || contact.phone || contact.contact_value || contact.customer_name || contact.name || '';
@@ -1560,6 +1569,7 @@ Core Rules:
 
   useEffect(() => {
     if (!isAuthenticated) return;
+    if (isSubUserProfile) return;
     const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
@@ -1568,7 +1578,7 @@ Core Rules:
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isSubUserProfile]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -1637,7 +1647,6 @@ Core Rules:
       const isFirstLoadForUser = loadedProfileUserIdRef.current !== userId;
       if (isFirstLoadForUser) {
         fetchAdminProfile(userId, { showLoading: true });
-        loadAdminData();
       }
     };
 
@@ -1695,6 +1704,7 @@ Core Rules:
   // Supabase Realtime subscription for live sync across all tables
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase || !isAuthenticated) return;
+    if (isSubUserProfile) return;
 
     const channel = supabase
       .channel('admin-realtime-sync')
@@ -1749,7 +1759,7 @@ Core Rules:
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [isAuthenticated, adminProfile]);
+  }, [isAuthenticated, adminProfile, isSubUserProfile]);
 
   // Fetch list of files/images in the Supabase product-pics storage bucket
   const fetchBucketImages = async () => {
@@ -1811,6 +1821,28 @@ Core Rules:
 
   // Fetch admin products and orders
   const loadAdminData = async () => {
+    if (adminProfile && isSubUser(adminProfile)) {
+      setLoadingProducts(false);
+      setLoadingOrders(false);
+      setLoadingAbandonedCarts(false);
+      setLoadingReviews(false);
+      setLoadingLeads(false);
+      setLoadingBlogs(false);
+      setLoadingSettings(false);
+      setLoadingFbNotifications(false);
+      setLoadingWhatsappMessages(false);
+      setProducts([]);
+      setOrders([]);
+      setAbandonedCarts([]);
+      setReviews([]);
+      setLeads([]);
+      setBlogs([]);
+      setProductViews([]);
+      setFacebookNotifications([]);
+      setWhatsappMessages([]);
+      return;
+    }
+
     // Helper to bypass Supabase 1000 row limit
     const fetchAllRows = async (table, orderCol, ascending = false, matchEq = null) => {
       let allData = [];
@@ -2529,16 +2561,19 @@ Core Rules:
 
         handleCellChange(productId, 'imageUrl', publicUrl);
         fetchBucketImages(); // Refresh the list of images in the background
+        return publicUrl;
       } catch (err) {
         console.error("Storage upload error:", err);
         handleCellChange(productId, 'imageUrl', '');
         alert("Image upload failed. Please verify that your Supabase Storage bucket 'product-pics' exists and is set to public.");
+        return null;
       }
     } else {
       // Local simulation URL
       const dummyUrl = URL.createObjectURL(file);
       handleCellChange(productId, 'imageUrl', dummyUrl);
       alert("Local Simulation: Image loaded inside browser memory. To upload permanently, connect Supabase!");
+      return dummyUrl;
     }
   };
 
@@ -3649,7 +3684,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   };
 
   // Save changes batch
-  const handleSaveChanges = async () => {
+  const handleSaveChanges = async (productRows = products) => {
     setSaveLoading(true);
     setSaveStatus('');
 
@@ -3661,7 +3696,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     }
 
     // Keep legacy CRC columns synced from USD, while USD remains the source of truth.
-    const filled = products.map(p => {
+    const filled = productRows.map(p => {
       let newP = { ...p };
       if (newP.priceUsd) {
         const usdNum = parseFloat(String(newP.priceUsd).replace(/[^0-9.]/g, '')) || 0;
@@ -4357,16 +4392,20 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             >
               {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
             </button>
-            <button type="button" className="admin-search-trigger" onClick={() => setGlobalSearchOpen(true)}>
-              <Search size={14} />
-              <span className="admin-search-label">Search</span>
-              <kbd>⌘K</kbd>
-            </button>
-            <NotificationCenter
-              onNavigate={navigateToTab}
-              refreshKey={notifRefreshKey}
-              adminUserId={adminProfile?.user_id}
-            />
+            {!isSubUserProfile && (
+              <>
+                <button type="button" className="admin-search-trigger" onClick={() => setGlobalSearchOpen(true)}>
+                  <Search size={14} />
+                  <span className="admin-search-label">Search</span>
+                  <kbd>⌘K</kbd>
+                </button>
+                <NotificationCenter
+                  onNavigate={navigateToTab}
+                  refreshKey={notifRefreshKey}
+                  adminUserId={adminProfile?.user_id}
+                />
+              </>
+            )}
           </div>
         </div>
 
@@ -4461,7 +4500,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           </div>
           )}
 
-          {['carts','share','reviews','messenger','marketing','affiliates','deals','broadcasts'].some(hasAccess) && (
+          {['carts','share','reviews','messenger','marketing','affiliates','deals','my_qr','my_team','broadcasts'].some(hasAccess) && (
           <div className="admin-nav-section">
             <div className="admin-nav-section-title">Sales & Marketing</div>
             <div className="admin-nav-section-items">
@@ -5003,6 +5042,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             handleSendRecoveryEmail={handleSendRecoveryEmail}
             handleDeleteCart={handleDeleteCart}
             onOpenCustomerProfile={openCustomerProfileHandoff}
+            onWhatsAppClick={openWhatsAppComposer}
           />
             </ErrorBoundary>
           )
@@ -6898,14 +6938,17 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         />
       )}
 
-      <GlobalSearch
-        open={globalSearchOpen}
-        onClose={() => setGlobalSearchOpen(false)}
-        orders={visibleOrders}
-        products={products}
-        leads={leads}
-        onSelect={handleGlobalSearchSelect}
-      />
+      {!isSubUserProfile && (
+        <GlobalSearch
+          open={globalSearchOpen}
+          onClose={() => setGlobalSearchOpen(false)}
+          orders={visibleOrders}
+          products={canNavigateToTab('spreadsheet') ? products : []}
+          leads={leads}
+          canAccessTab={canNavigateToTab}
+          onSelect={handleGlobalSearchSelect}
+        />
+      )}
 
       <ManualOrderModal
         open={manualOrderOpen}

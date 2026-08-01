@@ -127,3 +127,66 @@ export function agentWhatsAppNumbers(profile) {
 export function agentWhatsAppNumber(profile) {
   return agentWhatsAppNumbers(profile)[0] || '';
 }
+
+const emailKey = (value) => String(value || '').trim().toLowerCase();
+
+function dedupeByKey(entries, keyFor) {
+  const seen = new Set();
+  const unique = [];
+  for (const entry of entries) {
+    const key = keyFor(entry);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(entry);
+  }
+  return unique;
+}
+
+/** Merge central order-email destinations with per-member email preferences. */
+export function mergeOrderEmailDestinations({
+  base = [],
+  managed = [],
+  managedAvailable = false,
+  profiles = [],
+} = {}) {
+  const startingList = managedAvailable ? managed : base;
+  const optedOut = new Set(
+    profiles
+      .filter((profile) => profile?.email && !wantsOrderEmail(profile))
+      .map((profile) => emailKey(profile.email))
+  );
+  const profileEmails = profiles
+    .filter((profile) => profile?.email && wantsOrderEmail(profile))
+    .map((profile) => String(profile.email).trim());
+
+  return dedupeByKey([...startingList, ...profileEmails], emailKey)
+    .filter((email) => !(managedAvailable && optedOut.has(emailKey(email))));
+}
+
+/** Merge central WhatsApp destinations with per-member WhatsApp preferences. */
+export function mergeOrderWhatsAppDestinations({
+  managed = [],
+  managedAvailable = false,
+  profiles = [],
+} = {}) {
+  const optedOut = new Set(
+    profiles
+      .filter((profile) => !wantsOrderWhatsApp(profile))
+      .flatMap(agentWhatsAppNumbers)
+  );
+  const managedEntries = managedAvailable
+    ? managed.map((entry) => ({
+        name: entry.label || entry.name || entry.destination || entry.phone,
+        phone: String(entry.destination || entry.phone || '').replace(/\D/g, ''),
+      }))
+    : [];
+  const profileEntries = profiles
+    .filter(wantsOrderWhatsApp)
+    .flatMap((profile) => agentWhatsAppNumbers(profile).map((phone) => ({
+      name: profile.name,
+      phone,
+    })));
+
+  return dedupeByKey([...managedEntries, ...profileEntries], (entry) => entry.phone)
+    .filter((entry) => entry.phone && !(managedAvailable && optedOut.has(entry.phone)));
+}
