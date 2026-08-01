@@ -644,40 +644,51 @@ export default function WhatsAppInbox({
     }
   }, [conversationRoutingAvailable, onConversationAction]);
 
+  const chatPassesInboxFilter = useCallback((chat) => {
+    if (inboxFilter === 'urgent') return chat.status !== 'resolved' && chat.direction === 'inbound' && getReplyWindow(chat.lastInboundAt, now).state === 'urgent';
+    if (inboxFilter === 'unread') return chat.status !== 'resolved' && hasUnread(chat);
+    if (inboxFilter === 'needs_reply') return chat.status !== 'resolved' && chat.direction === 'inbound';
+    if (inboxFilter === 'hot_cart') return chat.status !== 'resolved' && chat.stage === 'Cart';
+    if (inboxFilter === 'resolved') return chat.status === 'resolved';
+    return true;
+  }, [hasUnread, inboxFilter, now]);
+
+  const chatMatchesSearch = useCallback((chat) => {
+    const query = chatSearch.trim().toLowerCase();
+    if (!query) return true;
+    const digits = normalizePhone(query);
+    return (
+      chat.displayName.toLowerCase().includes(query) ||
+      chat.lastMessageText?.toLowerCase().includes(query) ||
+      (digits && chat.waId.includes(digits))
+    );
+  }, [chatSearch]);
+
+  const ownerCountChats = useMemo(
+    () => chatsList.filter((chat) => chatPassesInboxFilter(chat) && chatMatchesSearch(chat)),
+    [chatMatchesSearch, chatPassesInboxFilter, chatsList]
+  );
+
   const mineCount = useMemo(
-    () => chatsList.filter((chat) => getConversationOwner(chat.waId) === currentAgentKey).length,
-    [chatsList, currentAgentKey, getConversationOwner]
+    () => ownerCountChats.filter((chat) => getConversationOwner(chat.waId) === currentAgentKey).length,
+    [currentAgentKey, getConversationOwner, ownerCountChats]
   );
   const unassignedCount = useMemo(
-    () => chatsList.filter((chat) => getConversationOwner(chat.waId) === WA_UNASSIGNED_OWNER).length,
-    [chatsList, getConversationOwner]
+    () => ownerCountChats.filter((chat) => getConversationOwner(chat.waId) === WA_UNASSIGNED_OWNER).length,
+    [getConversationOwner, ownerCountChats]
   );
 
   const filteredChats = useMemo(() => {
-    let result = chatsList;
+    let result = ownerCountChats;
     if (ownerFilter === 'mine') result = result.filter((chat) => getConversationOwner(chat.waId) === currentAgentKey);
     if (ownerFilter === 'unassigned') result = result.filter((chat) => getConversationOwner(chat.waId) === WA_UNASSIGNED_OWNER);
-    if (inboxFilter === 'urgent') result = result.filter((chat) => chat.status !== 'resolved' && chat.direction === 'inbound' && getReplyWindow(chat.lastInboundAt, now).state === 'urgent');
-    if (inboxFilter === 'unread') result = result.filter((chat) => chat.status !== 'resolved' && hasUnread(chat));
-    if (inboxFilter === 'needs_reply') result = result.filter((chat) => chat.status !== 'resolved' && chat.direction === 'inbound');
-    if (inboxFilter === 'hot_cart') result = result.filter((chat) => chat.status !== 'resolved' && chat.stage === 'Cart');
-    if (inboxFilter === 'resolved') result = result.filter((chat) => chat.status === 'resolved');
-    const query = chatSearch.trim().toLowerCase();
-    if (query) {
-      const digits = normalizePhone(query);
-      result = result.filter((chat) =>
-        chat.displayName.toLowerCase().includes(query) ||
-        chat.lastMessageText?.toLowerCase().includes(query) ||
-        (digits && chat.waId.includes(digits))
-      );
-    }
     return [...result].sort((a, b) => {
       const aPriority = getPriorityScore(a, hasUnread(a), getReplyWindow(a.lastInboundAt, now));
       const bPriority = getPriorityScore(b, hasUnread(b), getReplyWindow(b.lastInboundAt, now));
       if (aPriority !== bPriority) return aPriority - bPriority;
       return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
     });
-  }, [chatSearch, chatsList, currentAgentKey, getConversationOwner, hasUnread, inboxFilter, now, ownerFilter]);
+  }, [currentAgentKey, getConversationOwner, hasUnread, now, ownerCountChats, ownerFilter]);
 
   const visibleChats = filteredChats.slice(0, visibleChatCount);
 
@@ -912,16 +923,17 @@ export default function WhatsAppInbox({
     { id: 'all', label: 'All', count: chatsList.length },
   ];
   const ownerTabs = [
-    { id: 'all', label: 'All', count: chatsList.length },
+    { id: 'all', label: 'All', count: ownerCountChats.length },
     { id: 'mine', label: 'Mine', count: mineCount },
     { id: 'unassigned', label: 'Open', count: unassignedCount },
   ];
+  const activeFilterLabel = filterTabs.find((tab) => tab.id === inboxFilter)?.label || 'this view';
   const emptyCopy = chatSearch
     ? 'No conversations match your search.'
     : ownerFilter === 'mine'
-      ? 'No conversations are assigned to you yet.'
+      ? `No conversations assigned to you in ${activeFilterLabel}. Try All.`
       : ownerFilter === 'unassigned'
-        ? 'No open unassigned conversations right now.'
+        ? `No unassigned conversations in ${activeFilterLabel}. Try All.`
     : inboxFilter === 'needs_reply'
       ? 'No customers are waiting for a reply.'
       : inboxFilter === 'urgent'
