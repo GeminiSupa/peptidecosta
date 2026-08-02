@@ -5506,9 +5506,13 @@ body:has(.product-grid.grid-view) {
 /* The single-outlet band was a fixed 3-column grid. With more than one outlet
    the middle column can no longer be a fixed fraction, so the multi variant
    lays out as a flex row and lets the quote absorb the leftover space. */
+/* Centred, not flex-start: the band is as wide as the trust-badge row above it,
+   so left-packing the label and logos left a dead gap on the right and read as
+   misaligned against those badges. With two outlets there is no quote left to
+   absorb that space, so the group has to centre itself. */
 .press-band--multi.catalog-press-band {
     display: flex;
-    justify-content: flex-start;
+    justify-content: center;
     gap: 14px;
 }
 
