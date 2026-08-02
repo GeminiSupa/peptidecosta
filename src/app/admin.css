@@ -5910,14 +5910,15 @@
 
 .admin-quick-nav-btn {
     position: relative;
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 3px;
-    min-height: 52px;
-    padding: 6px 4px;
+    min-height: 56px;
+    padding: 7px 4px 6px;
     background: transparent;
     border: none;
     color: #64748b;
@@ -5926,6 +5927,13 @@
     cursor: pointer;
     border-radius: 10px;
     transition: color 0.2s, background 0.2s;
+}
+
+.admin-quick-nav-btn span:not(.admin-quick-nav-badge) {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .admin-quick-nav-btn.active {
@@ -5966,6 +5974,10 @@
 
 .admin-quick-nav-badge.warning {
     background: #f59e0b;
+}
+
+.admin-quick-nav-badge.success {
+    background: #10b981;
 }
 
 /* More sections sheet */
@@ -6080,7 +6092,8 @@
         z-index: 200;
         background: rgba(11, 19, 43, 0.82);
         border-top: 1px solid rgba(255, 255, 255, 0.08);
-        padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+        gap: 2px;
+        padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
         backdrop-filter: blur(16px) saturate(180%);
         -webkit-backdrop-filter: blur(16px) saturate(180%);
         box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.4);
@@ -6225,23 +6238,27 @@
     }
 
     .admin-more-group-items {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
     }
 
     .admin-more-tab-btn {
-        display: inline-flex;
+        display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 6px;
         padding: 10px 14px;
         min-height: 44px;
+        width: 100%;
+        min-width: 0;
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.06);
         border-radius: 10px;
         color: #cbd5e1;
         font-size: 0.82rem;
         font-weight: 700;
+        text-align: left;
         cursor: pointer;
     }
 

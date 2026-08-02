@@ -1540,6 +1540,86 @@ Core Rules:
     router.replace(`/admin?${query.toString()}`, { scroll: false });
   }, [canNavigateToTab, router]);
 
+  const pendingOrderCount = visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length;
+  const mobilePrimaryTabIds = (
+    isSubUserProfile
+      ? ['my_earnings', 'my_qr', 'team_chat']
+      : adminProfile?.is_superadmin
+        ? ['home', 'orders', 'whatsapp_ai', 'spreadsheet']
+        : ['orders', 'whatsapp_ai', 'carts', 'customers', 'leads', 'team_chat', 'home']
+  ).filter((tabId) => hasAccess(tabId)).slice(0, 4);
+
+  const mobileTabMeta = {
+    home: {
+      label: isStaffAgent ? 'Today' : 'Home',
+      icon: <LayoutDashboard size={18} />,
+    },
+    orders: {
+      label: 'Orders',
+      icon: <ClipboardList size={18} />,
+      badge: pendingOrderCount,
+    },
+    whatsapp_ai: {
+      label: 'WhatsApp',
+      icon: <MessageSquare size={18} />,
+      badge: unreadWaCount,
+    },
+    spreadsheet: {
+      label: 'Products',
+      icon: <Table size={18} />,
+    },
+    customers: {
+      label: 'Customers',
+      icon: <Users size={18} />,
+    },
+    carts: {
+      label: 'Carts',
+      icon: <ShoppingCart size={18} />,
+      badge: abandonedCarts.length,
+      badgeTone: 'warning',
+    },
+    leads: {
+      label: 'Leads',
+      icon: <Target size={18} />,
+      badge: leads.length,
+      badgeTone: 'success',
+    },
+    team_chat: {
+      label: 'Team',
+      icon: <MessageCircle size={18} />,
+      badge: unreadTeamMsgCount,
+    },
+    my_earnings: {
+      label: 'Earnings',
+      icon: <Wallet size={18} />,
+    },
+    my_qr: {
+      label: 'My Link',
+      icon: <QrCode size={18} />,
+    },
+  };
+
+  const renderMobileQuickTab = (tabId) => {
+    const meta = mobileTabMeta[tabId];
+    if (!meta) return null;
+    return (
+      <button
+        key={tabId}
+        type="button"
+        className={`admin-quick-nav-btn${activeTab === tabId ? ' active' : ''}`}
+        onClick={() => navigateToTab(tabId)}
+      >
+        {meta.icon}
+        <span>{meta.label}</span>
+        {meta.badge > 0 && (
+          <span className={`admin-quick-nav-badge${meta.badgeTone ? ` ${meta.badgeTone}` : ''}`}>
+            {meta.badge}
+          </span>
+        )}
+      </button>
+    );
+  };
+
   const openCustomerProfileHandoff = useCallback((contact = {}) => {
     const lookupValue = contact.search || contact.customer_email || contact.user_email || contact.email || contact.customer_phone || contact.user_phone || contact.phone || contact.contact_value || contact.customer_name || contact.name || '';
     if (lookupValue) {
@@ -5704,7 +5784,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <div className="cms-preview-card">
                 <div className="cms-panel-kicker">Publish safety</div>
                 <ul>
-                  <li>URLs must use full http:// or https:// links.</li>
+                  <li>Use full https:// links for external URLs; internal links can start with /.</li>
                   <li>Changes stay in draft fields until you press Save.</li>
                   <li>Blog posts still use their own published toggle.</li>
                 </ul>
@@ -5735,19 +5815,21 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
 
                     <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
-                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Header Banner</h4>
+                      <h4 style={{ margin: '0 0 8px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Running Promo Ticker</h4>
+                      <p style={{ margin: '0 0 12px 0', color: '#94a3b8', fontSize: '0.76rem', lineHeight: 1.45 }}>
+                        Shows as the moving blue banner on the landing page and catalog. Use plain text or a Markdown link; the storefront cleans it automatically.
+                      </p>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#cbd5e1', fontSize: '0.82rem', marginBottom: '12px' }}>
                         <input
                           type="checkbox"
                           checked={Boolean(siteSettings.bannerActive)}
                           onChange={(e) => updateLandingSetting('bannerActive', e.target.checked)}
                         />
-                        Show promo/free-shipping ticker
+                        Show running promo ticker
                       </label>
                       {cmsField('Ticker text EN', 'bannerTextEn')}
                       {cmsField('Ticker text ES', 'bannerTextEs')}
-                      {cmsField('Top blue bar text EN', 'topBarTextEn')}
-                      {cmsField('Top blue bar text ES', 'topBarTextEs')}
+                      {cmsField('Banner link URL', 'catalogBannerUrl', '/catalog')}
                     </div>
 
                     <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
@@ -5770,22 +5852,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {cmsField('Primary CTA ES', 'primaryCtaEs')}
                       {cmsField('WhatsApp CTA EN', 'secondaryCtaEn')}
                       {cmsField('WhatsApp CTA ES', 'secondaryCtaEs')}
-                    </div>
-
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
-                      <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Catalog Promo Banner</h4>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#cbd5e1', fontSize: '0.82rem', marginBottom: '12px' }}>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(siteSettings.catalogBannerActive)}
-                          onChange={(e) => updateLandingSetting('catalogBannerActive', e.target.checked)}
-                        />
-                        Show catalog promo banner on landing page
-                      </label>
-                      {cmsField('Banner image URL', 'catalogBannerImageUrl', '/catalog-promo-banner.webp')}
-                      {cmsField('Banner link URL', 'catalogBannerUrl', '/catalog')}
-                      {cmsField('Banner alt text EN', 'catalogBannerAltEn')}
-                      {cmsField('Banner alt text ES', 'catalogBannerAltEs')}
                     </div>
 
                     <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
@@ -7617,94 +7683,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
       {/* Mobile bottom quick navigation */}
       <nav className="admin-mobile-quick-nav" aria-label="Quick navigation">
-        {hasAccess('home') && (
-          <button
-            type="button"
-            className={`admin-quick-nav-btn${activeTab === 'home' ? ' active' : ''}`}
-            onClick={() => navigateToTab('home')}
-          >
-            <LayoutDashboard size={18} />
-            <span>{isStaffAgent ? 'My Pay' : 'Today'}</span>
-          </button>
-        )}
-        {hasAccess('orders') && (
-          <button
-            type="button"
-            className={`admin-quick-nav-btn${activeTab === 'orders' ? ' active' : ''}`}
-            onClick={() => navigateToTab('orders')}
-          >
-            <ClipboardList size={18} />
-            <span>Orders</span>
-            {visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length > 0 && (
-              <span className="admin-quick-nav-badge">
-                {visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length}
-              </span>
-            )}
-          </button>
-        )}
-        {hasAccess('carts') && (
-          <button
-            type="button"
-            className={`admin-quick-nav-btn${activeTab === 'carts' ? ' active' : ''}`}
-            onClick={() => navigateToTab('carts')}
-          >
-            <ShoppingCart size={18} />
-            <span>Carts</span>
-            {abandonedCarts.length > 0 && (
-              <span className="admin-quick-nav-badge warning">{abandonedCarts.length}</span>
-            )}
-          </button>
-        )}
-        {hasAccess('whatsapp_ai') && (
-          <button
-            type="button"
-            className={`admin-quick-nav-btn${activeTab === 'whatsapp_ai' ? ' active' : ''}`}
-            onClick={() => navigateToTab('whatsapp_ai')}
-          >
-            <MessageSquare size={18} />
-            <span>Chat</span>
-            {unreadWaCount > 0 && (
-              <span className="admin-quick-nav-badge">{unreadWaCount}</span>
-            )}
-          </button>
-        )}
-        {hasAccess('team_chat') && (
-          <button
-            type="button"
-            className={`admin-quick-nav-btn${activeTab === 'team_chat' ? ' active' : ''}`}
-            onClick={() => navigateToTab('team_chat')}
-          >
-            <MessageCircle size={18} />
-            <span>Team</span>
-            {unreadTeamMsgCount > 0 && (
-              <span className="admin-quick-nav-badge">{unreadTeamMsgCount}</span>
-            )}
-          </button>
-        )}
-        {/* A sub-user has access to none of the five buttons above, so without
-            these two their phone shows a bottom bar containing only "More".
-            my_qr is gated on the tier as well, otherwise every staff member
-            would gain a bottom tab they never asked for. */}
-        {hasAccess('my_earnings') && (
-          <button
-            type="button"
-            className={`admin-quick-nav-btn${activeTab === 'my_earnings' ? ' active' : ''}`}
-            onClick={() => navigateToTab('my_earnings')}
-          >
-            <Wallet size={18} />
-            <span>Earnings</span>
-          </button>
-        )}
-        {isSubUserProfile && hasAccess('my_qr') && (
-          <button
-            type="button"
-            className={`admin-quick-nav-btn${activeTab === 'my_qr' ? ' active' : ''}`}
-            onClick={() => navigateToTab('my_qr')}
-          >
-            <QrCode size={18} />
-            <span>My Link</span>
-          </button>
-        )}
+        {mobilePrimaryTabIds.map(renderMobileQuickTab)}
         <button
           type="button"
           className={`admin-quick-nav-btn${mobileMoreOpen ? ' active' : ''}`}
