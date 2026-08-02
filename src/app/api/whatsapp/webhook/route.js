@@ -71,6 +71,7 @@ export async function POST(request) {
           const messageText = msg?.text?.body || '';
           const messageType = msg?.type || 'text';
           const timestamp = msg?.timestamp;
+          const receivedAt = new Date().toISOString();
 
           // Get display name from contacts array
           const contact = contacts.find(c => c.wa_id === waId);
@@ -189,12 +190,13 @@ export async function POST(request) {
             const { error: conversationError } = await upsertWhatsAppConversation(supabase, {
               waId,
               displayName,
-              messageAt: timestamp ? new Date(Number(timestamp) * 1000).toISOString() : null,
+              messageAt: receivedAt,
               direction: 'inbound',
               source: 'cloud_api',
               matchedOrderId,
               metadata: {
                 webhook_message_id: msg.id || null,
+                webhook_timestamp: timestamp || null,
               },
             });
             if (conversationError) {

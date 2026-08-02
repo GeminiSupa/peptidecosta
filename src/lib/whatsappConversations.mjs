@@ -113,10 +113,22 @@ export function conversationVisibleToProfile(conversation, profile) {
   return !owner || owner === profile.user_id;
 }
 
+function latestIsoTimestamp(...values) {
+  const timestamps = values
+    .map((value) => {
+      const ms = new Date(value || 0).getTime();
+      return Number.isFinite(ms) ? ms : null;
+    })
+    .filter((value) => value !== null);
+
+  if (!timestamps.length) return null;
+  return new Date(Math.max(...timestamps)).toISOString();
+}
+
 export async function upsertWhatsAppConversation(supabase, {
   waId,
   displayName = null,
-  direction = 'inbound',
+  direction = null,
   messageAt = null,
   matchedOrderId = null,
   source = 'cloud_api',
@@ -146,7 +158,6 @@ export async function upsertWhatsAppConversation(supabase, {
   const patch = {
     wa_id: cleanWaId,
     source: existing?.source || source || 'cloud_api',
-    last_message_at: lastAt,
     updated_at: nowIso,
     metadata: {
       ...(existing?.metadata && typeof existing.metadata === 'object' ? existing.metadata : {}),
@@ -156,11 +167,16 @@ export async function upsertWhatsAppConversation(supabase, {
 
   if (displayName) patch.display_name = displayName;
   if (matchedOrderId) patch.matched_order_id = matchedOrderId;
+  if (direction === 'inbound' || direction === 'outbound') {
+    patch.last_message_at = latestIsoTimestamp(existing?.last_message_at, lastAt);
+  }
   if (direction === 'inbound') {
-    patch.last_inbound_at = lastAt;
+    patch.last_inbound_at = latestIsoTimestamp(existing?.last_inbound_at, lastAt);
     if (existing?.status === 'resolved') patch.status = 'open';
   }
-  if (direction === 'outbound') patch.last_outbound_at = lastAt;
+  if (direction === 'outbound') {
+    patch.last_outbound_at = latestIsoTimestamp(existing?.last_outbound_at, lastAt);
+  }
 
   if (!existing?.assigned_to) {
     const owner = await findRoutingOwner(supabase, cleanWaId, matchedOrderId);
