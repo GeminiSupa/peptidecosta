@@ -42,9 +42,8 @@ import {
   CreditCard, MessageCircle, Lock, Share2
 } from 'lucide-react';
 import PressBand from '@/components/PressBand';
-import PromoTicker from '@/components/PromoTicker';
+import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import { mergeLandingPageSettings } from '@/lib/landingContent';
-import { normalizeBannerCopy, replaceUsdPlaceholders } from '@/lib/bannerText';
 import { readCatalogParams, resolveCategoryParam, compareBySaleAndStock } from '@/lib/catalogFilters.mjs';
 
 // const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
@@ -312,13 +311,6 @@ export default function CatalogPage() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState(false);
 
-  // CMS Settings State
-  const [cmsSettings, setCmsSettings] = useState({
-    bannerActive: true,
-    bannerTextEn: "Volume Discount: Buy 5+ vials get 15% off, buy 10+ vials get 20% off! Mix & match allowed. • 🚚 FREE SHIPPING ON ORDERS OVER $200!",
-    bannerTextEs: "Descuento por Volumen: ¡Compra 5+ viales y recibe 15% de descuento, compra 10+ viales y recibe 20%! Puedes combinar diferentes productos. • 🚚 ¡ENVÍO GRATIS EN PEDIDOS SUPERIORES A $200!"
-  });
-
   // Access Gate States
   const [gateAccessGranted, setGateAccessGranted] = useState(false); // Default false for security, updated in useEffect
   const [gateLoading, setGateLoading] = useState(true);
@@ -468,48 +460,8 @@ export default function CatalogPage() {
     async function loadSettings() {
       if (!isSupabaseConfigured || !supabase) return;
       try {
-        let bannerActive = false;
-        let bannerTextEn = '';
-        let bannerTextEs = '';
-
-        // Check landing_page banner (managed in Admin UI)
         const { data: lpData } = await supabase.from('site_settings').select('value').eq('id', 'landing_page').single();
         setLandingSettings(mergeLandingPageSettings(lpData?.value));
-        if (lpData && lpData.value && lpData.value.bannerActive) {
-          let isValid = true;
-          if (lpData.value.linkedPromoCode) {
-            const { data: promo } = await supabase.from('promo_codes').select('valid_until, is_active').eq('code', lpData.value.linkedPromoCode.toUpperCase()).single();
-            if (promo) {
-              if (promo.valid_until && new Date(promo.valid_until) < new Date()) {
-                isValid = false;
-              } else if (!promo.is_active) {
-                isValid = false;
-              }
-            } else {
-              isValid = false;
-            }
-          }
-          if (isValid) {
-            bannerActive = true;
-            bannerTextEn = lpData.value.bannerTextEn || '';
-            bannerTextEs = lpData.value.bannerTextEs || '';
-          }
-        }
-
-        // Check announcement_banners (secondary source)
-        const { data } = await supabase.from('site_settings').select('value').eq('id', 'announcement_banners').single();
-        if (data && Array.isArray(data.value)) {
-          const activeBanners = data.value.filter(b => b.isActive);
-          if (activeBanners.length > 0) {
-            bannerActive = true;
-            const annEn = activeBanners.map(b => b.textEn).join("  🌟  ");
-            const annEs = activeBanners.map(b => b.textEs).join("  🌟  ");
-            bannerTextEn = bannerTextEn ? `${bannerTextEn}  🌟  ${annEn}` : annEn;
-            bannerTextEs = bannerTextEs ? `${bannerTextEs}  🌟  ${annEs}` : annEs;
-          }
-        }
-
-        setCmsSettings(prev => ({ ...prev, bannerActive, bannerTextEn, bannerTextEs }));
 
         // Load list of products hidden from the catalog by admin (hidden, not deleted)
         try {
@@ -2914,25 +2866,7 @@ export default function CatalogPage() {
 
   return (
     <div id="app" className="min-h-screen" suppressHydrationWarning>
-      {/* Global Promo Banner */}
-      {(() => {
-        const parseBannerText = (text) => {
-          if (!text) return '';
-          return replaceUsdPlaceholders(text, (usdAmount) => {
-            if (currency === 'USD') return `$${usdAmount.toLocaleString()}`;
-            const crcAmount = Math.round(usdAmount * exchangeRate);
-            return `₡${crcAmount.toLocaleString()}`;
-          });
-        };
-        const rawBannerText = cmsSettings?.bannerActive
-          ? (lang === 'en' ? parseBannerText(cmsSettings.bannerTextEn) : parseBannerText(cmsSettings.bannerTextEs))
-          : '';
-        const banner = normalizeBannerCopy(rawBannerText);
-
-        return cmsSettings?.bannerActive && (
-          <PromoTicker active text={banner.text} href={banner.href} />
-        );
-      })()}
+      <CatalogPromoBanner lang={lang} settings={landingSettings} forceActive mode="ticker" />
       {/* Static Top Header Section */}
       <header className="header-top-section">
         <div className="header-top container">
