@@ -177,6 +177,14 @@
 
 .admin-tab-btn .tab-label {
     display: inline;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-tab-btn svg {
+    flex-shrink: 0;
 }
 
 .admin-tab-btn:hover {
@@ -198,6 +206,12 @@
     border-radius: 6px;
     font-weight: 800;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    flex-shrink: 0;
+    margin-left: auto;
 }
 
 .admin-logout-btn {
@@ -1999,6 +2013,88 @@
         box-shadow: inset 1px 0 0 rgba(255,255,255,0.1) !important;
         font-weight: 800 !important;
     }
+
+    .admin-nav-sections--desktop-focused {
+        gap: 14px !important;
+    }
+
+    .admin-nav-section--primary .admin-nav-section-title {
+        color: #7dd3fc !important;
+    }
+
+    .admin-nav-section--primary .admin-tab-btn:not(.active) {
+        background: rgba(255, 255, 255, 0.018) !important;
+        border-color: rgba(255, 255, 255, 0.03) !important;
+    }
+
+    .admin-nav-section--primary .admin-tab-btn {
+        min-height: 44px !important;
+    }
+
+    .admin-tab-btn .tab-label {
+        flex: 1 1 auto !important;
+    }
+
+    .admin-tab-btn .tab-count,
+    .admin-tab-btn .admin-more-tab-badge {
+        margin-left: auto !important;
+    }
+
+    .admin-nav-more-tools {
+        border-top: 1px solid rgba(148, 163, 184, 0.12) !important;
+        margin-top: 2px !important;
+        padding-top: 10px !important;
+    }
+
+    .admin-nav-more-tools summary {
+        min-height: 38px !important;
+        padding: 9px 12px !important;
+        border-radius: 10px !important;
+        color: #94a3b8 !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 8px !important;
+        font-size: 0.72rem !important;
+        font-weight: 800 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.06em !important;
+        list-style: none !important;
+        transition: background 0.2s, color 0.2s !important;
+    }
+
+    .admin-nav-more-tools summary::-webkit-details-marker {
+        display: none !important;
+    }
+
+    .admin-nav-more-tools summary:hover {
+        background: rgba(255, 255, 255, 0.05) !important;
+        color: #e2e8f0 !important;
+    }
+
+    .admin-nav-more-tools summary svg {
+        flex-shrink: 0 !important;
+        transition: transform 0.2s ease !important;
+    }
+
+    .admin-nav-more-tools[open] summary svg {
+        transform: rotate(180deg) !important;
+    }
+
+    .admin-nav-more-groups {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 14px !important;
+        margin-top: 10px !important;
+    }
+
+    .admin-nav-section--secondary .admin-tab-btn {
+        min-height: 38px !important;
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+        font-size: 0.8rem !important;
+    }
     
     .admin-sidebar-footer {
         display: flex !important;
@@ -2163,6 +2259,7 @@
     .admin-sidebar-collapsed .admin-search-label,
     .admin-sidebar-collapsed .admin-search-trigger kbd,
     .admin-sidebar-collapsed .admin-nav-section-title,
+    .admin-sidebar-collapsed .admin-nav-more-tools summary span,
     .admin-sidebar-collapsed .admin-tab-btn .tab-label,
     .admin-sidebar-collapsed .admin-user-details {
         display: none !important;
@@ -2177,6 +2274,8 @@
     .admin-sidebar-collapsed .admin-navbar:focus-within .admin-search-label,
     .admin-sidebar-collapsed .admin-navbar:hover .admin-search-trigger kbd,
     .admin-sidebar-collapsed .admin-navbar:focus-within .admin-search-trigger kbd,
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-nav-more-tools summary span,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-nav-more-tools summary span,
     .admin-sidebar-collapsed .admin-navbar:hover .admin-tab-btn .tab-label,
     .admin-sidebar-collapsed .admin-navbar:focus-within .admin-tab-btn .tab-label {
         display: inline !important;
@@ -2264,6 +2363,22 @@
         border-radius: 12px !important;
     }
 
+    .admin-sidebar-collapsed .admin-nav-more-tools {
+        width: 100% !important;
+    }
+
+    .admin-sidebar-collapsed .admin-nav-more-tools summary {
+        width: 44px !important;
+        min-height: 42px !important;
+        padding: 0 !important;
+        justify-content: center !important;
+        margin: 0 auto !important;
+    }
+
+    .admin-sidebar-collapsed .admin-nav-more-groups {
+        display: none !important;
+    }
+
     .admin-sidebar-collapsed .admin-navbar:hover .admin-tab-btn,
     .admin-sidebar-collapsed .admin-navbar:focus-within .admin-tab-btn {
         width: 100% !important;
@@ -2272,6 +2387,20 @@
         justify-content: flex-start !important;
         border-left-width: 3px !important;
         border-radius: 10px !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-nav-more-tools summary,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-nav-more-tools summary {
+        width: 100% !important;
+        min-height: 38px !important;
+        padding: 9px 12px !important;
+        justify-content: space-between !important;
+        margin: 0 !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-nav-more-groups,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-nav-more-groups {
+        display: flex !important;
     }
 
     .admin-sidebar-collapsed .admin-tab-btn:hover {

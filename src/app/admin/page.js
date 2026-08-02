@@ -1541,6 +1541,138 @@ Core Rules:
   }, [canNavigateToTab, router]);
 
   const pendingOrderCount = visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length;
+  const pendingReviewCount = reviews.filter((r) => r.status === 'Pending').length;
+  const unreadFacebookCount = facebookNotifications.filter((n) => n.status === 'unread').length;
+  const makeAdminTabMeta = (iconSize = 14) => ({
+    home: {
+      label: isStaffAgent ? 'Today' : 'Home',
+      icon: <LayoutDashboard size={iconSize} />,
+    },
+    my_earnings: {
+      label: 'Earnings',
+      icon: <Wallet size={iconSize} />,
+    },
+    spreadsheet: {
+      label: 'Products',
+      icon: <Table size={iconSize} />,
+    },
+    orders: {
+      label: 'Orders',
+      icon: <ClipboardList size={iconSize} />,
+      badge: pendingOrderCount,
+      badgeTone: 'danger',
+    },
+    customers: {
+      label: 'Customers',
+      icon: <Users size={iconSize} />,
+    },
+    inquiries: {
+      label: 'Inquiries',
+      icon: <Inbox size={iconSize} />,
+      badge: inquiryCount,
+    },
+    leads: {
+      label: 'Leads',
+      icon: <Target size={iconSize} />,
+      badge: leads.length,
+      badgeTone: 'success',
+    },
+    carts: {
+      label: 'Carts',
+      icon: <ShoppingCart size={iconSize} />,
+      badge: abandonedCarts.length,
+      badgeTone: 'warning',
+    },
+    share: {
+      label: 'Campaign Links',
+      icon: <Link2 size={iconSize} />,
+    },
+    reviews: {
+      label: 'Reviews',
+      icon: <Star size={iconSize} />,
+      badge: pendingReviewCount,
+      badgeTone: 'info',
+    },
+    messenger: {
+      label: 'Facebook Inbox',
+      icon: <FacebookIcon size={iconSize} style={{ color: activeTab === 'messenger' ? 'inherit' : '#1877f2' }} />,
+      badge: unreadFacebookCount,
+      badgeTone: 'info',
+    },
+    marketing: {
+      label: 'Marketing Studio',
+      icon: <Mail size={iconSize} />,
+    },
+    affiliates: {
+      label: 'Affiliates',
+      icon: <UserPlus size={iconSize} />,
+    },
+    deals: {
+      label: 'Deal of the Week',
+      icon: <Zap size={iconSize} />,
+    },
+    my_qr: {
+      label: 'My QR & Scans',
+      icon: <QrCode size={iconSize} />,
+    },
+    my_team: {
+      label: adminProfile?.is_superadmin ? 'Sub-Users' : 'My Team',
+      icon: <Users size={iconSize} />,
+    },
+    broadcasts: {
+      label: 'Announcements',
+      icon: <Megaphone size={iconSize} />,
+    },
+    analytics: {
+      label: 'Analytics',
+      icon: <BarChart2 size={iconSize} />,
+    },
+    cms: {
+      label: 'CMS',
+      icon: <FileText size={iconSize} />,
+    },
+    whatsapp_ai: {
+      label: 'Sales WhatsApp',
+      icon: <MessageSquare size={iconSize} style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981' }} />,
+      badge: unreadWaCount,
+    },
+    wa_session: {
+      label: 'WhatsApp Device',
+      icon: <Smartphone size={iconSize} style={{ color: activeTab === 'wa_session' ? 'inherit' : '#34d399' }} />,
+    },
+    team: {
+      label: 'Team',
+      icon: <Shield size={iconSize} />,
+    },
+    team_chat: {
+      label: 'Team Chat',
+      icon: <MessageCircle size={iconSize} />,
+      badge: unreadTeamMsgCount,
+    },
+  });
+
+  const desktopTabMeta = makeAdminTabMeta(14);
+  const baseMobileTabMeta = makeAdminTabMeta(18);
+  const mobileTabMeta = {
+    ...baseMobileTabMeta,
+    whatsapp_ai: { ...baseMobileTabMeta.whatsapp_ai, label: 'WhatsApp' },
+    wa_session: { ...baseMobileTabMeta.wa_session, label: 'Device' },
+    my_qr: { ...baseMobileTabMeta.my_qr, label: 'My Link' },
+    team_chat: { ...baseMobileTabMeta.team_chat, label: 'Team' },
+  };
+  const desktopPrimaryTabIds = (
+    isSubUserProfile
+      ? ['my_earnings', 'my_qr', 'team_chat']
+      : ['home', 'orders', 'whatsapp_ai', 'spreadsheet', 'customers', 'carts']
+  ).filter((tabId) => hasAccess(tabId));
+  const desktopSecondaryGroups = [
+    { title: 'Customer Work', tabs: ['inquiries', 'leads', 'messenger'] },
+    { title: 'Marketing', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'my_qr', 'my_team'] },
+    { title: 'Admin Tools', tabs: ['analytics', 'cms', 'wa_session', 'team', 'team_chat'] },
+  ].map((group) => ({
+    ...group,
+    tabs: group.tabs.filter((tabId) => hasAccess(tabId) && !desktopPrimaryTabIds.includes(tabId)),
+  })).filter((group) => group.tabs.length > 0);
   const mobilePrimaryTabIds = (
     isSubUserProfile
       ? ['my_earnings', 'my_qr', 'team_chat']
@@ -1549,54 +1681,32 @@ Core Rules:
         : ['orders', 'whatsapp_ai', 'carts', 'customers', 'leads', 'team_chat', 'home']
   ).filter((tabId) => hasAccess(tabId)).slice(0, 4);
 
-  const mobileTabMeta = {
-    home: {
-      label: isStaffAgent ? 'Today' : 'Home',
-      icon: <LayoutDashboard size={18} />,
-    },
-    orders: {
-      label: 'Orders',
-      icon: <ClipboardList size={18} />,
-      badge: pendingOrderCount,
-    },
-    whatsapp_ai: {
-      label: 'WhatsApp',
-      icon: <MessageSquare size={18} />,
-      badge: unreadWaCount,
-    },
-    spreadsheet: {
-      label: 'Products',
-      icon: <Table size={18} />,
-    },
-    customers: {
-      label: 'Customers',
-      icon: <Users size={18} />,
-    },
-    carts: {
-      label: 'Carts',
-      icon: <ShoppingCart size={18} />,
-      badge: abandonedCarts.length,
-      badgeTone: 'warning',
-    },
-    leads: {
-      label: 'Leads',
-      icon: <Target size={18} />,
-      badge: leads.length,
-      badgeTone: 'success',
-    },
-    team_chat: {
-      label: 'Team',
-      icon: <MessageCircle size={18} />,
-      badge: unreadTeamMsgCount,
-    },
-    my_earnings: {
-      label: 'Earnings',
-      icon: <Wallet size={18} />,
-    },
-    my_qr: {
-      label: 'My Link',
-      icon: <QrCode size={18} />,
-    },
+  const badgeClassForTone = (tone) => {
+    if (tone === 'danger') return 'badge-danger';
+    if (tone === 'warning') return 'badge-warning';
+    if (tone === 'success') return 'badge-success';
+    if (tone === 'info') return 'badge-info';
+    return '';
+  };
+
+  const renderDesktopNavButton = (tabId) => {
+    const meta = desktopTabMeta[tabId];
+    if (!meta) return null;
+    return (
+      <button
+        key={tabId}
+        className={`admin-tab-btn ${activeTab === tabId ? 'active' : ''}`}
+        onClick={() => navigateToTab(tabId)}
+      >
+        {meta.icon}
+        <span className="tab-label">{meta.label}</span>
+        {meta.badge > 0 && (
+          <span className={`tab-count ${badgeClassForTone(meta.badgeTone)}`}>
+            {meta.badge}
+          </span>
+        )}
+      </button>
+    );
   };
 
   const renderMobileQuickTab = (tabId) => {
@@ -4528,284 +4638,38 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         </div>
 
         <div className="admin-nav-scroll-wrap">
-        <div className="admin-nav-sections">
-          <div className="admin-nav-section">
-            <div className="admin-nav-section-title">Overview</div>
-            <div className="admin-nav-section-items">
-              {hasAccess('home') && (
-                <button
-                  className={`admin-tab-btn ${activeTab === 'home' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('home')}
-                >
-                  <LayoutDashboard size={14} />
-                  <span className="tab-label">{isStaffAgent ? 'My Pay' : 'Today'}</span>
-                </button>
-              )}
-              {/* Sub-users only — their equivalent of Today. */}
-              {hasAccess('my_earnings') && (
-                <button
-                  className={`admin-tab-btn ${activeTab === 'my_earnings' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('my_earnings')}
-                >
-                  <Wallet size={14} />
-                  <span className="tab-label">My Earnings</span>
-                </button>
-              )}
-            </div>
-          </div>
+          <div className="admin-nav-sections admin-nav-sections--desktop-focused">
+            {desktopPrimaryTabIds.length > 0 && (
+              <div className="admin-nav-section admin-nav-section--primary">
+                <div className="admin-nav-section-title">Daily Work</div>
+                <div className="admin-nav-section-items">
+                  {desktopPrimaryTabIds.map(renderDesktopNavButton)}
+                </div>
+              </div>
+            )}
 
-          {['spreadsheet','orders','customers','inquiries','leads'].some(hasAccess) && (
-          <div className="admin-nav-section">
-            <div className="admin-nav-section-title">Core Operations</div>
-            <div className="admin-nav-section-items">
-              {hasAccess('spreadsheet') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'spreadsheet' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('spreadsheet')}
-                >
-                  <Table size={14} />
-                  <span className="tab-label">Products</span>
-                </button>
-              )}
-              {hasAccess('orders') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'orders' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('orders')}
-                >
-                  <ClipboardList size={14} />
-                  <span className="tab-label">Orders</span>
-                  {visibleOrders.filter(o => (o.status || 'Pending') === 'Pending').length > 0 && (
-                    <span className="tab-count badge-danger">
-                      {visibleOrders.filter(o => (o.status || 'Pending') === 'Pending').length}
-                    </span>
-                  )}
-                </button>
-              )}
-              {hasAccess('customers') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'customers' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('customers')}
-                >
-                  <Users size={14} />
-                  <span className="tab-label">Customers</span>
-                </button>
-              )}
-              {hasAccess('inquiries') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'inquiries' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('inquiries')}
-                >
-                  <Inbox size={14} />
-                  <span className="tab-label">Inquiries</span>
-                  {inquiryCount > 0 && <span className="admin-more-tab-badge">{inquiryCount}</span>}
-                </button>
-              )}
-              {hasAccess('leads') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'leads' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('leads')}
-                >
-                  <Target size={14} />
-                  <span className="tab-label">Leads</span>
-                  {leads.length > 0 && (
-                    <span className="tab-count badge-success">
-                      {leads.length}
-                    </span>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-          )}
-
-          {['carts','share','reviews','messenger','marketing','affiliates','deals','my_qr','my_team','broadcasts'].some(hasAccess) && (
-          <div className="admin-nav-section">
-            <div className="admin-nav-section-title">Sales & Marketing</div>
-            <div className="admin-nav-section-items">
-              {hasAccess('carts') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'carts' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('carts')}
-                >
-                  <ShoppingCart size={14} />
-                  <span className="tab-label">Carts</span>
-                  {abandonedCarts.length > 0 && (
-                    <span className="tab-count badge-warning">
-                      {abandonedCarts.length}
-                    </span>
-                  )}
-                </button>
-              )}
-              {hasAccess('share') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'share' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('share')}
-                >
-                  <Link2 size={14} />
-                  <span className="tab-label">Campaign Links</span>
-                </button>
-              )}
-              {hasAccess('reviews') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'reviews' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('reviews')}
-                >
-                  <Star size={14} />
-                  <span className="tab-label">Reviews</span>
-                  {reviews.filter(r => r.status === 'Pending').length > 0 && (
-                    <span className="tab-count badge-info">
-                      {reviews.filter(r => r.status === 'Pending').length}
-                    </span>
-                  )}
-                </button>
-              )}
-              {hasAccess('messenger') && (
-                <button
-                  className={`admin-tab-btn ${activeTab === 'messenger' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('messenger')}
-                >
-                  <FacebookIcon size={14} style={{ color: activeTab === 'messenger' ? 'inherit' : '#1877f2' }} />
-                  <span className="tab-label">Facebook Inbox</span>
-                  {facebookNotifications.filter(n => n.status === 'unread').length > 0 && (
-                    <span className="tab-count badge-info">
-                      {facebookNotifications.filter(n => n.status === 'unread').length}
-                    </span>
-                  )}
-                </button>
-              )}
-              {hasAccess('marketing') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'marketing' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('marketing')}
-                >
-                  <Mail size={14} />
-                  <span className="tab-label">Marketing Studio</span>
-                </button>
-              )}
-              {hasAccess('affiliates') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'affiliates' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('affiliates')}
-                >
-                  <UserPlus size={14} />
-                  <span className="tab-label">Affiliates</span>
-                </button>
-              )}
-              {hasAccess('deals') && (
-                <button
-                  className={`admin-tab-btn ${activeTab === 'deals' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('deals')}
-                >
-                  <Zap size={14} />
-                  <span className="tab-label">Deal of the Week</span>
-                </button>
-              )}
-              {hasAccess('my_qr') && (
-                <button
-                  className={`admin-tab-btn ${activeTab === 'my_qr' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('my_qr')}
-                >
-                  <QrCode size={14} />
-                  <span className="tab-label">My QR & Scans</span>
-                </button>
-              )}
-              {hasAccess('my_team') && (
-                <button
-                  className={`admin-tab-btn ${activeTab === 'my_team' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('my_team')}
-                >
-                  <Users size={14} />
-                  <span className="tab-label">{adminProfile?.is_superadmin ? 'Sub-Users' : 'My Team'}</span>
-                </button>
-              )}
-              {hasAccess('broadcasts') && (
-                <button
-                  className={`admin-tab-btn ${activeTab === 'broadcasts' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('broadcasts')}
-                >
-                  <Megaphone size={14} />
-                  <span className="tab-label">One-Time Announcements</span>
-                </button>
-              )}
-            </div>
-          </div>
-          )}
-
-          {['analytics','cms'].some(hasAccess) && (
-          <div className="admin-nav-section">
-            <div className="admin-nav-section-title">Analytics & Content</div>
-            <div className="admin-nav-section-items">
-              {hasAccess('analytics') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'analytics' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('analytics')}
-                >
-                  <BarChart2 size={14} />
-                  <span className="tab-label">Analytics</span>
-                </button>
-              )}
-              {hasAccess('cms') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'cms' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('cms')}
-                >
-                  <FileText size={14} />
-                  <span className="tab-label">CMS</span>
-                </button>
-              )}
-            </div>
-          </div>
-          )}
-
-          {(['whatsapp_ai','wa_session','team_chat'].some(hasAccess) || adminProfile?.is_superadmin) && (
-          <div className="admin-nav-section">
-            <div className="admin-nav-section-title">System & AI</div>
-            <div className="admin-nav-section-items">
-              {hasAccess('whatsapp_ai') && (
-              <button 
-                className={`admin-tab-btn ${activeTab === 'whatsapp_ai' ? 'active' : ''}`}
-                onClick={() => navigateToTab('whatsapp_ai')}
-                style={{ position: 'relative' }}
+            {desktopSecondaryGroups.length > 0 && (
+              <details
+                className="admin-nav-more-tools"
+                open={desktopSecondaryGroups.some((group) => group.tabs.includes(activeTab)) || undefined}
               >
-                <MessageSquare size={14} style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981' }} />
-                <span className="tab-label" style={{ color: activeTab === 'whatsapp_ai' ? 'inherit' : '#10b981', fontWeight: 'bold' }}>Sales WhatsApp</span>
-                {unreadWaCount > 0 && (
-                  <span className="admin-more-tab-badge" style={{ marginLeft: 'auto' }}>{unreadWaCount}</span>
-                )}
-              </button>
-              )}
-              {hasAccess('wa_session') && (
-                <button
-                  className={`admin-tab-btn ${activeTab === 'wa_session' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('wa_session')}
-                >
-                  <Smartphone size={14} style={{ color: activeTab === 'wa_session' ? 'inherit' : '#34d399' }} />
-                  <span className="tab-label" style={{ color: activeTab === 'wa_session' ? 'inherit' : '#34d399', fontWeight: '600' }}>WhatsApp Device</span>
-                </button>
-              )}
-              {adminProfile?.is_superadmin && (
-                <button
-                  className={`admin-tab-btn ${activeTab === 'team' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('team')}
-                >
-                  <Shield size={14} />
-                  <span className="tab-label">Team</span>
-                </button>
-              )}
-              {hasAccess('team_chat') && (
-                <button 
-                  className={`admin-tab-btn ${activeTab === 'team_chat' ? 'active' : ''}`}
-                  onClick={() => navigateToTab('team_chat')}
-                >
-                  <MessageCircle size={14} />
-                  <span className="tab-label">Team Chat</span>
-                  {unreadTeamMsgCount > 0 && <span className="admin-more-tab-badge">{unreadTeamMsgCount}</span>}
-                </button>
-              )}
-            </div>
+                <summary>
+                  <span>More tools</span>
+                  <ChevronDown size={14} />
+                </summary>
+                <div className="admin-nav-more-groups">
+                  {desktopSecondaryGroups.map((group) => (
+                    <div key={group.title} className="admin-nav-section admin-nav-section--secondary">
+                      <div className="admin-nav-section-title">{group.title}</div>
+                      <div className="admin-nav-section-items">
+                        {group.tabs.map(renderDesktopNavButton)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
-          )}
-        </div>
         </div>
 
         {/* Bottom Pinned Admin Session Card */}
