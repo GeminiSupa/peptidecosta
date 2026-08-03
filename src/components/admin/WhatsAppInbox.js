@@ -195,13 +195,23 @@ function getOwnerDisplay(ownerKey, currentAgentKey) {
   return ownerKey.includes('@') ? ownerKey.split('@')[0] : ownerKey;
 }
 
+// Ranking is driven by when the CUSTOMER last wrote, not by who spoke last.
+// The AI auto-replies within seconds, which used to flip a fresh customer
+// message to "outbound" and bury the chat below ~1800 others.
 function getPriorityScore(chat, isUnread, replyWindow) {
   if (chat.status === 'resolved') return 5;
-  if (chat.direction === 'inbound' && replyWindow.state === 'urgent') return 0;
-  if (chat.direction === 'inbound' && isUnread) return 1;
+  const customerWaiting = isUnread || chat.direction === 'inbound';
+  if (customerWaiting && replyWindow.state === 'urgent') return 0;
+  if (isUnread) return 1;
   if (chat.direction === 'inbound') return 2;
   if (chat.stage === 'Cart') return 3;
   return 4;
+}
+
+// Timestamp a chat is ordered by, per sort mode.
+function getSortTimestamp(chat, sortMode) {
+  if (sortMode === 'outbound') return chat.lastOutboundAt || chat.lastMessageAt || null;
+  return chat.lastInboundAt || chat.lastMessageAt || null;
 }
 
 function useIsMobileWa() {
@@ -383,6 +393,8 @@ export default function WhatsAppInbox({
   const [chatSearch, setChatSearch] = useState('');
   const [inboxFilter, setInboxFilter] = useState('needs_reply');
   const [ownerFilter, setOwnerFilter] = useState('all');
+  // 'customer' = when the customer last wrote, 'outbound' = when we last messaged.
+  const [sortMode, setSortMode] = useState('customer');
   const [messageSearch, setMessageSearch] = useState('');
   const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [visibleChatCount, setVisibleChatCount] = useState(INITIAL_CHAT_LIMIT);
@@ -492,6 +504,7 @@ export default function WhatsAppInbox({
         lastMessageText: conversation.status === 'resolved' ? 'Resolved conversation' : 'No recent message loaded',
         lastMessageAt: conversation.last_message_at || conversation.updated_at || conversation.created_at,
         lastInboundAt: conversation.last_inbound_at || null,
+        lastOutboundAt: conversation.last_outbound_at || null,
         direction: conversation.last_inbound_at && (!conversation.last_outbound_at || new Date(conversation.last_inbound_at) > new Date(conversation.last_outbound_at))
           ? 'inbound'
           : 'outbound',
@@ -518,6 +531,9 @@ export default function WhatsAppInbox({
       const lastInboundAt = m.direction === 'inbound'
         ? m.created_at
         : (existing?.lastInboundAt || null);
+      const lastOutboundAt = m.direction === 'outbound'
+        ? m.created_at
+        : (existing?.lastOutboundAt || null);
 
       chatsMap.set(waId, {
         waId,
@@ -526,6 +542,7 @@ export default function WhatsAppInbox({
         lastMessageText: m.message_text,
         lastMessageAt: m.created_at,
         lastInboundAt,
+        lastOutboundAt,
         direction: m.direction,
         isAiLast: m.direction === 'outbound' && m.display_name === 'AI Copilot',
         stage: contactStageByPhone.get(waId) || contactStageByPhone.get(waId.slice(-8)) || 'Contact',
@@ -682,13 +699,22 @@ export default function WhatsAppInbox({
     let result = ownerCountChats;
     if (ownerFilter === 'mine') result = result.filter((chat) => getConversationOwner(chat.waId) === currentAgentKey);
     if (ownerFilter === 'unassigned') result = result.filter((chat) => getConversationOwner(chat.waId) === WA_UNASSIGNED_OWNER);
+
+    // "We messaged" is a plain recency list of our own outgoing messages, so it
+    // deliberately skips the waiting-customer priority bands.
+    if (sortMode === 'outbound') {
+      return [...result].sort(
+        (a, b) => new Date(getSortTimestamp(b, 'outbound') || 0) - new Date(getSortTimestamp(a, 'outbound') || 0)
+      );
+    }
+
     return [...result].sort((a, b) => {
       const aPriority = getPriorityScore(a, hasUnread(a), getReplyWindow(a.lastInboundAt, now));
       const bPriority = getPriorityScore(b, hasUnread(b), getReplyWindow(b.lastInboundAt, now));
       if (aPriority !== bPriority) return aPriority - bPriority;
-      return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
+      return new Date(getSortTimestamp(b, 'customer') || 0) - new Date(getSortTimestamp(a, 'customer') || 0);
     });
-  }, [currentAgentKey, getConversationOwner, hasUnread, now, ownerCountChats, ownerFilter]);
+  }, [currentAgentKey, getConversationOwner, hasUnread, now, ownerCountChats, ownerFilter, sortMode]);
 
   const visibleChats = filteredChats.slice(0, visibleChatCount);
 
@@ -1037,6 +1063,22 @@ export default function WhatsAppInbox({
                 aria-label="Search WhatsApp conversations"
               />
             </label>
+          </div>
+
+          <div className="admin-wa-sort-row">
+            <span>Sort</span>
+            <select
+              className="admin-wa-sort-select"
+              value={sortMode}
+              onChange={(event) => {
+                setSortMode(event.target.value);
+                setVisibleChatCount(INITIAL_CHAT_LIMIT);
+              }}
+              aria-label="Sort conversations"
+            >
+              <option value="customer">Customer wrote</option>
+              <option value="outbound">We messaged</option>
+            </select>
           </div>
 
           <div className="admin-wa-filter-tabs-wrap">
