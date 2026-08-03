@@ -414,22 +414,38 @@ export default function OrdersManager({
                     {order.sales_agent && <span className="order-mobile-agent">{order.sales_agent}</span>}
                   </div>
                 </button>
-                <div className="order-mobile-claim-zone">
-                  <label className="order-mobile-agent-label" htmlFor={`order-agent-${order.id}`}>
-                    Order owner
+                <div className="order-mobile-control-grid">
+                  <label className="order-mobile-field" htmlFor={`order-status-${order.id}`}>
+                    <span>Status</span>
+                    <select
+                      id={`order-status-${order.id}`}
+                      className="order-mobile-status-select"
+                      value={order.status || 'Pending'}
+                      onChange={(e) => handleOrderStatusUpdate(order.id, e.target.value)}
+                      style={getStatusSelectStyle(order.status)}
+                    >
+                      {ORDER_STATUS_OPTIONS.map(status => (
+                        <option key={status} value={status}>{status}</option>
+                      ))}
+                    </select>
                   </label>
-                  <select
-                    id={`order-agent-${order.id}`}
-                    className={`order-mobile-agent-select${order.sales_agent ? ' is-assigned' : ''}`}
-                    value={order.sales_agent || ''}
-                    onChange={(e) => handleOrderSalesAgentUpdate(order.id, e.target.value)}
-                  >
-                    <option value="">-- Unassigned --</option>
-                    {agentOptionsFor(order).map((agent) => (
-                      <option key={agent} value={agent}>{agent}</option>
-                    ))}
-                  </select>
-                  {!order.sales_agent && (
+                  <label className="order-mobile-field" htmlFor={`order-agent-${order.id}`}>
+                    <span>Owner</span>
+                    <select
+                      id={`order-agent-${order.id}`}
+                      className={`order-mobile-agent-select${order.sales_agent ? ' is-assigned' : ''}`}
+                      value={order.sales_agent || ''}
+                      onChange={(e) => handleOrderSalesAgentUpdate(order.id, e.target.value)}
+                    >
+                      <option value="">Unassigned</option>
+                      {agentOptionsFor(order).map((agent) => (
+                        <option key={agent} value={agent}>{agent}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {!order.sales_agent && (
+                  <div className="order-mobile-claim-zone">
                     <button
                       type="button"
                       className="admin-btn admin-btn-primary order-mobile-claim-primary"
@@ -438,8 +454,8 @@ export default function OrdersManager({
                     >
                       Claim this order
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
                 <div className="order-mobile-actions">
                   {group.id === 'needs_payment' && !paymentConfirmed && (
                     <button type="button" className="admin-btn admin-btn-secondary" onClick={() => openPaymentReminder(order)}>

@@ -4,6 +4,10 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { orderVisibleToAgent } from '@/lib/agentOrders';
 import { resolveAdminTabAccess } from '@/lib/adminModules';
 import { notificationsEnabled } from '@/lib/notificationPreferences.mjs';
+import {
+  conversationVisibleToProfile,
+  normalizeWaId,
+} from '@/lib/whatsappConversations.mjs';
 
 export const runtime = 'nodejs';
 
@@ -122,6 +126,29 @@ async function getPersistedOrderMap(supabase, notifications, profile) {
   return byRef;
 }
 
+async function getWhatsappConversationMap(supabase, messages) {
+  const waIds = [
+    ...new Set(
+      (messages || [])
+        .map((message) => normalizeWaId(message.wa_id))
+        .filter(Boolean)
+    ),
+  ];
+  if (!waIds.length) return new Map();
+
+  const { data, error } = await supabase
+    .from('whatsapp_conversations')
+    .select('wa_id, assigned_to, assigned_to_email, assigned_to_name, status')
+    .in('wa_id', waIds);
+
+  if (error) {
+    console.warn('[admin/notifications] WhatsApp conversation visibility lookup:', error.message);
+    return new Map();
+  }
+
+  return new Map((data || []).map((conversation) => [normalizeWaId(conversation.wa_id), conversation]));
+}
+
 function canSeeNotification(notification, profile, orderMap = new Map()) {
   if (!canAccessNotificationTarget(notification, profile)) return false;
   if (!profile || profile.is_superadmin || !isOrderNotification(notification)) return true;
@@ -170,6 +197,7 @@ async function buildNotifications(supabase, profile = null) {
   ]);
 
   const persistedOrderMap = await getPersistedOrderMap(supabase, notifRes.data || [], profile);
+  const whatsappConversationMap = await getWhatsappConversationMap(supabase, waRes.data || []);
   const persisted = (notifRes.data || []).filter((n) => canSeeNotification(n, profile, persistedOrderMap));
   const dynamic = [];
 
@@ -204,6 +232,8 @@ async function buildNotifications(supabase, profile = null) {
 
   for (const m of waRes.data || []) {
     if (!resolveAdminTabAccess('whatsapp_ai', profile)) continue;
+    const conversation = whatsappConversationMap.get(normalizeWaId(m.wa_id));
+    if (conversation && !conversationVisibleToProfile(conversation, profile)) continue;
     dynamic.push({
       id: `wa-${m.id}`,
       type: 'whatsapp',
