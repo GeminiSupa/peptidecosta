@@ -1482,8 +1482,11 @@
 .admin-wa-search-row .admin-wa-search { flex: 1; margin: 0; min-height: 44px; }
 .admin-wa-sort-row { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
 .admin-wa-sort-row > span { flex: 0 0 auto; color: #64748b; font-size: .62rem; font-weight: 850; text-transform: uppercase; letter-spacing: .04em; }
-.admin-wa-sort-select { flex: 1; min-width: 0; min-height: 38px; padding: 0 8px; border: 1px solid rgba(255,255,255,.07); border-radius: 10px; background: rgba(255,255,255,.025); color: #94a3b8; font: inherit; font-size: .72rem; font-weight: 750; cursor: pointer; outline: none; touch-action: manipulation; }
+/* color-scheme keeps the native popup dark; without it the browser paints the
+   option list white and the unselected row is unreadable on this theme. */
+.admin-wa-sort-select { flex: 1; min-width: 0; min-height: 38px; padding: 0 8px; border: 1px solid rgba(255,255,255,.07); border-radius: 10px; background: #0f172a; color: #e2e8f0; color-scheme: dark; font: inherit; font-size: .72rem; font-weight: 750; cursor: pointer; outline: none; touch-action: manipulation; }
 .admin-wa-sort-select:hover { border-color: rgba(45,212,191,.28); color: #99f6e4; }
+.admin-wa-sort-select option { background: #0f172a; color: #e2e8f0; }
 .admin-wa-filter-tabs-wrap { position: relative; border-bottom: 1px solid rgba(255,255,255,.06); }
 .admin-wa-filter-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 0 12px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .admin-wa-filter-tabs::-webkit-scrollbar { display: none; }
