@@ -130,6 +130,8 @@ const FacebookIcon = ({ size = 14, style, ...props }) => (
 );
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
+// How often an open WhatsApp inbox silently re-fetches conversations.
+const WHATSAPP_REFRESH_MS = 30 * 1000;
 
 const cartHasItems = (cartData) => Array.isArray(cartData) && cartData.length > 0;
 
@@ -2514,6 +2516,58 @@ Core Rules:
     adminProfile?.is_superadmin,
     adminPermissionKey,
   ]);
+
+  // Silent background refresh for the WhatsApp inbox only. Nothing else on the
+  // dashboard polls, so an inbox left open used to show stale threads until the
+  // agent pressed F5 while phone notifications kept arriving. This deliberately
+  // does NOT touch loadingWhatsappMessages, so the list never flashes a loader
+  // and the open conversation stays put.
+  const refreshingWhatsappRef = React.useRef(false);
+
+  const refreshWhatsappInbox = useCallback(async () => {
+    if (refreshingWhatsappRef.current) return; // a slow refresh must not stack
+    const canLoadSalesWhatsApp = resolveTabAccess('whatsapp_ai', adminProfile);
+    const canLoadWhatsAppDevice = resolveTabAccess('wa_session', adminProfile);
+    if (!isSupabaseConfigured || (!canLoadSalesWhatsApp && !canLoadWhatsAppDevice)) return;
+
+    refreshingWhatsappRef.current = true;
+    try {
+      const sourceQuery = !canLoadSalesWhatsApp && canLoadWhatsAppDevice
+        ? '?source=baileys_session'
+        : '';
+      const res = await adminFetch(`/api/admin/whatsapp-conversations${sourceQuery}`);
+      const data = await res.json();
+      if (!res.ok || data.available === false) return; // keep what is on screen
+      setWhatsappConversations(data.conversations || []);
+      setWhatsappMessages(data.messages || []);
+      setWhatsappAgents(data.agents || []);
+    } catch (err) {
+      // A failed background poll must stay invisible; the next tick retries.
+      console.warn('WhatsApp inbox auto-refresh failed:', err.message);
+    } finally {
+      refreshingWhatsappRef.current = false;
+    }
+  }, [adminProfile]);
+
+  useEffect(() => {
+    if (!isAuthenticated || profileLoading || !adminProfile) return undefined;
+    // Only poll while an inbox is actually on screen. Each refresh is a few MB,
+    // so polling from other tabs or a hidden window would be pure waste.
+    if (activeTab !== 'whatsapp_ai' && activeTab !== 'wa_session') return undefined;
+
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      refreshWhatsappInbox();
+    };
+    const timer = setInterval(tick, WHATSAPP_REFRESH_MS);
+    // Catch up immediately when the agent comes back to the window or tab.
+    const onVisible = () => { if (!document.hidden) refreshWhatsappInbox(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [isAuthenticated, profileLoading, adminProfile, activeTab, refreshWhatsappInbox]);
 
   // Auth Handlers
   const handleLogin = async (e) => {
