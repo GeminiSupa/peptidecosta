@@ -3983,58 +3983,69 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   };
 
   // Save changes batch
-  const handleSaveChanges = async (productRows = products) => {
-    setSaveLoading(true);
-    setSaveStatus('');
+  // The mobile drawer passes an explicit row array; the desktop Save button is
+  // wired to onClick and can hand us a click event instead. Only an actual
+  // array is a caller-supplied list — anything else means "save the grid".
+  const handleSaveChanges = async (productRowsArg) => {
+    const productRows = Array.isArray(productRowsArg) ? productRowsArg : products;
 
     if (!isDbConnected) {
       setSaveStatus("❌ Cannot save: Database is offline or in local fallback mode. Verify database connection before saving.");
-      setSaveLoading(false);
       setTimeout(() => setSaveStatus(''), 5000);
       return;
     }
 
-    // Keep legacy CRC columns synced from USD, while USD remains the source of truth.
-    const filled = productRows.map(p => {
-      let newP = { ...p };
-      if (newP.priceUsd) {
-        const usdNum = parseFloat(String(newP.priceUsd).replace(/[^0-9.]/g, '')) || 0;
-        if (usdNum > 0) {
-          newP.priceCrc = `₡${Math.round(usdNum * exchangeRate).toLocaleString('en-US')}`;
-        }
-      }
-      if (newP.originalPriceUsd) {
-        const origUsdNum = parseFloat(String(newP.originalPriceUsd).replace(/[^0-9.]/g, '')) || 0;
-        if (origUsdNum > 0) {
-          newP.originalPriceCrc = `₡${Math.round(origUsdNum * exchangeRate).toLocaleString('en-US')}`;
-        }
-      }
-      return newP;
-    });
-    // Update state so the UI reflects the auto-filled values
-    setProducts(filled);
+    setSaveLoading(true);
+    setSaveStatus('');
 
-    if (isSupabaseConfigured) {
-      try {
-        const res = await adminFetch('/api/admin/products', {
-          method: 'PUT',
-          body: JSON.stringify({ products: filled }),
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) throw new Error(data.error || 'Failed to save products');
+    // Everything below runs inside try/finally so the button always comes back
+    // out of "Syncing DB..." even if something unexpected throws.
+    try {
+      // Keep legacy CRC columns synced from USD, while USD remains the source of truth.
+      const filled = productRows.map(p => {
+        let newP = { ...p };
+        if (newP.priceUsd) {
+          const usdNum = parseFloat(String(newP.priceUsd).replace(/[^0-9.]/g, '')) || 0;
+          if (usdNum > 0) {
+            newP.priceCrc = `₡${Math.round(usdNum * exchangeRate).toLocaleString('en-US')}`;
+          }
+        }
+        if (newP.originalPriceUsd) {
+          const origUsdNum = parseFloat(String(newP.originalPriceUsd).replace(/[^0-9.]/g, '')) || 0;
+          if (origUsdNum > 0) {
+            newP.originalPriceCrc = `₡${Math.round(origUsdNum * exchangeRate).toLocaleString('en-US')}`;
+          }
+        }
+        return newP;
+      });
+      // Update state so the UI reflects the auto-filled values
+      setProducts(filled);
 
-        setSaveStatus("Changes successfully saved to database!");
-        loadAdminData(); // reload fresh rows
-      } catch (err) {
-        console.error("Database save changes error:", err);
-        setSaveStatus(`Failed to save: ${err.message || 'Row Level Security error'}`);
+      if (isSupabaseConfigured) {
+        try {
+          const res = await adminFetch('/api/admin/products', {
+            method: 'PUT',
+            body: JSON.stringify({ products: filled }),
+          });
+          const data = await res.json();
+          if (!res.ok || data.error) throw new Error(data.error || 'Failed to save products');
+
+          setSaveStatus("Changes successfully saved to database!");
+          loadAdminData(); // reload fresh rows
+        } catch (err) {
+          console.error("Database save changes error:", err);
+          setSaveStatus(`Failed to save: ${err.message || 'Row Level Security error'}`);
+        }
+      } else {
+        setSaveStatus("Local Simulation: Saved products data state inside browser memory!");
       }
-    } else {
-      setSaveStatus("Local Simulation: Saved products data state inside browser memory!");
+    } catch (err) {
+      console.error("Save changes error:", err);
+      setSaveStatus(`Failed to save: ${err.message || 'Unexpected error'}`);
+    } finally {
+      setSaveLoading(false);
+      setTimeout(() => setSaveStatus(''), 4000);
     }
-
-    setSaveLoading(false);
-    setTimeout(() => setSaveStatus(''), 4000);
   };
 
   const handleApproveReview = async (id) => {

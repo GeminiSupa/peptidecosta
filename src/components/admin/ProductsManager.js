@@ -213,7 +213,7 @@ export default function ProductsManager({
             <Plus size={16} />
             Add Product Row
           </button>
-          <button className="admin-btn admin-btn-primary" onClick={handleSaveChanges} disabled={saveLoading}>
+          <button className="admin-btn admin-btn-primary" onClick={() => handleSaveChanges()} disabled={saveLoading}>
             <Save size={16} />
             {saveLoading ? 'Syncing DB...' : 'Save Changes'}
           </button>
