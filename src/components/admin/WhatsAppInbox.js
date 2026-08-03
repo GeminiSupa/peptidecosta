@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, Check, CheckCheck, ChevronLeft, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus, Maximize2, Minimize2 } from 'lucide-react';
+import { Brain, Check, CheckCheck, ChevronLeft, ChevronRight, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus, Maximize2, Minimize2 } from 'lucide-react';
 import { renderWhatsAppTemplateBody } from '@/lib/whatsappTemplates.mjs';
 
 const INITIAL_CHAT_LIMIT = 30;
@@ -914,6 +914,46 @@ export default function WhatsAppInbox({
     }
   };
 
+  // The filter row scrolls sideways but its scrollbar is hidden, so the tabs
+  // past the right edge were invisible with no hint they existed. These arrows
+  // appear only on the side that still has tabs to reach.
+  const filterTabsRef = useRef(null);
+  const [tabOverflow, setTabOverflow] = useState({ left: false, right: false });
+
+  const syncTabOverflow = useCallback(() => {
+    const el = filterTabsRef.current;
+    if (!el) return;
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    setTabOverflow({
+      left: el.scrollLeft > 1,
+      right: el.scrollLeft < maxScroll - 1,
+    });
+  }, []);
+
+  const scrollFilterTabs = (direction) => {
+    const el = filterTabsRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction * Math.max(120, el.clientWidth * 0.6), behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    const el = filterTabsRef.current;
+    if (!el) return undefined;
+    syncTabOverflow();
+    el.addEventListener('scroll', syncTabOverflow, { passive: true });
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncTabOverflow) : null;
+    if (observer) observer.observe(el);
+    return () => {
+      el.removeEventListener('scroll', syncTabOverflow);
+      if (observer) observer.disconnect();
+    };
+  }, [syncTabOverflow]);
+
+  // Counts change the tab widths, so re-measure when they do.
+  useEffect(() => {
+    syncTabOverflow();
+  }, [syncTabOverflow, waitingCount, urgentCount, hotCartCount, unreadCount, resolvedCount, chatsList.length]);
+
   const filterTabs = [
     { id: 'needs_reply', label: 'Waiting', count: waitingCount },
     { id: 'urgent', label: 'Urgent', count: urgentCount },
@@ -999,22 +1039,46 @@ export default function WhatsAppInbox({
             </label>
           </div>
 
-          <div className="admin-wa-filter-tabs" role="tablist" aria-label="Conversation filters">
-            {filterTabs.map((tab) => (
+          <div className="admin-wa-filter-tabs-wrap">
+            {tabOverflow.left && (
               <button
-                key={tab.id}
                 type="button"
-                role="tab"
-                aria-selected={inboxFilter === tab.id}
-                className={inboxFilter === tab.id ? 'active' : ''}
-                onClick={() => {
-                  setInboxFilter(tab.id);
-                  setVisibleChatCount(INITIAL_CHAT_LIMIT);
-                }}
+                className="admin-wa-filter-scroll admin-wa-filter-scroll--left"
+                onClick={() => scrollFilterTabs(-1)}
+                aria-label="Show earlier filters"
+                tabIndex={-1}
               >
-                {tab.label} <span>{tab.count}</span>
+                <ChevronLeft size={16} aria-hidden />
               </button>
-            ))}
+            )}
+            <div className="admin-wa-filter-tabs" role="tablist" aria-label="Conversation filters" ref={filterTabsRef}>
+              {filterTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={inboxFilter === tab.id}
+                  className={inboxFilter === tab.id ? 'active' : ''}
+                  onClick={() => {
+                    setInboxFilter(tab.id);
+                    setVisibleChatCount(INITIAL_CHAT_LIMIT);
+                  }}
+                >
+                  {tab.label} <span>{tab.count}</span>
+                </button>
+              ))}
+            </div>
+            {tabOverflow.right && (
+              <button
+                type="button"
+                className="admin-wa-filter-scroll admin-wa-filter-scroll--right"
+                onClick={() => scrollFilterTabs(1)}
+                aria-label="Show more filters"
+                tabIndex={-1}
+              >
+                <ChevronRight size={16} aria-hidden />
+              </button>
+            )}
           </div>
 
           <div className="admin-wa-owner-filter" role="tablist" aria-label="Conversation ownership filters">

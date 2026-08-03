@@ -1480,8 +1480,13 @@
 }
 .admin-wa-search-row { display: flex; gap: 8px; padding: 10px 12px 8px; }
 .admin-wa-search-row .admin-wa-search { flex: 1; margin: 0; min-height: 44px; }
-.admin-wa-filter-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 0 12px 10px; border-bottom: 1px solid rgba(255,255,255,.06); scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.admin-wa-filter-tabs-wrap { position: relative; border-bottom: 1px solid rgba(255,255,255,.06); }
+.admin-wa-filter-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 0 12px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .admin-wa-filter-tabs::-webkit-scrollbar { display: none; }
+.admin-wa-filter-scroll { position: absolute; z-index: 2; top: 0; display: grid; width: 34px; height: 44px; place-items: center; padding: 0; border: 0; color: #7dd3fc; cursor: pointer; touch-action: manipulation; }
+.admin-wa-filter-scroll--left { left: 0; background: linear-gradient(to right, #0e1626 58%, rgba(14,22,38,0)); }
+.admin-wa-filter-scroll--right { right: 0; background: linear-gradient(to left, #0e1626 58%, rgba(14,22,38,0)); }
+.admin-wa-filter-scroll:hover { color: #99f6e4; }
 .admin-wa-filter-tabs button { flex: 0 0 auto; min-width: 78px; min-height: 44px; padding: 0 10px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: #718096; font: inherit; font-size: .72rem; font-weight: 750; white-space: nowrap; cursor: pointer; touch-action: manipulation; }
 .admin-wa-filter-tabs button span { margin-left: 3px; color: #475569; font-size: .62rem; }
 .admin-wa-filter-tabs button.active { border-color: rgba(45,212,191,.23); background: rgba(45,212,191,.1); color: #99f6e4; }
@@ -9173,7 +9178,7 @@
 
     .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-inbox-heading small,
     .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-search-row,
-    .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-filter-tabs,
+    .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-filter-tabs-wrap,
     .admin-whatsapp-inbox.admin-wa-focus-list .admin-wa-owner-filter {
         display: none !important;
     }
