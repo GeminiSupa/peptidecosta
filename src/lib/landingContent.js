@@ -421,8 +421,8 @@ export const DEFAULT_PUBLIC_PAGE_SETTINGS = {
       {
         qEn: 'How do I pay?',
         qEs: '¿Cómo puedo pagar?',
-        aEn: 'We accept SINPE Móvil (CRC), credit/debit cards (Visa, Mastercard) and PayPal (USD). All payments are handled securely through our encrypted checkout.',
-        aEs: 'Aceptamos SINPE Móvil (CRC), tarjetas de crédito/débito (Visa, Mastercard) y PayPal (USD). Todos los pagos son procesados de forma segura.',
+        aEn: 'We accept SINPE Móvil (CRC) and credit/debit cards (Visa, Mastercard). All payments are handled securely through our encrypted checkout.',
+        aEs: 'Aceptamos SINPE Móvil (CRC) y tarjetas de crédito/débito (Visa, Mastercard). Todos los pagos son procesados de forma segura.',
       },
       {
         qEn: 'How fast is delivery?',

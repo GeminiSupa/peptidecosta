@@ -359,11 +359,6 @@ export default function CatalogPage() {
   const [waRepromptSubmitting, setWaRepromptSubmitting] = useState(false);
   const [waRepromptDone, setWaRepromptDone]           = useState(false);
 
-  // PayPal States
-  const [paypalReady, setPaypalReady] = useState(false);
-  const paypalButtonRef = useRef(null);
-  const paypalRendered = useRef(false);
-
   // Card Payment State
   const [cardSubmitting, setCardSubmitting] = useState(false);
   // Synchronous double-submit guard. The `cardSubmitting` state guard updates too
@@ -400,13 +395,6 @@ export default function CatalogPage() {
   }, []);
 
   const phoneLooksValid = !customerPhone || isValidE164(customerPhone, customerPhoneCountry);
-
-  // Ref to hold latest checkout data for PayPal callbacks without re-rendering
-  const checkoutDataRef = useRef({ cart, currency: 'CRC', exchangeRate: FALLBACK_EXCHANGE_RATE, customerName, customerPhone, customerEmail, shippingAddress, lang: 'en', sessionId, customerMetadata, promoData });
-
-  useEffect(() => {
-    checkoutDataRef.current = { cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata, promoData };
-  }, [cart, currency, exchangeRate, customerName, customerPhone, customerEmail, shippingAddress, lang, sessionId, customerMetadata, promoData]);
 
   // Let new visitors see the populated catalog before asking for contact info.
   useEffect(() => {
@@ -1224,22 +1212,6 @@ export default function CatalogPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
-
-  // Load PayPal JS SDK
-  useEffect(() => {
-    const clientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
-    if (!clientId || document.getElementById('paypal-sdk')) {
-      if (window.paypal) setPaypalReady(true);
-      return;
-    }
-    const script = document.createElement('script');
-    script.id = 'paypal-sdk';
-    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&locale=${lang === 'en' ? 'en' : 'es'}_CR`;
-    script.async = true;
-    script.onload = () => setPaypalReady(true);
-    script.onerror = () => console.error('Failed to load PayPal SDK');
-    document.head.appendChild(script);
   }, []);
 
   // Sync cart to localStorage and Supabase abandoned_carts (only while cart has items)
@@ -2394,12 +2366,7 @@ export default function CatalogPage() {
       : `\n\n*TOTAL A PAGAR:* *${formatPriceVal(totalVal, currency)}*`;
 
     let instructionsText = '';
-    if (paymentMethod === 'paypal') {
-      const usdTotal = currency === 'USD' ? totalVal : Math.round(totalVal / exchangeRate);
-      instructionsText = lang === 'en'
-        ? `\n\n*Payment Method: PayPal (Friends & Family)*\n_We will provide you with our current PayPal account details for the $${usdTotal} USD transfer shortly._\n\n_Once transferred, we will verify your payment and dispatch immediately._`
-        : `\n\n*Método de Pago: PayPal (Amigos y Familiares)*\n_En breve le brindaremos los detalles de nuestra cuenta actual de PayPal para la transferencia de $${usdTotal} USD._\n\n_Verificaremos su pago y despacharemos de inmediato._`;
-    } else if (paymentMethod === 'sinpe') {
+    if (paymentMethod === 'sinpe') {
       const crcTotal = currency === 'CRC' ? totalVal : Math.round(totalVal * exchangeRate);
       instructionsText = lang === 'en'
         ? `\n\n*Payment Method: SINPE Móvil*\n_Please send ₡${crcTotal.toLocaleString('en-US')} CRC via SINPE to:_\n👉 *+506 7264-9160*\n\n_Please send the screenshot of the transfer to verify and coordinate dispatch._`
@@ -2445,251 +2412,6 @@ export default function CatalogPage() {
     // Redirect to the thank-you conversion page
     router.push(`/thank-you?lang=${lang}`);
   };
-
-  // Render PayPal Buttons into the container
-  const renderPayPalButtons = useCallback(() => {
-    if (!paypalReady || !window.paypal || !paypalButtonRef.current || paypalRendered.current) return;
-    
-    paypalRendered.current = true;
-
-    window.paypal.Buttons({
-      style: {
-        layout: 'vertical',
-        color: 'gold',
-        shape: 'rect',
-        label: 'paypal',
-        height: 45,
-      },
-      createOrder: async () => {
-        const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, customerEmail: cEmail, shippingAddress: sAddress, lang: cLang } = checkoutDataRef.current;
-        if (checkBacOnlyMinimum(currentCart).blocked) {
-          alert(bacOnlyMinimumMessage(currentCart, cLang));
-          throw new Error('BAC-only order below minimum');
-        }
-
-        const vials = getCartVialCount(currentCart);
-        const pct = effectiveVolumeDiscountPct(
-          checkoutDataRef.current.promoData?.valid ? checkoutDataRef.current.promoData : null,
-          getVolumeDiscountPct(vials),
-        );
-        const { subtotal: subtotalVal, itemsTotal } = applyBacAwareDiscount(
-          getDiscountableSubtotal(currentCart, cur, rate),
-          getBacSummary(currentCart, cur, rate).charge,
-          pct,
-        );
-        const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
-
-        let shippingFee = 0;
-        if (itemsTotalUsd < 200) {
-          shippingFee = cur === 'USD' ? parseFloat((FLAT_SHIPPING_CRC / rate).toFixed(2)) : FLAT_SHIPPING_CRC;
-        }
-        const totalVal = itemsTotal + shippingFee;
-        const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
-        const orderItems = buildOrderItems(currentCart, cur, rate);
-
-        try {
-          const res = await fetch('/api/paypal/create-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              totalUsd: usdTotal,
-              items: orderItems,
-              customerName: cName,
-              customerPhone: cPhone,
-              customerEmail: cEmail
-            }),
-          });
-          const data = await res.json();
-          if (data.error) throw new Error(data.error);
-          return data.id;
-        } catch (err) {
-          console.error('PayPal create order failed:', err);
-          alert((cLang === 'en' ? 'Failed to create PayPal order: ' : 'Error al crear la orden de PayPal: ') + err.message);
-        }
-      },
-      onApprove: async (data) => {
-        const { cart: currentCart, currency: cur, exchangeRate: rate, customerName: cName, customerPhone: cPhone, customerEmail: cEmail, shippingAddress: sAddress, lang: cLang, sessionId: sid, customerMetadata } = checkoutDataRef.current;
-        
-        const vials = getCartVialCount(currentCart);
-        const pct = effectiveVolumeDiscountPct(
-          checkoutDataRef.current.promoData?.valid ? checkoutDataRef.current.promoData : null,
-          getVolumeDiscountPct(vials),
-        );
-        const { subtotal: subtotalVal, itemsTotal } = applyBacAwareDiscount(
-          getDiscountableSubtotal(currentCart, cur, rate),
-          getBacSummary(currentCart, cur, rate).charge,
-          pct,
-        );
-
-        const pData = checkoutDataRef.current.promoData;
-        let targetTotalForPromo = itemsTotal;
-        if (pData?.valid && pData.is_flash_sale && pData.target_product) {
-          const rawTargetSum = currentCart
-            .filter(item => {
-              // BAC water is a flat side charge — promo codes never touch it.
-              if (isBacWater(item.product)) return false;
-              const targets = pData.target_product.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-              return targets.some(target => item.product.toLowerCase().includes(target));
-            })
-            .reduce((sum, item) => {
-              const p = getPriceAsNumber(item, cur, rate);
-              return sum + (p * item.qty);
-            }, 0);
-          targetTotalForPromo = pct > 0 ? Math.round(rawTargetSum * (1 - pct / 100)) : rawTargetSum;
-        }
-        const promoDiscount = pData?.valid ? (cur === 'USD' ? parseFloat((targetTotalForPromo * pData.discount_pct).toFixed(2)) : Math.round(targetTotalForPromo * pData.discount_pct)) : 0;
-
-        const itemsTotalUsd = cur === 'USD' ? itemsTotal : (itemsTotal / rate);
-        let shippingFee = 0;
-        if (itemsTotalUsd < 200) {
-          shippingFee = cur === 'USD' ? parseFloat((FLAT_SHIPPING_CRC / rate).toFixed(2)) : FLAT_SHIPPING_CRC;
-        }
-        const totalVal = (itemsTotal - promoDiscount) + shippingFee;
-        const usdTotal = cur === 'USD' ? totalVal : Math.round(totalVal / rate);
-        const paypalShippingUsd = cur === 'USD' ? shippingFee : shippingFee / rate;
-        const orderItems = buildOrderItems(currentCart, cur, rate);
-
-        try {
-          setOrderSubmitting(true);
-          const res = await fetch('/api/paypal/capture-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderID: data.orderID }),
-          });
-          const captureData = await res.json();
-
-          if (captureData.status === 'COMPLETED') {
-            const paypalOrderNum = `PPCR-${data.orderID || captureData.id || Date.now().toString(36).toUpperCase()}`;
-
-            const ppWaSource = typeof window !== 'undefined' ? localStorage.getItem('whatsapp_source') : null;
-            const paypalSave = await fetch('/api/orders/create', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                order: applyStoredAttribution({
-                  order_number: paypalOrderNum,
-                  customer_name: cName || 'PayPal Customer',
-                  customer_phone: cPhone || '',
-                  shipping_address: sAddress || '',
-                  customer_id_type: customerIdType,
-                  customer_id_number: customerIdNumber,
-                  items: orderItems,
-                  total_usd: usdTotal,
-                  total_crc: Math.round(usdTotal * rate),
-                  shipping_cost_usd: Number(paypalShippingUsd.toFixed(2)),
-                  shipping_cost_crc: Math.round(paypalShippingUsd * rate),
-                  currency: 'USD',
-                  payment_method: 'paypal',
-                  status: 'Paid',
-                  customer_email: cEmail || null,
-                  ip_address: customerMetadata?.ip_address || null,
-                  location_data: customerMetadata?.location_data || null,
-                  device_info: customerMetadata?.device_info || null,
-                  whatsapp_source: ppWaSource || null,
-                  sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
-                  promo_code: pData?.valid ? pData.code : null,
-                  discount_amount_usd: pData?.valid ? (cur === 'USD' ? promoDiscount : parseFloat((promoDiscount / rate).toFixed(2))) : 0,
-                  discount_amount_crc: pData?.valid ? (cur === 'CRC' ? promoDiscount : Math.round(promoDiscount * rate)) : 0,
-                  affiliate_id: pData?.valid ? pData.affiliate_id : null,
-                  affiliate_commission_usd: pData?.valid ? parseFloat(((usdTotal - (cur === 'USD' ? shippingFee : shippingFee/rate)) * pData.commission_rate).toFixed(2)) : 0,
-                  affiliate_commission_crc: pData?.valid ? Math.round(((cur === 'CRC' ? (totalVal - shippingFee) : (totalVal - shippingFee) * rate)) * pData.commission_rate) : 0,
-                }),
-                sessionId: sid || null,
-              }),
-            });
-            const paypalSaveData = await paypalSave.json().catch(() => ({}));
-            if (!paypalSave.ok) {
-              console.error('Failed to log PayPal order:', paypalSaveData.error);
-            } else if (sid) {
-              const newSid = 'session_' + Math.random().toString(36).substring(2, 15);
-              localStorage.setItem('cart_session_id', newSid);
-              setSessionId(newSid);
-            }
-
-            await sendOrderNotification({
-              orderNumber: paypalOrderNum,
-              customerName: cName || 'PayPal Customer',
-              customerPhone: cPhone || '',
-              customerEmail: cEmail || '',
-              shippingAddress: sAddress || '',
-              customerIdType,
-              customerIdNumber,
-              items: orderItems,
-              total: usdTotal,
-              totalUsd: usdTotal,
-              totalCrc: Math.round(usdTotal * rate),
-              subtotal: cur === 'USD' ? itemsBeforeShip : itemsBeforeShip / rate,
-              volumeDiscount: cur === 'USD' ? volDiscount : volDiscount / rate,
-              promoDiscount: cur === 'USD' ? promoDiscount : promoDiscount / rate,
-              shipping: cur === 'USD' ? shippingFee : shippingFee / rate,
-              currency: 'USD',
-              paymentMethod: 'paypal',
-              status: 'Paid',
-              customerReceiptOnly: true,
-              lang: cLang,
-            });
-
-            setOrderSubmitting(false);
-            if (sid) localStorage.setItem('checkout_completed_session_id', sid);
-            setCart([]);
-            setCustomerName('');
-            setCustomerPhoneNational('');
-            setCustomerPhoneCountry(DEFAULT_PHONE_COUNTRY);
-            setCustomerEmail('');
-            setShippingAddress('');
-            setCustomerIdNumber('');
-            setShippingProvince('');
-            setShippingCanton('');
-            setShippingDistrict('');
-            setShippingDetailedAddress('');
-            setShippingZip('');
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('checkout_customer_name');
-              localStorage.removeItem('checkout_customer_phone');
-              localStorage.removeItem('checkout_customer_email');
-              localStorage.removeItem('checkout_shipping_address');
-              localStorage.removeItem('checkout_shipping_province');
-              localStorage.removeItem('checkout_shipping_canton');
-              localStorage.removeItem('checkout_shipping_district');
-              localStorage.removeItem('checkout_shipping_detailed');
-              localStorage.removeItem('checkout_shipping_zip');
-              localStorage.removeItem('checkout_customer_id_type');
-              localStorage.removeItem('checkout_customer_id_number');
-            }
-            
-            // Redirect to the thank-you conversion page
-            router.push(`/thank-you?lang=${cLang}`);
-          } else {
-            setOrderSubmitting(false);
-            alert(cLang === 'en' ? 'Payment was not completed. Please try again.' : 'El pago no se completó. Intente de nuevo.');
-          }
-        } catch (err) {
-          setOrderSubmitting(false);
-          console.error('PayPal capture failed:', err);
-          alert(cLang === 'en' ? 'Payment processing failed. Please try again.' : 'Error al procesar el pago. Intente de nuevo.');
-        }
-      },
-      onCancel: () => {
-        console.log('PayPal payment cancelled by user');
-      },
-      onError: (err) => {
-        console.error('PayPal button error:', err);
-      }
-    }).render(paypalButtonRef.current);
-  }, [paypalReady]);
-
-  // Re-render PayPal buttons when relevant state changes
-  useEffect(() => {
-    const hasDetails = customerName && customerPhone && shippingAddress;
-    if (!hasDetails) {
-      paypalRendered.current = false;
-      return;
-    }
-
-    if (paymentMethod === 'paypal' && paypalReady && paypalButtonRef.current && cart.length > 0 && !paypalRendered.current) {
-      renderPayPalButtons();
-    }
-  }, [paymentMethod, paypalReady, cart.length, renderPayPalButtons, customerName, customerPhone, shippingAddress]);
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();

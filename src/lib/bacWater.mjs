@@ -4,7 +4,7 @@
  * BAC water used to be a pure gift: never in the cart, silently appended to the
  * order by the notification endpoint. It is now a sellable line item, which
  * means four rules have to hold identically everywhere a total is computed
- * (cart UI, WhatsApp checkout, card checkout, PayPal create + approve):
+ * (cart UI, WhatsApp checkout, card checkout):
  *
  *   1. One free vial per peptide purchased, given automatically. Syringes and
  *      other reconstitution supplies do NOT earn a free vial — only peptides do.
