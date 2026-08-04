@@ -4,6 +4,7 @@ import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPa
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { getPublicSiteUrl } from '@/lib/publicUrl';
+import { sendCustomerOrderConfirmation } from '@/app/api/orders/create/route';
 
 export const runtime = 'nodejs';
 
@@ -202,6 +203,14 @@ export async function POST(req) {
     await updateOrderStatus(orderNumber, orderStatus, transaction, { customerEmail, customerPhone });
 
     if (transaction.status === 'Approved') {
+      try {
+        const { data: orderData } = await supabase.from('orders').select('*').eq('order_number', orderNumber).single();
+        if (orderData) {
+          await sendCustomerOrderConfirmation(supabase, orderData, orderNumber, orderData.id);
+        }
+      } catch (waErr) {
+        console.error('[Shield Hub Pay] Delayed WhatsApp confirmation failed:', waErr);
+      }
       return NextResponse.json({ ok: true, status: transaction.status, orderStatus, transactionId: transaction.id });
     }
 

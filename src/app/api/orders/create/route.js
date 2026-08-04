@@ -215,7 +215,7 @@ async function sendAgentOrderWhatsApp(supabase, order, orderNumber, orderId = nu
   });
 }
 
-async function sendCustomerOrderConfirmation(supabase, order, orderNumber, orderId = null) {
+export async function sendCustomerOrderConfirmation(supabase, order, orderNumber, orderId = null) {
   const customerPhone = order.customer_phone?.replace(/\D/g, '');
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -541,7 +541,9 @@ export async function POST(request) {
     // can hold up a customer.
     const baseUrl = new URL(request.url).origin;
     const alerts = [
-      ['customer WhatsApp', sendCustomerOrderConfirmation(supabase, order, data.order_number, data.id)],
+      order.payment_method === 'card' 
+        ? ['customer WhatsApp (skipped)', Promise.resolve()]
+        : ['customer WhatsApp', sendCustomerOrderConfirmation(supabase, order, data.order_number, data.id)],
       ['agent WhatsApp', sendAgentOrderWhatsApp(supabase, order, data.order_number, data.id)],
       ['admin email', sendAdminOrderEmail(baseUrl, order, data.order_number)],
     ];

@@ -58,14 +58,12 @@ const formatMoney = (value, currency) => {
 const paymentLabels = {
   en: {
     whatsapp: 'WhatsApp Manual Coordination',
-    paypal: 'PayPal Secure Payment',
     sinpe: 'SINPE Móvil',
     card: 'Credit / Debit Card via Shield Hub Pay',
     unknown: 'Standard Payment Method',
   },
   es: {
     whatsapp: 'Coordinación Manual por WhatsApp',
-    paypal: 'Pago Seguro con PayPal',
     sinpe: 'SINPE Móvil',
     card: 'Tarjeta de Crédito / Débito vía Shield Hub Pay',
     unknown: 'Método de Pago Estándar',
@@ -253,27 +251,34 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
 
   const isEn = lang === 'en';
   const isPaid = isPaidStatus(order.status);
+  const isDeclined = order.status === 'Declined';
   const paymentMethod = normalizePaymentMethod(order.paymentMethod);
   const isGatewayPayment = isElectronicGatewayPayment(paymentMethod);
-  const showManualPaymentAction = !isPaid && !isGatewayPayment;
+  const showManualPaymentAction = !isPaid && !isGatewayPayment && !isDeclined;
   const strings = {
     title: isPaid
       ? (isEn ? 'Order Confirmed!' : '¡Pedido Confirmado!')
-      : isGatewayPayment
-        ? (isEn ? 'Order Received - Payment Processing' : 'Pedido Recibido - Pago en Proceso')
-        : (isEn ? 'Action Required: Complete Payment' : 'Acción Requerida: Completar Pago'),
+      : isDeclined
+        ? (isEn ? 'Payment Declined' : 'Pago Rechazado')
+        : isGatewayPayment
+          ? (isEn ? 'Order Received - Payment Processing' : 'Pedido Recibido - Pago en Proceso')
+          : (isEn ? 'Action Required: Complete Payment' : 'Acción Requerida: Completar Pago'),
     subtitle: isPaid 
       ? (isEn ? "We've received your order and payment. Here are your transaction details." : 'Hemos recibido su pedido y su pago. A continuación encontrará los detalles.') 
-      : isGatewayPayment
-        ? (isEn ? "We've received your order and are waiting for the payment processor's final confirmation." : 'Hemos recibido su pedido y estamos esperando la confirmación final del procesador de pago.')
-        : (isEn ? "We've received your order! Please submit your payment to complete processing." : '¡Hemos recibido su pedido! Por favor envíe su pago para procesarlo.'),
+      : isDeclined
+        ? (isEn ? "Your card payment was declined. Please try again or choose a different payment method." : 'Su pago con tarjeta fue rechazado. Por favor intente nuevamente o elija un método de pago distinto.')
+        : isGatewayPayment
+          ? (isEn ? "We've received your order and are waiting for the payment processor's final confirmation." : 'Hemos recibido su pedido y estamos esperando la confirmación final del procesador de pago.')
+          : (isEn ? "We've received your order! Please submit your payment to complete processing." : '¡Hemos recibido su pedido! Por favor envíe su pago para procesarlo.'),
     ref: isEn ? 'Order Reference' : 'Referencia del Pedido',
     method: isEn ? 'Payment Method' : 'Método de Pago',
     status: isEn ? 'Payment Status' : 'Estado del Pago',
     paidStatus: isEn ? 'Paid / Completed' : 'Pagado / Completado',
-    pendingStatus: isGatewayPayment
-      ? (isEn ? 'Awaiting Processor Confirmation' : 'Esperando Confirmación del Procesador')
-      : (isEn ? 'Pending Payment' : 'Pago Pendiente'),
+    pendingStatus: isDeclined
+      ? (isEn ? 'Declined' : 'Rechazado')
+      : isGatewayPayment
+        ? (isEn ? 'Awaiting Processor Confirmation' : 'Esperando Confirmación del Procesador')
+        : (isEn ? 'Pending Payment' : 'Pago Pendiente'),
     shippingTo: isEn ? 'Shipping Destination' : 'Destinatario de Envío',
     orderSummary: isEn ? 'Order Summary' : 'Resumen de su Orden',
     product: isEn ? 'Product' : 'Producto',
@@ -308,20 +313,26 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
       <div style="padding:32px;">
         
         ${!isPaid ? `
-        <div style="background-color:#f0fdf4; border:1px solid #bbf7d0; border-radius:16px; padding:24px; text-align:center; margin-bottom:32px;">
-          <h2 style="color:#166534; font-size:18px; font-weight:800; margin:0 0 8px; line-height:1.3;">
-            ${isGatewayPayment
-              ? (isEn ? 'Payment Processing' : 'Pago en Proceso')
-              : (isEn ? 'Action Required: Complete Your Payment' : 'Acción Requerida: Complete su Pago')}
+        <div style="background-color:${isDeclined ? '#fef2f2' : '#f0fdf4'}; border:1px solid ${isDeclined ? '#fecaca' : '#bbf7d0'}; border-radius:16px; padding:24px; text-align:center; margin-bottom:32px;">
+          <h2 style="color:${isDeclined ? '#991b1b' : '#166534'}; font-size:18px; font-weight:800; margin:0 0 8px; line-height:1.3;">
+            ${isDeclined
+              ? (isEn ? 'Card Declined' : 'Tarjeta Rechazada')
+              : isGatewayPayment
+                ? (isEn ? 'Payment Processing' : 'Pago en Proceso')
+                : (isEn ? 'Action Required: Complete Your Payment' : 'Acción Requerida: Complete su Pago')}
           </h2>
-          <p style="color:#166534; font-size:14px; margin:0 0 18px; font-weight:500; line-height:1.5;">
-            ${isGatewayPayment
+          <p style="color:${isDeclined ? '#991b1b' : '#166534'}; font-size:14px; margin:0 0 18px; font-weight:500; line-height:1.5;">
+            ${isDeclined
               ? (isEn
-                ? 'No WhatsApp payment action is needed for this order. We will update your order once the payment processor confirms the transaction.'
-                : 'No necesita completar el pago por WhatsApp para este pedido. Actualizaremos su orden cuando el procesador confirme la transacción.')
-              : (isEn
-                ? 'To secure your order and schedule dispatch, please send your payment confirmation screenshot to our agent on WhatsApp.'
-                : 'Para asegurar su pedido y programar el envío, por favor envíe el comprobante de su pago a nuestro asesor por WhatsApp.')}
+                ? 'Your transaction could not be completed. Please return to the site to try again, or contact your bank.'
+                : 'No se pudo completar su transacción. Por favor regrese al sitio para intentar nuevamente, o contacte a su banco.')
+              : isGatewayPayment
+                ? (isEn
+                  ? 'No WhatsApp payment action is needed for this order. We will update your order once the payment processor confirms the transaction.'
+                  : 'No necesita completar el pago por WhatsApp para este pedido. Actualizaremos su orden cuando el procesador confirme la transacción.')
+                : (isEn
+                  ? 'To secure your order and schedule dispatch, please send your payment confirmation screenshot to our agent on WhatsApp.'
+                  : 'Para asegurar su pedido y programar el envío, por favor envíe el comprobante de su pago a nuestro asesor por WhatsApp.')}
           </p>
           ${showManualPaymentAction ? `
           <a href="${whatsappPayLink}" style="display:inline-block;background-color:#22c55e;color:#ffffff;text-decoration:none;padding:16px 32px;border-radius:12px;font-weight:800;font-size:18px;text-transform:uppercase;letter-spacing:0.5px;">
@@ -346,7 +357,7 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
           <div style="margin-bottom:24px;">
             <div style="color:#64748b;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">${strings.status}</div>
             <div>
-              <span style="background-color:${isPaid ? '#dcfce7' : '#fef08a'};color:${isPaid ? '#15803d' : '#854d0e'};font-weight:800;font-size:13px;padding:6px 14px;border-radius:20px;text-transform:uppercase;letter-spacing:0.5px;border:1px solid ${isPaid ? '#bbf7d0' : '#fde047'};">
+              <span style="background-color:${isPaid ? '#dcfce7' : isDeclined ? '#fee2e2' : '#fef08a'};color:${isPaid ? '#15803d' : isDeclined ? '#991b1b' : '#854d0e'};font-weight:800;font-size:13px;padding:6px 14px;border-radius:20px;text-transform:uppercase;letter-spacing:0.5px;border:1px solid ${isPaid ? '#bbf7d0' : isDeclined ? '#fecaca' : '#fde047'};">
                 ${isPaid ? strings.paidStatus : strings.pendingStatus}
               </span>
             </div>

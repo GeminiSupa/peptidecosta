@@ -298,6 +298,7 @@ export default function CatalogPage() {
     cvv: '',
   });
   const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [cartAnimating, setCartAnimating] = useState(false);
   const [sessionId, setSessionId] = useState('');
@@ -396,13 +397,7 @@ export default function CatalogPage() {
    */
   const dismissGate = useCallback(() => setGateVisible(false), []);
 
-  // Esc closes the gate, the same as every other dialog on the site.
-  useEffect(() => {
-    if (gateAccessGranted || !gateVisible) return;
-    const onKeyDown = (e) => { if (e.key === 'Escape') dismissGate(); };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [gateAccessGranted, gateVisible, dismissGate]);
+
 
   // Second-chance WhatsApp opt-in re-prompt: for visitors who unlocked the
   // catalog but never opted in. Fires once (after 15s), at most once / 3 days,
@@ -2031,13 +2026,76 @@ export default function CatalogPage() {
     }
   };
 
+  const validateForm = () => {
+    const errors = {};
+    if (!customerName.trim()) errors.customerName = lang === 'en' ? 'Full name is required.' : 'El nombre completo es requerido.';
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!customerEmail.trim()) {
+      errors.customerEmail = lang === 'en' ? 'Email address is required.' : 'El correo electrónico es requerido.';
+    } else if (!emailRegex.test(customerEmail)) {
+      errors.customerEmail = lang === 'en' ? 'Please enter a valid email address.' : 'Por favor ingrese un correo electrónico válido.';
+    }
+
+    if (!customerPhoneNational.trim()) {
+      errors.customerPhone = lang === 'en' ? 'WhatsApp number is required.' : 'El número de WhatsApp es requerido.';
+    } else if (!phoneLooksValid) {
+      errors.customerPhone = lang === 'en' ? `Invalid number for ${findPhoneCountry(customerPhoneCountry).name}.` : `Número inválido para ${findPhoneCountry(customerPhoneCountry).name}.`;
+    }
+
+    if (!customerIdNumber.trim()) {
+      errors.customerIdNumber = lang === 'en' ? 'ID number is required.' : 'El número de identificación es requerido.';
+    }
+
+    if (!shippingProvince || !shippingCanton || !shippingDistrict || !shippingDetailedAddress.trim()) {
+      errors.shippingAddress = lang === 'en' ? 'Please complete your full shipping address.' : 'Por favor complete su dirección de envío completa.';
+    }
+
+    if (paymentMethod === 'card') {
+      const cleanNumber = cardDetails.number.replace(/\D/g, '');
+      const cleanCvv = cardDetails.cvv.replace(/\D/g, '');
+
+      if (!cardDetails.holder.trim()) errors.cardHolder = lang === 'en' ? 'Cardholder name is required.' : 'El nombre del titular es requerido.';
+
+      if (!cleanNumber) {
+        errors.cardNumber = lang === 'en' ? 'Card number is required.' : 'El número de tarjeta es requerido.';
+      } else if (cleanNumber.length < 12) {
+        errors.cardNumber = lang === 'en' ? 'Please enter a complete card number.' : 'Por favor ingrese el número completo de la tarjeta.';
+      }
+
+      if (!cardDetails.expiry.trim()) {
+        errors.cardExpiry = lang === 'en' ? 'Expiration date is required.' : 'La fecha de expiración es requerida.';
+      } else if (!/^\d{2}\/\d{2}$/.test(cardDetails.expiry)) {
+        errors.cardExpiry = lang === 'en' ? 'Use the MM/YY format.' : 'Use el formato MM/AA.';
+      }
+
+      if (!cleanCvv) {
+        errors.cardCvv = lang === 'en' ? 'CVV is required.' : 'El CVV es requerido.';
+      } else if (cleanCvv.length < 3) {
+        errors.cardCvv = lang === 'en' ? 'CVV must be at least 3 digits.' : 'El CVV debe tener al menos 3 dígitos.';
+      }
+    }
+
+    setFormErrors(errors);
+
+    const firstError = Object.keys(errors)[0];
+    if (firstError) {
+      setTimeout(() => {
+        const el = document.getElementById(`field-${firstError}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.focus({ preventScroll: true });
+        }
+      }, 100);
+      return false;
+    }
+    return true;
+  };
+
   const startCardCheckout = async () => {
     if (cardSubmitLockRef.current || cardSubmitting || cart.length === 0) return;
 
-    if (!customerName || !customerEmail || !customerPhone || !shippingAddress || !customerIdNumber) {
-      return;
-    }
-    if (!phoneLooksValid) return;
+    if (!validateForm()) return;
 
     if (checkBacOnlyMinimum(cart).blocked) {
       alert(bacOnlyMinimumMessage(cart, lang));
@@ -2046,12 +2104,6 @@ export default function CatalogPage() {
 
     const cleanCardNumber = cardDetails.number.replace(/\D/g, '');
     const cleanCvv = cardDetails.cvv.replace(/\D/g, '');
-    if (!cardDetails.holder.trim() || cleanCardNumber.length < 12 || !cardDetails.expiry.trim() || cleanCvv.length < 3) {
-      alert(lang === 'en'
-        ? 'Please enter complete card details.'
-        : 'Ingrese los datos completos de la tarjeta.');
-      return;
-    }
 
     cardSubmitLockRef.current = true;
     setCardSubmitting(true);
@@ -2173,6 +2225,11 @@ export default function CatalogPage() {
         return;
       }
 
+      await sendOrderNotification({
+        ...orderNotificationPayload,
+        status: 'Declined',
+      });
+
       alert(lang === 'en'
         ? `Card payment setup failed: ${data.error || 'Unknown error'}`
         : `Error al configurar el pago con tarjeta: ${data.error || 'Error desconocido'}`);
@@ -2193,13 +2250,8 @@ export default function CatalogPage() {
       // Card payment is handled by its own button below — should not reach here
       return;
     }
-    if (!customerName || !customerPhone || !shippingAddress || !customerIdNumber || cart.length === 0) return;
-    if (!phoneLooksValid) {
-      alert(lang === 'en'
-        ? `Please check your WhatsApp number — it does not look right for ${findPhoneCountry(customerPhoneCountry).name}.`
-        : `Por favor revisa tu número de WhatsApp — no parece correcto para ${findPhoneCountry(customerPhoneCountry).name}.`);
-      return;
-    }
+    if (cart.length === 0) return;
+    if (!validateForm()) return;
     if (checkBacOnlyMinimum(cart).blocked) {
       alert(bacOnlyMinimumMessage(cart, lang));
       return;
@@ -3241,7 +3293,6 @@ export default function CatalogPage() {
             role="dialog"
             aria-modal="true"
             aria-label={lang === 'en' ? 'Exclusive Catalog Access' : 'Acceso Exclusivo al Catálogo'}
-            onClick={(e) => { if (e.target === e.currentTarget) dismissGate(); }}
             style={{
               position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh',
               background: theme === 'dark' ? 'rgba(5, 11, 24, 0.8)' : 'rgba(244, 246, 249, 0.8)',
@@ -3256,25 +3307,7 @@ export default function CatalogPage() {
               maxWidth: '480px', width: '100%', textAlign: 'center', overflow: 'hidden',
               position: 'relative'
             }}>
-              {/* Without this the gate was a dead end: nothing set gateVisible
-                  back to false except a successful submit, so a visitor who
-                  would not hand over a number simply left. */}
-              <button
-                type="button"
-                onClick={dismissGate}
-                aria-label={lang === 'en' ? 'Close' : 'Cerrar'}
-                title={lang === 'en' ? 'Close' : 'Cerrar'}
-                style={{
-                  position: 'absolute', top: '12px', right: '12px',
-                  width: '36px', height: '36px', borderRadius: '50%',
-                  border: '1px solid var(--border)', background: 'var(--bg-secondary)',
-                  color: 'var(--text-muted)', fontSize: '1.1rem', lineHeight: 1,
-                  cursor: 'pointer', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', padding: 0, zIndex: 1
-                }}
-              >
-                ✕
-              </button>
+
               <div style={{ padding: '24px 24px 32px 24px' }}>
               <img src="/logo.png" alt="Peptides Costa Rica Logo" style={{ height: '40px', margin: '0 auto 16px auto', display: 'block', borderRadius: '8px' }} />
               <h2 style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px' }}>
@@ -3343,16 +3376,7 @@ export default function CatalogPage() {
                     lang === 'en' ? 'Unlock Catalog' : 'Desbloquear Catálogo'
                   )}
                 </button>
-                <button
-                  type="button"
-                  onClick={dismissGate}
-                  style={{
-                    background: 'none', border: 'none', color: 'var(--text-muted)',
-                    fontSize: '0.85rem', cursor: 'pointer', padding: '4px', textDecoration: 'underline'
-                  }}
-                >
-                  {lang === 'en' ? 'Keep browsing without unlocking' : 'Seguir viendo sin desbloquear'}
-                </button>
+
               </form>
               </div>
             </div>
@@ -4029,59 +4053,82 @@ export default function CatalogPage() {
               )}
             </div>
 
-            <form id="checkout-form-main" onSubmit={handleCheckoutSubmit} className="checkout-form" style={{ paddingBottom: '80px' }}>
+            {/* noValidate is deliberate: native constraint validation runs before
+                the submit event, so without it the browser's own bubble preempts
+                validateForm() and none of the inline field errors ever render. */}
+            <form id="checkout-form-main" noValidate onSubmit={handleCheckoutSubmit} className="checkout-form" style={{ paddingBottom: '80px' }}>
               
               <div className="checkout-step-header">
                 <span className="checkout-step-number">1</span>
                 <h3>{lang === 'en' ? 'Contact & Shipping' : 'Contacto y Envío'}</h3>
               </div>
-              <input 
-                type="text" 
-                className="checkout-input" 
-                placeholder={lang === 'en' ? "Your Full Name" : "Su Nombre Completo"}
-                required
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-              />
-              <input 
-                type="email" 
-                className="checkout-input" 
-                placeholder={lang === 'en' ? "Email Address" : "Correo Electrónico"}
-                required
-                value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
-              />
-              <div className="checkout-phone-row">
-                <select
-                  className="checkout-input checkout-phone-country"
-                  value={customerPhoneCountry}
-                  onChange={(e) => setCustomerPhoneCountry(e.target.value)}
-                  style={{ appearance: 'auto' }}
-                  aria-label={lang === 'en' ? 'Country code' : 'Código de país'}
-                >
-                  {PHONE_COUNTRIES.map((country) => (
-                    <option key={country.code} value={country.code}>
-                      {country.flag} +{country.dial} {country.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="tel"
-                  className="checkout-input checkout-phone-number"
-                  placeholder={lang === 'en' ? "WhatsApp Phone Number" : "Número de WhatsApp"}
+              <div>
+                <input 
+                  id="field-customerName"
+                  type="text" 
+                  className="checkout-input" 
+                  placeholder={lang === 'en' ? "Your Full Name" : "Su Nombre Completo"}
                   required
-                  value={customerPhoneNational}
-                  onChange={(e) => setCustomerPhoneNational(e.target.value)}
-                  aria-invalid={!phoneLooksValid}
+                  value={customerName}
+                  onChange={(e) => {
+                    setCustomerName(e.target.value);
+                    if (formErrors.customerName) setFormErrors(prev => ({ ...prev, customerName: null }));
+                  }}
+                  style={formErrors.customerName ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
                 />
+                {formErrors.customerName && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.customerName}</div>}
               </div>
-              {!phoneLooksValid && (
-                <div style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '-6px' }}>
-                  {lang === 'en'
-                    ? `Check this number — it does not look right for ${findPhoneCountry(customerPhoneCountry).name}.`
-                    : `Revisa este número — no parece correcto para ${findPhoneCountry(customerPhoneCountry).name}.`}
+              
+              <div>
+                <input 
+                  id="field-customerEmail"
+                  type="email" 
+                  className="checkout-input" 
+                  placeholder={lang === 'en' ? "Email Address" : "Correo Electrónico"}
+                  required
+                  value={customerEmail}
+                  onChange={(e) => {
+                    setCustomerEmail(e.target.value);
+                    if (formErrors.customerEmail) setFormErrors(prev => ({ ...prev, customerEmail: null }));
+                  }}
+                  style={formErrors.customerEmail ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                />
+                {formErrors.customerEmail && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.customerEmail}</div>}
+              </div>
+              <div>
+                <div className="checkout-phone-row">
+                  <select
+                    className="checkout-input checkout-phone-country"
+                    value={customerPhoneCountry}
+                    onChange={(e) => setCustomerPhoneCountry(e.target.value)}
+                    style={{ appearance: 'auto' }}
+                    aria-label={lang === 'en' ? 'Country code' : 'Código de país'}
+                  >
+                    {PHONE_COUNTRIES.map((country) => (
+                      <option key={country.code} value={country.code}>
+                        {country.flag} +{country.dial} {country.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    id="field-customerPhone"
+                    type="tel"
+                    className="checkout-input checkout-phone-number"
+                    placeholder={lang === 'en' ? "WhatsApp Phone Number" : "Número de WhatsApp"}
+                    required
+                    value={customerPhoneNational}
+                    onChange={(e) => {
+                      setCustomerPhoneNational(e.target.value);
+                      if (formErrors.customerPhone) setFormErrors(prev => ({ ...prev, customerPhone: null }));
+                    }}
+                    aria-invalid={!phoneLooksValid || !!formErrors.customerPhone}
+                    style={formErrors.customerPhone ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                  />
                 </div>
-              )}
+                {formErrors.customerPhone && (
+                  <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.customerPhone}</div>
+                )}
+              </div>
 
               <div className="checkout-id-grid">
                 <div>
@@ -4100,19 +4147,27 @@ export default function CatalogPage() {
                 </div>
                 <div>
                   <input
+                    id="field-customerIdNumber"
                     type="text"
                     className="checkout-input"
                     placeholder={lang === 'en' ? 'ID Number' : 'Número de Identificación'}
                     required
                     value={customerIdNumber}
-                    onChange={(e) => setCustomerIdNumber(e.target.value)}
-                    style={{ width: '100%' }}
+                    onChange={(e) => {
+                      setCustomerIdNumber(e.target.value);
+                      if (formErrors.customerIdNumber) setFormErrors(prev => ({ ...prev, customerIdNumber: null }));
+                    }}
+                    style={{ width: '100%', ...(formErrors.customerIdNumber ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}) }}
                   />
+                  {formErrors.customerIdNumber && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.customerIdNumber}</div>}
                 </div>
               </div>
 
               {/* Structured Address Builder for Costa Rica */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+              {/* tabIndex -1 so validateForm's focus() actually lands here — a
+                  plain div is not focusable and the call would be a no-op. */}
+              <div id="field-shippingAddress" tabIndex={-1} style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px', ...(formErrors.shippingAddress ? { padding: '12px', border: '1px solid #ef4444', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.03)' } : {}) }}>
+                {formErrors.shippingAddress && <div style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: '700' }}>{formErrors.shippingAddress}</div>}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
@@ -4121,10 +4176,11 @@ export default function CatalogPage() {
                     <select
                       className="checkout-input"
                       value={shippingProvince}
-                      onChange={(e) => {
+                       onChange={(e) => {
                         setShippingProvince(e.target.value);
                         setShippingCanton('');
                         setShippingDistrict('');
+                        if (formErrors.shippingAddress) setFormErrors(prev => ({ ...prev, shippingAddress: null }));
                       }}
                       required
                       style={{ cursor: 'pointer' }}
@@ -4146,6 +4202,7 @@ export default function CatalogPage() {
                       onChange={(e) => {
                         setShippingCanton(e.target.value);
                         setShippingDistrict('');
+                        if (formErrors.shippingAddress) setFormErrors(prev => ({ ...prev, shippingAddress: null }));
                       }}
                       disabled={!shippingProvince}
                       required
@@ -4169,7 +4226,10 @@ export default function CatalogPage() {
                     <select
                       className="checkout-input"
                       value={shippingDistrict}
-                      onChange={(e) => setShippingDistrict(e.target.value)}
+                      onChange={(e) => {
+                        setShippingDistrict(e.target.value);
+                        if (formErrors.shippingAddress) setFormErrors(prev => ({ ...prev, shippingAddress: null }));
+                      }}
                       disabled={!shippingCanton}
                       required
                       style={{ cursor: 'pointer' }}
@@ -4209,7 +4269,10 @@ export default function CatalogPage() {
                     style={{ resize: 'vertical' }}
                     placeholder={lang === 'en' ? 'e.g. 200m North of the catholic church, white house with black gate' : 'ej. 200m Norte de la iglesia católica, casa blanca con portón negro'}
                     value={shippingDetailedAddress}
-                    onChange={(e) => setShippingDetailedAddress(e.target.value)}
+                    onChange={(e) => {
+                      setShippingDetailedAddress(e.target.value);
+                      if (formErrors.shippingAddress) setFormErrors(prev => ({ ...prev, shippingAddress: null }));
+                    }}
                     required
                   />
                 </div>
@@ -4245,13 +4308,6 @@ export default function CatalogPage() {
                       : (lang === 'en' ? 'Soon' : 'Pronto'),
                     disabled: !CARD_CHECKOUT_ENABLED,
                   },
-                  {
-                    value: 'paypal',
-                    icon: <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797H9.603c-.536 0-.99.394-1.073.926L7.076 21.337Z" fill="#253B80"/><path d="M20.16 7.035c-.01.058-.02.117-.032.177-1.071 5.497-4.74 7.398-9.426 7.398H8.847a1.16 1.16 0 0 0-1.146.98l-.94 5.967-.266 1.69a.61.61 0 0 0 .603.707h4.24c.468 0 .866-.34.94-.802l.038-.198.745-4.724.048-.26a.948.948 0 0 1 .937-.803h.59c3.827 0 6.822-1.554 7.7-6.05.367-1.878.177-3.446-.793-4.548a3.78 3.78 0 0 0-1.083-.834Z" fill="#179BD7"/><path d="M19.064 6.59a8.321 8.321 0 0 0-1.024-.227 12.99 12.99 0 0 0-2.063-.15h-6.25a.94.94 0 0 0-.932.795L7.684 14.01l-.033.21a1.16 1.16 0 0 1 1.146-.98h1.855c4.686 0 8.355-1.902 9.426-7.399.032-.163.06-.322.083-.477a5.58 5.58 0 0 0-1.097-.473Z" fill="#222D65"/></svg>,
-                    iconColor: undefined,
-                    title: 'PayPal',
-                    detail: lang === 'en' ? 'PayPal transfer only' : 'Solo transferencia PayPal',
-                  },
                 ].map(method => (
                   <button
                     key={method.value}
@@ -4275,80 +4331,79 @@ export default function CatalogPage() {
                 ))}
               </div>
               {renderPaymentTotalNotice()}
-              {paymentMethod === 'paypal' ? (
-                <div style={{ marginTop: '16px' }}>
-                  <div style={{ padding: '16px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.95rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-                    <h4 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', fontWeight: 'bold' }}>
-                      {lang === 'en' ? '⚠️ PayPal Checkout Maintenance' : '⚠️ Mantenimiento de PayPal'}
-                    </h4>
-                    <p style={{ margin: '0 0 16px 0', lineHeight: '1.5' }}>
-                      {lang === 'en' 
-                        ? 'Our automated PayPal system is temporarily unavailable. We are currently only accepting PayPal payments via the "Friends and Family" option.' 
-                        : 'Nuestro sistema automatizado de PayPal está temporalmente inactivo. Actualmente solo aceptamos pagos de PayPal mediante la opción "Amigos y Familiares".'}
-                    </p>
-                    <button
-                      type="submit"
-                      className="whatsapp-btn"
-                      disabled={orderSubmitting || cart.length === 0 || checkBacOnlyMinimum(cart).blocked}
-                      style={{ width: '100%' }}
-                    >
-                      {orderSubmitting ? (
-                        <>
-                          <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
-                          {lang === 'en' ? 'Processing...' : 'Procesando...'}
-                        </>
-                      ) : (
-                        <>
-                          <MessageCircle size={18} />
-                          {lang === 'en' ? 'Order via WhatsApp for PayPal Details' : 'Pedir por WhatsApp para Detalles'}
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ) : paymentMethod === 'card' ? (
+              {paymentMethod === 'card' ? (
                 <div className="card-payment-panel">
                   <div className="card-payment-fields">
-                    <input
-                      type="text"
-                      className="checkout-input"
-                      autoComplete="cc-name"
-                      placeholder={lang === 'en' ? 'Name on card' : 'Nombre en la tarjeta'}
-                      value={cardDetails.holder}
-                      onChange={(e) => setCardDetails(prev => ({ ...prev, holder: e.target.value }))}
-                    />
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      className="checkout-input"
-                      autoComplete="cc-number"
-                      placeholder={lang === 'en' ? 'Card number' : 'Número de tarjeta'}
-                      value={cardDetails.number}
-                      onChange={(e) => setCardDetails(prev => ({ ...prev, number: e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').trim().slice(0, 23) }))}
-                    />
-                    <div className="card-payment-fields__row">
+                    <div>
                       <input
+                        id="field-cardHolder"
+                        type="text"
+                        className="checkout-input"
+                        autoComplete="cc-name"
+                        placeholder={lang === 'en' ? 'Name on card' : 'Nombre en la tarjeta'}
+                        value={cardDetails.holder}
+                        onChange={(e) => {
+                          setCardDetails(prev => ({ ...prev, holder: e.target.value }));
+                          if (formErrors.cardHolder) setFormErrors(prev => ({ ...prev, cardHolder: null }));
+                        }}
+                        style={formErrors.cardHolder ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                      />
+                      {formErrors.cardHolder && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.cardHolder}</div>}
+                    </div>
+                    <div>
+                      <input
+                        id="field-cardNumber"
                         type="text"
                         inputMode="numeric"
                         className="checkout-input"
-                        autoComplete="cc-exp"
-                        placeholder="MM/YY"
-                        value={cardDetails.expiry}
+                        autoComplete="cc-number"
+                        placeholder={lang === 'en' ? 'Card number' : 'Número de tarjeta'}
+                        value={cardDetails.number}
                         onChange={(e) => {
-                          const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
-                          const expiry = digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
-                          setCardDetails(prev => ({ ...prev, expiry }));
+                          setCardDetails(prev => ({ ...prev, number: e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').trim().slice(0, 23) }));
+                          if (formErrors.cardNumber) setFormErrors(prev => ({ ...prev, cardNumber: null }));
                         }}
+                        style={formErrors.cardNumber ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
                       />
-                      <input
-                        type="password"
-                        inputMode="numeric"
-                        className="checkout-input"
-                        autoComplete="cc-csc"
-                        placeholder="CVV"
-                        value={cardDetails.cvv}
-                        onChange={(e) => setCardDetails(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
-                      />
+                      {formErrors.cardNumber && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.cardNumber}</div>}
+                    </div>
+                    <div className="card-payment-fields__row">
+                      <div style={{ flex: 1 }}>
+                        <input
+                          id="field-cardExpiry"
+                          type="text"
+                          inputMode="numeric"
+                          className="checkout-input"
+                          autoComplete="cc-exp"
+                          placeholder="MM/YY"
+                          value={cardDetails.expiry}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+                            const expiry = digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+                            setCardDetails(prev => ({ ...prev, expiry }));
+                            if (formErrors.cardExpiry) setFormErrors(prev => ({ ...prev, cardExpiry: null }));
+                          }}
+                          style={formErrors.cardExpiry ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                        />
+                        {formErrors.cardExpiry && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.cardExpiry}</div>}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <input
+                          id="field-cardCvv"
+                          type="password"
+                          inputMode="numeric"
+                          className="checkout-input"
+                          autoComplete="cc-csc"
+                          placeholder="CVV"
+                          value={cardDetails.cvv}
+                          onChange={(e) => {
+                            setCardDetails(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }));
+                            if (formErrors.cardCvv) setFormErrors(prev => ({ ...prev, cardCvv: null }));
+                          }}
+                          style={formErrors.cardCvv ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                        />
+                        {formErrors.cardCvv && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.cardCvv}</div>}
+                      </div>
                     </div>
                     <p className="card-payment-security-note">
                       {lang === 'en'
@@ -4356,30 +4411,27 @@ export default function CatalogPage() {
                         : 'Los datos de la tarjeta se envían de forma segura a Shield Hub Pay y no se almacenan en Costa Peptides.'}
                     </p>
                   </div>
-                  {(!customerName || !customerEmail || !customerPhone || !shippingAddress || !customerIdNumber) ? (
-                    <div style={{ padding: '12px', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', borderRadius: '12px', textAlign: 'center', fontSize: '0.9rem', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-                      {lang === 'en' ? 'Please enter your contact, shipping, and ID details to proceed.' : 'Ingrese sus datos de contacto, envío y número de identificación para continuar.'}
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={cardSubmitting || cart.length === 0 || checkBacOnlyMinimum(cart).blocked}
-                      onClick={startCardCheckout}
-                      className="card-payment-btn"
-                    >
-                      {cardSubmitting ? (
-                        <>
-                          <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
-                          {lang === 'en' ? 'Redirecting to payment...' : 'Redirigiendo al pago...'}
-                        </>
-                      ) : (
-                        <>
-                          <CreditCard size={18} />
-                          {lang === 'en' ? `Pay ${formatPriceVal(getFinalTotal(), currency)} by Card` : `Pagar ${formatPriceVal(getFinalTotal(), currency)} con Tarjeta`}
-                        </>
-                      )}
-                    </button>
-                  )}
+                  {/* Always render the button. Hiding it behind a "fill in your
+                      details" notice made the customer hunt for the missing field
+                      themselves; validateForm now names it and scrolls to it. */}
+                  <button
+                    type="button"
+                    disabled={cardSubmitting || cart.length === 0 || checkBacOnlyMinimum(cart).blocked}
+                    onClick={startCardCheckout}
+                    className="card-payment-btn"
+                  >
+                    {cardSubmitting ? (
+                      <>
+                        <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
+                        {lang === 'en' ? 'Redirecting to payment...' : 'Redirigiendo al pago...'}
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard size={18} />
+                        {lang === 'en' ? `Pay ${formatPriceVal(getFinalTotal(), currency)} by Card` : `Pagar ${formatPriceVal(getFinalTotal(), currency)} con Tarjeta`}
+                      </>
+                    )}
+                  </button>
                   <p className="card-payment-caption">
                     {CARD_CHECKOUT_LIVE
                       ? (lang === 'en'

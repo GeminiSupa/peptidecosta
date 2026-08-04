@@ -143,8 +143,8 @@ const buildRecoveryHtml = (customerName, cartData, checkoutUrl, currency, lang, 
       ? "We noticed you were browsing our selection of high-purity research peptides, but didn't get a chance to complete your order. Don't worry—we saved your cart so you can pick up right where you left off!" 
       : 'Notamos que estabas buscando en nuestra selección de péptidos de alta pureza para investigación, pero no tuviste la oportunidad de completar tu orden. ¡No te preocupes! Guardamos tu carrito para que puedas continuar justo donde lo dejaste.',
     body2: isEn
-      ? "Ready to finalize your research order? Simply click the button below to review your cart and proceed to checkout. We accept convenient payment methods including SINPE Móvil, Credit/Debit cards, and PayPal."
-      : '¿Listo para finalizar tu orden de investigación? Simplemente haz clic en el botón de abajo para revisar tu carrito y proceder al pago. Aceptamos métodos de pago convenientes que incluyen SINPE Móvil, tarjetas de crédito/débito y PayPal.',
+      ? "Ready to finalize your research order? Simply click the button below to review your cart and proceed to checkout. We accept convenient payment methods including SINPE Móvil and Credit/Debit cards."
+      : '¿Listo para finalizar tu orden de investigación? Simplemente haz clic en el botón de abajo para revisar tu carrito y proceder al pago. Aceptamos métodos de pago convenientes que incluyen SINPE Móvil y tarjetas de crédito/débito.',
     cta: isEn ? 'Complete Your Purchase' : 'Completar mi Compra',
     itemsLeft: isEn ? 'Items Left in Your Cart' : 'Artículos en tu Carrito',
     product: isEn ? 'Product' : 'Producto',
