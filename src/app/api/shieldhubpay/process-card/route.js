@@ -1,12 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { getPublicSiteUrl } from '@/lib/publicUrl';
-import { sendCustomerOrderConfirmation } from '@/app/api/orders/create/route';
+import { sendCustomerOrderConfirmation } from '@/lib/orderWhatsAppAlerts';
 
 export const runtime = 'nodejs';
+// after() work is billed against the route's budget, and the charge round-trip
+// has already spent some of it by the time the confirmation is queued.
+export const maxDuration = 60;
 
 const APP_URL = getPublicSiteUrl();
 
@@ -203,14 +206,22 @@ export async function POST(req) {
     await updateOrderStatus(orderNumber, orderStatus, transaction, { customerEmail, customerPhone });
 
     if (transaction.status === 'Approved') {
-      try {
-        const { data: orderData } = await supabase.from('orders').select('*').eq('order_number', orderNumber).single();
-        if (orderData) {
-          await sendCustomerOrderConfirmation(supabase, orderData, orderNumber, orderData.id);
+      // orders/create holds the customer confirmation back for card orders so
+      // nobody is told "confirmed" before the charge clears. This is where it
+      // gets sent — after the response, so a slow Meta round-trip is not added
+      // to the wait the customer sits through on the payment screen.
+      after(async () => {
+        try {
+          const { data: orderData } = await supabase.from('orders').select('*').eq('order_number', orderNumber).single();
+          if (orderData) {
+            await sendCustomerOrderConfirmation(supabase, orderData, orderNumber, orderData.id);
+          } else {
+            console.warn(`[Shield Hub Pay] No order row for ${orderNumber}; customer confirmation not sent`);
+          }
+        } catch (waErr) {
+          console.error('[Shield Hub Pay] Delayed WhatsApp confirmation failed:', waErr);
         }
-      } catch (waErr) {
-        console.error('[Shield Hub Pay] Delayed WhatsApp confirmation failed:', waErr);
-      }
+      });
       return NextResponse.json({ ok: true, status: transaction.status, orderStatus, transactionId: transaction.id });
     }
 

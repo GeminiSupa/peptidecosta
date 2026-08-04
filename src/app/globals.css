@@ -17,6 +17,12 @@
     --border: rgba(0, 39, 102, 0.08);
     --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
+    /* Red 600 rather than 500: at the 0.85rem the field errors render at, 500
+       misses AA contrast on the white card. */
+    --danger: #dc2626;
+    --danger-border: #dc2626;
+    --danger-ring: rgba(220, 38, 38, 0.16);
+    --danger-bg: rgba(220, 38, 38, 0.05);
 }
 
 [data-theme="dark"] {
@@ -29,6 +35,11 @@
     --border: rgba(255, 255, 255, 0.08);
     --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+    /* Red 400 on the dark card — 600 goes muddy against #0e1626. */
+    --danger: #f87171;
+    --danger-border: #ef4444;
+    --danger-ring: rgba(248, 113, 113, 0.22);
+    --danger-bg: rgba(248, 113, 113, 0.07);
 }
 
 * {
@@ -1792,8 +1803,55 @@ body {
     text-overflow: ellipsis;
 }
 
+/* Invalid state is driven entirely by aria-invalid so the thing screen readers
+   read and the thing sighted users see can never drift apart. */
 .checkout-input[aria-invalid="true"] {
-    border-color: #f87171;
+    border-color: var(--danger-border);
+    box-shadow: 0 0 0 3px var(--danger-ring);
+}
+
+.checkout-input[aria-invalid="true"]:focus {
+    border-color: var(--danger-border);
+}
+
+/* Error text never carries meaning by colour alone — the icon and the wording
+   both have to survive a greyscale screenshot. */
+.field-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 6px;
+    color: var(--danger);
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.field-error svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+/* The address block is four controls behind one message, so the message is
+   pinned to the group instead of to any single input. */
+.checkout-fieldset--invalid {
+    padding: 12px;
+    border: 1px solid var(--danger-border);
+    border-radius: 12px;
+    background: var(--danger-bg);
+}
+
+.checkout-fieldset--invalid > .field-error {
+    margin-top: 0;
+    margin-bottom: 2px;
+    font-size: 0.875rem;
+    font-weight: 700;
+}
+
+/* Programmatic focus target for scroll-to-first-error; it should move focus
+   without painting a ring around the whole group. */
+#field-shippingAddress:focus {
+    outline: none;
 }
 
 .payment-method-grid {
@@ -2276,6 +2334,17 @@ body {
     .checkout-input {
         min-height: 44px;
         font-size: 16px;
+    }
+
+    /* 14px floor: the desktop 0.85rem is the first thing that becomes hard to
+       read one-handed, and this is the text telling them why they are stuck. */
+    .field-error {
+        font-size: 0.875rem;
+        margin-top: 7px;
+    }
+
+    .checkout-fieldset--invalid {
+        padding: 10px;
     }
 
     .checkout-step-header {

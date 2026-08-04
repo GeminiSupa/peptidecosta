@@ -221,6 +221,37 @@ const COSTA_RICA_TERRITORY = {
   ]
 };
 
+/**
+ * The message under an invalid checkout field.
+ *
+ * role="alert" so it is announced the moment validation fails rather than only
+ * on the next focus, and the icon so the state survives greyscale and the
+ * ~8% of men with red-green colour blindness.
+ */
+function FieldError({ name, message }) {
+  if (!message) return null;
+  return (
+    <div id={`error-${name}`} className="field-error" role="alert">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+      <span>{message}</span>
+    </div>
+  );
+}
+
+/**
+ * Spread onto an input to wire it to its FieldError. Keeping the two in one
+ * helper is what stops a field from looking invalid without being announced
+ * as invalid, which is how the first version of this drifted.
+ */
+const invalidProps = (name, formErrors) => ({
+  'aria-invalid': formErrors[name] ? 'true' : undefined,
+  'aria-describedby': formErrors[name] ? `error-${name}` : undefined,
+});
+
 export default function CatalogPage() {
   const { links } = useBusinessLinks();
   const router = useRouter();
@@ -389,15 +420,6 @@ export default function CatalogPage() {
       }
     }
   }, [loading]);
-
-  /**
-   * Closing the gate frees the catalog for this visit only — nothing is written
-   * to localStorage, so the prompt returns on the next page load. That keeps the
-   * lead capture working without holding the catalog hostage to it.
-   */
-  const dismissGate = useCallback(() => setGateVisible(false), []);
-
-
 
   // Second-chance WhatsApp opt-in re-prompt: for visitors who unlocked the
   // catalog but never opted in. Fires once (after 15s), at most once / 3 days,
@@ -2078,14 +2100,19 @@ export default function CatalogPage() {
 
     setFormErrors(errors);
 
+    // Keys are inserted in DOM order above, so the first one is the first
+    // problem on the page.
     const firstError = Object.keys(errors)[0];
     if (firstError) {
       setTimeout(() => {
         const el = document.getElementById(`field-${firstError}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.focus({ preventScroll: true });
-        }
+        if (!el) return;
+        const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        // Centred rather than 'start': the checkout has a sticky header above
+        // and a sticky submit bar below, and either will happily cover a field
+        // parked at the edge of a phone viewport.
+        el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+        el.focus({ preventScroll: true });
       }, 100);
       return false;
     }
@@ -4063,10 +4090,10 @@ export default function CatalogPage() {
                 <h3>{lang === 'en' ? 'Contact & Shipping' : 'Contacto y Envío'}</h3>
               </div>
               <div>
-                <input 
+                <input
                   id="field-customerName"
-                  type="text" 
-                  className="checkout-input" 
+                  type="text"
+                  className="checkout-input"
                   placeholder={lang === 'en' ? "Your Full Name" : "Su Nombre Completo"}
                   required
                   value={customerName}
@@ -4074,16 +4101,16 @@ export default function CatalogPage() {
                     setCustomerName(e.target.value);
                     if (formErrors.customerName) setFormErrors(prev => ({ ...prev, customerName: null }));
                   }}
-                  style={formErrors.customerName ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                  {...invalidProps('customerName', formErrors)}
                 />
-                {formErrors.customerName && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.customerName}</div>}
+                <FieldError name="customerName" message={formErrors.customerName} />
               </div>
-              
+
               <div>
-                <input 
+                <input
                   id="field-customerEmail"
-                  type="email" 
-                  className="checkout-input" 
+                  type="email"
+                  className="checkout-input"
                   placeholder={lang === 'en' ? "Email Address" : "Correo Electrónico"}
                   required
                   value={customerEmail}
@@ -4091,9 +4118,9 @@ export default function CatalogPage() {
                     setCustomerEmail(e.target.value);
                     if (formErrors.customerEmail) setFormErrors(prev => ({ ...prev, customerEmail: null }));
                   }}
-                  style={formErrors.customerEmail ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                  {...invalidProps('customerEmail', formErrors)}
                 />
-                {formErrors.customerEmail && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.customerEmail}</div>}
+                <FieldError name="customerEmail" message={formErrors.customerEmail} />
               </div>
               <div>
                 <div className="checkout-phone-row">
@@ -4110,6 +4137,10 @@ export default function CatalogPage() {
                       </option>
                     ))}
                   </select>
+                  {/* Deliberately not driven by phoneLooksValid: that turned the
+                      field red on the first digit typed, before anyone had a
+                      chance to finish. It goes red on submit and clears on the
+                      next keystroke. */}
                   <input
                     id="field-customerPhone"
                     type="tel"
@@ -4121,13 +4152,10 @@ export default function CatalogPage() {
                       setCustomerPhoneNational(e.target.value);
                       if (formErrors.customerPhone) setFormErrors(prev => ({ ...prev, customerPhone: null }));
                     }}
-                    aria-invalid={!phoneLooksValid || !!formErrors.customerPhone}
-                    style={formErrors.customerPhone ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                    {...invalidProps('customerPhone', formErrors)}
                   />
                 </div>
-                {formErrors.customerPhone && (
-                  <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.customerPhone}</div>
-                )}
+                <FieldError name="customerPhone" message={formErrors.customerPhone} />
               </div>
 
               <div className="checkout-id-grid">
@@ -4157,17 +4185,23 @@ export default function CatalogPage() {
                       setCustomerIdNumber(e.target.value);
                       if (formErrors.customerIdNumber) setFormErrors(prev => ({ ...prev, customerIdNumber: null }));
                     }}
-                    style={{ width: '100%', ...(formErrors.customerIdNumber ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}) }}
+                    style={{ width: '100%' }}
+                    {...invalidProps('customerIdNumber', formErrors)}
                   />
-                  {formErrors.customerIdNumber && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.customerIdNumber}</div>}
+                  <FieldError name="customerIdNumber" message={formErrors.customerIdNumber} />
                 </div>
               </div>
 
               {/* Structured Address Builder for Costa Rica */}
               {/* tabIndex -1 so validateForm's focus() actually lands here — a
                   plain div is not focusable and the call would be a no-op. */}
-              <div id="field-shippingAddress" tabIndex={-1} style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px', ...(formErrors.shippingAddress ? { padding: '12px', border: '1px solid #ef4444', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.03)' } : {}) }}>
-                {formErrors.shippingAddress && <div style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: '700' }}>{formErrors.shippingAddress}</div>}
+              <div
+                id="field-shippingAddress"
+                tabIndex={-1}
+                className={formErrors.shippingAddress ? 'checkout-fieldset--invalid' : undefined}
+                style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}
+              >
+                <FieldError name="shippingAddress" message={formErrors.shippingAddress} />
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
@@ -4176,7 +4210,7 @@ export default function CatalogPage() {
                     <select
                       className="checkout-input"
                       value={shippingProvince}
-                       onChange={(e) => {
+                      onChange={(e) => {
                         setShippingProvince(e.target.value);
                         setShippingCanton('');
                         setShippingDistrict('');
@@ -4184,6 +4218,7 @@ export default function CatalogPage() {
                       }}
                       required
                       style={{ cursor: 'pointer' }}
+                      {...invalidProps('shippingAddress', formErrors)}
                     >
                       <option value="">-- {lang === 'en' ? 'Select Province' : 'Seleccionar Provincia'} --</option>
                       {Object.values(costaricaData.provincias).map((prov) => (
@@ -4207,6 +4242,7 @@ export default function CatalogPage() {
                       disabled={!shippingProvince}
                       required
                       style={{ cursor: 'pointer' }}
+                      {...invalidProps('shippingAddress', formErrors)}
                     >
                       <option value="">-- {lang === 'en' ? 'Select Canton' : 'Seleccionar Cantón'} --</option>
                       {shippingProvince && Object.values(
@@ -4233,6 +4269,7 @@ export default function CatalogPage() {
                       disabled={!shippingCanton}
                       required
                       style={{ cursor: 'pointer' }}
+                      {...invalidProps('shippingAddress', formErrors)}
                     >
                       <option value="">-- {lang === 'en' ? 'Select District' : 'Seleccionar Distrito'} --</option>
                       {shippingCanton && Object.values(
@@ -4274,6 +4311,7 @@ export default function CatalogPage() {
                       if (formErrors.shippingAddress) setFormErrors(prev => ({ ...prev, shippingAddress: null }));
                     }}
                     required
+                    {...invalidProps('shippingAddress', formErrors)}
                   />
                 </div>
               </div>
@@ -4346,9 +4384,9 @@ export default function CatalogPage() {
                           setCardDetails(prev => ({ ...prev, holder: e.target.value }));
                           if (formErrors.cardHolder) setFormErrors(prev => ({ ...prev, cardHolder: null }));
                         }}
-                        style={formErrors.cardHolder ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                        {...invalidProps('cardHolder', formErrors)}
                       />
-                      {formErrors.cardHolder && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.cardHolder}</div>}
+                      <FieldError name="cardHolder" message={formErrors.cardHolder} />
                     </div>
                     <div>
                       <input
@@ -4363,12 +4401,14 @@ export default function CatalogPage() {
                           setCardDetails(prev => ({ ...prev, number: e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').trim().slice(0, 23) }));
                           if (formErrors.cardNumber) setFormErrors(prev => ({ ...prev, cardNumber: null }));
                         }}
-                        style={formErrors.cardNumber ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                        {...invalidProps('cardNumber', formErrors)}
                       />
-                      {formErrors.cardNumber && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.cardNumber}</div>}
+                      <FieldError name="cardNumber" message={formErrors.cardNumber} />
                     </div>
+                    {/* .card-payment-fields__row is a grid, and collapses to one
+                        column under 768px — the children size themselves. */}
                     <div className="card-payment-fields__row">
-                      <div style={{ flex: 1 }}>
+                      <div>
                         <input
                           id="field-cardExpiry"
                           type="text"
@@ -4383,11 +4423,11 @@ export default function CatalogPage() {
                             setCardDetails(prev => ({ ...prev, expiry }));
                             if (formErrors.cardExpiry) setFormErrors(prev => ({ ...prev, cardExpiry: null }));
                           }}
-                          style={formErrors.cardExpiry ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                          {...invalidProps('cardExpiry', formErrors)}
                         />
-                        {formErrors.cardExpiry && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.cardExpiry}</div>}
+                        <FieldError name="cardExpiry" message={formErrors.cardExpiry} />
                       </div>
-                      <div style={{ flex: 1 }}>
+                      <div>
                         <input
                           id="field-cardCvv"
                           type="password"
@@ -4400,9 +4440,9 @@ export default function CatalogPage() {
                             setCardDetails(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }));
                             if (formErrors.cardCvv) setFormErrors(prev => ({ ...prev, cardCvv: null }));
                           }}
-                          style={formErrors.cardCvv ? { borderColor: '#ef4444', boxShadow: '0 0 0 1px #ef4444' } : {}}
+                          {...invalidProps('cardCvv', formErrors)}
                         />
-                        {formErrors.cardCvv && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginTop: '4px', paddingLeft: '4px' }}>{formErrors.cardCvv}</div>}
+                        <FieldError name="cardCvv" message={formErrors.cardCvv} />
                       </div>
                     </div>
                     <p className="card-payment-security-note">
