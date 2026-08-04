@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
@@ -257,6 +258,7 @@ export async function POST(request) {
 
     const customerInfo = await transporter.sendMail({
       bcc: bccList,
+      cc: withTaxRecordsCc(),
       from: NOTIFICATION_FROM,
       to: order.customer_email.trim(),
       subject: customerSubject,

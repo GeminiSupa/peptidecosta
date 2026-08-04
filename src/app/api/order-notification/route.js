@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
+import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
 import { getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
 import { splitCartUnits } from '@/lib/bacWater.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -673,6 +674,7 @@ export async function POST(request) {
           from: smtp.from,
           replyTo: smtp.replyTo,
           to: order.customerEmail.trim(),
+          cc: withTaxRecordsCc(),
           subject: customerSubject,
           html: customerHtml,
           text: customerText,

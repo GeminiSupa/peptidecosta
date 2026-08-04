@@ -12,6 +12,7 @@ import { buildOverrideBreakdown, computeOverrideAmounts } from '@/lib/subUserCom
 import { SUB_USER_PAYOUT_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
+import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
 
 // Email Configuration from Environment variables
 const SMTP_HOST = process.env.SMTP_HOST;
@@ -196,7 +197,7 @@ export async function POST(request) {
             bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
             from: NOTIFICATION_FROM,
             to: payout.agent_email.trim(),
-            cc: ADMIN_CC_EMAILS,
+            cc: withTaxRecordsCc(ADMIN_CC_EMAILS),
             subject: subject,
             html: refreshedEmailHtml,
             text: refreshedEmailText,

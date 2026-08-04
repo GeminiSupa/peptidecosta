@@ -19,6 +19,7 @@ import { isActiveProfile, profileTier } from '@/lib/subUserTier.mjs';
 import { SUB_USER_PAYOUT_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
+import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -408,6 +409,7 @@ export async function GET(request) {
         try {
           await transporter.sendMail({
             bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+            cc: withTaxRecordsCc(),
             from: NOTIFICATION_FROM,
             to: agent.email,
             subject: `Your weekly pay report · ${periodDisplay}`,
@@ -502,7 +504,8 @@ export async function GET(request) {
         `;
 
         await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+          bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
+          cc: withTaxRecordsCc(),
           from: NOTIFICATION_FROM,
           to: ADMIN_CC_EMAILS,
           subject: `Weekly team pay report · ${periodDisplay}`,
