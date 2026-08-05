@@ -857,30 +857,43 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
 
   const sendCampaign = async (isTestBatch = false) => {
     if (!selectedCampaignId) {
-      setStatusDetail('Save this campaign before sending.');
+      const message = 'Cannot send yet: save this campaign as a draft first.';
+      setStatusDetail(message);
+      alert(message);
       return;
     }
     if (!canSend) {
-      setStatusDetail('Resolve the final checklist before sending. The current version must be test-emailed first.');
+      const blockers = preflightItems.filter(item => !item.ok).map(item => item.label);
+      const message = `Cannot send yet:\n\n${blockers.map(label => `- ${label}`).join('\n')}`;
+      setStatusDetail(message.replaceAll('\n', ' '));
+      alert(message);
       return;
     }
-    const currentHtml = await new Promise((resolve, reject) => {
-      try {
-        emailEditorRef.current.editor.exportHtml(({ html }) => resolve(html));
-      } catch (error) {
-        reject(error);
-      }
-    });
-    const currentSignature = buildCampaignSignature(currentHtml);
-    if (!lastTestedSignature || currentSignature !== lastTestedSignature) {
-      setAutosaveStatus('pending');
-      setStatusDetail('Send blocked: send a test email for this exact version before sending to subscribers.');
-      return;
-    }
-    const label = isTestBatch ? 'A/B test batch' : 'full campaign';
-    if (!confirm(`Send ${label} to ${estimatedAudience.length} subscriber${estimatedAudience.length === 1 ? '' : 's'}?`)) return;
+
     try {
+      const currentHtml = await new Promise((resolve, reject) => {
+        try {
+          const editor = emailEditorRef.current?.editor;
+          if (!editor) throw new Error('The email editor is not ready. Reload the page and try again.');
+          editor.exportHtml(({ html }) => resolve(html));
+        } catch (error) {
+          reject(error);
+        }
+      });
+      const currentSignature = buildCampaignSignature(currentHtml);
+      if (!lastTestedSignature || currentSignature !== lastTestedSignature) {
+        const message = 'Cannot send yet: send a test email for this exact version first. The campaign changed after the last test.';
+        setAutosaveStatus('pending');
+        setStatusDetail(message);
+        alert(message);
+        return;
+      }
+
+      const label = isTestBatch ? 'A/B test batch' : 'full campaign';
+      if (!confirm(`Send ${label} to ${estimatedAudience.length} subscriber${estimatedAudience.length === 1 ? '' : 's'}?`)) return;
+
       setIsSending(true);
+      setStatusDetail(`Sending ${label}... Keep this page open until the first batch is confirmed.`);
       const res  = await adminFetch('/api/admin/campaigns/send', {
         method: 'POST',
         body: JSON.stringify({ campaign_id: selectedCampaignId, is_test_batch: isTestBatch }),
@@ -894,7 +907,9 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       setStatusDetail(progressText);
       fetchCampaigns();
     } catch (err) {
-      alert('Failed to send: ' + err.message);
+      const message = `Failed to send: ${err.message}`;
+      setStatusDetail(message);
+      alert(message);
     } finally {
       setIsSending(false);
     }
@@ -1266,18 +1281,19 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
 
             {/* Action buttons */}
             <div className="mkt-preflight-actions">
-              <button onClick={openPreview} disabled={!isReady} className="mkt-btn mkt-review-action" style={{ flex: '1 1 auto' }}>
+              <button type="button" onClick={openPreview} disabled={!isReady} className="mkt-btn mkt-review-action" style={{ flex: '1 1 auto' }}>
                 <Eye size={14} /> Review email
               </button>
-              <button onClick={saveCampaign} disabled={!isReady || isSaving} className="mkt-btn mkt-btn-primary mkt-save-action" style={{ flex: '1 1 auto' }}>
+              <button type="button" onClick={saveCampaign} disabled={!isReady || isSaving} className="mkt-btn mkt-btn-primary mkt-save-action" style={{ flex: '1 1 auto' }}>
                 {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save draft
               </button>
               {activeCampaignIsABTest && (
-                <button onClick={() => sendCampaign(true)} disabled={!isReady || isSending || !selectedCampaign?.is_ab_test} className="mkt-btn mkt-btn-warning" style={{ flex: '1 1 auto' }}>
+                <button type="button" onClick={() => sendCampaign(true)} disabled={!isReady || isSending || !selectedCampaign?.is_ab_test} className="mkt-btn mkt-btn-warning" style={{ flex: '1 1 auto' }}>
                   <Send size={14} /> Test 20%
                 </button>
               )}
               <button
+                type="button"
                 onClick={() => sendCampaign(false)}
                 disabled={!isReady || isSending || !selectedCampaignId || selectedCampaign?.status === 'testing'}
                 className="mkt-btn mkt-btn-danger"
@@ -1287,6 +1303,24 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
                 {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Send campaign
               </button>
             </div>
+            {statusDetail && (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  marginTop: '10px',
+                  padding: '10px 12px',
+                  border: `1px solid ${statusDetail.toLowerCase().includes('fail') || statusDetail.toLowerCase().includes('cannot') || statusDetail.toLowerCase().includes('blocked') ? 'rgba(248,113,113,0.35)' : 'rgba(52,211,153,0.3)'}`,
+                  background: statusDetail.toLowerCase().includes('fail') || statusDetail.toLowerCase().includes('cannot') || statusDetail.toLowerCase().includes('blocked') ? 'rgba(127,29,29,0.16)' : 'rgba(6,78,59,0.16)',
+                  color: '#e2e8f0',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  lineHeight: 1.5,
+                }}
+              >
+                {statusDetail}
+              </div>
+            )}
           </div>
         </div>
       </div>
