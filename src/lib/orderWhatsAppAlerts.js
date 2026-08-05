@@ -23,6 +23,12 @@ export function formatSalesAlertTotal(order) {
     : `CRC ${Number(order.total_crc || 0).toLocaleString('es-CR')}`;
 }
 
+export function formatAffiliateCommissionTotal(order) {
+  return order.currency === 'USD'
+    ? `$${Number(order.affiliate_commission_usd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `CRC ${Number(order.affiliate_commission_crc || 0).toLocaleString('es-CR')}`;
+}
+
 export async function logOrderAlert(supabase, { phone, messageId, summary, orderId, raw }) {
   if (!supabase || !messageId) return;
   try {
@@ -125,5 +131,110 @@ export async function sendCustomerOrderConfirmation(supabase, order, orderNumber
     }
   } catch (error) {
     console.error('[order-whatsapp] Customer WhatsApp alert error:', error.message);
+  }
+}
+
+async function markAffiliateOrderWhatsAppSent(supabase, orderId, messageId) {
+  if (!supabase || !orderId) return;
+  try {
+    const { error } = await supabase
+      .from('orders')
+      .update({
+        affiliate_whatsapp_notified_at: new Date().toISOString(),
+        affiliate_whatsapp_message_id: messageId || null,
+      })
+      .eq('id', orderId);
+    if (error) console.warn('[order-whatsapp] Could not mark affiliate WhatsApp notification:', error.message);
+  } catch (err) {
+    console.warn('[order-whatsapp] Could not mark affiliate WhatsApp notification:', err.message);
+  }
+}
+
+export async function sendAffiliateOrderWhatsApp(supabase, order, orderNumber, orderId = null) {
+  const affiliateId = order?.affiliate_id;
+  if (!affiliateId) return { skipped: 'no_affiliate' };
+  if (order?.affiliate_whatsapp_notified_at) return { skipped: 'already_notified' };
+
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!accessToken || !phoneNumberId) {
+    console.warn('[order-whatsapp] Affiliate WhatsApp skipped: WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID not set');
+    return { skipped: 'missing_whatsapp_config' };
+  }
+
+  const { data: affiliate, error } = await supabase
+    .from('affiliates')
+    .select('id, name, email, whatsapp')
+    .eq('id', affiliateId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn('[order-whatsapp] Affiliate WhatsApp skipped: could not load affiliate:', error.message);
+    return { skipped: 'affiliate_lookup_failed' };
+  }
+  if (!affiliate) return { skipped: 'affiliate_not_found' };
+
+  const cleanPhone = toE164(affiliate.whatsapp, DEFAULT_PHONE_COUNTRY);
+  if (!isValidE164(cleanPhone)) {
+    console.warn(`[order-whatsapp] Affiliate WhatsApp skipped for ${orderNumber}: ${affiliate.name || affiliate.email || affiliateId} has no usable WhatsApp number`);
+    return { skipped: 'missing_affiliate_whatsapp' };
+  }
+
+  const templateName = process.env.AFFILIATE_SALE_WHATSAPP_TEMPLATE || 'alerta_venta_afiliado';
+  const templateLanguage = process.env.AFFILIATE_SALE_WHATSAPP_TEMPLATE_LANGUAGE || 'es';
+  const commission = formatAffiliateCommissionTotal(order);
+
+  try {
+    const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(WHATSAPP_TIMEOUT_MS),
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: cleanPhone,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: templateLanguage },
+          components: [{
+            type: 'body',
+            parameters: [
+              { type: 'text', text: affiliate.name || 'Afiliado' },
+              { type: 'text', text: orderNumber },
+              { type: 'text', text: formatSalesAlertTotal(order) },
+              { type: 'text', text: commission },
+            ],
+          }],
+        },
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.error('[order-whatsapp] Affiliate WhatsApp alert failed:', result);
+      return { skipped: 'meta_rejected', error: result?.error?.message || `Meta API returned ${response.status}` };
+    }
+
+    const messageId = result.messages?.[0]?.id;
+    await logOrderAlert(supabase, {
+      phone: cleanPhone,
+      messageId,
+      summary: `Affiliate sale alert ${orderNumber} - ${affiliate.name || affiliate.email || affiliateId} - ${formatSalesAlertTotal(order)} - commission ${commission}`,
+      orderId,
+      raw: result,
+    });
+    await markAffiliateOrderWhatsAppSent(supabase, orderId, messageId);
+
+    console.log('[order-whatsapp] Affiliate WhatsApp alert sent:', {
+      affiliate: affiliate.name || affiliate.email || affiliateId,
+      phone: cleanPhone,
+      messageId,
+    });
+    return { sent: true, phone: cleanPhone, messageId };
+  } catch (err) {
+    console.error('[order-whatsapp] Affiliate WhatsApp alert error:', err.message);
+    return { skipped: 'send_failed', error: err.message };
   }
 }

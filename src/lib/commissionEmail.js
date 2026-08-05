@@ -46,6 +46,9 @@ export function buildAgentCommissionEmail({
 
   const overrideList = Array.isArray(overrideBreakdown) ? overrideBreakdown : [];
   const hasOverride = overrideList.length > 0 && (Number(overrideUsd) > 0 || Number(overrideCrc) > 0);
+  const commissionRateLabel = typeof commissionRate === 'string'
+    ? commissionRate
+    : `${Number(commissionRate || 0)}%`;
   const overrideRows = overrideList.map((row, index) => `
       <tr bgcolor="${index % 2 === 0 ? '#ffffff' : '#f8fafc'}">
         <td style="padding:12px 10px;border-top:1px solid #e2e8f0;font:600 12px Arial,sans-serif;color:#0f172a;">${escapeHtml(row.name || 'Sub-user')}</td>
@@ -99,7 +102,7 @@ export function buildAgentCommissionEmail({
                 </td>
                 <td width="2%">&nbsp;</td>
                 <td width="49%" align="center" valign="top" bgcolor="#f8fafc" style="padding:16px 8px;border:1px solid #dbe3ee;background-color:#f8fafc;">
-                  <div style="font:700 10px Arial,sans-serif;color:#64748b;letter-spacing:.8px;text-transform:uppercase;">Commission (${Number(commissionRate || 0)}%)</div>
+                  <div style="font:700 10px Arial,sans-serif;color:#64748b;letter-spacing:.8px;text-transform:uppercase;">Commission (${escapeHtml(commissionRateLabel)})</div>
                   <div style="font:700 17px Arial,sans-serif;color:#0f172a;margin-top:8px;">${formatMoney(usdCommission, 'USD')}</div>
                   <div style="font:700 10px Arial,sans-serif;color:#64748b;margin:3px 0;">AND</div>
                   <div style="font:700 17px Arial,sans-serif;color:#0f172a;">${formatMoney(crcCommission, 'CRC')}</div>

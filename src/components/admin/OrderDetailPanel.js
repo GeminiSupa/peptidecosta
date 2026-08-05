@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Copy, Phone, Plus, Trash2 } from 'lucide-react';
+import { Copy, Phone, Plus, Trash2, BadgePercent } from 'lucide-react';
 import { formatActivityType } from '@/lib/orderActivity';
 import { adminFetch } from '@/lib/adminApi';
 
@@ -109,6 +109,9 @@ export default function OrderDetailPanel({
   onUpdated,
   onStatusChange,
   onTrackingChange,
+  agents = [],
+  affiliates = [],
+  isSuperadmin = false,
 }) {
   const initialShipping = order ? inferShippingCosts(order) : { crc: 0, usd: 0 };
   const [notes, setNotes] = useState(order.internal_notes || '');
@@ -129,6 +132,12 @@ export default function OrderDetailPanel({
   const [cardLinkLoading, setCardLinkLoading] = useState(false);
   const [cardLinkCopied, setCardLinkCopied] = useState(false);
   const [cardLinkError, setCardLinkError] = useState('');
+  const [creditedAgent, setCreditedAgent] = useState(order.sales_agent || '');
+  const [attributionAffiliateId, setAttributionAffiliateId] = useState(order.affiliate_id || '');
+  const [commissionMode, setCommissionMode] = useState(order.agent_commission_rate_override ? 'custom' : 'default');
+  const [commissionOverridePct, setCommissionOverridePct] = useState(order.agent_commission_rate_override || 20);
+  const [savingAttribution, setSavingAttribution] = useState(false);
+  const [attributionError, setAttributionError] = useState('');
 
   useEffect(() => {
     if (!order) return;
@@ -145,6 +154,11 @@ export default function OrderDetailPanel({
     setPhoneCopied(false);
     setCardLinkCopied(false);
     setCardLinkError('');
+    setCreditedAgent(order.sales_agent || '');
+    setAttributionAffiliateId(order.affiliate_id || '');
+    setCommissionMode(Number(order.agent_commission_rate_override || 0) === 20 && order.agent_commission_source === 'self_generated' ? 'self_generated' : (order.agent_commission_rate_override ? 'custom' : 'default'));
+    setCommissionOverridePct(order.agent_commission_rate_override || 20);
+    setAttributionError('');
   }, [order]);
 
   if (!order) return null;
@@ -200,6 +214,52 @@ export default function OrderDetailPanel({
     if (!res.ok) throw new Error(data.error || 'Update failed');
     onUpdated(data.order);
     return data.order;
+  };
+
+  const agentOptions = (() => {
+    const current = String(creditedAgent || '').trim();
+    if (!current || agents.some((agent) => String(agent).trim() === current)) return agents;
+    return [current, ...agents];
+  })();
+
+  const selectedAffiliate = affiliates.find((affiliate) => affiliate.id === attributionAffiliateId);
+  const selectedAffiliateRate = selectedAffiliate ? Number(selectedAffiliate.commission_rate || 0) * 100 : 0;
+  const currentAgentOverride = Number(order.agent_commission_rate_override || 0);
+  const currentCommissionLabel = currentAgentOverride > 0
+    ? `${currentAgentOverride}%${order.agent_commission_source === 'self_generated' ? ' self-generated' : ' override'}`
+    : 'Profile rate';
+
+  const saveAttribution = async () => {
+    if (commissionMode !== 'default' && !creditedAgent.trim()) {
+      setAttributionError('Choose a credited agent before setting a commission override.');
+      return;
+    }
+
+    setSavingAttribution(true);
+    setAttributionError('');
+    try {
+      const overrideRate = commissionMode === 'default' ? null : Math.max(0, Number(commissionOverridePct) || 0);
+      const source = commissionMode === 'default'
+        ? null
+        : (commissionMode === 'self_generated' ? 'self_generated' : 'custom_override');
+
+      await patchOrder(
+        {
+          sales_agent: creditedAgent.trim() || null,
+          affiliate_id: attributionAffiliateId || null,
+          agent_commission_rate_override: overrideRate,
+          agent_commission_source: source,
+        },
+        {
+          type: 'attribution_updated',
+          message: `Attribution updated: ${creditedAgent.trim() || 'unassigned'} / ${selectedAffiliate?.name || 'no affiliate'} / ${overrideRate ? `${overrideRate}%` : 'profile rate'}`,
+        }
+      );
+    } catch (err) {
+      setAttributionError(err.message);
+    } finally {
+      setSavingAttribution(false);
+    }
   };
 
   const saveNotes = async () => {
@@ -559,6 +619,102 @@ export default function OrderDetailPanel({
                 )}
               </div>
             </div>
+          )}
+        </div>
+
+        <div className="order-detail-section">
+          <h3>Attribution &amp; Payout</h3>
+          <div className="order-detail-grid">
+            <div>
+              <label>Credited agent</label>
+              {isSuperadmin ? (
+                <select
+                  className="admin-select"
+                  value={creditedAgent}
+                  onChange={(e) => setCreditedAgent(e.target.value)}
+                  style={{ width: '100%', marginTop: '4px' }}
+                >
+                  <option value="">Unassigned</option>
+                  {agentOptions.map((agent) => (
+                    <option key={agent} value={agent}>{agent}</option>
+                  ))}
+                </select>
+              ) : (
+                <span>{order.sales_agent || 'Unassigned'}</span>
+              )}
+            </div>
+            <div>
+              <label>Agent commission</label>
+              {isSuperadmin ? (
+                <select
+                  className="admin-select"
+                  value={commissionMode}
+                  onChange={(e) => {
+                    setCommissionMode(e.target.value);
+                    if (e.target.value === 'self_generated') setCommissionOverridePct(20);
+                  }}
+                  style={{ width: '100%', marginTop: '4px' }}
+                >
+                  <option value="default">Profile rate</option>
+                  <option value="self_generated">Self-generated sale - 20%</option>
+                  <option value="custom">Custom override</option>
+                </select>
+              ) : (
+                <span>{currentCommissionLabel}</span>
+              )}
+            </div>
+            {isSuperadmin && commissionMode === 'custom' && (
+              <div>
+                <label>Override %</label>
+                <input
+                  className="admin-input"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={commissionOverridePct}
+                  onChange={(e) => setCommissionOverridePct(e.target.value)}
+                />
+              </div>
+            )}
+            <div>
+              <label>Affiliate</label>
+              {isSuperadmin ? (
+                <select
+                  className="admin-select"
+                  value={attributionAffiliateId}
+                  onChange={(e) => setAttributionAffiliateId(e.target.value)}
+                  style={{ width: '100%', marginTop: '4px' }}
+                >
+                  <option value="">No affiliate</option>
+                  {affiliates.map((affiliate) => (
+                    <option key={affiliate.id} value={affiliate.id}>
+                      {affiliate.name}{affiliate.whatsapp ? ' - WhatsApp ready' : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span>{selectedAffiliate?.name || (order.affiliate_id ? 'Affiliate assigned' : 'No affiliate')}</span>
+              )}
+            </div>
+          </div>
+          {selectedAffiliate && (
+            <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '10px 0 0' }}>
+              Affiliate payout preview uses {selectedAffiliateRate.toFixed(0)}% and will send their WhatsApp alert when this affiliate is newly assigned.
+            </p>
+          )}
+          {attributionError && <p style={{ color: '#f87171', fontSize: '0.85rem', marginTop: '8px' }}>{attributionError}</p>}
+          {isSuperadmin && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-primary"
+              onClick={saveAttribution}
+              disabled={savingAttribution}
+              style={{ marginTop: '12px', width: '100%' }}
+            >
+              <BadgePercent size={14} />
+              {savingAttribution ? 'Saving...' : 'Save attribution'}
+            </button>
           )}
         </div>
 

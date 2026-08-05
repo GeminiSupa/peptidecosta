@@ -423,6 +423,7 @@ export default function AdminPage() {
   // Storage Bucket States
   const [bucketImages, setBucketImages] = useState([]);
   const [agents, setAgents] = useState([]);
+  const [orderAffiliates, setOrderAffiliates] = useState([]);
   const [loadingBucketImages, setLoadingBucketImages] = useState(false);
   
   // CMS States
@@ -2084,6 +2085,25 @@ Core Rules:
     }
   };
 
+  const fetchOrderAffiliates = async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      setOrderAffiliates([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('affiliates')
+        .select('id, name, email, whatsapp, commission_rate')
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setOrderAffiliates(data || []);
+    } catch (err) {
+      console.error('Failed to load affiliates for order attribution:', err);
+      setOrderAffiliates([]);
+    }
+  };
+
   // Fetch admin products and orders
   const loadAdminData = async () => {
     if (adminProfile && isSubUser(adminProfile)) {
@@ -2138,6 +2158,7 @@ Core Rules:
 
     // Fetch agents
     fetchAgents();
+    fetchOrderAffiliates();
 
     // 1. Fetch Products
     if (isSupabaseConfigured && supabase) {
@@ -7000,6 +7021,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           onUpdated={handleOrderUpdated}
           onStatusChange={handleOrderStatusUpdate}
           onTrackingChange={handleOrderTrackingUpdate}
+          agents={agents}
+          affiliates={orderAffiliates}
+          isSuperadmin={!!adminProfile?.is_superadmin}
         />
       )}
 

@@ -18,6 +18,7 @@ import {
 import { isActiveProfile, profileTier } from '@/lib/subUserTier.mjs';
 import { SUB_USER_PAYOUT_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
+import { commissionRateLabel, summarizeOrderCommissions } from '@/lib/orderCommission.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
 
@@ -283,15 +284,14 @@ export async function GET(request) {
         && rate === 0
       ) continue;
 
-      // Group totals by currency
-      let usdSales = 0;
-      let crcSales = 0;
-
-      for (const order of agentOrders) {
-        const amounts = getOrderSalesAmounts(order, currentExchangeRate);
-        usdSales += amounts.usd;
-        crcSales += amounts.crc;
-      }
+      const commissionSummary = summarizeOrderCommissions(
+        agentOrders,
+        rate,
+        (order) => getOrderSalesAmounts(order, currentExchangeRate)
+      );
+      const usdSales = commissionSummary.usdSales;
+      const crcSales = commissionSummary.crcSales;
+      const agentRateLabel = commissionRateLabel(commissionSummary.rates, rate);
 
       // Calculate commissions
       const {
@@ -303,6 +303,8 @@ export async function GET(request) {
         usdSales,
         crcSales,
         commissionRate: rate,
+        usdCommissionOverride: commissionSummary.usdCommission,
+        crcCommissionOverride: commissionSummary.crcCommission,
         weeklySalary,
         salaryCurrency,
         exchangeRate: currentExchangeRate,
@@ -314,7 +316,7 @@ export async function GET(request) {
       const { html: emailHtml, text: emailText } = buildAgentCommissionEmail({
         agentName: agent.name || agent.email,
         periodDisplay,
-        commissionRate: rate,
+        commissionRate: agentRateLabel,
         weeklySalary,
         salaryCurrency,
         usdSales,
@@ -427,7 +429,7 @@ export async function GET(request) {
         agentId: agent.id,
         name: agent.name,
         email: agent.email,
-        rate: `${rate}%`,
+        rate: agentRateLabel,
         closedOrdersCount: agentOrders.length,
         usdSales: formatMoney(usdSales, 'USD'),
         crcSales: formatMoney(crcSales, 'CRC'),

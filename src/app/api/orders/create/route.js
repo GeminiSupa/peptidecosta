@@ -10,6 +10,7 @@ import {
   WHATSAPP_TIMEOUT_MS,
   formatSalesAlertTotal,
   logOrderAlert,
+  sendAffiliateOrderWhatsApp,
   sendCustomerOrderConfirmation,
 } from '@/lib/orderWhatsAppAlerts';
 
@@ -271,6 +272,7 @@ export async function POST(request) {
     // reaching a uuid column used to fail the whole insert, which broke
     // checkout for every customer who arrived through that link.
     const { order: orderRow, dropped: droppedAttribution } = sanitizeOrderAttribution(order);
+    let savedOrderForAlerts = orderRow;
     if (droppedAttribution.length) {
       console.warn(
         '[orders/create] Dropped invalid attribution (order still saved):',
@@ -287,6 +289,7 @@ export async function POST(request) {
     if (error && isFkViolation(error) && orderRow.affiliate_id) {
       console.warn('[orders/create] Affiliate FK failed, retrying without affiliate fields:', error.message);
       const { affiliate_id, affiliate_commission_usd, affiliate_commission_crc, ...withoutAffiliate } = orderRow;
+      savedOrderForAlerts = withoutAffiliate;
       ({ data, error } = await supabase
         .from('orders')
         .insert(withoutAffiliate)
@@ -430,9 +433,10 @@ export async function POST(request) {
     const alerts = [
       order.payment_method === 'card' 
         ? ['customer WhatsApp (skipped)', Promise.resolve()]
-        : ['customer WhatsApp', sendCustomerOrderConfirmation(supabase, order, data.order_number, data.id)],
-      ['agent WhatsApp', sendAgentOrderWhatsApp(supabase, order, data.order_number, data.id)],
-      ['admin email', sendAdminOrderEmail(baseUrl, order, data.order_number)],
+        : ['customer WhatsApp', sendCustomerOrderConfirmation(supabase, savedOrderForAlerts, data.order_number, data.id)],
+      ['agent WhatsApp', sendAgentOrderWhatsApp(supabase, savedOrderForAlerts, data.order_number, data.id)],
+      ['affiliate WhatsApp', sendAffiliateOrderWhatsApp(supabase, savedOrderForAlerts, data.order_number, data.id)],
+      ['admin email', sendAdminOrderEmail(baseUrl, savedOrderForAlerts, data.order_number)],
     ];
     const alertResults = await Promise.allSettled(alerts.map(([, promise]) => promise));
     alertResults.forEach((result, index) => {

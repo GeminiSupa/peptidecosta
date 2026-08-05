@@ -37,6 +37,8 @@ export function recalcPayoutAmounts({
   usdSales = 0,
   crcSales = 0,
   commissionRate = 0,
+  usdCommissionOverride,
+  crcCommissionOverride,
   weeklySalary = 0,
   salaryCurrency = 'USD',
   exchangeRate = FALLBACK_EXCHANGE_RATE,
@@ -44,8 +46,12 @@ export function recalcPayoutAmounts({
   overrideCrc = 0,
 }) {
   const rate = Number(commissionRate || 0);
-  const usdCommission = Number(usdSales || 0) * (rate / 100);
-  const crcCommission = Number(crcSales || 0) * (rate / 100);
+  const usdCommission = usdCommissionOverride === undefined
+    ? Number(usdSales || 0) * (rate / 100)
+    : Number(usdCommissionOverride || 0);
+  const crcCommission = crcCommissionOverride === undefined
+    ? Number(crcSales || 0) * (rate / 100)
+    : Number(crcCommissionOverride || 0);
 
   const salary = Number(weeklySalary || 0);
   const salaryUsd = salaryCurrency === 'USD' ? salary : salary / exchangeRate;

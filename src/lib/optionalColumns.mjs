@@ -73,3 +73,13 @@ export const SUB_USER_PROFILE_COLUMNS = [
   'reassigned_by',
   'reassigned_at',
 ];
+
+export const ORDER_ATTRIBUTION_COLUMNS = [
+  'affiliate_id',
+  'affiliate_commission_usd',
+  'affiliate_commission_crc',
+  'agent_commission_rate_override',
+  'agent_commission_source',
+  'affiliate_whatsapp_notified_at',
+  'affiliate_whatsapp_message_id',
+];

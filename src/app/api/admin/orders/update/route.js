@@ -4,8 +4,28 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { agentMatchKeys, orderVisibleToAgent } from '@/lib/agentOrders';
+import { ORDER_ATTRIBUTION_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import { sendAffiliateOrderWhatsApp } from '@/lib/orderWhatsAppAlerts';
 
 export const runtime = 'nodejs';
+
+function affiliateCommissionPatch(order, affiliate) {
+  if (!order?.affiliate_id || !affiliate) {
+    return {
+      affiliate_commission_usd: 0,
+      affiliate_commission_crc: 0,
+    };
+  }
+
+  const rate = Number(affiliate.commission_rate || 0);
+  const usdBase = Math.max(0, Number(order.total_usd || 0) - Number(order.shipping_cost_usd || 0));
+  const crcBase = Math.max(0, Number(order.total_crc || 0) - Number(order.shipping_cost_crc || 0));
+
+  return {
+    affiliate_commission_usd: Number((usdBase * rate).toFixed(2)),
+    affiliate_commission_crc: Math.round(crcBase * rate),
+  };
+}
 
 export async function PATCH(request) {
   const auth = await verifyAdminSession(request);
@@ -26,6 +46,7 @@ export async function PATCH(request) {
       'shipping_address', 'items', 'total_usd', 'total_crc',
       'payment_transaction_id', 'payment_provider_status', 'payment_authorization',
       'payment_descriptor', 'payment_provider_response',
+      'affiliate_id', 'agent_commission_rate_override', 'agent_commission_source',
     ];
     const patch = {};
     for (const key of allowed) {
@@ -36,7 +57,7 @@ export async function PATCH(request) {
 
     const { data: currentOrder, error: currentOrderError } = await supabase
       .from('orders')
-      .select('id, status, sales_agent')
+      .select('*')
       .eq('id', orderId)
       .single();
 
@@ -55,6 +76,49 @@ export async function PATCH(request) {
       }
     }
 
+    const superadminOnlyFields = [
+      'affiliate_id',
+      'agent_commission_rate_override',
+      'agent_commission_source',
+    ];
+    if (!auth.profile.is_superadmin && superadminOnlyFields.some((field) => field in patch)) {
+      return NextResponse.json({ error: 'Forbidden: only superadmins can edit payout attribution' }, { status: 403 });
+    }
+
+    if ('agent_commission_rate_override' in patch) {
+      const rate = Number(patch.agent_commission_rate_override || 0);
+      patch.agent_commission_rate_override = rate > 0 ? rate : null;
+      if (!patch.agent_commission_rate_override) patch.agent_commission_source = null;
+    }
+
+    if ('agent_commission_source' in patch) {
+      patch.agent_commission_source = String(patch.agent_commission_source || '').trim() || null;
+    }
+
+    if ('affiliate_id' in patch) {
+      patch.affiliate_id = patch.affiliate_id || null;
+      let affiliate = null;
+      if (patch.affiliate_id) {
+        const { data: affiliateRow, error: affiliateError } = await supabase
+          .from('affiliates')
+          .select('id, commission_rate')
+          .eq('id', patch.affiliate_id)
+          .maybeSingle();
+        if (affiliateError) {
+          return NextResponse.json({ error: affiliateError.message }, { status: 500 });
+        }
+        if (!affiliateRow) {
+          return NextResponse.json({ error: 'Affiliate not found' }, { status: 404 });
+        }
+        affiliate = affiliateRow;
+      }
+      Object.assign(patch, affiliateCommissionPatch({ ...currentOrder, ...patch }, affiliate));
+      if (currentOrder.affiliate_id !== patch.affiliate_id) {
+        patch.affiliate_whatsapp_notified_at = null;
+        patch.affiliate_whatsapp_message_id = null;
+      }
+    }
+
     let activityLog;
     if (activity) {
       const { data: current } = await supabase
@@ -70,16 +134,33 @@ export async function PATCH(request) {
       patch.activity_log = activityLog;
     }
 
-    const { data, error } = await supabase
-      .from('orders')
-      .update(patch)
-      .eq('id', orderId)
-      .select('*')
-      .single();
+    const { data, error, droppedColumns } = await writeDroppingMissingColumns(
+      patch,
+      ORDER_ATTRIBUTION_COLUMNS,
+      (row) => supabase
+        .from('orders')
+        .update(row)
+        .eq('id', orderId)
+        .select('*')
+        .single()
+    );
 
     if (error) {
       console.error('[admin/orders/update]', error.message);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (droppedColumns?.length) {
+      console.warn('[admin/orders/update] Order attribution columns missing, run add-order-attribution-controls.sql:', droppedColumns.join(', '));
+    }
+
+    if (
+      auth.profile.is_superadmin &&
+      'affiliate_id' in patch &&
+      data.affiliate_id &&
+      currentOrder.affiliate_id !== data.affiliate_id
+    ) {
+      await sendAffiliateOrderWhatsApp(supabase, data, data.order_number, data.id);
     }
 
     // Trigger Customer Receipt if status changed to Paid/Completed
