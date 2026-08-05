@@ -14,7 +14,6 @@ export function isEligibleSalesAgentProfile(profile) {
   const status = String(profile?.status || 'active').trim().toLowerCase();
   return Boolean(
     profile
-    && profile.is_superadmin !== true
     && tier === 'staff'
     && status === 'active'
     && String(profile.name || profile.email || '').trim()

@@ -230,6 +230,8 @@ export default function OrderDetailPanel({
   })();
 
   const selectedAffiliate = affiliates.find((affiliate) => affiliate.id === attributionAffiliateId);
+  const salesAgentAffiliates = affiliates.filter(isSalesAgentAffiliate);
+  const externalAffiliates = affiliates.filter((affiliate) => !isSalesAgentAffiliate(affiliate));
   const selectedAffiliateRate = selectedAffiliate ? Number(selectedAffiliate.commission_rate || 0) * 100 : 0;
   const selectedAffiliateIsAgent = isSalesAgentAffiliate(selectedAffiliate);
   const currentAgentOverride = Number(order.agent_commission_rate_override || 0);
@@ -707,11 +709,24 @@ export default function OrderDetailPanel({
                   style={{ width: '100%', marginTop: '4px' }}
                 >
                   <option value="">No affiliate</option>
-                  {affiliates.map((affiliate) => (
-                    <option key={affiliate.id} value={affiliate.id}>
-                      {affiliate.name}{isSalesAgentAffiliate(affiliate) ? ' - Sales agent (20%)' : (affiliate.whatsapp ? ' - WhatsApp ready' : '')}
-                    </option>
-                  ))}
+                  {salesAgentAffiliates.length > 0 && (
+                    <optgroup label="Sales agents - combined 20%">
+                      {salesAgentAffiliates.map((affiliate) => (
+                        <option key={affiliate.id} value={affiliate.id}>
+                          {affiliate.name}{affiliate.whatsapp ? ' - WhatsApp ready' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {externalAffiliates.length > 0 && (
+                    <optgroup label="External affiliates">
+                      {externalAffiliates.map((affiliate) => (
+                        <option key={affiliate.id} value={affiliate.id}>
+                          {affiliate.name}{affiliate.whatsapp ? ' - WhatsApp ready' : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               ) : (
                 <span>{selectedAffiliate?.name || (order.affiliate_id ? 'Affiliate assigned' : 'No affiliate')}</span>
