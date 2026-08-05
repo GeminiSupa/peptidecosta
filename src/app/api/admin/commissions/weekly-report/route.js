@@ -18,9 +18,14 @@ import {
 import { isActiveProfile, profileTier } from '@/lib/subUserTier.mjs';
 import { SUB_USER_PAYOUT_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
-import { commissionRateLabel, summarizeOrderCommissions } from '@/lib/orderCommission.mjs';
+import {
+  commissionRateLabel,
+  decorateCommissionOrder,
+  summarizeOrderCommissions,
+} from '@/lib/orderCommission.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
+import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -292,6 +297,12 @@ export async function GET(request) {
       const usdSales = commissionSummary.usdSales;
       const crcSales = commissionSummary.crcSales;
       const agentRateLabel = commissionRateLabel(commissionSummary.rates, rate);
+      const reportedAgentOrders = agentOrders.map((order) => decorateCommissionOrder(
+        order,
+        rate,
+        (row) => getOrderSalesAmounts(row, currentExchangeRate),
+        commissionSourceLabel
+      ));
 
       // Calculate commissions
       const {
@@ -325,7 +336,7 @@ export async function GET(request) {
         crcCommission,
         totalPayoutUsd,
         totalPayoutCrc,
-        orders: agentOrders,
+        orders: reportedAgentOrders,
         overrideRate,
         overrideUsd,
         overrideCrc,
@@ -370,7 +381,7 @@ export async function GET(request) {
         salary_currency: salaryCurrency,
         total_payout_usd: totalPayoutUsd,
         total_payout_crc: totalPayoutCrc,
-        orders_data: agentOrders,
+        orders_data: reportedAgentOrders,
         // Kept separate from orders_data so approving this payout marks these
         // orders paid for THIS agent only, leaving the sub-user's own 8% intact.
         override_rate: overrideRate,

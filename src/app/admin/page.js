@@ -2093,7 +2093,7 @@ Core Rules:
     try {
       const { data, error } = await supabase
         .from('affiliates')
-        .select('id, name, email, whatsapp, commission_rate')
+        .select('*')
         .order('name', { ascending: true });
 
       if (error) throw error;

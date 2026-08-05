@@ -46,6 +46,9 @@ export function buildAgentCommissionEmail({
 
   const overrideList = Array.isArray(overrideBreakdown) ? overrideBreakdown : [];
   const hasOverride = overrideList.length > 0 && (Number(overrideUsd) > 0 || Number(overrideCrc) > 0);
+  const agentReferralCount = sortedOrders.filter(
+    (order) => order.agent_commission_source === 'agent_referral'
+  ).length;
   const commissionRateLabel = typeof commissionRate === 'string'
     ? commissionRate
     : `${Number(commissionRate || 0)}%`;
@@ -61,12 +64,18 @@ export function buildAgentCommissionEmail({
     const orderAmount = isUsd
       ? formatMoney(order.total_usd || order.total || 0, 'USD')
       : formatMoney(order.total_crc || order.total || 0, 'CRC');
+    const commissionEarned = isUsd
+      ? formatMoney(order.commission_earned_usd || 0, 'USD')
+      : formatMoney(order.commission_earned_crc || 0, 'CRC');
     return `
       <tr bgcolor="${index % 2 === 0 ? '#ffffff' : '#f8fafc'}">
         <td style="padding:12px 10px;border-top:1px solid #e2e8f0;font:600 12px Arial,sans-serif;color:#0f172a;">#${escapeHtml(order.order_number || order.id?.slice(0, 8) || 'N/A')}</td>
         <td style="padding:12px 10px;border-top:1px solid #e2e8f0;font:12px Arial,sans-serif;color:#475569;white-space:nowrap;">${formatCrDate(order.created_at)}</td>
         <td style="padding:12px 10px;border-top:1px solid #e2e8f0;font:12px Arial,sans-serif;color:#334155;">${escapeHtml(order.customer_name || 'N/A')}</td>
+        <td style="padding:12px 10px;border-top:1px solid #e2e8f0;font:600 12px Arial,sans-serif;color:#0f766e;">${escapeHtml(order.commission_source_label || 'Standard sale')}</td>
+        <td align="right" style="padding:12px 10px;border-top:1px solid #e2e8f0;font:700 12px Arial,sans-serif;color:#475569;white-space:nowrap;">${Number(order.commission_rate_applied || 0)}%</td>
         <td align="right" style="padding:12px 10px;border-top:1px solid #e2e8f0;font:700 12px Arial,sans-serif;color:#0f172a;white-space:nowrap;">${orderAmount}</td>
+        <td align="right" style="padding:12px 10px;border-top:1px solid #e2e8f0;font:700 12px Arial,sans-serif;color:#0f766e;white-space:nowrap;">${commissionEarned}</td>
       </tr>`;
   }).join('');
 
@@ -110,6 +119,12 @@ export function buildAgentCommissionEmail({
               </tr>
             </table>
 
+            ${agentReferralCount > 0 ? `
+            <div style="margin-top:16px;padding:13px 14px;background-color:#ecfdf5;border:1px solid #99f6e4;font:12px Arial,sans-serif;line-height:1.5;color:#115e59;">
+              <strong>${agentReferralCount} agent referral${agentReferralCount === 1 ? '' : 's'} paid at 20%.</strong>
+              This is the full combined commission for those orders; no separate 10% sales commission is added.
+            </div>` : ''}
+
             ${hasOverride ? `
             <div style="font:700 14px Arial,sans-serif;color:#0f172a;margin:24px 0 10px;">My team &middot; ${Number(overrideRate || 0)}% of what they sold</div>
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #dbe3ee;">
@@ -143,9 +158,12 @@ export function buildAgentCommissionEmail({
                 <th align="left" style="padding:10px;font:700 10px Arial,sans-serif;color:#475569;text-transform:uppercase;">Order</th>
                 <th align="left" style="padding:10px;font:700 10px Arial,sans-serif;color:#475569;text-transform:uppercase;">Date</th>
                 <th align="left" style="padding:10px;font:700 10px Arial,sans-serif;color:#475569;text-transform:uppercase;">Customer</th>
+                <th align="left" style="padding:10px;font:700 10px Arial,sans-serif;color:#475569;text-transform:uppercase;">Type</th>
+                <th align="right" style="padding:10px;font:700 10px Arial,sans-serif;color:#475569;text-transform:uppercase;">Rate</th>
                 <th align="right" style="padding:10px;font:700 10px Arial,sans-serif;color:#475569;text-transform:uppercase;">Amount</th>
+                <th align="right" style="padding:10px;font:700 10px Arial,sans-serif;color:#475569;text-transform:uppercase;">Earned</th>
               </tr>
-              ${orderRows || '<tr><td colspan="4" align="center" style="padding:20px;font:13px Arial,sans-serif;color:#64748b;border-top:1px solid #e2e8f0;">No completed orders in this period.</td></tr>'}
+              ${orderRows || '<tr><td colspan="7" align="center" style="padding:20px;font:13px Arial,sans-serif;color:#64748b;border-top:1px solid #e2e8f0;">No completed orders in this period.</td></tr>'}
             </table>
           </td></tr>
           <tr><td align="center" bgcolor="#f8fafc" style="padding:16px;border-top:1px solid #dbe3ee;font:11px Arial,sans-serif;color:#64748b;">Automated weekly report · Peptides Costa Rica</td></tr>
@@ -158,8 +176,17 @@ export function buildAgentCommissionEmail({
     `Weekly pay report for ${periodDisplay}`,
     `Total payout (salary + commission): ${formatMoney(totalPayoutUsd, 'USD')} OR ${formatMoney(totalPayoutCrc, 'CRC')}`,
     'Choose one currency option—not both.',
+    ...(agentReferralCount > 0
+      ? [`Agent referrals: ${agentReferralCount} order${agentReferralCount === 1 ? '' : 's'} paid at one combined 20% (no additional 10%).`]
+      : []),
     `Completed orders: ${sortedOrders.length}`,
-    ...sortedOrders.map((order) => `${formatCrDate(order.created_at)} · #${order.order_number || order.id?.slice(0, 8) || 'N/A'} · ${order.customer_name || 'N/A'}`),
+    ...sortedOrders.map((order) => {
+      const isUsd = String(order.currency || '').toUpperCase() === 'USD';
+      const earned = isUsd
+        ? formatMoney(order.commission_earned_usd || 0, 'USD')
+        : formatMoney(order.commission_earned_crc || 0, 'CRC');
+      return `${formatCrDate(order.created_at)} · #${order.order_number || order.id?.slice(0, 8) || 'N/A'} · ${order.customer_name || 'N/A'} · ${order.commission_source_label || 'Standard sale'} · ${Number(order.commission_rate_applied || 0)}% · earned ${earned}`;
+    }),
     ...(hasOverride
       ? [
         '',

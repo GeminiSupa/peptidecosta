@@ -6,6 +6,11 @@ import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRe
 import { agentMatchKeys, orderVisibleToAgent } from '@/lib/agentOrders';
 import { ORDER_ATTRIBUTION_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAffiliateOrderWhatsApp } from '@/lib/orderWhatsAppAlerts';
+import {
+  applySalesAgentReferral,
+  isEligibleSalesAgentProfile,
+  isSalesAgentAffiliate,
+} from '@/lib/salesAgentAffiliate.mjs';
 
 export const runtime = 'nodejs';
 
@@ -101,7 +106,7 @@ export async function PATCH(request) {
       if (patch.affiliate_id) {
         const { data: affiliateRow, error: affiliateError } = await supabase
           .from('affiliates')
-          .select('id, commission_rate')
+          .select('*')
           .eq('id', patch.affiliate_id)
           .maybeSingle();
         if (affiliateError) {
@@ -112,7 +117,29 @@ export async function PATCH(request) {
         }
         affiliate = affiliateRow;
       }
-      Object.assign(patch, affiliateCommissionPatch({ ...currentOrder, ...patch }, affiliate));
+      if (isSalesAgentAffiliate(affiliate)) {
+        const { data: linkedProfile, error: linkedProfileError } = await supabase
+          .from('admin_profiles')
+          .select('*')
+          .eq('user_id', affiliate.admin_profile_user_id)
+          .maybeSingle();
+        if (linkedProfileError) {
+          return NextResponse.json({ error: linkedProfileError.message }, { status: 500 });
+        }
+        if (!isEligibleSalesAgentProfile(linkedProfile)) {
+          return NextResponse.json({ error: 'This sales-agent affiliate is not active.' }, { status: 400 });
+        }
+        const combined = applySalesAgentReferral({ ...currentOrder, ...patch }, linkedProfile);
+        Object.assign(patch, {
+          sales_agent: combined.sales_agent,
+          agent_commission_rate_override: combined.agent_commission_rate_override,
+          agent_commission_source: combined.agent_commission_source,
+          affiliate_commission_usd: 0,
+          affiliate_commission_crc: 0,
+        });
+      } else {
+        Object.assign(patch, affiliateCommissionPatch({ ...currentOrder, ...patch }, affiliate));
+      }
       if (currentOrder.affiliate_id !== patch.affiliate_id) {
         patch.affiliate_whatsapp_notified_at = null;
         patch.affiliate_whatsapp_message_id = null;

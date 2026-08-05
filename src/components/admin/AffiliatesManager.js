@@ -7,6 +7,7 @@ import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check
 import { getBadgeStyleOptions, resolvePromoBadgeText } from '@/lib/promoBadge.mjs';
 import { crWallToIso, isoToCrWall, formatCrWall, formatCrInstant } from '@/lib/crTime.mjs';
 import ReferralAnalytics from '@/components/admin/ReferralAnalytics';
+import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 
 const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://catalog.peptidescostarica.net/catalog?lang=es';
 
@@ -281,7 +282,9 @@ export default function AffiliatesManager({ products = [] }) {
         name: editingAffiliate.name.trim(),
         email: editingAffiliate.email.trim(),
         whatsapp: editingAffiliate.whatsapp?.trim() || null,
-        commission_rate: Number(editingAffiliate.commission_rate || 0)
+        commission_rate: isSalesAgentAffiliate(editingAffiliate)
+          ? 0.20
+          : Number(editingAffiliate.commission_rate || 0)
       };
 
       const { data, error } = await supabase
@@ -303,6 +306,10 @@ export default function AffiliatesManager({ products = [] }) {
 
   const handleDeleteAffiliate = async (id) => {
     const affiliate = affiliates.find((a) => a.id === id);
+    if (isSalesAgentAffiliate(affiliate)) {
+      alert('Sales-agent affiliates are managed from Team Members and cannot be deleted here.');
+      return;
+    }
     const ownedCodes = promoCodes.filter((p) => p.affiliate_id === id);
     if (!confirmDelete('affiliate', [
       affiliate?.name,
@@ -510,7 +517,7 @@ export default function AffiliatesManager({ products = [] }) {
                     <div style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '1rem' }}>{aff.name}</div>
                     <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>{aff.email}</div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#34d399', background: 'rgba(52, 211, 153, 0.1)', padding: '2px 8px', borderRadius: '12px', display: 'inline-block', marginTop: '8px' }}>
-                      {(aff.commission_rate * 100).toFixed(0)}% Payout Rate
+                      {isSalesAgentAffiliate(aff) ? 'Sales agent affiliate · combined 20%' : `${(aff.commission_rate * 100).toFixed(0)}% Payout Rate`}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -521,7 +528,9 @@ export default function AffiliatesManager({ products = [] }) {
                     >
                       <Edit2 size={16} />
                     </button>
-                    <button onClick={() => handleDeleteAffiliate(aff.id)} title="Delete affiliate" style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', cursor: 'pointer', padding: '8px', transition: 'all 0.2s' }}><Trash2 size={16} /></button>
+                    {!isSalesAgentAffiliate(aff) && (
+                      <button onClick={() => handleDeleteAffiliate(aff.id)} title="Delete affiliate" style={{ color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', cursor: 'pointer', padding: '8px', transition: 'all 0.2s' }}><Trash2 size={16} /></button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1018,10 +1027,11 @@ export default function AffiliatesManager({ products = [] }) {
             </h2>
 
             <div style={{ display: 'grid', gap: '12px' }}>
-              <input required placeholder="Name" value={editingAffiliate.name || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, name: e.target.value })} style={inputStyle} />
-              <input required type="email" placeholder="Email" value={editingAffiliate.email || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, email: e.target.value })} style={inputStyle} />
+              <input disabled={isSalesAgentAffiliate(editingAffiliate)} required placeholder="Name" value={editingAffiliate.name || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, name: e.target.value })} style={inputStyle} />
+              <input disabled={isSalesAgentAffiliate(editingAffiliate)} required type="email" placeholder="Email" value={editingAffiliate.email || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, email: e.target.value })} style={inputStyle} />
               <input placeholder="WhatsApp (Optional)" value={editingAffiliate.whatsapp || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, whatsapp: e.target.value })} style={inputStyle} />
               <select
+                disabled={isSalesAgentAffiliate(editingAffiliate)}
                 value={getCommissionSelectValue(editingAffiliate.commission_rate)}
                 onChange={e => setEditingAffiliate({
                   ...editingAffiliate,
@@ -1037,6 +1047,7 @@ export default function AffiliatesManager({ products = [] }) {
                 )}
               </select>
               <input
+                disabled={isSalesAgentAffiliate(editingAffiliate)}
                 type="number"
                 min="0"
                 max="100"

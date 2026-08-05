@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Copy, Phone, Plus, Trash2, BadgePercent } from 'lucide-react';
 import { formatActivityType } from '@/lib/orderActivity';
 import { adminFetch } from '@/lib/adminApi';
+import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
 const ORDER_STATUS_OPTIONS = [
@@ -156,7 +157,13 @@ export default function OrderDetailPanel({
     setCardLinkError('');
     setCreditedAgent(order.sales_agent || '');
     setAttributionAffiliateId(order.affiliate_id || '');
-    setCommissionMode(Number(order.agent_commission_rate_override || 0) === 20 && order.agent_commission_source === 'self_generated' ? 'self_generated' : (order.agent_commission_rate_override ? 'custom' : 'default'));
+    setCommissionMode(
+      order.agent_commission_source === 'agent_referral'
+        ? 'agent_referral'
+        : (Number(order.agent_commission_rate_override || 0) === 20 && order.agent_commission_source === 'self_generated'
+          ? 'self_generated'
+          : (order.agent_commission_rate_override ? 'custom' : 'default'))
+    );
     setCommissionOverridePct(order.agent_commission_rate_override || 20);
     setAttributionError('');
   }, [order]);
@@ -224,9 +231,10 @@ export default function OrderDetailPanel({
 
   const selectedAffiliate = affiliates.find((affiliate) => affiliate.id === attributionAffiliateId);
   const selectedAffiliateRate = selectedAffiliate ? Number(selectedAffiliate.commission_rate || 0) * 100 : 0;
+  const selectedAffiliateIsAgent = isSalesAgentAffiliate(selectedAffiliate);
   const currentAgentOverride = Number(order.agent_commission_rate_override || 0);
   const currentCommissionLabel = currentAgentOverride > 0
-    ? `${currentAgentOverride}%${order.agent_commission_source === 'self_generated' ? ' self-generated' : ' override'}`
+    ? `${currentAgentOverride}%${order.agent_commission_source === 'agent_referral' ? ' agent referral' : (order.agent_commission_source === 'self_generated' ? ' self-generated' : ' override')}`
     : 'Profile rate';
 
   const saveAttribution = async () => {
@@ -241,7 +249,9 @@ export default function OrderDetailPanel({
       const overrideRate = commissionMode === 'default' ? null : Math.max(0, Number(commissionOverridePct) || 0);
       const source = commissionMode === 'default'
         ? null
-        : (commissionMode === 'self_generated' ? 'self_generated' : 'custom_override');
+        : (commissionMode === 'agent_referral'
+          ? 'agent_referral'
+          : (commissionMode === 'self_generated' ? 'self_generated' : 'custom_override'));
 
       await patchOrder(
         {
@@ -651,11 +661,12 @@ export default function OrderDetailPanel({
                   value={commissionMode}
                   onChange={(e) => {
                     setCommissionMode(e.target.value);
-                    if (e.target.value === 'self_generated') setCommissionOverridePct(20);
+                    if (e.target.value === 'self_generated' || e.target.value === 'agent_referral') setCommissionOverridePct(20);
                   }}
                   style={{ width: '100%', marginTop: '4px' }}
                 >
                   <option value="default">Profile rate</option>
+                  <option value="agent_referral">Agent referral - combined 20%</option>
                   <option value="self_generated">Self-generated sale - 20%</option>
                   <option value="custom">Custom override</option>
                 </select>
@@ -683,13 +694,22 @@ export default function OrderDetailPanel({
                 <select
                   className="admin-select"
                   value={attributionAffiliateId}
-                  onChange={(e) => setAttributionAffiliateId(e.target.value)}
+                  onChange={(e) => {
+                    const affiliateId = e.target.value;
+                    const affiliate = affiliates.find((row) => row.id === affiliateId);
+                    setAttributionAffiliateId(affiliateId);
+                    if (isSalesAgentAffiliate(affiliate)) {
+                      setCreditedAgent(affiliate.name || affiliate.email || '');
+                      setCommissionMode('agent_referral');
+                      setCommissionOverridePct(20);
+                    }
+                  }}
                   style={{ width: '100%', marginTop: '4px' }}
                 >
                   <option value="">No affiliate</option>
                   {affiliates.map((affiliate) => (
                     <option key={affiliate.id} value={affiliate.id}>
-                      {affiliate.name}{affiliate.whatsapp ? ' - WhatsApp ready' : ''}
+                      {affiliate.name}{isSalesAgentAffiliate(affiliate) ? ' - Sales agent (20%)' : (affiliate.whatsapp ? ' - WhatsApp ready' : '')}
                     </option>
                   ))}
                 </select>
@@ -700,7 +720,9 @@ export default function OrderDetailPanel({
           </div>
           {selectedAffiliate && (
             <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '10px 0 0' }}>
-              Affiliate payout preview uses {selectedAffiliateRate.toFixed(0)}% and will send their WhatsApp alert when this affiliate is newly assigned.
+              {selectedAffiliateIsAgent
+                ? 'Sales-agent affiliate: one combined 20% payout appears in the agent report. No separate affiliate commission is added.'
+                : `Affiliate payout preview uses ${selectedAffiliateRate.toFixed(0)}% and will send their WhatsApp alert when this affiliate is newly assigned.`}
             </p>
           )}
           {attributionError && <p style={{ color: '#f87171', fontSize: '0.85rem', marginTop: '8px' }}>{attributionError}</p>}

@@ -1049,11 +1049,28 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   totals.crc += amounts.crc;
                   return totals;
                 }, { usd: 0, crc: 0 });
+                const hasPerOrderCommissions = includedOrders.some(
+                  (order) => order.commission_rate_applied !== undefined
+                );
+                const perOrderCommissions = includedOrders.reduce((totals, order) => {
+                  totals.usd += Number(order.commission_earned_usd || 0);
+                  totals.crc += Number(order.commission_earned_crc || 0);
+                  return totals;
+                }, { usd: 0, crc: 0 });
+                const appliedRates = [...new Set(includedOrders
+                  .map((order) => Number(order.commission_rate_applied))
+                  .filter((rate) => Number.isFinite(rate) && rate > 0))]
+                  .sort((a, b) => a - b);
+                const displayedRate = appliedRates.length > 1
+                  ? `Variable (${appliedRates.map((rate) => `${rate}%`).join(', ')})`
+                  : `${appliedRates[0] ?? p.commission_rate}%`;
                 const displayedPayout = p.status === 'Pending'
                   ? recalcPayoutAmounts({
                       usdSales: currentAmounts.usd,
                       crcSales: currentAmounts.crc,
                       commissionRate: p.commission_rate,
+                      usdCommissionOverride: hasPerOrderCommissions ? perOrderCommissions.usd : undefined,
+                      crcCommissionOverride: hasPerOrderCommissions ? perOrderCommissions.crc : undefined,
                       weeklySalary: p.weekly_salary_paid,
                       salaryCurrency: p.salary_currency,
                     })
@@ -1096,7 +1113,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                       </div>
                       <div className="commission-payout-card__metric">
                         <span className="label">Rate</span>
-                        <span className="value">{p.commission_rate}%</span>
+                        <span className="value">{displayedRate}</span>
                       </div>
                       <div className="commission-payout-card__metric">
                         <span className="label">Commission</span>
@@ -1148,6 +1165,14 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                           <span>#{order.order_number || order.id?.slice(0, 8)}</span>
                           <span>{order.customer_name || 'N/A'}</span>
                           <span>
+                            {order.commission_source_label && (
+                              <small style={{ display: 'block', color: '#5eead4', fontWeight: 700 }}>
+                                {order.commission_source_label} · {Number(order.commission_rate_applied || 0)}% · earned{' '}
+                                {order.currency === 'USD'
+                                  ? formatMoneyUI(order.commission_earned_usd, 'USD')
+                                  : formatMoneyUI(order.commission_earned_crc, 'CRC')}
+                              </small>
+                            )}
                             {order.currency === 'USD'
                               ? formatMoneyUI(order.total_usd, 'USD')
                               : formatMoneyUI(order.total_crc, 'CRC')}

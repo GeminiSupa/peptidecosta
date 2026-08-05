@@ -1,5 +1,6 @@
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { toE164, isValidE164, DEFAULT_PHONE_COUNTRY } from '@/lib/phoneFormat.mjs';
+import { isSalesAgentAffiliate, SALES_AGENT_REFERRAL_RATE } from '@/lib/salesAgentAffiliate.mjs';
 
 /**
  * Order WhatsApp alerts, shared by the two routes that send them.
@@ -27,6 +28,18 @@ export function formatAffiliateCommissionTotal(order) {
   return order.currency === 'USD'
     ? `$${Number(order.affiliate_commission_usd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : `CRC ${Number(order.affiliate_commission_crc || 0).toLocaleString('es-CR')}`;
+}
+
+export function formatAffiliateAlertCommission(order, affiliate) {
+  if (!isSalesAgentAffiliate(affiliate)) return formatAffiliateCommissionTotal(order);
+
+  const rate = Number(order.agent_commission_rate_override || SALES_AGENT_REFERRAL_RATE) / 100;
+  if (order.currency === 'USD') {
+    const base = Math.max(0, Number(order.total_usd || 0));
+    return `$${(base * rate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  const base = Math.max(0, Number(order.total_crc || 0));
+  return `CRC ${Math.round(base * rate).toLocaleString('es-CR')}`;
 }
 
 export async function logOrderAlert(supabase, { phone, messageId, summary, orderId, raw }) {
@@ -164,7 +177,7 @@ export async function sendAffiliateOrderWhatsApp(supabase, order, orderNumber, o
 
   const { data: affiliate, error } = await supabase
     .from('affiliates')
-    .select('id, name, email, whatsapp')
+    .select('*')
     .eq('id', affiliateId)
     .maybeSingle();
 
@@ -182,7 +195,7 @@ export async function sendAffiliateOrderWhatsApp(supabase, order, orderNumber, o
 
   const templateName = process.env.AFFILIATE_SALE_WHATSAPP_TEMPLATE || 'alerta_venta_afiliado';
   const templateLanguage = process.env.AFFILIATE_SALE_WHATSAPP_TEMPLATE_LANGUAGE || 'es';
-  const commission = formatAffiliateCommissionTotal(order);
+  const commission = formatAffiliateAlertCommission(order, affiliate);
 
   try {
     const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {

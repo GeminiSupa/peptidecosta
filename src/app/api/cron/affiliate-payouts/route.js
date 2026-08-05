@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
+import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -38,7 +39,9 @@ export async function GET(request) {
         affiliates (
           id,
           name,
-          email
+          email,
+          affiliate_kind,
+          admin_profile_user_id
         )
       `)
       .not('affiliate_id', 'is', null)
@@ -57,8 +60,11 @@ export async function GET(request) {
     for (const order of orders) {
       // Skip array wrappers if any
       const aff = Array.isArray(order.affiliates) ? order.affiliates[0] : order.affiliates;
-      if (!aff) continue;
-      
+      if (!aff || isSalesAgentAffiliate(aff)) continue;
+
+      const comm = Number(order.affiliate_commission_usd || 0);
+      if (comm <= 0) continue;
+
       if (!payouts[aff.id]) {
         payouts[aff.id] = {
           name: aff.name,
@@ -68,12 +74,9 @@ export async function GET(request) {
         };
       }
       
-      const comm = Number(order.affiliate_commission_usd || 0);
-      if (comm > 0) {
-        payouts[aff.id].totalEarned += comm;
-        payouts[aff.id].ordersCount += 1;
-        totalCommissionsUsd += comm;
-      }
+      payouts[aff.id].totalEarned += comm;
+      payouts[aff.id].ordersCount += 1;
+      totalCommissionsUsd += comm;
     }
 
     if (Object.keys(payouts).length === 0) {

@@ -5,7 +5,13 @@ import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoE
 import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
+import { agentMatchKeys } from '@/lib/agentOrders';
 import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
+import {
+  applySalesAgentReferral,
+  isEligibleSalesAgentProfile,
+  isSalesAgentAffiliate,
+} from '@/lib/salesAgentAffiliate.mjs';
 import {
   WHATSAPP_TIMEOUT_MS,
   formatSalesAlertTotal,
@@ -21,6 +27,62 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const REQUIRED_FIELDS = ['order_number', 'customer_name', 'customer_phone', 'items'];
+
+async function applyTrustedAgentReferralAttribution(supabase, untrustedOrder) {
+  const order = { ...untrustedOrder };
+  // Checkout callers do not choose payout rates. Attribution is resolved from
+  // the linked server-side profile below.
+  delete order.agent_commission_rate_override;
+  delete order.agent_commission_source;
+
+  let affiliate = null;
+  if (order.affiliate_id) {
+    const { data } = await supabase
+      .from('affiliates')
+      .select('*')
+      .eq('id', order.affiliate_id)
+      .maybeSingle();
+    affiliate = data || null;
+  }
+
+  if (isSalesAgentAffiliate(affiliate)) {
+    const { data: profile } = await supabase
+      .from('admin_profiles')
+      .select('*')
+      .eq('user_id', affiliate.admin_profile_user_id)
+      .maybeSingle();
+
+    if (isEligibleSalesAgentProfile(profile)) {
+      return applySalesAgentReferral(order, profile);
+    }
+
+    // A suspended or otherwise invalid linked agent must not fall through to
+    // the ordinary affiliate payout and accidentally earn there instead.
+    return {
+      ...order,
+      affiliate_commission_usd: 0,
+      affiliate_commission_crc: 0,
+    };
+  }
+
+  const requestedAgent = String(order.sales_agent || '').trim().toLowerCase();
+  if (!requestedAgent) return order;
+
+  const { data: profiles } = await supabase.from('admin_profiles').select('*');
+  const profile = (profiles || []).find((row) => agentMatchKeys(row).has(requestedAgent));
+  if (!isEligibleSalesAgentProfile(profile)) return order;
+
+  const { data: linkedAffiliate } = await supabase
+    .from('affiliates')
+    .select('*')
+    .eq('admin_profile_user_id', profile.user_id)
+    .maybeSingle();
+
+  return applySalesAgentReferral({
+    ...order,
+    affiliate_id: linkedAffiliate?.id || order.affiliate_id || null,
+  }, profile);
+}
 
 function isFkViolation(error) {
   const msg = error?.message || '';
@@ -271,7 +333,8 @@ export async function POST(request) {
     // A marketing tag must never cost us the sale. A free-text campaign name
     // reaching a uuid column used to fail the whole insert, which broke
     // checkout for every customer who arrived through that link.
-    const { order: orderRow, dropped: droppedAttribution } = sanitizeOrderAttribution(order);
+    const { order: sanitizedOrder, dropped: droppedAttribution } = sanitizeOrderAttribution(order);
+    const orderRow = await applyTrustedAgentReferralAttribution(supabase, sanitizedOrder);
     let savedOrderForAlerts = orderRow;
     if (droppedAttribution.length) {
       console.warn(

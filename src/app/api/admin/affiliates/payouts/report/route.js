@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 
 // Email Configuration from Environment variables
 const SMTP_HOST = process.env.SMTP_HOST;
@@ -135,7 +136,7 @@ export async function GET(request) {
       auth: { user: SMTP_USER, pass: SMTP_PASS }
     }) : null;
 
-    for (const aff of affiliates) {
+    for (const aff of (affiliates || []).filter((row) => !isSalesAgentAffiliate(row))) {
       const rate = Number(aff.commission_rate || 0.10);
 
       // Filter orders for this affiliate

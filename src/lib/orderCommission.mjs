@@ -69,3 +69,14 @@ export function commissionRateLabel(rates = [], fallbackRate = 0) {
   if (unique.length === 1) return `${unique[0]}%`;
   return `Variable (${unique.map((rate) => `${rate}%`).join(', ')})`;
 }
+
+export function decorateCommissionOrder(order, defaultRate = 0, getAmounts, sourceLabel = (value) => value || 'Standard sale') {
+  const commission = computeOrderCommissionAmounts(order, defaultRate, getAmounts);
+  return {
+    ...order,
+    commission_rate_applied: commission.rate,
+    commission_source_label: sourceLabel(commission.source),
+    commission_earned_usd: commission.usdCommission,
+    commission_earned_crc: commission.crcCommission,
+  };
+}

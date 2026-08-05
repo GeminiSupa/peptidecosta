@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getOrderSalesAmounts, orderBelongsToAgent, isCommissionEligibleOrder } from '@/lib/agentOrders';
+import {
+  commissionRateLabel,
+  decorateCommissionOrder,
+  summarizeOrderCommissions,
+} from '@/lib/orderCommission.mjs';
+import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 
 const CR_OFFSET = -6;
 
@@ -98,7 +104,7 @@ export async function GET(request) {
 
     const { data: orders, error: ordersError } = await supabaseAdmin
       .from('orders')
-      .select('id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at, activity_log')
+      .select('id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at, activity_log, agent_commission_rate_override, agent_commission_source')
       .gte('created_at', fetchStartUtc)
       .lte('created_at', nowUtc)
       .not('status', 'eq', 'Cancelled')
@@ -146,8 +152,19 @@ export async function GET(request) {
     const weekPendingSales = sumAgentOrders(weekPendingOrders);
 
     const rate = Number(profile.commission_rate || 0);
-    const weekCommissionUsd = weekSales.usd * (rate / 100);
-    const weekCommissionCrc = weekSales.crc * (rate / 100);
+    const weekCommissionSummary = summarizeOrderCommissions(
+      weekOrders,
+      rate,
+      getOrderSalesAmounts
+    );
+    const weekCommissionUsd = weekCommissionSummary.usdCommission;
+    const weekCommissionCrc = weekCommissionSummary.crcCommission;
+    const reportedWeekOrders = weekOrders.map((order) => decorateCommissionOrder(
+      order,
+      rate,
+      getOrderSalesAmounts,
+      commissionSourceLabel
+    ));
 
     const { data: recentPayouts, error: payoutsError } = await supabaseAdmin
       .from('commission_payouts')
@@ -198,7 +215,7 @@ export async function GET(request) {
         weekStartDate,
         weekEndDate: displayEndCR.toISOString().slice(0, 10),
         weekPayout,
-        weekOrders: weekOrders.map(({ activity_log, ...rest }) => rest),
+        weekOrders: reportedWeekOrders.map(({ activity_log, ...rest }) => rest),
         weekPendingOrders: weekPendingOrders.map(({ activity_log, ...rest }) => rest),
         weekPendingCount: weekPendingSales.count,
         weekPendingSalesUSD: weekPendingSales.usd,
@@ -206,6 +223,10 @@ export async function GET(request) {
         weeklySalary: profile.weekly_salary || 0,
         salaryCurrency: profile.salary_currency || 'USD',
         commissionRate: rate,
+        currentWeekCommissionRateLabel: commissionRateLabel(weekCommissionSummary.rates, rate),
+        currentWeekAgentReferralCount: reportedWeekOrders.filter(
+          (order) => order.agent_commission_source === 'agent_referral'
+        ).length,
         commissionStructure: profile.commission_structure || '',
         currentMonthOrdersCount: monthSales.count,
         currentMonthSalesUSD: monthSales.usd,

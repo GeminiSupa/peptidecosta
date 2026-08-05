@@ -115,6 +115,11 @@ export default function AgentDashboard({
         <div>
           <div className="dashboard-mini-title">#{o.order_number || o.id.slice(0, 8)}</div>
           <div className="dashboard-mini-sub">{o.customer_name || 'Customer'}</div>
+          {o.commission_source_label && (
+            <div className="dashboard-mini-sub" style={{ color: o.agent_commission_source === 'agent_referral' ? '#5eead4' : undefined }}>
+              {o.commission_source_label} · {Number(o.commission_rate_applied || 0)}% commission
+            </div>
+          )}
         </div>
         <div style={{ textAlign: 'right' }}>
           <div className="dashboard-mini-val">{display}</div>
@@ -288,7 +293,7 @@ export default function AgentDashboard({
                 ? `From payout report · ${wp.status === 'Approved' ? 'Paid' : 'Pending'}`
                 : isSubUser
                   ? `${stats.commissionRate}% of your orders`
-                  : `${stats.commissionRate}% commission + salary`}
+                  : `${stats.currentWeekCommissionRateLabel || `${stats.commissionRate}%`} commission + salary`}
             </div>
           </div>
         </div>
@@ -330,6 +335,16 @@ export default function AgentDashboard({
               </div>
               <div className="dashboard-mini-val">{stats.commissionRate}%</div>
             </div>
+            {!isSubUser && (
+              <div className="dashboard-mini-row" style={{ cursor: 'default' }}>
+                <TrendingUp size={16} style={{ color: '#2dd4bf' }} />
+                <div style={{ flex: 1 }}>
+                  <div className="dashboard-mini-title">Marketing referral rate</div>
+                  <div className="dashboard-mini-sub">One combined payout, not added to standard commission</div>
+                </div>
+                <div className="dashboard-mini-val">20%</div>
+              </div>
+            )}
             <div className="dashboard-mini-row" style={{ cursor: 'default' }}>
               <DollarSign size={16} style={{ color: '#4ade80' }} />
               <div style={{ flex: 1 }}>
