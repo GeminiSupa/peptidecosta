@@ -71,9 +71,9 @@ test('a sales-agent affiliate becomes one combined 20% payout', () => {
   assert.equal(computeOrderCommissionAmounts(attributed, 10).usdCommission, 100);
 });
 
-test('sub-users are excluded, while staff with superadmin access can still sell', () => {
+test('sub-users and superadmins are not promoted to sales-agent affiliates', () => {
   assert.equal(isEligibleSalesAgentProfile({ name: 'Sub', tier: 'sub_user', status: 'active' }), false);
-  assert.equal(isEligibleSalesAgentProfile({ name: 'Owner', tier: 'staff', status: 'active', is_superadmin: true }), true);
+  assert.equal(isEligibleSalesAgentProfile({ name: 'Owner', tier: 'staff', status: 'active', is_superadmin: true }), false);
   assert.equal(isEligibleSalesAgentProfile({ name: 'Agent', tier: 'staff', status: 'active' }), true);
 });
 

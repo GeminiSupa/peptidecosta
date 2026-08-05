@@ -27,7 +27,8 @@ SET admin_profile_user_id = profile.user_id,
 FROM public.admin_profiles profile
 WHERE affiliate.admin_profile_user_id IS NULL
   AND lower(trim(affiliate.email)) = lower(trim(profile.email))
-  AND COALESCE(profile.tier, 'staff') = 'staff';
+  AND COALESCE(profile.tier, 'staff') = 'staff'
+  AND COALESCE(profile.is_superadmin, false) = false;
 
 INSERT INTO public.affiliates (
   name, email, whatsapp, commission_rate, admin_profile_user_id, affiliate_kind
@@ -41,6 +42,7 @@ SELECT
   'sales_agent'
 FROM public.admin_profiles profile
 WHERE COALESCE(profile.tier, 'staff') = 'staff'
+  AND COALESCE(profile.is_superadmin, false) = false
   AND profile.user_id IS NOT NULL
 ON CONFLICT (admin_profile_user_id) WHERE admin_profile_user_id IS NOT NULL
 DO UPDATE SET
@@ -58,6 +60,7 @@ SET search_path = public
 AS $$
 BEGIN
   IF COALESCE(NEW.tier, 'staff') <> 'staff'
+     OR COALESCE(NEW.is_superadmin, false) = true
      OR NEW.user_id IS NULL THEN
     RETURN NEW;
   END IF;
