@@ -78,6 +78,27 @@ export function shouldShowVisitorProfileForm({
   return !knownVisitor && messageCount === 0;
 }
 
+// The inbox status chips. `new` is a work queue rather than a stored status:
+// it is everything still live that nobody has claimed, so a chat leaves it the
+// moment an agent takes it (by assigning, or just by replying). Keeping this
+// here rather than inline in the component means the list and the chip counts
+// can never drift apart.
+export function matchesLiveChatStatusFilter(conversation, statusFilter) {
+  if (!conversation) return false;
+  if (statusFilter === 'all') return true;
+  if (statusFilter === 'new') {
+    return conversation.status !== 'resolved' && !conversation.assignedTo;
+  }
+  return conversation.status === statusFilter;
+}
+
+export function matchesLiveChatOwnerFilter(conversation, ownerFilter, currentUserId) {
+  if (!conversation) return false;
+  if (ownerFilter === 'mine') return Boolean(currentUserId) && conversation.assignedTo === currentUserId;
+  if (ownerFilter === 'unassigned') return !conversation.assignedTo;
+  return true;
+}
+
 export function normalizeLiveChatEmail(value) {
   const email = String(value || '').trim().toLowerCase();
   return email.includes('@') ? email.slice(0, 255) : '';

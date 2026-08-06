@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { resolveAdminTabAccess } from '@/lib/adminModules';
+import { isActiveProfile, isSubUser } from '@/lib/subUserTier.mjs';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
@@ -208,12 +209,19 @@ export async function GET(request) {
 
     if (!profilesError) {
       for (const profile of profiles || []) {
-        if (!resolveAdminTabAccess('live_chat', profile)) continue;
+        // Every active member of staff is listed, because silently dropping
+        // the ones without Live Chat permission made the assignment dropdown
+        // look like agents were missing from the system. They are flagged
+        // instead, and the UI disables them: assigning a chat to someone who
+        // cannot open the tab would black-hole it, which is why the assign
+        // action below still refuses those user ids outright.
+        if (!isActiveProfile(profile) || isSubUser(profile)) continue;
         agents.push({
           userId: profile.user_id,
           name: profile.name || profile.email || 'Agent',
           email: profile.email || '',
           isSuperadmin: Boolean(profile.is_superadmin),
+          hasLiveChatAccess: resolveAdminTabAccess('live_chat', profile),
         });
       }
     }
@@ -267,7 +275,10 @@ export async function POST(request) {
       assigned_to: conversation.assignedTo || auth.profile.user_id,
       assigned_to_email: conversation.assignedToEmail || senderEmail,
       assigned_to_name: conversation.assignedToName || senderName,
-      status: conversation.status === 'resolved' ? 'open' : conversation.status,
+      // Answering moves the chat into Open, not just out of Resolved. A parked
+      // ('pending') thread that an agent has actually replied to is open work,
+      // and leaving it parked kept it out of the Open queue after a real reply.
+      status: 'open',
       last_message: message,
       last_message_at: now,
       last_agent_message_at: now,

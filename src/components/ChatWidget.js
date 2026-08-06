@@ -215,6 +215,21 @@ export default function ChatWidget() {
     return () => supabase.removeChannel(channel);
   }, [conversation?.id, fetchConversation, shouldHide]);
 
+  // The realtime channel above only delivers if the live chat tables are both
+  // published AND readable by `anon`, and they deliberately are not: visitors
+  // are anonymous, so an anon read policy would let any visitor subscribe to
+  // every other customer's chat (see enable-live-chat-realtime.sql). The open
+  // panel therefore polls its own visitor-scoped endpoint. A closed widget and
+  // a backgrounded tab cost nothing.
+  useEffect(() => {
+    if (shouldHide || !isOpen || isMinimized || !visitorId) return undefined;
+    const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      fetchConversation({ silent: true });
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [shouldHide, isOpen, isMinimized, visitorId, fetchConversation]);
+
   useEffect(() => {
     if (isOpen && !isMinimized) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });

@@ -4,9 +4,21 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, Bot, CheckCircle2, ChevronLeft, Circle, Clock3, ExternalLink, FileText, Inbox, Loader2, MessageCircle, RefreshCw, Search, Send, Target, Trash2, UserCheck, UserPlus, XCircle } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { renderLiveChatMessage as messageText } from '@/lib/liveChat';
+import {
+  matchesLiveChatOwnerFilter,
+  matchesLiveChatStatusFilter,
+  renderLiveChatMessage as messageText,
+} from '@/lib/liveChat';
 
 const POLL_MS = 15000;
+
+// Agents had to click the bell again on every page load, so in practice nobody
+// was ever alerted. The choice is remembered per browser instead.
+const ALERTS_KEY = 'peptides_live_chat_alerts';
+
+// A new/unassigned chat that nobody has picked up beeps again on this interval.
+// One missed beep used to mean a waiting customer was never noticed.
+const REMINDER_MS = 60000;
 
 const QUICK_REPLIES = [
   'Hola, gracias por escribirnos. ¿En qué le podemos ayudar?',
@@ -102,7 +114,7 @@ export default function LiveChatInbox() {
   const [currentAgent, setCurrentAgent] = useState(null);
   const [activeId, setActiveId] = useState(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('active');
+  const [statusFilter, setStatusFilter] = useState('new');
   const [ownerFilter, setOwnerFilter] = useState('all');
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
@@ -117,7 +129,25 @@ export default function LiveChatInbox() {
   const [error, setError] = useState('');
   const messagesEndRef = useRef(null);
   const previousUnreadIdsRef = useRef(new Set());
+  // Conversations already on screen. Without this, every chat that was unread
+  // before the agent opened the CRM counts as newly arrived.
+  const knownConversationIdsRef = useRef(new Set());
+  // The first fetch seeds the refs above without alerting. Alerts were only
+  // ever silent on load because the bell defaulted to off; now that the setting
+  // persists, opening the inbox would otherwise fire for every old unread chat.
+  const seededRef = useRef(false);
   const isMobile = useIsMobile();
+
+  // Restore the agent's choice. Browser permission can be revoked from the
+  // address bar without the app hearing about it, so it is re-checked rather
+  // than trusted from storage alone.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(ALERTS_KEY) !== '1') return;
+      if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') return;
+      setAlertsEnabled(true);
+    } catch {}
+  }, []);
 
   const fetchInbox = useCallback(async (manual = false) => {
     if (manual) setRefreshing(true);
@@ -159,6 +189,20 @@ export default function LiveChatInbox() {
     };
   }, [fetchInbox]);
 
+  // Backstop for the channel above. When the tables are not in the realtime
+  // publication the subscription still reports SUBSCRIBED and then silently
+  // never fires, so there is nothing to detect and fall back on — the inbox
+  // would just sit stale until an agent hit refresh. Slow on purpose: realtime
+  // is the fast path once enable-live-chat-realtime.sql has been run. Not
+  // `manual`, so the backstop never flashes the refresh spinner.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      fetchInbox();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [fetchInbox]);
+
   useEffect(() => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       setAlertsEnabled(true);
@@ -176,19 +220,15 @@ export default function LiveChatInbox() {
   }, [activeId]);
 
   const counts = useMemo(() => {
-    const byOwner = conversations.filter((conversation) => {
-      if (ownerFilter === 'mine' && conversation.assignedTo !== currentAgent?.userId) return false;
-      if (ownerFilter === 'unassigned' && conversation.assignedTo) return false;
-      return true;
-    });
+    const byOwner = conversations.filter((conversation) =>
+      matchesLiveChatOwnerFilter(conversation, ownerFilter, currentAgent?.userId));
 
-    const byStatus = conversations.filter((conversation) => {
-      if (statusFilter === 'active' && conversation.status === 'resolved') return false;
-      if (statusFilter !== 'active' && statusFilter !== 'all' && conversation.status !== statusFilter) return false;
-      return true;
-    });
+    const byStatus = conversations.filter((conversation) =>
+      matchesLiveChatStatusFilter(conversation, statusFilter));
 
     return {
+      newUnassigned: byOwner.filter((conversation) =>
+        matchesLiveChatStatusFilter(conversation, 'new')).length,
       open: byOwner.filter((conversation) => conversation.status === 'open').length,
       pending: byOwner.filter((conversation) => conversation.status === 'pending').length,
       unread: byOwner.filter((conversation) => conversation.unreadForAgent).length,
@@ -203,10 +243,13 @@ export default function LiveChatInbox() {
     const q = search.trim().toLowerCase();
     return conversations
       .filter((conversation) => {
-        if (statusFilter === 'active' && conversation.status === 'resolved') return false;
-        if (statusFilter !== 'active' && statusFilter !== 'all' && conversation.status !== statusFilter) return false;
-        if (ownerFilter === 'mine' && conversation.assignedTo !== currentAgent?.userId) return false;
-        if (ownerFilter === 'unassigned' && conversation.assignedTo) return false;
+        // Replying claims the chat, which drops it out of New/Unassigned. The
+        // thread being read is kept in the list regardless so that answering a
+        // customer cannot yank the agent onto a different one mid-sentence.
+        // Search still applies, so a deliberate search is never overridden.
+        const pinned = conversation.id === activeId;
+        if (!pinned && !matchesLiveChatStatusFilter(conversation, statusFilter)) return false;
+        if (!pinned && !matchesLiveChatOwnerFilter(conversation, ownerFilter, currentAgent?.userId)) return false;
         if (!q) return true;
         return [
           conversation.visitorName,
@@ -220,7 +263,7 @@ export default function LiveChatInbox() {
         if (a.unreadForAgent !== b.unreadForAgent) return a.unreadForAgent ? -1 : 1;
         return new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0);
       });
-  }, [conversations, currentAgent?.userId, ownerFilter, search, statusFilter]);
+  }, [activeId, conversations, currentAgent?.userId, ownerFilter, search, statusFilter]);
 
   useEffect(() => {
     if (filteredConversations.length === 0) {
@@ -232,21 +275,92 @@ export default function LiveChatInbox() {
     }
   }, [activeId, filteredConversations]);
 
-  useEffect(() => {
-    const unreadIds = new Set(conversations.filter((conversation) => conversation.unreadForAgent).map((conversation) => conversation.id));
-    const newUnread = [...unreadIds].filter((id) => !previousUnreadIdsRef.current.has(id));
-    previousUnreadIdsRef.current = unreadIds;
-    if (!alertsEnabled || newUnread.length === 0) return;
-
-    const newest = conversations.find((conversation) => newUnread.includes(conversation.id));
-    if (!newest) return;
+  // Focusing the window from a click handler needs the notification kept alive,
+  // so this is shared by the arrival alert and the unanswered-chat reminder.
+  const raiseNotification = useCallback((title, body, conversationId) => {
     playAlertTone();
-    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      new Notification('New website chat', {
-        body: `${newest.visitorName}: ${messageText(newest.lastMessage) || 'New message'}`.slice(0, 120),
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    try {
+      const notification = new Notification(title, {
+        body: String(body || '').slice(0, 120),
+        // Re-alerting the same chat replaces its previous popup rather than
+        // stacking a new one every minute.
+        tag: `live-chat-${conversationId}`,
+        renotify: true,
       });
+      notification.onclick = () => {
+        window.focus();
+        setActiveId(conversationId);
+        if (isMobile) setMobileThreadOpen(true);
+        notification.close();
+      };
+    } catch {}
+  }, [isMobile]);
+
+  useEffect(() => {
+    const unreadIds = new Set(conversations
+      .filter((conversation) => conversation.unreadForAgent)
+      .map((conversation) => conversation.id));
+    const allIds = new Set(conversations.map((conversation) => conversation.id));
+
+    // The first load only records what is already there. Alerting here would
+    // announce yesterday's chats as if a customer had just walked in.
+    if (!seededRef.current) {
+      previousUnreadIdsRef.current = unreadIds;
+      knownConversationIdsRef.current = allIds;
+      if (conversations.length > 0) seededRef.current = true;
+      return;
     }
-  }, [alertsEnabled, conversations]);
+
+    const newUnread = [...unreadIds].filter((id) => !previousUnreadIdsRef.current.has(id));
+    const arrived = [...allIds].filter((id) => !knownConversationIdsRef.current.has(id));
+    previousUnreadIdsRef.current = unreadIds;
+    knownConversationIdsRef.current = allIds;
+
+    if (!alertsEnabled) return;
+
+    // A brand new conversation is the thing Joe asked to be told about, so it
+    // wins over a follow-up message on a chat the agent already knows.
+    const targetId = arrived.find((id) => unreadIds.has(id)) ?? arrived[0] ?? newUnread[0];
+    if (!targetId) return;
+    const target = conversations.find((conversation) => conversation.id === targetId);
+    if (!target) return;
+
+    const isNewChat = arrived.includes(targetId);
+    raiseNotification(
+      isNewChat ? 'New chat waiting' : 'New message',
+      `${target.visitorName || 'Visitor'}: ${messageText(target.lastMessage) || (isNewChat ? 'started a chat' : 'sent a message')}`,
+      targetId,
+    );
+  }, [alertsEnabled, conversations, raiseNotification]);
+
+  // A waiting customer nobody has claimed is re-announced until an agent takes
+  // the chat. A single beep at the wrong moment used to lose the customer.
+  useEffect(() => {
+    if (!alertsEnabled) return undefined;
+    const interval = setInterval(() => {
+      const waiting = conversations
+        .filter((conversation) => matchesLiveChatStatusFilter(conversation, 'new'))
+        .sort((a, b) => new Date(a.lastMessageAt || 0) - new Date(b.lastMessageAt || 0))[0];
+      if (!waiting) return;
+      raiseNotification(
+        'Customer still waiting',
+        `${waiting.visitorName || 'Visitor'} has not been answered yet`,
+        waiting.id,
+      );
+    }, REMINDER_MS);
+    return () => clearInterval(interval);
+  }, [alertsEnabled, conversations, raiseNotification]);
+
+  // A backgrounded CRM tab gave no signal at all. The count rides in the tab
+  // title so a glance at the browser is enough.
+  useEffect(() => {
+    const waiting = conversations.filter((conversation) =>
+      matchesLiveChatStatusFilter(conversation, 'new')).length;
+    const base = document.title.replace(/^\(\d+\)\s*/, '');
+    document.title = waiting > 0 ? `(${waiting}) ${base}` : base;
+    return () => { document.title = document.title.replace(/^\(\d+\)\s*/, ''); };
+  }, [conversations]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -342,14 +456,19 @@ export default function LiveChatInbox() {
     }
   };
 
-  const enableAlerts = async () => {
-    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-      const permission = await Notification.requestPermission();
-      setAlertsEnabled(permission === 'granted');
-    } else {
-      setAlertsEnabled(true);
+  const toggleAlerts = async () => {
+    if (alertsEnabled) {
+      setAlertsEnabled(false);
+      try { localStorage.setItem(ALERTS_KEY, '0'); } catch {}
+      return;
     }
-    playAlertTone();
+    let granted = true;
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      granted = (await Notification.requestPermission()) === 'granted';
+    }
+    setAlertsEnabled(granted);
+    try { localStorage.setItem(ALERTS_KEY, granted ? '1' : '0'); } catch {}
+    if (granted) playAlertTone();
   };
 
   const draftAiReply = async () => {
@@ -446,7 +565,14 @@ export default function LiveChatInbox() {
             <button type="button" onClick={() => fetchInbox(true)} className="admin-btn" style={iconButtonStyle} title="Refresh">
               {refreshing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
             </button>
-            <button type="button" onClick={enableAlerts} className="admin-btn" style={{ ...iconButtonStyle, color: alertsEnabled ? '#86efac' : '#cbd5e1' }} title="Enable alerts">
+            <button
+              type="button"
+              onClick={toggleAlerts}
+              className="admin-btn"
+              style={{ ...iconButtonStyle, color: alertsEnabled ? '#86efac' : '#cbd5e1' }}
+              title={alertsEnabled ? 'Alerts on — click to turn off' : 'Alerts off — click to be notified of new chats'}
+              aria-pressed={alertsEnabled}
+            >
               <Bell size={15} />
             </button>
           </div>
@@ -456,9 +582,12 @@ export default function LiveChatInbox() {
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search conversations" style={searchInputStyle} />
           </label>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginTop: '12px' }}>
+          {/* 'New/Unassigned' is far longer than the other three labels, so the
+              first column is widened instead of letting an equal split squash
+              or wrap it on a narrow phone sidebar. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.75fr 1fr 1fr 1fr', gap: '6px', marginTop: '12px' }}>
             {[
-              ['active', 'Active', counts.open + counts.pending],
+              ['new', 'New/Unassigned', counts.newUnassigned],
               ['open', 'Open', counts.open],
               ['pending', 'Wait', counts.pending],
               ['resolved', 'Done', counts.resolved],
@@ -629,9 +758,17 @@ export default function LiveChatInbox() {
                   title="Assign conversation"
                 >
                   <option value="">Unassigned</option>
+                  {/* Staff without Live Chat access are shown but not
+                      selectable, so it is obvious they exist and what is
+                      missing, rather than them looking absent from the CRM. */}
                   {agents.map((agent) => (
-                    <option key={agent.userId} value={agent.userId}>
+                    <option
+                      key={agent.userId}
+                      value={agent.userId}
+                      disabled={agent.hasLiveChatAccess === false}
+                    >
                       {agent.name}
+                      {agent.hasLiveChatAccess === false ? ' — no Live Chat access' : ''}
                     </option>
                   ))}
                 </select>
@@ -937,6 +1074,14 @@ const filterButtonStyle = {
   display: 'grid',
   gap: '2px',
   fontSize: '0.68rem',
+  // minWidth:0 lets a grid child shrink below its text width instead of
+  // pushing the row wider than the sidebar; the rest keeps all four chips the
+  // same height whether their label wraps to two lines or not.
+  minWidth: 0,
+  textAlign: 'center',
+  lineHeight: 1.2,
+  alignContent: 'center',
+  overflowWrap: 'anywhere',
 };
 
 const selectStyle = {

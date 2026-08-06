@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { buildVisitorIdentityPatch, cleanLiveChatText, getLiveChatLeadContact, renderLiveChatMessage, shouldShowVisitorProfileForm } from '../src/lib/liveChat.js';
+import {
+  buildVisitorIdentityPatch,
+  cleanLiveChatText,
+  getLiveChatLeadContact,
+  matchesLiveChatOwnerFilter,
+  matchesLiveChatStatusFilter,
+  renderLiveChatMessage,
+  shouldShowVisitorProfileForm,
+} from '../src/lib/liveChat.js';
 
 test('a visitor with a cleared browser profile does not erase captured contact details', () => {
   assert.deepEqual(buildVisitorIdentityPatch({ name: null, email: null, phone: null }), {});
@@ -62,6 +70,44 @@ test('asking to add details reopens the form for anyone', () => {
     shouldShowVisitorProfileForm({ knownVisitor: true, messageCount: 4, showDetails: true }),
     true
   );
+});
+
+test('New/Unassigned holds only live chats nobody has claimed', () => {
+  const unclaimed = { status: 'open', assignedTo: null };
+  const claimed = { status: 'open', assignedTo: 'agent-1' };
+  const parked = { status: 'pending', assignedTo: null };
+  const done = { status: 'resolved', assignedTo: null };
+
+  assert.equal(matchesLiveChatStatusFilter(unclaimed, 'new'), true);
+  assert.equal(matchesLiveChatStatusFilter(parked, 'new'), true, 'waiting chats are still unclaimed work');
+  assert.equal(matchesLiveChatStatusFilter(claimed, 'new'), false, 'an agent already owns this one');
+  assert.equal(matchesLiveChatStatusFilter(done, 'new'), false, 'resolved is not new work');
+});
+
+test('replying moves a chat out of New/Unassigned and into Open + Mine', () => {
+  // What the server does on reply: assigns the sender and opens the thread.
+  const before = { status: 'pending', assignedTo: null };
+  const after = { status: 'open', assignedTo: 'agent-1' };
+
+  assert.equal(matchesLiveChatStatusFilter(before, 'new'), true);
+  assert.equal(matchesLiveChatStatusFilter(after, 'new'), false, 'must leave the New queue');
+  assert.equal(matchesLiveChatStatusFilter(after, 'open'), true, 'must land in Open');
+  assert.equal(matchesLiveChatOwnerFilter(after, 'mine', 'agent-1'), true, 'must land in Mine');
+});
+
+test('the other status chips still match on the stored status alone', () => {
+  assert.equal(matchesLiveChatStatusFilter({ status: 'resolved' }, 'resolved'), true);
+  assert.equal(matchesLiveChatStatusFilter({ status: 'open' }, 'resolved'), false);
+  assert.equal(matchesLiveChatStatusFilter({ status: 'resolved' }, 'all'), true);
+});
+
+test('owner filters never treat a signed-out agent as owning unassigned chats', () => {
+  // `assignedTo` and a missing user id are both nullish, so a loose comparison
+  // would have shown every unclaimed chat under Mine.
+  assert.equal(matchesLiveChatOwnerFilter({ assignedTo: null }, 'mine', undefined), false);
+  assert.equal(matchesLiveChatOwnerFilter({ assignedTo: null }, 'unassigned', undefined), true);
+  assert.equal(matchesLiveChatOwnerFilter({ assignedTo: 'agent-2' }, 'mine', 'agent-1'), false);
+  assert.equal(matchesLiveChatOwnerFilter({ assignedTo: 'agent-2' }, 'all', 'agent-1'), true);
 });
 
 test('live chat rendering hides rows that were stored as stringified objects', () => {
