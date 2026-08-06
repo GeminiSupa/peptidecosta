@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Bot, CheckCircle2, ChevronLeft, Circle, Clock3, ExternalLink, FileText, Inbox, Loader2, MessageCircle, RefreshCw, Search, Send, Target, UserCheck, UserPlus, XCircle } from 'lucide-react';
+import { Bell, Bot, CheckCircle2, ChevronLeft, Circle, Clock3, ExternalLink, FileText, Inbox, Loader2, MessageCircle, RefreshCw, Search, Send, Target, Trash2, UserCheck, UserPlus, XCircle } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { renderLiveChatMessage as messageText } from '@/lib/liveChat';
@@ -291,6 +291,29 @@ export default function LiveChatInbox() {
       setError('');
     } catch (err) {
       setError(err.message || 'Update failed');
+    }
+  };
+
+  const deleteConversation = async () => {
+    if (!activeConversation) return;
+    if (!window.confirm('Are you sure you want to permanently delete this conversation and all its messages?')) return;
+    
+    const conversationId = activeConversation.id;
+    try {
+      const response = await adminFetch(`/api/admin/live-chat?conversationId=${conversationId}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Delete failed');
+      
+      setConversations((prev) => prev.filter((c) => c.id !== conversationId));
+      if (activeId === conversationId) {
+        setActiveId(null);
+        setMobileThreadOpen(false);
+      }
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Delete failed');
     }
   };
 
@@ -630,6 +653,9 @@ export default function LiveChatInbox() {
                     <CheckCircle2 size={14} /> <span className="admin-live-chat-btn-label">Resolve</span>
                   </button>
                 )}
+                <button type="button" className="admin-btn" style={{ ...toolbarButtonStyle, color: 'var(--color-danger, #ef4444)' }} onClick={deleteConversation} title="Delete">
+                  <Trash2 size={14} /> <span className="admin-live-chat-btn-label">Delete</span>
+                </button>
               </div>
             </header>
 

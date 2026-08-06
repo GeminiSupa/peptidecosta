@@ -435,3 +435,39 @@ export async function PATCH(request) {
     return NextResponse.json({ error: err.message || 'Could not update conversation.' }, { status: 500 });
   }
 }
+
+export async function DELETE(request) {
+  const auth = await verifyAdminSession(request, { requireAnyPermission: ['live_chat'] });
+  if (auth.error) return auth.error;
+
+  try {
+    const url = new URL(request.url);
+    const conversationId = String(url.searchParams.get('conversationId') || '').trim();
+
+    if (!conversationId) return NextResponse.json({ error: 'conversationId is required' }, { status: 400 });
+
+    const supabase = getSupabaseAdmin();
+    const conversation = await loadConversationById(supabase, conversationId);
+    if (!conversation) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+
+    // Ensure they have permission (either assigned to them, unassigned, or superadmin)
+    if (!canControlConversation({ assigned_to: conversation.assignedTo }, auth.profile)) {
+      return NextResponse.json({ error: 'Forbidden: this conversation belongs to another agent' }, { status: 403 });
+    }
+
+    const { error } = await supabase
+      .from('live_chat_conversations')
+      .delete()
+      .eq('id', conversationId);
+
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, conversationId });
+  } catch (err) {
+    if (isMissingLiveChatTable(err)) {
+      return NextResponse.json({ error: 'Live chat tables are not installed yet.' }, { status: 409 });
+    }
+    console.error('[admin/live-chat] DELETE failed:', err);
+    return NextResponse.json({ error: err.message || 'Could not delete conversation.' }, { status: 500 });
+  }
+}
