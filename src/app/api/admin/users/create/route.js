@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { writeWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
+import { ADMIN_PROFILE_OPTIONAL_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 
 export async function POST(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
@@ -56,13 +56,14 @@ export async function POST(request) {
     };
     if (avatar_url) profileRow.avatar_url = avatar_url;
 
-    const { data: profileData, error: profileError, droppedColumns } = await writeWithOptionalPreferences(
+    const { data: profileData, error: profileError, droppedColumns } = await writeDroppingMissingColumns(
       profileRow,
+      ADMIN_PROFILE_OPTIONAL_COLUMNS,
       (row) => supabaseAdmin.from('admin_profiles').insert([row]).select().single()
     );
 
     if (droppedColumns?.length) {
-      console.warn('[admin/users/create] Notification columns missing, run add-notification-preferences-to-profiles.sql:', droppedColumns.join(', '));
+      console.warn('[admin/users/create] admin_profiles columns missing, run the matching migration:', droppedColumns.join(', '));
     }
 
     if (profileError) {

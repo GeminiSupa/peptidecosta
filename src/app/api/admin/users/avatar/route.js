@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { missingColumnFrom } from '@/lib/optionalColumns.mjs';
 
 export const runtime = 'nodejs';
 
@@ -67,7 +68,9 @@ export async function POST(request) {
       .single();
 
     if (profileError) {
-      const message = profileError.code === '42703'
+      // A write reports the missing column as PGRST204, not 42703, so checking
+      // the code alone surfaced the raw PostgREST text instead of the fix.
+      const message = missingColumnFrom(profileError) === 'avatar_url'
         ? 'Run team-profile-avatars-migration.sql first.'
         : profileError.message;
       return NextResponse.json({ error: message }, { status: 500 });

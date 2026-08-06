@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ADMIN_PROFILE_OPTIONAL_COLUMNS,
   SUB_USER_PAYOUT_COLUMNS,
   writeDroppingMissingColumns,
 } from '../src/lib/optionalColumns.mjs';
@@ -150,6 +151,56 @@ test('an invite survives a database with no notification columns', async () => {
   assert.equal(result.data.name, 'Diego Ruiz');
   assert.equal(result.data.status, 'pending');
   assert.equal(result.data.commission_rate, 8);
+});
+
+test('granting Live Chat access survives a database with no avatar_url', async () => {
+  // The reported failure: the edit-member form posts the whole row, including
+  // avatar_url: null, so on a database that never ran
+  // team-profile-avatars-migration.sql the save died with "Could not find the
+  // 'avatar_url' column of 'admin_profiles' in the schema cache" — and the
+  // permission the superadmin was actually granting never landed.
+  const table = fakeTable(['avatar_url']);
+
+  const result = await writeDroppingMissingColumns(
+    {
+      name: 'Webster',
+      permissions: ['orders', 'live_chat'],
+      is_superadmin: false,
+      avatar_url: null,
+    },
+    ADMIN_PROFILE_OPTIONAL_COLUMNS,
+    table.run
+  );
+
+  assert.equal(result.error, null);
+  assert.deepEqual(result.droppedColumns, ['avatar_url']);
+  // The whole point: the access grant went through.
+  assert.deepEqual(result.data.permissions, ['orders', 'live_chat']);
+  assert.equal(result.data.name, 'Webster');
+});
+
+test('a half-migrated admin_profiles keeps the pay fields it does have', async () => {
+  // avatar_url absent, commission columns present: giving up the pay figures
+  // alongside it would quietly zero someone's commission on an unrelated edit.
+  const table = fakeTable(['avatar_url']);
+
+  const result = await writeDroppingMissingColumns(
+    {
+      permissions: ['live_chat'],
+      commission_rate: 8,
+      weekly_salary: 250,
+      whatsapp_number: '+506 8812 4490',
+      avatar_url: null,
+    },
+    ADMIN_PROFILE_OPTIONAL_COLUMNS,
+    table.run
+  );
+
+  assert.equal(result.error, null);
+  assert.deepEqual(result.droppedColumns, ['avatar_url']);
+  assert.equal(result.data.commission_rate, 8);
+  assert.equal(result.data.weekly_salary, 250);
+  assert.equal(result.data.whatsapp_number, '+506 8812 4490');
 });
 
 test('a missing column outside the allow list is a real bug and is surfaced', async () => {

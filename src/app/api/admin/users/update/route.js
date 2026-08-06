@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { writeWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
+import { ADMIN_PROFILE_OPTIONAL_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 
 export async function PUT(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
@@ -49,13 +49,14 @@ export async function PUT(request) {
     if (whatsapp_number !== undefined) updateData.whatsapp_number = whatsapp_number ? String(whatsapp_number).trim() : null;
 
     if (Object.keys(updateData).length > 0) {
-      const { data: profileData, error: profileError, droppedColumns } = await writeWithOptionalPreferences(
+      const { data: profileData, error: profileError, droppedColumns } = await writeDroppingMissingColumns(
         updateData,
+        ADMIN_PROFILE_OPTIONAL_COLUMNS,
         (row) => supabaseAdmin.from('admin_profiles').update(row).eq('user_id', userId).select().single()
       );
 
       if (droppedColumns?.length) {
-        console.warn('[admin/users/update] Notification columns missing, run add-notification-preferences-to-profiles.sql:', droppedColumns.join(', '));
+        console.warn('[admin/users/update] admin_profiles columns missing, run the matching migration:', droppedColumns.join(', '));
       }
 
       if (profileError) {

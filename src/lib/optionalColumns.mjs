@@ -17,7 +17,7 @@
  * the notification preference columns on admin_profiles.
  */
 
-import { missingColumnFrom } from './notificationPreferences.mjs';
+import { missingColumnFrom, NOTIFICATION_PREFERENCE_COLUMNS } from './notificationPreferences.mjs';
 
 export { missingColumnFrom };
 
@@ -47,6 +47,27 @@ export async function writeDroppingMissingColumns(payload, optional, run) {
 
   return { ...(await run(current)), droppedColumns: dropped };
 }
+
+/**
+ * admin_profiles columns that arrive via their own hand-run migration:
+ * avatar_url (team-profile-avatars-migration.sql), the pay fields
+ * (add-commission-rate-to-profiles.sql) and the notification preferences
+ * (add-notification-preferences-to-profiles.sql).
+ *
+ * Editing a team member writes the whole form in one row, so before this list
+ * existed a single un-run migration failed the entire save — someone ticking
+ * the Live Chat permission got "Could not find the 'avatar_url' column of
+ * 'admin_profiles' in the schema cache" and the permission never landed.
+ * Permissions and roles must never be hostage to an optional column.
+ */
+export const ADMIN_PROFILE_OPTIONAL_COLUMNS = [
+  'avatar_url',
+  'commission_rate',
+  'weekly_salary',
+  'salary_currency',
+  'commission_structure',
+  ...NOTIFICATION_PREFERENCE_COLUMNS,
+];
 
 /** Columns added by add-sub-user-tier.sql and add-sub-user-override-to-payouts.sql. */
 export const SUB_USER_PAYOUT_COLUMNS = [
