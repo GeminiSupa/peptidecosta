@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, Check, CheckCheck, ChevronLeft, ChevronRight, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus, Maximize2, Minimize2 } from 'lucide-react';
+import { Brain, Check, CheckCheck, ChevronLeft, ChevronRight, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus, Maximize2, Minimize2, Trash2 } from 'lucide-react';
 import { renderWhatsAppTemplateBody } from '@/lib/whatsappTemplates.mjs';
 
 const INITIAL_CHAT_LIMIT = 30;
@@ -643,6 +643,8 @@ export default function WhatsAppInbox({
     }
   }, [conversationRoutingAvailable, onConversationAction]);
 
+  }, [conversationRoutingAvailable, onConversationAction]);
+
   const updateConversationStatus = useCallback(async (waId, status) => {
     if (!waId || !status) return;
     if (!conversationRoutingAvailable || !onConversationAction) {
@@ -656,6 +658,26 @@ export default function WhatsAppInbox({
       setShowContactActions(false);
     } catch (err) {
       setConversationActionError(err.message || 'Could not update conversation status.');
+    } finally {
+      setConversationActionWaId(null);
+    }
+  }, [conversationRoutingAvailable, onConversationAction]);
+
+  const deleteConversation = useCallback(async (waId) => {
+    if (!waId) return;
+    if (!window.confirm('Are you sure you want to permanently delete this conversation and all its messages?')) return;
+    if (!conversationRoutingAvailable || !onConversationAction) {
+      setConversationActionError('Conversation routing is not installed yet. Run the WhatsApp conversations SQL migration.');
+      return;
+    }
+    setConversationActionError('');
+    setConversationActionWaId(waId);
+    try {
+      await onConversationAction(waId, 'delete');
+      setShowContactActions(false);
+      setActiveChatWaId(null);
+    } catch (err) {
+      setConversationActionError(err.message || 'Could not delete conversation.');
     } finally {
       setConversationActionWaId(null);
     }
@@ -1815,6 +1837,18 @@ export default function WhatsAppInbox({
                 <div>
                   <strong>{currentChatIsResolved ? 'Reopen conversation' : 'Resolve conversation'}</strong>
                   <small>{currentChatIsResolved ? 'Move it back into active queues.' : 'Clear it from waiting and urgent queues.'}</small>
+                </div>
+              </button>
+              <button
+                type="button"
+                className="admin-wa-action-row"
+                style={{ color: 'var(--color-danger, #ef4444)' }}
+                onClick={() => deleteConversation(activeChatWaId)}
+              >
+                <span><Trash2 size={20} /></span>
+                <div>
+                  <strong>Delete conversation</strong>
+                  <small style={{ color: 'inherit', opacity: 0.8 }}>Permanently remove this conversation.</small>
                 </div>
               </button>
               <a href={activeChatCallHref} className="admin-wa-action-row admin-wa-action-row--call">

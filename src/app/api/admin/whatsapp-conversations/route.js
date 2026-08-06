@@ -251,3 +251,52 @@ export async function PATCH(request) {
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
   }
 }
+
+export async function DELETE(request) {
+  const auth = await verifyAdminSession(request, { requireAnyPermission: ['whatsapp_ai', 'wa_session'] });
+  if (auth.error) return auth.error;
+
+  try {
+    const url = new URL(request.url);
+    const waId = normalizeWaId(url.searchParams.get('waId'));
+
+    if (!waId) {
+      return NextResponse.json({ error: 'waId is required' }, { status: 400 });
+    }
+
+    const supabase = getSupabaseAdmin();
+    
+    // Validate permission first
+    const { data: conversation, error: loadError } = await supabase
+      .from('whatsapp_conversations')
+      .select('*')
+      .eq('wa_id', waId)
+      .maybeSingle();
+
+    if (loadError) throw loadError;
+    if (!conversation) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+
+    const ownerId = conversation.assigned_to || null;
+    const isMine = ownerId === auth.profile.user_id;
+    const canControl = auth.profile.is_superadmin || !ownerId || isMine;
+
+    if (!canControl) {
+      return NextResponse.json({ error: 'Forbidden: this conversation belongs to another agent' }, { status: 403 });
+    }
+
+    const { error: deleteError } = await supabase
+      .from('whatsapp_conversations')
+      .delete()
+      .eq('wa_id', waId);
+
+    if (deleteError) throw deleteError;
+
+    return NextResponse.json({ success: true, waId });
+  } catch (err) {
+    if (isMissingWhatsappConversationsTable(err)) {
+      return NextResponse.json({ error: 'WhatsApp conversation routing table is not installed yet.' }, { status: 409 });
+    }
+    console.error('[admin/whatsapp-conversations] DELETE failed:', err);
+    return NextResponse.json({ error: err.message || 'Could not delete conversation.' }, { status: 500 });
+  }
+}

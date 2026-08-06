@@ -525,6 +525,16 @@ export default function AdminPage() {
   };
 
   const handleWhatsAppConversationAction = async (waId, action, extra = {}) => {
+    if (action === 'delete') {
+      const res = await adminFetch(`/api/admin/whatsapp-conversations?waId=${waId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not delete conversation');
+      setWhatsappConversations((prev) => prev.filter((item) => item.wa_id !== waId));
+      return null;
+    }
+
     const res = await adminFetch('/api/admin/whatsapp-conversations', {
       method: 'PATCH',
       body: JSON.stringify({ waId, action, ...extra }),
