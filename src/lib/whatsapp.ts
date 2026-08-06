@@ -27,8 +27,8 @@ export const cleanPhoneNumber = (phone: string | null | undefined): string => {
 /**
  * Build a WhatsApp link that includes a source identifier.
  * The source is embedded in the pre‑filled text so the sales team can see where the user came from.
- * Example: buildWhatsAppLink('50684046973', 'homepage')
- *   => "https://wa.me/50684046973?text=Hello%20I%27m%20interested%20from%20homepage"
+ * Example: buildWhatsAppLink('50660626224', 'homepage')
+ *   => "https://wa.me/50660626224?text=Hello%20I%27m%20interested%20from%20homepage"
  */
 export const buildWhatsAppLink = (
   phone: string,

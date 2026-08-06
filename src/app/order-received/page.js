@@ -44,7 +44,7 @@ function OrderReceivedContent() {
       note: 'Please expect slower response times on weekends and outside working hours.',
       button: 'Return to Catalog',
       whatsappText1: 'To speak to a live agent immediately, please message us on ',
-      whatsappLink: 'WhatsApp: +506 8404-6973',
+      whatsappLink: 'WhatsApp: +506 6062 6224',
     },
     es: {
       title: 'Gracias por su Pedido',
@@ -52,7 +52,7 @@ function OrderReceivedContent() {
       note: 'Por favor, espere tiempos de respuesta más lentos los fines de semana y fuera del horario laboral.',
       button: 'Volver al Catálogo',
       whatsappText1: 'Para hablar con un agente en vivo de inmediato, por favor envíenos un mensaje por ',
-      whatsappLink: 'WhatsApp: +506 8404-6973',
+      whatsappLink: 'WhatsApp: +506 6062 6224',
     },
   }[lang];
 
@@ -137,7 +137,7 @@ function OrderReceivedContent() {
         }}>
           {t.whatsappText1}
           <a
-            href="https://wa.me/50684046973"
+            href="https://wa.me/50660626224"
             target="_blank"
             rel="noopener noreferrer"
             style={{

@@ -8,19 +8,48 @@ const env = fs.readFileSync('.env.local', 'utf8').split('\n').reduce((acc, line)
 
 const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
+const DEFAULT_BUSINESS_LINKS = {
+  whatsappNumber: '50660626224',
+  whatsappDisplay: '+506 6062 6224',
+  apiWhatsAppNumber: '18314715559',
+  apiWhatsAppDisplay: '+1 831-471-5559',
+  googleMapsUrl: 'https://maps.app.goo.gl/jJCMHBM8aPXx67G3A',
+  facebookUrl: '',
+  instagramUrl: '',
+  trustpilotUrl: 'https://www.trustpilot.com/review/peptidescostarica.net',
+  trustpilotUrlEn: 'https://www.trustpilot.com/review/peptidescostarica.net',
+  trustpilotUrlEs: 'https://es.trustpilot.com/review/peptidescostarica.net',
+  googleReviewUrl: 'https://maps.app.goo.gl/jJCMHBM8aPXx67G3A',
+  facebookReviewUrl: 'https://www.facebook.com/Peptidescostaricaresearch/reviews',
+  supportEmail: 'support@peptidescostarica.net',
+};
+
 async function run() {
-  const { data: current } = await supabase.from('site_settings').select('value').eq('id', 'business_links').single();
-  
-  if (current && current.value) {
-    const newVal = {
-      ...current.value,
-      apiWhatsAppNumber: '18314715559',
-      apiWhatsAppDisplay: '+1 831-471-5559',
-      whatsappDisplay: '+506 8404-6973 (CR) / +1 831-471-5559 (US AI)'
-    };
-    const { error } = await supabase.from('site_settings').update({ value: newVal }).eq('id', 'business_links');
-    if (error) console.error("Error updating:", error);
-    else console.log("Updated successfully!");
-  }
+  const { data: current, error: readError } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('id', 'business_links')
+    .maybeSingle();
+
+  if (readError) throw readError;
+
+  const newVal = {
+    ...DEFAULT_BUSINESS_LINKS,
+    ...(current?.value && typeof current.value === 'object' ? current.value : {}),
+    whatsappNumber: '50660626224',
+    whatsappDisplay: '+506 6062 6224',
+    apiWhatsAppNumber: '18314715559',
+    apiWhatsAppDisplay: '+1 831-471-5559',
+  };
+
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ id: 'business_links', value: newVal }, { onConflict: 'id' });
+
+  if (error) throw error;
+  console.log('Business links updated successfully.');
 }
-run();
+run().catch((error) => {
+  console.error('Error updating business links:', error);
+  process.exit(1);
+});

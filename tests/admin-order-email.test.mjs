@@ -9,7 +9,7 @@ import {
 const ORDER = {
   order_number: 'TEST-1',
   customer_name: 'Omer',
-  customer_phone: '50684046973',
+  customer_phone: '50660626224',
   customer_email: 'customer@example.com',
   shipping_address: 'San Jose',
   currency: 'USD',
@@ -65,7 +65,7 @@ test('the payload carries what the team needs to act on the order', () => {
 
   assert.equal(payload.orderNumber, 'TEST-1');
   assert.equal(payload.customerName, 'Omer');
-  assert.equal(payload.customerPhone, '50684046973');
+  assert.equal(payload.customerPhone, '50660626224');
   assert.equal(payload.total, 120);
   assert.equal(payload.shipping, 10);
   assert.equal(payload.subtotal, 120);

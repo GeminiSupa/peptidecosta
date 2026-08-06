@@ -46,7 +46,7 @@ import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import { mergeLandingPageSettings } from '@/lib/landingContent';
 import { readCatalogParams, resolveCategoryParam, compareBySaleAndStock } from '@/lib/catalogFilters.mjs';
 
-// const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
+// const WHATSAPP_NUMBER = '50660626224'; // Replaced with useBusinessLinks()
 const FALLBACK_EXCHANGE_RATE = 454.48;
 const FREE_SHIPPING_USD_THRESHOLD = 200;
 const FLAT_SHIPPING_CRC = 2500;

@@ -12,8 +12,8 @@ const LEGACY_GOOGLE_LISTING_URLS = new Set([
 ]);
 
 export const DEFAULT_BUSINESS_LINKS = {
-  whatsappNumber: '50684046973',
-  whatsappDisplay: '+506 8404-6973',
+  whatsappNumber: '50660626224',
+  whatsappDisplay: '+506 6062 6224',
   apiWhatsAppNumber: '18314715559',
   apiWhatsAppDisplay: '+1 (831) 471-5559',
   googleMapsUrl: GOOGLE_LOCAL_LISTING_URL,

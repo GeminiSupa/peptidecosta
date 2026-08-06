@@ -20,7 +20,7 @@ let filterState = {
     inStockOnly: false
 };
 let viewMode = localStorage.getItem('viewMode') || 'list'; // 'list', 'compact', 'grid'
-const WHATSAPP_NUMBER = '50684046973';
+const WHATSAPP_NUMBER = '50660626224';
 
 // DOM Elements
 const productGrid = document.getElementById('productGrid');
