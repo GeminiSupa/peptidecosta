@@ -1688,7 +1688,7 @@ Core Rules:
       : ['home', 'orders', 'whatsapp_ai', 'spreadsheet', 'customers', 'carts']
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
-    { title: 'Customer Work', tabs: ['inquiries', 'leads', 'messenger'] },
+    { title: 'Customer Work', tabs: ['live_chat', 'inquiries', 'leads', 'messenger'] },
     { title: 'Marketing', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'my_qr', 'my_team'] },
     { title: 'Admin Tools', tabs: ['analytics', 'cms', 'wa_session', 'team', 'team_chat'] },
   ].map((group) => ({
@@ -7764,6 +7764,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           )}
                           {tabId === 'whatsapp_ai' && unreadWaCount > 0 && (
                             <span className="admin-more-tab-badge">{unreadWaCount}</span>
+                          )}
+                          {tabId === 'live_chat' && liveChatUnreadCount > 0 && (
+                            <span className="admin-more-tab-badge badge-info">{liveChatUnreadCount}</span>
                           )}
                         </button>
                       ))}
