@@ -63,6 +63,21 @@ export function buildVisitorIdentityPatch({ name, email, phone } = {}) {
   return patch;
 }
 
+// Whether the pre-chat form (name/email/phone) should be on screen.
+// `knownVisitor` MUST be the load-time answer to "did we already have this
+// visitor's details", never a value derived from the fields as they are typed:
+// deriving it live flipped it true on the first keystroke of the name and
+// unmounted the inputs mid-entry, so nobody ever reached email or phone and
+// every chat arrived in the CRM unqualified.
+export function shouldShowVisitorProfileForm({
+  knownVisitor = false,
+  messageCount = 0,
+  showDetails = false,
+} = {}) {
+  if (showDetails) return true;
+  return !knownVisitor && messageCount === 0;
+}
+
 export function normalizeLiveChatEmail(value) {
   const email = String(value || '').trim().toLowerCase();
   return email.includes('@') ? email.slice(0, 255) : '';

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { buildVisitorIdentityPatch, cleanLiveChatText, getLiveChatLeadContact, renderLiveChatMessage } from '../src/lib/liveChat.js';
+import { buildVisitorIdentityPatch, cleanLiveChatText, getLiveChatLeadContact, renderLiveChatMessage, shouldShowVisitorProfileForm } from '../src/lib/liveChat.js';
 
 test('a visitor with a cleared browser profile does not erase captured contact details', () => {
   assert.deepEqual(buildVisitorIdentityPatch({ name: null, email: null, phone: null }), {});
@@ -13,6 +13,54 @@ test('visitor identity fields are written when the visitor actually supplies the
   assert.deepEqual(
     buildVisitorIdentityPatch({ name: 'Ana', email: 'ana@example.com', phone: null }),
     { visitor_name: 'Ana', visitor_email: 'ana@example.com' }
+  );
+});
+
+test('the pre-chat form stays open while a new visitor types their details', () => {
+  // The regression: the gate was derived from the fields as they were typed, so
+  // the first letter of the name flipped it and tore the inputs off screen
+  // before the visitor could reach email or phone.
+  const stored = { name: '', email: '', phone: '' };
+  // The component resolves this once, on load, exactly like this.
+  const knownVisitor = Boolean(stored.name || stored.email || stored.phone);
+
+  // Every intermediate state of a visitor filling the form by hand.
+  const keystrokes = [
+    { name: '', email: '', phone: '' },
+    { name: 'J', email: '', phone: '' },
+    { name: 'Joe', email: '', phone: '' },
+    { name: 'Joe', email: 'joe@', phone: '' },
+    { name: 'Joe', email: 'joe@example.com', phone: '' },
+    { name: 'Joe', email: 'joe@example.com', phone: '+506 6062 6224' },
+  ];
+
+  for (const profile of keystrokes) {
+    assert.equal(
+      shouldShowVisitorProfileForm({ knownVisitor, messageCount: 0, showDetails: false }),
+      true,
+      `form must stay open at ${JSON.stringify(profile)}`
+    );
+  }
+});
+
+test('a returning visitor we already have details for is not asked again', () => {
+  assert.equal(
+    shouldShowVisitorProfileForm({ knownVisitor: true, messageCount: 0, showDetails: false }),
+    false
+  );
+});
+
+test('the pre-chat form closes once the visitor has actually started the chat', () => {
+  assert.equal(
+    shouldShowVisitorProfileForm({ knownVisitor: false, messageCount: 1, showDetails: false }),
+    false
+  );
+});
+
+test('asking to add details reopens the form for anyone', () => {
+  assert.equal(
+    shouldShowVisitorProfileForm({ knownVisitor: true, messageCount: 4, showDetails: true }),
+    true
   );
 });
 

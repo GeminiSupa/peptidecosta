@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { ExternalLink, FileText, Loader2, MessageCircle, Minus, Paperclip, Send, UserRound, X } from 'lucide-react';
-import { renderLiveChatMessage as messageText } from '@/lib/liveChat';
+import { renderLiveChatMessage as messageText, shouldShowVisitorProfileForm } from '@/lib/liveChat';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { isoToCrWall } from '@/lib/crTime.mjs';
 
@@ -61,6 +61,7 @@ export default function ChatWidget() {
   const [isMinimized, setIsMinimized] = useState(false);
   const [visitorId, setVisitorId] = useState('');
   const [profile, setProfile] = useState({ name: '', email: '', phone: '' });
+  const [knownVisitor, setKnownVisitor] = useState(false);
   const [conversation, setConversation] = useState(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -81,7 +82,9 @@ export default function ChatWidget() {
   useEffect(() => {
     if (shouldHide) return;
     setVisitorId(getVisitorId());
-    setProfile(readProfile());
+    const stored = readProfile();
+    setProfile(stored);
+    setKnownVisitor(Boolean(stored.name || stored.email || stored.phone));
     setLang(localStorage.getItem('lang') || 'es');
   }, [shouldHide]);
 
@@ -161,7 +164,11 @@ export default function ChatWidget() {
   const hasAgentReply = messages.some((message) => message.senderType === 'agent');
   const isResolved = conversation?.status === 'resolved';
   const hasContact = Boolean(profile.name || profile.email || profile.phone);
-  const needsProfile = (!hasContact && serverMessages.length === 0) || showDetails;
+  const needsProfile = shouldShowVisitorProfileForm({
+    knownVisitor,
+    messageCount: serverMessages.length,
+    showDetails,
+  });
 
   useEffect(() => {
     if (shouldHide || isOpen || conversation || localStorage.getItem(PROMPT_DISMISSED_KEY) === '1') return undefined;
