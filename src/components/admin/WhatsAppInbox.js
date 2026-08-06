@@ -643,8 +643,6 @@ export default function WhatsAppInbox({
     }
   }, [conversationRoutingAvailable, onConversationAction]);
 
-  }, [conversationRoutingAvailable, onConversationAction]);
-
   const updateConversationStatus = useCallback(async (waId, status) => {
     if (!waId || !status) return;
     if (!conversationRoutingAvailable || !onConversationAction) {
