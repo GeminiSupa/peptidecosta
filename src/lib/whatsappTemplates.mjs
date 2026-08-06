@@ -82,7 +82,7 @@ export const APPROVED_WHATSAPP_AGENT_TEMPLATES = [
     label: 'Confirmar pedido',
     use: 'Pedido',
     description: 'Confirmacion de pedido con detalle y total.',
-    body: 'Hola {{1}},\n\nGracias por tu compra en Peptides Costa Rica.\n\nTu pedido {{2}} ha sido recibido correctamente.\nDetalles: {{3}}\nTotal: {{4}}\n\nPor favor, contacta a nuestro equipo al +506 6062 6224 para mas detalles o si tienes alguna pregunta.\n\nNota: Este numero (+1) es un sistema automatizado y no recibe mensajes.',
+    body: 'Hola {{1}},\n\nGracias por tu compra en Peptides Costa Rica.\n\nTu pedido {{2}} ha sido recibido correctamente.\nDetalles: {{3}}\nTotal: {{4}}\n\nPor favor, contacta a nuestro equipo al +50684046973 para mas detalles o si tienes alguna pregunta.\n\nNota: Este numero (+1) es un sistema automatizado y no recibe mensajes.',
     variables: [
       { key: 'customerName', label: 'Nombre', fallback: 'Cliente' },
       { key: 'orderNumber', label: 'Orden', fallback: 'WPCR' },
@@ -98,7 +98,7 @@ export const APPROVED_WHATSAPP_AGENT_TEMPLATES = [
     label: 'Order confirmation EN',
     use: 'Order',
     description: 'English order confirmation with details and total.',
-    body: 'Hello {{1}},\n\nThank you for your purchase from Peptides Costa Rica.\n\nYour order {{2}} has been successfully received.\nDetails: {{3}}\nTotal: {{4}}\n\nPlease contact our team at +506 6062 6224 for details or if you have any questions.\n\nNote: This number (+1) is an automated system and does not receive messages.',
+    body: 'Hello {{1}},\n\nThank you for your purchase from Peptides Costa Rica.\n\nYour order {{2}} has been successfully received.\nDetails: {{3}}\nTotal: {{4}}\n\nPlease contact our team at +50684046973 for details or if you have any questions.\n\nNote: This number (+1) is an automated system and does not receive messages.',
     variables: [
       { key: 'customerName', label: 'Name', fallback: 'Customer' },
       { key: 'orderNumber', label: 'Order', fallback: 'WPCR' },

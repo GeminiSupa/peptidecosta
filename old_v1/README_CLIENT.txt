@@ -88,7 +88,7 @@ faster, sorting behaves dynamically:
 ------------------------------------------------------------------------
 All ordering and contact channels are routed directly to your official 
 WhatsApp phone line:
-*   Official Number: +506 6062 6224 (encoded as 50660626224 in link targets)
+*   Official Number: +506 8404-6973 (encoded as 50684046973 in link targets)
 *   Interactive Orders: When a user clicks "Order via WhatsApp" inside a 
     product detail modal, the application automatically prepares a pre-filled 
     custom message, e.g.:

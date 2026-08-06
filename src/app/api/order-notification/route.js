@@ -447,7 +447,7 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
           <h4 style="margin:0 0 8px;color:#047857;font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;">🔬 ${strings.supportTitle}</h4>
           <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.5;font-weight:500;">${strings.supportText}</p>
           <p style="margin:0 0 20px;color:#0f172a;font-size:14.5px;line-height:1.6;font-weight:600;">
-            <strong>Costa Rica:</strong> +506 6062 6224<br/>
+            <strong>Costa Rica:</strong> +506 8404-6973<br/>
             
           </p>
           <a href="https://api.whatsapp.com/send?phone=${links.whatsappNumber}" style="display:inline-block;background-color:#0f172a;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px;">
@@ -666,8 +666,8 @@ export async function POST(request) {
           ...(order.shipping !== undefined ? [`${orderLang === 'en' ? 'Shipping' : 'Envío'}: ${order.shipping === 0 ? 'FREE / GRATIS' : formatMoney(order.shipping, order.currency)}`] : []),
           '',
           orderLang === 'en' 
-            ? `Need help? Contact our support desk at +506 6062 6224 or reply to this email.`
-            : `Necesita ayuda? Contacte a soporte al +506 6062 6224 o responda a este correo.`
+            ? `Need help? Contact our support desk at +506 8404-6973 or reply to this email.`
+            : `Necesita ayuda? Contacte a soporte al +506 8404-6973 o responda a este correo.`
         ].join('\n');
 
         const customerInfo = await transporter.sendMail({

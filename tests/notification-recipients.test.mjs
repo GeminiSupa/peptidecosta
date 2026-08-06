@@ -49,21 +49,21 @@ test('a real database error is surfaced, not swallowed', async () => {
 test('unusable destinations are dropped', async () => {
   const supabase = fakeSupabase({
     data: [
-      { label: 'Webster', channel: 'whatsapp', destination: '50660626224' },
+      { label: 'Webster', channel: 'whatsapp', destination: '50684046973' },
       { label: 'Typo', channel: 'whatsapp', destination: '6484164' },
       { label: 'Blank', channel: 'whatsapp', destination: '' },
     ],
     error: null,
   });
   const { recipients } = await getNotificationRecipients(supabase, { channel: 'whatsapp' });
-  assert.deepEqual(recipients, [{ label: 'Webster', destination: '50660626224' }]);
+  assert.deepEqual(recipients, [{ label: 'Webster', destination: '50684046973' }]);
 });
 
 test('the same number listed twice only gets one alert', async () => {
   const supabase = fakeSupabase({
     data: [
-      { label: 'Webster', channel: 'whatsapp', destination: '50660626224' },
-      { label: 'Webster spare', channel: 'whatsapp', destination: '+506 6062-6224' },
+      { label: 'Webster', channel: 'whatsapp', destination: '50684046973' },
+      { label: 'Webster spare', channel: 'whatsapp', destination: '+506 8404-6973' },
     ],
     error: null,
   });
@@ -91,12 +91,12 @@ test('an unknown notification type is a programming error', async () => {
 });
 
 test('normalizeDestination strips phone symbols but keeps address text', () => {
-  assert.equal(normalizeDestination('whatsapp', '+506 6062-6224'), '50660626224');
+  assert.equal(normalizeDestination('whatsapp', '+506 8404-6973'), '50684046973');
   assert.equal(normalizeDestination('email', '  ops@example.com '), 'ops@example.com');
 });
 
 test('isUsableDestination enforces the Meta digit range and email shape', () => {
-  assert.equal(isUsableDestination('whatsapp', '50660626224'), true);
+  assert.equal(isUsableDestination('whatsapp', '50684046973'), true);
   assert.equal(isUsableDestination('whatsapp', '6484164'), false);
   assert.equal(isUsableDestination('whatsapp', '1234567890123456'), false);
   assert.equal(isUsableDestination('email', 'ops@example.com'), true);

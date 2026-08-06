@@ -107,8 +107,8 @@ export default function ChatWidget() {
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         text: lang === 'en'
-          ? 'Sorry, I am having connection issues. Please contact us via WhatsApp at +506 6062 6224.'
-          : 'Lo siento, estoy teniendo problemas de conexión. Por favor, contáctanos por WhatsApp al +506 6062 6224.'
+          ? 'Sorry, I am having connection issues. Please contact us via WhatsApp at +506 8404-6973.'
+          : 'Lo siento, estoy teniendo problemas de conexión. Por favor, contáctanos por WhatsApp al +506 8404-6973.'
       }]);
     } finally {
       setIsLoading(false);

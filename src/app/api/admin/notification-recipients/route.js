@@ -17,7 +17,7 @@ function validate({ label, channel, destination }) {
   if (!NOTIFICATION_CHANNELS.includes(channel)) return 'Channel must be "whatsapp" or "email".';
   if (!isUsableDestination(channel, destination)) {
     return channel === 'whatsapp'
-      ? 'Enter a WhatsApp number with its country code, 8 to 15 digits (for example 50660626224).'
+      ? 'Enter a WhatsApp number with its country code, 8 to 15 digits (for example 50684046973).'
       : 'Enter a valid email address.';
   }
   return null;

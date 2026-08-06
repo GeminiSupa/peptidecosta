@@ -144,7 +144,7 @@ function NotificationSettings({
             </select>
             <input
               className="admin-input"
-              placeholder={newChannel === 'whatsapp' ? '50660626224 (with country code)' : 'name@example.com'}
+              placeholder={newChannel === 'whatsapp' ? '50684046973 (with country code)' : 'name@example.com'}
               value={newDestination}
               onChange={e => setNewDestination(e.target.value)}
               style={{ flex: '1 1 220px' }}
@@ -155,7 +155,7 @@ function NotificationSettings({
             </button>
           </div>
           <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '10px 0 0 0' }}>
-            WhatsApp numbers need the country code and no symbols — 50660626224, not 6062-6224.
+            WhatsApp numbers need the country code and no symbols — 50684046973, not 8404-6973.
           </p>
         </form>
       ) : (
@@ -1533,7 +1533,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                     value={formWhatsAppNumber}
                     onChange={e => setFormWhatsAppNumber(e.target.value)}
                     disabled={!formNotificationsEnabled || !formOrderWhatsApp}
-                    placeholder="50660626224"
+                    placeholder="50684046973"
                     style={{
                       width: '100%',
                       marginTop: '8px',

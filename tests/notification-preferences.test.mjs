@@ -174,15 +174,15 @@ test('WhatsApp numbers are normalised, and unusable ones are rejected', () => {
 
 test('one member can be reached on several numbers', () => {
   assert.deepEqual(
-    agentWhatsAppNumbers({ whatsapp_number: '+506 6062 6224, +506 9999 5678' }),
-    ['50660626224', '50699995678']
+    agentWhatsAppNumbers({ whatsapp_number: '+506 8404-6973, +506 9999 5678' }),
+    ['50684046973', '50699995678']
   );
 });
 
 test('junk entries in the list are dropped without losing the good ones', () => {
   assert.deepEqual(
-    agentWhatsAppNumbers({ whatsapp_number: '50660626224, 123, , abc, 50699995678' }),
-    ['50660626224', '50699995678']
+    agentWhatsAppNumbers({ whatsapp_number: '50684046973, 123, , abc, 50699995678' }),
+    ['50684046973', '50699995678']
   );
   assert.deepEqual(agentWhatsAppNumbers({ whatsapp_number: '' }), []);
   assert.deepEqual(agentWhatsAppNumbers({}), []);
@@ -190,8 +190,8 @@ test('junk entries in the list are dropped without losing the good ones', () => 
 
 test('the same number listed twice is only messaged once', () => {
   assert.deepEqual(
-    agentWhatsAppNumbers({ whatsapp_number: '50660626224, +506 6062-6224' }),
-    ['50660626224']
+    agentWhatsAppNumbers({ whatsapp_number: '50684046973, +506 8404-6973' }),
+    ['50684046973']
   );
 });
 
@@ -215,11 +215,11 @@ test('member WhatsApp preferences merge with the central notification list', () 
       managedAvailable: true,
       managed: [
         { label: 'Ops', destination: '50611112222' },
-        { label: 'Quiet', destination: '+506 6062-6224' },
+        { label: 'Quiet', destination: '+506 8404-6973' },
       ],
       profiles: [
         { name: 'Agent', order_whatsapp_notifications: true, whatsapp_number: '50688881234' },
-        { name: 'Quiet', order_whatsapp_notifications: false, whatsapp_number: '50660626224' },
+        { name: 'Quiet', order_whatsapp_notifications: false, whatsapp_number: '50684046973' },
       ],
     }),
     [

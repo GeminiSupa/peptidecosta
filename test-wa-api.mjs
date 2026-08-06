@@ -6,7 +6,7 @@ const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
 async function testWa() {
-  const cleanContact = '50660626224'; // Sample costa rican number from the codebase, but I'll use a dummy one if needed. Let's use 50688888888
+  const cleanContact = '50684046973'; // Sample costa rican number from the codebase, but I'll use a dummy one if needed. Let's use 50688888888
   // Wait, I don't know the user's phone number. I'll just send it to a random number and see if the API says "Template not found" or "Recipient not opted in".
   const phone = '50688888888';
   
