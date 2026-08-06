@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Bot, CheckCircle2, ChevronLeft, Circle, Clock3, ExternalLink, FileText, Inbox, Loader2, MessageCircle, RefreshCw, Search, Send, Target, UserCheck, UserPlus, XCircle } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { renderLiveChatMessage as messageText } from '@/lib/liveChat';
 
 const POLL_MS = 15000;
 
@@ -49,7 +51,7 @@ function priorityColor(priority) {
 function visibleMessagesFor(conversation) {
   const messages = Array.isArray(conversation?.messages) ? conversation.messages : [];
   if (messages.length > 0) return messages;
-  if (!conversation?.lastMessage) return [];
+  if (!messageText(conversation?.lastMessage)) return [];
   return [{
     id: `${conversation.id || 'conversation'}-last-message`,
     senderType: conversation.lastAgentMessageAt && !conversation.lastCustomerMessageAt ? 'agent' : 'visitor',
@@ -61,14 +63,17 @@ function visibleMessagesFor(conversation) {
   }];
 }
 
+// Matches the breakpoint where the dashboard swaps to the fixed bottom tab bar,
+// so the inbox and the chrome around it never disagree about the layout.
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const update = () => setIsMobile(window.innerWidth < 860);
+    const query = window.matchMedia('(max-width: 1023px)');
+    const update = () => setIsMobile(query.matches);
     update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
   }, []);
 
   return isMobile;
@@ -106,7 +111,9 @@ export default function LiveChatInbox() {
   const [sending, setSending] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [leadSaving, setLeadSaving] = useState(false);
-  const [reply, setReply] = useState('');
+  // Drafts are keyed by conversation so switching threads mid-sentence cannot
+  // send text meant for one visitor to another.
+  const [drafts, setDrafts] = useState({});
   const [error, setError] = useState('');
   const messagesEndRef = useRef(null);
   const previousUnreadIdsRef = useRef(new Set());
@@ -133,8 +140,23 @@ export default function LiveChatInbox() {
 
   useEffect(() => {
     fetchInbox();
-    const interval = setInterval(() => fetchInbox(), POLL_MS);
-    return () => clearInterval(interval);
+    
+    let channel;
+    if (isSupabaseConfigured && supabase) {
+      channel = supabase
+        .channel('admin-live-chat-inbox')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'live_chat_conversations' }, () => {
+          fetchInbox(true);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'live_chat_messages' }, () => {
+          fetchInbox(true);
+        })
+        .subscribe();
+    }
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [fetchInbox]);
 
   useEffect(() => {
@@ -147,6 +169,11 @@ export default function LiveChatInbox() {
     () => conversations.find((conversation) => conversation.id === activeId) || null,
     [conversations, activeId]
   );
+
+  const reply = drafts[activeId] || '';
+  const setReply = useCallback((value) => {
+    setDrafts((prev) => ({ ...prev, [activeId]: value }));
+  }, [activeId]);
 
   const counts = useMemo(() => ({
     open: conversations.filter((conversation) => conversation.status === 'open').length,
@@ -202,7 +229,7 @@ export default function LiveChatInbox() {
     playAlertTone();
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       new Notification('New website chat', {
-        body: `${newest.visitorName}: ${newest.lastMessage || 'New message'}`.slice(0, 120),
+        body: `${newest.visitorName}: ${messageText(newest.lastMessage) || 'New message'}`.slice(0, 120),
       });
     }
   }, [alertsEnabled, conversations]);
@@ -210,6 +237,14 @@ export default function LiveChatInbox() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [activeId, activeConversation?.messages?.length]);
+
+  // Same treatment the WhatsApp inbox gets: an open thread takes the whole
+  // screen, otherwise the composer hides behind the fixed bottom tab bar.
+  useEffect(() => {
+    const threadOpen = isMobile && mobileThreadOpen;
+    document.body.classList.toggle('admin-live-chat-thread-open', threadOpen);
+    return () => document.body.classList.remove('admin-live-chat-thread-open');
+  }, [isMobile, mobileThreadOpen]);
 
   useEffect(() => {
     if (!activeConversation?.unreadForAgent) return;
@@ -247,13 +282,14 @@ export default function LiveChatInbox() {
 
   const sendReply = async () => {
     if (!activeConversation || !reply.trim() || sending) return;
+    const conversationId = activeConversation.id;
     const text = reply.trim();
     setSending(true);
-    setReply('');
+    setDrafts((prev) => ({ ...prev, [conversationId]: '' }));
     try {
       const response = await adminFetch('/api/admin/live-chat', {
         method: 'POST',
-        body: JSON.stringify({ conversationId: activeConversation.id, message: text }),
+        body: JSON.stringify({ conversationId, message: text }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Send failed');
@@ -262,7 +298,7 @@ export default function LiveChatInbox() {
       )));
       setError('');
     } catch (err) {
-      setReply(text);
+      setDrafts((prev) => ({ ...prev, [conversationId]: text }));
       setError(err.message || 'Send failed');
     } finally {
       setSending(false);
@@ -342,22 +378,29 @@ export default function LiveChatInbox() {
   }
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: isMobile ? '1fr' : 'minmax(280px, 360px) minmax(0, 1fr)',
-      minHeight: '680px',
-      border: '1px solid rgba(148, 163, 184, 0.16)',
-      borderRadius: '16px',
-      overflow: 'hidden',
-      background: '#020617',
-    }}>
-      <aside style={{
-        borderRight: isMobile ? 0 : '1px solid rgba(148, 163, 184, 0.16)',
-        background: '#07111f',
-        minWidth: 0,
-        display: isMobile && mobileThreadOpen ? 'none' : 'block',
-      }}>
-        <div style={{ padding: '16px', borderBottom: '1px solid rgba(148, 163, 184, 0.16)' }}>
+    <div
+      className={`admin-live-chat${isMobile && mobileThreadOpen ? ' is-thread-open' : ''}`}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : 'minmax(280px, 360px) minmax(0, 1fr)',
+        minHeight: isMobile ? 0 : '680px',
+        border: '1px solid rgba(148, 163, 184, 0.16)',
+        borderRadius: '16px',
+        overflow: 'hidden',
+        background: '#020617',
+      }}
+    >
+      <aside
+        className="admin-live-chat-aside"
+        style={{
+          borderRight: isMobile ? 0 : '1px solid rgba(148, 163, 184, 0.16)',
+          background: '#07111f',
+          minWidth: 0,
+          display: isMobile && mobileThreadOpen ? 'none' : 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <div className="admin-live-chat-filters" style={{ padding: '16px', borderBottom: '1px solid rgba(148, 163, 184, 0.16)', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '14px' }}>
               <div>
                 <div style={{ color: '#f8fafc', fontWeight: 800, fontSize: '1rem' }}>Website Inbox</div>
@@ -422,7 +465,7 @@ export default function LiveChatInbox() {
           </div>
         </div>
 
-        <div style={{ maxHeight: '560px', overflowY: 'auto' }}>
+        <div className="admin-live-chat-list" style={{ maxHeight: '560px', overflowY: 'auto' }}>
           {filteredConversations.length === 0 ? (
             <div style={{ padding: '28px 18px', color: '#94a3b8', textAlign: 'center' }}>
               <Inbox size={28} style={{ marginBottom: '10px' }} />
@@ -469,7 +512,7 @@ export default function LiveChatInbox() {
                   <span style={{ color: '#94a3b8', fontSize: '0.72rem', flexShrink: 0 }}>{formatTime(conversation.lastMessageAt)}</span>
                 </div>
                 <div style={{ color: '#94a3b8', fontSize: '0.76rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '3px' }}>
-                  {conversation.lastMessage || 'No message preview'}
+                  {messageText(conversation.lastMessage) || 'No message preview'}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '7px', color: '#94a3b8', fontSize: '0.7rem' }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: priorityColor(conversation.priority), display: 'inline-block' }} />
@@ -484,12 +527,15 @@ export default function LiveChatInbox() {
         </div>
       </aside>
 
-      <main style={{
-        minWidth: 0,
-        display: isMobile && !mobileThreadOpen ? 'none' : 'flex',
-        flexDirection: 'column',
-        background: '#0f172a',
-      }}>
+      <main
+        className="admin-live-chat-thread"
+        style={{
+          minWidth: 0,
+          display: isMobile && !mobileThreadOpen ? 'none' : 'flex',
+          flexDirection: 'column',
+          background: '#0f172a',
+        }}
+      >
         {!activeConversation ? (
           <div style={{ flex: 1, display: 'grid', placeItems: 'center', color: '#94a3b8' }}>
             <div style={{ textAlign: 'center' }}>
@@ -499,7 +545,7 @@ export default function LiveChatInbox() {
           </div>
         ) : (
           <>
-            <header style={{
+            <header className="admin-live-chat-header" style={{
               padding: '16px 18px',
               borderBottom: '1px solid rgba(148, 163, 184, 0.16)',
               display: 'flex',
@@ -507,22 +553,23 @@ export default function LiveChatInbox() {
               justifyContent: 'space-between',
               gap: '14px',
               background: '#111827',
+              flexShrink: 0,
             }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f8fafc', fontWeight: 800 }}>
+              <div className="admin-live-chat-identity" style={{ minWidth: 0 }}>
+                <div className="admin-live-chat-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f8fafc', fontWeight: 800, minWidth: 0 }}>
                   {isMobile && (
                     <button type="button" onClick={() => setMobileThreadOpen(false)} style={{ ...iconButtonStyle, width: '30px', height: '30px' }} aria-label="Back to conversations">
                       <ChevronLeft size={16} />
                     </button>
                   )}
-                  <span>{activeConversation.visitorName}</span>
-                  <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.76rem' }}>{statusLabel(activeConversation.status)}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{activeConversation.visitorName}</span>
+                  <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.76rem', flexShrink: 0 }}>{statusLabel(activeConversation.status)}</span>
                 </div>
                 <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {[activeConversation.visitorEmail, activeConversation.visitorPhone, activeConversation.pageUrl].filter(Boolean).join(' · ') || activeConversation.visitorId}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <div className="admin-live-chat-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <select
                   value={activeConversation.priority}
                   onChange={(event) => patchConversation({ action: 'priority', priority: event.target.value })}
@@ -552,21 +599,21 @@ export default function LiveChatInbox() {
                   ))}
                 </select>
                 {activeConversation.assignedTo ? (
-                  <button type="button" className="admin-btn" style={toolbarButtonStyle} onClick={() => patchConversation({ action: 'release' })}>
-                    <XCircle size={14} /> Release
+                  <button type="button" className="admin-btn" style={toolbarButtonStyle} onClick={() => patchConversation({ action: 'release' })} title="Release">
+                    <XCircle size={14} /> <span className="admin-live-chat-btn-label">Release</span>
                   </button>
                 ) : (
-                  <button type="button" className="admin-btn" style={toolbarButtonStyle} onClick={() => patchConversation({ action: 'claim' })}>
-                    <UserCheck size={14} /> Claim
+                  <button type="button" className="admin-btn" style={toolbarButtonStyle} onClick={() => patchConversation({ action: 'claim' })} title="Claim">
+                    <UserCheck size={14} /> <span className="admin-live-chat-btn-label">Claim</span>
                   </button>
                 )}
                 {activeConversation.status === 'resolved' ? (
-                  <button type="button" className="admin-btn" style={toolbarButtonStyle} onClick={() => patchConversation({ action: 'status', status: 'open' })}>
-                    <Clock3 size={14} /> Reopen
+                  <button type="button" className="admin-btn" style={toolbarButtonStyle} onClick={() => patchConversation({ action: 'status', status: 'open' })} title="Reopen">
+                    <Clock3 size={14} /> <span className="admin-live-chat-btn-label">Reopen</span>
                   </button>
                 ) : (
-                  <button type="button" className="admin-btn" style={toolbarButtonStyle} onClick={() => patchConversation({ action: 'status', status: 'resolved' })}>
-                    <CheckCircle2 size={14} /> Resolve
+                  <button type="button" className="admin-btn" style={toolbarButtonStyle} onClick={() => patchConversation({ action: 'status', status: 'resolved' })} title="Resolve">
+                    <CheckCircle2 size={14} /> <span className="admin-live-chat-btn-label">Resolve</span>
                   </button>
                 )}
               </div>
@@ -578,9 +625,11 @@ export default function LiveChatInbox() {
               onSave={saveLead}
             />
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="admin-live-chat-messages" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {visibleMessagesFor(activeConversation).map((message) => {
                 const isAgent = message.senderType === 'agent';
+                const text = messageText(message.message);
+                const hasAttachments = message.attachments?.length > 0;
                 return (
                   <div key={message.id} style={{ alignSelf: isAgent ? 'flex-end' : 'flex-start', maxWidth: '72%' }}>
                     <div style={{
@@ -590,12 +639,15 @@ export default function LiveChatInbox() {
                       borderRadius: isAgent ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                       padding: '11px 13px',
                       whiteSpace: 'pre-wrap',
+                      overflowWrap: 'anywhere',
                       lineHeight: 1.5,
                       fontSize: '0.9rem',
                     }}>
-                      {message.message}
-                      {message.attachments?.length > 0 && (
-                        <div style={{ display: 'grid', gap: '8px', marginTop: message.message ? '10px' : 0 }}>
+                      {text || (hasAttachments ? '' : (
+                        <em style={{ color: '#cbd5e1', fontStyle: 'italic' }}>Message could not be read</em>
+                      ))}
+                      {hasAttachments && (
+                        <div style={{ display: 'grid', gap: '8px', marginTop: text ? '10px' : 0 }}>
                           {message.attachments.map((attachment) => (
                             <AttachmentPreview key={attachment.path} attachment={attachment} isAgent={isAgent} />
                           ))}
@@ -612,8 +664,8 @@ export default function LiveChatInbox() {
               <div ref={messagesEndRef} />
             </div>
 
-            <div style={{ borderTop: '1px solid rgba(148, 163, 184, 0.16)', padding: '14px 16px', background: '#111827' }}>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+            <div className="admin-live-chat-composer" style={{ borderTop: '1px solid rgba(148, 163, 184, 0.16)', padding: '14px 16px', background: '#111827', flexShrink: 0 }}>
+              <div className="admin-live-chat-quick-replies" style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
                 <button type="button" onClick={draftAiReply} disabled={drafting || !activeConversation.messages.length} style={{ ...quickReplyStyle, opacity: drafting ? 0.7 : 1 }}>
                   {drafting ? <Loader2 size={13} className="animate-spin" /> : <Bot size={13} />} AI draft
                 </button>
@@ -631,8 +683,10 @@ export default function LiveChatInbox() {
                   onKeyDown={handleKeyDown}
                   rows={2}
                   placeholder="Reply to visitor..."
+                  className="admin-live-chat-input"
                   style={{
                     flex: 1,
+                    minWidth: 0,
                     minHeight: '54px',
                     maxHeight: '140px',
                     resize: 'vertical',
@@ -657,7 +711,7 @@ export default function LiveChatInbox() {
                   }}
                 >
                   {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                  Send
+                  <span className="admin-live-chat-btn-label">Send</span>
                 </button>
               </div>
             </div>

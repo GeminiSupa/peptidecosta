@@ -35,9 +35,32 @@ export function cleanLiveChatText(value, limit = 2000) {
   return String(value).replace(/\s+/g, ' ').trim().slice(0, limit);
 }
 
+// Rows stored before the widget stopped forwarding the click event to the API
+// hold the literal string "[object Object]". cleanLiveChatText keeps new ones
+// out; this keeps the old ones off the screen on both sides of the chat.
+const UNRENDERABLE_MESSAGES = new Set(['[object Object]', 'undefined', 'null', 'NaN']);
+
+export function renderLiveChatMessage(value) {
+  if (typeof value !== 'string') return '';
+  const text = value.trim();
+  return UNRENDERABLE_MESSAGES.has(text) ? '' : text;
+}
+
 export function cleanOptionalText(value, limit = 500) {
   const text = String(value || '').trim().slice(0, limit);
   return text || null;
+}
+
+// The visitor profile lives in the browser's localStorage, so a cleared browser
+// or a second device sends blanks. Upserting those blanks would erase contact
+// details the visitor already gave us and silently un-qualify the lead, so only
+// the fields that actually carry a value are written.
+export function buildVisitorIdentityPatch({ name, email, phone } = {}) {
+  const patch = {};
+  if (name) patch.visitor_name = name;
+  if (email) patch.visitor_email = email;
+  if (phone) patch.visitor_phone = phone;
+  return patch;
 }
 
 export function normalizeLiveChatEmail(value) {

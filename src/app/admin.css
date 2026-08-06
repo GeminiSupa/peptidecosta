@@ -6182,6 +6182,105 @@
         flex: 0 0 42px;
     }
 
+    /* Website live chat: the inbox is a chat client, so on a phone it gets the
+       whole screen like the WhatsApp inbox does. Left in the page flow it sat
+       at a fixed 680px inside a scrolling page, which buried the composer
+       under the bottom tab bar and gave the thread two nested scrollbars. */
+    .admin-live-chat {
+        height: calc(100dvh - 210px);
+        min-height: 420px;
+        /* Single visible column on mobile; the row must fill the box so the
+           list and the composer can pin instead of running off the bottom. */
+        grid-template-rows: minmax(0, 1fr);
+    }
+
+    .admin-live-chat > * {
+        min-height: 0;
+    }
+
+    .admin-live-chat-list {
+        flex: 1 1 auto;
+        max-height: none !important;
+    }
+
+    .admin-live-chat-quick-replies {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .admin-live-chat-quick-replies::-webkit-scrollbar {
+        display: none;
+    }
+
+    .admin-live-chat-quick-replies > button {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    body.admin-live-chat-thread-open {
+        overflow: hidden;
+    }
+
+    body.admin-live-chat-thread-open .admin-navbar,
+    body.admin-live-chat-thread-open .admin-page-header,
+    body.admin-live-chat-thread-open .admin-mobile-quick-nav {
+        display: none !important;
+    }
+
+    body.admin-live-chat-thread-open .admin-container {
+        height: 100dvh;
+        padding: 0 !important;
+    }
+
+    body.admin-live-chat-thread-open .admin-tab-panel {
+        height: 100dvh;
+    }
+
+    body.admin-live-chat-thread-open .admin-live-chat.is-thread-open {
+        height: 100dvh;
+        min-height: 0;
+        border: 0;
+        border-radius: 0 !important;
+    }
+
+    body.admin-live-chat-thread-open .admin-live-chat-composer {
+        padding-bottom: max(14px, env(safe-area-inset-bottom, 0px));
+    }
+
+    /* Two selects plus two labelled buttons wrapped onto three rows and shoved
+       the visitor name into a two-line sliver. Icons only below 1024px. */
+    .admin-live-chat-header {
+        padding: 12px 14px !important;
+        gap: 10px !important;
+    }
+
+    .admin-live-chat-identity {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .admin-live-chat-actions {
+        flex-wrap: nowrap !important;
+        gap: 6px !important;
+        flex: 0 0 auto;
+    }
+
+    .admin-live-chat-actions select {
+        max-width: 96px;
+        padding: 8px 6px !important;
+        font-size: 0.78rem;
+    }
+
+    .admin-live-chat-actions .admin-live-chat-btn-label {
+        display: none;
+    }
+
+    .admin-live-chat-actions .admin-btn {
+        padding: 9px 10px !important;
+    }
+
     .admin-navbar {
         padding: 10px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px));
     }

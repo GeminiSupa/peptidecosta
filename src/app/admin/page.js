@@ -2054,26 +2054,36 @@ Core Rules:
     }
 
     let cancelled = false;
+    let channel = null;
+
     const refreshLiveChatCount = async () => {
       try {
-        const res = await adminFetch('/api/admin/live-chat', { cache: 'no-store' });
+        const res = await adminFetch('/api/admin/live-chat/unread', { cache: 'no-store' });
         const data = await res.json();
         if (!res.ok) {
           if (!cancelled) setLiveChatUnreadCount(0);
           return;
         }
-        const unread = (data.conversations || []).filter((conversation) => conversation.unreadForAgent).length;
-        if (!cancelled) setLiveChatUnreadCount(unread);
+        if (!cancelled) setLiveChatUnreadCount(data.unreadCount || 0);
       } catch {
         if (!cancelled) setLiveChatUnreadCount(0);
       }
     };
 
     refreshLiveChatCount();
-    const timer = setInterval(refreshLiveChatCount, 20000);
+    
+    if (isSupabaseConfigured && supabase) {
+      channel = supabase
+        .channel('admin-live-chat-unread')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'live_chat_conversations' }, () => {
+          refreshLiveChatCount();
+        })
+        .subscribe();
+    }
+
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [isAuthenticated, profileLoading, adminProfile, adminPermissionKey]);
 

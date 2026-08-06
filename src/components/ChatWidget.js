@@ -3,6 +3,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { ExternalLink, FileText, Loader2, MessageCircle, Minus, Paperclip, Send, UserRound, X } from 'lucide-react';
+import { renderLiveChatMessage as messageText } from '@/lib/liveChat';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { isoToCrWall } from '@/lib/crTime.mjs';
 
 const VISITOR_ID_KEY = 'peptides_live_chat_visitor_id';
 const VISITOR_PROFILE_KEY = 'peptides_live_chat_profile';
@@ -62,15 +65,18 @@ export default function ChatWidget() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [polling, setPolling] = useState(false);
   const [error, setError] = useState('');
   const [lang, setLang] = useState('es');
   const [showPrompt, setShowPrompt] = useState(false);
   const [ratingSent, setRatingSent] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [pending, setPending] = useState([]);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  const shouldHide = pathname?.startsWith('/admin');
+  // The embed route is rendered inside a customer's iframe, where a fixed
+  // launcher would anchor to the iframe box instead of the real viewport.
+  const shouldHide = pathname?.startsWith('/admin') || pathname?.startsWith('/embed');
 
   useEffect(() => {
     if (shouldHide) return;
@@ -81,15 +87,30 @@ export default function ChatWidget() {
 
   useEffect(() => {
     if (typeof window === 'undefined' || shouldHide) return undefined;
-    const interval = setInterval(() => {
+    const syncLang = () => {
+      if (document.hidden) return;
       setLang(localStorage.getItem('lang') || 'es');
-    }, 800);
-    return () => clearInterval(interval);
+    };
+    const interval = setInterval(syncLang, 1500);
+    window.addEventListener('storage', syncLang);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', syncLang);
+    };
   }, [shouldHide]);
+
+  const offline = useMemo(() => {
+    const crTime = isoToCrWall(new Date().toISOString());
+    if (!crTime) return false;
+    const hour = parseInt(crTime.split('T')[1].split(':')[0], 10);
+    return hour < 7 || hour >= 19;
+  }, []);
 
   const copy = useMemo(() => ({
     title: lang === 'en' ? 'Live support' : 'Soporte en vivo',
-    subtitle: lang === 'en' ? 'Usually replies in a few minutes' : 'Respondemos pronto',
+    subtitle: offline 
+      ? (lang === 'en' ? 'We are offline. We will reply during business hours' : 'Estamos desconectados. Responderemos en nuestro horario')
+      : (lang === 'en' ? 'Usually replies in a few minutes' : 'Respondemos pronto'),
     welcome: lang === 'en'
       ? 'Hi. Send us a message here and our team will reply in this chat.'
       : 'Hola. Escríbanos aquí y nuestro equipo responderá en este chat.',
@@ -118,15 +139,29 @@ export default function ChatWidget() {
         'Hola, ¿qué opciones de pago tienen disponibles?',
       ],
     rating: lang === 'en' ? 'How was this chat?' : '¿Cómo fue este chat?',
+    details: lang === 'en' ? 'Add your contact details' : 'Agregar sus datos de contacto',
+    detailsHint: lang === 'en'
+      ? 'So we can follow up if you close this chat.'
+      : 'Para poder darle seguimiento si cierra el chat.',
+    detailsDone: lang === 'en' ? 'Saved' : 'Guardado',
     error: lang === 'en'
       ? 'Chat is temporarily unavailable. Please use the contact form or email us.'
       : 'El chat no está disponible temporalmente. Use el formulario de contacto o escríbanos por correo.',
     unread: lang === 'en' ? 'New reply' : 'Nueva respuesta',
   }), [lang]);
 
-  const messages = conversation?.messages || [];
+  const serverMessages = useMemo(() => conversation?.messages || [], [conversation]);
+  // Anything the visitor sent that the server has not echoed back yet, so the
+  // bubble appears the moment they hit send instead of after the round trip.
+  const messages = useMemo(() => {
+    if (pending.length === 0) return serverMessages;
+    const seen = new Set(serverMessages.map((message) => messageText(message.message)));
+    return [...serverMessages, ...pending.filter((message) => !seen.has(messageText(message.message)))];
+  }, [pending, serverMessages]);
   const hasAgentReply = messages.some((message) => message.senderType === 'agent');
-  const needsProfile = !profile.name && !profile.email && messages.length === 0;
+  const isResolved = conversation?.status === 'resolved';
+  const hasContact = Boolean(profile.name || profile.email || profile.phone);
+  const needsProfile = (!hasContact && serverMessages.length === 0) || showDetails;
 
   useEffect(() => {
     if (shouldHide || isOpen || conversation || localStorage.getItem(PROMPT_DISMISSED_KEY) === '1') return undefined;
@@ -141,7 +176,6 @@ export default function ChatWidget() {
 
   const fetchConversation = useCallback(async ({ silent = false } = {}) => {
     if (!visitorId) return;
-    if (!silent) setPolling(true);
     try {
       const response = await fetch(`/api/live-chat?visitorId=${encodeURIComponent(visitorId)}`, {
         cache: 'no-store',
@@ -152,23 +186,41 @@ export default function ChatWidget() {
       setConversation(data.conversation || null);
     } catch (err) {
       if (!silent) setError(err.message || 'Could not load chat');
-    } finally {
-      if (!silent) setPolling(false);
     }
   }, [visitorId]);
 
   useEffect(() => {
     if (!visitorId || shouldHide) return undefined;
     fetchConversation({ silent: true });
-    const interval = setInterval(() => fetchConversation({ silent: true }), POLL_MS);
-    return () => clearInterval(interval);
   }, [fetchConversation, visitorId, shouldHide]);
+
+  useEffect(() => {
+    if (!conversation?.id || shouldHide || !isSupabaseConfigured || !supabase) return undefined;
+    const channel = supabase
+      .channel(`chat-${conversation.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_chat_messages', filter: `conversation_id=eq.${conversation.id}` }, () => {
+        fetchConversation({ silent: true });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_chat_conversations', filter: `id=eq.${conversation.id}` }, () => {
+        fetchConversation({ silent: true });
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [conversation?.id, fetchConversation, shouldHide]);
 
   useEffect(() => {
     if (isOpen && !isMinimized) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   }, [messages.length, isOpen, isMinimized]);
+
+  // The panel goes full screen on phones, so the page behind it must not scroll.
+  useEffect(() => {
+    if (shouldHide) return undefined;
+    const active = isOpen && !isMinimized;
+    document.body.classList.toggle('lcw-open', active);
+    return () => document.body.classList.remove('lcw-open');
+  }, [isOpen, isMinimized, shouldHide]);
 
   const updateProfile = (key, value) => {
     setProfile((prev) => {
@@ -179,10 +231,19 @@ export default function ChatWidget() {
   };
 
   const sendMessage = async (overrideMessage = null) => {
-    const message = String(overrideMessage ?? input).trim();
+    const raw = typeof overrideMessage === 'string' ? overrideMessage : input;
+    const message = String(raw ?? '').trim();
     if (!message || loading || uploading || !visitorId) return;
     setLoading(true);
     setInput('');
+    setPending((prev) => [...prev, {
+      id: `pending_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      senderType: 'visitor',
+      message,
+      attachments: [],
+      createdAt: new Date().toISOString(),
+      optimistic: true,
+    }]);
     try {
       const response = await fetch('/api/live-chat', {
         method: 'POST',
@@ -201,10 +262,12 @@ export default function ChatWidget() {
       if (!response.ok) throw new Error(data.error || 'Could not send message');
       setError('');
       setConversation(data.conversation || null);
+      setShowDetails(false);
     } catch (err) {
       setError(err.message || copy.error);
       setInput(message);
     } finally {
+      setPending((prev) => prev.filter((item) => item.message !== message));
       setLoading(false);
     }
   };
@@ -278,20 +341,7 @@ export default function ChatWidget() {
     return (
       <>
         {showPrompt && (
-          <div style={{
-            position: 'fixed',
-            left: '24px',
-            bottom: '96px',
-            zIndex: 9999,
-            width: '280px',
-            maxWidth: 'calc(100vw - 48px)',
-            background: '#fff',
-            color: '#0f172a',
-            border: '1px solid #dbeafe',
-            borderRadius: '16px',
-            boxShadow: '0 18px 48px rgba(15, 23, 42, 0.22)',
-            padding: '14px',
-          }}>
+          <div className="lcw-prompt">
             <button
               type="button"
               onClick={() => {
@@ -315,53 +365,19 @@ export default function ChatWidget() {
         )}
         <button
           type="button"
+          className="lcw-launcher"
           onClick={() => { setShowPrompt(false); setIsOpen(true); setIsMinimized(false); }}
           aria-label={copy.title}
-          style={{
-            position: 'fixed',
-            left: '24px',
-            bottom: '24px',
-            zIndex: 9999,
-            width: '60px',
-            height: '60px',
-            borderRadius: '50%',
-            border: '1px solid rgba(14, 165, 233, 0.5)',
-            background: 'linear-gradient(135deg, #0ea5e9 0%, #14b8a6 100%)',
-            color: '#fff',
-            boxShadow: '0 14px 38px rgba(8, 47, 73, 0.32)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-          }}
         >
           <MessageCircle size={28} />
+          {conversation?.unreadForVisitor && <span className="lcw-launcher-dot" aria-hidden="true" />}
         </button>
       </>
     );
   }
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        left: '24px',
-        bottom: '24px',
-        zIndex: 9999,
-        width: '370px',
-        maxWidth: 'calc(100vw - 48px)',
-        height: isMinimized ? '64px' : '560px',
-        maxHeight: 'calc(100vh - 96px)',
-        background: '#0f172a',
-        border: '1px solid rgba(148, 163, 184, 0.22)',
-        borderRadius: '18px',
-        boxShadow: '0 24px 70px rgba(2, 6, 23, 0.5)',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        transition: 'height 160ms ease',
-      }}
-    >
+    <div className={`lcw-panel${isMinimized ? ' is-minimized' : ''}`} role="dialog" aria-label={copy.title}>
       <div
         onClick={() => setIsMinimized((value) => !value)}
         style={{
@@ -403,7 +419,7 @@ export default function ChatWidget() {
             type="button"
             onClick={(event) => { event.stopPropagation(); setIsMinimized((value) => !value); }}
             aria-label="Minimize"
-            style={{ background: 'transparent', border: 0, color: '#fff', cursor: 'pointer', padding: '4px' }}
+            className="lcw-header-btn"
           >
             {isMinimized ? <MessageCircle size={18} /> : <Minus size={18} />}
           </button>
@@ -411,7 +427,7 @@ export default function ChatWidget() {
             type="button"
             onClick={(event) => { event.stopPropagation(); setIsOpen(false); }}
             aria-label="Close"
-            style={{ background: 'transparent', border: 0, color: '#fff', cursor: 'pointer', padding: '4px' }}
+            className="lcw-header-btn"
           >
             <X size={18} />
           </button>
@@ -451,10 +467,24 @@ export default function ChatWidget() {
                 borderRadius: '12px',
                 padding: '12px',
               }}>
-                <input value={profile.name} onChange={(e) => updateProfile('name', e.target.value)} placeholder={copy.name} style={inputStyle} />
-                <input value={profile.email} onChange={(e) => updateProfile('email', e.target.value)} placeholder={copy.email} style={inputStyle} />
-                <input value={profile.phone} onChange={(e) => updateProfile('phone', e.target.value)} placeholder={copy.phone} style={inputStyle} />
+                <div style={{ color: '#475569', fontSize: '0.74rem' }}>{copy.detailsHint}</div>
+                <input value={profile.name} onChange={(e) => updateProfile('name', e.target.value)} placeholder={copy.name} style={inputStyle} autoComplete="name" />
+                <input value={profile.email} onChange={(e) => updateProfile('email', e.target.value)} placeholder={copy.email} style={inputStyle} type="email" inputMode="email" autoComplete="email" />
+                <input value={profile.phone} onChange={(e) => updateProfile('phone', e.target.value)} placeholder={copy.phone} style={inputStyle} type="tel" inputMode="tel" autoComplete="tel" />
+                {showDetails && (
+                  <button type="button" onClick={() => setShowDetails(false)} className="lcw-ghost-btn">
+                    {copy.detailsDone}
+                  </button>
+                )}
               </div>
+            )}
+
+            {/* Without this the visitor can never hand over contact details after
+                the first message, which leaves every chat unqualified in the CRM. */}
+            {!needsProfile && !hasContact && serverMessages.length > 0 && (
+              <button type="button" onClick={() => setShowDetails(true)} className="lcw-ghost-btn" style={{ alignSelf: 'flex-start' }}>
+                <UserRound size={13} /> {copy.details}
+              </button>
             )}
 
             {messages.length === 0 && (
@@ -483,10 +513,14 @@ export default function ChatWidget() {
 
             {messages.map((message) => {
               const isVisitor = message.senderType === 'visitor';
+              const text = messageText(message.message);
+              const hasAttachments = message.attachments?.length > 0;
+              if (!text && !hasAttachments) return null;
               return (
                 <div key={message.id} style={{
                   alignSelf: isVisitor ? 'flex-end' : 'flex-start',
                   maxWidth: '86%',
+                  opacity: message.optimistic ? 0.65 : 1,
                 }}>
                   <div style={{
                     background: isVisitor ? '#0891b2' : '#fff',
@@ -497,10 +531,11 @@ export default function ChatWidget() {
                     fontSize: '0.86rem',
                     lineHeight: 1.5,
                     whiteSpace: 'pre-wrap',
+                    overflowWrap: 'anywhere',
                   }}>
-                    {message.message}
-                    {message.attachments?.length > 0 && (
-                      <div style={{ display: 'grid', gap: '8px', marginTop: message.message ? '9px' : 0 }}>
+                    {text}
+                    {hasAttachments && (
+                      <div style={{ display: 'grid', gap: '8px', marginTop: text ? '9px' : 0 }}>
                         {message.attachments.map((attachment) => (
                           <AttachmentPreview key={attachment.path} attachment={attachment} isVisitor={isVisitor} />
                         ))}
@@ -514,29 +549,30 @@ export default function ChatWidget() {
                     textAlign: isVisitor ? 'right' : 'left',
                   }}>
                     {message.senderType === 'agent' && (message.senderName || 'Support') + ' · '}
-                    {formatTime(message.createdAt)}
+                    {message.optimistic ? copy.sending : formatTime(message.createdAt)}
                   </div>
                 </div>
               );
             })}
 
-            {(loading || polling) && (
-              <div style={{ color: '#64748b', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Loader2 size={14} className="animate-spin" /> {loading ? copy.sending : ''}
-              </div>
-            )}
             {uploading && (
               <div style={{ color: '#64748b', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Loader2 size={14} className="animate-spin" /> {copy.uploading}
               </div>
             )}
-            {error && <div style={{ color: '#b91c1c', fontSize: '0.78rem' }}>{copy.error}</div>}
+            {error && (
+              <div style={{ color: '#b91c1c', fontSize: '0.78rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '8px 10px' }}>
+                {copy.error}
+              </div>
+            )}
             {!hasAgentReply && messages.length > 0 && (
               <div style={{ color: '#64748b', fontSize: '0.75rem', textAlign: 'center' }}>
                 {copy.subtitle}
               </div>
             )}
-            {hasAgentReply && !ratingSent && (
+            {/* Asking to rate while the agent is still mid-conversation reads as
+                a brush-off, so wait until the thread is actually resolved. */}
+            {hasAgentReply && isResolved && !ratingSent && (
               <div style={{ alignSelf: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '10px 12px', textAlign: 'center' }}>
                 <div style={{ color: '#475569', fontSize: '0.76rem', marginBottom: '6px' }}>{copy.rating}</div>
                 <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
@@ -556,14 +592,7 @@ export default function ChatWidget() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div style={{
-            padding: '12px',
-            borderTop: '1px solid #e2e8f0',
-            background: '#fff',
-            display: 'flex',
-            alignItems: 'flex-end',
-            gap: '8px',
-          }}>
+          <div className="lcw-composer">
             <input
               ref={fileInputRef}
               type="file"
@@ -577,18 +606,12 @@ export default function ChatWidget() {
               disabled={loading || uploading}
               aria-label={copy.attach}
               title={copy.attach}
+              className="lcw-composer-btn"
               style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '14px',
-                border: '1px solid #cbd5e1',
                 background: '#f8fafc',
+                border: '1px solid #cbd5e1',
                 color: '#0f766e',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
                 cursor: loading || uploading ? 'not-allowed' : 'pointer',
-                flexShrink: 0,
               }}
             >
               {uploading ? <Loader2 size={18} className="animate-spin" /> : <Paperclip size={18} />}
@@ -599,37 +622,19 @@ export default function ChatWidget() {
               onKeyDown={handleKeyDown}
               placeholder={copy.placeholder}
               rows={1}
-              style={{
-                flex: 1,
-                minHeight: '42px',
-                maxHeight: '110px',
-                resize: 'none',
-                border: '1px solid #cbd5e1',
-                borderRadius: '14px',
-                padding: '10px 12px',
-                outline: 'none',
-                color: '#0f172a',
-                fontSize: '0.88rem',
-                fontFamily: 'inherit',
-              }}
+              className="lcw-textarea"
             />
             <button
               type="button"
               onClick={() => sendMessage()}
               disabled={loading || uploading || !input.trim()}
               aria-label="Send"
+              className="lcw-composer-btn"
               style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '14px',
                 border: 0,
                 background: input.trim() && !loading && !uploading ? '#0f766e' : '#94a3b8',
                 color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
                 cursor: input.trim() && !loading && !uploading ? 'pointer' : 'not-allowed',
-                flexShrink: 0,
               }}
             >
               <Send size={18} />
@@ -696,6 +701,7 @@ function AttachmentPreview({ attachment, isVisitor }) {
     </a>
   );
 }
+
 
 const inputStyle = {
   width: '100%',

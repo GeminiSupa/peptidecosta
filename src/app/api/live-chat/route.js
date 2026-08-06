@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
+  buildVisitorIdentityPatch,
   cleanLiveChatText,
   cleanOptionalText,
   formatLiveChatConversation,
@@ -8,6 +9,7 @@ import {
   normalizeVisitorId,
   signLiveChatAttachmentUrls,
 } from '@/lib/liveChat';
+import { rateLimit } from '@/lib/rateLimit.mjs';
 
 export const runtime = 'nodejs';
 
@@ -77,6 +79,13 @@ export async function POST(request) {
     if (!visitorId) return NextResponse.json({ error: 'visitorId is required' }, { status: 400 });
     if (!message) return NextResponse.json({ error: 'Message is required' }, { status: 400 });
 
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    const ip = forwardedFor ? forwardedFor.split(',')[0].trim() : '127.0.0.1';
+    const rateKey = `live-chat-post-${visitorId}-${ip}`;
+    if (!rateLimit(rateKey, 30)) {
+      return NextResponse.json({ error: 'Too many messages sent. Please wait a few minutes.' }, { status: 429 });
+    }
+
     const now = new Date().toISOString();
     const supabase = getSupabaseAdmin();
     const visitorName = cleanOptionalText(body.visitorName, 120);
@@ -89,9 +98,7 @@ export async function POST(request) {
       .from('live_chat_conversations')
       .upsert({
         visitor_id: visitorId,
-        visitor_name: visitorName,
-        visitor_email: visitorEmail,
-        visitor_phone: visitorPhone,
+        ...buildVisitorIdentityPatch({ name: visitorName, email: visitorEmail, phone: visitorPhone }),
         page_url: pageUrl,
         referrer,
         status: 'open',
