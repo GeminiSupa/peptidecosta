@@ -2,6 +2,7 @@ import { Montserrat, Inter } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import UTMTracker from "@/components/UTMTracker";
+import ChatWidget from "@/components/ChatWidget";
 import { LIVE_SITE_URL } from "@/lib/publicUrl";
 
 const montserrat = Montserrat({
@@ -191,6 +192,7 @@ export default async function RootLayout({ children }) {
         </noscript>
         {children}
         <UTMTracker />
+        <ChatWidget />
         {/* Google Tag Manager */}
         <Script id="gtm" strategy="lazyOnload">
           {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':

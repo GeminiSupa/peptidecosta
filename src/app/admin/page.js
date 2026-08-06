@@ -115,6 +115,7 @@ const CartsManager = dynamicTab(() => import('@/components/admin/CartsManager'),
 const LeadsManager = dynamicTab(() => import('@/components/admin/LeadsManager'), 'Loading leads…');
 const MessengerInbox = dynamicTab(() => import('@/components/admin/MessengerInbox'), 'Loading messenger…');
 const MessengerPosts = dynamicTab(() => import('@/components/admin/MessengerPosts'), 'Loading posts…');
+const LiveChatInbox = dynamicTab(() => import('@/components/admin/LiveChatInbox'), 'Loading live chat…');
 
 const FacebookIcon = ({ size = 14, style, ...props }) => (
   <svg 
@@ -179,6 +180,8 @@ function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, i
       return newLeads
         ? `${newLeads} new lead${newLeads !== 1 ? 's' : ''} · ${leads.length} total`
         : `${leads.length} lead${leads.length !== 1 ? 's' : ''}`;
+    case 'live_chat':
+      return 'Website chat inbox · reply without WhatsApp';
     case 'reviews':
       return pendingReviews
         ? `${pendingReviews} awaiting approval`
@@ -391,6 +394,7 @@ export default function AdminPage() {
   const [manualOrderOpen, setManualOrderOpen] = useState(false);
   const [inquiryCount, setInquiryCount] = useState(0);
   const [unreadTeamMsgCount, setUnreadTeamMsgCount] = useState(0);
+  const [liveChatUnreadCount, setLiveChatUnreadCount] = useState(0);
   const [notifRefreshKey, setNotifRefreshKey] = useState(0);
   const [selectedCartDetails, setSelectedCartDetails] = useState(null);
   const [loadingLeads, setLoadingLeads] = useState(true);
@@ -1574,6 +1578,12 @@ Core Rules:
       icon: <Inbox size={iconSize} />,
       badge: inquiryCount,
     },
+    live_chat: {
+      label: 'Live Chat',
+      icon: <MessageCircle size={iconSize} />,
+      badge: liveChatUnreadCount,
+      badgeTone: 'info',
+    },
     leads: {
       label: 'Leads',
       icon: <Target size={iconSize} />,
@@ -2026,6 +2036,37 @@ Core Rules:
       supabase.removeChannel(channel);
     };
   }, [isAuthenticated, adminProfile, isSubUserProfile]);
+
+  useEffect(() => {
+    if (!isAuthenticated || profileLoading || !adminProfile) return undefined;
+    if (!resolveTabAccess('live_chat', adminProfile)) {
+      setLiveChatUnreadCount(0);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const refreshLiveChatCount = async () => {
+      try {
+        const res = await adminFetch('/api/admin/live-chat', { cache: 'no-store' });
+        const data = await res.json();
+        if (!res.ok) {
+          if (!cancelled) setLiveChatUnreadCount(0);
+          return;
+        }
+        const unread = (data.conversations || []).filter((conversation) => conversation.unreadForAgent).length;
+        if (!cancelled) setLiveChatUnreadCount(unread);
+      } catch {
+        if (!cancelled) setLiveChatUnreadCount(0);
+      }
+    };
+
+    refreshLiveChatCount();
+    const timer = setInterval(refreshLiveChatCount, 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [isAuthenticated, profileLoading, adminProfile, adminPermissionKey]);
 
   // Fetch list of files/images in the Supabase product-pics storage bucket
   const fetchBucketImages = async () => {
@@ -6281,6 +6322,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             />
               </ErrorBoundary>
             )}
+          </div>
+        )}
+
+        {activeTab === 'live_chat' && (
+          <div className="admin-orders-tab admin-tab-panel">
+            <ErrorBoundary>
+              <LiveChatInbox />
+            </ErrorBoundary>
           </div>
         )}
 

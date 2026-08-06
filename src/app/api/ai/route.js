@@ -10,6 +10,7 @@ const AI_MODE_PERMISSIONS = {
   chat: ['home'],
   cross_sell: ['customers', 'carts', 'whatsapp_ai'],
   draft_inquiry_reply: ['inquiries'],
+  draft_live_chat_reply: ['live_chat'],
   generate_email_template: ['marketing'],
   draft_broadcast: ['broadcasts'],
   generate_journey: ['marketing'],
@@ -173,6 +174,28 @@ Instructions:
 7. End the email warmly from "El equipo de Peptides Costa Rica" or "The Peptides Costa Rica Team".
 
 Output ONLY the clean email reply text ready to be sent to the customer.`;
+    } else if (mode === 'draft_live_chat_reply') {
+      const { visitorName = 'Website visitor', messages = [] } = context;
+      const transcript = messages
+        .slice(-12)
+        .map((message) => `${message.senderType === 'agent' ? 'Agent' : 'Visitor'}: ${message.message}`)
+        .join('\n');
+
+      finalPrompt = `You are "Peptides Costa Rica Live Support", a warm, precise website chat support agent.
+Draft a concise reply to this live chat visitor: "${visitorName}".
+
+Recent chat transcript:
+${transcript}
+
+Rules:
+- Reply in the same language the visitor is using, default Spanish if unclear.
+- Be helpful, calm, and direct.
+- Keep it short enough for live chat: 1-3 short paragraphs.
+- Do not invent stock, prices, policies, or medical claims.
+- If the visitor asks for something you cannot verify, say the team can confirm it shortly.
+- Avoid mentioning WhatsApp as the main channel.
+
+Output ONLY the chat reply text.`;
     } else if (mode === 'generate_email_template') {
       const { prompt: userPrompt } = context;
       finalPrompt = `You are an elite biotech e-commerce copywriter and email marketer.

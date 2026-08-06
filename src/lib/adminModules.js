@@ -11,6 +11,7 @@ export const ADMIN_MODULES = [
   { id: 'spreadsheet', label: 'Products', title: 'Products', group: 'Core Operations', superadminOnly: true },
   { id: 'orders', label: 'Orders', title: 'Orders', group: 'Core Operations' },
   { id: 'customers', label: 'Customers', title: 'Customers', group: 'Core Operations' },
+  { id: 'live_chat', label: 'Live Chat', title: 'Live Chat', group: 'Core Operations' },
   { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
   { id: 'leads', label: 'Leads', title: 'Leads', group: 'Core Operations' },
   { id: 'carts', label: 'Abandoned Carts', title: 'Abandoned Carts', group: 'Sales & Marketing' },
