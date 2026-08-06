@@ -615,7 +615,7 @@ export default function ChatWidget() {
             />
             <button
               type="button"
-              onClick={sendMessage}
+              onClick={() => sendMessage()}
               disabled={loading || uploading || !input.trim()}
               aria-label="Send"
               style={{

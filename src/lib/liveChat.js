@@ -30,7 +30,9 @@ export function normalizeLiveChatPriority(value) {
 }
 
 export function cleanLiveChatText(value, limit = 2000) {
-  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
+  if (value == null) return '';
+  if (typeof value !== 'string' && typeof value !== 'number') return '';
+  return String(value).replace(/\s+/g, ' ').trim().slice(0, limit);
 }
 
 export function cleanOptionalText(value, limit = 500) {
