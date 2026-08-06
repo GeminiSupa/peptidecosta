@@ -46,6 +46,21 @@ function priorityColor(priority) {
   return '#a3e635';
 }
 
+function visibleMessagesFor(conversation) {
+  const messages = Array.isArray(conversation?.messages) ? conversation.messages : [];
+  if (messages.length > 0) return messages;
+  if (!conversation?.lastMessage) return [];
+  return [{
+    id: `${conversation.id || 'conversation'}-last-message`,
+    senderType: conversation.lastAgentMessageAt && !conversation.lastCustomerMessageAt ? 'agent' : 'visitor',
+    senderName: conversation.visitorName || 'Visitor',
+    message: conversation.lastMessage,
+    attachments: [],
+    createdAt: conversation.lastMessageAt || conversation.updatedAt || conversation.createdAt,
+    fallback: true,
+  }];
+}
+
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
 
@@ -165,6 +180,16 @@ export default function LiveChatInbox() {
         return new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0);
       });
   }, [conversations, currentAgent?.userId, ownerFilter, search, statusFilter]);
+
+  useEffect(() => {
+    if (filteredConversations.length === 0) {
+      setActiveId(null);
+      return;
+    }
+    if (!filteredConversations.some((conversation) => conversation.id === activeId)) {
+      setActiveId(filteredConversations[0].id);
+    }
+  }, [activeId, filteredConversations]);
 
   useEffect(() => {
     const unreadIds = new Set(conversations.filter((conversation) => conversation.unreadForAgent).map((conversation) => conversation.id));
@@ -377,7 +402,7 @@ export default function LiveChatInbox() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginTop: '8px' }}>
             {[
               ['mine', 'Mine', counts.mine],
-              ['unassigned', 'Open', counts.unassigned],
+              ['unassigned', 'Unassigned', counts.unassigned],
               ['all', 'All', conversations.length],
             ].map(([value, label, count]) => (
               <button
@@ -554,7 +579,7 @@ export default function LiveChatInbox() {
             />
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {activeConversation.messages.map((message) => {
+              {visibleMessagesFor(activeConversation).map((message) => {
                 const isAgent = message.senderType === 'agent';
                 return (
                   <div key={message.id} style={{ alignSelf: isAgent ? 'flex-end' : 'flex-start', maxWidth: '72%' }}>
@@ -579,6 +604,7 @@ export default function LiveChatInbox() {
                     </div>
                     <div style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '5px', textAlign: isAgent ? 'right' : 'left' }}>
                       {(message.senderName || (isAgent ? 'Agent' : 'Visitor'))} · {formatTime(message.createdAt)}
+                      {message.fallback ? ' · latest preview' : ''}
                     </div>
                   </div>
                 );
