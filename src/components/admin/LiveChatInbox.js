@@ -175,15 +175,29 @@ export default function LiveChatInbox() {
     setDrafts((prev) => ({ ...prev, [activeId]: value }));
   }, [activeId]);
 
-  const counts = useMemo(() => ({
-    open: conversations.filter((conversation) => conversation.status === 'open').length,
-    pending: conversations.filter((conversation) => conversation.status === 'pending').length,
-    unread: conversations.filter((conversation) => conversation.unreadForAgent).length,
-    resolved: conversations.filter((conversation) => conversation.status === 'resolved').length,
-    leadReady: conversations.filter((conversation) => conversation.leadContext?.status === 'ready').length,
-    mine: conversations.filter((conversation) => conversation.assignedTo === currentAgent?.userId).length,
-    unassigned: conversations.filter((conversation) => !conversation.assignedTo).length,
-  }), [conversations, currentAgent?.userId]);
+  const counts = useMemo(() => {
+    const byOwner = conversations.filter((conversation) => {
+      if (ownerFilter === 'mine' && conversation.assignedTo !== currentAgent?.userId) return false;
+      if (ownerFilter === 'unassigned' && conversation.assignedTo) return false;
+      return true;
+    });
+
+    const byStatus = conversations.filter((conversation) => {
+      if (statusFilter === 'active' && conversation.status === 'resolved') return false;
+      if (statusFilter !== 'active' && statusFilter !== 'all' && conversation.status !== statusFilter) return false;
+      return true;
+    });
+
+    return {
+      open: byOwner.filter((conversation) => conversation.status === 'open').length,
+      pending: byOwner.filter((conversation) => conversation.status === 'pending').length,
+      unread: byOwner.filter((conversation) => conversation.unreadForAgent).length,
+      resolved: byOwner.filter((conversation) => conversation.status === 'resolved').length,
+      leadReady: byOwner.filter((conversation) => conversation.leadContext?.status === 'ready').length,
+      mine: byStatus.filter((conversation) => conversation.assignedTo === currentAgent?.userId).length,
+      unassigned: byStatus.filter((conversation) => !conversation.assignedTo).length,
+    };
+  }, [conversations, currentAgent?.userId, ownerFilter, statusFilter]);
 
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase();
