@@ -182,6 +182,15 @@ function canControlConversation(conversation, profile) {
   return conversation.assigned_to === profile.user_id;
 }
 
+function summarizeAgent(profile, user) {
+  return {
+    userId: profile.user_id,
+    name: profile.name || profile.email || user?.email || 'Agent',
+    email: profile.email || user?.email || '',
+    isSuperadmin: Boolean(profile.is_superadmin),
+  };
+}
+
 export async function GET(request) {
   const auth = await verifyAdminSession(request, { requireAnyPermission: ['live_chat'] });
   if (auth.error) return auth.error;
@@ -190,6 +199,7 @@ export async function GET(request) {
     const supabase = getSupabaseAdmin();
     const conversations = await loadConversations(supabase);
     const agents = [];
+    const currentAgent = summarizeAgent(auth.profile, auth.user);
 
     const { data: profiles, error: profilesError } = await supabase
       .from('admin_profiles')
@@ -208,7 +218,7 @@ export async function GET(request) {
       }
     }
 
-    return NextResponse.json({ conversations, agents });
+    return NextResponse.json({ conversations, agents, currentAgent });
   } catch (err) {
     if (isMissingLiveChatTable(err)) {
       return NextResponse.json({ conversations: [], agents: [], error: 'Live chat tables are not installed yet.' }, { status: 409 });
@@ -314,6 +324,25 @@ export async function PATCH(request) {
       patch.assigned_to = null;
       patch.assigned_to_email = null;
       patch.assigned_to_name = null;
+    } else if (action === 'assign') {
+      const agentUserId = String(body.agentUserId || '').trim();
+      if (!agentUserId) return NextResponse.json({ error: 'agentUserId is required' }, { status: 400 });
+
+      const { data: agent, error: agentError } = await supabase
+        .from('admin_profiles')
+        .select('*')
+        .eq('user_id', agentUserId)
+        .maybeSingle();
+
+      if (agentError) throw agentError;
+      if (!agent || !resolveAdminTabAccess('live_chat', agent)) {
+        return NextResponse.json({ error: 'That agent does not have Live Chat access.' }, { status: 400 });
+      }
+
+      patch.assigned_to = agent.user_id;
+      patch.assigned_to_email = agent.email || null;
+      patch.assigned_to_name = agent.name || agent.email || 'Agent';
+      patch.status = conversation.status === 'resolved' ? 'open' : conversation.status;
     } else if (action === 'status') {
       patch.status = normalizeLiveChatStatus(body.status);
       if (patch.status === 'resolved') {

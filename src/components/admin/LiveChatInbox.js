@@ -79,9 +79,11 @@ function playAlertTone() {
 export default function LiveChatInbox() {
   const [conversations, setConversations] = useState([]);
   const [agents, setAgents] = useState([]);
+  const [currentAgent, setCurrentAgent] = useState(null);
   const [activeId, setActiveId] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
+  const [ownerFilter, setOwnerFilter] = useState('all');
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -103,6 +105,7 @@ export default function LiveChatInbox() {
       if (!response.ok) throw new Error(data.error || 'Could not load live chat');
       setConversations(data.conversations || []);
       setAgents(data.agents || []);
+      setCurrentAgent(data.currentAgent || null);
       setError('');
       setActiveId((current) => current || data.conversations?.[0]?.id || null);
     } catch (err) {
@@ -136,7 +139,9 @@ export default function LiveChatInbox() {
     unread: conversations.filter((conversation) => conversation.unreadForAgent).length,
     resolved: conversations.filter((conversation) => conversation.status === 'resolved').length,
     leadReady: conversations.filter((conversation) => conversation.leadContext?.status === 'ready').length,
-  }), [conversations]);
+    mine: conversations.filter((conversation) => conversation.assignedTo === currentAgent?.userId).length,
+    unassigned: conversations.filter((conversation) => !conversation.assignedTo).length,
+  }), [conversations, currentAgent?.userId]);
 
   const filteredConversations = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -144,6 +149,8 @@ export default function LiveChatInbox() {
       .filter((conversation) => {
         if (statusFilter === 'active' && conversation.status === 'resolved') return false;
         if (statusFilter !== 'active' && statusFilter !== 'all' && conversation.status !== statusFilter) return false;
+        if (ownerFilter === 'mine' && conversation.assignedTo !== currentAgent?.userId) return false;
+        if (ownerFilter === 'unassigned' && conversation.assignedTo) return false;
         if (!q) return true;
         return [
           conversation.visitorName,
@@ -157,7 +164,7 @@ export default function LiveChatInbox() {
         if (a.unreadForAgent !== b.unreadForAgent) return a.unreadForAgent ? -1 : 1;
         return new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0);
       });
-  }, [conversations, search, statusFilter]);
+  }, [conversations, currentAgent?.userId, ownerFilter, search, statusFilter]);
 
   useEffect(() => {
     const unreadIds = new Set(conversations.filter((conversation) => conversation.unreadForAgent).map((conversation) => conversation.id));
@@ -366,6 +373,28 @@ export default function LiveChatInbox() {
               </button>
             ))}
           </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginTop: '8px' }}>
+            {[
+              ['mine', 'Mine', counts.mine],
+              ['unassigned', 'Open', counts.unassigned],
+              ['all', 'All', conversations.length],
+            ].map(([value, label, count]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setOwnerFilter(value)}
+                style={{
+                  ...filterButtonStyle,
+                  background: ownerFilter === value ? '#14b8a6' : 'rgba(15, 23, 42, 0.7)',
+                  color: ownerFilter === value ? '#fff' : '#cbd5e1',
+                }}
+              >
+                <span>{label}</span>
+                <strong>{count}</strong>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div style={{ maxHeight: '560px', overflowY: 'auto' }}>
@@ -478,6 +507,24 @@ export default function LiveChatInbox() {
                   <option value="low">Low</option>
                   <option value="normal">Normal</option>
                   <option value="high">High</option>
+                </select>
+                <select
+                  value={activeConversation.assignedTo || ''}
+                  onChange={(event) => (
+                    event.target.value
+                      ? patchConversation({ action: 'assign', agentUserId: event.target.value })
+                      : patchConversation({ action: 'release' })
+                  )}
+                  style={selectStyle}
+                  aria-label="Assigned agent"
+                  title="Assign conversation"
+                >
+                  <option value="">Unassigned</option>
+                  {agents.map((agent) => (
+                    <option key={agent.userId} value={agent.userId}>
+                      {agent.name}
+                    </option>
+                  ))}
                 </select>
                 {activeConversation.assignedTo ? (
                   <button type="button" className="admin-btn" style={toolbarButtonStyle} onClick={() => patchConversation({ action: 'release' })}>
