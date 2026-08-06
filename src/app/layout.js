@@ -3,6 +3,7 @@ import Script from "next/script";
 import "./globals.css";
 import UTMTracker from "@/components/UTMTracker";
 import ChatWidget from "@/components/ChatWidget";
+import GlobalContactForm from "@/components/GlobalContactForm";
 import { LIVE_SITE_URL } from "@/lib/publicUrl";
 
 const montserrat = Montserrat({
@@ -193,6 +194,7 @@ export default async function RootLayout({ children }) {
         {children}
         <UTMTracker />
         <ChatWidget />
+        <GlobalContactForm />
         {/* Google Tag Manager */}
         <Script id="gtm" strategy="lazyOnload">
           {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':

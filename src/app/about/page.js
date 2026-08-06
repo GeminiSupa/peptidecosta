@@ -7,6 +7,7 @@ import { usePublicPageContent, localized } from '@/hooks/usePublicPageContent';
 import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
 import TrustFlowBand from '@/components/TrustFlowBand';
 import MobileActionBar from '@/components/MobileActionBar';
+import { openContactForm } from '@/lib/contactForm';
 import '../landing.css';
 import './about.css';
 
@@ -127,9 +128,9 @@ export default function AboutPage() {
               <Link href={`/catalog?lang=${lang}`} className="about-primary">
                 {localized(pageSettings, 'ctaButton', lang)} <ArrowUpRight size={17} />
               </Link>
-              <a href={`https://wa.me/${links.whatsappNumber}`} className="about-secondary" target="_blank" rel="noopener noreferrer">
+              <button type="button" className="about-secondary" onClick={() => openContactForm('about_cta')}>
                 <MessageCircle size={17} /> {localized(pageSettings, 'contactButton', lang)}
-              </a>
+              </button>
             </div>
           </div>
         </section>

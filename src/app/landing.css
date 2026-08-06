@@ -3750,3 +3750,158 @@
     background: rgba(255, 255, 255, 0.1);
     border-color: white;
 }
+
+/* ==========================================================================
+   Contáctenos lead dialog (src/components/ContactLeadModal.js)
+   Replaced the WhatsApp CTAs. Full-height sheet on phones, centred card from
+   640px up, so the three fields never sit under the keyboard on mobile.
+   ========================================================================== */
+
+.clone-lead-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(15, 23, 42, 0.62);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0;
+}
+
+.clone-lead-card {
+    position: relative;
+    width: 100%;
+    max-height: 92vh;
+    overflow-y: auto;
+    background: #ffffff;
+    color: #0f172a;
+    border-radius: 20px 20px 0 0;
+    padding: 26px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -12px 40px rgba(15, 23, 42, 0.28);
+}
+
+.clone-lead-card h2 {
+    margin: 0 0 6px;
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+}
+
+.clone-lead-intro {
+    margin: 0 0 18px;
+    color: #475569;
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+.clone-lead-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: #f1f5f9;
+    color: #475569;
+    cursor: pointer;
+}
+
+.clone-lead-close:hover { background: #e2e8f0; }
+
+.clone-lead-field { display: block; margin-bottom: 14px; }
+
+.clone-lead-field > span {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #334155;
+}
+
+.clone-lead-field > input {
+    width: 100%;
+    box-sizing: border-box;
+    /* 16px keeps iOS Safari from zooming the page when a field is focused. */
+    font-size: 16px;
+    padding: 12px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    background: #fff;
+    color: #0f172a;
+}
+
+.clone-lead-field > input:focus {
+    outline: none;
+    border-color: #0ea5e9;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.18);
+}
+
+.clone-lead-error {
+    margin: 0 0 12px;
+    color: #b91c1c;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.clone-lead-submit {
+    width: 100%;
+    border: 0;
+    border-radius: 12px;
+    padding: 14px 18px;
+    font-size: 1rem;
+    font-weight: 800;
+    color: #fff;
+    background: linear-gradient(135deg, #0ea5e9 0%, #14b8a6 100%);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.clone-lead-submit:disabled { opacity: 0.7; cursor: default; }
+
+.clone-lead-success { text-align: center; padding: 12px 0 4px; }
+
+.clone-lead-tick {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: #dcfce7;
+    color: #15803d;
+    margin-bottom: 12px;
+}
+
+.clone-lead-success p { margin: 0 0 20px; color: #475569; line-height: 1.55; }
+
+.clone-lead-spin { animation: clone-lead-spin 1s linear infinite; }
+
+@keyframes clone-lead-spin { to { transform: rotate(360deg); } }
+
+@media (min-width: 640px) {
+    .clone-lead-backdrop { align-items: center; padding: 24px; }
+
+    .clone-lead-card {
+        max-width: 440px;
+        border-radius: 20px;
+        padding: 30px 28px;
+        max-height: calc(100vh - 48px);
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.32);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .clone-lead-spin { animation: none; }
+}

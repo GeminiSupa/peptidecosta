@@ -14,6 +14,7 @@ import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
+import ContactLeadModal from '@/components/ContactLeadModal';
 import MobileActionBar from '@/components/MobileActionBar';
 import PressBand from '@/components/PressBand';
 import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
@@ -184,6 +185,12 @@ export default function LandingPage() {
     window.open(buildWhatsAppLink(links.whatsappNumber), '_blank');
   };
 
+  // The two storefront CTAs now collect a lead instead of handing the visitor
+  // to WhatsApp. `leadSource` keeps which button was used, so the CRM note
+  // still shows whether it came from the hero or the bulk section.
+  const [leadSource, setLeadSource] = useState('');
+  const openContactForm = (source) => setLeadSource(source);
+
   const resolvePageHref = (href = '/catalog') => {
     if (!href) return `/catalog?lang=${lang}`;
     if (href === 'whatsapp') return buildWhatsAppLink(links.whatsappNumber);
@@ -198,6 +205,11 @@ export default function LandingPage() {
     const href = event.target.value;
     setHeroChoice(href);
     if (!href) return;
+    if (href === 'contact') {
+      openContactForm('hero_dropdown');
+      setHeroChoice('');
+      return;
+    }
     if (href === 'whatsapp') {
       openWhatsApp('hero_dropdown');
       return;
@@ -230,7 +242,7 @@ export default function LandingPage() {
             </div>
             <div className="clone-hero-actions">
               <Link href={`/catalog?lang=${lang}`}>{copy(settings, 'primaryCta', lang)} <ArrowUpRight size={16} /></Link>
-              <button type="button" onClick={() => openWhatsApp('hero')}>{copy(settings, 'secondaryCta', lang)}</button>
+              <button type="button" onClick={() => openContactForm('hero')}>{copy(settings, 'secondaryCta', lang)}</button>
             </div>
             <label className="clone-hero-dropdown">
               <span>{copy(settings, 'heroDropdownLabel', lang)}</span>
@@ -377,14 +389,21 @@ export default function LandingPage() {
               <h2>{copy(settings, 'bulkTitle', lang)}</h2>
               <p>{copy(settings, 'bulkText', lang)}</p>
             </div>
-            <button type="button" onClick={() => openWhatsApp('bulk_cta')}>{copy(settings, 'bulkButton', lang)}</button>
+            <button type="button" onClick={() => openContactForm('bulk_cta')}>{copy(settings, 'bulkButton', lang)}</button>
           </div>
         </section>
       </main>
 
       <StorefrontFooter lang={lang} settings={settings} categories={categoryChips} />
 
-      <MobileActionBar lang={lang} onWhatsapp={() => openWhatsApp('mobile_sticky')} />
+      <MobileActionBar lang={lang} onContact={() => openContactForm('mobile_sticky')} />
+
+      <ContactLeadModal
+        open={Boolean(leadSource)}
+        onClose={() => setLeadSource('')}
+        lang={lang}
+        source={leadSource}
+      />
     </div>
   );
 }

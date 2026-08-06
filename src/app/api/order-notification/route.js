@@ -119,8 +119,7 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
       : formatMoney(shippingAmount, order.currency);
       
   const isPaid = isPaidStatus(order.status);
-  const whatsappNumberClean = (order.customerPhone || '').replace(/[^0-9]/g, '');
-  const whatsappPayLink = `https://wa.me/${whatsappNumberClean}`;
+  const customerPhoneDigits = (order.customerPhone || '').replace(/[^0-9]/g, '');
 
   return `
     <!--[if mso]>
@@ -137,13 +136,6 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
 
       <div style="padding:32px;background-color:#f8fafc;">
         
-        <!-- CTA -->
-        <div style="text-align:center;margin-bottom:32px;">
-          <a href="${whatsappPayLink}" style="display:inline-block;background-color:#25D366;color:#ffffff;text-decoration:none;padding:16px 32px;border-radius:12px;font-weight:800;font-size:18px;box-shadow:0 4px 12px rgba(37,211,102,0.3);text-transform:uppercase;letter-spacing:0.5px;">
-             💬 Chat with Customer on WhatsApp
-          </a>
-        </div>
-
         <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:32px 24px;margin-bottom:24px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);text-align:center;">
           <div style="margin-bottom:24px;">
             <div style="color:#64748b;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Order Reference</div>
@@ -191,7 +183,7 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
               order.customerIdType || 'N/A'
             )})</span></div>
           ` : ''}
-          <div style="margin-bottom:12px;"><span style="color:#64748b;font-size:13px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px;">WhatsApp</span> <a href="https://wa.me/${whatsappNumberClean}" style="color:#25D366;text-decoration:none;font-weight:800;font-size:16px;">${escapeHtml(order.customerPhone || 'N/A')}</a></div>
+          <div style="margin-bottom:12px;"><span style="color:#64748b;font-size:13px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px;">Telephone</span> <a href="tel:${customerPhoneDigits}" style="color:#0f172a;text-decoration:none;font-weight:800;font-size:16px;">${escapeHtml(order.customerPhone || 'N/A')}</a></div>
           <div><span style="color:#64748b;font-size:13px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px;">Email</span> <span style="font-weight:600;font-size:15px;color:#0f172a;">${escapeHtml(order.customerEmail || 'N/A')}</span></div>
         </div>
 
@@ -590,7 +582,7 @@ export async function POST(request) {
         '',
         `Customer Profile:`,
         ` Name: ${order.customerName}`,
-        ` WhatsApp: ${order.customerPhone || 'N/A'}`,
+        ` Telephone: ${order.customerPhone || 'N/A'}`,
         ` Email: ${order.customerEmail || 'N/A'}`,
         '',
         `Shipping Address:`,

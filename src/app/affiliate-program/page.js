@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { ArrowRight, Handshake, MessageCircle } from 'lucide-react';
 import MobileActionBar from '@/components/MobileActionBar';
+import { openContactForm } from '@/lib/contactForm';
 import { StorefrontBulkBand, StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { usePublicPageContent, localized } from '@/hooks/usePublicPageContent';
@@ -24,8 +25,8 @@ export default function AffiliateProgramPage() {
             <h1>{localized(pageSettings, 'heroTitle', lang)}</h1>
             <p>{localized(pageSettings, 'heroText', lang)}</p>
             <div>
-              <a href={whatsappHref} target="_blank" rel="noopener noreferrer">{localized(pageSettings, 'primaryButton', lang)} <ArrowRight size={16} /></a>
-              <a href={whatsappHref} target="_blank" rel="noopener noreferrer"><MessageCircle size={16} /> {localized(pageSettings, 'secondaryButton', lang)}</a>
+              <button type="button" onClick={() => openContactForm('affiliate_apply')}>{localized(pageSettings, 'primaryButton', lang)} <ArrowRight size={16} /></button>
+              <button type="button" onClick={() => openContactForm('affiliate_contact')}><MessageCircle size={16} /> {localized(pageSettings, 'secondaryButton', lang)}</button>
             </div>
           </div>
           <img src={pageSettings.heroImageUrl || '/science_lab_about.webp'} alt="Affiliate program partner support" />
@@ -72,7 +73,9 @@ export default function AffiliateProgramPage() {
           <div className="clone-affiliate-talk">
             <h2>{localized(pageSettings, 'talkTitle', lang)}</h2>
             <p>{localized(pageSettings, 'talkText', lang)}</p>
-            <a href={whatsappHref} target="_blank" rel="noopener noreferrer">WhatsApp: {links.whatsappDisplay}</a>
+            <button type="button" onClick={() => openContactForm('affiliate_talk')}>
+              {lang === 'en' ? 'Contact Us' : 'Contáctenos'}
+            </button>
           </div>
         </section>
       </main>

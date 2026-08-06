@@ -12,8 +12,10 @@ export const ADMIN_MODULES = [
   { id: 'orders', label: 'Orders', title: 'Orders', group: 'Core Operations' },
   { id: 'customers', label: 'Customers', title: 'Customers', group: 'Core Operations' },
   { id: 'live_chat', label: 'Live Chat', title: 'Live Chat', group: 'Core Operations' },
-  { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
+  // Leads sits directly under Live Chat: chats are where leads now come from,
+  // so the two are worked together.
   { id: 'leads', label: 'Leads', title: 'Leads', group: 'Core Operations' },
+  { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
   { id: 'carts', label: 'Abandoned Carts', title: 'Abandoned Carts', group: 'Sales & Marketing' },
   { id: 'share', label: 'Share Links', title: 'Share Links', group: 'Sales & Marketing' },
   { id: 'reviews', label: 'Reviews', title: 'Reviews', group: 'Sales & Marketing' },

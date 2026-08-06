@@ -7,6 +7,7 @@ import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { usePublicPageContent, localized } from '@/hooks/usePublicPageContent';
 import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
 import MobileActionBar from '@/components/MobileActionBar';
+import { openContactForm } from '@/lib/contactForm';
 import '../landing.css';
 import './contact.css';
 
@@ -250,23 +251,18 @@ export default function ContactPage() {
               <div style={{ background: '#25D36615', color: '#25D366', width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '24px' }}>
                 <MessageCircle size={32} />
               </div>
-              <h3 style={{ fontSize: '1.5rem', marginBottom: '12px' }}>WhatsApp</h3>
+              <h3 style={{ fontSize: '1.5rem', marginBottom: '12px' }}>{lang === 'en' ? 'Live chat' : 'Chat en vivo'}</h3>
               <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>
                 {localized(pageSettings, 'whatsappText', lang)}
               </p>
-              <a
-                href={`https://wa.me/${links.whatsappNumber}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => {
-                  e.preventDefault();
-                  window.open(buildWhatsAppLink(links.whatsappNumber), '_blank');
-                }}
+              <button
+                type="button"
+                onClick={() => openContactForm('contact_page')}
                 className="contact-button contact-button--wa"
-                style={{ background: '#25D366', width: '100%' }}
+                style={{ background: '#0ea5e9', width: '100%' }}
               >
                 <MessageCircle size={17} /> {localized(pageSettings, 'whatsappButton', lang)}
-              </a>
+              </button>
             </div>
 
             <div className="contact-method-card" style={{ background: 'var(--card-bg)', padding: '40px 24px', borderRadius: '16px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
