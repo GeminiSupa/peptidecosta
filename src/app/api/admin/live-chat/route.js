@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { resolveAdminTabAccess } from '@/lib/adminModules';
+import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
+  buildLiveChatLeadNote,
   cleanLiveChatText,
   formatLiveChatConversation,
+  getLiveChatLeadContact,
   isMissingLiveChatTable,
   normalizeLiveChatPriority,
   normalizeLiveChatStatus,
@@ -14,6 +17,102 @@ import {
 export const runtime = 'nodejs';
 
 const MESSAGE_LIMIT = 250;
+const OPTIONAL_LEAD_COLUMNS = [
+  'name',
+  'email',
+  'phone',
+  'status',
+  'notes',
+  'last_contacted_at',
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'referrer',
+  'whatsapp_consent',
+  'marketing_consent',
+  'consent_at',
+  'consent_source',
+];
+
+function summarizeLead(lead) {
+  if (!lead) return null;
+  return {
+    id: lead.id,
+    name: lead.name || '',
+    email: lead.email || '',
+    phone: lead.phone || '',
+    contactMethod: lead.contact_method || '',
+    contactValue: lead.contact_value || '',
+    status: lead.status || 'New',
+    source: lead.utm_source || lead.source || '',
+    campaign: lead.utm_campaign || '',
+    whatsappConsent: lead.whatsapp_consent === true,
+    lastContactedAt: lead.last_contacted_at || null,
+    createdAt: lead.created_at || null,
+  };
+}
+
+function buildLeadContactCandidates(conversation) {
+  const contact = getLiveChatLeadContact(conversation);
+  const values = new Set();
+  if (contact?.value) values.add(contact.value);
+  if (contact?.email) values.add(contact.email);
+  if (contact?.phone) values.add(contact.phone);
+  return [...values];
+}
+
+async function enrichLeadContext(supabase, conversations) {
+  const leadIds = new Set();
+  const contactValues = new Set();
+
+  for (const conversation of conversations) {
+    const linkedId = conversation.metadata?.leadId || conversation.leadContext?.lead?.id;
+    if (linkedId) leadIds.add(linkedId);
+    for (const value of buildLeadContactCandidates(conversation)) contactValues.add(value);
+  }
+
+  const leads = [];
+  if (leadIds.size) {
+    const { data, error } = await supabase
+      .from('catalog_leads')
+      .select('*')
+      .in('id', [...leadIds]);
+    if (!error) leads.push(...(data || []));
+  }
+  if (contactValues.size) {
+    const { data, error } = await supabase
+      .from('catalog_leads')
+      .select('*')
+      .in('contact_value', [...contactValues]);
+    if (!error) leads.push(...(data || []));
+  }
+
+  const byId = new Map();
+  const byContact = new Map();
+  for (const lead of leads) {
+    if (lead.id) byId.set(lead.id, lead);
+    if (lead.contact_value) byContact.set(String(lead.contact_value).toLowerCase(), lead);
+  }
+
+  return conversations.map((conversation) => {
+    const linkedLead = conversation.metadata?.leadId ? byId.get(conversation.metadata.leadId) : null;
+    const matchedLead = buildLeadContactCandidates(conversation)
+      .map((value) => byContact.get(String(value).toLowerCase()))
+      .find(Boolean);
+    const lead = linkedLead || matchedLead || null;
+    const contact = getLiveChatLeadContact(conversation);
+
+    return {
+      ...conversation,
+      leadContext: {
+        status: lead ? (linkedLead ? 'saved' : 'matched') : (contact ? 'ready' : 'missing_contact'),
+        contactMethod: contact?.method || '',
+        contactValue: contact?.value || '',
+        lead: summarizeLead(lead),
+      },
+    };
+  });
+}
 
 async function loadConversations(supabase) {
   const { data: conversations, error } = await supabase
@@ -44,12 +143,13 @@ async function loadConversations(supabase) {
     byConversation.set(message.conversation_id, list);
   }
 
-  return Promise.all((conversations || []).map((conversation) => (
+  const formatted = await Promise.all((conversations || []).map((conversation) => (
     signLiveChatAttachmentUrls(
       supabase,
       formatLiveChatConversation(conversation, byConversation.get(conversation.id) || [])
     )
   )));
+  return enrichLeadContext(supabase, formatted);
 }
 
 async function loadConversationById(supabase, conversationId) {
@@ -70,7 +170,9 @@ async function loadConversationById(supabase, conversationId) {
     .limit(MESSAGE_LIMIT);
 
   if (messageError) throw messageError;
-  return signLiveChatAttachmentUrls(supabase, formatLiveChatConversation(conversation, messages || []));
+  const formatted = await signLiveChatAttachmentUrls(supabase, formatLiveChatConversation(conversation, messages || []));
+  const [enriched] = await enrichLeadContext(supabase, [formatted]);
+  return enriched;
 }
 
 function canControlConversation(conversation, profile) {
@@ -221,6 +323,68 @@ export async function PATCH(request) {
       patch.priority = normalizeLiveChatPriority(body.priority);
     } else if (action === 'mark_seen') {
       patch.unread_for_agent = false;
+    } else if (action === 'save_lead') {
+      const contact = getLiveChatLeadContact(conversation);
+      if (!contact?.value) {
+        return NextResponse.json({ error: 'Add an email or phone before saving this chat as a lead.' }, { status: 400 });
+      }
+
+      const hasPaymentProof = (conversation.messages || []).some((message) => message.attachments?.length > 0);
+      const nowIso = new Date().toISOString();
+      const { data: existingLead } = await supabase
+        .from('catalog_leads')
+        .select('*')
+        .eq('contact_value', contact.value)
+        .maybeSingle();
+      const chatNote = buildLiveChatLeadNote(conversation);
+      const mergedNotes = existingLead?.notes
+        ? `${chatNote}\n\n--- Previous CRM notes ---\n${existingLead.notes}`
+        : chatNote;
+      const leadPayload = {
+        contact_method: contact.method,
+        contact_value: contact.value,
+        name: conversation.visitorName === 'Website visitor' ? (existingLead?.name || null) : conversation.visitorName,
+        email: contact.email || existingLead?.email || null,
+        phone: contact.phone || existingLead?.phone || null,
+        language: 'es',
+        status: existingLead?.status && existingLead.status !== 'New' ? existingLead.status : (hasPaymentProof ? 'Quoted' : 'Interested'),
+        notes: mergedNotes,
+        last_contacted_at: existingLead?.last_contacted_at || null,
+        utm_source: 'live_chat',
+        utm_medium: 'website_chat',
+        utm_campaign: hasPaymentProof ? 'payment_proof' : 'support_chat',
+        referrer: conversation.pageUrl || conversation.referrer || 'website_live_chat',
+        whatsapp_consent: false,
+        marketing_consent: false,
+        consent_at: null,
+        consent_source: 'live_chat_contact_only',
+      };
+
+      const { data: lead, error: leadError } = await writeDroppingMissingColumns(
+        leadPayload,
+        OPTIONAL_LEAD_COLUMNS,
+        (row) => supabase
+          .from('catalog_leads')
+          .upsert(row, { onConflict: 'contact_value' })
+          .select('*')
+          .single()
+      );
+
+      if (leadError) throw leadError;
+
+      patch.metadata = {
+        ...(conversation.metadata || {}),
+        leadId: lead?.id || null,
+        leadSavedAt: nowIso,
+        leadSavedBy: auth.profile.email || auth.user.email || null,
+        leadContext: {
+          status: 'saved',
+          contactMethod: contact.method,
+          contactValue: contact.value,
+          lead: summarizeLead(lead),
+        },
+      };
+      patch.priority = hasPaymentProof ? 'high' : (conversation.priority === 'low' ? 'normal' : conversation.priority);
     } else {
       return NextResponse.json({ error: 'Unsupported action' }, { status: 400 });
     }

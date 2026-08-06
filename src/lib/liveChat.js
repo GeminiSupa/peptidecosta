@@ -40,6 +40,56 @@ export function cleanOptionalText(value, limit = 500) {
   return text || null;
 }
 
+export function normalizeLiveChatEmail(value) {
+  const email = String(value || '').trim().toLowerCase();
+  return email.includes('@') ? email.slice(0, 255) : '';
+}
+
+export function normalizeLiveChatPhone(value) {
+  return String(value || '').replace(/[^0-9]/g, '').slice(0, 32);
+}
+
+export function getLiveChatLeadContact(conversation) {
+  const email = normalizeLiveChatEmail(conversation?.visitorEmail || conversation?.visitor_email);
+  if (email) {
+    return {
+      method: 'email',
+      value: email,
+      email,
+      phone: normalizeLiveChatPhone(conversation?.visitorPhone || conversation?.visitor_phone),
+    };
+  }
+
+  const phone = normalizeLiveChatPhone(conversation?.visitorPhone || conversation?.visitor_phone);
+  if (phone.length >= 8) {
+    return {
+      method: 'whatsapp',
+      value: phone,
+      email: '',
+      phone,
+    };
+  }
+
+  return null;
+}
+
+export function buildLiveChatLeadNote(conversation) {
+  const messages = conversation?.messages || [];
+  const firstVisitorMessage = messages.find((message) => message.senderType === 'visitor');
+  const hasAttachment = messages.some((message) => message.attachments?.length > 0);
+
+  return [
+    'Lead captured from website live chat.',
+    conversation?.visitorName ? `Name: ${conversation.visitorName}` : '',
+    conversation?.visitorEmail ? `Email: ${conversation.visitorEmail}` : '',
+    conversation?.visitorPhone ? `Phone: ${conversation.visitorPhone}` : '',
+    firstVisitorMessage?.message ? `First message: ${firstVisitorMessage.message}` : '',
+    hasAttachment ? 'Intent signal: uploaded payment screenshot/document.' : '',
+    conversation?.pageUrl ? `Page: ${conversation.pageUrl}` : '',
+    conversation?.referrer ? `Referrer: ${conversation.referrer}` : '',
+  ].filter(Boolean).join('\n');
+}
+
 export function cleanLiveChatFileName(value) {
   const fallback = 'attachment';
   const cleaned = String(value || fallback)
@@ -127,6 +177,8 @@ export function formatLiveChatAttachment(value) {
 }
 
 export function formatLiveChatConversation(row, messages = []) {
+  const metadata = row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+
   return {
     id: row.id,
     visitorId: row.visitor_id,
@@ -146,6 +198,8 @@ export function formatLiveChatConversation(row, messages = []) {
     lastAgentMessageAt: row.last_agent_message_at || null,
     unreadForAgent: Boolean(row.unread_for_agent),
     unreadForVisitor: Boolean(row.unread_for_visitor),
+    metadata,
+    leadContext: metadata.leadContext || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     messages: messages.map(formatLiveChatMessage),

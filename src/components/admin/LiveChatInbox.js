@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Bot, CheckCircle2, ChevronLeft, Circle, Clock3, ExternalLink, FileText, Inbox, Loader2, MessageCircle, RefreshCw, Search, Send, UserCheck, XCircle } from 'lucide-react';
+import { Bell, Bot, CheckCircle2, ChevronLeft, Circle, Clock3, ExternalLink, FileText, Inbox, Loader2, MessageCircle, RefreshCw, Search, Send, Target, UserCheck, UserPlus, XCircle } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
 const POLL_MS = 15000;
@@ -88,6 +88,7 @@ export default function LiveChatInbox() {
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
   const [drafting, setDrafting] = useState(false);
+  const [leadSaving, setLeadSaving] = useState(false);
   const [reply, setReply] = useState('');
   const [error, setError] = useState('');
   const messagesEndRef = useRef(null);
@@ -134,6 +135,7 @@ export default function LiveChatInbox() {
     pending: conversations.filter((conversation) => conversation.status === 'pending').length,
     unread: conversations.filter((conversation) => conversation.unreadForAgent).length,
     resolved: conversations.filter((conversation) => conversation.status === 'resolved').length,
+    leadReady: conversations.filter((conversation) => conversation.leadContext?.status === 'ready').length,
   }), [conversations]);
 
   const filteredConversations = useMemo(() => {
@@ -270,6 +272,27 @@ export default function LiveChatInbox() {
     }
   };
 
+  const saveLead = async () => {
+    if (!activeConversation || leadSaving) return;
+    setLeadSaving(true);
+    try {
+      const response = await adminFetch('/api/admin/live-chat', {
+        method: 'PATCH',
+        body: JSON.stringify({ conversationId: activeConversation.id, action: 'save_lead' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save lead');
+      setConversations((prev) => prev.map((conversation) => (
+        conversation.id === data.conversation.id ? data.conversation : conversation
+      )));
+      setError('');
+    } catch (err) {
+      setError(err.message || 'Could not save lead');
+    } finally {
+      setLeadSaving(false);
+    }
+  };
+
   const handleKeyDown = (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
@@ -304,9 +327,9 @@ export default function LiveChatInbox() {
       }}>
         <div style={{ padding: '16px', borderBottom: '1px solid rgba(148, 163, 184, 0.16)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '14px' }}>
-            <div>
-              <div style={{ color: '#f8fafc', fontWeight: 800, fontSize: '1rem' }}>Website Inbox</div>
-              <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{counts.unread} unread · {counts.open + counts.pending} active · {agents.length} agent{agents.length === 1 ? '' : 's'}</div>
+              <div>
+                <div style={{ color: '#f8fafc', fontWeight: 800, fontSize: '1rem' }}>Website Inbox</div>
+              <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{counts.unread} unread · {counts.open + counts.pending} active · {counts.leadReady} leads ready</div>
             </div>
             <button type="button" onClick={() => fetchInbox(true)} className="admin-btn" style={iconButtonStyle} title="Refresh">
               {refreshing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
@@ -397,6 +420,7 @@ export default function LiveChatInbox() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '7px', color: '#94a3b8', fontSize: '0.7rem' }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: priorityColor(conversation.priority), display: 'inline-block' }} />
                   <span>{statusLabel(conversation.status)}</span>
+                  {conversation.leadContext?.lead && <span>· Lead</span>}
                   {conversation.assignedToName && <span>· {conversation.assignedToName}</span>}
                   {conversation.unreadForAgent && <Circle size={8} fill="#38bdf8" color="#38bdf8" />}
                 </div>
@@ -475,6 +499,12 @@ export default function LiveChatInbox() {
                 )}
               </div>
             </header>
+
+            <LeadCapturePanel
+              conversation={activeConversation}
+              saving={leadSaving}
+              onSave={saveLead}
+            />
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {activeConversation.messages.map((message) => {
@@ -621,6 +651,81 @@ function AttachmentPreview({ attachment, isAgent }) {
       </span>
       {attachment.url && <ExternalLink size={12} style={{ marginLeft: 'auto', flexShrink: 0 }} />}
     </a>
+  );
+}
+
+function LeadCapturePanel({ conversation, saving, onSave }) {
+  const context = conversation?.leadContext || {};
+  const lead = context.lead;
+  const missingContact = context.status === 'missing_contact';
+  const isSaved = context.status === 'saved';
+  const isMatched = context.status === 'matched';
+  const contactValue = context.contactValue || conversation?.visitorEmail || conversation?.visitorPhone || '';
+  const statusText = missingContact
+    ? 'Ask for email or phone'
+    : isSaved
+      ? 'Saved in Leads'
+      : isMatched
+        ? 'Matched existing lead'
+        : 'Ready for Leads';
+
+  return (
+    <section style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) auto',
+      gap: '12px',
+      alignItems: 'center',
+      padding: '12px 18px',
+      borderBottom: '1px solid rgba(148, 163, 184, 0.16)',
+      background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(16, 185, 129, 0.06))',
+    }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            color: missingContact ? '#fbbf24' : '#86efac',
+            fontSize: '0.78rem',
+            fontWeight: 800,
+            textTransform: 'uppercase',
+          }}>
+            <Target size={14} /> {statusText}
+          </span>
+          {lead?.status && (
+            <span style={{ color: '#cbd5e1', fontSize: '0.75rem', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '999px', padding: '3px 8px' }}>
+              {lead.status}
+            </span>
+          )}
+          {lead?.whatsappConsent ? (
+            <span style={{ color: '#86efac', fontSize: '0.72rem' }}>WA opt-in</span>
+          ) : (
+            <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>No promo opt-in</span>
+          )}
+        </div>
+        <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {contactValue || 'No email/phone captured yet'}{lead?.source ? ` · source: ${lead.source}` : ''}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={saving || missingContact}
+        className="admin-btn"
+        style={{
+          ...toolbarButtonStyle,
+          background: isSaved || isMatched ? 'rgba(34,197,94,0.12)' : '#0ea5e9',
+          color: isSaved || isMatched ? '#86efac' : '#fff',
+          opacity: saving || missingContact ? 0.6 : 1,
+          cursor: saving || missingContact ? 'not-allowed' : 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+        title={missingContact ? 'Ask the visitor for an email or phone first' : 'Create or update this lead in the CRM'}
+      >
+        {saving ? <Loader2 size={14} className="animate-spin" /> : (isSaved || isMatched ? <CheckCircle2 size={14} /> : <UserPlus size={14} />)}
+        {isSaved || isMatched ? 'Update Lead' : 'Save Lead'}
+      </button>
+    </section>
   );
 }
 

@@ -59,8 +59,14 @@ export default function LeadsManager({
   const totalLeads = safeLeads.length;
   const convertedLeads = safeLeads.filter(l => getLeadConversion(l).converted).length;
   const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0.0';
-  const adsLeads = safeLeads.filter(l => l.utm_source || l.utm_medium || l.utm_campaign || (l.source && l.source.toLowerCase().includes('facebook'))).length;
-  const organicLeads = totalLeads - adsLeads;
+  const chatLeads = safeLeads.filter(l => String(l.utm_source || l.source || '').toLowerCase() === 'live_chat').length;
+  const adsLeads = safeLeads.filter(l => {
+    const source = String(l.utm_source || l.source || '').toLowerCase();
+    const medium = String(l.utm_medium || '').toLowerCase();
+    if (source === 'live_chat') return false;
+    return source.includes('facebook') || source.includes('google') || source.includes('ads') || medium.includes('ad') || medium.includes('cpc');
+  }).length;
+  const organicLeads = Math.max(0, totalLeads - adsLeads - chatLeads);
 
   // WhatsApp marketing opt-in (only these may receive promo WhatsApp messages).
   const optInLeads = safeLeads.filter(l => l.whatsapp_consent === true).length;
@@ -98,6 +104,7 @@ export default function LeadsManager({
         if (leadsSourceFilter === 'converted' && !getLeadConversion(l).converted) return false;
         if (leadsSourceFilter === 'wa_optin' && l.whatsapp_consent !== true) return false;
         if (leadsSourceFilter === 'wa_nooptin' && l.whatsapp_consent === true) return false;
+        if (leadsSourceFilter === 'live_chat' && String(l.utm_source || l.source || '').toLowerCase() !== 'live_chat') return false;
         if (leadsSourceFilter === 'facebook' && !(
           (l.source && String(l.source).toLowerCase().includes('facebook')) ||
           (l.utm_source && String(l.utm_source).toLowerCase().includes('facebook')) ||
@@ -245,6 +252,10 @@ export default function LeadsManager({
           <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Organic</div>
           <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#38bdf8' }}>{organicLeads}</div>
         </div>
+        <div style={{ flex: '1 1 120px', background: 'rgba(14, 165, 233, 0.08)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(14, 165, 233, 0.15)' }}>
+          <div style={{ fontSize: '0.7rem', color: '#7dd3fc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live Chat</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#7dd3fc' }}>{chatLeads}</div>
+        </div>
         <div style={{ flex: '1 1 120px', background: 'rgba(16, 185, 129, 0.08)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.15)' }}>
           <div style={{ fontSize: '0.7rem', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Converted</div>
           <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#10b981' }}>{convertedLeads}</div>
@@ -314,6 +325,7 @@ export default function LeadsManager({
           <option value="All">All Sources</option>
           <option value="whatsapp">WhatsApp</option>
           <option value="email">Email</option>
+          <option value="live_chat">Live Chat</option>
           <option value="facebook">Facebook Ads</option>
           <option value="converted">Converted</option>
           <option value="wa_optin">✓ WhatsApp Opt-in</option>

@@ -226,6 +226,7 @@ const getReferralLabel = (lead) => {
     if (cleanSource === 'ig' || cleanSource === 'instagram') return 'Instagram Ads';
     if (cleanSource === 'fb' || cleanSource === 'facebook') return 'Facebook Ads';
     if (cleanSource === 'google' || cleanSource === 'gads') return 'Google Ads';
+    if (cleanSource === 'live_chat') return 'Live Chat';
     return source.charAt(0).toUpperCase() + source.slice(1);
   }
   
@@ -262,6 +263,14 @@ const getReferralBadgeStyles = (label) => {
       background: 'rgba(34, 197, 94, 0.15)',
       color: '#4ade80',
       border: '1px solid rgba(34, 197, 94, 0.3)'
+    };
+  }
+
+  if (lower.includes('live chat')) {
+    return {
+      background: 'rgba(14, 165, 233, 0.15)',
+      color: '#7dd3fc',
+      border: '1px solid rgba(14, 165, 233, 0.3)'
     };
   }
   
