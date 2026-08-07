@@ -37,6 +37,25 @@ export function isoToCrWall(iso) {
   return new Date(parsed - CR_OFFSET_MS).toISOString().slice(0, 16);
 }
 
+/**
+ * The wall-clock hour (0-23) and weekday (0 = Sunday) in Costa Rica at a given
+ * instant, or nulls when the instant cannot be read.
+ *
+ * The live chat needs both together to answer "is the shop open right now", and
+ * reading them off the same converted value keeps them from disagreeing across
+ * a midnight boundary.
+ */
+export function crHourAndDay(iso) {
+  const wall = isoToCrWall(iso);
+  if (!wall) return { hour: null, day: null };
+  // The wall string is CR local time; read back as UTC it yields those same
+  // clock fields without the browser's own zone getting a say.
+  const parsed = Date.parse(`${wall}:00Z`);
+  if (!Number.isFinite(parsed)) return { hour: null, day: null };
+  const date = new Date(parsed);
+  return { hour: date.getUTCHours(), day: date.getUTCDay() };
+}
+
 /** A bare date ("2026-07-25") extended to the last moment of that day in CR. */
 export function crEndOfDayIso(dateStr) {
   if (!dateStr) return null;

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { crWallToIso, isoToCrWall, crEndOfDayIso, crStartOfDayIso } from '../src/lib/crTime.mjs';
+import { crWallToIso, isoToCrWall, crEndOfDayIso, crStartOfDayIso, crHourAndDay } from '../src/lib/crTime.mjs';
 
 test('CR midnight Saturday stores as 05:59 UTC Sunday', () => {
   assert.equal(crEndOfDayIso('2026-07-25'), '2026-07-26T05:59:59.999Z');
@@ -36,6 +36,33 @@ test('does not depend on the machine timezone it runs on', () => {
     for (const tz of ['Asia/Karachi', 'America/Costa_Rica', 'UTC']) {
       process.env.TZ = tz;
       assert.equal(crWallToIso('2026-07-25T23:59'), '2026-07-26T05:59:00.000Z', `TZ=${tz}`);
+    }
+  } finally {
+    if (before === undefined) delete process.env.TZ; else process.env.TZ = before;
+  }
+});
+
+test('the live chat reads the CR hour and weekday off the same instant', () => {
+  // 05:59 UTC Sunday is still 23:59 Saturday in Costa Rica. Reading the day
+  // from the UTC date would put the chat on Sunday's schedule an hour early.
+  assert.deepEqual(crHourAndDay('2026-07-26T05:59:00.000Z'), { hour: 23, day: 6 });
+  // One minute later it really is Sunday in CR.
+  assert.deepEqual(crHourAndDay('2026-07-26T06:00:00.000Z'), { hour: 0, day: 0 });
+  assert.deepEqual(crHourAndDay('2026-07-22T14:00:00.000Z'), { hour: 8, day: 3 });
+
+  // The widget passes these straight through as "unknown", which keeps the
+  // chat online rather than guessing a day.
+  for (const bad of [null, undefined, '', 'not a date']) {
+    assert.deepEqual(crHourAndDay(bad), { hour: null, day: null }, `${JSON.stringify(bad)}`);
+  }
+});
+
+test('the CR hour and weekday do not depend on the machine timezone', () => {
+  const before = process.env.TZ;
+  try {
+    for (const tz of ['Asia/Karachi', 'Pacific/Kiritimati', 'UTC']) {
+      process.env.TZ = tz;
+      assert.deepEqual(crHourAndDay('2026-07-26T05:59:00.000Z'), { hour: 23, day: 6 }, `TZ=${tz}`);
     }
   } finally {
     if (before === undefined) delete process.env.TZ; else process.env.TZ = before;

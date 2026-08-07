@@ -4,8 +4,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, Bot, CheckCircle2, ChevronLeft, Circle, Clock3, ExternalLink, FileText, Inbox, Loader2, MessageCircle, RefreshCw, Search, Send, Target, Trash2, UserCheck, UserPlus, XCircle } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import {
+  DAY_DISPLAY_ORDER,
+  DAY_LABELS,
   DEFAULT_LIVE_CHAT_AVAILABILITY,
+  buildDayEntry,
   formatHour12,
+  scheduleForDay,
+  summarizeSchedule,
 } from '@/lib/liveChatAvailability.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
@@ -130,6 +135,15 @@ export default function LiveChatInbox() {
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [availability, setAvailability] = useState(null);
   const [savingAvailability, setSavingAvailability] = useState(false);
+  // Seven rows of pickers do not fit the sidebar header, so the week opens on
+  // demand and the header keeps a one-line summary of it.
+  const [showHours, setShowHours] = useState(false);
+  // Ticked days, for setting several to the same hours in one go — changing a
+  // whole week a dropdown at a time is fourteen interactions.
+  const [selectedDays, setSelectedDays] = useState([]);
+  // What the apply bar will set. Null means it has not been touched yet and
+  // should show the shared hours as its starting point.
+  const [bulkHours, setBulkHours] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -476,6 +490,48 @@ export default function LiveChatInbox() {
     }
   };
 
+  // The apply bar starts from the shared hours rather than from a hard-coded
+  // 7am-7pm, so it opens showing something the shop actually uses.
+  const bulkClosed = bulkHours?.closed === true;
+  const bulkOpen = bulkHours?.openHour ?? availability?.openHour ?? DEFAULT_LIVE_CHAT_AVAILABILITY.openHour;
+  const bulkClose = bulkHours?.closeHour ?? availability?.closeHour ?? DEFAULT_LIVE_CHAT_AVAILABILITY.closeHour;
+
+  /**
+   * Saves the same edit against one or more weekdays, leaving the rest alone.
+   *
+   * Every selected day goes in a single request rather than one per day: seven
+   * PATCHes would each overwrite the whole setting, and the last to land would
+   * win with a stale copy of the other six.
+   */
+  const saveDays = (days, patch) => {
+    const next = { ...(availability?.days || {}) };
+    for (const day of days) {
+      // A day that has never been edited shows the shared hours, so the edit
+      // starts from what is on screen rather than from the shipped default.
+      const base = scheduleForDay(availability, day).ranges[0] || DEFAULT_LIVE_CHAT_AVAILABILITY;
+      next[day] = buildDayEntry(patch, base);
+    }
+    return saveAvailability({ days: next });
+  };
+
+  const saveDay = (day, patch) => saveDays([day], patch);
+
+  const toggleDaySelected = (day) => {
+    setSelectedDays((current) => (current.includes(day)
+      ? current.filter((entry) => entry !== day)
+      : [...current, day]));
+  };
+
+  // The bar applies exactly what it shows, so it passes both hours rather than
+  // letting each day fill a missing one in from its own.
+  const applyToSelectedDays = async () => {
+    if (!selectedDays.length) return;
+    await saveDays(selectedDays, bulkClosed ? { closed: true } : { openHour: bulkOpen, closeHour: bulkClose });
+    // Clearing is the confirmation: the rows now read as what was applied, and
+    // the bar going away says the change landed.
+    setSelectedDays([]);
+  };
+
   // Cycles Auto -> Online -> Offline. Auto keeps the saved schedule; the other
   // two override the clock until someone sets it back.
   const cycleAvailability = () => {
@@ -667,30 +723,17 @@ export default function LiveChatInbox() {
                 hidden when the mode is overriding the clock — otherwise they
                 look like settings that are being ignored, which they are. */}
             {currentAgent?.isSuperadmin && (availability?.mode || 'auto') === 'auto' ? (
-              <span style={availabilityHoursStyle} title="Hours the website chat shows as online, Costa Rica time">
-                <select
-                  value={availability?.openHour ?? DEFAULT_LIVE_CHAT_AVAILABILITY.openHour}
-                  onChange={(event) => saveAvailability({ openHour: Number(event.target.value) })}
-                  disabled={savingAvailability}
-                  style={hourSelectStyle}
-                  aria-label="Live chat opens at"
-                >
-                  {HOURS.map((hour) => <option key={hour} value={hour}>{formatHour12(hour)}</option>)}
-                </select>
-                <span style={{ opacity: 0.6 }}>–</span>
-                <select
-                  value={availability?.closeHour ?? DEFAULT_LIVE_CHAT_AVAILABILITY.closeHour}
-                  onChange={(event) => saveAvailability({ closeHour: Number(event.target.value) })}
-                  disabled={savingAvailability}
-                  style={hourSelectStyle}
-                  aria-label="Live chat closes at"
-                >
-                  {/* Only hours after opening, because an inverted range would
-                      be rejected on save and silently snap back to 7am-7pm. */}
-                  {HOURS.filter((hour) => hour > (availability?.openHour ?? DEFAULT_LIVE_CHAT_AVAILABILITY.openHour))
-                    .map((hour) => <option key={hour} value={hour}>{formatHour12(hour)}</option>)}
-                </select>
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowHours((open) => !open)}
+                className="admin-btn"
+                style={availabilityHoursStyle}
+                title="Hours the website chat shows as online, Costa Rica time"
+                aria-expanded={showHours}
+              >
+                <Clock3 size={12} />
+                {summarizeSchedule(availability)}
+              </button>
             ) : null}
             {!currentAgent?.isSuperadmin ? (
               <span
@@ -702,6 +745,120 @@ export default function LiveChatInbox() {
               </span>
             ) : null}
           </div>
+
+          {/* The week, one row per day. A day keeps showing the shared hours
+              until it is given its own, so the panel always reads as the real
+              schedule rather than as seven blanks waiting to be filled. */}
+          {currentAgent?.isSuperadmin && showHours && (availability?.mode || 'auto') === 'auto' ? (
+            <div style={weekPanelStyle}>
+              <div style={weekPanelHintStyle}>Website chat hours · Costa Rica time</div>
+              {DAY_DISPLAY_ORDER.map((day) => {
+                const schedule = scheduleForDay(availability, day);
+                const range = schedule.ranges[0];
+                return (
+                  <div key={day} style={dayRowStyle}>
+                    <input
+                      type="checkbox"
+                      checked={selectedDays.includes(day)}
+                      onChange={() => toggleDaySelected(day)}
+                      style={dayCheckboxStyle}
+                      aria-label={`Select ${DAY_LABELS[day]} to set with other days`}
+                    />
+                    <span style={dayNameStyle}>{DAY_LABELS[day].slice(0, 3)}</span>
+                    <select
+                      value={schedule.closed ? 'closed' : range.openHour}
+                      onChange={(event) => saveDay(day, event.target.value === 'closed'
+                        ? { closed: true }
+                        : { openHour: Number(event.target.value) })}
+                      disabled={savingAvailability}
+                      style={hourSelectStyle}
+                      aria-label={`${DAY_LABELS[day]} opens at`}
+                    >
+                      <option value="closed">Closed</option>
+                      {/* 11pm is not offered as an opening: closing must be
+                          later, and there is no later hour that day. */}
+                      {HOURS.slice(0, 23).map((hour) => (
+                        <option key={hour} value={hour}>{formatHour12(hour)}</option>
+                      ))}
+                    </select>
+                    {schedule.closed ? (
+                      <span style={{ opacity: 0.5, fontSize: '0.72rem' }}>all day</span>
+                    ) : (
+                      <>
+                        <span style={{ opacity: 0.6 }}>–</span>
+                        <select
+                          value={range.closeHour}
+                          onChange={(event) => saveDay(day, { closeHour: Number(event.target.value) })}
+                          disabled={savingAvailability}
+                          style={hourSelectStyle}
+                          aria-label={`${DAY_LABELS[day]} closes at`}
+                        >
+                          {/* Only hours after opening, because an inverted range
+                              would be rejected on save and drop the day back to
+                              the shared hours. */}
+                          {HOURS.filter((hour) => hour > range.openHour)
+                            .map((hour) => <option key={hour} value={hour}>{formatHour12(hour)}</option>)}
+                        </select>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Only once something is ticked: an empty bar would be a control
+                  that does nothing, sitting under the rows that do. */}
+              {selectedDays.length ? (
+                <div style={bulkBarStyle}>
+                  <span style={{ color: '#cbd5e1' }}>
+                    Set {selectedDays.length} selected {selectedDays.length === 1 ? 'day' : 'days'} to
+                  </span>
+                  <span style={dayRowStyle}>
+                    <select
+                      value={bulkClosed ? 'closed' : bulkOpen}
+                      onChange={(event) => setBulkHours(event.target.value === 'closed'
+                        ? { closed: true }
+                        : { openHour: Number(event.target.value), closeHour: Math.max(bulkClose, Number(event.target.value) + 1) })}
+                      disabled={savingAvailability}
+                      style={hourSelectStyle}
+                      aria-label="Set selected days to open at"
+                    >
+                      <option value="closed">Closed</option>
+                      {HOURS.slice(0, 23).map((hour) => (
+                        <option key={hour} value={hour}>{formatHour12(hour)}</option>
+                      ))}
+                    </select>
+                    {bulkClosed ? (
+                      <span style={{ opacity: 0.5 }}>all day</span>
+                    ) : (
+                      <>
+                        <span style={{ opacity: 0.6 }}>–</span>
+                        <select
+                          value={bulkClose}
+                          onChange={(event) => setBulkHours({ openHour: bulkOpen, closeHour: Number(event.target.value) })}
+                          disabled={savingAvailability}
+                          style={hourSelectStyle}
+                          aria-label="Set selected days to close at"
+                        >
+                          {HOURS.filter((hour) => hour > bulkOpen)
+                            .map((hour) => <option key={hour} value={hour}>{formatHour12(hour)}</option>)}
+                        </select>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={applyToSelectedDays}
+                      disabled={savingAvailability}
+                      className="admin-btn"
+                      style={applyButtonStyle}
+                    >
+                      {savingAvailability ? <Loader2 size={12} className="animate-spin" /> : null}
+                      Apply
+                    </button>
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <label style={searchStyle}>
             <Search size={15} />
@@ -1240,10 +1397,81 @@ const AVAILABILITY_LABELS = { auto: 'Auto', online: 'Online', offline: 'Offline'
 const availabilityHoursStyle = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: '4px',
+  gap: '5px',
+  padding: '6px 10px',
+  borderRadius: '999px',
+  border: '1px solid rgba(148, 163, 184, 0.24)',
+  background: 'transparent',
   fontSize: '0.72rem',
   color: '#cbd5e1',
   whiteSpace: 'nowrap',
+  cursor: 'pointer',
+};
+
+const weekPanelStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '6px',
+  padding: '10px',
+  marginBottom: '14px',
+  borderRadius: '10px',
+  background: 'rgba(2, 6, 23, 0.6)',
+  border: '1px solid rgba(148, 163, 184, 0.18)',
+};
+
+const weekPanelHintStyle = {
+  fontSize: '0.68rem',
+  color: '#94a3b8',
+  marginBottom: '2px',
+};
+
+const dayRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+};
+
+const dayCheckboxStyle = {
+  width: '13px',
+  height: '13px',
+  flexShrink: 0,
+  accentColor: '#38bdf8',
+  cursor: 'pointer',
+};
+
+const bulkBarStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '6px',
+  marginTop: '4px',
+  paddingTop: '8px',
+  // A rule rather than a panel of its own: it belongs to the rows above it.
+  borderTop: '1px solid rgba(148, 163, 184, 0.18)',
+  fontSize: '0.72rem',
+};
+
+const applyButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '5px',
+  marginLeft: 'auto',
+  padding: '5px 12px',
+  borderRadius: '8px',
+  border: '1px solid rgba(56, 189, 248, 0.4)',
+  background: 'rgba(56, 189, 248, 0.14)',
+  color: '#e0f2fe',
+  fontSize: '0.72rem',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const dayNameStyle = {
+  // Fixed width so the pickers line up in a column rather than stepping in and
+  // out with the length of the day name.
+  width: '30px',
+  flexShrink: 0,
+  fontSize: '0.72rem',
+  color: '#cbd5e1',
 };
 
 const hourSelectStyle = {

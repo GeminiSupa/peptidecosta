@@ -4,9 +4,18 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation';
 import { ExternalLink, FileText, Loader2, MessageCircle, Minus, Paperclip, Send, UserRound, X } from 'lucide-react';
 import { renderLiveChatMessage as messageText, shouldShowVisitorProfileForm } from '@/lib/liveChat';
-import { formatHour12, isLiveChatOnline, normalizeLiveChatAvailability } from '@/lib/liveChatAvailability.mjs';
+import {
+  DAY_LABELS,
+  DAY_LABELS_ES,
+  formatDayHours,
+  formatHour12,
+  isLiveChatOnline,
+  nextOpening,
+  normalizeLiveChatAvailability,
+  scheduleForDay,
+} from '@/lib/liveChatAvailability.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { isoToCrWall } from '@/lib/crTime.mjs';
+import { crHourAndDay } from '@/lib/crTime.mjs';
 
 const VISITOR_ID_KEY = 'peptides_live_chat_visitor_id';
 const VISITOR_PROFILE_KEY = 'peptides_live_chat_profile';
@@ -113,13 +122,32 @@ export default function ChatWidget() {
   // fetch lands (and if it fails) this falls back to the shipped schedule.
   const config = useMemo(() => normalizeLiveChatAvailability(availability), [availability]);
 
-  const offline = useMemo(() => {
-    const crTime = isoToCrWall(new Date().toISOString());
-    const hour = crTime ? parseInt(crTime.split('T')[1].split(':')[0], 10) : null;
-    return !isLiveChatOnline(config, hour);
+  // Recomputed whenever the config changes; the widget polls every 12s and
+  // re-renders with it, so the clock never drifts far from what is shown.
+  const { offline, todayHours, reopens } = useMemo(() => {
+    const { hour, day } = crHourAndDay(new Date().toISOString());
+    const today = scheduleForDay(config, day);
+    return {
+      offline: !isLiveChatOnline(config, hour, day),
+      todayHours: today.ranges,
+      reopens: nextOpening(config, day, hour),
+    };
   }, [config]);
 
-  const hours = `${formatHour12(config.openHour)}–${formatHour12(config.closeHour)}`;
+  // Today's own hours, not the week's — a visitor on a short Saturday should
+  // not be told the Monday window.
+  const closedToday = todayHours.length === 0;
+  const hours = formatDayHours(todayHours, '');
+
+  // "back Monday from 9am". Only reached when today is closed, so it never
+  // competes with today's own hours for the same line.
+  const reopensText = useMemo(() => {
+    if (!reopens) return '';
+    const dayName = (lang === 'en' ? DAY_LABELS : DAY_LABELS_ES)[reopens.day];
+    return lang === 'en'
+      ? `${dayName} from ${formatHour12(reopens.openHour)}`
+      : `${dayName} desde las ${formatHour12(reopens.openHour)}`;
+  }, [reopens, lang]);
 
   const copy = useMemo(() => ({
     title: lang === 'en' ? 'Live support' : 'Soporte en vivo',
@@ -127,14 +155,31 @@ export default function ChatWidget() {
     // on one short line. Naming the hours is also more use to a visitor than
     // "during business hours" was.
     subtitle: offline
-      ? (lang === 'en' ? `Offline · open ${hours}` : `Desconectados · ${hours}`)
+      ? (closedToday
+        ? (lang === 'en' ? 'Offline · closed today' : 'Desconectados · cerrado hoy')
+        : (lang === 'en' ? `Offline · open ${hours}` : `Desconectados · ${hours}`))
       : (lang === 'en' ? 'Usually replies in a few minutes' : 'Respondemos pronto'),
     // Message list: full width, so it can say it properly. This used to reuse
     // the header string, which is why one line had to serve two very different
     // spaces and fitted neither.
-    offlineNote: lang === 'en'
-      ? `We are offline right now. Our team replies between ${formatHour12(config.openHour)} and ${formatHour12(config.closeHour)}, Costa Rica time.`
-      : `Estamos fuera de horario. Nuestro equipo responde entre ${formatHour12(config.openHour)} y ${formatHour12(config.closeHour)}, hora de Costa Rica.`,
+    // Three cases, because the hours are now per day: open later today, closed
+    // today but back on a named day, and closed with no next opening at all —
+    // where naming a time would be a promise nobody is going to keep.
+    offlineNote: (() => {
+      if (!closedToday) {
+        return lang === 'en'
+          ? `We are offline right now. Today our team replies ${hours}, Costa Rica time.`
+          : `Estamos fuera de horario. Hoy nuestro equipo responde de ${hours}, hora de Costa Rica.`;
+      }
+      if (reopensText) {
+        return lang === 'en'
+          ? `We are closed today. Our team is back ${reopensText}, Costa Rica time.`
+          : `Hoy estamos cerrados. Nuestro equipo vuelve el ${reopensText}, hora de Costa Rica.`;
+      }
+      return lang === 'en'
+        ? 'We are offline right now. Leave a message and our team will reply here.'
+        : 'Estamos fuera de horario. Déjenos un mensaje y le responderemos aquí.';
+    })(),
     welcome: lang === 'en'
       ? 'Hi. Send us a message here and our team will reply in this chat.'
       : 'Hola. Escríbanos aquí y nuestro equipo responderá en este chat.',
@@ -172,7 +217,7 @@ export default function ChatWidget() {
       ? 'Chat is temporarily unavailable. Please use the contact form or email us.'
       : 'El chat no está disponible temporalmente. Use el formulario de contacto o escríbanos por correo.',
     unread: lang === 'en' ? 'New reply' : 'Nueva respuesta',
-  }), [lang, offline, hours, config.openHour, config.closeHour]);
+  }), [lang, offline, hours, closedToday, reopensText]);
 
   const serverMessages = useMemo(() => conversation?.messages || [], [conversation]);
   // Anything the visitor sent that the server has not echoed back yet, so the
