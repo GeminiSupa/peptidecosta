@@ -732,11 +732,14 @@ export default function LiveChatInbox() {
                 onClick={() => setShowHours((open) => !open)}
                 className="admin-btn"
                 style={availabilityHoursStyle}
-                title="Hours the website chat shows as online, Costa Rica time"
+                // The button says what it does; what is currently set moves to
+                // the tooltip, where it informs without having to be read as an
+                // instruction.
+                title={`Hours the website chat shows as online, Costa Rica time — ${summarizeSchedule(availability)}`}
                 aria-expanded={showHours}
               >
                 <Clock3 size={12} />
-                {summarizeSchedule(availability)}
+                Adjust time
               </button>
             ) : null}
             {!currentAgent?.isSuperadmin ? (
