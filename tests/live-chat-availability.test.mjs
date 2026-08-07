@@ -3,10 +3,31 @@ import { test } from 'node:test';
 
 import {
   DEFAULT_LIVE_CHAT_AVAILABILITY,
+  formatHour12,
   isLiveChatOnline,
   isWithinSchedule,
   normalizeLiveChatAvailability,
 } from '../src/lib/liveChatAvailability.mjs';
+
+test('the hour picker and the visitor copy read an hour the same way', () => {
+  // Same function drives the dashboard dropdown and the "open 7am-7pm" line,
+  // so the two can never describe the same setting differently.
+  assert.equal(formatHour12(0), '12am', 'midnight is 12am, not 0am');
+  assert.equal(formatHour12(7), '7am');
+  assert.equal(formatHour12(12), '12pm', 'noon is 12pm, not 0pm');
+  assert.equal(formatHour12(13), '1pm');
+  assert.equal(formatHour12(19), '7pm');
+  assert.equal(formatHour12(23), '11pm');
+});
+
+test('the hour formatter refuses anything that is not a real hour', () => {
+  for (const bad of [-1, 24, 7.5, null, undefined, NaN, 'seven', {}]) {
+    assert.equal(formatHour12(bad), '', `${JSON.stringify(bad)} is not an hour`);
+  }
+  // A numeric string is accepted rather than blanked: a select posts strings,
+  // and rendering nothing would be worse than rendering the hour.
+  assert.equal(formatHour12('7'), '7am');
+});
 
 test('with no setting saved the chat keeps the original 7am-7pm schedule', () => {
   assert.deepEqual(normalizeLiveChatAvailability(undefined), DEFAULT_LIVE_CHAT_AVAILABILITY);

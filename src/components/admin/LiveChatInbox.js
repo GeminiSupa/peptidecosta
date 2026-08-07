@@ -3,6 +3,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Bot, CheckCircle2, ChevronLeft, Circle, Clock3, ExternalLink, FileText, Inbox, Loader2, MessageCircle, RefreshCw, Search, Send, Target, Trash2, UserCheck, UserPlus, XCircle } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
+import {
+  DEFAULT_LIVE_CHAT_AVAILABILITY,
+  formatHour12,
+} from '@/lib/liveChatAvailability.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   matchesLiveChatOwnerFilter,
@@ -446,14 +450,13 @@ export default function LiveChatInbox() {
     }
   };
 
-  // Cycles Auto -> Online -> Offline. Auto keeps the saved schedule; the other
-  // two override the clock until someone sets it back.
-  const cycleAvailability = async () => {
+  // Shared by the mode pill and the two hour pickers, so both save the same way
+  // and a failure in either puts the control back rather than leaving the
+  // dashboard showing a state the website is not actually in.
+  const saveAvailability = async (patch) => {
     if (savingAvailability) return;
-    const order = ['auto', 'online', 'offline'];
     const previous = availability;
-    const next = order[(order.indexOf(availability?.mode || 'auto') + 1) % order.length];
-    const optimistic = { ...(availability || {}), mode: next };
+    const optimistic = { ...DEFAULT_LIVE_CHAT_AVAILABILITY, ...(availability || {}), ...patch };
     setAvailability(optimistic);
     setSavingAvailability(true);
     try {
@@ -466,12 +469,19 @@ export default function LiveChatInbox() {
       setAvailability(data.availability);
       setError('');
     } catch (err) {
-      // Put the switch back rather than showing a state the website is not in.
       setAvailability(previous);
       setError(err.message || 'Could not change availability');
     } finally {
       setSavingAvailability(false);
     }
+  };
+
+  // Cycles Auto -> Online -> Offline. Auto keeps the saved schedule; the other
+  // two override the clock until someone sets it back.
+  const cycleAvailability = () => {
+    const order = ['auto', 'online', 'offline'];
+    const next = order[(order.indexOf(availability?.mode || 'auto') + 1) % order.length];
+    return saveAvailability({ mode: next });
   };
 
   const sendReply = async () => {
@@ -630,7 +640,37 @@ export default function LiveChatInbox() {
                   : <Circle size={9} fill="currentColor" strokeWidth={0} />}
                 {AVAILABILITY_LABELS[availability?.mode || 'auto']}
               </button>
-            ) : (
+            ) : null}
+            {/* The schedule only decides anything in Auto, so the pickers are
+                hidden when the mode is overriding the clock — otherwise they
+                look like settings that are being ignored, which they are. */}
+            {currentAgent?.isSuperadmin && (availability?.mode || 'auto') === 'auto' ? (
+              <span style={availabilityHoursStyle} title="Hours the website chat shows as online, Costa Rica time">
+                <select
+                  value={availability?.openHour ?? DEFAULT_LIVE_CHAT_AVAILABILITY.openHour}
+                  onChange={(event) => saveAvailability({ openHour: Number(event.target.value) })}
+                  disabled={savingAvailability}
+                  style={hourSelectStyle}
+                  aria-label="Live chat opens at"
+                >
+                  {HOURS.map((hour) => <option key={hour} value={hour}>{formatHour12(hour)}</option>)}
+                </select>
+                <span style={{ opacity: 0.6 }}>–</span>
+                <select
+                  value={availability?.closeHour ?? DEFAULT_LIVE_CHAT_AVAILABILITY.closeHour}
+                  onChange={(event) => saveAvailability({ closeHour: Number(event.target.value) })}
+                  disabled={savingAvailability}
+                  style={hourSelectStyle}
+                  aria-label="Live chat closes at"
+                >
+                  {/* Only hours after opening, because an inverted range would
+                      be rejected on save and silently snap back to 7am-7pm. */}
+                  {HOURS.filter((hour) => hour > (availability?.openHour ?? DEFAULT_LIVE_CHAT_AVAILABILITY.openHour))
+                    .map((hour) => <option key={hour} value={hour}>{formatHour12(hour)}</option>)}
+                </select>
+              </span>
+            ) : null}
+            {!currentAgent?.isSuperadmin ? (
               <span
                 style={{ ...availabilityPillStyle, ...availabilityTone(availability?.mode), cursor: 'default' }}
                 title={AVAILABILITY_HINTS[availability?.mode || 'auto']}
@@ -638,7 +678,7 @@ export default function LiveChatInbox() {
                 <Circle size={9} fill="currentColor" strokeWidth={0} />
                 {AVAILABILITY_LABELS[availability?.mode || 'auto']}
               </span>
-            )}
+            ) : null}
             <button type="button" onClick={() => fetchInbox(true)} className="admin-btn" style={iconButtonStyle} title="Refresh">
               {refreshing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
             </button>
@@ -1182,7 +1222,28 @@ const searchInputStyle = {
   fontSize: '0.85rem',
 };
 
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+
 const AVAILABILITY_LABELS = { auto: 'Auto', online: 'Online', offline: 'Offline' };
+
+const availabilityHoursStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '4px',
+  fontSize: '0.72rem',
+  color: '#cbd5e1',
+  whiteSpace: 'nowrap',
+};
+
+const hourSelectStyle = {
+  background: '#020617',
+  color: '#e2e8f0',
+  border: '1px solid rgba(148, 163, 184, 0.24)',
+  borderRadius: '8px',
+  padding: '5px 6px',
+  fontSize: '0.72rem',
+  cursor: 'pointer',
+};
 
 const AVAILABILITY_HINTS = {
   auto: 'Following the schedule — click to force the website chat Online',

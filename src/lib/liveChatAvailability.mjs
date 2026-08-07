@@ -43,6 +43,22 @@ export function normalizeLiveChatAvailability(value) {
   return { mode, openHour, closeHour };
 }
 
+/** 7 -> "7am", 19 -> "7pm", 0 -> "12am". Shared so the dashboard picker and
+ *  the visitor-facing copy can never describe the same hour differently. */
+export function formatHour12(hour24) {
+  // Guarded before Number(), which turns null, '' and [] into 0 and would
+  // render a missing hour as a confident "12am".
+  const isNumberish = typeof hour24 === 'number'
+    || (typeof hour24 === 'string' && hour24.trim() !== '');
+  if (!isNumberish) return '';
+
+  const hour = Number(hour24);
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return '';
+  const suffix = hour >= 12 ? 'pm' : 'am';
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}${suffix}`;
+}
+
 export function isWithinSchedule(hour, { openHour, closeHour }) {
   if (!Number.isFinite(hour)) return true;
   return hour >= openHour && hour < closeHour;

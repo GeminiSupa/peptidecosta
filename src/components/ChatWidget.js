@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation';
 import { ExternalLink, FileText, Loader2, MessageCircle, Minus, Paperclip, Send, UserRound, X } from 'lucide-react';
 import { renderLiveChatMessage as messageText, shouldShowVisitorProfileForm } from '@/lib/liveChat';
-import { isLiveChatOnline, normalizeLiveChatAvailability } from '@/lib/liveChatAvailability.mjs';
+import { formatHour12, isLiveChatOnline, normalizeLiveChatAvailability } from '@/lib/liveChatAvailability.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { isoToCrWall } from '@/lib/crTime.mjs';
 
@@ -53,11 +53,6 @@ function saveProfile(profile) {
 // The staffed hours now live in the availability setting, so the copy below is
 // built from whatever the dashboard has saved rather than a constant here. A
 // visitor is never told a window nobody is actually working.
-function formatSupportHour(hour24) {
-  const suffix = hour24 >= 12 ? 'pm' : 'am';
-  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  return `${hour12}${suffix}`;
-}
 
 function formatTime(value) {
   const date = new Date(value);
@@ -124,7 +119,7 @@ export default function ChatWidget() {
     return !isLiveChatOnline(config, hour);
   }, [config]);
 
-  const hours = `${formatSupportHour(config.openHour)}–${formatSupportHour(config.closeHour)}`;
+  const hours = `${formatHour12(config.openHour)}–${formatHour12(config.closeHour)}`;
 
   const copy = useMemo(() => ({
     title: lang === 'en' ? 'Live support' : 'Soporte en vivo',
@@ -138,8 +133,8 @@ export default function ChatWidget() {
     // the header string, which is why one line had to serve two very different
     // spaces and fitted neither.
     offlineNote: lang === 'en'
-      ? `We are offline right now. Our team replies between ${formatSupportHour(config.openHour)} and ${formatSupportHour(config.closeHour)}, Costa Rica time.`
-      : `Estamos fuera de horario. Nuestro equipo responde entre ${formatSupportHour(config.openHour)} y ${formatSupportHour(config.closeHour)}, hora de Costa Rica.`,
+      ? `We are offline right now. Our team replies between ${formatHour12(config.openHour)} and ${formatHour12(config.closeHour)}, Costa Rica time.`
+      : `Estamos fuera de horario. Nuestro equipo responde entre ${formatHour12(config.openHour)} y ${formatHour12(config.closeHour)}, hora de Costa Rica.`,
     welcome: lang === 'en'
       ? 'Hi. Send us a message here and our team will reply in this chat.'
       : 'Hola. Escríbanos aquí y nuestro equipo responderá en este chat.',
