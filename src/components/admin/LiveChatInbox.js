@@ -124,6 +124,8 @@ export default function LiveChatInbox() {
   const [ownerFilter, setOwnerFilter] = useState('all');
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
+  const [availability, setAvailability] = useState(null);
+  const [savingAvailability, setSavingAvailability] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -164,6 +166,7 @@ export default function LiveChatInbox() {
       setConversations(data.conversations || []);
       setAgents(data.agents || []);
       setCurrentAgent(data.currentAgent || null);
+      if (data.availability) setAvailability(data.availability);
       setError('');
       setActiveId((current) => current || data.conversations?.[0]?.id || null);
     } catch (err) {
@@ -444,6 +447,34 @@ export default function LiveChatInbox() {
     }
   };
 
+  // Cycles Auto -> Online -> Offline. Auto keeps the saved schedule; the other
+  // two override the clock until someone sets it back.
+  const cycleAvailability = async () => {
+    if (savingAvailability) return;
+    const order = ['auto', 'online', 'offline'];
+    const previous = availability;
+    const next = order[(order.indexOf(availability?.mode || 'auto') + 1) % order.length];
+    const optimistic = { ...(availability || {}), mode: next };
+    setAvailability(optimistic);
+    setSavingAvailability(true);
+    try {
+      const response = await adminFetch('/api/admin/live-chat', {
+        method: 'PATCH',
+        body: JSON.stringify({ action: 'availability', availability: optimistic }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not change availability');
+      setAvailability(data.availability);
+      setError('');
+    } catch (err) {
+      // Put the switch back rather than showing a state the website is not in.
+      setAvailability(previous);
+      setError(err.message || 'Could not change availability');
+    } finally {
+      setSavingAvailability(false);
+    }
+  };
+
   const sendReply = async () => {
     if (!activeConversation || !reply.trim() || sending) return;
     const conversationId = activeConversation.id;
@@ -583,6 +614,32 @@ export default function LiveChatInbox() {
                   actually describe. */}
               <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{counts.unread} unread · {counts.newUnassigned} waiting · {counts.leadReady} leads ready</div>
             </div>
+            {/* Shop-wide online switch, superadmin only. Everyone else just
+                sees the state, so an agent cannot close the chat for the
+                whole company by accident. */}
+            {currentAgent?.isSuperadmin ? (
+              <button
+                type="button"
+                onClick={cycleAvailability}
+                disabled={savingAvailability}
+                className="admin-btn"
+                style={{ ...availabilityPillStyle, ...availabilityTone(availability?.mode) }}
+                title={AVAILABILITY_HINTS[availability?.mode || 'auto']}
+              >
+                {savingAvailability
+                  ? <Loader2 size={13} className="animate-spin" />
+                  : <Circle size={9} fill="currentColor" strokeWidth={0} />}
+                {AVAILABILITY_LABELS[availability?.mode || 'auto']}
+              </button>
+            ) : (
+              <span
+                style={{ ...availabilityPillStyle, ...availabilityTone(availability?.mode), cursor: 'default' }}
+                title={AVAILABILITY_HINTS[availability?.mode || 'auto']}
+              >
+                <Circle size={9} fill="currentColor" strokeWidth={0} />
+                {AVAILABILITY_LABELS[availability?.mode || 'auto']}
+              </span>
+            )}
             <button type="button" onClick={() => fetchInbox(true)} className="admin-btn" style={iconButtonStyle} title="Refresh">
               {refreshing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
             </button>
@@ -1120,6 +1177,34 @@ const searchInputStyle = {
   color: '#f8fafc',
   fontSize: '0.85rem',
 };
+
+const AVAILABILITY_LABELS = { auto: 'Auto', online: 'Online', offline: 'Offline' };
+
+const AVAILABILITY_HINTS = {
+  auto: 'Following the schedule — click to force the website chat Online',
+  online: 'Forced Online, ignoring the schedule — click to force Offline',
+  offline: 'Forced Offline, ignoring the schedule — click to go back to the schedule',
+};
+
+const availabilityPillStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  padding: '6px 10px',
+  borderRadius: '999px',
+  fontSize: '0.72rem',
+  fontWeight: 700,
+  whiteSpace: 'nowrap',
+  border: '1px solid rgba(148, 163, 184, 0.24)',
+};
+
+// Auto is deliberately neutral rather than green: it means "whatever the
+// schedule says", which is offline for half the day.
+function availabilityTone(mode) {
+  if (mode === 'online') return { background: 'rgba(34, 197, 94, 0.16)', color: '#86efac' };
+  if (mode === 'offline') return { background: 'rgba(239, 68, 68, 0.16)', color: '#fca5a5' };
+  return { background: 'rgba(15, 23, 42, 0.7)', color: '#cbd5e1' };
+}
 
 const filterButtonStyle = {
   border: '1px solid rgba(148, 163, 184, 0.16)',

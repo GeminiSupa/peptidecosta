@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation';
 import { ExternalLink, FileText, Loader2, MessageCircle, Minus, Paperclip, Send, UserRound, X } from 'lucide-react';
 import { renderLiveChatMessage as messageText, shouldShowVisitorProfileForm } from '@/lib/liveChat';
+import { isLiveChatOnline, normalizeLiveChatAvailability } from '@/lib/liveChatAvailability.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { isoToCrWall } from '@/lib/crTime.mjs';
 
@@ -49,12 +50,9 @@ function saveProfile(profile) {
   } catch {}
 }
 
-// Live chat is staffed 07:00–19:00 Costa Rica time. The copy below is built
-// from these, so changing the hours changes what visitors are told rather than
-// leaving the widget promising a window nobody is working.
-const SUPPORT_OPEN_HOUR = 7;
-const SUPPORT_CLOSE_HOUR = 19;
-
+// The staffed hours now live in the availability setting, so the copy below is
+// built from whatever the dashboard has saved rather than a constant here. A
+// visitor is never told a window nobody is actually working.
 function formatSupportHour(hour24) {
   const suffix = hour24 >= 12 ? 'pm' : 'am';
   const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
@@ -74,6 +72,7 @@ export default function ChatWidget() {
   const [visitorId, setVisitorId] = useState('');
   const [profile, setProfile] = useState({ name: '', email: '', phone: '' });
   const [knownVisitor, setKnownVisitor] = useState(false);
+  const [availability, setAvailability] = useState(null);
   const [conversation, setConversation] = useState(null);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -114,14 +113,18 @@ export default function ChatWidget() {
     };
   }, [shouldHide]);
 
+  // Availability comes from the dashboard so a superadmin can force the chat
+  // online or offline, or move the hours, without a deploy. Until the first
+  // fetch lands (and if it fails) this falls back to the shipped schedule.
+  const config = useMemo(() => normalizeLiveChatAvailability(availability), [availability]);
+
   const offline = useMemo(() => {
     const crTime = isoToCrWall(new Date().toISOString());
-    if (!crTime) return false;
-    const hour = parseInt(crTime.split('T')[1].split(':')[0], 10);
-    return hour < SUPPORT_OPEN_HOUR || hour >= SUPPORT_CLOSE_HOUR;
-  }, []);
+    const hour = crTime ? parseInt(crTime.split('T')[1].split(':')[0], 10) : null;
+    return !isLiveChatOnline(config, hour);
+  }, [config]);
 
-  const hours = `${formatSupportHour(SUPPORT_OPEN_HOUR)}–${formatSupportHour(SUPPORT_CLOSE_HOUR)}`;
+  const hours = `${formatSupportHour(config.openHour)}–${formatSupportHour(config.closeHour)}`;
 
   const copy = useMemo(() => ({
     title: lang === 'en' ? 'Live support' : 'Soporte en vivo',
@@ -135,8 +138,8 @@ export default function ChatWidget() {
     // the header string, which is why one line had to serve two very different
     // spaces and fitted neither.
     offlineNote: lang === 'en'
-      ? `We are offline right now. Our team replies between ${formatSupportHour(SUPPORT_OPEN_HOUR)} and ${formatSupportHour(SUPPORT_CLOSE_HOUR)}, Costa Rica time.`
-      : `Estamos fuera de horario. Nuestro equipo responde entre ${formatSupportHour(SUPPORT_OPEN_HOUR)} y ${formatSupportHour(SUPPORT_CLOSE_HOUR)}, hora de Costa Rica.`,
+      ? `We are offline right now. Our team replies between ${formatSupportHour(config.openHour)} and ${formatSupportHour(config.closeHour)}, Costa Rica time.`
+      : `Estamos fuera de horario. Nuestro equipo responde entre ${formatSupportHour(config.openHour)} y ${formatSupportHour(config.closeHour)}, hora de Costa Rica.`,
     welcome: lang === 'en'
       ? 'Hi. Send us a message here and our team will reply in this chat.'
       : 'Hola. Escríbanos aquí y nuestro equipo responderá en este chat.',
@@ -174,7 +177,7 @@ export default function ChatWidget() {
       ? 'Chat is temporarily unavailable. Please use the contact form or email us.'
       : 'El chat no está disponible temporalmente. Use el formulario de contacto o escríbanos por correo.',
     unread: lang === 'en' ? 'New reply' : 'Nueva respuesta',
-  }), [lang, offline, hours]);
+  }), [lang, offline, hours, config.openHour, config.closeHour]);
 
   const serverMessages = useMemo(() => conversation?.messages || [], [conversation]);
   // Anything the visitor sent that the server has not echoed back yet, so the
@@ -214,6 +217,9 @@ export default function ChatWidget() {
       if (!response.ok) throw new Error(data.error || 'Could not load chat');
       setError('');
       setConversation(data.conversation || null);
+      // Arrives on every poll, so flipping the toggle in the dashboard reaches
+      // a visitor who already has the widget open.
+      if (data.availability) setAvailability(data.availability);
     } catch (err) {
       if (!silent) setError(err.message || 'Could not load chat');
     }

@@ -9,6 +9,10 @@ import {
   normalizeVisitorId,
   signLiveChatAttachmentUrls,
 } from '@/lib/liveChat';
+import {
+  LIVE_CHAT_AVAILABILITY_SETTING_ID,
+  normalizeLiveChatAvailability,
+} from '@/lib/liveChatAvailability.mjs';
 import { rateLimit } from '@/lib/rateLimit.mjs';
 
 export const runtime = 'nodejs';
@@ -46,21 +50,48 @@ async function loadConversation(supabase, visitorId) {
   return signLiveChatAttachmentUrls(supabase, formatLiveChatConversation(conversation, messages || []));
 }
 
+/**
+ * The saved availability, or the shipped default.
+ *
+ * A missing row or an unreadable one falls back to the schedule rather than
+ * failing the request — the chat loading matters more than the status badge.
+ */
+async function loadLiveChatAvailability(supabase) {
+  try {
+    const { data } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('id', LIVE_CHAT_AVAILABILITY_SETTING_ID)
+      .maybeSingle();
+    return normalizeLiveChatAvailability(data?.value);
+  } catch {
+    return normalizeLiveChatAvailability(undefined);
+  }
+}
+
 export async function GET(request) {
   try {
     const visitorId = normalizeVisitorId(request.nextUrl.searchParams.get('visitorId'));
     if (!visitorId) return NextResponse.json({ error: 'visitorId is required' }, { status: 400 });
 
     const supabase = getSupabaseAdmin();
+
+    // Sent on every poll so a superadmin flipping the chat offline reaches
+    // visitors who already have the widget open, not just new ones.
+    const availability = await loadLiveChatAvailability(supabase);
+
     const conversation = await loadConversation(supabase, visitorId);
-    if (!conversation) return NextResponse.json({ conversation: null });
+    if (!conversation) return NextResponse.json({ conversation: null, availability });
 
     await supabase
       .from('live_chat_conversations')
       .update({ unread_for_visitor: false, updated_at: new Date().toISOString() })
       .eq('id', conversation.id);
 
-    return NextResponse.json({ conversation: { ...conversation, unreadForVisitor: false } });
+    return NextResponse.json({
+      conversation: { ...conversation, unreadForVisitor: false },
+      availability,
+    });
   } catch (err) {
     if (isMissingLiveChatTable(err)) {
       return NextResponse.json({ error: 'Live chat tables are not installed yet.' }, { status: 409 });

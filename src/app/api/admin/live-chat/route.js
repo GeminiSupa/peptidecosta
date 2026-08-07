@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { resolveAdminTabAccess } from '@/lib/adminModules';
 import { isActiveProfile, isSubUser } from '@/lib/subUserTier.mjs';
+import {
+  LIVE_CHAT_AVAILABILITY_SETTING_ID,
+  normalizeLiveChatAvailability,
+} from '@/lib/liveChatAvailability.mjs';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
@@ -226,7 +230,19 @@ export async function GET(request) {
       }
     }
 
-    return NextResponse.json({ conversations, agents, currentAgent });
+    let availability = normalizeLiveChatAvailability(undefined);
+    try {
+      const { data: setting } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('id', LIVE_CHAT_AVAILABILITY_SETTING_ID)
+        .maybeSingle();
+      availability = normalizeLiveChatAvailability(setting?.value);
+    } catch {
+      // The inbox still loads on the shipped default rather than 500ing.
+    }
+
+    return NextResponse.json({ conversations, agents, currentAgent, availability });
   } catch (err) {
     if (isMissingLiveChatTable(err)) {
       return NextResponse.json({ conversations: [], agents: [], error: 'Live chat tables are not installed yet.' }, { status: 409 });
@@ -313,6 +329,22 @@ export async function PATCH(request) {
     const body = await request.json();
     const conversationId = String(body.conversationId || '').trim();
     const action = String(body.action || '').trim().toLowerCase();
+
+    // Whether the whole website chat shows as online. Superadmin only: this is
+    // a shop-wide switch, not something one agent should flip for everyone.
+    // Handled before the conversationId check because it targets no chat.
+    if (action === 'availability') {
+      if (!auth.profile.is_superadmin) {
+        return NextResponse.json({ error: 'Only a superadmin can change live chat availability.' }, { status: 403 });
+      }
+      const availability = normalizeLiveChatAvailability(body.availability);
+      const supabase = getSupabaseAdmin();
+      const { error } = await supabase
+        .from('site_settings')
+        .upsert({ id: LIVE_CHAT_AVAILABILITY_SETTING_ID, value: availability }, { onConflict: 'id' });
+      if (error) throw error;
+      return NextResponse.json({ success: true, availability });
+    }
 
     if (!conversationId) return NextResponse.json({ error: 'conversationId is required' }, { status: 400 });
 
