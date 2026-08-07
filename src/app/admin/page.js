@@ -2967,46 +2967,35 @@ Core Rules:
     handleCellChange(productId, 'imageUrl', 'Uploading...');
 
     if (isSupabaseConfigured && supabase) {
+      // Uploaded through the server, not straight from the browser: Storage
+      // rejects the public anon key with a row-level security error, which is
+      // what used to surface as "check that the bucket exists and is public"
+      // about a bucket that existed and was public.
+      const previousUrl = products.find(p => p.id === productId)?.imageUrl || '';
       try {
-        // 1. Delete old image from storage if it exists
-        const currentProduct = products.find(p => p.id === productId);
-        if (currentProduct && currentProduct.imageUrl && currentProduct.imageUrl.includes('product-pics')) {
-          try {
-            // Extract file name from the public URL
-            const urlParts = currentProduct.imageUrl.split('/product-pics/');
-            if (urlParts[1]) {
-              const oldFileName = decodeURIComponent(urlParts[1].split('?')[0]);
-              await supabase.storage.from('product-pics').remove([oldFileName]);
-              console.log('Old image deleted:', oldFileName);
-            }
-          } catch (delErr) {
-            console.warn('Could not delete old image (non-critical):', delErr);
-          }
-        }
+        const form = new FormData();
+        form.append('file', file);
+        form.append('kind', 'product');
 
-        // 2. Upload new image
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `${fileName}`;
+        const response = await adminFetch('/api/admin/upload-image', { method: 'POST', body: form });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Upload failed.');
 
-        const { error: uploadError } = await supabase.storage
-          .from('product-pics')
-          .upload(filePath, file);
-
-        if (uploadError) throw uploadError;
-
-        // 3. Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('product-pics')
-          .getPublicUrl(filePath);
-
-        handleCellChange(productId, 'imageUrl', publicUrl);
+        handleCellChange(productId, 'imageUrl', data.url);
         fetchBucketImages(); // Refresh the list of images in the background
-        return publicUrl;
+
+        // Replacing a product's image deliberately leaves the old file in
+        // storage. It used to be deleted here, which meant one mis-click was
+        // enough to destroy an image permanently, and anything else still
+        // pointing at that URL broke with it. Storage is cheap; the photo is
+        // not replaceable.
+        return data.url;
       } catch (err) {
         console.error("Storage upload error:", err);
-        handleCellChange(productId, 'imageUrl', '');
-        alert("Image upload failed. Please verify that your Supabase Storage bucket 'product-pics' exists and is set to public.");
+        // Put back whatever was there rather than blanking the cell, so a
+        // failed upload cannot quietly cost a product the image it already had.
+        handleCellChange(productId, 'imageUrl', previousUrl);
+        alert(`Image upload failed. ${err.message}`);
         return null;
       }
     } else {
@@ -3027,27 +3016,23 @@ Core Rules:
     setEditingBlog(prev => ({ ...prev, image_url: 'Uploading...' }));
 
     if (isSupabaseConfigured && supabase) {
+      // Same server route as the product images, for the same reason.
+      const previousUrl = editingBlog?.image_url || '';
       try {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `blog-${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `${fileName}`;
+        const form = new FormData();
+        form.append('file', file);
+        form.append('kind', 'blog');
 
-        const { error: uploadError } = await supabase.storage
-          .from('product-pics')
-          .upload(filePath, file);
+        const response = await adminFetch('/api/admin/upload-image', { method: 'POST', body: form });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Upload failed.');
 
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('product-pics')
-          .getPublicUrl(filePath);
-
-        setEditingBlog(prev => ({ ...prev, image_url: publicUrl }));
+        setEditingBlog(prev => ({ ...prev, image_url: data.url }));
         fetchBucketImages(); // Refresh the list of images so it appears in dropdowns
       } catch (err) {
         console.error("Blog storage upload error:", err);
-        setEditingBlog(prev => ({ ...prev, image_url: '' }));
-        alert("Image upload failed. Please verify that your Supabase Storage bucket 'product-pics' exists and is set to public.");
+        setEditingBlog(prev => ({ ...prev, image_url: previousUrl }));
+        alert(`Image upload failed. ${err.message}`);
       }
     } else {
       const dummyUrl = URL.createObjectURL(file);
