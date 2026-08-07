@@ -63,6 +63,146 @@ export function buildVisitorIdentityPatch({ name, email, phone } = {}) {
   return patch;
 }
 
+/**
+ * Country codes offered beside the phone box, Costa Rica first because it is
+ * both the default and where most visitors are.
+ *
+ * Deliberately a short list rather than all ~200: a visitor scrolling past
+ * Kazakhstan to reach Costa Rica is worse served than one from an unlisted
+ * country typing their number in full, which still validates.
+ */
+// `digits` is an exact local length, set only where it is genuinely fixed —
+// Costa Rica is always 8, the North American plan always 10. Everywhere else is
+// left to the 7-digit floor rather than guessed at, because a wrong length here
+// turns a real customer away at the door.
+// Both spellings, because the widget runs in Spanish by default and a list
+// reading "Mexico, Spain, Germany" under Spanish labels is the one place the
+// language slips.
+export const LIVE_CHAT_DIAL_CODES = [
+  { code: '+506', label: 'Costa Rica', labelEs: 'Costa Rica', digits: 8 },
+  { code: '+1', label: 'USA / Canada', labelEs: 'EE. UU. / Canadá', digits: 10 },
+  { code: '+52', label: 'Mexico', labelEs: 'México' },
+  { code: '+502', label: 'Guatemala', labelEs: 'Guatemala' },
+  { code: '+503', label: 'El Salvador', labelEs: 'El Salvador' },
+  { code: '+504', label: 'Honduras', labelEs: 'Honduras' },
+  { code: '+505', label: 'Nicaragua', labelEs: 'Nicaragua' },
+  { code: '+507', label: 'Panama', labelEs: 'Panamá' },
+  { code: '+57', label: 'Colombia', labelEs: 'Colombia' },
+  { code: '+58', label: 'Venezuela', labelEs: 'Venezuela' },
+  { code: '+51', label: 'Peru', labelEs: 'Perú' },
+  { code: '+593', label: 'Ecuador', labelEs: 'Ecuador' },
+  { code: '+56', label: 'Chile', labelEs: 'Chile' },
+  { code: '+54', label: 'Argentina', labelEs: 'Argentina' },
+  { code: '+55', label: 'Brazil', labelEs: 'Brasil' },
+  { code: '+34', label: 'Spain', labelEs: 'España' },
+  { code: '+44', label: 'United Kingdom', labelEs: 'Reino Unido' },
+  { code: '+49', label: 'Germany', labelEs: 'Alemania' },
+  { code: '+33', label: 'France', labelEs: 'Francia' },
+  { code: '+39', label: 'Italy', labelEs: 'Italia' },
+  { code: '+61', label: 'Australia', labelEs: 'Australia' },
+  { code: '+92', label: 'Pakistan', labelEs: 'Pakistán' },
+  { code: '+91', label: 'India', labelEs: 'India' },
+];
+
+/** The country name in the language the widget is running in. */
+export function dialCodeLabel(entry, lang) {
+  if (!entry) return '';
+  return lang === 'en' ? entry.label : (entry.labelEs || entry.label);
+}
+
+export const DEFAULT_LIVE_CHAT_DIAL_CODE = '+506';
+
+export function isLiveChatDialCode(value) {
+  return LIVE_CHAT_DIAL_CODES.some((entry) => entry.code === value);
+}
+
+// Longest first, so +506 is never mistaken for +50 or +5.
+const DIAL_CODES_BY_LENGTH = [...LIVE_CHAT_DIAL_CODES]
+  .map((entry) => entry.code)
+  .sort((a, b) => b.length - a.length);
+
+/**
+ * A stored number split back into a country code and the local part, so a
+ * visitor returning to the widget sees the picker on the country they chose
+ * rather than their code sitting in the text box.
+ *
+ * Numbers saved before the picker existed are bare local ones, and fall
+ * through to the default country — which is what they were.
+ */
+export function splitLiveChatPhone(value) {
+  const phone = String(value || '').trim();
+  for (const code of DIAL_CODES_BY_LENGTH) {
+    if (phone.startsWith(code)) {
+      return { dialCode: code, localNumber: phone.slice(code.length).trim() };
+    }
+  }
+  return { dialCode: DEFAULT_LIVE_CHAT_DIAL_CODE, localNumber: phone };
+}
+
+/**
+ * The country code and local number joined into the one string stored against
+ * the lead. Empty when there is no local number: a bare "+506" is a country,
+ * not a phone number, and must not read as one in the CRM.
+ */
+export function composeLiveChatPhone(dialCode, localNumber) {
+  const local = String(localNumber || '').trim();
+  if (!local) return '';
+  const code = isLiveChatDialCode(dialCode) ? dialCode : DEFAULT_LIVE_CHAT_DIAL_CODE;
+  // Already carries its own country code, so it is used as typed rather than
+  // prefixed twice.
+  if (local.startsWith('+')) return local;
+  return `${code} ${local}`;
+}
+
+/**
+ * A chat cannot start until we can reach the person back: a name, plus an email
+ * or a phone number.
+ *
+ * The fields are checked for being usable, not merely non-empty. "a" in the
+ * email box would pass a blank check and leave the CRM holding a lead nobody
+ * can answer, which is the exact thing the requirement exists to prevent. The
+ * tests are deliberately loose on format beyond that — a real customer turned
+ * away by a strict pattern costs more than a typo that an agent can query.
+ */
+export function isUsableEmail(value) {
+  const email = String(value || '').trim();
+  // One @, something either side, and a dot in the domain. Nothing stricter:
+  // real addresses break every "clever" pattern.
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+}
+
+export const LIVE_CHAT_MIN_PHONE_DIGITS = 7;
+
+export function isUsablePhone(value) {
+  // The country code is taken off before counting, or it would pad the number
+  // towards the minimum on its own: "+506 1234" is 7 digits but only 4 of them
+  // are a phone number.
+  const { dialCode, localNumber } = splitLiveChatPhone(value);
+  // Digits only, so "6062 6224", "6062-6224" and "6062.6224" are all the same
+  // number — a visitor should never be rejected over a dash.
+  const digits = localNumber.replace(/\D/g, '').length;
+
+  const country = LIVE_CHAT_DIAL_CODES.find((entry) => entry.code === dialCode);
+  if (country?.digits) return digits === country.digits;
+  return digits >= LIVE_CHAT_MIN_PHONE_DIGITS;
+}
+
+/**
+ * Which requirements a profile still fails: 'name', 'contact', or both. An
+ * array rather than a boolean so the widget can say what is actually missing
+ * instead of a blanket "fill in the form".
+ */
+export function missingLiveChatContact({ name, email, phone } = {}) {
+  const missing = [];
+  if (!String(name || '').trim()) missing.push('name');
+  if (!isUsableEmail(email) && !isUsablePhone(phone)) missing.push('contact');
+  return missing;
+}
+
+export function canStartLiveChat(profile) {
+  return missingLiveChatContact(profile).length === 0;
+}
+
 // Whether the pre-chat form (name/email/phone) should be on screen.
 // `knownVisitor` MUST be the load-time answer to "did we already have this
 // visitor's details", never a value derived from the fields as they are typed:

@@ -3,7 +3,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { ExternalLink, FileText, Loader2, MessageCircle, Minus, Paperclip, Send, UserRound, X } from 'lucide-react';
-import { renderLiveChatMessage as messageText, shouldShowVisitorProfileForm } from '@/lib/liveChat';
+import {
+  DEFAULT_LIVE_CHAT_DIAL_CODE,
+  LIVE_CHAT_DIAL_CODES,
+  canStartLiveChat,
+  composeLiveChatPhone,
+  dialCodeLabel,
+  isLiveChatDialCode,
+  isUsablePhone,
+  renderLiveChatMessage as messageText,
+  missingLiveChatContact,
+  shouldShowVisitorProfileForm,
+  splitLiveChatPhone,
+} from '@/lib/liveChat';
 import {
   DAY_LABELS,
   DAY_LABELS_ES,
@@ -39,17 +51,27 @@ function getVisitorId() {
   return next;
 }
 
+// `phone` holds the local number only; the country lives in `dialCode`. They
+// are joined into one string when the number is sent, so the CRM keeps storing
+// a whole number as it always did.
+const EMPTY_PROFILE = { name: '', email: '', phone: '', dialCode: DEFAULT_LIVE_CHAT_DIAL_CODE };
+
 function readProfile() {
-  if (typeof window === 'undefined') return { name: '', email: '', phone: '' };
+  if (typeof window === 'undefined') return { ...EMPTY_PROFILE };
   try {
     const parsed = JSON.parse(localStorage.getItem(VISITOR_PROFILE_KEY) || '{}');
+    // A profile saved before the picker existed holds the whole number in
+    // `phone`, so it is split back apart rather than shown with its country
+    // code sitting in the text box.
+    const stored = splitLiveChatPhone(parsed.phone || '');
     return {
       name: parsed.name || '',
       email: parsed.email || '',
-      phone: parsed.phone || '',
+      phone: parsed.dialCode ? (parsed.phone || '') : stored.localNumber,
+      dialCode: isLiveChatDialCode(parsed.dialCode) ? parsed.dialCode : stored.dialCode,
     };
   } catch {
-    return { name: '', email: '', phone: '' };
+    return { ...EMPTY_PROFILE };
   }
 }
 
@@ -74,7 +96,7 @@ export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [visitorId, setVisitorId] = useState('');
-  const [profile, setProfile] = useState({ name: '', email: '', phone: '' });
+  const [profile, setProfile] = useState({ ...EMPTY_PROFILE });
   const [knownVisitor, setKnownVisitor] = useState(false);
   const [availability, setAvailability] = useState(null);
   const [conversation, setConversation] = useState(null);
@@ -82,6 +104,8 @@ export default function ChatWidget() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  // Kept apart from `error`, which is for the chat itself failing.
+  const [contactNotice, setContactNotice] = useState('');
   const [lang, setLang] = useState('es');
   const [showPrompt, setShowPrompt] = useState(false);
   const [ratingSent, setRatingSent] = useState(false);
@@ -99,7 +123,14 @@ export default function ChatWidget() {
     setVisitorId(getVisitorId());
     const stored = readProfile();
     setProfile(stored);
-    setKnownVisitor(Boolean(stored.name || stored.email || stored.phone));
+    // "Known" now means we hold everything a chat requires, not just some
+    // fragment of it — a visitor stored with only a name still has to be asked
+    // for a way to reach them back. Read once at load, never derived from the
+    // fields as they are typed: see shouldShowVisitorProfileForm.
+    setKnownVisitor(canStartLiveChat({
+      ...stored,
+      phone: composeLiveChatPhone(stored.dialCode, stored.phone),
+    }));
     setLang(localStorage.getItem('lang') || 'es');
   }, [shouldHide]);
 
@@ -149,6 +180,28 @@ export default function ChatWidget() {
       : `${dayName} desde las ${formatHour12(reopens.openHour)}`;
   }, [reopens, lang]);
 
+  // What the visitor still has to supply before a chat can start. Checked
+  // against the details as they stand right now — unlike the form's visibility,
+  // which must not move while they are still typing into it.
+  // The number as it leaves the widget: country code and local part joined. The
+  // one value validated and sent, so what is checked is always what is stored.
+  const composedPhone = useMemo(
+    () => composeLiveChatPhone(profile.dialCode, profile.phone),
+    [profile.dialCode, profile.phone],
+  );
+
+  // Memoized so the array is stable between renders and can be a dependency of
+  // the copy below.
+  const contactMissing = useMemo(
+    () => missingLiveChatContact({ ...profile, phone: composedPhone }),
+    [profile, composedPhone],
+  );
+
+  // A number was typed but does not pass — almost always a digit short or a
+  // digit over. Told apart from an empty box so the nudge can say "check the
+  // number" rather than "add a phone number" to somebody who plainly just did.
+  const phoneIncomplete = Boolean(String(profile.phone || '').trim()) && !isUsablePhone(composedPhone);
+
   const copy = useMemo(() => ({
     title: lang === 'en' ? 'Live support' : 'Soporte en vivo',
     // Header strip: sits beside a 36px avatar and two buttons, so it has to fit
@@ -183,9 +236,38 @@ export default function ChatWidget() {
     welcome: lang === 'en'
       ? 'Hi. Send us a message here and our team will reply in this chat.'
       : 'Hola. Escríbanos aquí y nuestro equipo responderá en este chat.',
+    // Email and phone are each optional on their own but not together, which a
+    // per-field "optional"/"required" label cannot say. The line above the
+    // fields carries that rule instead.
     name: lang === 'en' ? 'Name' : 'Nombre',
     email: lang === 'en' ? 'Email' : 'Correo',
-    phone: lang === 'en' ? 'Phone optional' : 'Teléfono opcional',
+    phone: lang === 'en' ? 'Phone' : 'Teléfono',
+    country: lang === 'en' ? 'Country code' : 'Código de país',
+    contactRule: lang === 'en'
+      ? 'Your name, and an email or phone number, so our team can reply.'
+      : 'Su nombre, y un correo o teléfono, para que nuestro equipo pueda responderle.',
+    // Named separately from the rule so the nudge after a blocked send says
+    // what is actually missing rather than repeating the whole instruction.
+    contactRequired: (() => {
+      const needsName = contactMissing.includes('name');
+      const needsReach = contactMissing.includes('contact');
+      if (needsName && needsReach) {
+        return lang === 'en'
+          ? 'Please add your name and an email or phone number first.'
+          : 'Por favor agregue su nombre y un correo o teléfono primero.';
+      }
+      if (needsName) {
+        return lang === 'en' ? 'Please add your name first.' : 'Por favor agregue su nombre primero.';
+      }
+      if (phoneIncomplete) {
+        return lang === 'en'
+          ? 'That phone number does not look complete. Please check it.'
+          : 'Ese número de teléfono no parece completo. Por favor revíselo.';
+      }
+      return lang === 'en'
+        ? 'Please add an email or phone number so we can reply.'
+        : 'Por favor agregue un correo o teléfono para poder responderle.';
+    })(),
     placeholder: lang === 'en' ? 'Write a message...' : 'Escriba un mensaje...',
     sending: lang === 'en' ? 'Sending...' : 'Enviando...',
     uploading: lang === 'en' ? 'Uploading...' : 'Subiendo...',
@@ -217,7 +299,14 @@ export default function ChatWidget() {
       ? 'Chat is temporarily unavailable. Please use the contact form or email us.'
       : 'El chat no está disponible temporalmente. Use el formulario de contacto o escríbanos por correo.',
     unread: lang === 'en' ? 'New reply' : 'Nueva respuesta',
-  }), [lang, offline, hours, closedToday, reopensText]);
+    // Screen-reader only, but a Spanish reader should not hit four English
+    // words on the one part of the page it cannot see.
+    dismiss: lang === 'en' ? 'Dismiss' : 'Descartar',
+    minimize: lang === 'en' ? 'Minimize' : 'Minimizar',
+    close: lang === 'en' ? 'Close' : 'Cerrar',
+    send: lang === 'en' ? 'Send' : 'Enviar',
+  }), [lang, offline, hours, closedToday, reopensText, contactMissing, phoneIncomplete]);
+
 
   const serverMessages = useMemo(() => conversation?.messages || [], [conversation]);
   // Anything the visitor sent that the server has not echoed back yet, so the
@@ -235,6 +324,10 @@ export default function ChatWidget() {
     messageCount: serverMessages.length,
     showDetails,
   });
+
+  // Once the conversation exists the gate is done: a visitor mid-conversation
+  // is never blocked from replying, whatever we hold for them.
+  const blockedUntilContact = serverMessages.length === 0 && contactMissing.length > 0;
 
   useEffect(() => {
     if (shouldHide || isOpen || conversation || localStorage.getItem(PROMPT_DISMISSED_KEY) === '1') return undefined;
@@ -325,6 +418,17 @@ export default function ChatWidget() {
     const raw = typeof overrideMessage === 'string' ? overrideMessage : input;
     const message = String(raw ?? '').trim();
     if (!message || loading || uploading || !visitorId) return;
+    // Checked here rather than only on the button, because the quick-question
+    // chips call this directly and would otherwise start a chat we cannot reply
+    // to.
+    if (blockedUntilContact) {
+      // Its own notice rather than setError: the error banner deliberately
+      // shows one generic line whatever it is handed, which would tell the
+      // visitor the chat is broken instead of what to fill in.
+      setContactNotice(copy.contactRequired);
+      setShowDetails(true);
+      return;
+    }
     setLoading(true);
     setInput('');
     setPending((prev) => [...prev, {
@@ -344,7 +448,7 @@ export default function ChatWidget() {
           message,
           visitorName: profile.name,
           visitorEmail: profile.email,
-          visitorPhone: profile.phone,
+          visitorPhone: composedPhone,
           pageUrl: window.location.href,
           referrer: document.referrer,
         }),
@@ -365,6 +469,15 @@ export default function ChatWidget() {
 
   const uploadAttachment = async (file) => {
     if (!file || uploading || loading || !visitorId) return;
+    // An attachment opens a conversation just as a message does.
+    if (blockedUntilContact) {
+      // Its own notice rather than setError: the error banner deliberately
+      // shows one generic line whatever it is handed, which would tell the
+      // visitor the chat is broken instead of what to fill in.
+      setContactNotice(copy.contactRequired);
+      setShowDetails(true);
+      return;
+    }
     setUploading(true);
     const caption = input.trim();
     setInput('');
@@ -375,7 +488,7 @@ export default function ChatWidget() {
       form.append('message', caption || copy.uploaded);
       form.append('visitorName', profile.name);
       form.append('visitorEmail', profile.email);
-      form.append('visitorPhone', profile.phone);
+      form.append('visitorPhone', composedPhone);
       form.append('pageUrl', window.location.href);
       form.append('referrer', document.referrer);
 
@@ -409,7 +522,7 @@ export default function ChatWidget() {
           message: `Chat rating: ${score}/5`,
           visitorName: profile.name,
           visitorEmail: profile.email,
-          visitorPhone: profile.phone,
+          visitorPhone: composedPhone,
           pageUrl: window.location.href,
           referrer: document.referrer,
         }),
@@ -439,7 +552,7 @@ export default function ChatWidget() {
                 localStorage.setItem(PROMPT_DISMISSED_KEY, '1');
                 setShowPrompt(false);
               }}
-              aria-label="Dismiss"
+              aria-label={copy.dismiss}
               style={{ position: 'absolute', right: '8px', top: '8px', border: 0, background: 'transparent', color: '#64748b', cursor: 'pointer' }}
             >
               <X size={14} />
@@ -525,7 +638,7 @@ export default function ChatWidget() {
           <button
             type="button"
             onClick={(event) => { event.stopPropagation(); setIsMinimized((value) => !value); }}
-            aria-label="Minimize"
+            aria-label={copy.minimize}
             className="lcw-header-btn"
           >
             {isMinimized ? <MessageCircle size={18} /> : <Minus size={18} />}
@@ -533,7 +646,7 @@ export default function ChatWidget() {
           <button
             type="button"
             onClick={(event) => { event.stopPropagation(); setIsOpen(false); }}
-            aria-label="Close"
+            aria-label={copy.close}
             className="lcw-header-btn"
           >
             <X size={18} />
@@ -574,10 +687,48 @@ export default function ChatWidget() {
                 borderRadius: '12px',
                 padding: '12px',
               }}>
-                <div style={{ color: '#475569', fontSize: '0.74rem' }}>{copy.detailsHint}</div>
+                {/* Before the chat starts these details are the requirement, so
+                    the line states the rule. Afterwards the form is only ever
+                    reopened by the visitor themselves, where the old "so we can
+                    follow up" wording is the honest one. */}
+                <div style={{ color: '#475569', fontSize: '0.74rem' }}>
+                  {blockedUntilContact ? copy.contactRule : copy.detailsHint}
+                </div>
                 <input value={profile.name} onChange={(e) => updateProfile('name', e.target.value)} placeholder={copy.name} style={inputStyle} autoComplete="name" />
                 <input value={profile.email} onChange={(e) => updateProfile('email', e.target.value)} placeholder={copy.email} style={inputStyle} type="email" inputMode="email" autoComplete="email" />
-                <input value={profile.phone} onChange={(e) => updateProfile('phone', e.target.value)} placeholder={copy.phone} style={inputStyle} type="tel" inputMode="tel" autoComplete="tel" />
+                {/* The country sits beside the number rather than being typed
+                    into it, so a Costa Rican number arrives dialable without
+                    the visitor having to know to write +506. */}
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <select
+                    value={profile.dialCode}
+                    onChange={(e) => updateProfile('dialCode', e.target.value)}
+                    style={{ ...inputStyle, flex: '0 0 82px', minWidth: 0 }}
+                    aria-label={copy.country}
+                    title={copy.country}
+                  >
+                    {/* A closed select can only show its selected option's own
+                        text, so that one row carries just the code and the rest
+                        carry the country name — which is what keeps "+506" in
+                        the form and "+506 Costa Rica" in the list. Staying with
+                        a native select also keeps the OS picker on phones,
+                        which beats any custom list on a small screen. */}
+                    {LIVE_CHAT_DIAL_CODES.map((entry) => (
+                      <option key={entry.code} value={entry.code}>
+                        {entry.code === profile.dialCode ? entry.code : `${entry.code} ${dialCodeLabel(entry, lang)}`}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={profile.phone}
+                    onChange={(e) => updateProfile('phone', e.target.value)}
+                    placeholder={copy.phone}
+                    style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel-national"
+                  />
+                </div>
                 {showDetails && (
                   <button type="button" onClick={() => setShowDetails(false)} className="lcw-ghost-btn">
                     {copy.detailsDone}
@@ -601,6 +752,9 @@ export default function ChatWidget() {
                     key={label}
                     type="button"
                     onClick={() => sendMessage(copy.quickMessages[index])}
+                    // Dimmed rather than removed while the details are missing:
+                    // these chips are what tells a visitor what the chat is for,
+                    // and clicking one still explains what is needed first.
                     style={{
                       border: '1px solid #bae6fd',
                       background: '#ecfeff',
@@ -610,6 +764,7 @@ export default function ChatWidget() {
                       fontSize: '0.76rem',
                       fontWeight: 700,
                       cursor: 'pointer',
+                      opacity: blockedUntilContact ? 0.55 : 1,
                     }}
                   >
                     {label}
@@ -670,6 +825,13 @@ export default function ChatWidget() {
             {error && (
               <div style={{ color: '#b91c1c', fontSize: '0.78rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '8px 10px' }}>
                 {copy.error}
+              </div>
+            )}
+            {/* Gated on blockedUntilContact as well as on the notice itself, so
+                filling the fields in clears it without needing to be dismissed. */}
+            {contactNotice && blockedUntilContact && (
+              <div style={{ color: '#92400e', fontSize: '0.78rem', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '8px 10px' }}>
+                {contactNotice}
               </div>
             )}
             {!hasAgentReply && messages.length > 0 && (
@@ -735,7 +897,7 @@ export default function ChatWidget() {
               type="button"
               onClick={() => sendMessage()}
               disabled={loading || uploading || !input.trim()}
-              aria-label="Send"
+              aria-label={copy.send}
               className="lcw-composer-btn"
               style={{
                 border: 0,

@@ -6,6 +6,7 @@ import {
   cleanOptionalText,
   formatLiveChatConversation,
   isMissingLiveChatTable,
+  missingLiveChatContact,
   normalizeVisitorId,
   signLiveChatAttachmentUrls,
 } from '@/lib/liveChat';
@@ -124,6 +125,26 @@ export async function POST(request) {
     const visitorPhone = cleanOptionalText(body.visitorPhone, 80);
     const pageUrl = cleanOptionalText(body.pageUrl, 1000);
     const referrer = cleanOptionalText(body.referrer, 1000);
+
+    // The widget already blocks this, but the endpoint is public, so the
+    // requirement is enforced where it cannot be skipped.
+    //
+    // Only when the conversation is being opened: chats started before this
+    // rule existed, and any the team began by hand, must keep working — a
+    // visitor mid-conversation being told they cannot reply is far worse than
+    // one unqualified lead.
+    const { data: existing } = await supabase
+      .from('live_chat_conversations')
+      .select('id')
+      .eq('visitor_id', visitorId)
+      .maybeSingle();
+
+    if (!existing && missingLiveChatContact({ name: visitorName, email: visitorEmail, phone: visitorPhone }).length) {
+      return NextResponse.json(
+        { error: 'Please add your name and an email or phone number so our team can reply.' },
+        { status: 400 },
+      );
+    }
 
     const { data: conversation, error: upsertError } = await supabase
       .from('live_chat_conversations')

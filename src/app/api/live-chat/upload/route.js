@@ -11,6 +11,7 @@ import {
   getLiveChatAttachmentPreviewText,
   isMissingLiveChatTable,
   LIVE_CHAT_ATTACHMENT_BUCKET,
+  missingLiveChatContact,
   normalizeVisitorId,
   signLiveChatAttachmentUrls,
   validateLiveChatAttachment,
@@ -80,6 +81,22 @@ export async function POST(request) {
     const pageUrl = cleanOptionalText(form.get('pageUrl'), 1000);
     const referrer = cleanOptionalText(form.get('referrer'), 1000);
     const caption = cleanLiveChatText(form.get('message'), 800);
+
+    // Same requirement as a first message, and checked before the file is
+    // stored so a rejected chat leaves nothing behind in the bucket.
+    const { data: existing } = await supabase
+      .from('live_chat_conversations')
+      .select('id')
+      .eq('visitor_id', visitorId)
+      .maybeSingle();
+
+    if (!existing && missingLiveChatContact({ name: visitorName, email: visitorEmail, phone: visitorPhone }).length) {
+      return NextResponse.json(
+        { error: 'Please add your name and an email or phone number so our team can reply.' },
+        { status: 400 },
+      );
+    }
+
     const fileName = cleanLiveChatFileName(file.name);
     const path = buildLiveChatAttachmentPath(visitorId, fileName, file.type);
     uploadedPath = path;
