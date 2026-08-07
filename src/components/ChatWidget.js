@@ -431,12 +431,25 @@ export default function ChatWidget() {
             <div style={{ fontSize: '0.95rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {copy.title}
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#ccfbf1' }}>
+            {/* Truncated like the title above it. The header is a fixed 64px,
+                and the offline subtitle ("Estamos desconectados. Responderemos
+                en nuestro horario") wrapped to three lines and was cut in half
+                by the panel's overflow, which looked broken when minimised. */}
+            <div
+              style={{
+                fontSize: '0.72rem',
+                color: '#ccfbf1',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+              title={conversation?.unreadForVisitor ? copy.unread : copy.subtitle}
+            >
               {conversation?.unreadForVisitor ? copy.unread : copy.subtitle}
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
           <button
             type="button"
             onClick={(event) => { event.stopPropagation(); setIsMinimized((value) => !value); }}
