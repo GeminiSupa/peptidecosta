@@ -6507,6 +6507,35 @@ body:has(.product-grid.grid-view) {
   }
 }
 
+/* Same again for the landing pages' sticky Catálogo / Contáctenos bar, which
+   the launcher sat on top of: at z-index 1050 against the bar's 120 it covered
+   the Catálogo button outright.
+ *
+ * Driven by a class MobileActionBar puts on <body> while the bar is on screen,
+ * not by body:has(...) like the cart rule above. :has() needs Safari 15.4+ and
+ * Chrome 105+, and on anything older it is not an error — the rule is simply
+ * dropped and the overlap silently returns. A class is understood everywhere.
+ *
+ * The bar is 62px tall (44px buttons, 8px padding either side, 1px borders) and
+ * sits on max(12px, safe-area), so the same max() is repeated here rather than
+ * a bare env(): on a phone with a home indicator the bar rises, and a launcher
+ * that only added the inset would be left overlapping it again.
+ *
+ * Capped at 768px, the width above which the bar is display:none. */
+@media (max-width: 768px) {
+  body.has-mobile-action-bar .lcw-launcher {
+    /* Plain value first: a browser too old for max() drops the calc() below as
+       invalid and keeps this, which clears the bar on a phone with no home
+       indicator. The calc() then refines it wherever it is understood. */
+    bottom: 86px;
+    bottom: calc(74px + max(12px, env(safe-area-inset-bottom, 0px)));
+  }
+  body.has-mobile-action-bar .lcw-prompt {
+    bottom: 158px;
+    bottom: calc(146px + max(12px, env(safe-area-inset-bottom, 0px)));
+  }
+}
+
 /* The launcher used to render above the access gate and the cart drawer and
    swallow their controls, because it sat at the same z-index as the overlays. */
 body:has([aria-modal="true"]) .lcw-launcher,

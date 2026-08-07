@@ -23,6 +23,20 @@ export default function MobileActionBar({ lang = 'en', onContact, source = 'mobi
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Tells the chat widget to sit above this bar instead of on top of it.
+  //
+  // A body class rather than `body:has(.lp-mobile-actions.is-visible)`, which
+  // would have been shorter but needs Safari 15.4+ / Chrome 105+ — and where
+  // :has() is missing the rule is dropped in silence and the launcher covers
+  // the Catálogo button again. A class works everywhere.
+  useEffect(() => {
+    const CLASS = 'has-mobile-action-bar';
+    document.body.classList.toggle(CLASS, visible);
+    // Navigating to a page without this bar unmounts the component; without
+    // this the class would stick and hold the widget up for no reason.
+    return () => document.body.classList.remove(CLASS);
+  }, [visible]);
+
   const catalogText = lang === 'en' ? 'Catalog' : 'Catálogo';
   const contactLabel = lang === 'en' ? 'Contact Us' : 'Contáctenos';
 
