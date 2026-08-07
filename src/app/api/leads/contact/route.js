@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { buildAgentNameResolver, lookupHistoricalAgent } from '@/lib/agentAttribution.mjs';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import { rateLimit } from '@/lib/rateLimit.mjs';
 
 // The storefront "Contáctenos" form. This replaced the WhatsApp CTAs, so it is
 // now the only way a visitor who does not want to check out can reach the team
@@ -21,8 +22,32 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const clean = (value, limit = 200) => String(value ?? '').trim().slice(0, limit);
 
+// This is posted to from standalone ad landing pages, which are not served
+// from this domain, so the browser needs CORS to let the request through.
+// It is not a security control — anything can POST here with curl regardless —
+// so the actual abuse protection is the per-IP rate limit below.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Max-Age': '86400',
+};
+
+const withCors = (body, status = 200) => NextResponse.json(body, { status, headers: CORS_HEADERS });
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS_HEADERS });
+}
+
 export async function POST(request) {
   try {
+    // 20 leads per 10 minutes per IP. A real landing page sends one; this only
+    // ever bites a script.
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    if (!rateLimit(`lead-contact:${ip}`, 20)) {
+      return withCors({ error: 'rate_limited' }, 429);
+    }
+
     const body = await request.json();
     const name = clean(body.name, 120);
     const email = clean(body.email, 200).toLowerCase();
@@ -30,20 +55,29 @@ export async function POST(request) {
     const language = body.language === 'en' ? 'en' : 'es';
     const source = clean(body.source, 60) || 'contact_form';
 
+    // Ad campaign tracking. catalog_leads has carried these columns all along
+    // but nothing was filling them, so a lead from a paid ad was
+    // indistinguishable from an organic one and the ad spend could not be
+    // judged. An AdWords landing page passes them straight through.
+    const utmSource = clean(body.utm_source ?? body.utmSource, 120);
+    const utmMedium = clean(body.utm_medium ?? body.utmMedium, 120);
+    const utmCampaign = clean(body.utm_campaign ?? body.utmCampaign, 120);
+    const referrer = clean(body.referrer, 500) || request.headers.get('referer') || '';
+
     if (!name) {
-      return NextResponse.json({ error: 'name_required' }, { status: 400 });
+      return withCors({ error: 'name_required' }, 400);
     }
     if (email && !EMAIL_RE.test(email)) {
-      return NextResponse.json({ error: 'email_invalid' }, { status: 400 });
+      return withCors({ error: 'email_invalid' }, 400);
     }
     // Either channel is enough to follow up, but with neither there is no lead.
     const phone = phoneRaw ? cleanPhoneNumber(phoneRaw) : '';
     if (!email && !phone) {
-      return NextResponse.json({ error: 'contact_required' }, { status: 400 });
+      return withCors({ error: 'contact_required' }, 400);
     }
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      return NextResponse.json({ error: 'server_not_configured' }, { status: 500 });
+      return withCors({ error: 'server_not_configured' }, 500);
     }
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -94,6 +128,9 @@ export async function POST(request) {
       // Mirrored into the note as well, because `sales_agent` is dropped below
       // if the live table lacks the column — the owner must stay visible.
       historyAgent ? `Owner: ${historyAgent} (returning customer — first closed by this agent)` : null,
+      utmCampaign || utmSource
+        ? `Campaign: ${[utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / ')}`
+        : null,
     ].filter(Boolean).join('\n');
 
     const payload = {
@@ -110,12 +147,22 @@ export async function POST(request) {
       phone: phone || null,
       sales_agent: owner || null,
       updated_at: nowIso,
+      // Only overwrite the campaign on a lead that actually arrived with one,
+      // so a returning visitor coming in organically does not erase the ad
+      // that originally won them.
+      ...(utmSource ? { utm_source: utmSource } : {}),
+      ...(utmMedium ? { utm_medium: utmMedium } : {}),
+      ...(utmCampaign ? { utm_campaign: utmCampaign } : {}),
+      ...(referrer ? { referrer } : {}),
     };
 
     // These arrive via their own hand-run migrations (or not at all). Dropping
     // them individually keeps a lead from being lost to a schema gap, the same
     // way the team-member save handles admin_profiles.
-    const optional = ['name', 'email', 'phone', 'sales_agent', 'updated_at'];
+    const optional = [
+      'name', 'email', 'phone', 'sales_agent', 'updated_at',
+      'utm_source', 'utm_medium', 'utm_campaign', 'referrer',
+    ];
 
     const { error } = await writeDroppingMissingColumns(payload, optional, (row) => (
       existing
@@ -124,9 +171,9 @@ export async function POST(request) {
     ));
     if (error) throw error;
 
-    return NextResponse.json({ success: true });
+    return withCors({ success: true });
   } catch (err) {
     console.error('[leads/contact] failed:', err);
-    return NextResponse.json({ error: 'save_failed' }, { status: 500 });
+    return withCors({ error: 'save_failed' }, 500);
   }
 }
