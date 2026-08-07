@@ -115,6 +115,12 @@ export default function LiveChatInbox() {
   const [activeId, setActiveId] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('new');
+  // The one chat allowed to ignore the filters, so that replying — which
+  // claims it and moves it to Open/Mine — cannot yank the agent onto a
+  // different customer mid-conversation. Set only by sending a reply, and
+  // dropped the moment the agent filters, searches or picks another chat,
+  // because then they are deliberately asking to see something else.
+  const [pinnedId, setPinnedId] = useState(null);
   const [ownerFilter, setOwnerFilter] = useState('all');
   const [mobileThreadOpen, setMobileThreadOpen] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
@@ -236,6 +242,10 @@ export default function LiveChatInbox() {
       leadReady: byOwner.filter((conversation) => conversation.leadContext?.status === 'ready').length,
       mine: byStatus.filter((conversation) => conversation.assignedTo === currentAgent?.userId).length,
       unassigned: byStatus.filter((conversation) => !conversation.assignedTo).length,
+      // Counted within the current status filter like Mine and Unassigned
+      // beside it. It used to be the raw total, so picking a status with no
+      // matches still showed "All 3" above an empty list.
+      allInStatus: byStatus.length,
     };
   }, [conversations, currentAgent?.userId, ownerFilter, statusFilter]);
 
@@ -243,11 +253,11 @@ export default function LiveChatInbox() {
     const q = search.trim().toLowerCase();
     return conversations
       .filter((conversation) => {
-        // Replying claims the chat, which drops it out of New/Unassigned. The
-        // thread being read is kept in the list regardless so that answering a
-        // customer cannot yank the agent onto a different one mid-sentence.
-        // Search still applies, so a deliberate search is never overridden.
-        const pinned = conversation.id === activeId;
+        // Only a chat just replied to overrides the filters (see `pinnedId`).
+        // This used to pin whatever was selected, which meant clicking a filter
+        // with a count of 0 still listed that chat and the filters looked
+        // broken. Search still applies either way.
+        const pinned = pinnedId !== null && conversation.id === pinnedId;
         if (!pinned && !matchesLiveChatStatusFilter(conversation, statusFilter)) return false;
         if (!pinned && !matchesLiveChatOwnerFilter(conversation, ownerFilter, currentAgent?.userId)) return false;
         if (!q) return true;
@@ -263,7 +273,7 @@ export default function LiveChatInbox() {
         if (a.unreadForAgent !== b.unreadForAgent) return a.unreadForAgent ? -1 : 1;
         return new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0);
       });
-  }, [activeId, conversations, currentAgent?.userId, ownerFilter, search, statusFilter]);
+  }, [pinnedId, conversations, currentAgent?.userId, ownerFilter, search, statusFilter]);
 
   useEffect(() => {
     if (filteredConversations.length === 0) {
@@ -447,6 +457,10 @@ export default function LiveChatInbox() {
       setConversations((prev) => prev.map((conversation) => (
         conversation.id === data.conversation.id ? data.conversation : conversation
       )));
+      // Replying claims the chat and moves it to Open/Mine, dropping it out of
+      // the New/Unassigned queue most agents work from. Hold it on screen so
+      // the thread they are mid-conversation on does not vanish under them.
+      setPinnedId(conversationId);
       setError('');
     } catch (err) {
       setDrafts((prev) => ({ ...prev, [conversationId]: text }));
@@ -560,7 +574,11 @@ export default function LiveChatInbox() {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '14px' }}>
               <div>
                 <div style={{ color: '#f8fafc', fontWeight: 800, fontSize: '1rem' }}>Website Inbox</div>
-              <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{counts.unread} unread · {counts.open + counts.pending} active · {counts.leadReady} leads ready</div>
+              {/* "active" was left over from the old Active chip and counted
+                  open+pending, so this read "0 active" while unclaimed chats
+                  were sitting in the list. It now reports the queue the chips
+                  actually describe. */}
+              <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{counts.unread} unread · {counts.newUnassigned} waiting · {counts.leadReady} leads ready</div>
             </div>
             <button type="button" onClick={() => fetchInbox(true)} className="admin-btn" style={iconButtonStyle} title="Refresh">
               {refreshing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
@@ -579,7 +597,7 @@ export default function LiveChatInbox() {
 
           <label style={searchStyle}>
             <Search size={15} />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search conversations" style={searchInputStyle} />
+            <input value={search} onChange={(event) => { setSearch(event.target.value); setPinnedId(null); }} placeholder="Search conversations" style={searchInputStyle} />
           </label>
 
           {/* 'New/Unassigned' is far longer than the other three labels, so the
@@ -595,7 +613,7 @@ export default function LiveChatInbox() {
               <button
                 key={value}
                 type="button"
-                onClick={() => setStatusFilter(value)}
+                onClick={() => { setStatusFilter(value); setPinnedId(null); }}
                 style={{
                   ...filterButtonStyle,
                   background: statusFilter === value ? '#0ea5e9' : 'rgba(15, 23, 42, 0.7)',
@@ -612,12 +630,12 @@ export default function LiveChatInbox() {
             {[
               ['mine', 'Mine', counts.mine],
               ['unassigned', 'Unassigned', counts.unassigned],
-              ['all', 'All', conversations.length],
+              ['all', 'All', counts.allInStatus],
             ].map(([value, label, count]) => (
               <button
                 key={value}
                 type="button"
-                onClick={() => setOwnerFilter(value)}
+                onClick={() => { setOwnerFilter(value); setPinnedId(null); }}
                 style={{
                   ...filterButtonStyle,
                   background: ownerFilter === value ? '#14b8a6' : 'rgba(15, 23, 42, 0.7)',
@@ -643,6 +661,9 @@ export default function LiveChatInbox() {
               type="button"
               onClick={() => {
                 setActiveId(conversation.id);
+                // Choosing a different chat retires the previous pin, so an
+                // old reply cannot keep an unrelated chat stuck in the list.
+                if (conversation.id !== pinnedId) setPinnedId(null);
                 if (isMobile) setMobileThreadOpen(true);
               }}
               style={{
