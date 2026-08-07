@@ -615,14 +615,36 @@ export default function LiveChatInbox() {
       >
         <div className="admin-live-chat-filters" style={{ padding: '16px', borderBottom: '1px solid rgba(148, 163, 184, 0.16)', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '14px' }}>
-              <div>
-                <div style={{ color: '#f8fafc', fontWeight: 800, fontSize: '1rem' }}>Website Inbox</div>
+              {/* minWidth:0 lets the summary line ellipsise instead of forcing
+                  the row wider than the sidebar and wrapping the title. */}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ color: '#f8fafc', fontWeight: 800, fontSize: '1rem', whiteSpace: 'nowrap' }}>Website Inbox</div>
               {/* "active" was left over from the old Active chip and counted
                   open+pending, so this read "0 active" while unclaimed chats
                   were sitting in the list. It now reports the queue the chips
                   actually describe. */}
               <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{counts.unread} unread · {counts.newUnassigned} waiting · {counts.leadReady} leads ready</div>
             </div>
+            <button type="button" onClick={() => fetchInbox(true)} className="admin-btn" style={iconButtonStyle} title="Refresh">
+              {refreshing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+            </button>
+            <button
+              type="button"
+              onClick={toggleAlerts}
+              className="admin-btn"
+              style={{ ...iconButtonStyle, color: alertsEnabled ? '#86efac' : '#cbd5e1' }}
+              title={alertsEnabled ? 'Alerts on — click to turn off' : 'Alerts off — click to be notified of new chats'}
+              aria-pressed={alertsEnabled}
+            >
+              <Bell size={15} />
+            </button>
+          </div>
+
+          {/* Its own row rather than beside the title. In the sidebar width
+              the pill plus two hour pickers plus two icon buttons squeezed
+              "Website Inbox" onto two lines and pushed the icons off the
+              edge. */}
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
             {/* Shop-wide online switch, superadmin only. Everyone else just
                 sees the state, so an agent cannot close the chat for the
                 whole company by accident. */}
@@ -679,19 +701,6 @@ export default function LiveChatInbox() {
                 {AVAILABILITY_LABELS[availability?.mode || 'auto']}
               </span>
             ) : null}
-            <button type="button" onClick={() => fetchInbox(true)} className="admin-btn" style={iconButtonStyle} title="Refresh">
-              {refreshing ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-            </button>
-            <button
-              type="button"
-              onClick={toggleAlerts}
-              className="admin-btn"
-              style={{ ...iconButtonStyle, color: alertsEnabled ? '#86efac' : '#cbd5e1' }}
-              title={alertsEnabled ? 'Alerts on — click to turn off' : 'Alerts off — click to be notified of new chats'}
-              aria-pressed={alertsEnabled}
-            >
-              <Bell size={15} />
-            </button>
           </div>
 
           <label style={searchStyle}>
@@ -702,7 +711,7 @@ export default function LiveChatInbox() {
           {/* 'New/Unassigned' is far longer than the other four labels, so the
               first column is widened instead of letting an equal split squash
               or wrap it on a narrow phone sidebar. */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.9fr 1fr 1fr 1fr 1fr', gap: '6px', marginTop: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 1fr 1fr 1fr 1fr', gap: '6px', marginTop: '12px' }}>
             {[
               ['new', 'New/Unassigned', counts.newUnassigned],
               ['open', 'Open', counts.open],
@@ -1192,6 +1201,8 @@ function LeadCapturePanel({ conversation, saving, onSave }) {
 const iconButtonStyle = {
   width: '34px',
   height: '34px',
+  // Square buttons must not be squashed into slivers when the row is tight.
+  flexShrink: 0,
   padding: 0,
   border: '1px solid rgba(148, 163, 184, 0.2)',
   background: '#0f172a',
@@ -1286,7 +1297,10 @@ const filterButtonStyle = {
   textAlign: 'center',
   lineHeight: 1.2,
   alignContent: 'center',
-  overflowWrap: 'anywhere',
+  // break-word, not anywhere: if 'New/Unassigned' ever does outgrow its
+  // column it should break after the slash, not mid-word as 'New/Unassigne'
+  // + 'd', which is what it was doing.
+  overflowWrap: 'break-word',
 };
 
 const selectStyle = {
