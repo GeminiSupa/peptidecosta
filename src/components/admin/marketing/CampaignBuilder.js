@@ -721,15 +721,15 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     const activeSubject = selectedCampaign?.subject_line || subject;
     const activeTitle   = selectedCampaign?.title || campaignName;
     return [
-      { label: 'Campaign name set',              ok: Boolean(activeTitle?.trim()) },
-      { label: 'Subject line ready',             ok: Boolean(activeSubject?.trim()) },
-      { label: 'Audience has subscribers',       ok: estimatedAudience.length > 0 },
-      { label: 'Sender credentials configured',  ok: true, note: 'Verified at send time.' },
-      { label: 'Unsubscribe footer auto-added',  ok: true },
-      { label: 'Tracking enabled',               ok: true },
-      { label: 'Saved campaign selected',        ok: Boolean(selectedCampaignId) },
-      { label: 'Email body saved',               ok: Boolean(selectedCampaign?.html_content || selectedCampaignId) },
-      { label: 'Current version test email sent', ok: Boolean(lastTestedSignature && lastTestSentAt) },
+      { label: 'Campaign name set',              errorLabel: 'Missing campaign name', ok: Boolean(activeTitle?.trim()) },
+      { label: 'Subject line ready',             errorLabel: 'Missing subject line', ok: Boolean(activeSubject?.trim()) },
+      { label: 'Audience has subscribers',       errorLabel: 'Audience has no subscribers', ok: estimatedAudience.length > 0 },
+      { label: 'Sender credentials configured',  errorLabel: 'Sender credentials not configured', ok: true, note: 'Verified at send time.' },
+      { label: 'Unsubscribe footer auto-added',  errorLabel: 'Unsubscribe footer missing', ok: true },
+      { label: 'Tracking enabled',               errorLabel: 'Tracking not enabled', ok: true },
+      { label: 'Saved campaign selected',        errorLabel: 'No saved campaign selected', ok: Boolean(selectedCampaignId) },
+      { label: 'Email body saved',               errorLabel: 'Email body not saved', ok: Boolean(selectedCampaign?.html_content || selectedCampaignId) },
+      { label: 'Current version test email sent', errorLabel: 'Current version test email not sent', ok: Boolean(lastTestedSignature && lastTestSentAt) },
     ];
   }, [campaignName, estimatedAudience.length, lastTestSentAt, lastTestedSignature, selectedCampaign, selectedCampaignId, subject]);
 
@@ -863,7 +863,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       return;
     }
     if (!canSend) {
-      const blockers = preflightItems.filter(item => !item.ok).map(item => item.label);
+      const blockers = preflightItems.filter(item => !item.ok).map(item => item.errorLabel || item.label);
       const message = `Cannot send yet:\n\n${blockers.map(label => `- ${label}`).join('\n')}`;
       setStatusDetail(message.replaceAll('\n', ' '));
       alert(message);
