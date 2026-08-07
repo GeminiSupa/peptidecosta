@@ -6,6 +6,7 @@ import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { agentMatchKeys } from '@/lib/agentOrders';
+import { CUSTOMER_HISTORY_SOURCE, buildAgentNameResolver, lookupHistoricalAgent } from '@/lib/agentAttribution.mjs';
 import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
 import {
   applySalesAgentReferral,
@@ -82,6 +83,45 @@ async function applyTrustedAgentReferralAttribution(supabase, untrustedOrder) {
     ...order,
     affiliate_id: linkedAffiliate?.id || order.affiliate_id || null,
   }, profile);
+}
+
+/**
+ * Credits a returning customer's order to the agent who first closed them.
+ *
+ * Runs only when the order arrived with no agent, so a referral link always
+ * wins. Attribution is never worth losing a sale over: if the lookup fails the
+ * order saves unattributed and an agent can still assign it by hand.
+ */
+async function applyCustomerHistoryAttribution(supabase, order) {
+  if (String(order?.sales_agent || '').trim()) return order;
+
+  try {
+    const { data: profiles } = await supabase.from('admin_profiles').select('*');
+
+    const match = await lookupHistoricalAgent(supabase, {
+      phone: order.customer_phone,
+      email: order.customer_email,
+      // Some closed orders record an agent's email rather than their name.
+      // Without this they read as a second, non-existent agent.
+      resolveAgent: buildAgentNameResolver(profiles),
+    });
+    if (!match) return order;
+
+    // The agent who closed them may have left since. Only a currently eligible
+    // profile can be credited, otherwise the order is left unassigned.
+    const profile = (profiles || []).find((row) => agentMatchKeys(row).has(match.agent.toLowerCase()));
+    if (!isEligibleSalesAgentProfile(profile)) return order;
+
+    console.log(`[orders/create] Attributed to ${match.agent} from customer history`);
+    return {
+      ...order,
+      sales_agent: match.agent,
+      agent_commission_source: CUSTOMER_HISTORY_SOURCE,
+    };
+  } catch (err) {
+    console.warn('[orders/create] History attribution skipped:', err.message);
+    return order;
+  }
 }
 
 function isFkViolation(error) {
@@ -334,7 +374,12 @@ export async function POST(request) {
     // reaching a uuid column used to fail the whole insert, which broke
     // checkout for every customer who arrived through that link.
     const { order: sanitizedOrder, dropped: droppedAttribution } = sanitizeOrderAttribution(order);
-    const orderRow = await applyTrustedAgentReferralAttribution(supabase, sanitizedOrder);
+    const referredOrder = await applyTrustedAgentReferralAttribution(supabase, sanitizedOrder);
+    // A returning customer goes back to the agent who first closed them, so the
+    // team keeps its clients now that the WhatsApp history is gone. This only
+    // fills a gap: an order that already has an agent (a referral link) is left
+    // exactly as it is, so nobody is paid twice for the same sale.
+    const orderRow = await applyCustomerHistoryAttribution(supabase, referredOrder);
     let savedOrderForAlerts = orderRow;
     if (droppedAttribution.length) {
       console.warn(

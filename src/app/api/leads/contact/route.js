@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
+import { buildAgentNameResolver, lookupHistoricalAgent } from '@/lib/agentAttribution.mjs';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 
 // The storefront "Contáctenos" form. This replaced the WhatsApp CTAs, so it is
@@ -59,6 +60,29 @@ export async function POST(request) {
 
     const nowIso = new Date().toISOString();
 
+    // A returning customer goes back to the agent who first closed them. An
+    // existing owner is never overwritten — an agent who already claimed this
+    // lead outranks anything history says.
+    const existingOwner = String(existing?.sales_agent || existing?.owner || existing?.assigned_to || '').trim();
+    let historyAgent = '';
+    if (!existingOwner) {
+      try {
+        const { data: profiles } = await supabase.from('admin_profiles').select('name, email');
+        const match = await lookupHistoricalAgent(supabase, {
+          phone,
+          email,
+          // Some closed orders record an agent's email rather than their name;
+          // both must resolve to the one agent.
+          resolveAgent: buildAgentNameResolver(profiles),
+        });
+        historyAgent = match?.agent || '';
+      } catch (attributionErr) {
+        // Never lose the lead over attribution; an agent can still claim it.
+        console.warn('[leads/contact] History attribution skipped:', attributionErr.message);
+      }
+    }
+    const owner = existingOwner || historyAgent;
+
     // catalog_leads has no name/email/phone columns on the live schema, so the
     // details are always written into `notes` as well. Otherwise an agent
     // opening the lead would see a bare phone number and no name.
@@ -67,6 +91,9 @@ export async function POST(request) {
       `Name: ${name}`,
       email ? `Email: ${email}` : null,
       phone ? `Phone (WhatsApp/SMS): ${phone}` : null,
+      // Mirrored into the note as well, because `sales_agent` is dropped below
+      // if the live table lacks the column — the owner must stay visible.
+      historyAgent ? `Owner: ${historyAgent} (returning customer — first closed by this agent)` : null,
     ].filter(Boolean).join('\n');
 
     const payload = {
@@ -81,13 +108,14 @@ export async function POST(request) {
       name: name || null,
       email: email || null,
       phone: phone || null,
+      sales_agent: owner || null,
       updated_at: nowIso,
     };
 
     // These arrive via their own hand-run migrations (or not at all). Dropping
     // them individually keeps a lead from being lost to a schema gap, the same
     // way the team-member save handles admin_profiles.
-    const optional = ['name', 'email', 'phone', 'updated_at'];
+    const optional = ['name', 'email', 'phone', 'sales_agent', 'updated_at'];
 
     const { error } = await writeDroppingMissingColumns(payload, optional, (row) => (
       existing

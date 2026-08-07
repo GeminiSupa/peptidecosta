@@ -1,5 +1,9 @@
 /** Lowercase keys used to match order.sales_agent to a profile. */
-export const COMMISSION_ELIGIBLE_ORDER_STATUSES = ['Paid', 'Completed', 'Order Complete'];
+// Defined in agentAttribution.mjs so the attribution unit tests can import it
+// without pulling in the `@/` alias this file depends on. Re-exported here so
+// existing callers keep working.
+export { COMMISSION_ELIGIBLE_ORDER_STATUSES } from './agentAttribution.mjs';
+import { COMMISSION_ELIGIBLE_ORDER_STATUSES } from './agentAttribution.mjs';
 
 export function isCommissionEligibleOrder(order) {
   const status = String(order?.status || '').trim().toLowerCase();
