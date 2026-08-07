@@ -49,6 +49,18 @@ function saveProfile(profile) {
   } catch {}
 }
 
+// Live chat is staffed 07:00–19:00 Costa Rica time. The copy below is built
+// from these, so changing the hours changes what visitors are told rather than
+// leaving the widget promising a window nobody is working.
+const SUPPORT_OPEN_HOUR = 7;
+const SUPPORT_CLOSE_HOUR = 19;
+
+function formatSupportHour(hour24) {
+  const suffix = hour24 >= 12 ? 'pm' : 'am';
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12}${suffix}`;
+}
+
 function formatTime(value) {
   const date = new Date(value);
   if (isNaN(date.getTime())) return '';
@@ -106,14 +118,25 @@ export default function ChatWidget() {
     const crTime = isoToCrWall(new Date().toISOString());
     if (!crTime) return false;
     const hour = parseInt(crTime.split('T')[1].split(':')[0], 10);
-    return hour < 7 || hour >= 19;
+    return hour < SUPPORT_OPEN_HOUR || hour >= SUPPORT_CLOSE_HOUR;
   }, []);
+
+  const hours = `${formatSupportHour(SUPPORT_OPEN_HOUR)}–${formatSupportHour(SUPPORT_CLOSE_HOUR)}`;
 
   const copy = useMemo(() => ({
     title: lang === 'en' ? 'Live support' : 'Soporte en vivo',
-    subtitle: offline 
-      ? (lang === 'en' ? 'We are offline. We will reply during business hours' : 'Estamos desconectados. Responderemos en nuestro horario')
+    // Header strip: sits beside a 36px avatar and two buttons, so it has to fit
+    // on one short line. Naming the hours is also more use to a visitor than
+    // "during business hours" was.
+    subtitle: offline
+      ? (lang === 'en' ? `Offline · open ${hours}` : `Desconectados · ${hours}`)
       : (lang === 'en' ? 'Usually replies in a few minutes' : 'Respondemos pronto'),
+    // Message list: full width, so it can say it properly. This used to reuse
+    // the header string, which is why one line had to serve two very different
+    // spaces and fitted neither.
+    offlineNote: lang === 'en'
+      ? `We are offline right now. Our team replies between ${formatSupportHour(SUPPORT_OPEN_HOUR)} and ${formatSupportHour(SUPPORT_CLOSE_HOUR)}, Costa Rica time.`
+      : `Estamos fuera de horario. Nuestro equipo responde entre ${formatSupportHour(SUPPORT_OPEN_HOUR)} y ${formatSupportHour(SUPPORT_CLOSE_HOUR)}, hora de Costa Rica.`,
     welcome: lang === 'en'
       ? 'Hi. Send us a message here and our team will reply in this chat.'
       : 'Hola. Escríbanos aquí y nuestro equipo responderá en este chat.',
@@ -151,7 +174,7 @@ export default function ChatWidget() {
       ? 'Chat is temporarily unavailable. Please use the contact form or email us.'
       : 'El chat no está disponible temporalmente. Use el formulario de contacto o escríbanos por correo.',
     unread: lang === 'en' ? 'New reply' : 'Nueva respuesta',
-  }), [lang]);
+  }), [lang, offline, hours]);
 
   const serverMessages = useMemo(() => conversation?.messages || [], [conversation]);
   // Anything the visitor sent that the server has not echoed back yet, so the
@@ -414,7 +437,10 @@ export default function ChatWidget() {
           flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+        {/* flex:1 so the title and status claim every pixel the buttons are not
+            using. Without it this block sized to its content and the status
+            line only ever got ~156px, which truncated even the online copy. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
           <div style={{
             width: '36px',
             height: '36px',
@@ -427,7 +453,7 @@ export default function ChatWidget() {
           }}>
             <UserRound size={18} />
           </div>
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: '0.95rem', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {copy.title}
             </div>
@@ -602,7 +628,7 @@ export default function ChatWidget() {
             )}
             {!hasAgentReply && messages.length > 0 && (
               <div style={{ color: '#64748b', fontSize: '0.75rem', textAlign: 'center' }}>
-                {copy.subtitle}
+                {offline ? copy.offlineNote : copy.subtitle}
               </div>
             )}
             {/* Asking to rate while the agent is still mid-conversation reads as
