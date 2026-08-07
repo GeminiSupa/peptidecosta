@@ -117,8 +117,59 @@ export function buildAgentNameResolver(profiles) {
  * Both the phone key and the email key of an order point at the same entry, so
  * a customer who later orders with only one of the two is still recognised.
  */
+/**
+ * Contact details that turned out to belong to more than one person.
+ *
+ * The order book is full of them. `abc@abc.com` sits on 24 different
+ * customers, `korinneda@icloud.com` on 13 — an agent's own address typed into
+ * the customer field — `info@peptidescostarica.net` on 3, and 41 phone numbers
+ * are shared the same way. Treating those as an identity would hand every one
+ * of those customers to whoever happened to close the earliest of them.
+ *
+ * Nothing is hard-coded: a key is disqualified when the order book itself
+ * shows it against two different people. A customer's own details naturally
+ * stay with one person and survive.
+ *
+ * Deliberately quick to disqualify. A false positive costs one attribution an
+ * agent can still make by hand; a false negative pays the wrong person.
+ */
+export function findAmbiguousContactKeys(orders) {
+  const counterparts = new Map();
+  const names = new Map();
+
+  const note = (map, key, value) => {
+    if (!key || !value) return;
+    if (!map.has(key)) map.set(key, new Set());
+    map.get(key).add(value);
+  };
+
+  for (const order of Array.isArray(orders) ? orders : []) {
+    if (!isClosedOrder(order)) continue;
+    const phone = phoneKey(order?.customer_phone);
+    const email = emailKey(order?.customer_email);
+    const name = String(order?.customer_name || '').trim().toLowerCase();
+
+    // Each key is judged by the other key on the same order, so one customer
+    // ordering twice — once with an email, once without — is not mistaken for
+    // two people.
+    note(counterparts, phone, email);
+    note(counterparts, email, phone);
+    note(names, phone, name);
+    note(names, email, name);
+  }
+
+  const ambiguous = new Set();
+  for (const map of [counterparts, names]) {
+    for (const [key, seen] of map) {
+      if (seen.size > 1) ambiguous.add(key);
+    }
+  }
+  return ambiguous;
+}
+
 export function buildAgentHistory(orders, { resolveAgent = (value) => value } = {}) {
   const history = new Map();
+  const ambiguous = findAmbiguousContactKeys(orders);
 
   for (const order of Array.isArray(orders) ? orders : []) {
     if (!isClosedOrder(order)) continue;
@@ -127,7 +178,7 @@ export function buildAgentHistory(orders, { resolveAgent = (value) => value } = 
 
     const closedAt = orderClosedAt(order);
     for (const key of [phoneKey(order?.customer_phone), emailKey(order?.customer_email)]) {
-      if (!key) continue;
+      if (!key || ambiguous.has(key)) continue;
       const current = history.get(key);
       // Strictly earlier only: the first agent to close keeps the customer, so
       // a later order by another agent never takes them over.
@@ -193,7 +244,9 @@ export async function lookupHistoricalAgent(supabase, { phone, email, resolveAge
   const emailMatch = emailKey(email);
   if (!supabase || (!phoneMatch && !emailMatch)) return null;
 
-  const columns = 'sales_agent, status, created_at, customer_phone, customer_email';
+  // customer_name is fetched so findAmbiguousContactKeys can still tell two
+  // people apart here, not just in the backfill.
+  const columns = 'sales_agent, status, created_at, customer_name, customer_phone, customer_email';
   const queries = [];
   if (phoneMatch) {
     queries.push(supabase

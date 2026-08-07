@@ -6,6 +6,7 @@ import {
   buildAgentHistory,
   buildAgentNameResolver,
   emailKey,
+  findAmbiguousContactKeys,
   findHistoricalAgent,
   historicalAgentForLead,
   historicalAttributionFor,
@@ -20,6 +21,60 @@ function likeMatches(pattern, value) {
   const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '[\\s\\S]*');
   return new RegExp(`^${escaped}$`).test(value);
 }
+
+test('a placeholder email shared by many customers owns none of them', () => {
+  // Real data: abc@abc.com sits on 24 different customers, and an agent's own
+  // address korinneda@icloud.com on 13. Treating either as an identity would
+  // hand every one of those people to whoever closed the earliest.
+  const orders = [
+    { status: 'Paid', sales_agent: 'Dani', customer_name: 'Ana', customer_phone: '50611111111', customer_email: 'abc@abc.com', created_at: '2026-01-01' },
+    { status: 'Paid', sales_agent: 'Dani', customer_name: 'Beto', customer_phone: '50622222222', customer_email: 'abc@abc.com', created_at: '2026-02-01' },
+    { status: 'Paid', sales_agent: 'Dani', customer_name: 'Caro', customer_phone: '50633333333', customer_email: 'abc@abc.com', created_at: '2026-03-01' },
+  ];
+  const history = buildAgentHistory(orders);
+
+  // A brand new person who also gives that placeholder must not inherit Ana's agent.
+  assert.equal(findHistoricalAgent(history, { email: 'abc@abc.com' }), null);
+
+  // Their own phone numbers still identify them normally.
+  assert.equal(findHistoricalAgent(history, { phone: '50622222222' })?.agent, 'Dani');
+});
+
+test('a phone number shared by several customers owns none of them', () => {
+  // 41 numbers in the order book are on more than one person.
+  const orders = [
+    { status: 'Paid', sales_agent: 'Korinne', customer_name: 'Ana', customer_phone: '86639549', customer_email: 'ana@example.com', created_at: '2026-01-01' },
+    { status: 'Paid', sales_agent: 'Yese', customer_name: 'Beto', customer_phone: '86639549', customer_email: 'beto@example.com', created_at: '2026-02-01' },
+  ];
+  const history = buildAgentHistory(orders);
+
+  assert.equal(findHistoricalAgent(history, { phone: '86639549' }), null, 'shared number owns nobody');
+  assert.equal(findHistoricalAgent(history, { email: 'ana@example.com' })?.agent, 'Korinne');
+  assert.equal(findHistoricalAgent(history, { email: 'beto@example.com' })?.agent, 'Yese');
+});
+
+test('one customer ordering twice is not mistaken for two people', () => {
+  // The same person, once with an email and once without. Their phone must
+  // still identify them rather than looking shared.
+  const orders = [
+    { status: 'Paid', sales_agent: 'Pollita', customer_name: 'Ana Mora', customer_phone: '50684046973', customer_email: 'ana@example.com', created_at: '2026-01-01' },
+    { status: 'Paid', sales_agent: 'Pollita', customer_name: 'Ana Mora', customer_phone: '8404-6973', customer_email: '', created_at: '2026-03-01' },
+  ];
+  const history = buildAgentHistory(orders);
+  assert.equal(findHistoricalAgent(history, { phone: '+506 8404 6973' })?.agent, 'Pollita');
+});
+
+test('ambiguous keys are reported for both contact types', () => {
+  const orders = [
+    { status: 'Paid', sales_agent: 'A', customer_name: 'One', customer_phone: '11111111', customer_email: 'shared@x.com', created_at: '2026-01-01' },
+    { status: 'Paid', sales_agent: 'B', customer_name: 'Two', customer_phone: '22222222', customer_email: 'shared@x.com', created_at: '2026-01-02' },
+    { status: 'Paid', sales_agent: 'C', customer_name: 'Three', customer_phone: '33333333', customer_email: 'solo@x.com', created_at: '2026-01-03' },
+  ];
+  const ambiguous = findAmbiguousContactKeys(orders);
+  assert.equal(ambiguous.has('shared@x.com'), true);
+  assert.equal(ambiguous.has('solo@x.com'), false);
+  assert.equal(ambiguous.has('33333333'), false);
+});
 
 test('the phone lookup pattern matches every format the order book actually holds', () => {
   // Real values read from production `orders.customer_phone`. Half of these
