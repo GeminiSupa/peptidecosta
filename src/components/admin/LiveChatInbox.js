@@ -244,7 +244,6 @@ export default function LiveChatInbox() {
       resolved: byOwner.filter((conversation) => conversation.status === 'resolved').length,
       leadReady: byOwner.filter((conversation) => conversation.leadContext?.status === 'ready').length,
       mine: byStatus.filter((conversation) => conversation.assignedTo === currentAgent?.userId).length,
-      unassigned: byStatus.filter((conversation) => !conversation.assignedTo).length,
       // Counted within the current status filter like Mine and Unassigned
       // beside it. It used to be the raw total, so picking a status with no
       // matches still showed "All 3" above an empty list.
@@ -692,11 +691,16 @@ export default function LiveChatInbox() {
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginTop: '8px' }}>
+          {/* Whose chats, not what state — the row above is the state.
+              'Unassigned' used to live here too, which put the word on screen
+              twice with two different counts next to the status row's
+              'New/Unassigned'. That chip already answers "nobody has this
+              one", so this row is now just mine-versus-everyone, and its last
+              chip is 'Everyone' rather than a second 'All'. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px', marginTop: '8px' }}>
             {[
               ['mine', 'Mine', counts.mine],
-              ['unassigned', 'Unassigned', counts.unassigned],
-              ['all', 'All', counts.allInStatus],
+              ['all', 'Everyone', counts.allInStatus],
             ].map(([value, label, count]) => (
               <button
                 key={value}
