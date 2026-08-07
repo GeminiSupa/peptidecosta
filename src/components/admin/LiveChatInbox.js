@@ -246,6 +246,9 @@ export default function LiveChatInbox() {
       // beside it. It used to be the raw total, so picking a status with no
       // matches still showed "All 3" above an empty list.
       allInStatus: byStatus.length,
+      // Every chat the owner filter allows, whatever its status. Backs the
+      // status row's own All chip.
+      allStatuses: byOwner.length,
     };
   }, [conversations, currentAgent?.userId, ownerFilter, statusFilter]);
 
@@ -600,15 +603,21 @@ export default function LiveChatInbox() {
             <input value={search} onChange={(event) => { setSearch(event.target.value); setPinnedId(null); }} placeholder="Search conversations" style={searchInputStyle} />
           </label>
 
-          {/* 'New/Unassigned' is far longer than the other three labels, so the
+          {/* 'New/Unassigned' is far longer than the other four labels, so the
               first column is widened instead of letting an equal split squash
               or wrap it on a narrow phone sidebar. */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.75fr 1fr 1fr 1fr', gap: '6px', marginTop: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.9fr 1fr 1fr 1fr 1fr', gap: '6px', marginTop: '12px' }}>
             {[
               ['new', 'New/Unassigned', counts.newUnassigned],
               ['open', 'Open', counts.open],
               ['pending', 'Wait', counts.pending],
               ['resolved', 'Done', counts.resolved],
+              // Renaming Active to New/Unassigned narrowed that chip from
+              // "everything not resolved" to "nobody has claimed it", which
+              // left no way to see the whole history at once — an agent whose
+              // chats were all resolved landed on an empty inbox and assumed
+              // they had been lost.
+              ['all', 'All', counts.allStatuses],
             ].map(([value, label, count]) => (
               <button
                 key={value}
@@ -653,7 +662,32 @@ export default function LiveChatInbox() {
           {filteredConversations.length === 0 ? (
             <div style={{ padding: '28px 18px', color: '#94a3b8', textAlign: 'center' }}>
               <Inbox size={28} style={{ marginBottom: '10px' }} />
-              <div>No conversations yet.</div>
+              {/* Saying "No conversations yet" while chats sat under another
+                  filter read as data loss. Say which it is, and offer the way
+                  back rather than making the agent guess the right chip. */}
+              {conversations.length === 0 ? (
+                <div>No conversations yet.</div>
+              ) : (
+                <>
+                  <div>Nothing matches this filter.</div>
+                  <button
+                    type="button"
+                    onClick={() => { setStatusFilter('all'); setOwnerFilter('all'); setSearch(''); setPinnedId(null); }}
+                    style={{
+                      marginTop: '12px',
+                      border: '1px solid rgba(148, 163, 184, 0.3)',
+                      background: 'rgba(15, 23, 42, 0.7)',
+                      color: '#e2e8f0',
+                      borderRadius: '10px',
+                      padding: '8px 14px',
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Show all {conversations.length} conversation{conversations.length === 1 ? '' : 's'}
+                  </button>
+                </>
+              )}
             </div>
           ) : filteredConversations.map((conversation) => (
             <button
