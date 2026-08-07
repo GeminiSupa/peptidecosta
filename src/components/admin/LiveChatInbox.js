@@ -7,6 +7,7 @@ import {
   DAY_DISPLAY_ORDER,
   DAY_LABELS,
   DEFAULT_LIVE_CHAT_AVAILABILITY,
+  LIVE_CHAT_MODES,
   buildDayEntry,
   formatHour12,
   scheduleForDay,
@@ -532,14 +533,6 @@ export default function LiveChatInbox() {
     setSelectedDays([]);
   };
 
-  // Cycles Auto -> Online -> Offline. Auto keeps the saved schedule; the other
-  // two override the clock until someone sets it back.
-  const cycleAvailability = () => {
-    const order = ['auto', 'online', 'offline'];
-    const next = order[(order.indexOf(availability?.mode || 'auto') + 1) % order.length];
-    return saveAvailability({ mode: next });
-  };
-
   const sendReply = async () => {
     if (!activeConversation || !reply.trim() || sending) return;
     const conversationId = activeConversation.id;
@@ -705,19 +698,30 @@ export default function LiveChatInbox() {
                 sees the state, so an agent cannot close the chat for the
                 whole company by accident. */}
             {currentAgent?.isSuperadmin ? (
-              <button
-                type="button"
-                onClick={cycleAvailability}
-                disabled={savingAvailability}
-                className="admin-btn"
-                style={{ ...availabilityPillStyle, ...availabilityTone(availability?.mode) }}
-                title={AVAILABILITY_HINTS[availability?.mode || 'auto']}
-              >
-                {savingAvailability
-                  ? <Loader2 size={13} className="animate-spin" />
-                  : <Circle size={9} fill="currentColor" strokeWidth={0} />}
-                {AVAILABILITY_LABELS[availability?.mode || 'auto']}
-              </button>
+              <div style={modeToggleStyle} role="group" aria-label="Website chat availability">
+                {LIVE_CHAT_MODES.map((mode) => {
+                  const active = (availability?.mode || 'auto') === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      // Re-saving the mode already showing would spend a request
+                      // to change nothing.
+                      onClick={() => (active ? undefined : saveAvailability({ mode }))}
+                      disabled={savingAvailability}
+                      className="admin-btn"
+                      style={{ ...modeSegmentStyle, ...(active ? { ...availabilityTone(mode), fontWeight: 700 } : {}) }}
+                      title={AVAILABILITY_HINTS[mode]}
+                      aria-pressed={active}
+                    >
+                      {savingAvailability && active
+                        ? <Loader2 size={11} className="animate-spin" />
+                        : active ? <Circle size={8} fill="currentColor" strokeWidth={0} /> : null}
+                      {AVAILABILITY_LABELS[mode]}
+                    </button>
+                  );
+                })}
+              </div>
             ) : null}
             {/* The schedule only decides anything in Auto, so the pickers are
                 hidden when the mode is overriding the clock — otherwise they
@@ -1484,10 +1488,39 @@ const hourSelectStyle = {
   cursor: 'pointer',
 };
 
+// Each option says what it does, not what clicking next would do: the three are
+// all on screen now, so there is no cycle left to explain.
 const AVAILABILITY_HINTS = {
-  auto: 'Following the schedule — click to force the website chat Online',
-  online: 'Forced Online, ignoring the schedule — click to force Offline',
-  offline: 'Forced Offline, ignoring the schedule — click to go back to the schedule',
+  auto: 'Follow the hours below — online during them, offline outside them',
+  online: 'Always show the website chat as online, whatever the clock says',
+  offline: 'Always show the website chat as offline, e.g. a holiday or nobody on shift',
+};
+
+// One track holding three segments, so the two modes that are not in force stay
+// readable as the alternatives rather than disappearing behind the current one.
+const modeToggleStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '2px',
+  padding: '2px',
+  borderRadius: '999px',
+  border: '1px solid rgba(148, 163, 184, 0.24)',
+  background: 'rgba(2, 6, 23, 0.6)',
+};
+
+const modeSegmentStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '5px',
+  padding: '5px 10px',
+  borderRadius: '999px',
+  border: 0,
+  background: 'transparent',
+  color: '#94a3b8',
+  fontSize: '0.72rem',
+  fontWeight: 600,
+  whiteSpace: 'nowrap',
+  cursor: 'pointer',
 };
 
 const availabilityPillStyle = {
