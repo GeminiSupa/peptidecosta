@@ -6350,6 +6350,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'leads' && (
           <ErrorBoundary><LeadsManager 
             leads={leads}
+            orders={orders}
             loadingLeads={loadingLeads}
             loadAdminData={loadAdminData}
             setExportModalType={setExportModalType}

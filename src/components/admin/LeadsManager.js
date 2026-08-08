@@ -14,6 +14,7 @@ const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) =>
 
 export default function LeadsManager({
   leads,
+  orders = [],
   loadingLeads,
   loadAdminData,
   setExportModalType,
@@ -55,7 +56,53 @@ export default function LeadsManager({
   const uniqueAreas = Array.from(new Set((leads || []).map(l => l.region || l.city).filter(Boolean))).sort();
 
   // Stats
-  const safeLeads = leads || [];
+  const enrichedLeads = useMemo(() => {
+    const arr = leads || [];
+    const historicalAgentsByContact = {};
+    const firstOrderDates = {};
+
+    (orders || []).forEach(o => {
+      const isClosed = o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'order complete';
+      if (isClosed && o.sales_agent) {
+        const orderTime = new Date(o.created_at).getTime();
+        
+        const trySet = (key) => {
+          if (!key) return;
+          const lowerKey = String(key).toLowerCase().trim();
+          if (!firstOrderDates[lowerKey] || orderTime < firstOrderDates[lowerKey]) {
+            firstOrderDates[lowerKey] = orderTime;
+            historicalAgentsByContact[lowerKey] = o.sales_agent;
+          }
+        };
+
+        trySet(o.customer_email);
+        trySet(o.customer_phone);
+        trySet(o.whatsapp_wa_id);
+      }
+    });
+
+    return arr.map(lead => {
+      let owner = lead.owner || lead.sales_agent || lead.assigned_to;
+      if (!owner) {
+        const cv = String(lead.contact_value || '').toLowerCase().trim();
+        const em = String(lead.email || '').toLowerCase().trim();
+        const ph = String(lead.phone || '').toLowerCase().trim();
+        
+        const cleanPh = ph.replace(/[^a-z0-9]/g, '');
+        const cleanCv = cv.replace(/[^a-z0-9]/g, '');
+
+        owner = historicalAgentsByContact[cv] || historicalAgentsByContact[em] || historicalAgentsByContact[ph];
+        if (!owner && cleanCv.length > 7) owner = historicalAgentsByContact[cleanCv];
+        if (!owner && cleanPh.length > 7) owner = historicalAgentsByContact[cleanPh];
+      }
+      return {
+        ...lead,
+        calculatedOwner: owner || 'Unassigned'
+      };
+    });
+  }, [leads, orders]);
+
+  const safeLeads = enrichedLeads;
   const totalLeads = safeLeads.length;
   const convertedLeads = safeLeads.filter(l => getLeadConversion(l).converted).length;
   const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0.0';
@@ -129,7 +176,7 @@ export default function LeadsManager({
     });
 
     return result;
-  }, [leads, leadsSearch, leadsSourceFilter, leadsAreaFilter, localContactedFilter, sortDir, getLeadConversion]);
+  }, [enrichedLeads, leadsSearch, leadsSourceFilter, leadsAreaFilter, localContactedFilter, sortDir, getLeadConversion]);
 
   const filteredLeads = filteredAndSortedLeads;
 
@@ -142,7 +189,7 @@ export default function LeadsManager({
     return 'New';
   }, []);
 
-  const getLeadOwner = (lead) => lead.owner || lead.sales_agent || lead.assigned_to || 'Unassigned';
+  const getLeadOwner = (lead) => lead.calculatedOwner || lead.owner || lead.sales_agent || lead.assigned_to || 'Unassigned';
 
   const getLeadFollowUp = (lead) => {
     const explicit = lead.next_follow_up_at || lead.follow_up_at;
@@ -529,6 +576,7 @@ export default function LeadsManager({
                 <th style={{ padding: '10px 12px' }}>Contact Details</th>
                 <th style={{ padding: '10px 12px', minWidth: '150px' }}>Location</th>
                 <th style={{ padding: '10px 12px' }}>Attribution</th>
+                <th style={{ padding: '10px 12px' }}>Agent</th>
                 <th style={{ padding: '10px 12px' }}>Last Contacted</th>
                 <th style={{ padding: '10px 12px' }}>Browsing History</th>
                 <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
@@ -710,6 +758,18 @@ export default function LeadsManager({
                           </span>
                         )}
                       </div>
+                    </td>
+                    <td data-label="Agent" style={{ padding: '10px 12px' }}>
+                      <span style={{ 
+                        background: 'rgba(255, 255, 255, 0.1)', 
+                        padding: '2px 8px', 
+                        borderRadius: '12px', 
+                        fontSize: '0.75rem', 
+                        color: '#e2e8f0',
+                        fontWeight: '600'
+                      }}>
+                        {lead.calculatedOwner}
+                      </span>
                     </td>
                     <td data-label="Last Contacted" style={{ padding: '10px 12px' }}>
                       {(() => {
