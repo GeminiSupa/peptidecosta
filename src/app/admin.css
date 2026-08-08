@@ -6122,7 +6122,7 @@
     background: #ef4444;
     /* Ring in the bar's own colour so the pill stays readable where it
        clips the icon's corner. */
-    border: 1.5px solid #101c33;
+    border: 1.5px solid #0b132b;
     box-sizing: border-box;
     color: white;
     font-size: 0.52rem;
@@ -6351,12 +6351,14 @@
         left: 0;
         right: 0;
         z-index: 200;
-        background: rgba(11, 19, 43, 0.82);
+        /* Opaque. At 0.82 alpha the dashboard text scrolled visibly through
+           the bar and collided with the nav labels, and backdrop-filter
+           can't be relied on to hide it — it silently no-ops on some mobile
+           GPUs, leaving the bar see-through. */
+        background: #0b132b;
         border-top: 1px solid rgba(255, 255, 255, 0.08);
         gap: 2px;
         padding: 6px max(6px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
-        backdrop-filter: blur(16px) saturate(180%);
-        -webkit-backdrop-filter: blur(16px) saturate(180%);
         box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.4);
     }
 
