@@ -78,7 +78,7 @@ export default function LeadsManager({
   const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
   const [localContactedFilter, setLocalContactedFilter] = useState('All');
   const [lastSelectedLeadIndex, setLastSelectedLeadIndex] = useState(null);
-  const [viewMode, setViewMode] = useState('kanban');
+  const [viewMode, setViewMode] = useState('table');
 
   const filteredAndSortedLeads = useMemo(() => {
     const safeLeads = leads || [];
