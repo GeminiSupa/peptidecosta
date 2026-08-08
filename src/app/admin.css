@@ -165,7 +165,9 @@
     font-weight: 700;
     cursor: pointer;
     font-size: 0.8rem;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Named properties only — `all` drags the gradient background and the
+       border into the animation, which stutters on hover. */
+    transition: background-color 0.15s ease, color 0.15s ease;
     border-radius: 8px;
     display: flex;
     align-items: center;
@@ -318,6 +320,21 @@
 
 /* Mobile Sidebar/Navbar Overrides (Screens under 1024px) */
 @media (max-width: 1023px) {
+    /* Fade hint for the horizontally scrolling nav. Only here — on the
+       desktop sidebar the nav is a vertical column, so this read as a
+       light stripe down the right edge. */
+    .admin-nav-scroll-wrap::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 28px;
+        background: linear-gradient(to left, #0b132b 0%, transparent 100%);
+        pointer-events: none;
+        opacity: 0.85;
+    }
+
     .admin-nav-sections {
         display: flex !important;
         flex-direction: row !important;
@@ -1913,15 +1930,16 @@
         gap: 20px !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
-        /* Near-opaque: backdrop-filter silently fails on some GPUs/browsers,
-           and a 0.75-alpha panel over content becomes unreadable without it. */
-        background: rgba(10, 15, 28, 0.97) !important;
-        backdrop-filter: blur(16px) !important;
-        -webkit-backdrop-filter: blur(16px) !important;
+        /* Opaque, no backdrop blur: at 0.97 alpha the blur was invisible, but
+           it forced the whole panel to re-composite on every nav hover. */
+        background: #0a0f1c !important;
         flex-shrink: 0 !important;
         box-shadow: 4px 0 32px rgba(0, 0, 0, 0.4) !important;
         z-index: 100 !important;
-        transition: width 0.22s ease, padding 0.22s ease, box-shadow 0.22s ease !important;
+        /* No width/padding animation on hover-expand: animating those relaid
+           out the sidebar and the whole dashboard every frame, which is what
+           made the hover feel laggy. Snap open, fade the shadow. */
+        transition: box-shadow 0.15s ease !important;
     }
     
     /* Slim, low-contrast scrollbar: visible enough to grab, without reading
@@ -2008,14 +2026,13 @@
         border-radius: 10px !important;
         border-left: 3px solid transparent !important;
         flex-shrink: 0 !important;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease !important;
     }
-    
+
     .admin-tab-btn:hover {
         background: rgba(255, 255, 255, 0.06) !important;
         color: #f8fafc !important;
-        transform: translateX(4px) !important; 
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+        transform: translateX(3px) !important;
     }
     
     .admin-tab-btn.active {
@@ -2208,9 +2225,6 @@
         padding: 28px 32px !important;
         max-width: none !important;
         box-sizing: border-box !important;
-        /* Follow the sidebar's 0.22s expand/collapse so the content glides
-           instead of jumping. */
-        transition: margin-left 0.22s ease, width 0.22s ease !important;
     }
 
     .admin-sidebar-collapsed .admin-navbar {
@@ -4662,18 +4676,6 @@
     position: relative;
     width: 100%;
     min-width: 0;
-}
-
-.admin-nav-scroll-wrap::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 28px;
-    background: linear-gradient(to left, #0b132b 0%, transparent 100%);
-    pointer-events: none;
-    opacity: 0.85;
 }
 
 .admin-toast {
