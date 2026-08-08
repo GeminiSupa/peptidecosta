@@ -1495,9 +1495,11 @@
     background: #15803d;
     color: #fff;
 }
-.admin-wa-search-row { display: flex; gap: 8px; padding: 10px 12px 8px; }
+.admin-wa-search-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px 8px; }
 .admin-wa-search-row .admin-wa-search { flex: 1; margin: 0; min-height: 44px; }
-.admin-wa-sort-row { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
+/* 100% basis keeps sort on its own line in the narrow desktop pane; mobile
+   drops the basis so it shares the row with the search box. */
+.admin-wa-sort-row { display: flex; flex: 1 1 100%; align-items: center; gap: 8px; padding: 0; }
 .admin-wa-sort-row > span { flex: 0 0 auto; color: #64748b; font-size: .62rem; font-weight: 850; text-transform: uppercase; letter-spacing: .04em; }
 /* color-scheme keeps the native popup dark; without it the browser paints the
    option list white and the unselected row is unreadable on this theme. */
@@ -9290,6 +9292,56 @@
         top: 0;
         z-index: 2;
         background: #0e1626;
+    }
+
+    /* Compact the inbox controls on phones. The five stacked rows were eating
+       ~300px before a single conversation was visible. Touch targets stay at
+       44px on the tap-heavy controls; the savings come from dead space,
+       duplicated labels, and giving sort a row of its own. */
+    .admin-whatsapp-inbox .admin-wa-conversations-header {
+        min-height: 0 !important;
+        padding: 8px 12px !important;
+    }
+
+    /* The page header above the card already says "Sales WhatsApp"; the
+       strapline underneath is advice, not data. */
+    .admin-whatsapp-inbox .admin-wa-inbox-heading small {
+        display: none;
+    }
+
+    .admin-whatsapp-inbox .admin-wa-search-row {
+        flex-wrap: nowrap;
+        padding: 8px 12px;
+    }
+
+    .admin-whatsapp-inbox .admin-wa-sort-row {
+        flex: 0 0 auto;
+    }
+
+    /* The selected value ("Customer wrote") names the control well enough. */
+    .admin-whatsapp-inbox .admin-wa-sort-row > span {
+        display: none;
+    }
+
+    .admin-whatsapp-inbox .admin-wa-sort-select {
+        min-width: 124px;
+        min-height: 44px;
+    }
+
+    .admin-whatsapp-inbox .admin-wa-filter-tabs {
+        padding-bottom: 6px;
+    }
+
+    /* min-width 78px padded "Urgent" and "All" out past their text. The strip
+       still scrolls either way — this just shortens the swipe (571px -> 556px
+       of content). Height is unchanged; the 44px tap target stays. */
+    .admin-whatsapp-inbox .admin-wa-filter-tabs button {
+        min-width: 0;
+        padding: 0 10px;
+    }
+
+    .admin-whatsapp-inbox .admin-wa-owner-filter {
+        padding: 6px 12px;
     }
 
     .admin-whatsapp-inbox:not(.admin-wa-chat-open) .admin-wa-chat-item-name {

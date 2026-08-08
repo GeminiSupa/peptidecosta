@@ -1083,22 +1083,24 @@ export default function WhatsAppInbox({
                 aria-label="Search WhatsApp conversations"
               />
             </label>
-          </div>
 
-          <div className="admin-wa-sort-row">
-            <span>Sort</span>
-            <select
-              className="admin-wa-sort-select"
-              value={sortMode}
-              onChange={(event) => {
-                setSortMode(event.target.value);
-                setVisibleChatCount(INITIAL_CHAT_LIMIT);
-              }}
-              aria-label="Sort conversations"
-            >
-              <option value="customer">Customer wrote</option>
-              <option value="outbound">We messaged</option>
-            </select>
+            {/* Nested so mobile can sit it beside the search box; on wider
+                panes it takes a full basis and wraps to its own line. */}
+            <div className="admin-wa-sort-row">
+              <span>Sort</span>
+              <select
+                className="admin-wa-sort-select"
+                value={sortMode}
+                onChange={(event) => {
+                  setSortMode(event.target.value);
+                  setVisibleChatCount(INITIAL_CHAT_LIMIT);
+                }}
+                aria-label="Sort conversations"
+              >
+                <option value="customer">Customer wrote</option>
+                <option value="outbound">We messaged</option>
+              </select>
+            </div>
           </div>
 
           <div className="admin-wa-filter-tabs-wrap">
