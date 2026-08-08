@@ -1,8 +1,20 @@
 :root {
     --primary: #002766; /* Deep Navy Blue matching website */
     --primary-alt: #0b2545;
-    --accent: #C8530C;  /* Warm Orange-Red/Rust matching website */
-    --cta: #C8530C;     /* Action Color (WhatsApp) */
+    /* The brand orange comes in two values, and which one is correct depends
+       entirely on what it sits against — that is the whole reason there are two
+       tokens instead of one.
+         --cta            white text on orange, or orange text on a light bg.
+                          #BF4F0B = 4.84:1 with white. The three shades this
+                          replaced (#F58220 2.59:1, #E05A0C 3.73:1,
+                          #C8530C 4.47:1) all failed AA.
+         --accent-on-dark orange text on the navy bands. #F58220 scores 4.94:1
+                          there; darkening it to --cta would DROP it to 2.65:1,
+                          so the light shade is the accessible one on navy. */
+    --accent: #BF4F0B;  /* Warm Orange-Red/Rust matching website */
+    --cta: #BF4F0B;     /* Action Color (WhatsApp) */
+    --cta-hover: #A34309;
+    --accent-on-dark: #F58220;
     --radius-md: 14px;
     --radius-lg: 22px;
     --container-width: 850px;
@@ -49,6 +61,31 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+/* Form controls do not inherit the document font — without this every button,
+   input, select and textarea falls back to the UA default (Arial on desktop,
+   monospace for textarea), which is why the catalog's controls rendered in a
+   different typeface from the headings and body around them.
+   font-family only, deliberately: `font: inherit` would also flatten the
+   font-size and weight that individual controls set for themselves. */
+button,
+input,
+select,
+textarea {
+    font-family: inherit;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 html, body {
     overflow-x: hidden;
     width: 100%;
@@ -61,6 +98,28 @@ body {
     line-height: 1.5;
     min-height: 100vh;
     transition: background-color 0.3s, color 0.3s;
+}
+
+.skip-link {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 10000;
+    transform: translateY(-140%);
+    padding: 12px 18px;
+    border-radius: 4px;
+    background: #ffffff;
+    color: #082d74;
+    font-weight: 900;
+    text-decoration: none;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+    transform: translateY(0);
+    outline: 3px solid #f59e0b;
+    outline-offset: 2px;
 }
 
 .container {
@@ -578,36 +637,38 @@ body {
     width: 80%;
     margin: 0 auto;
     box-sizing: border-box;
-    padding: 6px 10px;
-    background: #E05A0C; /* Brighter, premium brand orange for enhanced visual prominence */
+    padding: 8px 10px;
+    background: var(--cta);
     color: white;
-    border: 1px solid #E05A0C;
+    border: 1px solid var(--cta);
     border-radius: 20px;
-    font-size: 0.68rem;
+    /* 0.68rem rendered at ~9px once the mobile scale applied — below the point
+       where a label stays legible regardless of how well it contrasts. */
+    font-size: 0.8rem;
     font-weight: 700;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 [data-theme="dark"] .add-to-cart-btn {
-    background: #E05A0C;
-    border-color: #E05A0C;
+    background: var(--cta);
+    border-color: var(--cta);
     color: white;
 }
 
 .add-to-cart-btn:hover:not(:disabled) {
-    background: #C8530C; /* Classic brand rust orange on hover */
-    border-color: #C8530C;
+    background: var(--cta-hover);
+    border-color: var(--cta-hover);
     color: white;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(224, 90, 12, 0.2);
+    box-shadow: 0 4px 12px rgba(191, 79, 11, 0.25);
 }
 
 [data-theme="dark"] .add-to-cart-btn:hover:not(:disabled) {
-    background: #C8530C;
-    border-color: #C8530C;
+    background: var(--cta-hover);
+    border-color: var(--cta-hover);
     color: white;
-    box-shadow: 0 4px 12px rgba(224, 90, 12, 0.25);
+    box-shadow: 0 4px 12px rgba(191, 79, 11, 0.3);
 }
 
 .add-to-cart-btn:active:not(:disabled) {
@@ -1768,12 +1829,32 @@ body {
     gap: 12px;
 }
 
+/* align-items: end keeps the two controls on one baseline when only one of the
+   labels wraps to a second line — otherwise the shorter-labelled control floats
+   above its neighbour and the pair stops reading as one row. */
 .checkout-id-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
     width: 100%;
     margin-bottom: 12px;
+    align-items: end;
+}
+
+/* Every checkout control gets one of these. The visible text and the
+   accessible name are the same string, wired with htmlFor/id, so a screen
+   reader can never announce a field the sighted user cannot identify. */
+.checkout-label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.checkout-label .checkout-required {
+    color: var(--danger-border);
+    margin-left: 2px;
 }
 
 .checkout-input {
@@ -1797,6 +1878,7 @@ body {
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
     gap: 8px;
     width: 100%;
+    align-items: end;
 }
 
 .checkout-phone-country {
@@ -4180,7 +4262,7 @@ body {
     width: 132px;
     padding: 5px 0;
     transform: rotate(-45deg);
-    background: #f58220;
+    background: var(--cta);
     color: #ffffff;
     font-size: 0.68rem;
     font-weight: 800;
@@ -4261,13 +4343,13 @@ body {
 
 .price-original {
     text-decoration: line-through;
-    color: var(--text-muted);
+    color: #4b5568;
     font-size: 0.88rem;
     font-weight: 500;
 }
 
 .price-sale {
-    color: #f58220;
+    color: var(--cta);
     font-size: 1.1rem;
     font-weight: 800;
 }
@@ -4876,7 +4958,8 @@ body {
 .promo-banner-global {
     background: linear-gradient(90deg, #002766 0%, #0040a8 50%, #002766 100%);
     color: #ffffff;
-    padding: 6px 0;
+    min-height: 44px;
+    padding: 0 112px 0 0;
     font-size: 0.78rem;
     font-weight: 700;
     letter-spacing: 0.3px;
@@ -4895,6 +4978,7 @@ body {
 .promo-banner-ticker {
     overflow: hidden;
     width: 100%;
+    min-height: 44px;
     display: flex;
     justify-content: flex-start;
 }
@@ -4915,6 +4999,7 @@ body {
     align-items: center;
     justify-content: center;
     flex: 0 0 auto;
+    min-height: 44px;
     gap: 8px;
     padding: 0 10px;
     color: inherit;
@@ -4928,7 +5013,28 @@ body {
 
 .promo-icon {
     color: #38bdf8;
-    animation: promoPulse 2s infinite ease-in-out;
+}
+
+.promo-banner-pause {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    min-width: 92px;
+    min-height: 44px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.promo-banner-pause:focus-visible {
+    outline: 3px solid #ffffff;
+    outline-offset: 2px;
 }
 
 @keyframes promoPulse {
@@ -4958,7 +5064,7 @@ body {
     width: 80%;
     margin: 0 auto;
     min-height: 34px;
-    background: #E05A0C;
+    background: var(--cta);
     border: 1px solid #E05A0C;
     border-radius: 999px;
     overflow: hidden;
@@ -5001,7 +5107,7 @@ body {
 
 .inline-qty-selector .qty-btn:hover {
     background: #ffffff;
-    color: #E05A0C;
+    color: var(--cta);
 }
 
 .inline-qty-selector .qty-btn:active {
@@ -5617,6 +5723,8 @@ body:has(.product-grid.grid-view) {
 }
 
 .press-band-outlet {
+    min-width: 44px;
+    min-height: 44px;
     display: inline-flex;
     align-items: center;
     gap: 8px;
@@ -6194,8 +6302,8 @@ body:has(.product-grid.grid-view) {
 .landing-layout .lp-header--scrolled .lp-header-inner { max-width: 1180px; min-height: 78px; margin: 0 auto; padding: 12px 24px; border: 0; border-radius: 0; background: #fff; box-shadow: none; backdrop-filter: none; }
 .landing-layout .lp-logo img { height: auto; width: 112px; max-height: none !important; padding: 0; border-radius: 0 !important; background: transparent; box-shadow: none; }
 .landing-layout .lp-nav a { color: #17234d; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .035em; }
-.landing-layout .lp-nav a:hover { color: #f58220; }
-.landing-layout .lp-nav-cta { width: 42px; height: 42px; justify-content: center; padding: 0; border-radius: 4px; background: #f58220; box-shadow: none; font-size: 0; }
+.landing-layout .lp-nav a:hover { color: var(--cta); }
+.landing-layout .lp-nav-cta { width: 42px; height: 42px; justify-content: center; padding: 0; border-radius: 4px; background: var(--cta); box-shadow: none; font-size: 0; }
 .landing-layout .lp-nav-cta:hover { background: #dc6f12; transform: none; }
 .landing-layout .lang-selector { border: 1px solid #d9dde7; border-radius: 4px; background: #fff; padding: 0; }
 .landing-layout .lang-selector button { border-radius: 0; padding: 8px 9px; font-size: 11px; }
@@ -6206,12 +6314,12 @@ body:has(.product-grid.grid-view) {
 .landing-layout .lp-hero-glow { display: none; }
 .landing-layout .lp-hero-grid { max-width: 1120px; text-align: left; }
 .landing-layout .lp-hero-text-block { align-items: flex-start; }
-.landing-layout .hero-badge { align-self: flex-start; margin-bottom: 18px; padding: 7px 15px; border: 0; border-radius: 999px; background: #f58220; color: #fff; }
+.landing-layout .hero-badge { align-self: flex-start; margin-bottom: 18px; padding: 7px 15px; border: 0; border-radius: 999px; background: var(--cta); color: #fff; }
 .landing-layout .hero-title { color: #17234d; font-size: clamp(2.55rem, 5vw, 4.6rem); line-height: 1.04; letter-spacing: -.045em; }
 .landing-layout .hero-sub { color: #31394b; font-family: var(--font-inter), sans-serif; font-size: 1.06rem; line-height: 1.7; }
 .landing-layout .btn-hero-primary {
     border-radius: 4px;
-    background: #f58220;
+    background: var(--cta);
     box-shadow: none;
 }
 .landing-layout .btn-hero-primary:hover,
@@ -6221,7 +6329,7 @@ body:has(.product-grid.grid-view) {
 }
 .landing-layout .btn-hero-wa { border-radius: 4px; }
 .landing-layout .hero-features-row { margin-top: 8px; color: #39445a; }
-.landing-layout .hero-features-row svg { color: #f58220 !important; }
+.landing-layout .hero-features-row svg { color: var(--cta) !important; }
 .landing-layout .lp-hero-main-img { border-radius: 0; box-shadow: none; }
 .landing-layout .lp-trust-section,
 .landing-layout .lp-how-section,
@@ -6236,10 +6344,10 @@ body:has(.product-grid.grid-view) {
 .landing-layout .lp-step-card:hover,
 .landing-layout .lp-founder-card:hover { box-shadow: 0 16px 34px rgba(24,40,83,.09); }
 .landing-layout .lp-trust-icon,
-.landing-layout .lp-founder-icon { border-radius: 4px; color: #f58220; background: #fff0e5; }
-.landing-layout .lp-step-number { border-radius: 4px; background: #f58220; box-shadow: none; }
+.landing-layout .lp-founder-icon { border-radius: 4px; color: var(--cta); background: #fff0e5; }
+.landing-layout .lp-step-number { border-radius: 4px; background: var(--cta); box-shadow: none; }
 .landing-layout .lp-about-badge,
-.landing-layout .lp-section-badge { color: #f58220; }
+.landing-layout .lp-section-badge { color: var(--cta); }
 .landing-layout .lp-about-heading,
 .landing-layout .lp-section-header h2,
 .landing-layout .lp-cta-content h2 { color: #17234d; letter-spacing: -.035em; }
@@ -6292,7 +6400,7 @@ body:has(.product-grid.grid-view) {
 
 .catalog-promo-text-banner svg {
     flex: 0 0 auto;
-    color: #f58220;
+    color: var(--cta);
 }
 
 .catalog-promo-image-banner--legacy {

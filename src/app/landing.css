@@ -30,14 +30,14 @@
 }
 
 .clone-topbar .promo-banner-global {
-    min-height: 38px;
+    min-height: 44px;
     padding: 8px 0;
     border-bottom: 0;
     box-shadow: none;
 }
 
 .clone-topbar .promo-banner-text {
-    min-height: 22px;
+    min-height: 44px;
 }
 
 .clone-nav-wrap {
@@ -55,6 +55,8 @@
 .clone-logo {
     display: inline-flex;
     align-items: center;
+    min-width: 44px;
+    min-height: 44px;
 }
 
 .clone-logo .logo-img-custom,
@@ -72,6 +74,9 @@
 }
 
 .clone-nav-links a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
     color: #17244b;
     font-size: .78rem;
     font-weight: 900;
@@ -95,6 +100,7 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    min-height: 44px;
     padding: 0;
     border: 0;
     background: none;
@@ -128,6 +134,7 @@
 }
 
 .clone-nav-dropdown a {
+    min-height: 44px;
     padding: 9px 16px;
     font-size: .74rem;
     text-transform: none;
@@ -142,7 +149,8 @@
 .clone-search {
     display: flex;
     min-width: 0;
-    height: 42px;
+    height: 44px;
+    min-height: 44px;
     border: 1px solid #cad3e1;
     border-radius: 4px;
     overflow: hidden;
@@ -150,6 +158,7 @@
 }
 
 .clone-search input {
+    min-height: 44px;
     min-width: 0;
     flex: 1;
     border: 0;
@@ -162,6 +171,8 @@
 
 .clone-search button {
     width: 44px;
+    min-width: 44px;
+    min-height: 44px;
     border: 0;
     background: #fff;
     color: #082d74;
@@ -176,8 +187,8 @@
 
 .clone-nav-actions button,
 .clone-nav-actions a {
-    min-width: 42px;
-    min-height: 38px;
+    min-width: 44px;
+    min-height: 44px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -194,8 +205,8 @@
 
 .clone-menu-toggle {
     display: none;
-    width: 42px;
-    height: 42px;
+    width: 44px;
+    height: 44px;
     border: 1px solid #d8e0ed;
     border-radius: 4px;
     background: #fff;
@@ -291,7 +302,7 @@
 
 .clone-hero-actions button,
 .clone-bulk button {
-    background: #f58220;
+    background: var(--cta);
 }
 
 .clone-hero-dropdown {
@@ -515,6 +526,11 @@
 }
 
 .clone-category-chips a {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid #bcc9dc;
     border-radius: 4px;
     padding: 9px 15px;
@@ -577,7 +593,7 @@
 .clone-product-copy small {
     display: block;
     min-height: 16px;
-    color: #789;
+    color: #475569;
     font-size: .66rem;
 }
 
@@ -598,7 +614,7 @@
 }
 
 .clone-product-price span {
-    color: #8a95a8;
+    color: #4b5568;
     font-size: .76rem;
     text-decoration: line-through;
 }
@@ -613,7 +629,7 @@
     align-items: center;
     justify-content: center;
     gap: 5px;
-    min-height: 34px;
+    min-height: 44px;
     border-radius: 3px;
     background: #082d74;
     color: #fff;
@@ -692,10 +708,12 @@
     align-items: center;
 }
 
+/* Eyebrow on the navy testimonials band — the light shade is the accessible
+   one here (4.94:1); --cta would drop it to 2.65:1. */
 .clone-proof span {
     display: inline-block;
     margin-bottom: 8px;
-    color: #f58220;
+    color: var(--accent-on-dark);
     font-size: .72rem;
     font-weight: 900;
     letter-spacing: .08em;
@@ -832,7 +850,10 @@
 
 .clone-footer a,
 .clone-footer button {
-    display: block;
+    min-height: 44px;
+    min-width: 44px;
+    display: flex;
+    align-items: center;
     margin-bottom: 9px;
     border: 0;
     background: transparent;
@@ -905,18 +926,18 @@
 }
 
 .clone-review-logo--trustpilot {
-    background: #00b67a;
+    background: #007a55;
     color: #fff;
 }
 
 .clone-review-logo--google {
-    background: conic-gradient(from -45deg, #4285f4 0 25%, #34a853 0 50%, #fbbc05 0 75%, #ea4335 0);
+    background: #174ea6;
     color: #fff;
     font-family: Arial, sans-serif;
 }
 
 .clone-review-logo--facebook {
-    background: #1877f2;
+    background: #0b5fbd;
     color: #fff;
     font-family: Arial, sans-serif;
 }
@@ -1232,7 +1253,7 @@
 
 .clone-help-strip a:last-child,
 .clone-affiliate-hero a:first-child {
-    background: #f58220;
+    background: var(--cta);
 }
 
 .clone-story-hero {
@@ -1379,7 +1400,7 @@
     margin-top: 14px;
     border-radius: 4px;
     padding: 12px 18px;
-    background: #f58220;
+    background: var(--cta);
     color: #fff;
     font-weight: 900;
     text-decoration: none;
@@ -1551,6 +1572,31 @@
         padding: 14px 4px;
         border-bottom: 1px solid #e8edf5;
     }
+
+    .clone-nav-links .clone-nav-lang {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 48px;
+        margin-top: 6px;
+        padding: 14px 4px;
+        border: 0;
+        border-top: 1px solid #e8edf5;
+        background: none;
+        color: var(--primary);
+        font-size: .82rem;
+        font-weight: 800;
+        letter-spacing: .02em;
+        text-align: left;
+        cursor: pointer;
+    }
+}
+
+/* Drawer-only control: on desktop the header's own language button is visible
+   and this would be a duplicate. */
+.clone-nav-lang {
+    display: none;
 }
 
 @media (max-width: 900px) {
@@ -1634,7 +1680,7 @@
 
     .clone-topbar .promo-banner-global {
         height: auto;
-        min-height: 30px;
+        min-height: 44px;
         padding: 5px 0;
     }
 
@@ -1643,7 +1689,7 @@
     }
 
     .clone-nav-actions button {
-        display: none;
+        display: inline-flex;
     }
 
     .clone-hero h1 {
@@ -1872,7 +1918,7 @@
 .lp-quick-start-kicker {
     display: inline-flex;
     margin-bottom: 12px;
-    color: #f58220;
+    color: var(--cta);
     font-size: .72rem;
     font-weight: 900;
     letter-spacing: .12em;
@@ -1916,7 +1962,7 @@
 }
 
 .lp-quick-start-primary {
-    background: #f58220;
+    background: var(--cta);
     color: #fff;
 }
 
@@ -1961,7 +2007,7 @@
     width: 32px;
     height: 32px;
     border-radius: 4px;
-    background: #f58220;
+    background: var(--cta);
     color: #fff;
     font-size: .84rem;
     font-weight: 900;
@@ -2056,7 +2102,7 @@
 }
 
 .lp-mobile-action--catalog {
-    background: #f58220;
+    background: var(--cta);
 }
 
 .lp-mobile-action--wa {
@@ -2088,7 +2134,7 @@
     align-items: center;
     margin-bottom: 10px;
     padding: 0;
-    color: #f58220;
+    color: var(--cta);
     background: transparent;
     font-size: .72rem;
     font-weight: 900;
@@ -2156,7 +2202,7 @@
     place-items: center;
     border-radius: 8px;
     color: #fff;
-    background: #f58220;
+    background: var(--cta);
     box-shadow: 0 12px 24px rgba(245, 130, 32, .2);
     z-index: 1;
 }
@@ -2209,7 +2255,7 @@
 
 .trust-flow-primary {
     color: #fff;
-    background: #f58220;
+    background: var(--cta);
 }
 
 .trust-flow-secondary {
@@ -2231,7 +2277,7 @@
 }
 
 .lp-local-advantage-copy span {
-    color: #f58220;
+    color: var(--cta);
     font-size: .75rem;
     font-weight: 900;
     letter-spacing: .08em;
@@ -2265,7 +2311,7 @@
 
 .lp-local-advantage-card svg {
     margin-bottom: 14px;
-    color: #f58220;
+    color: var(--cta);
 }
 
 .lp-local-advantage-card h3 {
@@ -2368,7 +2414,7 @@
 }
 
 .landing-layout .hero-actions .btn-hero-primary {
-    background: #f58220;
+    background: var(--cta);
     box-shadow: 0 12px 26px rgba(245, 130, 32, .22);
 }
 
@@ -2414,7 +2460,7 @@
 .landing-layout .lp-section-eyebrow {
     display: inline-flex;
     margin-bottom: 9px;
-    color: #f58220;
+    color: #9f3a00;
     font-size: .72rem;
     font-weight: 900;
     letter-spacing: .11em;
@@ -2474,7 +2520,7 @@
 
 .landing-layout .lp-product-price {
     margin-top: 2px;
-    color: #f58220;
+    color: var(--cta);
     font-size: 1.12rem;
     font-weight: 950;
     line-height: 1.1;
@@ -2488,7 +2534,7 @@
 }
 
 .landing-layout .price-sale {
-    color: #f58220;
+    color: var(--cta);
     font-size: 1.16rem;
     font-weight: 950;
 }
@@ -2509,7 +2555,7 @@
 .landing-layout .lp-product-btn:hover,
 .landing-layout .lp-product-btn:focus-visible {
     gap: 7px;
-    background: #f58220;
+    background: var(--cta);
     color: #fff;
 }
 
@@ -2558,10 +2604,11 @@
     text-align: left;
 }
 
+/* Eyebrow on the navy volume-discount band — see .clone-proof span. */
 .landing-layout .lp-footer-cta span {
     display: inline-flex;
     margin-bottom: 8px;
-    color: #f58220;
+    color: var(--accent-on-dark);
     font-size: .72rem;
     font-weight: 900;
     letter-spacing: .12em;
@@ -2595,7 +2642,7 @@
     cursor: pointer;
 }
 
-.landing-layout .lp-footer-shop { background: #f58220; }
+.landing-layout .lp-footer-shop { background: var(--cta); }
 .landing-layout .lp-footer-wa { background: #25D366; }
 
 @media (min-width: 720px) {
@@ -2840,7 +2887,7 @@
 
 .landing-layout .lp-local-advantage-primary {
     color: #fff;
-    background: #f58220;
+    background: var(--cta);
 }
 
 .landing-layout .lp-local-advantage-secondary {
@@ -3436,7 +3483,7 @@
 }
 
 .lp-story-problems li svg {
-    color: #f58220;
+    color: var(--cta);
     flex-shrink: 0;
 }
 

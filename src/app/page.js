@@ -224,7 +224,7 @@ export default function LandingPage() {
           carry its own copy of this header, which is how its nav drifted. */}
       <StorefrontHeader lang={lang} onLanguage={setLanguage} settings={settings} />
 
-      <main>
+      <main id="main-content">
         {/* StorefrontHeader already renders the promo banner. */}
         <section className="clone-hero clone-shell">
           <div className="clone-hero-copy">

@@ -182,6 +182,7 @@ export default async function RootLayout({ children }) {
         />
       </head>
       <body suppressHydrationWarning>
+        <a className="skip-link" href="#main-content">Skip to main content</a>
         {/* Google Tag Manager — noscript fallback */}
         <noscript>
           <iframe

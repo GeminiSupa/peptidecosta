@@ -130,8 +130,13 @@ export const DEFAULT_LANDING_PAGE_SETTINGS = {
   ],
   bulkTitleEn: 'Bulk Savings Program',
   bulkTitleEs: 'Programa de ahorro por volumen',
-  bulkTextEn: 'Purchase five or more vials of the same product to receive 15% off.',
-  bulkTextEs: 'Compra cinco o más viales del mismo producto y recibe 15% de descuento.',
+  // Mirrors getVolumeDiscountPct in src/lib/pricing.js — 5+ vials = 15%,
+  // 10+ = 20%, counted across the whole cart. This used to say "of the same
+  // product" and omit the 20% tier, which both understated the offer and
+  // contradicted the promo banner ("puedes combinar diferentes productos")
+  // running above it on the same page.
+  bulkTextEn: 'Mix any products: buy 5 or more vials for 15% off, or 10 or more for 20% off.',
+  bulkTextEs: 'Combina los productos que quieras: 5 viales o más, 15% de descuento; 10 o más, 20%.',
   bulkButtonEn: 'Contact Us',
   bulkButtonEs: 'Contáctenos',
   footerDescriptionEn: 'Peptides Costa Rica offers premium, research-backed peptides for weight loss, muscle growth, energy, recovery, and healthy aging with trusted quality and bulk savings across Costa Rica.',
@@ -456,9 +461,13 @@ export const DEFAULT_PUBLIC_PAGE_SETTINGS = {
     heroTitleEs: 'Descuentos por Volumen',
     heroTextEn: 'Save more when you buy in larger quantities for your research needs.',
     heroTextEs: 'Ahorra más al comprar en grandes cantidades para tus necesidades de investigación.',
+    // Percentages must match getVolumeDiscountPct in src/lib/pricing.js, which
+    // is what the cart actually charges: 5+ = 15%, 10+ = 20%. These read 10%
+    // and 15% — the page selling the volume programme advertised five points
+    // less than the checkout applies, on both tiers.
     tiers: [
-      { labelEn: '5+ Vials', labelEs: '5+ Viales', valueEn: '10% OFF', valueEs: '10% DESC.', textEn: 'Automatic discount at checkout.', textEs: 'Descuento automático en caja.' },
-      { labelEn: '10+ Vials', labelEs: '10+ Viales', valueEn: '15% OFF', valueEs: '15% DESC.', textEn: 'Best value for active researchers.', textEs: 'Mejor valor para investigadores activos.' },
+      { labelEn: '5+ Vials', labelEs: '5+ Viales', valueEn: '15% OFF', valueEs: '15% DESC.', textEn: 'Automatic discount at checkout.', textEs: 'Descuento automático en caja.' },
+      { labelEn: '10+ Vials', labelEs: '10+ Viales', valueEn: '20% OFF', valueEs: '20% DESC.', textEn: 'Best value for active researchers.', textEs: 'Mejor valor para investigadores activos.' },
       { labelEn: '25+ Vials', labelEs: '25+ Viales', valueEn: 'Contact Us', valueEs: 'Contáctanos', textEn: 'Custom wholesale pricing available.', textEs: 'Precios mayoristas personalizados.' },
     ],
     // Index of the tier rendered with the highlighted/scaled treatment.

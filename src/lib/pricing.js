@@ -11,7 +11,10 @@
 //   - getShippingFee (free over $200 USD-equivalent, else ₡2500 / USD equiv)
 //   - BAC water pricing (src/lib/bacWater.mjs)
 
-import { isBacWater, summarizeBacWater, applyBacAwareDiscount } from '@/lib/bacWater.mjs';
+// Relative, not the `@/` alias: the alias only resolves inside the Next
+// bundler, and this module is the authority on what the cart charges, so the
+// unit tests have to be able to import it directly.
+import { isBacWater, summarizeBacWater, applyBacAwareDiscount } from './bacWater.mjs';
 
 export const FALLBACK_EXCHANGE_RATE = 454.48; // USD -> CRC, matches catalog fallback
 export const FREE_SHIPPING_USD_THRESHOLD = 200;

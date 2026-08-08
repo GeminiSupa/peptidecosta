@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, Menu, Search, ShoppingBag, X } from 'lucide-react';
+import { ChevronDown, Globe, Menu, Search, ShoppingBag, X } from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
@@ -101,7 +101,7 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
     : {};
 
   if (activeText && !activeImageBanner) {
-    return <PromoTicker active text={activeText} href={href} className={textTickerClassName(className)} />;
+    return <PromoTicker active text={activeText} href={href} className={textTickerClassName(className)} lang={lang} />;
   }
 
   if (textOnly) return null;
@@ -192,7 +192,9 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
             <button
               type="button"
               className="clone-menu-toggle"
-              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+              aria-label={menuOpen
+                ? (lang === 'en' ? 'Close menu' : 'Cerrar menú')
+                : (lang === 'en' ? 'Open menu' : 'Abrir menú')}
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((value) => !value)}
             >
@@ -237,19 +239,46 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
                   {item.label}
                 </Link>
               )))}
+
+              {/* The header's own language button is hidden below 900px because
+                  the bar has no room for it, which left the site with no way to
+                  switch language on a phone at all. It lives in the drawer
+                  instead, where there is space to spell the target language out
+                  rather than show a two-letter code. */}
+              <button
+                type="button"
+                className="clone-nav-lang"
+                onClick={() => { onLanguage(lang === 'en' ? 'es' : 'en'); setMenuOpen(false); }}
+              >
+                <Globe size={15} aria-hidden="true" />
+                {lang === 'en' ? 'Ver en español' : 'View in English'}
+              </button>
             </nav>
 
-            <form className="clone-search" onSubmit={submitSearch}>
+            <form
+              className="clone-search"
+              onSubmit={submitSearch}
+              role="search"
+              aria-label={lang === 'en' ? 'Site search' : 'Búsqueda del sitio'}
+            >
+              <label className="sr-only" htmlFor="storefront-search">
+                {lang === 'en' ? 'Search products and information' : 'Buscar productos e información'}
+              </label>
               <input
+                id="storefront-search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={lang === 'en' ? 'Search Peptide Products Or Information' : 'Buscar productos o información'}
               />
-              <button type="submit" aria-label="Search"><Search size={18} /></button>
+              <button type="submit" aria-label={lang === 'en' ? 'Search' : 'Buscar'}><Search size={18} /></button>
             </form>
 
             <div className="clone-nav-actions">
-              <button type="button" onClick={() => onLanguage(lang === 'en' ? 'es' : 'en')}>
+              <button
+                type="button"
+                onClick={() => onLanguage(lang === 'en' ? 'es' : 'en')}
+                aria-label={lang === 'en' ? 'Cambiar a español' : 'Switch to English'}
+              >
                 {lang === 'en' ? 'ES' : 'EN'}
               </button>
               <Link
@@ -323,7 +352,7 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
           <p>{settings?.[`legalNotice${suffix}`]}</p>
         </div>
         <div>
-          <h3>Quick Links</h3>
+          <h3>{lang === 'en' ? 'Quick Links' : 'Enlaces rápidos'}</h3>
           {(quickLinks.length ? quickLinks : DEFAULT_QUICK_LINKS).map((item, index) => (
             <Link key={`${item.href}-${index}`} href={withLang(item.href)}>
               {item[`label${suffix}`] || item.labelEn}
@@ -331,7 +360,7 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
           ))}
         </div>
         <div>
-          <h3>Shop By Categories</h3>
+          <h3>{lang === 'en' ? 'Shop By Categories' : 'Comprar por categorías'}</h3>
           {footerCategoryLinks.length ? footerCategoryLinks.map((item, index) => (
             <Link key={`${item.href}-${index}`} href={withLang(item.href)}>
               {item[`label${suffix}`] || item.labelEn}
@@ -341,7 +370,7 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
           ))}
         </div>
         <div>
-          <h3>Contact Us</h3>
+          <h3>{lang === 'en' ? 'Contact Us' : 'Contáctenos'}</h3>
           <a href={`mailto:${links.supportEmail}`}>{links.supportEmail}</a>
           <button type="button" onClick={openWhatsApp}>CR {links.whatsappDisplay}</button>
           <a href={`tel:+${links.apiWhatsAppNumber || '18314715559'}`}>US {links.apiWhatsAppDisplay || '+1 (831) 471-5559'}</a>

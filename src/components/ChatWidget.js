@@ -553,15 +553,25 @@ export default function ChatWidget() {
                 setShowPrompt(false);
               }}
               aria-label={copy.dismiss}
-              style={{ position: 'absolute', right: '8px', top: '8px', border: 0, background: 'transparent', color: '#64748b', cursor: 'pointer' }}
+              style={{
+                position: 'absolute', right: '8px', top: '8px',
+                width: '44px', height: '44px', display: 'inline-flex',
+                alignItems: 'center', justifyContent: 'center',
+                border: 0, background: 'transparent', color: '#64748b',
+                cursor: 'pointer', borderRadius: '10px'
+              }}
             >
               <X size={14} />
             </button>
-            <div style={{ fontWeight: 800, fontSize: '0.9rem', paddingRight: '22px' }}>{copy.prompt}</div>
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', paddingRight: '44px' }}>{copy.prompt}</div>
             <button
               type="button"
               onClick={() => { setShowPrompt(false); setIsOpen(true); setIsMinimized(false); }}
-              style={{ marginTop: '10px', border: 0, borderRadius: '10px', background: '#0f766e', color: '#fff', padding: '8px 10px', fontWeight: 800, cursor: 'pointer' }}
+              style={{
+                minHeight: '44px', marginTop: '10px', border: 0,
+                borderRadius: '10px', background: '#0f766e', color: '#fff',
+                padding: '10px 14px', fontWeight: 800, cursor: 'pointer'
+              }}
             >
               {copy.start}
             </button>
