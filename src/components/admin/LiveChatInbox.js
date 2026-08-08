@@ -1287,6 +1287,16 @@ function AttachmentPreview({ attachment, isAgent }) {
   );
 }
 
+const toolbarButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  border: '1px solid rgba(148, 163, 184, 0.2)',
+  background: '#0f172a',
+  color: '#e2e8f0',
+  padding: '8px 10px',
+};
+
 function LeadCapturePanel({ conversation, saving, onSave }) {
   const context = conversation?.leadContext || {};
   const lead = context.lead;
@@ -1572,16 +1582,6 @@ const selectStyle = {
   color: '#e2e8f0',
   border: '1px solid rgba(148, 163, 184, 0.24)',
   borderRadius: '10px',
-  padding: '8px 10px',
-};
-
-const toolbarButtonStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '6px',
-  border: '1px solid rgba(148, 163, 184, 0.2)',
-  background: '#0f172a',
-  color: '#e2e8f0',
   padding: '8px 10px',
 };
 
