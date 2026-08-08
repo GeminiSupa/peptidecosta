@@ -1427,6 +1427,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                 </div>
 
                 <div className="crm-mobile-metrics">
+                  <span><User size={12} /> {cust.owner || 'Unassigned'}</span>
                   <span><ShoppingBag size={12} /> {cust.orderCount} orders</span>
                   <span><DollarSign size={12} /> {cust.totalSpentUsd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
                   <span><Sparkles size={12} /> {rec.product}</span>
