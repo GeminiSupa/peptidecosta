@@ -37,6 +37,243 @@ const QUICK_REPLIES = [
   'Gracias. Un agente revisará su consulta y le responderá por aquí.',
 ];
 
+const iconButtonStyle = {
+  width: '34px',
+  height: '34px',
+  // Square buttons must not be squashed into slivers when the row is tight.
+  flexShrink: 0,
+  padding: 0,
+  border: '1px solid rgba(148, 163, 184, 0.2)',
+  background: '#0f172a',
+  color: '#cbd5e1',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
+
+const searchStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  border: '1px solid rgba(148, 163, 184, 0.2)',
+  borderRadius: '12px',
+  padding: '9px 10px',
+  color: '#94a3b8',
+  background: '#020617',
+};
+
+const searchInputStyle = {
+  flex: 1,
+  minWidth: 0,
+  border: 0,
+  outline: 0,
+  background: 'transparent',
+  color: '#f8fafc',
+  fontSize: '0.85rem',
+};
+
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+
+const AVAILABILITY_LABELS = { auto: 'Auto', online: 'Online', offline: 'Offline' };
+
+const availabilityHoursStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '5px',
+  padding: '6px 10px',
+  borderRadius: '999px',
+  border: '1px solid rgba(148, 163, 184, 0.24)',
+  background: 'transparent',
+  fontSize: '0.72rem',
+  color: '#cbd5e1',
+  whiteSpace: 'nowrap',
+  cursor: 'pointer',
+};
+
+const weekPanelStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '6px',
+  padding: '10px',
+  marginBottom: '14px',
+  borderRadius: '10px',
+  background: 'rgba(2, 6, 23, 0.6)',
+  border: '1px solid rgba(148, 163, 184, 0.18)',
+};
+
+const weekPanelHintStyle = {
+  fontSize: '0.68rem',
+  color: '#94a3b8',
+  marginBottom: '2px',
+};
+
+const dayRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+};
+
+const dayCheckboxStyle = {
+  width: '13px',
+  height: '13px',
+  flexShrink: 0,
+  accentColor: '#38bdf8',
+  cursor: 'pointer',
+};
+
+const bulkBarStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '6px',
+  marginTop: '4px',
+  paddingTop: '8px',
+  // A rule rather than a panel of its own: it belongs to the rows above it.
+  borderTop: '1px solid rgba(148, 163, 184, 0.18)',
+  fontSize: '0.72rem',
+};
+
+const applyButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '5px',
+  marginLeft: 'auto',
+  padding: '5px 12px',
+  borderRadius: '8px',
+  border: '1px solid rgba(56, 189, 248, 0.4)',
+  background: 'rgba(56, 189, 248, 0.14)',
+  color: '#e0f2fe',
+  fontSize: '0.72rem',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const dayNameStyle = {
+  // Fixed width so the pickers line up in a column rather than stepping in and
+  // out with the length of the day name.
+  width: '30px',
+  flexShrink: 0,
+  fontSize: '0.72rem',
+  color: '#cbd5e1',
+};
+
+const hourSelectStyle = {
+  background: '#020617',
+  color: '#e2e8f0',
+  border: '1px solid rgba(148, 163, 184, 0.24)',
+  borderRadius: '8px',
+  padding: '5px 6px',
+  fontSize: '0.72rem',
+  cursor: 'pointer',
+};
+
+// Each option says what it does, not what clicking next would do: the three are
+// all on screen now, so there is no cycle left to explain.
+const AVAILABILITY_HINTS = {
+  auto: 'Follow the hours below — online during them, offline outside them',
+  online: 'Always show the website chat as online, whatever the clock says',
+  offline: 'Always show the website chat as offline, e.g. a holiday or nobody on shift',
+};
+
+// One track holding three segments, so the two modes that are not in force stay
+// readable as the alternatives rather than disappearing behind the current one.
+const modeToggleStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '2px',
+  padding: '2px',
+  borderRadius: '999px',
+  border: '1px solid rgba(148, 163, 184, 0.24)',
+  background: 'rgba(2, 6, 23, 0.6)',
+};
+
+const modeSegmentStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '5px',
+  padding: '5px 10px',
+  borderRadius: '999px',
+  border: 0,
+  background: 'transparent',
+  color: '#94a3b8',
+  fontSize: '0.72rem',
+  fontWeight: 600,
+  whiteSpace: 'nowrap',
+  cursor: 'pointer',
+};
+
+const availabilityPillStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  padding: '6px 10px',
+  borderRadius: '999px',
+  fontSize: '0.72rem',
+  fontWeight: 700,
+  whiteSpace: 'nowrap',
+  border: '1px solid rgba(148, 163, 184, 0.24)',
+};
+
+const filterButtonStyle = {
+  border: '1px solid rgba(148, 163, 184, 0.16)',
+  borderRadius: '10px',
+  padding: '7px 4px',
+  cursor: 'pointer',
+  display: 'grid',
+  gap: '2px',
+  fontSize: '0.68rem',
+  // minWidth:0 lets a grid child shrink below its text width instead of
+  // pushing the row wider than the sidebar; the rest keeps all four chips the
+  // same height whether their label wraps to two lines or not.
+  minWidth: 0,
+  textAlign: 'center',
+  lineHeight: 1.2,
+  alignContent: 'center',
+  // break-word, not anywhere: if 'New/Unassigned' ever does outgrow its
+  // column it should break after the slash, not mid-word as 'New/Unassigne'
+  // + 'd', which is what it was doing.
+  overflowWrap: 'break-word',
+};
+
+const selectStyle = {
+  background: '#020617',
+  color: '#e2e8f0',
+  border: '1px solid rgba(148, 163, 184, 0.24)',
+  borderRadius: '10px',
+  padding: '8px 10px',
+};
+
+const toolbarButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '6px',
+  border: '1px solid rgba(148, 163, 184, 0.2)',
+  background: '#0f172a',
+  color: '#e2e8f0',
+  padding: '8px 10px',
+};
+
+const quickReplyStyle = {
+  border: '1px solid rgba(14, 165, 233, 0.3)',
+  background: 'rgba(14, 165, 233, 0.08)',
+  color: '#bae6fd',
+  borderRadius: '999px',
+  padding: '7px 10px',
+  fontSize: '0.75rem',
+  cursor: 'pointer',
+};
+
+const sendButtonStyle = {
+  minHeight: '54px',
+  borderRadius: '12px',
+  background: '#0ea5e9',
+  color: '#fff',
+  border: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '8px',
+  padding: '0 18px',
+};
+
 function formatTime(value) {
   if (!value) return '';
   const date = new Date(value);
@@ -1287,16 +1524,6 @@ function AttachmentPreview({ attachment, isAgent }) {
   );
 }
 
-const toolbarButtonStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '6px',
-  border: '1px solid rgba(148, 163, 184, 0.2)',
-  background: '#0f172a',
-  color: '#e2e8f0',
-  padding: '8px 10px',
-};
-
 function LeadCapturePanel({ conversation, saving, onSave }) {
   const context = conversation?.leadContext || {};
   const lead = context.lead;
@@ -1372,182 +1599,6 @@ function LeadCapturePanel({ conversation, saving, onSave }) {
   );
 }
 
-const iconButtonStyle = {
-  width: '34px',
-  height: '34px',
-  // Square buttons must not be squashed into slivers when the row is tight.
-  flexShrink: 0,
-  padding: 0,
-  border: '1px solid rgba(148, 163, 184, 0.2)',
-  background: '#0f172a',
-  color: '#cbd5e1',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-};
-
-const searchStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  border: '1px solid rgba(148, 163, 184, 0.2)',
-  borderRadius: '12px',
-  padding: '9px 10px',
-  color: '#94a3b8',
-  background: '#020617',
-};
-
-const searchInputStyle = {
-  flex: 1,
-  minWidth: 0,
-  border: 0,
-  outline: 0,
-  background: 'transparent',
-  color: '#f8fafc',
-  fontSize: '0.85rem',
-};
-
-const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
-
-const AVAILABILITY_LABELS = { auto: 'Auto', online: 'Online', offline: 'Offline' };
-
-const availabilityHoursStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '5px',
-  padding: '6px 10px',
-  borderRadius: '999px',
-  border: '1px solid rgba(148, 163, 184, 0.24)',
-  background: 'transparent',
-  fontSize: '0.72rem',
-  color: '#cbd5e1',
-  whiteSpace: 'nowrap',
-  cursor: 'pointer',
-};
-
-const weekPanelStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '6px',
-  padding: '10px',
-  marginBottom: '14px',
-  borderRadius: '10px',
-  background: 'rgba(2, 6, 23, 0.6)',
-  border: '1px solid rgba(148, 163, 184, 0.18)',
-};
-
-const weekPanelHintStyle = {
-  fontSize: '0.68rem',
-  color: '#94a3b8',
-  marginBottom: '2px',
-};
-
-const dayRowStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '6px',
-};
-
-const dayCheckboxStyle = {
-  width: '13px',
-  height: '13px',
-  flexShrink: 0,
-  accentColor: '#38bdf8',
-  cursor: 'pointer',
-};
-
-const bulkBarStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '6px',
-  marginTop: '4px',
-  paddingTop: '8px',
-  // A rule rather than a panel of its own: it belongs to the rows above it.
-  borderTop: '1px solid rgba(148, 163, 184, 0.18)',
-  fontSize: '0.72rem',
-};
-
-const applyButtonStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '5px',
-  marginLeft: 'auto',
-  padding: '5px 12px',
-  borderRadius: '8px',
-  border: '1px solid rgba(56, 189, 248, 0.4)',
-  background: 'rgba(56, 189, 248, 0.14)',
-  color: '#e0f2fe',
-  fontSize: '0.72rem',
-  fontWeight: 700,
-  cursor: 'pointer',
-};
-
-const dayNameStyle = {
-  // Fixed width so the pickers line up in a column rather than stepping in and
-  // out with the length of the day name.
-  width: '30px',
-  flexShrink: 0,
-  fontSize: '0.72rem',
-  color: '#cbd5e1',
-};
-
-const hourSelectStyle = {
-  background: '#020617',
-  color: '#e2e8f0',
-  border: '1px solid rgba(148, 163, 184, 0.24)',
-  borderRadius: '8px',
-  padding: '5px 6px',
-  fontSize: '0.72rem',
-  cursor: 'pointer',
-};
-
-// Each option says what it does, not what clicking next would do: the three are
-// all on screen now, so there is no cycle left to explain.
-const AVAILABILITY_HINTS = {
-  auto: 'Follow the hours below — online during them, offline outside them',
-  online: 'Always show the website chat as online, whatever the clock says',
-  offline: 'Always show the website chat as offline, e.g. a holiday or nobody on shift',
-};
-
-// One track holding three segments, so the two modes that are not in force stay
-// readable as the alternatives rather than disappearing behind the current one.
-const modeToggleStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '2px',
-  padding: '2px',
-  borderRadius: '999px',
-  border: '1px solid rgba(148, 163, 184, 0.24)',
-  background: 'rgba(2, 6, 23, 0.6)',
-};
-
-const modeSegmentStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '5px',
-  padding: '5px 10px',
-  borderRadius: '999px',
-  border: 0,
-  background: 'transparent',
-  color: '#94a3b8',
-  fontSize: '0.72rem',
-  fontWeight: 600,
-  whiteSpace: 'nowrap',
-  cursor: 'pointer',
-};
-
-const availabilityPillStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '6px',
-  padding: '6px 10px',
-  borderRadius: '999px',
-  fontSize: '0.72rem',
-  fontWeight: 700,
-  whiteSpace: 'nowrap',
-  border: '1px solid rgba(148, 163, 184, 0.24)',
-};
-
 // Auto is deliberately neutral rather than green: it means "whatever the
 // schedule says", which is offline for half the day.
 function availabilityTone(mode) {
@@ -1555,54 +1606,3 @@ function availabilityTone(mode) {
   if (mode === 'offline') return { background: 'rgba(239, 68, 68, 0.16)', color: '#fca5a5' };
   return { background: 'rgba(15, 23, 42, 0.7)', color: '#cbd5e1' };
 }
-
-const filterButtonStyle = {
-  border: '1px solid rgba(148, 163, 184, 0.16)',
-  borderRadius: '10px',
-  padding: '7px 4px',
-  cursor: 'pointer',
-  display: 'grid',
-  gap: '2px',
-  fontSize: '0.68rem',
-  // minWidth:0 lets a grid child shrink below its text width instead of
-  // pushing the row wider than the sidebar; the rest keeps all four chips the
-  // same height whether their label wraps to two lines or not.
-  minWidth: 0,
-  textAlign: 'center',
-  lineHeight: 1.2,
-  alignContent: 'center',
-  // break-word, not anywhere: if 'New/Unassigned' ever does outgrow its
-  // column it should break after the slash, not mid-word as 'New/Unassigne'
-  // + 'd', which is what it was doing.
-  overflowWrap: 'break-word',
-};
-
-const selectStyle = {
-  background: '#020617',
-  color: '#e2e8f0',
-  border: '1px solid rgba(148, 163, 184, 0.24)',
-  borderRadius: '10px',
-  padding: '8px 10px',
-};
-
-const quickReplyStyle = {
-  border: '1px solid rgba(14, 165, 233, 0.3)',
-  background: 'rgba(14, 165, 233, 0.08)',
-  color: '#bae6fd',
-  borderRadius: '999px',
-  padding: '7px 10px',
-  fontSize: '0.75rem',
-  cursor: 'pointer',
-};
-
-const sendButtonStyle = {
-  minHeight: '54px',
-  borderRadius: '12px',
-  background: '#0ea5e9',
-  color: '#fff',
-  border: 0,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '8px',
-  padding: '0 18px',
-};
