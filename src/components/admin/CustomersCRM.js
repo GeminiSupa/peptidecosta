@@ -259,7 +259,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           lastOrderDate: o.created_at,
           isLead: false,
           purchasedItems: [],
-          firstClosedOrderDate: Infinity,
+          lastClosedOrderDate: 0,
           owner: null
         };
       }
@@ -288,11 +288,14 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           map[id].totalSpentUsd += parseFloat(o.total_usd || 0);
           
           const orderTime = new Date(o.created_at).getTime();
-          if (orderTime < map[id].firstClosedOrderDate) {
-             map[id].firstClosedOrderDate = orderTime;
+          if (orderTime > map[id].lastClosedOrderDate) {
+             map[id].lastClosedOrderDate = orderTime;
              if (o.sales_agent) {
                 map[id].owner = o.sales_agent;
              }
+          } else if (!map[id].owner && o.sales_agent) {
+             map[id].owner = o.sales_agent;
+          }
           }
       }
       map[id].orderCount += 1;

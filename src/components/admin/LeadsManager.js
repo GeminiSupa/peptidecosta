@@ -54,6 +54,7 @@ export default function LeadsManager({
 }) {
 
   const uniqueAreas = Array.from(new Set((leads || []).map(l => l.region || l.city).filter(Boolean))).sort();
+  const uniqueAgents = Array.from(new Set((enrichedLeads || []).map(l => l.calculatedOwner || l.owner || l.sales_agent || l.assigned_to).filter(Boolean).filter(a => a !== 'Unassigned'))).sort();
 
   // Stats
   const enrichedLeads = useMemo(() => {
@@ -176,7 +177,7 @@ export default function LeadsManager({
     });
 
     return result;
-  }, [enrichedLeads, leadsSearch, leadsSourceFilter, leadsAreaFilter, localContactedFilter, sortDir, getLeadConversion]);
+  }, [enrichedLeads, leadsSearch, leadsSourceFilter, leadsAreaFilter, localContactedFilter, sortDir, getLeadConversion, agentFilter]);
 
   const filteredLeads = filteredAndSortedLeads;
 
@@ -379,6 +380,18 @@ export default function LeadsManager({
           <option value="wa_nooptin">✗ No WhatsApp Opt-in</option>
         </select>
 
+        <select
+          className="admin-select"
+          value={agentFilter}
+          onChange={(e) => setAgentFilter(e.target.value)}
+          style={{ flex: '0 1 140px', padding: '8px', fontSize: '0.85rem' }}
+        >
+          <option value="all">All Agents</option>
+          <option value="unassigned">Unassigned</option>
+          {uniqueAgents.map((agent, i) => (
+            <option key={i} value={agent}>{agent}</option>
+          ))}
+        </select>
         <select
           className="admin-select"
           value={leadsAreaFilter}
@@ -837,7 +850,11 @@ export default function LeadsManager({
                     </td>
                     
                     <td data-label="Actions" style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                      {/* .admin-card-actions is what turns these into a
+                          two-column grid once the table collapses to cards —
+                          the same wrapper OrdersManager uses. Without it the
+                          buttons stretch full width and stack one per line. */}
+                      <div className="admin-card-actions">
                         <button
                           onClick={() => openCustomerFromLead(lead)}
                           className="admin-btn admin-btn-secondary"
