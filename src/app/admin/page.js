@@ -53,6 +53,7 @@ import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 import { DEFAULT_BUSINESS_LINKS, normalizeBusinessLinks } from '@/lib/businessLinks';
 import { confirmDelete, confirmBulkDelete } from '@/lib/confirmDelete.mjs';
 import { claimOrderInDb } from '@/lib/claimOrder';
+import { filterOrdersVisibleToAgent, orderVisibleToAgent } from '@/lib/agentOrders';
 import {
   ADMIN_NAV_GROUPS,
   ADMIN_TAB_IDS,
@@ -1528,8 +1529,8 @@ Core Rules:
     : '';
 
   const visibleOrders = useMemo(
-    () => orders,
-    [orders]
+    () => filterOrdersVisibleToAgent(orders, adminProfile),
+    [orders, adminProfile]
   );
 
   const canNavigateToTab = useCallback((tabId) => {
@@ -3101,27 +3102,56 @@ Core Rules:
   // update is an unconditional overwrite (admin reassigning via the dropdown).
   // Resolves to { ok, takenBy } so the caller can tell the loser who won.
   const handleOrderSalesAgentUpdate = async (orderId, agentName, { onlyIfUnassigned = false } = {}) => {
-    let finalAgentName = agentName;
+    const finalAgentName = String(agentName || '').trim();
+    const previousOrder = orders.find((o) => o.id === orderId);
 
-    setOrders(orders.map(o => o.id === orderId ? { ...o, sales_agent: finalAgentName } : o));
-
-    if (!isSupabaseConfigured || !supabase) return { ok: true };
+    setOrders((prev) => prev.map(o => o.id === orderId ? { ...o, sales_agent: finalAgentName || null } : o));
+    if (selectedOrderDetails?.id === orderId) {
+      setSelectedOrderDetails({ ...selectedOrderDetails, sales_agent: finalAgentName || null });
+    }
 
     if (!onlyIfUnassigned) {
       try {
-        const { error } = await supabase
-          .from('orders')
-          .update({ sales_agent: finalAgentName || null })
-          .eq('id', orderId);
-
-        if (error) {
-          console.error("Supabase order sales agent update error:", error);
+        const response = await adminFetch('/api/admin/orders/update', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            orderId,
+            updates: { sales_agent: finalAgentName || null },
+            activity: {
+              type: 'agent_assignment',
+              message: finalAgentName
+                ? `Sales agent assigned to ${finalAgentName}`
+                : 'Sales agent assignment cleared',
+            },
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Could not update order agent');
         }
+
+        if (data.order) {
+          if (orderVisibleToAgent(data.order, adminProfile)) {
+            handleOrderUpdated(data.order);
+          } else {
+            setOrders((prev) => prev.filter((o) => o.id !== orderId));
+            setSelectedOrderDetails((prev) => (prev?.id === orderId ? null : prev));
+            alert(`Order ${data.order.order_number || ''} was moved to ${data.order.sales_agent}. It is no longer in this account's queue.`);
+          }
+        }
+        return { ok: true };
       } catch (err) {
         console.error("Order sales agent update error:", err);
+        if (previousOrder) {
+          setOrders((prev) => prev.map((o) => (o.id === orderId ? previousOrder : o)));
+          setSelectedOrderDetails((prev) => (prev?.id === orderId ? previousOrder : prev));
+        }
+        alert(err.message || 'Could not update order agent.');
+        return { ok: false, error: err.message || 'Could not update order agent', takenBy: previousOrder?.sales_agent || '' };
       }
-      return { ok: true };
     }
+
+    if (!isSupabaseConfigured || !supabase) return { ok: true };
 
     try {
       const result = await claimOrderInDb(supabase, orderId, finalAgentName);
@@ -4942,6 +4972,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             formatCustomerIdType={formatCustomerIdType}
             loggedInEmailRef={loggedInEmail}
             currentAgentName={adminProfile?.name || ''}
+            currentAgentEmail={adminProfile?.email || ''}
           />
           </ErrorBoundary>
         )}

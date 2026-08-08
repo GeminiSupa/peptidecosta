@@ -181,7 +181,8 @@ export default function OrdersManager({
   agents,
   formatCustomerIdType,
   loggedInEmailRef,
-  currentAgentName
+  currentAgentName,
+  currentAgentEmail = ''
 }) {
   const scopedOrders = visibleOrders;
   const filteredOrders = scopedOrders.filter(o => {
@@ -259,6 +260,14 @@ export default function OrdersManager({
 
   /** Orders claimed before this fix hold an email, which is not in `agents`. */
   const agentOptionsFor = (order) => {
+    if (isStaffAgent) {
+      const ownName = String(currentAgentName || '').trim();
+      const email = String(currentAgentEmail || '').trim();
+      const fallbackName = ownName || email;
+      const current = String(order?.sales_agent || '').trim();
+      return Array.from(new Set([current, fallbackName].filter(Boolean)));
+    }
+
     const current = String(order?.sales_agent || '').trim();
     if (!current || agents.some((agent) => String(agent).trim() === current)) return agents;
     return [current, ...agents];
