@@ -1757,13 +1757,15 @@ Core Rules:
         className={`admin-quick-nav-btn${activeTab === tabId ? ' active' : ''}`}
         onClick={() => navigateToTab(tabId)}
       >
-        {meta.icon}
-        <span>{meta.label}</span>
-        {meta.badge > 0 && (
-          <span className={`admin-quick-nav-badge${meta.badgeTone ? ` ${meta.badgeTone}` : ''}`}>
-            {meta.badge}
-          </span>
-        )}
+        <span className="admin-quick-nav-icon">
+          {meta.icon}
+          {meta.badge > 0 && (
+            <span className={`admin-quick-nav-badge${meta.badgeTone ? ` ${meta.badgeTone}` : ''}`}>
+              {meta.badge > 99 ? '99+' : meta.badge}
+            </span>
+          )}
+        </span>
+        <span className="admin-quick-nav-label">{meta.label}</span>
       </button>
     );
   };
@@ -7747,8 +7749,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           onClick={() => setMobileMoreOpen(true)}
           aria-label="More admin sections"
         >
-          <ListFilter size={18} />
-          <span>More</span>
+          <span className="admin-quick-nav-icon"><ListFilter size={18} /></span>
+          <span className="admin-quick-nav-label">More</span>
         </button>
       </nav>
 

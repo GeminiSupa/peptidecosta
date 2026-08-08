@@ -6061,22 +6061,34 @@
     justify-content: center;
     gap: 3px;
     min-height: 56px;
-    padding: 7px 4px 6px;
+    /* 2px sides, not 4px: at 320px wide the five slots are only 59px each and
+       "WhatsApp" was ellipsizing. */
+    padding: 7px 2px 6px;
     background: transparent;
     border: none;
     color: #64748b;
-    font-size: 0.62rem;
+    font-size: 0.6rem;
     font-weight: 700;
     cursor: pointer;
     border-radius: 10px;
     transition: color 0.2s, background 0.2s;
 }
 
-.admin-quick-nav-btn span:not(.admin-quick-nav-badge) {
+.admin-quick-nav-label {
     width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Anchors the badge to the icon instead of to the button's centre, so it
+   lands on the icon's corner at every screen width. */
+.admin-quick-nav-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .admin-quick-nav-btn.active {
@@ -6088,31 +6100,38 @@
 .admin-quick-nav-btn.active::before {
     content: '';
     position: absolute;
-    top: 0;
+    /* -6px clears the bar's own top padding, so the accent sits on the
+       nav's top border instead of floating in mid-air above the icon. */
+    top: -6px;
     left: 20%;
     right: 20%;
     height: 3px;
     background: #00D4FF;
     border-radius: 0 0 4px 4px;
-    box-shadow: 0 0 8px #00D4FF;
+    box-shadow: 0 0 6px rgba(0, 212, 255, 0.7);
 }
 
 .admin-quick-nav-badge {
     position: absolute;
-    top: 2px;
-    right: calc(50% - 22px);
-    min-width: 16px;
-    height: 16px;
+    top: -7px;
+    left: calc(100% - 5px);
+    min-width: 15px;
+    height: 15px;
     padding: 0 4px;
     border-radius: 999px;
     background: #ef4444;
+    /* Ring in the bar's own colour so the pill stays readable where it
+       clips the icon's corner. */
+    border: 1.5px solid #101c33;
+    box-sizing: border-box;
     color: white;
-    font-size: 0.55rem;
+    font-size: 0.52rem;
     font-weight: 800;
     display: flex;
     align-items: center;
     justify-content: center;
     line-height: 1;
+    pointer-events: none;
 }
 
 .admin-quick-nav-badge.warning {
@@ -6335,7 +6354,7 @@
         background: rgba(11, 19, 43, 0.82);
         border-top: 1px solid rgba(255, 255, 255, 0.08);
         gap: 2px;
-        padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+        padding: 6px max(6px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
         backdrop-filter: blur(16px) saturate(180%);
         -webkit-backdrop-filter: blur(16px) saturate(180%);
         box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.4);
