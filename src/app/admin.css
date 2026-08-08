@@ -4736,7 +4736,14 @@
 
 .admin-whatsapp-inbox {
     --admin-wa-mobile-nav: 56px;
-    height: min(680px, calc(100dvh - 220px));
+    /* The inbox starts 28px down (container padding; the page header is
+       display:none outside mobile). Subtracting 220 left ~190px of viewport
+       sitting under the card on a 684px-tall laptop, which squeezed the
+       conversation list to about one and a half rows. 108 = that 28px plus
+       an 80px peek, so the analytics below still shows enough to invite a
+       scroll. The dvh term only binds on short screens; taller ones hit the
+       cap. */
+    height: min(800px, calc(100dvh - 108px));
     min-height: 400px;
     display: grid;
     grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
