@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { 
   Users, Trash2, Upload, Brain, Sparkles, 
-  Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp, Columns3, List, Clock, User
+  Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp, Columns3, List, Clock, User, ChevronDown
 } from 'lucide-react';
 import {
   buildAgentHistory,
@@ -151,6 +151,64 @@ export default function LeadsManager({
   // render — defined below, it would still be in its temporal dead zone.
   const getLeadOwner = (lead) => lead.calculatedOwner || lead.owner || lead.sales_agent || lead.assigned_to || 'Unassigned';
 
+  const getLeadAgentState = (lead) => {
+    const claimed = String(lead.sales_agent || lead.owner || lead.assigned_to || '').trim();
+    const automatic = String(lead.historyOwner || '').trim();
+    const displayName = claimed || automatic || 'Unassigned';
+    const state = claimed ? 'claimed' : automatic ? 'auto' : 'unassigned';
+    return {
+      claimed,
+      automatic,
+      displayName,
+      state,
+      label: state === 'claimed' ? 'Claimed' : state === 'auto' ? 'Auto' : 'Open',
+      title: claimed
+        ? `Claimed by ${claimed}`
+        : automatic
+          ? `Auto: first closed by ${automatic}`
+          : 'No order history for this contact',
+    };
+  };
+
+  const renderLeadAgentControl = (lead, { compact = false } = {}) => {
+    const agent = getLeadAgentState(lead);
+
+    if (!handleLeadFieldUpdate) {
+      return (
+        <span className={`lead-agent-badge ${agent.state}`} title={agent.title}>
+          <User size={13} />
+          <span>{agent.displayName}</span>
+        </span>
+      );
+    }
+
+    return (
+      <div className={`lead-agent-control ${agent.state}${compact ? ' compact' : ''}`}>
+        <div className="lead-agent-control-top">
+          <span className={`lead-agent-state ${agent.state}`}>{agent.label}</span>
+          {agent.automatic && !agent.claimed && <span className="lead-agent-auto-note">from orders</span>}
+        </div>
+        <label className="lead-agent-select-shell" title={agent.title}>
+          <User size={14} className="lead-agent-icon" />
+          <select
+            className="lead-agent-select"
+            value={agent.claimed}
+            onChange={(event) => handleLeadFieldUpdate(lead.id, 'sales_agent', event.target.value || null)}
+            aria-label="Lead agent"
+          >
+            <option value="">
+              {agent.automatic ? `Auto - ${agent.automatic}` : 'Unassigned'}
+            </option>
+            {agentOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+          <ChevronDown size={15} className="lead-agent-chevron" aria-hidden="true" />
+        </label>
+      </div>
+    );
+  };
+
   const filteredAndSortedLeads = useMemo(() => {
     // enrichedLeads, not the raw `leads` prop: calculatedOwner is what the
     // agent filter matches on and it only exists on the enriched rows.
@@ -294,6 +352,203 @@ export default function LeadsManager({
 
   return (
     <div className="admin-tab-panel">
+      <style>{`
+        .lead-agent-control {
+          width: min(100%, 240px);
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          align-items: stretch;
+        }
+
+        .lead-agent-control.compact {
+          width: 100%;
+        }
+
+        .lead-agent-control-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          min-height: 18px;
+        }
+
+        .lead-agent-state {
+          display: inline-flex;
+          align-items: center;
+          min-height: 18px;
+          padding: 2px 7px;
+          border-radius: 999px;
+          font-size: 0.66rem;
+          font-weight: 800;
+          line-height: 1;
+          letter-spacing: 0;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+
+        .lead-agent-state.claimed {
+          color: #bfdbfe;
+          background: rgba(59, 130, 246, 0.16);
+          border: 1px solid rgba(96, 165, 250, 0.26);
+        }
+
+        .lead-agent-state.auto {
+          color: #c4b5fd;
+          background: rgba(139, 92, 246, 0.15);
+          border: 1px solid rgba(167, 139, 250, 0.24);
+        }
+
+        .lead-agent-state.unassigned {
+          color: #cbd5e1;
+          background: rgba(148, 163, 184, 0.12);
+          border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .lead-agent-auto-note {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          color: #64748b;
+          font-size: 0.68rem;
+          font-weight: 700;
+        }
+
+        .lead-agent-select-shell {
+          position: relative;
+          display: flex;
+          align-items: center;
+          min-height: 44px;
+          border-radius: 8px;
+          border: 1px solid rgba(148, 163, 184, 0.18);
+          background: rgba(15, 23, 42, 0.76);
+          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+          transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .lead-agent-control.claimed .lead-agent-select-shell {
+          border-color: rgba(96, 165, 250, 0.3);
+          background: rgba(30, 64, 175, 0.18);
+        }
+
+        .lead-agent-control.auto .lead-agent-select-shell {
+          border-color: rgba(167, 139, 250, 0.28);
+          background: rgba(88, 28, 135, 0.14);
+        }
+
+        .lead-agent-select-shell:focus-within {
+          border-color: rgba(56, 189, 248, 0.62);
+          box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.14);
+        }
+
+        .lead-agent-icon,
+        .lead-agent-chevron {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          color: #94a3b8;
+          pointer-events: none;
+        }
+
+        .lead-agent-icon {
+          left: 12px;
+        }
+
+        .lead-agent-chevron {
+          right: 11px;
+        }
+
+        .lead-agent-select {
+          width: 100%;
+          min-width: 0;
+          min-height: 44px;
+          padding: 0 34px 0 34px;
+          border: 0;
+          outline: 0;
+          color: #f8fafc;
+          background: transparent;
+          font: inherit;
+          font-size: 0.82rem;
+          font-weight: 750;
+          letter-spacing: 0;
+          cursor: pointer;
+          appearance: none;
+          -webkit-appearance: none;
+          text-overflow: ellipsis;
+        }
+
+        .lead-agent-select option {
+          color: #e2e8f0;
+          background: #0f172a;
+        }
+
+        .lead-agent-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          max-width: 240px;
+          min-height: 36px;
+          padding: 7px 10px;
+          border-radius: 8px;
+          color: #e2e8f0;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          font-size: 0.78rem;
+          font-weight: 750;
+        }
+
+        .lead-agent-badge span {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .lead-agent-card-row {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          width: 100%;
+        }
+
+        .lead-agent-card-row-label {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: #94a3b8;
+          font-size: 0.72rem;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0;
+        }
+
+        .lead-agent-table-cell {
+          min-width: 190px;
+        }
+
+        @media (max-width: 780px) {
+          .lead-agent-control,
+          .lead-agent-badge,
+          .lead-agent-table-cell {
+            width: 100%;
+            max-width: none;
+          }
+
+          .lead-agent-control-top {
+            justify-content: flex-start;
+          }
+
+          .lead-agent-select-shell {
+            min-height: 48px;
+          }
+
+          .lead-agent-select {
+            min-height: 48px;
+            font-size: 0.9rem;
+          }
+        }
+      `}</style>
       
       <div className="admin-section-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -550,8 +805,11 @@ export default function LeadsManager({
                         <span>{lead.contact_method === 'whatsapp' ? 'WhatsApp' : 'Email'}</span>
                         <span>{lead.city || lead.country || 'Unknown area'}</span>
                       </div>
+                      <div className="lead-agent-card-row">
+                        <span className="lead-agent-card-row-label"><User size={12} /> Agent</span>
+                        {renderLeadAgentControl(lead, { compact: true })}
+                      </div>
                       <div className="lead-mobile-summary">
-                        <span><Users size={12} /> {getLeadOwner(lead)}</span>
                         <span><Clock size={12} /> Follow up {getLeadFollowUp(lead)}</span>
                       </div>
                       <div className="leads-kanban-tags">
@@ -802,45 +1060,8 @@ export default function LeadsManager({
                         )}
                       </div>
                     </td>
-                    <td data-label="Agent" style={{ padding: '10px 12px' }}>
-                      {handleLeadFieldUpdate ? (
-                        <select
-                          className="cell-select"
-                          value={lead.sales_agent || ''}
-                          // null rather than '' so a hand-cleared owner reads
-                          // the same as one the routes never set.
-                          onChange={(e) => handleLeadFieldUpdate(lead.id, 'sales_agent', e.target.value || null)}
-                          title={
-                            lead.sales_agent
-                              ? `Claimed by ${lead.sales_agent}`
-                              : lead.historyOwner
-                                ? `Auto: first closed by ${lead.historyOwner}`
-                                : 'No order history for this contact'
-                          }
-                          style={{ fontWeight: lead.sales_agent ? '700' : '400' }}
-                        >
-                          {/* Empty value hands the lead back to order history
-                              rather than clearing it — that is what makes this
-                              reversible after a mis-click. */}
-                          <option value="">
-                            {lead.historyOwner ? `Auto · ${lead.historyOwner}` : 'Unassigned'}
-                          </option>
-                          {agentOptions.map((agent) => (
-                            <option key={agent} value={agent}>{agent}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span style={{
-                          background: 'rgba(255, 255, 255, 0.1)',
-                          padding: '2px 8px',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          color: '#e2e8f0',
-                          fontWeight: '600'
-                        }}>
-                          {lead.calculatedOwner}
-                        </span>
-                      )}
+                    <td data-label="Agent" className="lead-agent-table-cell" style={{ padding: '10px 12px' }}>
+                      {renderLeadAgentControl(lead)}
                     </td>
                     <td data-label="Last Contacted" style={{ padding: '10px 12px' }}>
                       {(() => {
