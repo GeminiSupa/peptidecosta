@@ -181,8 +181,7 @@ export default function OrdersManager({
   agents,
   formatCustomerIdType,
   loggedInEmailRef,
-  currentAgentName,
-  currentAgentEmail = ''
+  currentAgentName
 }) {
   const scopedOrders = visibleOrders;
   const filteredOrders = scopedOrders.filter(o => {
@@ -252,22 +251,13 @@ export default function OrdersManager({
     });
     const claimName = matchedAgent || currentAgentName || email || 'info@peptidescostarica.net';
     const result = await handleOrderSalesAgentUpdate(orderId, claimName, { onlyIfUnassigned: true });
-    // Losing a race hides the order from this agent, so say who took it.
     if (result?.ok === false && result.takenBy) {
-      alert(`This order was just claimed by ${result.takenBy}. It has moved to their queue.`);
+      alert(`This order was just claimed by ${result.takenBy}.`);
     }
   };
 
   /** Orders claimed before this fix hold an email, which is not in `agents`. */
   const agentOptionsFor = (order) => {
-    if (isStaffAgent) {
-      const ownName = String(currentAgentName || '').trim();
-      const email = String(currentAgentEmail || '').trim();
-      const fallbackName = ownName || email;
-      const current = String(order?.sales_agent || '').trim();
-      return Array.from(new Set([current, fallbackName].filter(Boolean)));
-    }
-
     const current = String(order?.sales_agent || '').trim();
     if (!current || agents.some((agent) => String(agent).trim() === current)) return agents;
     return [current, ...agents];
@@ -293,7 +283,7 @@ export default function OrdersManager({
       `}} />
       <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-          <h3>{isStaffAgent ? 'My Orders' : 'Customer Orders Log Ledger'}</h3>
+          <h3>{isStaffAgent ? 'Team Orders' : 'Customer Orders Log Ledger'}</h3>
           <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 12px 0' }}>
             {isStaffAgent
               ? 'Shared order queue for the sales team. Tag the managing agent on an order to claim commission ownership.'

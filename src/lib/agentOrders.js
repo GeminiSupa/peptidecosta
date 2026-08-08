@@ -34,14 +34,9 @@ export function orderBelongsToAgent(order, profile) {
   return agentMatchKeys(profile).has(orderAgent);
 }
 
-/** Orders tab: own assigned orders + unassigned (no sales_agent). */
-export function filterOrdersVisibleToAgent(orders, profile) {
-  if (!profile || profile.is_superadmin) return orders || [];
-  return (orders || []).filter((o) => {
-    const agent = String(o.sales_agent || '').trim();
-    if (!agent) return true;
-    return orderBelongsToAgent(o, profile);
-  });
+/** Orders tab: shared order ledger for all admin staff. */
+export function filterOrdersVisibleToAgent(orders) {
+  return orders || [];
 }
 
 /** Strict filter — only orders assigned to this agent (My Pay, earnings). */
@@ -71,9 +66,6 @@ export function getOrderSalesAmounts(order, exchangeRate = FALLBACK_EXCHANGE_RAT
   return { usd, crc };
 }
 
-export function orderVisibleToAgent(order, profile) {
-  if (!profile || profile.is_superadmin) return true;
-  const agent = String(order?.sales_agent || '').trim();
-  if (!agent) return true;
-  return orderBelongsToAgent(order, profile);
+export function orderVisibleToAgent() {
+  return true;
 }

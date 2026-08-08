@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
-import { agentMatchKeys, orderVisibleToAgent } from '@/lib/agentOrders';
+import { orderVisibleToAgent } from '@/lib/agentOrders';
 import { ORDER_ATTRIBUTION_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAffiliateOrderWhatsApp } from '@/lib/orderWhatsAppAlerts';
 import {
@@ -72,13 +72,6 @@ export async function PATCH(request) {
 
     if (!orderVisibleToAgent(currentOrder, auth.profile)) {
       return NextResponse.json({ error: 'Forbidden: order is not visible to this staff member' }, { status: 403 });
-    }
-
-    if (!auth.profile.is_superadmin && patch.sales_agent !== undefined) {
-      const requestedAgent = String(patch.sales_agent || '').trim().toLowerCase();
-      if (requestedAgent && !agentMatchKeys(auth.profile).has(requestedAgent)) {
-        return NextResponse.json({ error: 'Forbidden: staff can only assign orders to themselves' }, { status: 403 });
-      }
     }
 
     const superadminOnlyFields = [
