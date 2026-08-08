@@ -437,6 +437,11 @@ export default function AdminPage() {
   // Storage Bucket States
   const [bucketImages, setBucketImages] = useState([]);
   const [agents, setAgents] = useState([]);
+  // The same rows as `agents`, unflattened. buildAgentNameResolver needs the
+  // name AND the email to tell that an order signed "korinneda@icloud.com" is
+  // the same person as one signed "Korinne"; `agents` collapses them to one
+  // string and loses that link.
+  const [agentProfiles, setAgentProfiles] = useState([]);
   const [orderAffiliates, setOrderAffiliates] = useState([]);
   const [loadingBucketImages, setLoadingBucketImages] = useState(false);
   
@@ -2144,6 +2149,7 @@ Core Rules:
         if (!agentError && agentData) {
           const loadedAgents = agentData.map(a => a.name || a.email).filter(Boolean);
           setAgents(loadedAgents.length > 0 ? loadedAgents : ['Joe', 'info@peptidescostarica.net']);
+          setAgentProfiles(agentData);
         } else {
           setAgents(['Joe', 'info@peptidescostarica.net']);
         }
@@ -6363,6 +6369,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
               orders={orders} 
               abandonedCarts={abandonedCarts} 
+              agentProfiles={agentProfiles} 
               onWhatsAppClick={(recipient) => openWhatsAppComposer(recipient)} 
             />
               </ErrorBoundary>
@@ -6382,6 +6389,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <ErrorBoundary><LeadsManager 
             leads={leads}
             orders={orders}
+            agentProfiles={agentProfiles}
+            agents={agents}
             loadingLeads={loadingLeads}
             loadAdminData={loadAdminData}
             setExportModalType={setExportModalType}

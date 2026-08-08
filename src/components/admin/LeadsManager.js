@@ -5,6 +5,11 @@ import {
   Users, Trash2, Upload, Brain, Sparkles, 
   Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp, Columns3, List, Clock, User
 } from 'lucide-react';
+import {
+  buildAgentHistory,
+  buildAgentNameResolver,
+  historicalAgentForLead,
+} from '@/lib/agentAttribution.mjs';
 
 const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill={color} style={style} {...props}>
@@ -15,6 +20,8 @@ const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) =>
 export default function LeadsManager({
   leads,
   orders = [],
+  agentProfiles = [],
+  agents = [],
   loadingLeads,
   loadAdminData,
   setExportModalType,
@@ -54,54 +61,61 @@ export default function LeadsManager({
 }) {
 
   const uniqueAreas = Array.from(new Set((leads || []).map(l => l.region || l.city).filter(Boolean))).sort();
-  const uniqueAgents = Array.from(new Set((enrichedLeads || []).map(l => l.calculatedOwner || l.owner || l.sales_agent || l.assigned_to).filter(Boolean).filter(a => a !== 'Unassigned'))).sort();
 
   // Stats
+  //
+  // Ownership is NOT derived here any more. src/lib/agentAttribution.mjs is the
+  // one implementation of "the agent who first closed them owns them", it is
+  // unit-tested, and it handles three things this component used to get wrong:
+  // phone numbers typed differently on different orders, one agent appearing
+  // under both their name and their email, and contact details that belong to
+  // more than one customer (an agent's own address typed into the customer
+  // field sat on 13 orders) — which would otherwise hand all of them to
+  // whoever closed earliest.
   const enrichedLeads = useMemo(() => {
-    const arr = leads || [];
-    const historicalAgentsByContact = {};
-    const firstOrderDates = {};
+    const resolveAgent = buildAgentNameResolver(agentProfiles);
+    const history = buildAgentHistory(orders || [], { resolveAgent });
 
-    (orders || []).forEach(o => {
-      const isClosed = o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'order complete';
-      if (isClosed && o.sales_agent) {
-        const orderTime = new Date(o.created_at).getTime();
-        
-        const trySet = (key) => {
-          if (!key) return;
-          const lowerKey = String(key).toLowerCase().trim();
-          if (!firstOrderDates[lowerKey] || orderTime < firstOrderDates[lowerKey]) {
-            firstOrderDates[lowerKey] = orderTime;
-            historicalAgentsByContact[lowerKey] = o.sales_agent;
-          }
-        };
+    return (leads || []).map(lead => ({
+      ...lead,
+      // Kept separate from calculatedOwner so the Agent cell can show what the
+      // order book says even while an agent has claimed the lead for themselves
+      // — otherwise "claimed by Yese" and "would default to Korinne" are
+      // indistinguishable and there is no way to hand it back.
+      historyOwner: historicalAgentForLead(lead, history) || '',
+      // An owner recorded on the lead itself always wins: that is a human
+      // decision, and order history only fills the gap.
+      calculatedOwner:
+        lead.owner
+        || lead.sales_agent
+        || lead.assigned_to
+        || historicalAgentForLead(lead, history)
+        || 'Unassigned',
+    }));
+  }, [leads, orders, agentProfiles]);
 
-        trySet(o.customer_email);
-        trySet(o.customer_phone);
-        trySet(o.whatsapp_wa_id);
-      }
-    });
+  // Must stay below enrichedLeads: it reads calculatedOwner, which only exists
+  // on the enriched rows. Declared above it, the const was still in its
+  // temporal dead zone and every render of this tab threw
+  // "Cannot access 'enrichedLeads' before initialization".
+  const uniqueAgents = useMemo(
+    () => Array.from(new Set(
+      enrichedLeads
+        .map(l => l.calculatedOwner || l.owner || l.sales_agent || l.assigned_to)
+        .filter(Boolean)
+        .filter(a => a !== 'Unassigned')
+    )).sort(),
+    [enrichedLeads]
+  );
 
-    return arr.map(lead => {
-      let owner = lead.owner || lead.sales_agent || lead.assigned_to;
-      if (!owner) {
-        const cv = String(lead.contact_value || '').toLowerCase().trim();
-        const em = String(lead.email || '').toLowerCase().trim();
-        const ph = String(lead.phone || '').toLowerCase().trim();
-        
-        const cleanPh = ph.replace(/[^a-z0-9]/g, '');
-        const cleanCv = cv.replace(/[^a-z0-9]/g, '');
-
-        owner = historicalAgentsByContact[cv] || historicalAgentsByContact[em] || historicalAgentsByContact[ph];
-        if (!owner && cleanCv.length > 7) owner = historicalAgentsByContact[cleanCv];
-        if (!owner && cleanPh.length > 7) owner = historicalAgentsByContact[cleanPh];
-      }
-      return {
-        ...lead,
-        calculatedOwner: owner || 'Unassigned'
-      };
-    });
-  }, [leads, orders]);
+  // The Agent picker offers the current team, plus anyone already recorded as
+  // an owner who is no longer on it. Without that union a lead claimed by an
+  // agent who has since left renders as a blank <select>, and saving it would
+  // quietly reassign them.
+  const agentOptions = useMemo(
+    () => Array.from(new Set([...(agents || []), ...uniqueAgents].filter(Boolean))).sort(),
+    [agents, uniqueAgents]
+  );
 
   const safeLeads = enrichedLeads;
   const totalLeads = safeLeads.length;
@@ -127,10 +141,20 @@ export default function LeadsManager({
   const [localContactedFilter, setLocalContactedFilter] = useState('All');
   const [lastSelectedLeadIndex, setLastSelectedLeadIndex] = useState(null);
   const [viewMode, setViewMode] = useState('table');
+  // 'all' | 'unassigned' | <agent name>. The Agent <select> and the
+  // filteredAndSortedLeads dependency array both already referenced this; the
+  // declaration itself was missing, so the tab threw "agentFilter is not
+  // defined" before it could render a single row.
+  const [agentFilter, setAgentFilter] = useState('all');
+
+  // Declared above filteredAndSortedLeads because the memo body calls it during
+  // render — defined below, it would still be in its temporal dead zone.
+  const getLeadOwner = (lead) => lead.calculatedOwner || lead.owner || lead.sales_agent || lead.assigned_to || 'Unassigned';
 
   const filteredAndSortedLeads = useMemo(() => {
-    const safeLeads = leads || [];
-    let result = safeLeads.filter(l => {
+    // enrichedLeads, not the raw `leads` prop: calculatedOwner is what the
+    // agent filter matches on and it only exists on the enriched rows.
+    let result = enrichedLeads.filter(l => {
       if (leadsSearch) {
         const q = leadsSearch.toLowerCase();
         const match = (
@@ -167,6 +191,14 @@ export default function LeadsManager({
       if (leadsAreaFilter && leadsAreaFilter !== 'All') {
         if (l.region !== leadsAreaFilter && l.city !== leadsAreaFilter) return false;
       }
+      if (agentFilter !== 'all') {
+        const owner = getLeadOwner(l);
+        if (agentFilter === 'unassigned') {
+          if (owner !== 'Unassigned') return false;
+        } else if (owner !== agentFilter) {
+          return false;
+        }
+      }
       return true;
     });
 
@@ -189,8 +221,6 @@ export default function LeadsManager({
     if (raw === 'Processing') return 'Quoted';
     return 'New';
   }, []);
-
-  const getLeadOwner = (lead) => lead.calculatedOwner || lead.owner || lead.sales_agent || lead.assigned_to || 'Unassigned';
 
   const getLeadFollowUp = (lead) => {
     const explicit = lead.next_follow_up_at || lead.follow_up_at;
@@ -773,16 +803,44 @@ export default function LeadsManager({
                       </div>
                     </td>
                     <td data-label="Agent" style={{ padding: '10px 12px' }}>
-                      <span style={{ 
-                        background: 'rgba(255, 255, 255, 0.1)', 
-                        padding: '2px 8px', 
-                        borderRadius: '12px', 
-                        fontSize: '0.75rem', 
-                        color: '#e2e8f0',
-                        fontWeight: '600'
-                      }}>
-                        {lead.calculatedOwner}
-                      </span>
+                      {handleLeadFieldUpdate ? (
+                        <select
+                          className="cell-select"
+                          value={lead.sales_agent || ''}
+                          // null rather than '' so a hand-cleared owner reads
+                          // the same as one the routes never set.
+                          onChange={(e) => handleLeadFieldUpdate(lead.id, 'sales_agent', e.target.value || null)}
+                          title={
+                            lead.sales_agent
+                              ? `Claimed by ${lead.sales_agent}`
+                              : lead.historyOwner
+                                ? `Auto: first closed by ${lead.historyOwner}`
+                                : 'No order history for this contact'
+                          }
+                          style={{ fontWeight: lead.sales_agent ? '700' : '400' }}
+                        >
+                          {/* Empty value hands the lead back to order history
+                              rather than clearing it — that is what makes this
+                              reversible after a mis-click. */}
+                          <option value="">
+                            {lead.historyOwner ? `Auto · ${lead.historyOwner}` : 'Unassigned'}
+                          </option>
+                          {agentOptions.map((agent) => (
+                            <option key={agent} value={agent}>{agent}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span style={{
+                          background: 'rgba(255, 255, 255, 0.1)',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          color: '#e2e8f0',
+                          fontWeight: '600'
+                        }}>
+                          {lead.calculatedOwner}
+                        </span>
+                      )}
                     </td>
                     <td data-label="Last Contacted" style={{ padding: '10px 12px' }}>
                       {(() => {
