@@ -296,7 +296,6 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           } else if (!map[id].owner && o.sales_agent) {
              map[id].owner = o.sales_agent;
           }
-          }
       }
       map[id].orderCount += 1;
       
