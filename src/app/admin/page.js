@@ -1610,7 +1610,7 @@ Core Rules:
       badgeTone: 'success',
     },
     carts: {
-      label: 'Carts',
+      label: 'Abandoned Carts',
       icon: <ShoppingCart size={iconSize} />,
       badge: abandonedCarts.length,
       badgeTone: 'warning',
@@ -1695,7 +1695,7 @@ Core Rules:
   const desktopPrimaryTabIds = (
     isSubUserProfile
       ? ['my_earnings', 'my_qr', 'team_chat']
-      : ['home', 'orders', 'whatsapp_ai', 'live_chat', 'spreadsheet', 'customers', 'carts']
+      : ['home', 'orders', 'live_chat', 'leads', 'carts', 'spreadsheet']
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
     { title: 'Customer Work', tabs: ['live_chat', 'inquiries', 'leads', 'messenger'] },

@@ -8,15 +8,15 @@ import {
 
 export const ADMIN_MODULES = [
   { id: 'home', label: 'Today (Home)', title: 'Today', group: 'Overview', alwaysAvailable: true },
-  { id: 'spreadsheet', label: 'Products', title: 'Products', group: 'Core Operations', superadminOnly: true },
   { id: 'orders', label: 'Orders', title: 'Orders', group: 'Core Operations' },
-  { id: 'customers', label: 'Customers', title: 'Customers', group: 'Core Operations' },
   { id: 'live_chat', label: 'Live Chat', title: 'Live Chat', group: 'Core Operations' },
   // Leads sits directly under Live Chat: chats are where leads now come from,
   // so the two are worked together.
   { id: 'leads', label: 'Leads', title: 'Leads', group: 'Core Operations' },
-  { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
   { id: 'carts', label: 'Abandoned Carts', title: 'Abandoned Carts', group: 'Sales & Marketing' },
+  { id: 'spreadsheet', label: 'Products', title: 'Products', group: 'Core Operations', superadminOnly: true },
+  { id: 'customers', label: 'Customers', title: 'Customers', group: 'Core Operations' },
+  { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
   { id: 'share', label: 'Share Links', title: 'Share Links', group: 'Sales & Marketing' },
   { id: 'reviews', label: 'Reviews', title: 'Reviews', group: 'Sales & Marketing' },
   { id: 'facebook', label: 'FB Alerts', title: 'Facebook Alerts', group: 'Sales & Marketing', hiddenFromNav: true },
