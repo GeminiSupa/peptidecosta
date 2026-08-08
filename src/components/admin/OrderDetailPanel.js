@@ -5,6 +5,7 @@ import { Copy, Phone, Plus, Trash2, BadgePercent } from 'lucide-react';
 import { formatActivityType } from '@/lib/orderActivity';
 import { adminFetch } from '@/lib/adminApi';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
+import { calculateAdminOrderTotals, getAdminOrderSubtotal } from '@/lib/adminOrderTotals.mjs';
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
 const ORDER_STATUS_OPTIONS = [
@@ -37,11 +38,6 @@ const parseProductPrice = (product, currency) => {
   }
   return parseFloat(String(product.priceCrc || '0').replace(/[^0-9.]/g, '')) || 0;
 };
-
-const getItemsSubtotal = (items = []) => items.reduce(
-  (sum, item) => sum + (Number(item.price) || 0) * (Number(item.qty) || 1),
-  0
-);
 
 const getStoredTotal = (order) => {
   if (order.currency === 'USD') return Number(order.total_usd) || 0;
@@ -84,7 +80,7 @@ const inferShippingCosts = (order) => {
     };
   }
 
-  const itemsSubtotal = getItemsSubtotal(Array.isArray(order.items) ? order.items : []);
+  const itemsSubtotal = getAdminOrderSubtotal(Array.isArray(order.items) ? order.items : []);
   const storedTotal = getStoredTotal(order);
   const inferred = Math.max(0, storedTotal - itemsSubtotal);
 
@@ -202,15 +198,12 @@ export default function OrderDetailPanel({
   const shipping = order.currency === 'USD'
     ? Number(shippingUsd) || 0
     : Number(shippingCrc) || 0;
-  const itemsSubtotal = getItemsSubtotal(editItems);
-  
-  const vialCount = editItems.reduce((sum, item) => sum + (Number(item.qty) || 1), 0);
-  let discountPct = 0;
-  if (vialCount >= 10) discountPct = 20;
-  else if (vialCount >= 5) discountPct = 15;
-  const discountedSubtotal = discountPct > 0 ? itemsSubtotal * (1 - discountPct / 100) : itemsSubtotal;
-  
-  const orderTotal = discountedSubtotal + shipping;
+  const {
+    itemsSubtotal,
+    discountPct,
+    discountAmount,
+    total: orderTotal,
+  } = calculateAdminOrderTotals(editItems, shipping);
 
   const patchOrder = async (updates, activityEntry) => {
     const res = await adminFetch('/api/admin/orders/update', {
@@ -288,7 +281,7 @@ export default function OrderDetailPanel({
     const nextShippingCrc = Number(shippingCrc) || 0;
     const nextShippingUsd = Number(shippingUsd) || 0;
     const nextShipping = order.currency === 'USD' ? nextShippingUsd : nextShippingCrc;
-    const nextTotal = discountedSubtotal + nextShipping;
+    const nextTotal = calculateAdminOrderTotals(editItems, nextShipping).total;
     const totalUsd = order.currency === 'USD'
       ? Number(nextTotal.toFixed(2))
       : Number((nextTotal / FALLBACK_EXCHANGE_RATE).toFixed(2));
@@ -363,17 +356,10 @@ export default function OrderDetailPanel({
       price: Number(i.price) || 0,
     }));
 
-    const subtotal = normalizedItems.reduce((s, i) => s + i.price * i.qty, 0);
-    const vc = normalizedItems.reduce((s, i) => s + i.qty, 0);
-    let disc = 0;
-    if (vc >= 10) disc = 20;
-    else if (vc >= 5) disc = 15;
-    const discSubtotal = disc > 0 ? subtotal * (1 - disc / 100) : subtotal;
-
     const ship = order.currency === 'USD'
       ? Number(shippingUsd) || 0
       : Number(shippingCrc) || 0;
-    const total = discSubtotal + ship;
+    const total = calculateAdminOrderTotals(normalizedItems, ship).total;
     const totalUsd = order.currency === 'USD' ? Number(total.toFixed(2)) : Number((total / FALLBACK_EXCHANGE_RATE).toFixed(2));
     const totalCrc = order.currency === 'CRC' ? Math.round(total) : Math.round(total * FALLBACK_EXCHANGE_RATE);
 
@@ -800,7 +786,7 @@ export default function OrderDetailPanel({
             {discountPct > 0 && (
               <div style={{ color: '#16a34a' }}>
                 <span>Volume discount ({discountPct}%)</span>
-                <span>{order.currency === 'USD' ? `-$${(itemsSubtotal - discountedSubtotal).toFixed(2)}` : `-₡${Math.round(itemsSubtotal - discountedSubtotal).toLocaleString()}`}</span>
+                <span>{order.currency === 'USD' ? `-$${discountAmount.toFixed(2)}` : `-₡${Math.round(discountAmount).toLocaleString()}`}</span>
               </div>
             )}
             <div><span>Shipping</span><span>₡{shippingCrc || 0} / ${shippingUsd || 0}</span></div>

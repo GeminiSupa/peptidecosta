@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
+import { calculateAdminOrderTotals } from '@/lib/adminOrderTotals.mjs';
 
 const EMPTY_ITEM = { product: '', qty: 1, price: '' };
 
@@ -50,15 +51,8 @@ export default function ManualOrderModal({ open, onClose, products = [], onCreat
     setForm({ ...form, items });
   };
 
-  const itemsSubtotal = form.items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 1), 0);
-  const vialCount = form.items.reduce((s, i) => s + (Number(i.qty) || 1), 0);
-  let discountPct = 0;
-  if (vialCount >= 10) discountPct = 20;
-  else if (vialCount >= 5) discountPct = 15;
-  const discountedSubtotal = discountPct > 0 ? itemsSubtotal * (1 - discountPct / 100) : itemsSubtotal;
-
   const shipping = form.currency === 'USD' ? Number(form.shipping_cost_usd) || 0 : Number(form.shipping_cost_crc) || 0;
-  const total = discountedSubtotal + shipping;
+  const { discountPct, total } = calculateAdminOrderTotals(form.items, shipping);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

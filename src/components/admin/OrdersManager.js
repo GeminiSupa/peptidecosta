@@ -1,5 +1,6 @@
 import React from 'react';
 import { Database, Download, MessageCircle, Plus, Trash2 } from 'lucide-react';
+import { getAdminVolumeDiscountPct } from '@/lib/adminOrderTotals.mjs';
 
 const ORDER_STATUS_OPTIONS = [
   'Pending',
@@ -503,10 +504,7 @@ export default function OrdersManager({
                   const items = Array.isArray(order.items) ? order.items : [];
                   const orderDate = getOrderDateLabel(order);
 
-                  const _vialCount = items.reduce((s, i) => s + (Number(i.qty) || 1), 0);
-                  let _discountPct = 0;
-                  if (_vialCount >= 10) _discountPct = 20;
-                  else if (_vialCount >= 5) _discountPct = 15;
+                  const _discountPct = getAdminVolumeDiscountPct(items);
                   
                   const status = String(order.status || '').toLowerCase();
                   const cardBadge = getCardPaymentBadge(order);
