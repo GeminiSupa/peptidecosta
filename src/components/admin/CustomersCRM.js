@@ -173,6 +173,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
   const [exportLoading, setExportLoading] = useState(false);
   const [generatingPitchId, setGeneratingPitchId] = useState(null);
   const [filterTab, setFilterTab] = useState('all');
+  const [agentFilter, setAgentFilter] = useState('all');
   
   // Sorting State
   const [sortField, setSortField] = useState('date'); // 'date', 'ltv', 'orders'
@@ -257,7 +258,9 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           orderCount: 0,
           lastOrderDate: o.created_at,
           isLead: false,
-          purchasedItems: []
+          purchasedItems: [],
+          firstClosedOrderDate: Infinity,
+          owner: null
         };
       }
       
@@ -280,8 +283,17 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
         });
       }
       
-      if (o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'order complete') {
+      const isClosed = o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'order complete';
+      if (isClosed) {
           map[id].totalSpentUsd += parseFloat(o.total_usd || 0);
+          
+          const orderTime = new Date(o.created_at).getTime();
+          if (orderTime < map[id].firstClosedOrderDate) {
+             map[id].firstClosedOrderDate = orderTime;
+             if (o.sales_agent) {
+                map[id].owner = o.sales_agent;
+             }
+          }
       }
       map[id].orderCount += 1;
       
@@ -345,6 +357,13 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
     return { totalContacts, activeCustomers, totalLtv };
   }, [customers]);
 
+  const uniqueAgents = useMemo(() => {
+    const agents = new Set();
+    customers.forEach(c => {
+      if (c.owner) agents.add(c.owner);
+    });
+    return Array.from(agents).sort();
+  }, [customers]);
 
   // Filter based on search and selected tab
   const filteredCustomers = useMemo(() => {
@@ -356,8 +375,18 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
       if (!matchesSearch) return false;
       
       // Tab filter
-      if (filterTab === 'customers') return !c.isLead;
-      if (filterTab === 'leads') return c.isLead;
+      if (filterTab === 'customers' && c.isLead) return false;
+      if (filterTab === 'leads' && !c.isLead) return false;
+      
+      // Agent filter
+      if (agentFilter !== 'all') {
+         if (agentFilter === 'unassigned') {
+            if (c.owner) return false;
+         } else {
+            if (c.owner !== agentFilter) return false;
+         }
+      }
+
       return true;
     });
 
@@ -376,7 +405,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
     });
 
     return result;
-  }, [customers, searchTerm, filterTab, sortField, sortDir]);
+  }, [customers, searchTerm, filterTab, agentFilter, sortField, sortDir]);
 
 
 
@@ -459,7 +488,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
     setExportLoading(true);
     setTimeout(() => {
       try {
-        const headers = [ 'Name', 'Type', 'Email', 'Phone', 'Location', 'Total Spent (USD)', 'Orders', 'Last Active' ];
+        const headers = [ 'Name', 'Type', 'Email', 'Phone', 'Location', 'Total Spent (USD)', 'Orders', 'Last Active', 'Agent' ];
         const dataRows = filteredCustomers.map(c => [
           c.name,
           c.isLead ? 'Lead' : 'Customer',
@@ -468,7 +497,8 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           c.location,
           c.totalSpentUsd.toFixed(2),
           c.orderCount,
-          new Date(c.lastOrderDate).toLocaleDateString()
+          new Date(c.lastOrderDate).toLocaleDateString(),
+          c.owner || 'Unassigned'
         ]);
         const filename = `peptidescr-customers-${new Date().toISOString().slice(0, 10)}`;
 
@@ -1302,7 +1332,22 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
             <span className="crm-tab-badge">{customers.filter(c => c.isLead).length}</span>
           </button>
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '4px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '4px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <User size={14} color="#94a3b8" />
+            <select 
+              value={agentFilter} 
+              onChange={(e) => { setAgentFilter(e.target.value); setCurrentPage(1); }}
+              style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="all" style={{background: '#0f172a'}}>All Agents</option>
+              <option value="unassigned" style={{background: '#0f172a'}}>Unassigned</option>
+              {uniqueAgents.map(agent => (
+                <option key={agent} value={agent} style={{background: '#0f172a'}}>{agent}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '4px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
           <ArrowDownUp size={14} color="#94a3b8" />
           <select 
             value={sortField} 
@@ -1321,6 +1366,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
             <option value="desc" style={{background: '#0f172a'}}>Desc</option>
             <option value="asc" style={{background: '#0f172a'}}>Asc</option>
           </select>
+          </div>
         </div>
       </div>
 
@@ -1436,6 +1482,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                 <th style={{ textAlign: 'center' }}>Orders</th>
                 <th style={{ textAlign: 'center' }}>Lifetime Value</th>
                 <th>Last Active</th>
+                <th>Agent</th>
                 <th>AI Cross-Sell</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -1542,6 +1589,23 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                         <Calendar size={12} />
                         <span>{new Date(cust.lastOrderDate).toLocaleDateString()}</span>
                       </div>
+                    </td>
+
+                    {/* Agent Column */}
+                    <td data-label="Agent">
+                      {cust.owner ? (
+                        <span style={{ 
+                          background: 'rgba(255, 255, 255, 0.1)', 
+                          padding: '2px 8px', 
+                          borderRadius: '12px', 
+                          fontSize: '0.75rem', 
+                          color: '#e2e8f0' 
+                        }}>
+                          {cust.owner}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#475569', fontSize: '0.75rem', fontStyle: 'italic' }}>Unassigned</span>
+                      )}
                     </td>
 
                     {/* AI Recommendation Column */}
