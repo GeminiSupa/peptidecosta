@@ -5,6 +5,7 @@ import UTMTracker from "@/components/UTMTracker";
 import ChatWidget from "@/components/ChatWidget";
 import GlobalContactForm from "@/components/GlobalContactForm";
 import { LIVE_SITE_URL } from "@/lib/publicUrl";
+import { getTikTokPixelBootstrapScript } from "@/lib/tiktokPixel.mjs";
 
 const montserrat = Montserrat({
   variable: "--font-montserrat",
@@ -93,6 +94,9 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="es" className={`${montserrat.variable} ${inter.variable}`} suppressHydrationWarning>
       <head suppressHydrationWarning>
+        <Script id="tiktok-pixel" strategy="beforeInteractive">
+          {getTikTokPixelBootstrapScript()}
+        </Script>
         <script
           suppressHydrationWarning
           dangerouslySetInnerHTML={{
@@ -171,6 +175,7 @@ export default async function RootLayout({ children }) {
         />
         {/* Preconnect to critical third-party origins */}
         <link rel="preconnect" href="https://www.googletagmanager.com" />
+        <link rel="preconnect" href="https://analytics.tiktok.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://cbanvzipzfmllexraiei.supabase.co" />
         {/* Preload the logo — it's the LCP element on catalog & home */}
