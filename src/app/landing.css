@@ -868,11 +868,13 @@
 }
 
 .clone-review-row {
+    grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    margin-top: 16px;
-    max-width: 220px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 4px;
+    padding-top: 18px;
+    border-top: 1px solid #e6edf7;
 }
 
 .clone-review-row > .clone-review-card {
@@ -888,6 +890,7 @@
     font-size: .76rem;
     font-weight: 900;
     text-decoration: none;
+    margin-bottom: 0;
     transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
     overflow: hidden;
 }

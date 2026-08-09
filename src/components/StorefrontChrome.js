@@ -375,32 +375,32 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
           <button type="button" onClick={openWhatsApp}>CR {links.whatsappDisplay}</button>
           <a href={`tel:+${links.apiWhatsAppNumber || '18314715559'}`}>US {links.apiWhatsAppDisplay || '+1 (831) 471-5559'}</a>
           {links.googleMapsUrl && <a href={links.googleMapsUrl} target="_blank" rel="noopener noreferrer">Open in Maps</a>}
-          <div className="clone-review-row">
-            {reviewLinks.map((review) => review.href ? (
-              <a
-                key={review.label}
-                href={review.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="clone-review-card"
-                aria-label={`${review.label} reviews rated ${review.score}`}
-              >
-                <span className={`clone-review-logo clone-review-logo--${review.id}`} aria-hidden="true">{review.logo}</span>
-                <span className="clone-review-copy">
-                  <strong>{review.label}</strong>
-                  <span>{review.score}</span>
-                </span>
-              </a>
-            ) : (
-              <span key={review.label} className="clone-review-card">
-                <span className={`clone-review-logo clone-review-logo--${review.id}`} aria-hidden="true">{review.logo}</span>
-                <span className="clone-review-copy">
-                  <strong>{review.label}</strong>
-                  <span>{review.score}</span>
-                </span>
+        </div>
+        <div className="clone-review-row" aria-label="Review platforms">
+          {reviewLinks.map((review) => review.href ? (
+            <a
+              key={review.label}
+              href={review.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="clone-review-card"
+              aria-label={`${review.label} reviews rated ${review.score}`}
+            >
+              <span className={`clone-review-logo clone-review-logo--${review.id}`} aria-hidden="true">{review.logo}</span>
+              <span className="clone-review-copy">
+                <strong>{review.label}</strong>
+                <span>{review.score}</span>
               </span>
-            ))}
-          </div>
+            </a>
+          ) : (
+            <span key={review.label} className="clone-review-card">
+              <span className={`clone-review-logo clone-review-logo--${review.id}`} aria-hidden="true">{review.logo}</span>
+              <span className="clone-review-copy">
+                <strong>{review.label}</strong>
+                <span>{review.score}</span>
+              </span>
+            </span>
+          ))}
         </div>
       </div>
       <div className="clone-copyright">
