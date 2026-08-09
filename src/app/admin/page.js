@@ -1617,7 +1617,7 @@ Core Rules:
       badgeTone: 'success',
     },
     carts: {
-      label: 'Abandoned Carts',
+      label: 'Carts',
       icon: <ShoppingCart size={iconSize} />,
       badge: abandonedCarts.length,
       badgeTone: 'warning',

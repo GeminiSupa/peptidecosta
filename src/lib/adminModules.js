@@ -13,7 +13,7 @@ export const ADMIN_MODULES = [
   // Leads sits directly under Live Chat: chats are where leads now come from,
   // so the two are worked together.
   { id: 'leads', label: 'Leads', title: 'Leads', group: 'Core Operations' },
-  { id: 'carts', label: 'Abandoned Carts', title: 'Abandoned Carts', group: 'Sales & Marketing' },
+  { id: 'carts', label: 'Carts', title: 'Carts', group: 'Sales & Marketing' },
   { id: 'spreadsheet', label: 'Products', title: 'Products', group: 'Core Operations', superadminOnly: true },
   { id: 'customers', label: 'Customers', title: 'Customers', group: 'Core Operations' },
   { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
