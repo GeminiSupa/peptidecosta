@@ -148,36 +148,88 @@ export function buildAgentNameResolver(profiles) {
  * Deliberately quick to disqualify. A false positive costs one attribution an
  * agent can still make by hand; a false negative pays the wrong person.
  */
-export function findAmbiguousContactKeys(orders) {
-  const counterparts = new Map();
-  const names = new Map();
+/** Spanish name particles, which carry no identity on their own. */
+const NAME_PARTICLES = new Set(['de', 'del', 'la', 'las', 'los', 'da', 'do', 'dos', 'van', 'von']);
 
-  const note = (map, key, value) => {
-    if (!key || !value) return;
-    if (!map.has(key)) map.set(key, new Set());
-    map.get(key).add(value);
-  };
+/**
+ * The meaningful words of a name, accent- and case-insensitive.
+ *
+ * "Mariela Álvarez" and "mariela alvarez campos" have to reduce to overlapping
+ * words, or the same person reads as two.
+ */
+export function nameTokens(value) {
+  return new Set(
+    String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((word) => word.length >= 3 && !NAME_PARTICLES.has(word)),
+  );
+}
+
+/**
+ * Whether two names on one contact detail can be the same human.
+ *
+ * One shared word is enough. Two strangers who happen to share a phone almost
+ * never also share a name word, while one person's own orders routinely differ
+ * by a middle name, an abbreviated surname or a nickname — "kenneth alfaro h"
+ * and "kenneth alfaro hutchinson", "elodie" and "elodie ramirez".
+ *
+ * A nameless order is not evidence of anybody, so it matches whatever it sits
+ * beside rather than inventing a second person.
+ */
+function couldBeSamePerson(a, b) {
+  if (a.size === 0 || b.size === 0) return true;
+  for (const word of a) if (b.has(word)) return true;
+  return false;
+}
+
+/** How many distinct people a contact detail appears to belong to. */
+function distinctPeopleOn(nameSets) {
+  const clusters = [];
+  for (const tokens of nameSets) {
+    const hit = clusters.find((cluster) => cluster.some((seen) => couldBeSamePerson(seen, tokens)));
+    if (hit) hit.push(tokens);
+    else clusters.push([tokens]);
+  }
+  return clusters.length;
+}
+
+export function findAmbiguousContactKeys(orders) {
+  const names = new Map();
+  const counterparts = new Map();
 
   for (const order of Array.isArray(orders) ? orders : []) {
     if (!isClosedOrder(order)) continue;
     const phone = phoneKey(order?.customer_phone);
     const email = emailKey(order?.customer_email);
-    const name = String(order?.customer_name || '').trim().toLowerCase();
+    const tokens = nameTokens(order?.customer_name);
 
-    // Each key is judged by the other key on the same order, so one customer
-    // ordering twice — once with an email, once without — is not mistaken for
-    // two people.
-    note(counterparts, phone, email);
-    note(counterparts, email, phone);
-    note(names, phone, name);
-    note(names, email, name);
+    for (const key of [phone, email]) {
+      if (!key) continue;
+      if (!names.has(key)) names.set(key, []);
+      names.get(key).push(tokens);
+    }
+    // Kept only as a backstop for rows with no usable name — see below.
+    for (const [key, other] of [[phone, email], [email, phone]]) {
+      if (!key || !other) continue;
+      if (!counterparts.has(key)) counterparts.set(key, new Set());
+      counterparts.get(key).add(other);
+    }
   }
 
   const ambiguous = new Set();
-  for (const map of [counterparts, names]) {
-    for (const [key, seen] of map) {
-      if (seen.size > 1) ambiguous.add(key);
-    }
+  for (const [key, nameSets] of names) {
+    if (distinctPeopleOn(nameSets) > 1) ambiguous.add(key);
+  }
+  // A detail carrying three or more different counterparts is a placeholder
+  // even when the names are blank or unreadable. Two is left alone: a real
+  // customer having a second email address is ordinary, and treating that as
+  // two people is what stripped 26 customers of their agent.
+  for (const [key, seen] of counterparts) {
+    if (seen.size >= 3) ambiguous.add(key);
   }
   return ambiguous;
 }
