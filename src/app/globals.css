@@ -4990,10 +4990,6 @@ body {
     animation: marqueeTicker 80s linear infinite;
 }
 
-.promo-banner-track:hover {
-    animation-play-state: paused;
-}
-
 .promo-banner-text {
     display: flex;
     align-items: center;
@@ -5013,28 +5009,6 @@ body {
 
 .promo-icon {
     color: #38bdf8;
-}
-
-.promo-banner-pause {
-    position: absolute;
-    top: 50%;
-    right: 8px;
-    transform: translateY(-50%);
-    min-width: 92px;
-    min-height: 44px;
-    border: 1px solid rgba(255, 255, 255, 0.55);
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.12);
-    color: #ffffff;
-    font: inherit;
-    font-size: 0.72rem;
-    font-weight: 900;
-    cursor: pointer;
-}
-
-.promo-banner-pause:focus-visible {
-    outline: 3px solid #ffffff;
-    outline-offset: 2px;
 }
 
 @keyframes promoPulse {
