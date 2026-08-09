@@ -33,6 +33,85 @@ export function resolveCategoryParam(products = [], param = '') {
   return match ? match.category : 'all';
 }
 
+export function normalizeCatalogSearchText(value = '') {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function compactSearchText(value = '') {
+  return normalizeCatalogSearchText(value).replace(/\s+/g, '');
+}
+
+function searchAcronym(value = '') {
+  return normalizeCatalogSearchText(value)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word[0])
+    .join('');
+}
+
+function textMatchRank(value = '', query = '') {
+  const text = normalizeCatalogSearchText(value);
+  const compact = compactSearchText(value);
+  const words = text.split(/\s+/).filter(Boolean);
+  const acronym = searchAcronym(value);
+  const q = normalizeCatalogSearchText(query);
+  const qCompact = compactSearchText(query);
+
+  if (!q || !qCompact) return null;
+  if (text.startsWith(q) || compact.startsWith(qCompact)) return 0;
+  if (words.some((word) => word.startsWith(q)) || acronym.startsWith(qCompact)) return 1;
+  if (text.includes(q) || compact.includes(qCompact)) return 2;
+  if (acronym.includes(qCompact)) return 3;
+  return null;
+}
+
+export function catalogSearchMatchRank(product = {}, query = '') {
+  const q = normalizeCatalogSearchText(query);
+  if (!q) return 0;
+
+  const nameRank = textMatchRank(product?.product, q);
+  if (nameRank !== null) return nameRank;
+
+  const categoryRank = textMatchRank(product?.category, q);
+  if (categoryRank !== null) return 10 + categoryRank;
+
+  const detailText = [
+    product?.descriptionEn,
+    product?.descriptionEs,
+    product?.discount,
+    product?.bulkDiscountEn,
+    product?.bulkDiscountEs,
+  ].filter(Boolean).join(' ');
+  const detailRank = textMatchRank(detailText, q);
+  if (detailRank !== null) return 20 + detailRank;
+
+  return null;
+}
+
+export function productMatchesCatalogSearch(product = {}, query = '') {
+  return catalogSearchMatchRank(product, query) !== null;
+}
+
+export function rankCatalogSearchResults(products = [], query = '', { limit } = {}) {
+  const q = normalizeCatalogSearchText(query);
+  if (!q) {
+    return Number.isFinite(limit) ? products.slice(0, limit) : products;
+  }
+
+  const ranked = (products || [])
+    .map((product, index) => ({ product, index, rank: catalogSearchMatchRank(product, q) }))
+    .filter((item) => item.rank !== null)
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((item) => item.product);
+
+  return Number.isFinite(limit) ? ranked.slice(0, limit) : ranked;
+}
+
 /**
  * Where a product sits in the grid, lowest rank first:
  *

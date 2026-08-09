@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   readCatalogParams,
   resolveCategoryParam,
+  productMatchesCatalogSearch,
+  rankCatalogSearchResults,
   productSortRank,
   compareBySaleAndStock,
 } from '../src/lib/catalogFilters.mjs';
@@ -63,6 +65,40 @@ test('a stale link shows the whole catalog instead of an empty page', () => {
 test('products with no category never match', () => {
   assert.equal(resolveCategoryParam(products, 'null'), 'all');
   assert.equal(resolveCategoryParam(products, '   '), 'all');
+});
+
+test('search suggestions prefer product names containing the typed letters', () => {
+  const searchableProducts = [
+    { product: 'BPC-157', category: 'Recovery & Healing' },
+    { product: 'TB-500', category: 'Recovery & Healing' },
+    { product: 'BPC-157 + TB-500 20mg (Wolverine Stack)', category: 'Recovery & Healing' },
+  ];
+
+  const matches = rankCatalogSearchResults(searchableProducts, 'wolv');
+
+  assert.deepEqual(matches.map((p) => p.product), ['BPC-157 + TB-500 20mg (Wolverine Stack)']);
+});
+
+test('search matching tolerates punctuation and accents', () => {
+  assert.equal(
+    productMatchesCatalogSearch({ product: 'BPC-157 + TB-500 20mg (Wolverine Stack)' }, 'bpc157'),
+    true
+  );
+  assert.equal(
+    productMatchesCatalogSearch({ product: 'Pérdida de Peso Blend' }, 'perdida'),
+    true
+  );
+});
+
+test('name matches rank ahead of broad category matches', () => {
+  const searchableProducts = [
+    { product: 'Generic Repair Blend', category: 'Recovery & Healing' },
+    { product: 'Recovery Stack', category: 'Performance & Hormones' },
+  ];
+
+  const matches = rankCatalogSearchResults(searchableProducts, 'recovery');
+
+  assert.deepEqual(matches.map((p) => p.product), ['Recovery Stack', 'Generic Repair Blend']);
 });
 
 // --- Grid ordering: on-sale to the top -----------------------------------

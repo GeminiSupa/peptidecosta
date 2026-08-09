@@ -5,7 +5,7 @@ import { Sparkles } from 'lucide-react';
 import { normalizeBannerCopy, sanitizeBannerHref } from '@/lib/bannerText';
 
 export default function PromoTicker({ active = true, text = '', href = '', className = '', lang = 'es' }) {
-  const [paused, setPaused] = useState(true);
+  const [paused, setPaused] = useState(false);
   const normalized = normalizeBannerCopy(text);
   const cleanText = normalized.text;
   const tickerHref = sanitizeBannerHref(href || normalized.href);

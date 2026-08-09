@@ -44,7 +44,13 @@ import {
 import PressBand from '@/components/PressBand';
 import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import { mergeLandingPageSettings } from '@/lib/landingContent';
-import { readCatalogParams, resolveCategoryParam, compareBySaleAndStock } from '@/lib/catalogFilters.mjs';
+import {
+  readCatalogParams,
+  resolveCategoryParam,
+  productMatchesCatalogSearch,
+  rankCatalogSearchResults,
+  compareBySaleAndStock,
+} from '@/lib/catalogFilters.mjs';
 
 // const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
 const FALLBACK_EXCHANGE_RATE = 454.48;
@@ -1554,15 +1560,12 @@ export default function CatalogPage() {
   };
 
   const getSearchSuggestions = () => {
-    const query = searchQuery.toLowerCase().trim();
+    const query = searchQuery.trim();
     const visible = products.filter(isListableProduct);
     if (!query) {
       return visible.slice(0, 3);
     }
-    return visible.filter(p =>
-      p.product.toLowerCase().includes(query) ||
-      (p.category && p.category.toLowerCase().includes(query))
-    ).slice(0, 5);
+    return rankCatalogSearchResults(visible, query, { limit: 5 });
   };
 
   const handlePopularTermClick = (term) => {
@@ -2463,9 +2466,7 @@ export default function CatalogPage() {
     // search dropdown and the cart suggestions so the three lists cannot drift.
     if (!isListableProduct(p)) return false;
     // 1. Search Query
-    const nameMatch = (p.product || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const catMatch = (p.category || '').toLowerCase().includes(searchQuery.toLowerCase());
-    if (!nameMatch && !catMatch) return false;
+    if (!productMatchesCatalogSearch(p, searchQuery)) return false;
 
     // 2. Category Bubble Filter
     if (activeCategory !== 'all' && p.category !== activeCategory) return false;
