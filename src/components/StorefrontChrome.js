@@ -385,18 +385,18 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
                 className="clone-review-card"
                 aria-label={`${review.label} reviews rated ${review.score}`}
               >
-                <span className={`clone-review-logo clone-review-logo--${review.id}`}>{review.logo}</span>
+                <span className={`clone-review-logo clone-review-logo--${review.id}`} aria-hidden="true">{review.logo}</span>
                 <span className="clone-review-copy">
-                  <em>{review.label}</em>
-                  <strong>{review.score}</strong>
+                  <strong>{review.label}</strong>
+                  <span>{review.score}</span>
                 </span>
               </a>
             ) : (
               <span key={review.label} className="clone-review-card">
-                <span className={`clone-review-logo clone-review-logo--${review.id}`}>{review.logo}</span>
+                <span className={`clone-review-logo clone-review-logo--${review.id}`} aria-hidden="true">{review.logo}</span>
                 <span className="clone-review-copy">
-                  <em>{review.label}</em>
-                  <strong>{review.score}</strong>
+                  <strong>{review.label}</strong>
+                  <span>{review.score}</span>
                 </span>
               </span>
             ))}
