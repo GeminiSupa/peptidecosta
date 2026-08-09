@@ -5,6 +5,7 @@ import {
   CUSTOMER_HISTORY_SOURCE,
   buildAgentHistory,
   buildAgentNameResolver,
+  contactKeysFor,
   emailKey,
   findAmbiguousContactKeys,
   findHistoricalAgent,
@@ -343,4 +344,127 @@ test('a lead is matched whether its one contact value is a phone or an email', (
   assert.equal(historicalAgentForLead({ contact_value: '50684046973' }, history), 'Dani');
   assert.equal(historicalAgentForLead({ contact_value: 'nobody@x.com' }, history), null);
   assert.equal(historicalAgentForLead(null, history), null);
+});
+
+// --- Both CRM tabs must answer "who owns this customer?" identically ---------
+//
+// The Customers tab and the Leads tab each used to derive ownership themselves.
+// They drifted: Customers credited the LATEST closed order while Leads credited
+// the EARLIEST, so a customer with two closed orders by two agents showed a
+// different owner depending on which tab you opened. Both now call the helpers
+// below, and these tests pin the rule so a future edit to one tab cannot
+// silently re-open the gap.
+
+const twoAgentCustomer = [
+  {
+    customer_name: 'Ana',
+    customer_email: 'ana@correo.com',
+    customer_phone: '+506 8404 6973',
+    created_at: '2026-02-10',
+    status: 'Completed',
+    sales_agent: 'María',
+  },
+  {
+    customer_name: 'Ana',
+    customer_email: 'ana@correo.com',
+    // Same person, number typed differently on the second order.
+    customer_phone: '8404-6973',
+    created_at: '2026-07-22',
+    status: 'Completed',
+    sales_agent: 'Carlos',
+  },
+];
+
+test('the agent who closed first keeps the customer, not the most recent one', () => {
+  const history = buildAgentHistory(twoAgentCustomer);
+  const owner = findHistoricalAgent(history, {
+    phone: '+506 8404 6973',
+    email: 'ana@correo.com',
+  });
+  assert.equal(owner?.agent, 'María');
+});
+
+test('the Customers tab and the Leads tab resolve the same owner', () => {
+  const history = buildAgentHistory(twoAgentCustomer);
+
+  // How CustomersCRM asks: it has a grouped customer record.
+  const customersTab = findHistoricalAgent(history, {
+    phone: '8404 6973',
+    email: 'ana@correo.com',
+  })?.agent;
+
+  // How LeadsManager asks: a lead carries one contact value.
+  const leadsTab = historicalAgentForLead({ contact_value: 'ana@correo.com' }, history);
+
+  assert.equal(customersTab, 'María');
+  assert.equal(leadsTab, 'María');
+  assert.equal(customersTab, leadsTab);
+});
+
+test('a customer is recognised however their number was typed', () => {
+  const history = buildAgentHistory(twoAgentCustomer);
+  for (const phone of ['+506 8404 6973', '50684046973', '8404-6973', '8404 6973']) {
+    assert.equal(
+      findHistoricalAgent(history, { phone })?.agent,
+      'María',
+      `phone format ${phone} should resolve to María`
+    );
+  }
+});
+
+test('an open order never assigns ownership', () => {
+  const history = buildAgentHistory([
+    {
+      customer_name: 'Dani',
+      customer_email: 'dani@correo.com',
+      customer_phone: '+506 5000 3333',
+      created_at: '2026-06-01',
+      status: 'pending',
+      sales_agent: 'María',
+    },
+  ]);
+  assert.equal(findHistoricalAgent(history, { email: 'dani@correo.com' }), null);
+});
+
+test('one agent under both their name and their email is a single owner', () => {
+  const profiles = [{ name: 'Korinne', email: 'korinneda@icloud.com' }];
+  const resolveAgent = buildAgentNameResolver(profiles);
+  const history = buildAgentHistory(
+    [
+      {
+        customer_name: 'Eva',
+        customer_email: 'eva@correo.com',
+        customer_phone: '+506 7000 1234',
+        created_at: '2026-01-02',
+        status: 'Completed',
+        sales_agent: 'korinneda@icloud.com',
+      },
+    ],
+    { resolveAgent }
+  );
+  assert.equal(findHistoricalAgent(history, { email: 'eva@correo.com' })?.agent, 'Korinne');
+});
+
+test('a lead contact value is routed to the right key', () => {
+  assert.deepEqual(contactKeysFor('whatsapp', '+506 8404 6973'), { phone: '+506 8404 6973', email: '' });
+  assert.deepEqual(contactKeysFor('email', 'ana@correo.com'), { phone: '', email: 'ana@correo.com' });
+  // The catalog gate takes one field for "WhatsApp or email", so plenty of
+  // addresses arrive tagged as 'whatsapp'. The @ has to overrule the method.
+  assert.deepEqual(contactKeysFor('whatsapp', 'ana@correo.com'), { phone: '', email: 'ana@correo.com' });
+  assert.deepEqual(contactKeysFor('email', ''), { phone: '', email: '' });
+});
+
+test('a lead tagged whatsapp but holding an email still finds its agent', () => {
+  const history = buildAgentHistory([
+    {
+      customer_name: 'Ana',
+      customer_email: 'ana@correo.com',
+      customer_phone: '+506 8404 6973',
+      created_at: '2026-02-10',
+      status: 'Completed',
+      sales_agent: 'Mar\u00eda',
+    },
+  ]);
+  const keys = contactKeysFor('whatsapp', 'ana@correo.com');
+  assert.equal(findHistoricalAgent(history, keys)?.agent, 'Mar\u00eda');
 });

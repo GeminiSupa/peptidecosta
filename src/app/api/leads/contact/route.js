@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
-import { buildAgentNameResolver, lookupHistoricalAgent } from '@/lib/agentAttribution.mjs';
+import { resolveLeadOwner } from '@/lib/leadOwner';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { rateLimit } from '@/lib/rateLimit.mjs';
 
@@ -98,24 +98,13 @@ export async function POST(request) {
     // existing owner is never overwritten — an agent who already claimed this
     // lead outranks anything history says.
     const existingOwner = String(existing?.sales_agent || existing?.owner || existing?.assigned_to || '').trim();
-    let historyAgent = '';
-    if (!existingOwner) {
-      try {
-        const { data: profiles } = await supabase.from('admin_profiles').select('name, email');
-        const match = await lookupHistoricalAgent(supabase, {
-          phone,
-          email,
-          // Some closed orders record an agent's email rather than their name;
-          // both must resolve to the one agent.
-          resolveAgent: buildAgentNameResolver(profiles),
-        });
-        historyAgent = match?.agent || '';
-      } catch (attributionErr) {
-        // Never lose the lead over attribution; an agent can still claim it.
-        console.warn('[leads/contact] History attribution skipped:', attributionErr.message);
-      }
-    }
-    const owner = existingOwner || historyAgent;
+    const owner = await resolveLeadOwner(supabase, {
+      phone,
+      email,
+      existingOwner,
+      label: 'leads/contact',
+    });
+    const historyAgent = existingOwner ? '' : owner;
 
     // catalog_leads has no name/email/phone columns on the live schema, so the
     // details are always written into `notes` as well. Otherwise an agent

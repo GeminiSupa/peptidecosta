@@ -16,6 +16,7 @@ import { APPROVED_WHATSAPP_AGENT_TEMPLATES } from '@/lib/whatsappTemplates.mjs';
 import {
   getAbandonedCartConversion,
   getLeadConversion as resolveLeadConversion,
+  leadIsActiveForPipeline,
 } from '@/lib/leadConversion.mjs';
 import { markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
 import { 
@@ -416,7 +417,7 @@ export default function AdminPage() {
   const [fbFilter, setFbFilter] = useState('All');
   const [toastMessage, setToastMessage] = useState('');
   const [leadsSearch, setLeadsSearch] = useState('');
-  const [leadsSourceFilter, setLeadsSourceFilter] = useState('All');
+  const [leadsSourceFilter, setLeadsSourceFilter] = useState('active');
   const [leadsAreaFilter, setLeadsAreaFilter] = useState('All');
   const [fbReplyId, setFbReplyId] = useState(null);
   const [fbReplyText, setFbReplyText] = useState('');
@@ -4087,7 +4088,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
     // 2. Source Filter
     if (leadsSourceFilter !== 'All') {
-      if (leadsSourceFilter === 'Direct') {
+      if (leadsSourceFilter === 'active') {
+        if (!leadIsActiveForPipeline(lead, orders)) return false;
+      } else if (leadsSourceFilter === 'converted') {
+        if (leadIsActiveForPipeline(lead, orders)) return false;
+      } else if (leadsSourceFilter === 'Direct') {
         if (lead.utm_source) return false;
       } else if (leadsSourceFilter === 'Ads') {
         if (!lead.utm_source) return false;

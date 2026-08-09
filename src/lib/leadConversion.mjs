@@ -72,6 +72,10 @@ export function getLeadConversion(lead, orders = []) {
   return match ? { converted: true, order: match } : { converted: false };
 }
 
+export function leadIsActiveForPipeline(lead, orders = []) {
+  return !getLeadConversion(lead, orders).converted;
+}
+
 function parseDateMs(value) {
   if (!value) return null;
   const time = new Date(value).getTime();

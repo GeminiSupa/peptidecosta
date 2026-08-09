@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getPageAccessToken } from '@/lib/facebookPageToken';
+import { resolveLeadOwner } from '@/lib/leadOwner';
 
 // ─── Supabase client (service role for server writes) ───
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -135,9 +136,18 @@ export async function POST(request) {
               const contactMethod = emailVal ? 'email' : 'whatsapp';
               const contactValue = emailVal || phoneVal || `lead_${leadgenId}`;
 
+              // Lead Ads give both fields when the form asks for both, so pass
+              // each one through rather than guessing from contact_value.
+              const salesAgent = await resolveLeadOwner(supabase, {
+                phone: phoneVal,
+                email: emailVal,
+                label: 'facebook/webhook',
+              });
+
               await supabase.from('catalog_leads').insert({
                 contact_method: contactMethod,
                 contact_value: contactValue.trim(),
+                sales_agent: salesAgent || null,
                 language: 'es', // default to ES
                 utm_source: 'facebook_ads',
                 utm_medium: 'lead_form',

@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getAbandonedCartConversion, getLeadConversion } from '../src/lib/leadConversion.mjs';
+import {
+  getAbandonedCartConversion,
+  getLeadConversion,
+  leadIsActiveForPipeline,
+} from '../src/lib/leadConversion.mjs';
 
 test('does not convert leads with invalid or blank phone values', () => {
   const orders = [
@@ -40,6 +44,16 @@ test('matches paid orders by normalized email', () => {
   ];
 
   assert.equal(getLeadConversion(lead, orders).converted, true);
+});
+
+test('converted leads are not active pipeline leads', () => {
+  const lead = { contact_value: 'person@example.com' };
+  const orders = [
+    { id: 'order-1', status: 'Paid', customer_email: 'person@example.com' },
+  ];
+
+  assert.equal(leadIsActiveForPipeline(lead, orders), false);
+  assert.equal(leadIsActiveForPipeline({ contact_value: 'new@example.com' }, orders), true);
 });
 
 test('converts abandoned carts when a paid order matches the cart contact', () => {

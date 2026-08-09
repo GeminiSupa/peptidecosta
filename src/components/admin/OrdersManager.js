@@ -1,6 +1,7 @@
 import React from 'react';
 import { Database, Download, MessageCircle, Plus, Trash2 } from 'lucide-react';
 import { getAdminVolumeDiscountPct } from '@/lib/adminOrderTotals.mjs';
+import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
 
 const ORDER_STATUS_OPTIONS = [
   'Pending',
@@ -160,6 +161,13 @@ function hasConfirmedPayment(order, group, cardBadge) {
     cardBadge?.label === 'Paid' ||
     status.includes('paid') ||
     status.includes('complete');
+}
+
+function getOrderAgentSourceLabel(order) {
+  if (!order?.sales_agent) return 'Unassigned';
+  if (order.agent_commission_source === CUSTOMER_HISTORY_SOURCE) return 'Auto: customer history';
+  if (order.agent_commission_source) return `Source: ${order.agent_commission_source}`;
+  return 'Assigned owner';
 }
 
 export default function OrdersManager({
@@ -411,7 +419,7 @@ export default function OrdersManager({
                   <div className="order-mobile-badges">
                     <span className="order-mobile-status">{group.label}</span>
                     {cardBadge && <span className="order-mobile-payment" style={{ color: cardBadge.color, background: cardBadge.bg }}>{cardBadge.label}</span>}
-                    {order.sales_agent && <span className="order-mobile-agent">{order.sales_agent}</span>}
+                    {order.sales_agent && <span className="order-mobile-agent">Owner: {order.sales_agent}</span>}
                   </div>
                 </button>
                 <div className="order-mobile-control-grid">
@@ -442,6 +450,11 @@ export default function OrdersManager({
                         <option key={agent} value={agent}>{agent}</option>
                       ))}
                     </select>
+                    {order.sales_agent && (
+                      <small style={{ color: '#a78bfa', fontWeight: 800 }}>
+                        {getOrderAgentSourceLabel(order)}
+                      </small>
+                    )}
                   </label>
                 </div>
                 {!order.sales_agent && (
@@ -628,28 +641,33 @@ export default function OrdersManager({
                         </select>
                       </td>
                       <td data-label="Agent" style={{ padding: '10px 12px' }}>
-                        <select 
-                          className="cell-select"
-                          value={order.sales_agent || ''}
-                          onChange={(e) => handleOrderSalesAgentUpdate(order.id, e.target.value)}
-                          style={{
-                            padding: '4px 8px',
-                            borderRadius: '6px',
-                            fontSize: '0.75rem',
-                            width: '120px',
-                            background: order.sales_agent ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
-                            color: order.sales_agent ? '#c084fc' : '#94a3b8',
-                            fontWeight: 'bold',
-                            border: order.sales_agent ? '1px solid rgba(168, 85, 247, 0.3)' : '1px solid rgba(255,255,255,0.05)',
-                            textAlign: 'center',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <option value="">-- Unassigned --</option>
-                          {agentOptionsFor(order).map(agent => (
-                            <option key={agent} value={agent}>{agent}</option>
-                          ))}
-                        </select>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                          <select
+                            className="cell-select"
+                            value={order.sales_agent || ''}
+                            onChange={(e) => handleOrderSalesAgentUpdate(order.id, e.target.value)}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                              width: '120px',
+                              background: order.sales_agent ? 'rgba(168, 85, 247, 0.15)' : 'rgba(255,255,255,0.03)',
+                              color: order.sales_agent ? '#c084fc' : '#94a3b8',
+                              fontWeight: 'bold',
+                              border: order.sales_agent ? '1px solid rgba(168, 85, 247, 0.3)' : '1px solid rgba(255,255,255,0.05)',
+                              textAlign: 'center',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <option value="">-- Unassigned --</option>
+                            {agentOptionsFor(order).map(agent => (
+                              <option key={agent} value={agent}>{agent}</option>
+                            ))}
+                          </select>
+                          <span style={{ color: order.sales_agent ? '#a78bfa' : '#64748b', fontSize: '0.66rem', fontWeight: 800 }}>
+                            {getOrderAgentSourceLabel(order)}
+                          </span>
+                        </div>
                       </td>
                       <td data-label="Actions" style={{ padding: '10px 12px' }}>
                         <div className="admin-card-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', justifyContent: 'flex-end' }}>

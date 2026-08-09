@@ -10,6 +10,12 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
 import { adminFetch } from '@/lib/adminApi';
+import {
+  buildAgentHistory,
+  buildAgentNameResolver,
+  findHistoricalAgent,
+  isClosedOrder,
+} from '@/lib/agentAttribution.mjs';
 import { supabase } from '@/lib/supabase';
 
 const CRM_REMINDERS_KEY = 'peptides_crm_follow_up_reminders_v1';
@@ -162,7 +168,7 @@ const buildSalesScript = (cust) => {
   return `Hi ${firstName}, this is Peptides Costa Rica. ${purchaseLine} I can help you verify COA documentation, current Costa Rica stock, and live CRC pricing before you order.`;
 };
 
-export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhatsAppClick }) {
+export default function CustomersCRM({ orders = [], abandonedCarts = [], agentProfiles = [], onWhatsAppClick }) {
   const [searchTerm, setSearchTerm] = useState(() => takeCustomerHandoffSearch());
   const [currentPage, setCurrentPage] = useState(1);
   const [customersPerPage, setCustomersPerPage] = useState(25);
@@ -259,7 +265,6 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
           lastOrderDate: o.created_at,
           isLead: false,
           purchasedItems: [],
-          lastClosedOrderDate: 0,
           owner: null
         };
       }
@@ -283,20 +288,10 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
         });
       }
       
-      const isClosed = o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'order complete';
-      if (isClosed) {
+      if (isClosedOrder(o)) {
           map[id].totalSpentUsd += parseFloat(o.total_usd || 0);
-          
-          const orderTime = new Date(o.created_at).getTime();
-          if (orderTime > map[id].lastClosedOrderDate) {
-             map[id].lastClosedOrderDate = orderTime;
-             if (o.sales_agent) {
-                map[id].owner = o.sales_agent;
-             }
-          } else if (!map[id].owner && o.sales_agent) {
-             map[id].owner = o.sales_agent;
-          }
       }
+
       map[id].orderCount += 1;
       
       // Keep most recent contact details
@@ -343,6 +338,21 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
       }
     });
     
+    // Ownership comes from src/lib/agentAttribution.mjs, the same unit-tested
+    // module the Leads tab and the checkout backfill use: the agent who closed
+    // the customer's EARLIEST order keeps them. Deriving it here a second time
+    // is what let this tab and the Leads tab disagree — this tab had drifted to
+    // crediting the LATEST order, so any customer with two closed orders by
+    // different agents showed a different owner on each screen.
+    const resolveAgent = buildAgentNameResolver(agentProfiles);
+    const history = buildAgentHistory(orders, { resolveAgent });
+    for (const customer of Object.values(map)) {
+      customer.owner = findHistoricalAgent(history, {
+        phone: customer.phone || customer.whatsappWaId,
+        email: customer.email,
+      })?.agent || null;
+    }
+
     // Convert to array and sort by customer type (Customers first, then Leads) and LTV/Last updated
     return Object.values(map).sort((a, b) => {
       if (a.isLead !== b.isLead) {
@@ -350,7 +360,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
       }
       return b.totalSpentUsd - a.totalSpentUsd || new Date(b.lastOrderDate) - new Date(a.lastOrderDate);
     });
-  }, [orders, abandonedCarts]);
+  }, [orders, abandonedCarts, agentProfiles]);
 
   const crmStats = useMemo(() => {
     let totalContacts = customers.length;
@@ -1429,7 +1439,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                 </div>
 
                 <div className="crm-mobile-metrics">
-                  <span><User size={12} /> {cust.owner || 'Unassigned'}</span>
+                  <span><User size={12} /> Owner: {cust.owner || 'Unassigned'}</span>
                   <span><ShoppingBag size={12} /> {cust.orderCount} orders</span>
                   <span><DollarSign size={12} /> {cust.totalSpentUsd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
                   <span><Sparkles size={12} /> {rec.product}</span>
@@ -1604,10 +1614,10 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], onWhats
                           fontSize: '0.75rem', 
                           color: '#e2e8f0' 
                         }}>
-                          {cust.owner}
+                          Owner: {cust.owner}
                         </span>
                       ) : (
-                        <span style={{ color: '#475569', fontSize: '0.75rem', fontStyle: 'italic' }}>Unassigned</span>
+                        <span style={{ color: '#475569', fontSize: '0.75rem', fontStyle: 'italic' }}>Owner: Unassigned</span>
                       )}
                     </td>
 

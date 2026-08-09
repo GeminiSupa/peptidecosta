@@ -68,6 +68,21 @@ export function emailKey(value) {
   return email.includes('@') ? email : '';
 }
 
+/**
+ * Splits a `catalog_leads` row into the two keys attribution matches on.
+ *
+ * The table stores one free-text `contact_value` plus a `contact_method`, so
+ * which of the two it holds has to be worked out before it can be looked up.
+ * The `@` check overrules `contact_method`: the catalog gate takes one field
+ * for "WhatsApp or email" and tags plenty of addresses as 'whatsapp'.
+ */
+export function contactKeysFor(contactMethod, contactValue) {
+  const value = String(contactValue ?? '').trim();
+  if (!value) return { phone: '', email: '' };
+  if (contactMethod === 'email' || value.includes('@')) return { phone: '', email: value };
+  return { phone: value, email: '' };
+}
+
 function orderClosedAt(order) {
   const raw = order?.created_at || order?.updated_at || order?.order_date || null;
   const time = raw ? new Date(raw).getTime() : NaN;

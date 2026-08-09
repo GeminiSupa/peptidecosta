@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
+import { resolveLeadOwner } from '@/lib/leadOwner';
 
 // Records a WhatsApp marketing opt-in captured AFTER the initial signup (the
 // "second-chance" re-prompt on the catalog). Sets whatsapp_consent=true for the
@@ -46,9 +47,17 @@ export async function POST(request) {
         })
         .eq('id', existing.id);
     } else {
+      // Only on the insert branch: the update above touches a lead that already
+      // exists, and re-deriving its owner could overwrite an agent's own claim.
+      const salesAgent = await resolveLeadOwner(supabase, {
+        phone: clean,
+        label: 'leads/optin',
+      });
+
       await supabase.from('catalog_leads').insert([{
         contact_method: 'whatsapp',
         contact_value: clean,
+        sales_agent: salesAgent || null,
         whatsapp_consent: true,
         marketing_consent: true,
         consent_at: now,

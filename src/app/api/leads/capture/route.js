@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { sendCatalogWelcomeCampaign } from '@/lib/campaignDelivery';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
+import { resolveLeadOwner, contactKeysFor } from '@/lib/leadOwner';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -96,9 +97,18 @@ export async function POST(request) {
 
     if (supabase) {
       // Insert into catalog_leads
+      // A returning customer goes straight back to the agent who first closed
+      // them, so the owner is stored on the row rather than only being derived
+      // in the CRM at render time.
+      const salesAgent = await resolveLeadOwner(supabase, {
+        ...contactKeysFor(contact_method, cleanContact),
+        label: 'leads/capture',
+      });
+
       const { error: leadErr } = await supabase.from('catalog_leads').insert([{
         contact_method,
         contact_value: cleanContact,
+        sales_agent: salesAgent || null,
         whatsapp_consent: contact_method === 'whatsapp' ? !!whatsapp_consent : false,
         marketing_consent: !!whatsapp_consent,
         consent_at: whatsapp_consent ? new Date().toISOString() : null,

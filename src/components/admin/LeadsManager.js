@@ -229,6 +229,7 @@ export default function LeadsManager({
         if (!match) return false;
       }
       if (leadsSourceFilter && leadsSourceFilter !== 'All') {
+        if (leadsSourceFilter === 'active' && getLeadConversion(l).converted) return false;
         if (leadsSourceFilter === 'whatsapp' && l.contact_method !== 'whatsapp' && !(l.phone) && !(l.contact_value && !String(l.contact_value).includes('@'))) return false;
         if (leadsSourceFilter === 'email' && l.contact_method !== 'email' && !(l.email) && !(l.contact_value && String(l.contact_value).includes('@'))) return false;
         if (leadsSourceFilter === 'converted' && !getLeadConversion(l).converted) return false;
@@ -655,12 +656,13 @@ export default function LeadsManager({
           onChange={(e) => setLeadsSourceFilter(e.target.value)}
           style={{ flex: '0 1 140px', padding: '8px', fontSize: '0.85rem' }}
         >
-          <option value="All">All Sources</option>
+          <option value="active">Active Leads</option>
+          <option value="All">All Leads</option>
           <option value="whatsapp">WhatsApp</option>
           <option value="email">Email</option>
           <option value="live_chat">Live Chat</option>
           <option value="facebook">Facebook Ads</option>
-          <option value="converted">Converted</option>
+          <option value="converted">Converted / Won</option>
           <option value="wa_optin">✓ WhatsApp Opt-in</option>
           <option value="wa_nooptin">✗ No WhatsApp Opt-in</option>
         </select>
