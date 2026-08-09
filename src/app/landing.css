@@ -869,20 +869,21 @@
 
 .clone-review-row {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr;
     gap: 8px;
     margin-top: 16px;
+    max-width: 220px;
 }
 
 .clone-review-row > .clone-review-card {
-    min-height: 76px;
+    min-height: 54px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
     gap: 10px;
     border: 1px solid #d7e0ee;
     border-radius: 4px;
-    padding: 11px 10px;
+    padding: 10px 12px;
     color: #082d74;
     font-size: .76rem;
     font-weight: 900;
