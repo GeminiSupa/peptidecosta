@@ -5,6 +5,8 @@ import {
   isProspectsTableMissing,
   normalizeProspectInput,
   normalizeOptionalUrl,
+  normalizeProspectPeople,
+  normalizeLinkedInProfileUrls,
   scoreProspect,
   PROSPECT_STATUSES,
   CONTACT_PERMISSION_STATUSES,
@@ -17,7 +19,7 @@ const SELECT_FIELDS = [
   'website_url', 'phone', 'email', 'formatted_address', 'city', 'region', 'country',
   'latitude', 'longitude', 'google_maps_url', 'rating', 'user_rating_count',
   'business_status', 'status', 'fit_score', 'fit_reasons', 'contact_permission_status',
-  'contact_source_url', 'enriched_at', 'owner_email', 'notes', 'last_contacted_at',
+  'contact_source_url', 'enriched_at', 'people', 'linkedin_urls', 'owner_email', 'notes', 'last_contacted_at',
   'next_follow_up_at', 'created_at', 'updated_at',
 ].join(',');
 
@@ -122,6 +124,8 @@ export async function PATCH(request) {
   if ('phone' in body) updates.phone = String(body.phone || '').trim().slice(0, 80) || null;
   if ('contact_source_url' in body) updates.contact_source_url = normalizeOptionalUrl(body.contact_source_url);
   if ('enriched_at' in body) updates.enriched_at = body.enriched_at || null;
+  if ('people' in body) updates.people = normalizeProspectPeople(body.people);
+  if ('linkedin_urls' in body) updates.linkedin_urls = normalizeLinkedInProfileUrls(body.linkedin_urls);
   updates.updated_at = new Date().toISOString();
 
   const supabase = getSupabaseAdmin();

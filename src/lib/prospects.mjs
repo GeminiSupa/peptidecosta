@@ -29,6 +29,12 @@ export const CONTACT_PERMISSION_STATUSES = [
   'do_not_contact',
 ];
 
+const PEOPLE_VERIFICATION_STATUSES = new Set([
+  'published',
+  'published_domain_valid',
+  'unverified',
+]);
+
 const clean = (value, limit = 500) => String(value ?? '').trim().slice(0, limit);
 
 export function prospectSearchTerm(value) {
@@ -56,6 +62,38 @@ export function normalizeOptionalUrl(value) {
   } catch {
     return null;
   }
+}
+
+export function normalizeProspectPeople(people) {
+  if (!Array.isArray(people)) return [];
+  return people.slice(0, 30).map((person) => {
+    const confidence = Number(person?.confidence);
+    const verification = clean(person?.verification_status, 40);
+    return {
+      full_name: clean(person?.full_name, 180) || 'Public business contact',
+      job_title: clean(person?.job_title, 180) || null,
+      email: clean(person?.email, 240).toLowerCase() || null,
+      phone: clean(person?.phone, 80) || null,
+      linkedin_url: normalizeOptionalUrl(person?.linkedin_url),
+      source_url: normalizeOptionalUrl(person?.source_url),
+      evidence: clean(person?.evidence, 500) || null,
+      verification_status: PEOPLE_VERIFICATION_STATUSES.has(verification) ? verification : 'unverified',
+      confidence: Number.isFinite(confidence) ? Math.max(0, Math.min(100, Math.round(confidence))) : 50,
+    };
+  }).filter((person) => person.full_name && (person.job_title || person.email || person.phone || person.linkedin_url));
+}
+
+export function normalizeLinkedInProfileUrls(urls) {
+  if (!Array.isArray(urls)) return [];
+  return [...new Set(urls.map(normalizeOptionalUrl).filter((value) => {
+    if (!value) return false;
+    try {
+      const url = new URL(value);
+      return /(^|\.)linkedin\.com$/i.test(url.hostname) && /^\/in\//i.test(url.pathname);
+    } catch {
+      return false;
+    }
+  }))].slice(0, 30);
 }
 
 export function scoreProspect(prospect = {}) {
@@ -207,6 +245,8 @@ export function normalizeProspectInput(input = {}) {
     contact_permission_status: permission,
     contact_source_url: normalizeOptionalUrl(input.contact_source_url),
     enriched_at: input.enriched_at || null,
+    people: normalizeProspectPeople(input.people),
+    linkedin_urls: normalizeLinkedInProfileUrls(input.linkedin_urls),
     owner_email: clean(input.owner_email, 240).toLowerCase() || null,
     notes: clean(input.notes, 5000) || '',
     next_follow_up_at: input.next_follow_up_at || null,
@@ -226,6 +266,6 @@ export function isProspectsTableMissing(error) {
   const message = String(error?.message || '').toLowerCase();
   return code === '42P01'
     || code === 'PGRST205'
-    || (['42703', 'PGRST204'].includes(code) && (message.includes('contact_source_url') || message.includes('enriched_at')))
+    || (['42703', 'PGRST204'].includes(code) && (message.includes('contact_source_url') || message.includes('enriched_at') || message.includes('people') || message.includes('linkedin_urls')))
     || (message.includes('sales_prospects') && (message.includes('does not exist') || message.includes('schema cache')));
 }

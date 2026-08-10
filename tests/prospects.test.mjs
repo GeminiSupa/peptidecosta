@@ -5,7 +5,9 @@ import {
   buildProspectSearchQuery,
   isProspectsTableMissing,
   normalizeGooglePlace,
+  normalizeLinkedInProfileUrls,
   normalizeOpenStreetMapPlace,
+  normalizeProspectPeople,
   normalizeProspectInput,
   prospectSearchTerm,
   scoreProspect,
@@ -99,6 +101,7 @@ test('extracts only explicitly published website contacts and contact links', ()
       <a href="mailto:ventas@example.co.cr">Email us</a>
       <a href="tel:+50622223333">Call</a>
       <a href="/contacto">Contacto</a>
+      <a href="https://www.linkedin.com/in/jane-example/?trk=site">LinkedIn</a>
       <script>const fake = 'hidden@example.com';</script>
     </body></html>
   `, 'https://example.co.cr/');
@@ -106,6 +109,26 @@ test('extracts only explicitly published website contacts and contact links', ()
   assert.deepEqual(result.emails, ['ventas@example.co.cr']);
   assert.deepEqual(result.phones, ['+506 2222 3333']);
   assert.deepEqual(result.contactLinks, ['https://example.co.cr/contacto']);
+  assert.deepEqual(result.linkedinUrls, ['https://www.linkedin.com/in/jane-example/']);
+});
+
+test('normalizes public decision-makers without accepting arbitrary profile URLs', () => {
+  const people = normalizeProspectPeople([{
+    full_name: ' Jane Example ',
+    job_title: 'Founder',
+    email: 'JANE@EXAMPLE.COM',
+    linkedin_url: 'https://linkedin.com/in/jane-example',
+    source_url: 'https://example.com/team',
+    verification_status: 'published_domain_valid',
+    confidence: 91.6,
+  }]);
+  assert.equal(people[0].full_name, 'Jane Example');
+  assert.equal(people[0].email, 'jane@example.com');
+  assert.equal(people[0].confidence, 92);
+  assert.deepEqual(normalizeLinkedInProfileUrls([
+    'https://linkedin.com/in/jane-example',
+    'https://example.com/not-linkedin',
+  ]), ['https://linkedin.com/in/jane-example']);
 });
 
 test('blocks private and loopback networks during website enrichment', () => {

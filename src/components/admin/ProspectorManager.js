@@ -253,30 +253,36 @@ export default function ProspectorManager({ currentUserProfile }) {
     try {
       const response = await adminFetch('/api/admin/prospects/enrich', {
         method: 'POST',
-        body: JSON.stringify({ website_url: selected.website_url }),
+        body: JSON.stringify({
+          website_url: selected.website_url,
+          organization_name: selected.organization_name,
+        }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Unable to scan the business website');
-      if (!payload.email && !payload.phone) {
-        setNotice(`No public email or phone found across ${payload.pagesScanned?.length || 1} website page(s).`);
+      if (!payload.email && !payload.phone && !payload.people?.length && !payload.linkedinUrls?.length) {
+        setNotice(`No public contacts or decision-makers found across ${payload.pagesScanned?.length || 1} website page(s).`);
         return;
       }
       const updates = {
         email: payload.email || selected.email || null,
         phone: payload.phone || selected.phone || null,
+        people: payload.people?.length ? payload.people : selected.people || [],
+        linkedin_urls: payload.linkedinUrls?.length ? payload.linkedinUrls : selected.linkedin_urls || [],
         contact_permission_status: payload.permissionStatus,
         contact_source_url: payload.sourceUrl,
         enriched_at: new Date().toISOString(),
       };
+      const resultSummary = `${payload.people?.length || 0} decision-maker(s), ${payload.emails?.length || 0} public email(s), ${payload.phones?.length || 0} phone(s), and ${payload.linkedinUrls?.length || 0} LinkedIn profile(s)`;
       if (selectedSaved) {
-        await updateSelected(updates, `Found ${payload.emails.length} public email(s) and ${payload.phones.length} public phone(s)`);
+        await updateSelected(updates, `Found ${resultSummary}`);
       } else {
         setSelected((current) => {
           const enriched = { ...current, ...updates };
           const scored = scoreProspect(enriched);
           return { ...enriched, fit_score: scored.score, fit_reasons: scored.reasons };
         });
-        setNotice(`Found ${payload.emails.length} public email(s) and ${payload.phones.length} public phone(s). Save the prospect to keep them.`);
+        setNotice(`Found ${resultSummary}. Save the prospect to keep them.`);
       }
     } catch (enrichmentError) {
       setError(enrichmentError.message);
@@ -391,6 +397,15 @@ export default function ProspectorManager({ currentUserProfile }) {
         .prospector-fit { margin:14px 0; padding:11px; border-left:3px solid #38bdf8; background:rgba(56,189,248,.06); }
         .prospector-fit-title { display:flex; justify-content:space-between; gap:8px; font-size:.78rem; font-weight:800; margin-bottom:6px; }
         .prospector-fit ul { margin:0; padding-left:17px; color:#a8b7ca; font-size:.76rem; line-height:1.55; }
+        .prospector-people { margin:14px 0; padding-top:12px; border-top:1px solid rgba(148,163,184,.14); }
+        .prospector-people-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px; font-size:.78rem; font-weight:800; }
+        .prospector-person { padding:10px; margin-bottom:7px; border:1px solid rgba(148,163,184,.14); border-radius:9px; background:rgba(15,23,42,.42); }
+        .prospector-person strong { display:block; font-size:.82rem; }
+        .prospector-person-title { color:#94a3b8; font-size:.72rem; margin:2px 0 7px; }
+        .prospector-person-links { display:flex; flex-wrap:wrap; gap:8px; font-size:.7rem; }
+        .prospector-person-links a { color:#7dd3fc; text-decoration:none; }
+        .prospector-person-proof { color:#64748b; font-size:.65rem; margin-top:6px; }
+        .prospector-linkedin-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
         .prospector-detail label { display:grid; gap:5px; color:#94a3b8; font-size:.72rem; font-weight:800; margin-top:10px; }
         .prospector-detail-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:13px; }
         .prospector-empty { padding:36px 18px; text-align:center; color:#64748b; }
@@ -517,6 +532,27 @@ export default function ProspectorManager({ currentUserProfile }) {
                 <ul>{(selected.fit_reasons || []).length ? selected.fit_reasons.map((reason) => <li key={reason}>{reason}</li>) : <li>Complete business details to improve scoring.</li>}</ul>
               </div>
 
+              <div className="prospector-people">
+                <div className="prospector-people-head"><span><UserRoundCheck size={14} /> Public decision-makers</span><span>{selected.people?.length || 0}</span></div>
+                {(selected.people || []).map((person, index) => (
+                  <div className="prospector-person" key={`${person.full_name}-${person.job_title || index}`}>
+                    <strong>{person.full_name}</strong>
+                    <div className="prospector-person-title">{person.job_title || 'Role not published'}</div>
+                    <div className="prospector-person-links">
+                      {person.email && <a href={`mailto:${person.email}`}><Mail size={11} /> {person.email}</a>}
+                      {person.phone && <a href={`tel:${person.phone}`}><Phone size={11} /> {person.phone}</a>}
+                      {person.linkedin_url && <a href={person.linkedin_url} target="_blank" rel="noopener noreferrer"><ExternalLink size={11} /> LinkedIn</a>}
+                      {person.source_url && <a href={person.source_url} target="_blank" rel="noopener noreferrer"><ShieldCheck size={11} /> Evidence</a>}
+                    </div>
+                    <div className="prospector-person-proof">{person.verification_status === 'published_domain_valid' ? 'Published email · receiving domain confirmed' : 'Published-source record'} · {person.confidence || 0}% extraction confidence</div>
+                  </div>
+                ))}
+                {!selected.people?.length && <div className="prospector-person-title">Run public contact discovery to scan Team, About, leadership, and Contact pages.</div>}
+                {(selected.linkedin_urls || []).length > 0 && (
+                  <div className="prospector-linkedin-list">{selected.linkedin_urls.map((url, index) => <a className="prospector-btn" key={url} href={url} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> Profile {index + 1}</a>)}</div>
+                )}
+              </div>
+
               {selectedSaved ? (
                 <>
                   <label>Status
@@ -551,7 +587,7 @@ export default function ProspectorManager({ currentUserProfile }) {
               <div className="prospector-detail-actions">
                 {(selected.google_maps_url || mapQuery) && <a className="prospector-btn" href={selected.google_maps_url || `https://www.openstreetmap.org/search?query=${encodeURIComponent(mapQuery)}`} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} /> Open source map</a>}
                 {selected.website_url && <a className="prospector-btn" href={selected.website_url} target="_blank" rel="noopener noreferrer"><ChevronRight size={14} /> Visit website</a>}
-                {selected.website_url && <button type="button" className="prospector-btn" onClick={enrichSelected} disabled={enriching || saving}>{enriching ? <Loader2 size={14} className="mkt-spin" /> : <Search size={14} />} Find public contacts</button>}
+                {selected.website_url && <button type="button" className="prospector-btn" onClick={enrichSelected} disabled={enriching || saving}>{enriching ? <Loader2 size={14} className="mkt-spin" /> : <Search size={14} />} Find decision-makers</button>}
               </div>
               <div className="prospector-alert" style={{ marginTop: '14px', marginBottom: 0 }}><ShieldCheck size={16} /><small>Discovery uses OpenStreetMap. Contact enrichment only reads details published on the business website; it does not guess personal data or add anyone to marketing audiences.</small></div>
             </>

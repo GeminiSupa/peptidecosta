@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS public.sales_prospects (
   contact_permission_status TEXT NOT NULL DEFAULT 'unknown',
   contact_source_url TEXT,
   enriched_at TIMESTAMPTZ,
+  people JSONB NOT NULL DEFAULT '[]'::jsonb,
+  linkedin_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
   owner_email TEXT,
   notes TEXT NOT NULL DEFAULT '',
   last_contacted_at TIMESTAMPTZ,
@@ -62,7 +64,9 @@ ALTER TABLE public.sales_prospects ENABLE ROW LEVEL SECURITY;
 -- Safe upgrades for installations that ran an earlier Prospector migration.
 ALTER TABLE public.sales_prospects
   ADD COLUMN IF NOT EXISTS contact_source_url TEXT,
-  ADD COLUMN IF NOT EXISTS enriched_at TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS enriched_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS people JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS linkedin_urls JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 DROP POLICY IF EXISTS "Authenticated staff can read sales prospects" ON public.sales_prospects;
 

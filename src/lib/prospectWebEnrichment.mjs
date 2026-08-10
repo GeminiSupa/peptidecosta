@@ -1,5 +1,5 @@
 const EMAIL_PATTERN = /[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+/gi;
-const COSTA_RICA_PHONE_PATTERN = /(?:\+?506[\s().-]*)?[24678]\d{3}[\s().-]*\d{4}/g;
+const INTERNATIONAL_PHONE_PATTERN = /(?:(?:\+|00)\d{1,3}[\s().-]*)?(?:\d[\s().-]*){7,14}\d/g;
 
 const unique = (values, limit = 10) => [...new Set(values.filter(Boolean))].slice(0, limit);
 
@@ -16,18 +16,24 @@ function decodeBasicEntities(value) {
 function normalizePhone(value) {
   const raw = decodeBasicEntities(value).replace(/^tel:/i, '').trim();
   const digits = raw.replace(/\D/g, '');
-  if (digits.length === 8) return `+506 ${digits.slice(0, 4)} ${digits.slice(4)}`;
+  if (digits.length < 8 || digits.length > 15) return null;
   if (digits.length === 11 && digits.startsWith('506')) return `+506 ${digits.slice(3, 7)} ${digits.slice(7)}`;
-  return null;
+  return raw.startsWith('+') || raw.startsWith('00') ? `+${digits.replace(/^00/, '')}` : digits;
+}
+
+export function htmlToVisibleText(html) {
+  return decodeBasicEntities(html)
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function extractPublishedContacts(html, pageUrl) {
   const decoded = decodeBasicEntities(html);
-  const withoutNoise = decoded
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, ' ');
-  const visibleText = withoutNoise.replace(/<[^>]+>/g, ' ');
+  const visibleText = htmlToVisibleText(decoded);
 
   const mailtoEmails = [...decoded.matchAll(/href\s*=\s*["']mailto:([^?"'#\s]+)/gi)]
     .map((match) => decodeURIComponent(match[1]).toLowerCase());
@@ -37,22 +43,33 @@ export function extractPublishedContacts(html, pageUrl) {
 
   const telPhones = [...decoded.matchAll(/href\s*=\s*["'](tel:[^"']+)/gi)]
     .map((match) => normalizePhone(match[1]));
-  const textPhones = (visibleText.match(COSTA_RICA_PHONE_PATTERN) || []).map(normalizePhone);
+  const textPhones = (visibleText.match(INTERNATIONAL_PHONE_PATTERN) || []).map(normalizePhone);
   const phones = unique([...telPhones, ...textPhones], 8);
 
   const contactLinks = [];
+  const linkedinUrls = [];
   for (const match of decoded.matchAll(/href\s*=\s*["']([^"'#]+)["']/gi)) {
     try {
       const url = new URL(match[1], pageUrl);
+      if (/(^|\.)linkedin\.com$/i.test(url.hostname) && /^\/in\//i.test(url.pathname)) {
+        linkedinUrls.push(url.toString().split('?')[0]);
+        continue;
+      }
       if (url.origin !== new URL(pageUrl).origin) continue;
-      if (!/(contact|contacto|about|nosotros|equipo|team)/i.test(`${url.pathname}${url.search}`)) continue;
+      if (!/(contact|contacto|about|nosotros|equipo|team|staff|leadership|founder|director|doctor|provider)/i.test(`${url.pathname}${url.search}`)) continue;
       contactLinks.push(url.toString());
     } catch {
       // Ignore malformed links found in third-party HTML.
     }
   }
 
-  return { emails, phones, contactLinks: unique(contactLinks, 4) };
+  return {
+    emails,
+    phones,
+    linkedinUrls: unique(linkedinUrls, 20),
+    contactLinks: unique(contactLinks, 6),
+    visibleText,
+  };
 }
 
 export function isPublicNetworkAddress(address) {

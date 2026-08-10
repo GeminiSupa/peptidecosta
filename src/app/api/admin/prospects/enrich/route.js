@@ -5,12 +5,126 @@ import { isIP } from 'node:net';
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { extractPublishedContacts, isPublicNetworkAddress } from '@/lib/prospectWebEnrichment.mjs';
+import { normalizeProspectPeople } from '@/lib/prospects.mjs';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const MAX_BYTES = 800_000;
 const MAX_REDIRECTS = 2;
+
+const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+
+async function verifyEmailDomains(emails) {
+  const domains = [...new Set(emails.map((email) => email.split('@')[1]).filter(Boolean))];
+  const checks = await Promise.all(domains.map(async (domain) => {
+    try {
+      const records = await dns.resolveMx(domain);
+      return [domain, records.length > 0];
+    } catch {
+      return [domain, false];
+    }
+  }));
+  return Object.fromEntries(checks);
+}
+
+function evidenceForPerson(person, pages) {
+  const needle = normalizeText(person.full_name).toLowerCase();
+  const title = normalizeText(person.job_title).toLowerCase();
+  for (const page of pages) {
+    const text = normalizeText(page.contacts.visibleText);
+    const index = text.toLowerCase().indexOf(needle);
+    if (index < 0) continue;
+    const nearbyText = text.slice(Math.max(0, index - 160), Math.min(text.length, index + needle.length + 360));
+    if (title && !nearbyText.toLowerCase().includes(title)) continue;
+    return {
+      sourceUrl: page.url,
+      evidence: nearbyText,
+    };
+  }
+  return { sourceUrl: null, evidence: null };
+}
+
+async function extractPeopleWithGemini({ pages, emails, phones, linkedinUrls, companyName, domainChecks }) {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) return { people: [], aiUsed: false, aiAvailable: false };
+
+  const sourceText = pages.map((page, index) => (
+    `SOURCE ${index + 1}: ${page.url}\n${normalizeText(page.contacts.visibleText).slice(0, 12_000)}`
+  )).join('\n\n').slice(0, 36_000);
+  const prompt = `Extract publicly stated employees, owners, founders, directors, managers, doctors, trainers, or other decision-makers for ${companyName || 'this organization'} from the supplied company website text.
+
+Return strict JSON with this shape:
+{"people":[{"full_name":"","job_title":"","email":null,"phone":null,"linkedin_url":null,"confidence":0}]}
+
+Rules:
+- Include only a person whose full name is explicitly present in the source text.
+- Include only a job title explicitly connected to that person.
+- Email must be copied exactly from this allowed list: ${JSON.stringify(emails)}.
+- Phone must be copied exactly from this allowed list: ${JSON.stringify(phones)}.
+- LinkedIn URL must be copied exactly from this allowed list: ${JSON.stringify(linkedinUrls)}.
+- Never generate, infer, predict, or guess an email address, phone number, name, title, or profile URL.
+- Exclude testimonials, customers, article authors, and unrelated people.
+- Maximum 20 people. Output JSON only.
+
+${sourceText}`;
+
+  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent', {
+    method: 'POST',
+    cache: 'no-store',
+    signal: AbortSignal.timeout(20_000),
+    headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0, responseMimeType: 'application/json' },
+    }),
+  });
+  if (!response.ok) throw new Error(`Gemini extraction returned HTTP ${response.status}`);
+  const payload = await response.json();
+  const raw = payload?.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('') || '{}';
+  const parsed = JSON.parse(raw.replace(/^```json\s*|\s*```$/g, ''));
+  const combinedText = pages.map((page) => normalizeText(page.contacts.visibleText).toLowerCase()).join(' ');
+  const allowedLinkedIn = new Map(linkedinUrls.map((url) => [url.replace(/\/$/, '').toLowerCase(), url]));
+  const allowedEmails = new Set(emails);
+  const allowedPhones = new Set(phones);
+
+  const people = normalizeProspectPeople((Array.isArray(parsed.people) ? parsed.people : []).map((person) => {
+    const fullName = normalizeText(person.full_name).slice(0, 180);
+    const jobTitle = normalizeText(person.job_title).slice(0, 180);
+    if (!fullName || !combinedText.includes(fullName.toLowerCase())) return null;
+    if (jobTitle && !combinedText.includes(jobTitle.toLowerCase())) return null;
+    const evidence = evidenceForPerson({ full_name: fullName, job_title: jobTitle }, pages);
+    if (!evidence.sourceUrl) return null;
+    const nameTokens = fullName.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((token) => token.length >= 3);
+    const requestedEmail = allowedEmails.has(String(person.email || '').toLowerCase()) ? String(person.email).toLowerCase() : null;
+    const emailLocalPart = requestedEmail?.split('@')[0].replace(/[^a-z0-9]/g, '') || '';
+    const email = requestedEmail && nameTokens.some((token) => emailLocalPart.includes(token.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))
+      ? requestedEmail
+      : null;
+    const requestedPhone = allowedPhones.has(String(person.phone || '')) ? String(person.phone) : null;
+    const phone = requestedPhone && evidence.evidence.replace(/\D/g, '').includes(requestedPhone.replace(/\D/g, '')) ? requestedPhone : null;
+    const requestedLinkedIn = allowedLinkedIn.get(String(person.linkedin_url || '').replace(/\/$/, '').toLowerCase()) || null;
+    const linkedInSlug = requestedLinkedIn ? decodeURIComponent(new URL(requestedLinkedIn).pathname).toLowerCase() : '';
+    const linkedinUrl = requestedLinkedIn && nameTokens.some((token) => linkedInSlug.includes(token)) ? requestedLinkedIn : null;
+    const domainValid = email ? Boolean(domainChecks[email.split('@')[1]]) : false;
+    return {
+      full_name: fullName,
+      job_title: jobTitle || null,
+      email,
+      phone,
+      linkedin_url: linkedinUrl,
+      source_url: evidence.sourceUrl,
+      evidence: evidence.evidence,
+      verification_status: email && domainValid ? 'published_domain_valid' : 'published',
+      confidence: Math.max(50, Math.min(95, Number(person.confidence) || 75)),
+    };
+  }).filter(Boolean));
+
+  const deduped = people.filter((person, index, all) => (
+    all.findIndex((candidate) => `${candidate.full_name}|${candidate.job_title}`.toLowerCase() === `${person.full_name}|${person.job_title}`.toLowerCase()) === index
+  ));
+  return { people: deduped, aiUsed: true, aiAvailable: true };
+}
 
 async function resolvePublicAddresses(hostname) {
   if (hostname === 'localhost' || hostname.endsWith('.local')) throw new Error('Private website addresses are not allowed');
@@ -96,7 +210,7 @@ export async function POST(request) {
     const firstPage = await downloadHtml(websiteUrl);
     const firstContacts = extractPublishedContacts(firstPage.html, firstPage.url);
     const pages = [{ url: firstPage.url, contacts: firstContacts }];
-    for (const contactUrl of firstContacts.contactLinks.slice(0, 2)) {
+    for (const contactUrl of firstContacts.contactLinks.slice(0, 4)) {
       try {
         const page = await downloadHtml(contactUrl);
         pages.push({ url: page.url, contacts: extractPublishedContacts(page.html, page.url) });
@@ -107,6 +221,21 @@ export async function POST(request) {
 
     const emails = [...new Set(pages.flatMap((page) => page.contacts.emails))].slice(0, 8);
     const phones = [...new Set(pages.flatMap((page) => page.contacts.phones))].slice(0, 8);
+    const linkedinUrls = [...new Set(pages.flatMap((page) => page.contacts.linkedinUrls))].slice(0, 20);
+    const domainChecks = await verifyEmailDomains(emails);
+    let peopleResult = { people: [], aiUsed: false, aiAvailable: Boolean(process.env.GEMINI_API_KEY) };
+    try {
+      peopleResult = await extractPeopleWithGemini({
+        pages,
+        emails,
+        phones,
+        linkedinUrls,
+        companyName: String(body.organization_name || '').trim().slice(0, 240),
+        domainChecks,
+      });
+    } catch (error) {
+      console.warn('[Prospector Enrichment] Gemini people extraction skipped:', error.message);
+    }
     return NextResponse.json({
       email: emails[0] || null,
       phone: phones[0] || null,
@@ -114,8 +243,12 @@ export async function POST(request) {
       phones,
       sourceUrl: pages.find((page) => page.contacts.emails.length || page.contacts.phones.length)?.url || firstPage.url,
       pagesScanned: pages.map((page) => page.url),
+      linkedinUrls,
+      people: peopleResult.people,
+      emailDomainChecks: domainChecks,
       permissionStatus: emails.length || phones.length ? 'business_contact' : 'unknown',
-      aiUsed: false,
+      aiUsed: peopleResult.aiUsed,
+      aiAvailable: peopleResult.aiAvailable,
     });
   } catch (error) {
     console.error('[Prospector Enrichment] Failed:', error.message);
