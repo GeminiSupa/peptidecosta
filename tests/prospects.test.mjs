@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  buildProspectSearchQuery,
   isProspectsTableMissing,
   normalizeGooglePlace,
   normalizeOpenStreetMapPlace,
@@ -84,6 +85,12 @@ test('turns broad category labels into searchable OpenStreetMap terms', () => {
   assert.equal(prospectSearchTerm('Gyms and personal trainers'), 'gym');
   assert.equal(prospectSearchTerm('Nutrition practices'), 'nutritionist');
   assert.equal(prospectSearchTerm('BioLab Heredia'), 'BioLab Heredia');
+});
+
+test('builds worldwide searches without forcing a country', () => {
+  assert.equal(buildProspectSearchQuery('Gyms and personal trainers', 'Pakistan'), 'gym, Pakistan');
+  assert.equal(buildProspectSearchQuery('laboratory', 'Berlin, Germany'), 'laboratory, Berlin, Germany');
+  assert.equal(buildProspectSearchQuery('wellness center', ''), 'wellness');
 });
 
 test('extracts only explicitly published website contacts and contact links', () => {

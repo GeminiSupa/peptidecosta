@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { normalizeOpenStreetMapPlace, prospectSearchTerm } from '@/lib/prospects.mjs';
+import { buildProspectSearchQuery, normalizeOpenStreetMapPlace } from '@/lib/prospects.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +27,7 @@ function cacheSet(key, value) {
 }
 
 async function searchOpenStreetMap(query, location) {
-  const textQuery = [prospectSearchTerm(query), location, 'Costa Rica'].filter(Boolean).join(', ');
+  const textQuery = buildProspectSearchQuery(query, location);
   const cached = cacheGet(textQuery.toLowerCase());
   if (cached) return { prospects: cached, query: textQuery, cached: true };
 
@@ -37,7 +37,6 @@ async function searchOpenStreetMap(query, location) {
   url.searchParams.set('addressdetails', '1');
   url.searchParams.set('extratags', '1');
   url.searchParams.set('namedetails', '1');
-  url.searchParams.set('countrycodes', 'cr');
   url.searchParams.set('dedupe', '1');
   url.searchParams.set('limit', '20');
 

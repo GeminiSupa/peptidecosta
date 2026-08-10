@@ -88,7 +88,7 @@ export default function ProspectorManager({ currentUserProfile }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [query, setQuery] = useState('Gyms and personal trainers');
-  const [location, setLocation] = useState('San José');
+  const [location, setLocation] = useState('');
   const [savedSearch, setSavedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
   const [manualOpen, setManualOpen] = useState(false);
@@ -411,7 +411,7 @@ export default function ProspectorManager({ currentUserProfile }) {
       <div className="prospector-header">
         <div className="prospector-heading">
           <div className="prospector-heading-icon"><MapPinned size={22} /></div>
-          <div><h2>Prospector</h2><p>Key-free business discovery, public contact enrichment, qualification, and follow-up.</p></div>
+          <div><h2>Prospector</h2><p>Worldwide business discovery, public contact enrichment, qualification, and follow-up.</p></div>
         </div>
         <div className="prospector-header-actions">
           <button type="button" className="prospector-btn" onClick={() => loadProspects()} disabled={loading}>
@@ -448,7 +448,7 @@ export default function ProspectorManager({ currentUserProfile }) {
         <form className="prospector-searchbar" onSubmit={runSearch}>
           <input className="prospector-input" list="prospector-category-suggestions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Business type or keyword" aria-label="Business type or keyword" />
           <datalist id="prospector-category-suggestions">{CATEGORY_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
-          <input className="prospector-input" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="City, canton, or province" aria-label="City, canton, or province" />
+          <input className="prospector-input" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="City, region, or country (optional)" aria-label="City, region, or country" />
           <button className="prospector-btn primary" type="submit" disabled={searching || query.trim().length < 2}>
             {searching ? <Loader2 size={15} className="mkt-spin" /> : <Search size={15} />} Search area
           </button>

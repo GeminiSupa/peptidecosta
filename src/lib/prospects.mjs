@@ -43,6 +43,10 @@ export function prospectSearchTerm(value) {
   return query;
 }
 
+export function buildProspectSearchQuery(query, location) {
+  return [prospectSearchTerm(query), clean(location, 120)].filter(Boolean).join(', ');
+}
+
 export function normalizeOptionalUrl(value) {
   const raw = clean(value, 1000);
   if (!raw) return null;
