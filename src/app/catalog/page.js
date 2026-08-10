@@ -505,17 +505,20 @@ export default function CatalogPage() {
     async function loadSettings() {
       if (!isSupabaseConfigured || !supabase) return;
       try {
-        const { data: lpData } = await supabase.from('site_settings').select('value').eq('id', 'landing_page').single();
-        setLandingSettings(mergeLandingPageSettings(lpData?.value));
+        // Both rows live in the same table, so one round trip fetches both.
+        // Read separately they were awaited back to back, and the second wait
+        // (hidden products) held up the banner for no reason.
+        const { data: settingsRows } = await supabase
+          .from('site_settings')
+          .select('id, value')
+          .in('id', ['landing_page', 'hidden_products']);
 
-        // Load list of products hidden from the catalog by admin (hidden, not deleted)
-        try {
-          const { data: hp } = await supabase.from('site_settings').select('value').eq('id', 'hidden_products').maybeSingle();
-          const names = hp?.value?.names;
-          if (Array.isArray(names)) setHiddenProducts(names);
-        } catch (hpErr) {
-          console.warn('Could not load hidden products list:', hpErr);
-        }
+        const rows = Array.isArray(settingsRows) ? settingsRows : [];
+        setLandingSettings(mergeLandingPageSettings(rows.find((row) => row.id === 'landing_page')?.value));
+
+        // Products the admin hid from the catalog (hidden, not deleted).
+        const names = rows.find((row) => row.id === 'hidden_products')?.value?.names;
+        if (Array.isArray(names)) setHiddenProducts(names);
       } catch (err) {
         console.error('Error loading site settings:', err);
       }
@@ -1314,10 +1317,43 @@ export default function CatalogPage() {
     // 1. Try Supabase
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('products')
-          .select('*')
-          .order('priority', { ascending: true });
+        // Products, reviews and the badge promos do not depend on each other, so
+        // they go out together. Awaited one after another they cost the sum of
+        // all three (~3.2s measured) and the shopper stared at "Syncing
+        // catalog..." for the whole of it; in parallel the wait is just the
+        // slowest single query.
+        //
+        // Reviews and sale badges are decoration; products are the page. A
+        // rejection inside Promise.all would skip the mapping below, leaving
+        // loadedProducts empty and dropping the shopper onto the CSV fallback
+        // catalogue over a failed reviews call. So the two optional queries
+        // resolve to empty instead of rejecting, and only products can trigger
+        // the fallback — exactly as when they were awaited one at a time.
+        const optional = (query) => Promise.resolve(query).then((res) => res, () => ({ data: null }));
+
+        const [
+          { data, error },
+          { data: revData },
+          { data: badgePromos },
+        ] = await Promise.all([
+          supabase
+            .from('products')
+            .select('*')
+            .order('priority', { ascending: true }),
+          optional(supabase
+            .from('product_reviews')
+            .select('*')
+            .eq('status', 'Approved')),
+          // Promo codes opted in to showing a sale ribbon. Hidden codes are
+          // excluded in the query as well as in isBadgeEligible — a private code
+          // must never reach the public catalog, so it is filtered twice.
+          optional(supabase
+            .from('promo_codes')
+            .select('code, discount_pct, is_active, hidden, show_sale_badge, badge_style, badge_text, badge_text_es, target_product, valid_from, valid_until, usage_limit, usage_count')
+            .eq('show_sale_badge', true)
+            .eq('is_active', true)
+            .eq('hidden', false)),
+        ]);
 
         if (error) {
           console.error("❌ SUPABASE CATALOG PRODUCTS ERROR:", error);
@@ -1355,24 +1391,9 @@ export default function CatalogPage() {
           setIsDbBacked(true);
         }
         
-        // Fetch Reviews
-        const { data: revData } = await supabase
-          .from('product_reviews')
-          .select('*')
-          .eq('status', 'Approved');
         if (revData) {
           setReviews(revData);
         }
-
-        // Promo codes opted in to showing a sale ribbon. Hidden codes are
-        // excluded in the query as well as in isBadgeEligible — a private code
-        // must never reach the public catalog, so it is filtered twice.
-        const { data: badgePromos } = await supabase
-          .from('promo_codes')
-          .select('code, discount_pct, is_active, hidden, show_sale_badge, badge_style, badge_text, badge_text_es, target_product, valid_from, valid_until, usage_limit, usage_count')
-          .eq('show_sale_badge', true)
-          .eq('is_active', true)
-          .eq('hidden', false);
         setPromoBadges(badgePromos || []);
       } catch (err) {
         console.error("Supabase load error, falling back to local spreadsheet CSV...", err);
