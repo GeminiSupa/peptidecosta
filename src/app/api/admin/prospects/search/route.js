@@ -3,31 +3,42 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import {
   buildProspectSearchQuery,
   dedupeAndRankProspects,
+  expandAnchoredTagPattern,
+  isRetryableOverpassStatus,
   normalizeOpenStreetMapPlace,
   normalizeOverpassElement,
+  overpassEndpoints,
   prospectSearchProfile,
+  searchCacheTtlMs,
 } from '@/lib/prospects.mjs';
 
 export const dynamic = 'force-dynamic';
+// Worst case is a geocode and a named-place lookup serialized behind the 1 req/s
+// Nominatim throttle, racing a country-wide Overpass query.
+export const maxDuration = 60;
 
 const DEFAULT_NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
-const DEFAULT_OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
-const CACHE_TTL_MS = 15 * 60 * 1000;
+// Overpass gets a shared budget rather than a per-attempt one: three mirrors
+// each allowed the full 27s would overrun this route's 60s maxDuration and
+// return nothing at all, which is worse than the degradation it is fixing.
+const OVERPASS_TOTAL_BUDGET_MS = 40_000;
+const OVERPASS_ATTEMPT_TIMEOUT_MS = 27_000;
+const OVERPASS_MIN_ATTEMPT_MS = 6_000;
 const searchCache = new Map();
 let nominatimQueue = Promise.resolve();
 
 function cacheGet(key) {
   const cached = searchCache.get(key);
-  if (!cached || Date.now() - cached.createdAt > CACHE_TTL_MS) {
+  if (!cached || Date.now() - cached.createdAt > cached.ttl) {
     searchCache.delete(key);
     return null;
   }
   return cached.value;
 }
 
-function cacheSet(key, value) {
+function cacheSet(key, value, ttl) {
   if (searchCache.size >= 100) searchCache.delete(searchCache.keys().next().value);
-  searchCache.set(key, { createdAt: Date.now(), value });
+  searchCache.set(key, { createdAt: Date.now(), value, ttl });
 }
 
 async function nominatimSearch(q, limit = 20) {
@@ -89,7 +100,13 @@ function buildOverpassQuery(profile, context) {
   const prelude = useCountryArea
     ? `area["ISO3166-1"="${context.countryCode}"][admin_level=2]->.searchArea;`
     : '';
-  const clauses = profile.tagFilters.map(([key, pattern]) => `nwr["${key}"~"${pattern}"]${scope};`);
+  // One indexed exact-match clause per literal value; see expandAnchoredTagPattern.
+  const clauses = profile.tagFilters.flatMap(([key, pattern]) => {
+    const literals = expandAnchoredTagPattern(pattern);
+    return literals
+      ? literals.map((value) => `nwr["${key}"="${value}"]${scope};`)
+      : [`nwr["${key}"~"${pattern}"]${scope};`];
+  });
   const controlledPattern = profile.tagFilters.length ? profile.namePattern : escapeOverpassRegex(profile.namePattern);
   const bboxArea = context.bbox
     ? Math.abs((context.bbox.north - context.bbox.south) * (context.bbox.east - context.bbox.west))
@@ -99,16 +116,18 @@ function buildOverpassQuery(profile, context) {
   // enabled for the much smaller city/region bounding boxes.
   if (controlledPattern && !useCountryArea && bboxArea <= 12) clauses.push(`nwr["name"~"${controlledPattern}",i]${scope};`);
   if (!clauses.length) return null;
-  return `[out:json][timeout:22];${prelude}(${clauses.join('')});out tags center 80;`;
+  // Declared generously on purpose. The same query that came back 504 under
+  // [timeout:22] succeeded in 11s under a larger one — Overpass uses the
+  // declared budget to schedule, so asking for too little gets you rejected
+  // rather than served quickly. Our own client abort is the real ceiling.
+  return `[out:json][timeout:40];${prelude}(${clauses.join('')});out tags center 80;`;
 }
 
-async function overpassSearch(profile, context) {
-  const query = buildOverpassQuery(profile, context);
-  if (!query) return [];
-  const response = await fetch(process.env.OVERPASS_BASE_URL || DEFAULT_OVERPASS_URL, {
+async function overpassAttempt(endpoint, query, timeoutMs) {
+  const response = await fetch(endpoint, {
     method: 'POST',
     cache: 'no-store',
-    signal: AbortSignal.timeout(27_000),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
@@ -116,11 +135,50 @@ async function overpassSearch(profile, context) {
     },
     body: new URLSearchParams({ data: query }),
   });
-  if (!response.ok) throw new Error(`Overpass returned HTTP ${response.status}`);
-  const payload = await response.json();
-  return (payload.elements || [])
-    .map((element) => normalizeOverpassElement(element, context))
-    .filter((prospect) => prospect.organization_name && prospect.latitude != null && prospect.longitude != null);
+  if (!response.ok) {
+    const error = new Error(`Overpass returned HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  return response.json();
+}
+
+/**
+ * Runs the category query against each mirror until one answers.
+ *
+ * Only the last failure is thrown, because that is what the caller reports and
+ * an earlier mirror's rate limit says nothing useful about why the search has
+ * no category results.
+ */
+async function overpassSearch(profile, context) {
+  const query = buildOverpassQuery(profile, context);
+  if (!query) return [];
+
+  const endpoints = overpassEndpoints(process.env.OVERPASS_BASE_URL);
+  const deadline = Date.now() + OVERPASS_TOTAL_BUDGET_MS;
+  let lastError = new Error('Overpass was not reachable');
+
+  for (const [index, endpoint] of endpoints.entries()) {
+    const remaining = deadline - Date.now();
+    if (remaining < OVERPASS_MIN_ATTEMPT_MS) break;
+
+    try {
+      const payload = await overpassAttempt(endpoint, query, Math.min(remaining, OVERPASS_ATTEMPT_TIMEOUT_MS));
+      if (index > 0) console.warn(`[Prospector Search] Overpass answered from fallback mirror ${endpoint}`);
+      return (payload.elements || [])
+        .map((element) => normalizeOverpassElement(element, context))
+        .filter((prospect) => prospect.organization_name && prospect.latitude != null && prospect.longitude != null);
+    } catch (error) {
+      lastError = error;
+      // A rejected query is rejected everywhere; only endpoint-level problems
+      // are worth another mirror.
+      const worthRetrying = error.status === undefined || isRetryableOverpassStatus(error.status);
+      console.warn(`[Prospector Search] Overpass mirror ${endpoint} failed:`, error.message);
+      if (!worthRetrying) break;
+    }
+  }
+
+  throw lastError;
 }
 
 async function searchOpenStreetMap(query, location) {
@@ -153,8 +211,12 @@ async function searchOpenStreetMap(query, location) {
   const overpassProspects = results[1]?.status === 'fulfilled' ? results[1].value : [];
   if (results[0].status === 'rejected') warnings.push('Named-place fallback was unavailable.');
   if (results[1]?.status === 'rejected') {
-    console.warn('[Prospector Search] POI search failed:', results[1].reason?.message);
-    warnings.push('Expanded category search was temporarily unavailable; showing named-place matches.');
+    console.warn('[Prospector Search] POI search failed on every mirror:', results[1].reason?.message);
+    // Country-wide scans are the shape mirrors refuse, and narrowing the area
+    // is a fix the operator can apply now — so say that instead of "try later".
+    warnings.push(context.isCountry
+      ? 'Category search is rate-limited for country-wide scans; showing named-place matches. Search a city or province for the full results.'
+      : 'Category search was unavailable on every mirror; showing named-place matches. Try again in a minute.');
   }
 
   const prospects = dedupeAndRankProspects([...overpassProspects, ...directProspects], query, 80);
@@ -166,7 +228,7 @@ async function searchOpenStreetMap(query, location) {
     locationResolved: context?.displayName || null,
     warnings,
   };
-  cacheSet(cacheKey, result);
+  cacheSet(cacheKey, result, searchCacheTtlMs(warnings));
   return result;
 }
 

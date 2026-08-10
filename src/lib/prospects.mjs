@@ -4,6 +4,7 @@ export const PROSPECT_STATUSES = [
   'qualified',
   'contacted',
   'responded',
+  'meeting_booked',
   'partner',
   'won',
   'lost',
@@ -16,6 +17,7 @@ export const PROSPECT_STATUS_LABELS = {
   qualified: 'Qualified',
   contacted: 'Contacted',
   responded: 'Responded',
+  meeting_booked: 'Meeting booked',
   partner: 'Partner',
   won: 'Won',
   lost: 'Lost',
@@ -34,6 +36,27 @@ const PEOPLE_VERIFICATION_STATUSES = new Set([
   'published_domain_valid',
   'unverified',
 ]);
+
+// Permission is a claim about a person, so rediscovery may raise it but never
+// lower it. A recorded consent or an opt-out outranks anything a later website
+// scan infers.
+const PERMISSION_RANK = {
+  unknown: 0,
+  business_contact: 1,
+  consented: 2,
+  do_not_contact: 3,
+};
+
+/** Columns a re-discovery is allowed to refresh from the source directory. */
+const DISCOVERY_FIELDS = [
+  'source_provider', 'source_external_id', 'organization_name', 'category',
+  'website_url', 'formatted_address', 'city', 'region', 'country',
+  'latitude', 'longitude', 'google_maps_url', 'rating', 'user_rating_count',
+  'business_status',
+];
+
+/** Columns owned by the sales workflow, never touched by a re-discovery. */
+const PIPELINE_FIELDS = ['status', 'owner_email', 'next_follow_up_at', 'last_contacted_at'];
 
 const clean = (value, limit = 500) => String(value ?? '').trim().slice(0, limit);
 
@@ -122,6 +145,15 @@ export function normalizeProspectPeople(people) {
   }).filter((person) => person.full_name && (person.job_title || person.email || person.phone || person.linkedin_url));
 }
 
+export function normalizeWhatsAppNumbers(values) {
+  const source = Array.isArray(values) ? values : [values];
+  return [...new Set(source.flatMap((value) => String(value ?? '')
+    .split(/[;,]/)
+    .map((entry) => entry.replace(/\D/g, ''))
+    .filter((digits) => digits.length >= 8 && digits.length <= 15)
+    .map((digits) => `+${digits}`)))].slice(0, 5);
+}
+
 export function normalizeLinkedInProfileUrls(urls) {
   if (!Array.isArray(urls)) return [];
   return [...new Set(urls.map(normalizeOptionalUrl).filter((value) => {
@@ -208,8 +240,10 @@ export function normalizeOpenStreetMapPlace(place = {}) {
   const tags = place.extratags || {};
   const address = place.address || {};
   const website = tags.website || tags['contact:website'] || place.website;
-  const phone = tags.phone || tags['contact:phone'] || place.phone;
+  const phone = tags.phone || tags['contact:phone'] || tags['contact:mobile'] || tags.mobile || place.phone;
   const email = tags.email || tags['contact:email'] || place.email;
+  // Mappers record click-to-chat numbers separately from the landline.
+  const whatsapp = normalizeWhatsAppNumbers([tags['contact:whatsapp'], tags.whatsapp, place.whatsapp]);
   const latitude = Number(place.lat);
   const longitude = Number(place.lon);
   const category = clean(
@@ -242,7 +276,8 @@ export function normalizeOpenStreetMapPlace(place = {}) {
     rating: null,
     user_rating_count: null,
     business_status: null,
-    contact_permission_status: email || phone ? 'business_contact' : 'unknown',
+    whatsapp_numbers: whatsapp,
+    contact_permission_status: email || phone || whatsapp.length ? 'business_contact' : 'unknown',
   };
   const scored = scoreProspect(normalized);
   normalized.fit_score = scored.score;
@@ -326,7 +361,7 @@ export function normalizeProspectInput(input = {}) {
     formatted_address: clean(input.formatted_address, 500) || null,
     city: clean(input.city, 140) || null,
     region: clean(input.region, 140) || null,
-    country: clean(input.country || 'Costa Rica', 140) || 'Costa Rica',
+    country: clean(input.country, 140) || null,
     latitude: Number.isFinite(latitude) ? latitude : null,
     longitude: Number.isFinite(longitude) ? longitude : null,
     google_maps_url: normalizeOptionalUrl(input.google_maps_url),
@@ -339,6 +374,7 @@ export function normalizeProspectInput(input = {}) {
     enriched_at: input.enriched_at || null,
     people: normalizeProspectPeople(input.people),
     linkedin_urls: normalizeLinkedInProfileUrls(input.linkedin_urls),
+    whatsapp_numbers: normalizeWhatsAppNumbers(input.whatsapp_numbers || []),
     owner_email: clean(input.owner_email, 240).toLowerCase() || null,
     notes: clean(input.notes, 5000) || '',
     next_follow_up_at: input.next_follow_up_at || null,
@@ -353,11 +389,136 @@ export function normalizeProspectInput(input = {}) {
   return normalized;
 }
 
+export function upgradeContactPermission(existing, incoming) {
+  const current = CONTACT_PERMISSION_STATUSES.includes(existing) ? existing : 'unknown';
+  const next = CONTACT_PERMISSION_STATUSES.includes(incoming) ? incoming : 'unknown';
+  return PERMISSION_RANK[next] > PERMISSION_RANK[current] ? next : current;
+}
+
+/**
+ * Fold a freshly discovered record into one already in the pipeline.
+ *
+ * Saving the same business twice used to run a full-row UPDATE from a raw
+ * search result, which reset status, notes, owner, follow-up date and enriched
+ * people back to their defaults. Directory details refresh; everything a person
+ * typed or decided survives.
+ */
+export function mergeRediscoveredProspect(existing = {}, incoming = {}) {
+  const merged = { ...existing };
+
+  for (const field of DISCOVERY_FIELDS) {
+    if (incoming[field] != null && incoming[field] !== '') merged[field] = incoming[field];
+  }
+  for (const field of PIPELINE_FIELDS) {
+    merged[field] = existing[field] ?? null;
+  }
+
+  // Curated contact details win; a rediscovery only fills the blanks.
+  merged.email = existing.email || incoming.email || null;
+  merged.phone = existing.phone || incoming.phone || null;
+  merged.notes = clean(existing.notes, 5000) || clean(incoming.notes, 5000) || '';
+
+  // Enrichment results are additive: keep whatever the newer scan actually found.
+  merged.people = incoming.people?.length ? incoming.people : existing.people || [];
+  merged.linkedin_urls = incoming.linkedin_urls?.length ? incoming.linkedin_urls : existing.linkedin_urls || [];
+  merged.whatsapp_numbers = normalizeWhatsAppNumbers([
+    ...(existing.whatsapp_numbers || []),
+    ...(incoming.whatsapp_numbers || []),
+  ]);
+  merged.contact_source_url = incoming.contact_source_url || existing.contact_source_url || null;
+  merged.enriched_at = incoming.enriched_at || existing.enriched_at || null;
+
+  merged.contact_permission_status = upgradeContactPermission(
+    existing.contact_permission_status,
+    incoming.contact_permission_status,
+  );
+  if (merged.contact_permission_status === 'do_not_contact') merged.status = 'do_not_contact';
+
+  const scored = scoreProspect(merged);
+  merged.fit_score = scored.score;
+  merged.fit_reasons = scored.reasons;
+  return merged;
+}
+
+const ANCHORED_LITERAL = /^\^([a-z0-9_]+)\$$/i;
+const ANCHORED_ALTERNATION = /^\^\(([a-z0-9_]+(?:\|[a-z0-9_]+)*)\)\$$/i;
+
+/**
+ * Turns `^fitness_centre$` into `['fitness_centre']` so the query can use an
+ * exact tag match instead of a regex one.
+ *
+ * This is the difference between a country-wide search working and not
+ * working. Overpass answers `["leisure"="fitness_centre"]` from an index in
+ * about a second; the equivalent `["leisure"~"^fitness_centre$"]` is a scan
+ * that ran past the declared timeout and came back 504 on every mirror. Every
+ * pattern in prospectSearchProfile is an anchored literal or alternation, so
+ * all of them take the fast path — patterns that are not stay on regex.
+ *
+ * @returns {string[]|null} literal values, or null when regex is still needed
+ */
+export function expandAnchoredTagPattern(pattern) {
+  const raw = String(pattern || '').trim();
+  const literal = ANCHORED_LITERAL.exec(raw);
+  if (literal) return [literal[1]];
+
+  const alternation = ANCHORED_ALTERNATION.exec(raw);
+  if (!alternation) return null;
+  const values = alternation[1].split('|').map((value) => value.trim()).filter(Boolean);
+  return values.length ? values : null;
+}
+
+/**
+ * Public Overpass mirrors, tried in order.
+ *
+ * A country-wide area scan is the expensive query shape, and the flagship
+ * endpoint answers it with HTTP 429 whenever its slots are full — which is
+ * most of the time. The category half of a search was being dropped for a
+ * reason that has nothing to do with the search itself, so a failure now moves
+ * to the next mirror instead of degrading the result.
+ */
+const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+];
+
+export function overpassEndpoints(configuredUrl) {
+  const configured = String(configuredUrl || '').trim();
+  const ordered = configured ? [configured, ...OVERPASS_MIRRORS] : [...OVERPASS_MIRRORS];
+  return [...new Set(ordered)];
+}
+
+/**
+ * Whether another mirror is worth trying.
+ *
+ * Rate limits and gateway timeouts are properties of the endpoint, so a
+ * different one may well answer. A 400 means the query itself is malformed and
+ * every mirror will reject it identically — retrying that is pure latency.
+ */
+export function isRetryableOverpassStatus(status) {
+  return [429, 500, 502, 503, 504].includes(Number(status));
+}
+
+export const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
+export const DEGRADED_SEARCH_CACHE_TTL_MS = 45 * 1000;
+
+/**
+ * A degraded result is still cached, but only briefly.
+ *
+ * Caching it for the full fifteen minutes meant pressing Search again replayed
+ * the failure without retrying anything, so a transient rate limit looked
+ * permanent. Not caching it at all would let an impatient operator hammer the
+ * mirror that just rate-limited us. Forty-five seconds does neither.
+ */
+export function searchCacheTtlMs(warnings = []) {
+  return warnings.length ? DEGRADED_SEARCH_CACHE_TTL_MS : SEARCH_CACHE_TTL_MS;
+}
+
 export function isProspectsTableMissing(error) {
   const code = String(error?.code || '');
   const message = String(error?.message || '').toLowerCase();
   return code === '42P01'
     || code === 'PGRST205'
-    || (['42703', 'PGRST204'].includes(code) && (message.includes('contact_source_url') || message.includes('enriched_at') || message.includes('people') || message.includes('linkedin_urls')))
+    || (['42703', 'PGRST204'].includes(code) && ['contact_source_url', 'enriched_at', 'people', 'linkedin_urls', 'whatsapp_numbers'].some((column) => message.includes(column)))
     || (message.includes('sales_prospects') && (message.includes('does not exist') || message.includes('schema cache')));
 }

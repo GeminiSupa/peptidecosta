@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, Building2, CalendarClock, CheckCircle2, ChevronRight,
   ExternalLink, Globe2, ListFilter, Loader2, Mail, MapPin, MapPinned,
-  Phone, Plus, RefreshCw, Save, Search, ShieldCheck, Sparkles,
+  MessageCircle, Phone, Plus, RefreshCw, Save, Search, Send, ShieldCheck, Sparkles,
   Trash2, UserRoundCheck, X,
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
@@ -13,7 +13,9 @@ import {
   PROSPECT_STATUSES,
   PROSPECT_STATUS_LABELS,
   scoreProspect,
+  upgradeContactPermission,
 } from '@/lib/prospects.mjs';
+import { canContactProspect } from '@/lib/prospectOutreach.mjs';
 
 const EMPTY_FORM = {
   organization_name: '',
@@ -24,7 +26,7 @@ const EMPTY_FORM = {
   formatted_address: '',
   city: '',
   region: '',
-  country: 'Costa Rica',
+  country: '',
   latitude: '',
   longitude: '',
   notes: '',
@@ -94,6 +96,11 @@ export default function ProspectorManager({ currentUserProfile }) {
   const [manualOpen, setManualOpen] = useState(false);
   const [manualForm, setManualForm] = useState(EMPTY_FORM);
   const [notesDraft, setNotesDraft] = useState('');
+  const [outreachChannel, setOutreachChannel] = useState('email');
+  const [outreachLanguage, setOutreachLanguage] = useState('auto');
+  const [outreachDraft, setOutreachDraft] = useState(null);
+  const [drafting, setDrafting] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const currentEmail = currentUserProfile?.email || '';
 
@@ -140,9 +147,15 @@ export default function ProspectorManager({ currentUserProfile }) {
     setNotesDraft(selectedSaved ? selected?.notes || '' : '');
   }, [selected, selectedSaved]);
 
+  // A draft belongs to one prospect. Carrying it across a selection change is
+  // how a rep emails the wrong gym a message written about another one.
+  useEffect(() => {
+    setOutreachDraft(null);
+  }, [selected?.id, selectedSaved]);
+
   const stats = useMemo(() => ({
     saved: prospects.length,
-    qualified: prospects.filter((item) => ['qualified', 'responded', 'partner', 'won'].includes(item.status)).length,
+    qualified: prospects.filter((item) => ['qualified', 'responded', 'meeting_booked', 'partner', 'won'].includes(item.status)).length,
     due: prospects.filter((item) => item.next_follow_up_at && new Date(item.next_follow_up_at) <= new Date() && !['won', 'lost', 'do_not_contact'].includes(item.status)).length,
   }), [prospects]);
 
@@ -160,6 +173,19 @@ export default function ProspectorManager({ currentUserProfile }) {
   }, [prospects, savedSearch, statusFilter]);
 
   const visibleResults = view === 'discover' ? searchResults : filteredSaved;
+
+  // A search result can already be in the pipeline. Saving it again refreshes
+  // directory details and keeps the pipeline state, but the operator should see
+  // that before clicking.
+  const savedByExternalId = useMemo(() => new Map(
+    prospects
+      .filter((item) => item.source_external_id)
+      .map((item) => [`${item.source_provider}:${item.source_external_id}`, item]),
+  ), [prospects]);
+  const savedMatchFor = (prospect) => (prospect?.source_external_id
+    ? savedByExternalId.get(`${prospect.source_provider}:${prospect.source_external_id}`) || null
+    : null);
+  const selectedSavedMatch = !selectedSaved ? savedMatchFor(selected) : null;
 
   const chooseProspect = (prospect, saved = false) => {
     setSelected(prospect);
@@ -264,7 +290,7 @@ export default function ProspectorManager({ currentUserProfile }) {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Unable to scan the business website');
-      if (!payload.email && !payload.phone && !payload.people?.length && !payload.linkedinUrls?.length) {
+      if (!payload.email && !payload.phone && !payload.people?.length && !payload.linkedinUrls?.length && !payload.whatsappNumbers?.length) {
         setNotice(`No public contacts or decision-makers found across ${payload.pagesScanned?.length || 1} website page(s).`);
         return;
       }
@@ -273,11 +299,18 @@ export default function ProspectorManager({ currentUserProfile }) {
         phone: payload.phone || selected.phone || null,
         people: payload.people?.length ? payload.people : selected.people || [],
         linkedin_urls: payload.linkedinUrls?.length ? payload.linkedinUrls : selected.linkedin_urls || [],
-        contact_permission_status: payload.permissionStatus,
+        whatsapp_numbers: payload.whatsappNumbers?.length ? payload.whatsappNumbers : selected.whatsapp_numbers || [],
+        // A scan can raise contact permission but must never quietly undo a
+        // recorded consent or an opt-out.
+        contact_permission_status: upgradeContactPermission(
+          selected.contact_permission_status,
+          payload.permissionStatus,
+        ),
         contact_source_url: payload.sourceUrl,
         enriched_at: new Date().toISOString(),
       };
-      const resultSummary = `${payload.people?.length || 0} decision-maker(s), ${payload.emails?.length || 0} public email(s), ${payload.phones?.length || 0} phone(s), and ${payload.linkedinUrls?.length || 0} LinkedIn profile(s)`;
+      const unverifiedNote = payload.contactsVerified ? '' : ' Contacts came from page text rather than published mailto/tel links — verify before outreach.';
+      const resultSummary = `${payload.people?.length || 0} decision-maker(s), ${payload.emails?.length || 0} public email(s), ${payload.phones?.length || 0} phone(s), ${payload.whatsappNumbers?.length || 0} WhatsApp number(s), and ${payload.linkedinUrls?.length || 0} LinkedIn profile(s).${unverifiedNote}`;
       if (selectedSaved) {
         await updateSelected(updates, `Found ${resultSummary}`);
       } else {
@@ -292,6 +325,70 @@ export default function ProspectorManager({ currentUserProfile }) {
       setError(enrichmentError.message);
     } finally {
       setEnriching(false);
+    }
+  };
+
+  const draftOutreach = async () => {
+    if (!selectedSaved || !selected?.id) return;
+    setDrafting(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await adminFetch('/api/admin/prospects/outreach/draft', {
+        method: 'POST',
+        body: JSON.stringify({ prospectId: selected.id, channel: outreachChannel, language: outreachLanguage }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Unable to draft outreach');
+      setOutreachDraft({
+        channel: payload.channel,
+        subject: payload.subject || '',
+        body: payload.body || '',
+        bookingUrl: payload.bookingUrl,
+        recipient: payload.recipient,
+      });
+      setNotice(`Draft ready for ${payload.recipient}. Read it before sending — you are responsible for what goes out.`);
+    } catch (draftError) {
+      setError(draftError.message);
+    } finally {
+      setDrafting(false);
+    }
+  };
+
+  const sendOutreach = async () => {
+    if (!selectedSaved || !selected?.id || !outreachDraft) return;
+    const target = outreachDraft.channel === 'email' ? 'email' : 'WhatsApp';
+    if (!confirm(`Send this ${target} message to ${outreachDraft.recipient}?`)) return;
+
+    setSending(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await adminFetch('/api/admin/prospects/outreach/send', {
+        method: 'POST',
+        body: JSON.stringify({
+          prospectId: selected.id,
+          channel: outreachDraft.channel,
+          subject: outreachDraft.subject,
+          body: outreachDraft.body,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Unable to send outreach');
+
+      if (payload.handoffUrl) {
+        // WhatsApp opens in the rep's own client; see whatsappHandoffUrl.
+        window.open(payload.handoffUrl, '_blank', 'noopener,noreferrer');
+        setNotice('WhatsApp opened with the message prefilled. Press send there to deliver it.');
+      } else {
+        setNotice(`Email sent to ${payload.recipient}.`);
+      }
+      setOutreachDraft(null);
+      await loadProspects();
+    } catch (sendError) {
+      setError(sendError.message);
+    } finally {
+      setSending(false);
     }
   };
 
@@ -323,6 +420,10 @@ export default function ProspectorManager({ currentUserProfile }) {
       setSaving(false);
     }
   };
+
+  // Mirrors the server gate so a blocked send is explained before it is tried,
+  // never instead of the server check.
+  const outreachPermission = selected ? canContactProspect(selected, outreachChannel) : null;
 
   const mapQuery = selected
     ? selected.latitude != null && selected.longitude != null
@@ -378,6 +479,7 @@ export default function ProspectorManager({ currentUserProfile }) {
         .prospector-result.active { box-shadow:inset 3px 0 #38bdf8; }
         .prospector-result strong { display:block; font-size:.88rem; margin-bottom:4px; }
         .prospector-result small { color:#94a3b8; display:block; line-height:1.4; }
+        .prospector-result small.prospector-saved-flag { color:#86efac; font-weight:700; }
         .prospector-score { width:38px; height:38px; border-radius:10px; display:grid; place-items:center; font-size:.78rem; font-weight:900; }
         .prospector-score.high { background:rgba(34,197,94,.12); color:#86efac; }
         .prospector-score.medium { background:rgba(245,158,11,.12); color:#fcd34d; }
@@ -410,6 +512,11 @@ export default function ProspectorManager({ currentUserProfile }) {
         .prospector-person-links a { color:#7dd3fc; text-decoration:none; }
         .prospector-person-proof { color:#64748b; font-size:.65rem; margin-top:6px; }
         .prospector-linkedin-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+        .prospector-wa-list { display:flex; flex-wrap:wrap; gap:10px; }
+        .prospector-wa-list a { color:#86efac; text-decoration:none; font-weight:700; }
+        .prospector-outreach { margin:16px 0 0; padding-top:13px; border-top:1px solid rgba(148,163,184,.14); }
+        .prospector-outreach-controls { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:9px; }
+        .prospector-outreach-controls .prospector-btn { grid-column:1/-1; }
         .prospector-detail label { display:grid; gap:5px; color:#94a3b8; font-size:.72rem; font-weight:800; margin-top:10px; }
         .prospector-detail-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:13px; }
         .prospector-empty { padding:36px 18px; text-align:center; color:#64748b; }
@@ -494,7 +601,7 @@ export default function ProspectorManager({ currentUserProfile }) {
               <div className="prospector-empty"><ListFilter size={30} /><div>{view === 'discover' ? 'Search a business type and area to begin.' : 'No prospects match these filters.'}</div></div>
             ) : visibleResults.map((prospect) => (
               <button key={prospect.id || prospect.source_external_id} type="button" className={`prospector-result${selected && (selected.id || selected.source_external_id) === (prospect.id || prospect.source_external_id) ? ' active' : ''}`} onClick={() => chooseProspect(prospect, view === 'saved')}>
-                <div><strong>{prospect.organization_name}</strong><small>{prospect.category || 'Business'} · {locationLabel(prospect)}</small>{view === 'saved' && <small>{PROSPECT_STATUS_LABELS[prospect.status] || prospect.status}</small>}</div>
+                <div><strong>{prospect.organization_name}</strong><small>{prospect.category || 'Business'} · {locationLabel(prospect)}</small>{view === 'saved' && <small>{PROSPECT_STATUS_LABELS[prospect.status] || prospect.status}</small>}{view === 'discover' && savedMatchFor(prospect) && <small className="prospector-saved-flag">In pipeline · {PROSPECT_STATUS_LABELS[savedMatchFor(prospect).status] || savedMatchFor(prospect).status}</small>}</div>
                 <span className={`prospector-score ${scoreTone(prospect.fit_score || 0)}`}>{prospect.fit_score || 0}</span>
               </button>
             ))}
@@ -527,6 +634,13 @@ export default function ProspectorManager({ currentUserProfile }) {
               {enriching ? <div className="prospector-detail-row"><Loader2 size={15} className="mkt-spin" /><span>Scanning the public website and contact pages…</span></div> : null}
               <div className="prospector-detail-row"><Phone size={15} /><span>{selected.phone || 'No public business phone found'}</span></div>
               <div className="prospector-detail-row"><Mail size={15} /><span>{selected.email || 'No work email saved'}</span></div>
+              {(selected.whatsapp_numbers || []).length > 0 && (
+                <div className="prospector-detail-row"><MessageCircle size={15} /><span className="prospector-wa-list">
+                  {selected.whatsapp_numbers.map((number) => (
+                    <a key={number} href={`https://wa.me/${number.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">{number}</a>
+                  ))}
+                </span></div>
+              )}
               <div className="prospector-detail-row"><Globe2 size={15} />{selected.website_url ? <a href={selected.website_url} target="_blank" rel="noopener noreferrer">{selected.website_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a> : <span>No website found</span>}</div>
               {selected.contact_source_url && <div className="prospector-detail-row"><ShieldCheck size={15} /><a href={selected.contact_source_url} target="_blank" rel="noopener noreferrer">Contact source</a></div>}
               <div className="prospector-detail-row"><MapPin size={15} /><span>{selected.formatted_address || locationLabel(selected)}</span></div>
@@ -581,11 +695,65 @@ export default function ProspectorManager({ currentUserProfile }) {
                     <button type="button" className="prospector-btn" onClick={() => updateSelected({ status: 'contacted', last_contacted_at: new Date().toISOString() }, 'Contact logged')} disabled={saving || selected.contact_permission_status === 'do_not_contact'}><CheckCircle2 size={14} /> Mark contacted</button>
                     <button type="button" className="prospector-btn danger" onClick={deleteSelected} disabled={saving}><Trash2 size={14} /> Delete</button>
                   </div>
+
+                  <div className="prospector-outreach">
+                    <div className="prospector-people-head">
+                      <span><Send size={14} /> AI outreach &amp; booking</span>
+                      {selected.meeting_booked_at && <span className="prospector-badge">Meeting {new Date(selected.meeting_booked_at).toLocaleDateString()}</span>}
+                    </div>
+
+                    <div className="prospector-outreach-controls">
+                      <select className="prospector-select" value={outreachChannel} onChange={(event) => { setOutreachChannel(event.target.value); setOutreachDraft(null); }} aria-label="Outreach channel">
+                        <option value="email">Email</option>
+                        <option value="whatsapp">WhatsApp</option>
+                      </select>
+                      <select className="prospector-select" value={outreachLanguage} onChange={(event) => setOutreachLanguage(event.target.value)} aria-label="Outreach language">
+                        <option value="auto">Auto language</option>
+                        <option value="es">Spanish</option>
+                        <option value="en">English</option>
+                      </select>
+                      <button type="button" className="prospector-btn primary" onClick={draftOutreach} disabled={drafting || sending || !outreachPermission?.allowed}>
+                        {drafting ? <Loader2 size={14} className="mkt-spin" /> : <Sparkles size={14} />} Draft with AI
+                      </button>
+                    </div>
+
+                    {!outreachPermission?.allowed && (
+                      <div className="prospector-person-title">{outreachPermission?.reason}</div>
+                    )}
+
+                    {outreachDraft && (
+                      <>
+                        {outreachDraft.channel === 'email' && (
+                          <label>Subject
+                            <input className="prospector-input" value={outreachDraft.subject} onChange={(event) => setOutreachDraft({ ...outreachDraft, subject: event.target.value })} />
+                          </label>
+                        )}
+                        <label>Message to {outreachDraft.recipient}
+                          <textarea className="prospector-textarea" rows="9" value={outreachDraft.body} onChange={(event) => setOutreachDraft({ ...outreachDraft, body: event.target.value })} />
+                        </label>
+                        <div className="prospector-detail-actions">
+                          <button type="button" className="prospector-btn primary" onClick={sendOutreach} disabled={sending || drafting}>
+                            {sending ? <Loader2 size={14} className="mkt-spin" /> : outreachDraft.channel === 'email' ? <Mail size={14} /> : <MessageCircle size={14} />}
+                            {outreachDraft.channel === 'email' ? ' Send email' : ' Open in WhatsApp'}
+                          </button>
+                          <button type="button" className="prospector-btn" onClick={() => setOutreachDraft(null)} disabled={sending}><X size={14} /> Discard</button>
+                        </div>
+                        {outreachDraft.channel === 'whatsapp' && (
+                          <div className="prospector-person-title">WhatsApp opens with the message prefilled — you press send. Meta rejects automated first messages to people who have not written in.</div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </>
               ) : (
-                <div className="prospector-detail-actions">
-                  <button type="button" className="prospector-btn primary" onClick={() => saveProspect(selected)} disabled={saving || dbSetupRequired || enriching}>{saving ? <Loader2 size={14} className="mkt-spin" /> : <Save size={14} />} Save to Prospector</button>
-                </div>
+                <>
+                  {selectedSavedMatch && (
+                    <div className="prospector-alert" style={{ marginTop: '12px' }}><CheckCircle2 size={16} /><small>Already in your pipeline as <strong>{PROSPECT_STATUS_LABELS[selectedSavedMatch.status] || selectedSavedMatch.status}</strong>. Saving refreshes the directory details and any new contacts; status, notes, owner and follow-up stay as they are.</small></div>
+                  )}
+                  <div className="prospector-detail-actions">
+                    <button type="button" className="prospector-btn primary" onClick={() => saveProspect(selected)} disabled={saving || dbSetupRequired || enriching}>{saving ? <Loader2 size={14} className="mkt-spin" /> : <Save size={14} />} {selectedSavedMatch ? 'Refresh saved record' : 'Save to Prospector'}</button>
+                  </div>
+                </>
               )}
 
               <div className="prospector-detail-actions">
@@ -611,7 +779,8 @@ export default function ProspectorManager({ currentUserProfile }) {
               <label className="full">Website<input className="prospector-input" type="url" value={manualForm.website_url} onChange={(event) => setManualForm({ ...manualForm, website_url: event.target.value })} placeholder="https://…" /></label>
               <label className="full">Address<input className="prospector-input" value={manualForm.formatted_address} onChange={(event) => setManualForm({ ...manualForm, formatted_address: event.target.value })} /></label>
               <label>City or canton<input className="prospector-input" value={manualForm.city} onChange={(event) => setManualForm({ ...manualForm, city: event.target.value })} /></label>
-              <label>Province<input className="prospector-input" value={manualForm.region} onChange={(event) => setManualForm({ ...manualForm, region: event.target.value })} /></label>
+              <label>Province or state<input className="prospector-input" value={manualForm.region} onChange={(event) => setManualForm({ ...manualForm, region: event.target.value })} /></label>
+              <label className="full">Country<input className="prospector-input" value={manualForm.country} onChange={(event) => setManualForm({ ...manualForm, country: event.target.value })} placeholder="Costa Rica, Germany, Japan…" /></label>
               <label>Latitude<input className="prospector-input" type="number" step="any" value={manualForm.latitude} onChange={(event) => setManualForm({ ...manualForm, latitude: event.target.value })} /></label>
               <label>Longitude<input className="prospector-input" type="number" step="any" value={manualForm.longitude} onChange={(event) => setManualForm({ ...manualForm, longitude: event.target.value })} /></label>
               <label className="full">Contact permission<select className="prospector-select" value={manualForm.contact_permission_status} onChange={(event) => setManualForm({ ...manualForm, contact_permission_status: event.target.value })}>{CONTACT_PERMISSION_STATUSES.map((status) => <option key={status} value={status}>{PERMISSION_LABELS[status]}</option>)}</select></label>
