@@ -91,9 +91,13 @@ export async function markActiveAbandonedCartsConvertedForOrder(supabase, order,
   const phone = normalizePhone(order?.customer_phone || order?.phone);
   if (!email && phone.length < 8) return { matched: 0, error: null };
 
+  // user_email / user_phone are NOT columns on abandoned_carts. Naming them here
+  // failed the whole select, so this cleanup never ran once: a customer who paid
+  // kept an 'active' cart and kept receiving recovery emails. The matcher already
+  // reads those two names defensively, so leaving them out costs nothing.
   const { data, error } = await supabase
     .from('abandoned_carts')
-    .select('session_id, created_at, last_updated, customer_email, customer_phone, user_email, user_phone, status')
+    .select('session_id, created_at, last_updated, customer_email, customer_phone, status')
     .eq('status', 'active')
     .limit(limit);
 

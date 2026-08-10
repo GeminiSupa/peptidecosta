@@ -3066,6 +3066,7 @@ Core Rules:
       setSelectedOrderDetails({ ...selectedOrderDetails, status: newStatus });
     }
 
+    let savedOrder = null;
     try {
       const res = await adminFetch('/api/admin/orders/update', {
         method: 'PATCH',
@@ -3080,33 +3081,52 @@ Core Rules:
       });
       const data = await res.json();
       if (res.ok && data.order) {
+        savedOrder = data.order;
         handleOrderUpdated(data.order);
       }
     } catch (err) {
       console.error('Order status update error:', err);
     }
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        if (newStatus === 'Completed' || newStatus === 'Order Complete') {
-          const updatedOrder = prevOrder || orders.find(o => o.id === orderId);
-          if (updatedOrder && updatedOrder.customer_email) {
-            // adminFetch attaches the admin session token so the (now
-            // authenticated) email endpoint accepts the request.
-            adminFetch('/api/order-shipped-notification', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ...updatedOrder, status: newStatus })
-            }).then(res => res.json()).then(data => {
-              if (data.success) {
-                alert(`Shipping tracking email successfully sent to ${updatedOrder.customer_email}`);
-              }
-            }).catch(err => console.error('Failed to send shipping email:', err));
-          }
-        }
-      } catch(err) {
-        console.error("Order shipped email error:", err);
+    if (newStatus !== 'Completed' && newStatus !== 'Order Complete') return;
+
+    // The row the server just wrote comes first. Reading the copy in browser
+    // state was the weak link: a background reload can replace `orders` while
+    // the PATCH is in flight, and the lookup then found nothing and dropped the
+    // customer's email with no error anywhere.
+    const orderForEmail = savedOrder || prevOrder || orders.find((o) => o.id === orderId);
+
+    if (!orderForEmail) {
+      alert('Status saved, but the order could not be re-read to email the customer. Reload and use "Resend" on the order.');
+      return;
+    }
+    if (!orderForEmail.customer_email || !String(orderForEmail.customer_email).trim()) {
+      // Phone-only order. Nothing to send, and not a fault worth alarming about.
+      return;
+    }
+
+    // Every failure below used to be swallowed, so "no confirmation popup" and
+    // "email never sent" looked identical from the outside. Now they don't.
+    try {
+      const res = await adminFetch('/api/order-shipped-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...orderForEmail, status: newStatus }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (data.success) {
+        alert(`Order complete email sent to ${orderForEmail.customer_email}`);
+        return;
       }
+      if (data.skipped) {
+        alert(`Customer email NOT sent (${data.reason || 'email sending is not configured on the server'}). The status change was saved.`);
+        return;
+      }
+      alert(`Customer email FAILED for ${orderForEmail.customer_email}.\n\nReason: ${data.details || data.error || `server returned ${res.status}`}\n\nThe status change was saved.`);
+    } catch (err) {
+      console.error('Order complete email error:', err);
+      alert(`Customer email FAILED for ${orderForEmail.customer_email}.\n\nReason: ${err.message}\n\nThe status change was saved.`);
     }
   };
 
