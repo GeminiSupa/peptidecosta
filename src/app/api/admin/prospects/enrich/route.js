@@ -4,14 +4,24 @@ import https from 'node:https';
 import { isIP } from 'node:net';
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { extractPublishedContacts, isPublicNetworkAddress } from '@/lib/prospectWebEnrichment.mjs';
+import {
+  dedupePhoneDigits,
+  extractPublishedContacts,
+  isPublicNetworkAddress,
+  rankEmails,
+} from '@/lib/prospectWebEnrichment.mjs';
 import { normalizeProspectPeople } from '@/lib/prospects.mjs';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 const MAX_BYTES = 800_000;
 const MAX_REDIRECTS = 2;
+const PAGE_TIMEOUT_MS = 8_000;
+const MAX_CONTACT_PAGES = 3;
+// Leave room inside maxDuration for MX lookups and the extraction call.
+const CRAWL_BUDGET_MS = 28_000;
 
 const normalizeText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
@@ -72,7 +82,7 @@ ${sourceText}`;
   const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent', {
     method: 'POST',
     cache: 'no-store',
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(15_000),
     headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
@@ -191,7 +201,7 @@ async function downloadHtml(rawUrl, redirectsLeft = MAX_REDIRECTS) {
       response.on('end', () => resolve({ html: Buffer.concat(chunks).toString('utf8'), url: url.toString() }));
       response.on('error', reject);
     });
-    request.setTimeout(10_000, () => request.destroy(new Error('Website scan timed out')));
+    request.setTimeout(PAGE_TIMEOUT_MS, () => request.destroy(new Error('Website scan timed out')));
     request.on('error', reject);
     request.end();
   });
@@ -207,10 +217,15 @@ export async function POST(request) {
     const websiteUrl = String(body.website_url || '').trim().slice(0, 1000);
     if (!websiteUrl) return NextResponse.json({ error: 'A business website is required' }, { status: 400 });
 
+    const startedAt = Date.now();
     const firstPage = await downloadHtml(websiteUrl);
     const firstContacts = extractPublishedContacts(firstPage.html, firstPage.url);
     const pages = [{ url: firstPage.url, contacts: firstContacts }];
-    for (const contactUrl of firstContacts.contactLinks.slice(0, 4)) {
+    for (const contactUrl of firstContacts.contactLinks.slice(0, MAX_CONTACT_PAGES)) {
+      if (Date.now() - startedAt > CRAWL_BUDGET_MS) {
+        console.warn('[Prospector Enrichment] Crawl budget spent, skipping remaining contact pages');
+        break;
+      }
       try {
         const page = await downloadHtml(contactUrl);
         pages.push({ url: page.url, contacts: extractPublishedContacts(page.html, page.url) });
@@ -219,9 +234,18 @@ export async function POST(request) {
       }
     }
 
-    const emails = [...new Set(pages.flatMap((page) => page.contacts.emails))].slice(0, 8);
-    const phones = [...new Set(pages.flatMap((page) => page.contacts.phones))].slice(0, 8);
     const linkedinUrls = [...new Set(pages.flatMap((page) => page.contacts.linkedinUrls))].slice(0, 20);
+    const linkedEmails = [...new Set(pages.flatMap((page) => page.contacts.linkedEmails))];
+    const linkedPhones = [...new Set(pages.flatMap((page) => page.contacts.linkedPhones))];
+    // Rank across every page, otherwise a stray address on the landing page
+    // outranks the real inbox found on /contacto.
+    const emails = rankEmails(
+      [...new Set(pages.flatMap((page) => page.contacts.emails))],
+      firstPage.url,
+    ).slice(0, 8);
+    const phones = dedupePhoneDigits([...linkedPhones, ...pages.flatMap((page) => page.contacts.phones)], 8);
+    const whatsappNumbers = [...new Set(pages.flatMap((page) => page.contacts.whatsappNumbers))].slice(0, 5);
+    const socialProfiles = [...new Set(pages.flatMap((page) => page.contacts.socialProfiles))].slice(0, 8);
     const domainChecks = await verifyEmailDomains(emails);
     let peopleResult = { people: [], aiUsed: false, aiAvailable: Boolean(process.env.GEMINI_API_KEY) };
     try {
@@ -244,9 +268,20 @@ export async function POST(request) {
       sourceUrl: pages.find((page) => page.contacts.emails.length || page.contacts.phones.length)?.url || firstPage.url,
       pagesScanned: pages.map((page) => page.url),
       linkedinUrls,
+      whatsappNumbers,
+      socialProfiles,
       people: peopleResult.people,
       emailDomainChecks: domainChecks,
-      permissionStatus: emails.length || phones.length ? 'business_contact' : 'unknown',
+      // Only a mailto:/tel: the site published as a contact supports the
+      // "public business contact" claim. Loose text matches stay unproven.
+      permissionStatus: linkedEmails.length || linkedPhones.length ? 'business_contact' : 'unknown',
+      contactsVerified: linkedEmails.length + linkedPhones.length,
+      sources: {
+        mailto: linkedEmails.length,
+        tel: linkedPhones.length - whatsappNumbers.length,
+        whatsapp: whatsappNumbers.length,
+        structuredData: pages.some((page) => page.contacts.linkedEmails.length),
+      },
       aiUsed: peopleResult.aiUsed,
       aiAvailable: peopleResult.aiAvailable,
     });

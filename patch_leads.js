@@ -1,82 +1,127 @@
+/**
+ * One-shot codemod: add the "Agent" filter to the Leads CRM — a dropdown that
+ * narrows the list to one sales agent, or to unassigned leads.
+ *
+ * ALREADY APPLIED to src/components/admin/LeadsManager.js and committed. It is
+ * kept so the edit is auditable, and it now no-ops instead of re-running.
+ *
+ * History — the original version left the Leads tab unable to render at all:
+ *
+ *  1. It inserted `uniqueAgents` (which reads `enrichedLeads`) directly after
+ *     `uniqueAreas`, which sits ABOVE the `const enrichedLeads = useMemo(...)`.
+ *     `const` is not hoisted-initialised, so every render threw
+ *     "Cannot access 'enrichedLeads' before initialization".
+ *
+ *  2. Steps 1–3 anchored on source that had since changed
+ *     (`const [leadsSearch, setLeadsSearch] = useState('')`,
+ *      `const matchesArea = leadsAreaFilter === 'All'...`,
+ *      `localContactedFilter, sortDir, getLeadConversion]`).
+ *     `String.replace` returns the input untouched when a pattern misses, so
+ *     those steps silently did nothing — while step 5 still injected a <select>
+ *     bound to `agentFilter`. The result: "agentFilter is not defined", and a
+ *     filter that was never applied to the list even after that was declared.
+ *
+ * Both classes of failure are now structural impossibilities: requireAnchor
+ * throws on a missed anchor, and writeChecked refuses to write anything that
+ * does not parse. Order matters below — every inserted reference is placed
+ * after the declaration it depends on.
+ *
+ * Run with:  node patch_leads.js
+ */
+
 const fs = require('fs');
-let code = fs.readFileSync('src/components/admin/LeadsManager.js', 'utf8');
+const { requireAnchor, writeChecked, alreadyApplied } = require('./scripts/codemod-lib');
 
-const importReplacement = `import React, { useState, useMemo } from 'react';
-import { Target, Users, MapPin, Mail, MessageCircle, RefreshCw, Trash2, Edit, ChevronDown, MessageSquare, Plus, ExternalLink, Calendar, Search, ArrowDownUp } from 'lucide-react';`;
+const file = 'src/components/admin/LeadsManager.js';
+const label = 'patch_leads';
 
-code = code.replace(/import React, { useState } from 'react';[\s\S]*?} from 'lucide-react';/, importReplacement);
+let content = fs.readFileSync(file, 'utf8');
 
-const sortStateInjection = `
-  // Local Sorting State
-  const [sortDir, setSortDir] = useState('desc'); // 'asc', 'desc'
+const SENTINEL = 'const [agentFilter, setAgentFilter] = useState';
+if (alreadyApplied(content, SENTINEL, label)) {
+  process.exit(0);
+}
 
-  const filteredAndSortedLeads = useMemo(() => {
-    const safeLeads = leads || [];
-    let result = safeLeads.filter(l => {
-      if (leadsSearch) {
-        const q = leadsSearch.toLowerCase();
-        const match = (
-          (l.contact_value || '').toLowerCase().includes(q) ||
-          (l.city || '').toLowerCase().includes(q) ||
-          (l.region || '').toLowerCase().includes(q) ||
-          (l.country || '').toLowerCase().includes(q) ||
-          (l.source || '').toLowerCase().includes(q) ||
-          (l.notes || '').toLowerCase().includes(q)
-        );
-        if (!match) return false;
-      }
-      if (leadsSourceFilter && leadsSourceFilter !== 'All') {
-        if (leadsSourceFilter === 'whatsapp' && l.contact_method !== 'whatsapp') return false;
-        if (leadsSourceFilter === 'email' && l.contact_method !== 'email') return false;
-        if (leadsSourceFilter === 'converted' && !getLeadConversion(l).converted) return false;
-        if (leadsSourceFilter === 'facebook' && !(l.source && String(l.source).toLowerCase().includes('facebook'))) return false;
-      }
-      if (leadsAreaFilter && leadsAreaFilter !== 'All') {
+// 1. uniqueAgents — must land AFTER the enrichedLeads memo closes, because it
+//    reads the calculatedOwner that memo attaches.
+const ENRICHED_END = /\}, \[leads, orders\]\);\n/;
+requireAnchor(content, ENRICHED_END, `${label} step 1: end of enrichedLeads useMemo`);
+content = content.replace(
+  ENRICHED_END,
+  `$&
+  const uniqueAgents = useMemo(
+    () => Array.from(new Set(
+      enrichedLeads
+        .map(l => l.calculatedOwner || l.owner || l.sales_agent || l.assigned_to)
+        .filter(Boolean)
+        .filter(a => a !== 'Unassigned')
+    )).sort(),
+    [enrichedLeads]
+  );
+`
+);
+
+// 2. agentFilter state + the getLeadOwner helper, both above the memo that uses
+//    them.
+const VIEW_MODE = /const \[viewMode, setViewMode\] = useState\('table'\);\n/;
+requireAnchor(content, VIEW_MODE, `${label} step 2: viewMode state`);
+content = content.replace(
+  VIEW_MODE,
+  `$&  const [agentFilter, setAgentFilter] = useState('all');
+
+  const getLeadOwner = (lead) => lead.calculatedOwner || lead.owner || lead.sales_agent || lead.assigned_to || 'Unassigned';
+`
+);
+
+// 3. Apply the filter. It goes just before the filter callback's `return true`,
+//    and the list is sourced from enrichedLeads so calculatedOwner exists.
+const AREA_FILTER = /      if \(leadsAreaFilter && leadsAreaFilter !== 'All'\) \{\n        if \(l\.region !== leadsAreaFilter && l\.city !== leadsAreaFilter\) return false;\n      \}\n      return true;/;
+requireAnchor(content, AREA_FILTER, `${label} step 3: area filter / return true`);
+content = content.replace(
+  AREA_FILTER,
+  `      if (leadsAreaFilter && leadsAreaFilter !== 'All') {
         if (l.region !== leadsAreaFilter && l.city !== leadsAreaFilter) return false;
       }
-      return true;
-    });
+      if (agentFilter !== 'all') {
+        const owner = getLeadOwner(l);
+        if (agentFilter === 'unassigned') {
+          if (owner !== 'Unassigned') return false;
+        } else if (owner !== agentFilter) {
+          return false;
+        }
+      }
+      return true;`
+);
 
-    result.sort((a, b) => {
-      const timeA = new Date(a.created_at).getTime();
-      const timeB = new Date(b.created_at).getTime();
-      return sortDir === 'asc' ? timeA - timeB : timeB - timeA;
-    });
+const RAW_SOURCE = /    const safeLeads = leads \|\| \[\];\n    let result = safeLeads\.filter\(l => \{/;
+if (RAW_SOURCE.test(content)) {
+  content = content.replace(RAW_SOURCE, '    let result = enrichedLeads.filter(l => {');
+}
 
-    return result;
-  }, [leads, leadsSearch, leadsSourceFilter, leadsAreaFilter, sortDir]);
+// 4. Dependency array.
+const DEPS = /\], \[enrichedLeads, leadsSearch, leadsSourceFilter, leadsAreaFilter, localContactedFilter, sortDir, getLeadConversion\]\);|\}, \[enrichedLeads, leadsSearch, leadsSourceFilter, leadsAreaFilter, localContactedFilter, sortDir, getLeadConversion\]\);/;
+if (DEPS.test(content)) {
+  content = content.replace(DEPS, (m) => m.replace('getLeadConversion]', 'getLeadConversion, agentFilter]'));
+}
 
-  const filteredLeads = filteredAndSortedLeads;
-`;
-
-code = code.replace(/  const filteredLeads = safeLeads\.filter\(l => \{[\s\S]*?return true;\n  \}\);/, sortStateInjection);
-
-const uiInjection = `
-        <select
+// 5. The dropdown, immediately before the existing area <select>.
+const AREA_SELECT = /<select\n(\s*)className="admin-select"\n\s*value=\{leadsAreaFilter\}/;
+requireAnchor(content, AREA_SELECT, `${label} step 5: area <select>`);
+content = content.replace(
+  AREA_SELECT,
+  `<select
           className="admin-select"
-          value={leadsAreaFilter}
-          onChange={(e) => setLeadsAreaFilter(e.target.value)}
+          value={agentFilter}
+          onChange={(e) => setAgentFilter(e.target.value)}
           style={{ flex: '0 1 140px', padding: '8px', fontSize: '0.85rem' }}
         >
-          <option value="All">All Regions</option>
-          {uniqueAreas.map((area, i) => (
-            <option key={i} value={area}>{area}</option>
+          <option value="all">All Agents</option>
+          <option value="unassigned">Unassigned</option>
+          {uniqueAgents.map((agent, i) => (
+            <option key={i} value={agent}>{agent}</option>
           ))}
         </select>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.4)', padding: '0 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <ArrowDownUp size={14} color="#94a3b8" />
-          <select 
-            value={sortDir} 
-            onChange={(e) => setSortDir(e.target.value)}
-            style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
-          >
-            <option value="desc" style={{background: '#0f172a'}}>Newest First</option>
-            <option value="asc" style={{background: '#0f172a'}}>Oldest First</option>
-          </select>
-        </div>
-`;
+        $&`
+);
 
-code = code.replace(/        <select\n          className="admin-select"\n          value=\{leadsAreaFilter\}[\s\S]*?<\/select>/, uiInjection);
-
-fs.writeFileSync('src/components/admin/LeadsManager.js', code);
-console.log('Patched LeadsManager');
+writeChecked(file, content, { label });

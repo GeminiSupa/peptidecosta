@@ -4,7 +4,7 @@
 }
 
 .contact-page .lp-nav a.active {
-  color: #f58220;
+  color: var(--cta);
 }
 
 .contact-page .trust-flow-band {
@@ -34,7 +34,7 @@
 .contact-kicker {
   display: inline-flex;
   margin-bottom: 12px;
-  color: #f58220;
+  color: var(--cta);
   font-size: 0.76rem;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -96,7 +96,7 @@
 }
 
 .contact-direct-label span {
-  color: #f58220;
+  color: var(--cta);
   font-size: .72rem;
   font-weight: 900;
   letter-spacing: .08em;
@@ -151,7 +151,7 @@
 }
 
 .contact-button--primary {
-  background: #f58220 !important;
+  background: var(--cta) !important;
 }
 
 .contact-button--wa {

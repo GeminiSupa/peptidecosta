@@ -40,6 +40,18 @@ export default function AutomationBuilder() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Helper to update node data (used for both new and loaded nodes)
+  const updateNodeData = useCallback((nodeId, key, value) => {
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === nodeId) {
+          return { ...n, data: { ...n.data, [key]: value } };
+        }
+        return n;
+      })
+    );
+  }, [setNodes]);
+
   // Load existing workflow
   useEffect(() => {
     async function loadWorkflow() {
@@ -75,21 +87,7 @@ export default function AutomationBuilder() {
       }
     }
     loadWorkflow();
-  }, [setNodes, setEdges]); // Only run on mount
-
-  // Helper to update node data (used for both new and loaded nodes)
-  const updateNodeData = useCallback((nodeId, key, value) => {
-    setNodes((nds) =>
-      nds.map((n) => {
-        if (n.id === nodeId) {
-          return { ...n, data: { ...n.data, [key]: value } };
-        }
-        return n;
-      })
-    );
-  }, [setNodes]);
-
-
+  }, [setNodes, setEdges, updateNodeData]); // Only run on mount
   const onConnect = useCallback(
     (params) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]

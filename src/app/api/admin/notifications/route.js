@@ -345,7 +345,11 @@ export async function PATCH(request) {
       return NextResponse.json({ error: 'Notification not found' }, { status: 404 });
     }
 
-    if (isDynamicNotificationId(id)) {
+    // buildNotifications tags the synthesised rows with `dynamic: true` (the
+    // same flag the mark-all branch filters on); persisted rows come straight
+    // from the table and have no such field. Reusing it avoids re-deriving the
+    // distinction from the id prefix.
+    if (targetNotification.dynamic) {
       if (String(id).startsWith('facebook-')) {
         const facebookId = String(id).slice('facebook-'.length);
         const { error: facebookError } = await supabase

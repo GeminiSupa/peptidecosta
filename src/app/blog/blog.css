@@ -31,5 +31,5 @@
 .editorial-topic-links a:first-child {
   color: #fff;
   border-color: #f58220;
-  background: #f58220;
+  background: var(--cta);
 }

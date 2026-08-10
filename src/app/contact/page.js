@@ -125,7 +125,7 @@ export default function ContactPage() {
                 <button
                   onClick={() => setFormSuccess(false)}
                   className="contact-button contact-button--primary"
-                  style={{ background: '#f58220' }}
+                  style={{ background: 'var(--cta)' }}
                 >
                   {localized(pageSettings, 'successButton', lang)}
                 </button>
@@ -145,7 +145,7 @@ export default function ContactPage() {
                         type="text" value={formName} onChange={(e) => setFormName(e.target.value)}
                         placeholder={lang === 'en' ? 'John Doe' : 'Juan Pérez'}
                         style={inputStyle} required
-                        onFocus={(e) => { e.target.style.borderColor = '#f58220'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
+                        onFocus={(e) => { e.target.style.borderColor = 'var(--cta)'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
                         onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
                       />
                     </div>
@@ -163,7 +163,7 @@ export default function ContactPage() {
                         type="email" value={formEmail} onChange={(e) => setFormEmail(e.target.value)}
                         placeholder={lang === 'en' ? 'you@example.com' : 'tu@correo.com'}
                         style={inputStyle} required
-                        onFocus={(e) => { e.target.style.borderColor = '#f58220'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
+                        onFocus={(e) => { e.target.style.borderColor = 'var(--cta)'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
                         onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
                       />
                     </div>
@@ -182,7 +182,7 @@ export default function ContactPage() {
                       type="text" value={formSubject} onChange={(e) => setFormSubject(e.target.value)}
                       placeholder={lang === 'en' ? 'e.g. Question about BPC-157' : 'ej. Pregunta sobre BPC-157'}
                       style={inputStyle}
-                      onFocus={(e) => { e.target.style.borderColor = '#f58220'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
+                      onFocus={(e) => { e.target.style.borderColor = 'var(--cta)'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
                       onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
                     />
                   </div>
@@ -203,7 +203,7 @@ export default function ContactPage() {
                     style={{
                       ...inputStyle, paddingLeft: '16px', minHeight: '140px', resize: 'vertical', lineHeight: '1.6'
                     }}
-                    onFocus={(e) => { e.target.style.borderColor = '#f58220'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
+                    onFocus={(e) => { e.target.style.borderColor = 'var(--cta)'; e.target.style.boxShadow = '0 0 0 3px rgba(245,130,32,0.12)'; }}
                     onBlur={(e) => { e.target.style.borderColor = 'var(--border-color)'; e.target.style.boxShadow = 'none'; }}
                   />
                 </div>
@@ -223,7 +223,7 @@ export default function ContactPage() {
                   type="submit" disabled={formLoading}
                   className="contact-button contact-button--primary"
                   style={{
-                    background: '#f58220',
+                    background: 'var(--cta)',
                     width: '100%', padding: '16px', fontSize: '15px', fontWeight: '700',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                     borderRadius: '12px', border: 'none', color: '#fff', cursor: formLoading ? 'wait' : 'pointer',

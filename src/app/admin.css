@@ -791,46 +791,14 @@
     color: #f8fafc;
 }
 
-/* -------------------------------------
-   COMPACT MOBILE TABLES
-   ------------------------------------- */
-@media (max-width: 768px) {
-    .responsive-table, .responsive-table tbody, .responsive-table tr, .responsive-table td {
-        display: block;
-        width: 100%;
-    }
-    .responsive-table thead {
-        display: none;
-    }
-    .responsive-table tr {
-        margin-bottom: 16px;
-        background: #0e1626;
-        border: 1px solid rgba(255,255,255,0.05);
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    .responsive-table td {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        text-align: right;
-        padding: 10px 12px;
-        border-bottom: 1px solid rgba(255,255,255,0.05);
-    }
-    .responsive-table td:last-child {
-        border-bottom: none;
-    }
-    .responsive-table td::before {
-        content: attr(data-label);
-        font-size: 0.75rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        color: #94a3b8;
-        text-align: left;
-        margin-right: 16px;
-    }
-}
+/* The mobile table-to-card transform lives in ONE place — see
+   "MOBILE TABLE CARDS" further down. Two earlier copies of it used to sit here
+   and under "Admin Dashboard Mobile UI Overhaul", both targeting the same
+   tables at the same specificity. Admin tables carry both .spreadsheet-table
+   and .responsive-table, so the cells ended up inheriting flex-direction from
+   one copy and justify-content/align-items/text-align from another: a column
+   flex container with space-between and centred items, which centred every
+   label and value and blew each row up to roughly a screen tall. */
 
 /* Cell-specific styling */
 .cell-editable {
@@ -1825,62 +1793,104 @@
     }
 }
 
-/* RESPONSIVE TABLE CARDS FOR MOBILE ADMIN PORTAL */
+/* ===========================================================
+   MOBILE TABLE CARDS — the single source of truth
+   -----------------------------------------------------------
+   Every admin table (leads, orders, customers, carts, products,
+   affiliates, team) carries BOTH .spreadsheet-table and
+   .responsive-table, so both class names are handled together
+   here. Do not add a second copy of these rules elsewhere in
+   this file: two blocks at equal specificity split the cell
+   between them and the layout stops making sense.
+
+   Layout: label above value, everything left-aligned. The cells
+   hold rich content (status pills, stacked contact lines, button
+   groups), not short scalars, so the label-left/value-right row
+   this replaced could not lay them out.
+   =========================================================== */
 @media (max-width: 768px) {
-    .spreadsheet-table thead {
+    .spreadsheet-table thead,
+    .responsive-table thead {
         display: none;
     }
-    
-    .spreadsheet-table, .spreadsheet-table tbody, .spreadsheet-table tr {
+
+    .spreadsheet-table,
+    .spreadsheet-table tbody,
+    .responsive-table,
+    .responsive-table tbody {
         display: block;
         width: 100%;
     }
-    
-    .spreadsheet-table tr {
+
+    .spreadsheet-table tr,
+    .responsive-table tr {
+        display: block;
+        width: 100%;
         background: #0e1626;
-        border: 1px solid rgba(0, 212, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.07);
         border-radius: 12px;
-        margin-bottom: 20px;
-        padding: 12px;
+        margin-bottom: 12px;
+        padding: 4px 12px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
     }
-    
-    .spreadsheet-table tr:hover td {
+
+    .spreadsheet-table tr:hover td,
+    .responsive-table tr:hover td {
         background: inherit;
     }
-    
-    .spreadsheet-table td {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        border: none;
-        border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
-        padding: 12px 10px;
-        text-align: left;
+
+    .spreadsheet-table td,
+    .responsive-table td {
+        display: block;
         width: 100%;
+        border: none;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        padding: 9px 0;
+        text-align: left;
         background: transparent !important;
         font-size: 0.85rem;
-        gap: 6px;
     }
-    
-    .spreadsheet-table td:last-child {
+
+    .spreadsheet-table td:last-child,
+    .responsive-table td:last-child {
         border-bottom: none;
     }
-    
-    /* Inject column data labels on the top dynamically */
-    .spreadsheet-table td::before {
+
+    .spreadsheet-table td::before,
+    .responsive-table td::before {
         content: attr(data-label);
-        font-weight: 800;
-        color: #00D4FF;
+        display: block;
+        margin-bottom: 4px;
+        color: #7c8ba1;
+        font-weight: 700;
+        font-size: 0.65rem;
+        letter-spacing: .04em;
         text-transform: uppercase;
-        font-size: 0.7rem;
         text-align: left;
-        margin-right: 0;
-        flex-shrink: 0;
     }
-    
+
+    /* A checkbox needs no caption, and a whole card row for the word
+       "SELECT" is pure overhead. Float it beside the first real field
+       instead of giving it a row of its own. */
+    .spreadsheet-table td[data-label="Select"],
+    .responsive-table td[data-label="Select"] {
+        float: right;
+        width: auto;
+        padding: 9px 0 0;
+        border-bottom: none;
+    }
+
+    .spreadsheet-table td[data-label="Select"]::before,
+    .responsive-table td[data-label="Select"]::before {
+        content: none;
+    }
+
+    /* Action-cell layout is owned by the .admin-card-actions rules further
+       down; wrap the buttons in that class rather than restyling the cell. */
+
     /* Full width for editable cells and select boxes on mobile */
-    .spreadsheet-table td .cell-editable {
+    .spreadsheet-table td .cell-editable,
+    .responsive-table td .cell-editable {
         justify-content: flex-start;
         text-align: left;
         border: 1px solid rgba(255, 255, 255, 0.05);
@@ -1891,16 +1901,20 @@
         max-width: 100%;
         min-height: 38px;
     }
-    
-    .spreadsheet-table td .cell-select {
+
+    .spreadsheet-table td .cell-select,
+    .responsive-table td .cell-select {
         width: 100%;
         max-width: 100%;
         text-align-last: left;
         padding: 8px 12px;
-        min-height: 38px;
+        /* 44px to match .admin-btn in this same breakpoint — the Agent picker
+           sits directly above the action buttons in a card. */
+        min-height: 44px;
     }
-    
-    .spreadsheet-table td .admin-image-cell {
+
+    .spreadsheet-table td .admin-image-cell,
+    .responsive-table td .admin-image-cell {
         justify-content: flex-start;
         width: 100%;
         max-width: 100%;
@@ -2768,64 +2782,8 @@
 
 /* --- Admin Dashboard Mobile UI Overhaul --- */
 @media (max-width: 768px) {
-    /* Responsive Table to Cards */
-    .responsive-table {
-        display: block;
-        width: 100%;
-    }
-    
-    .responsive-table thead {
-        display: none; /* Hide table headers on mobile */
-    }
-    
-    .responsive-table tbody {
-        display: block;
-        width: 100%;
-    }
-    
-    .responsive-table tr {
-        display: flex;
-        flex-direction: column;
-        background: rgba(14, 26, 51, 0.4);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 12px;
-        margin-bottom: 16px;
-        padding: 12px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-    
-    .responsive-table td {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px 4px !important;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.03) !important;
-        font-size: 0.85rem;
-        text-align: right;
-    }
-    
-    .responsive-table td:last-child {
-        border-bottom: none !important;
-    }
-    
-    .responsive-table td::before {
-        content: attr(data-label);
-        font-weight: 800;
-        text-transform: uppercase;
-        font-size: 0.7rem;
-        color: #94a3b8;
-        margin-right: 12px;
-        text-align: left;
-    }
-    
-    /* Fix complex contents inside td */
-    .responsive-table td > div {
-        text-align: right;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-    }
-    
+    /* Table-to-card rules deliberately absent here — see "MOBILE TABLE CARDS". */
+
     /* Touch Target Enhancements */
     .admin-btn {
         min-height: 44px;

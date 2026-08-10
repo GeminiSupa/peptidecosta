@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.sales_prospects (
   formatted_address TEXT,
   city TEXT,
   region TEXT,
-  country TEXT NOT NULL DEFAULT 'Costa Rica',
+  country TEXT,
   latitude DOUBLE PRECISION,
   longitude DOUBLE PRECISION,
   google_maps_url TEXT,
@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS public.sales_prospects (
   enriched_at TIMESTAMPTZ,
   people JSONB NOT NULL DEFAULT '[]'::jsonb,
   linkedin_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+  whatsapp_numbers JSONB NOT NULL DEFAULT '[]'::jsonb,
   owner_email TEXT,
   notes TEXT NOT NULL DEFAULT '',
   last_contacted_at TIMESTAMPTZ,
@@ -66,7 +67,13 @@ ALTER TABLE public.sales_prospects
   ADD COLUMN IF NOT EXISTS contact_source_url TEXT,
   ADD COLUMN IF NOT EXISTS enriched_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS people JSONB NOT NULL DEFAULT '[]'::jsonb,
-  ADD COLUMN IF NOT EXISTS linkedin_urls JSONB NOT NULL DEFAULT '[]'::jsonb;
+  ADD COLUMN IF NOT EXISTS linkedin_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS whatsapp_numbers JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+-- Discovery is worldwide, so an unknown country must stay unknown rather than
+-- inheriting the storefront's home country.
+ALTER TABLE public.sales_prospects ALTER COLUMN country DROP NOT NULL;
+ALTER TABLE public.sales_prospects ALTER COLUMN country DROP DEFAULT;
 
 DROP POLICY IF EXISTS "Authenticated staff can read sales prospects" ON public.sales_prospects;
 

@@ -249,6 +249,24 @@ function FieldError({ name, message }) {
 }
 
 /**
+ * The visible label for a checkout control.
+ *
+ * htmlFor is required rather than optional on purpose: a label that is not tied
+ * to a control is decoration, and this form previously shipped six fields whose
+ * only name was a placeholder — which disappears the moment anyone types, so
+ * the field is unnamed exactly when a validation error sends the user back to
+ * re-read it.
+ */
+function CheckoutLabel({ htmlFor, children, required = false }) {
+  return (
+    <label htmlFor={htmlFor} className="checkout-label">
+      {children}
+      {required && <span className="checkout-required" aria-hidden="true">*</span>}
+    </label>
+  );
+}
+
+/**
  * Spread onto an input to wire it to its FieldError. Keeping the two in one
  * helper is what stops a field from looking invalid without being announced
  * as invalid, which is how the first version of this drifted.
@@ -356,7 +374,18 @@ export default function CatalogPage() {
   const [gateInput, setGateInput] = useState('');
   const [gateSubmitting, setGateSubmitting] = useState(false);
   const [gateError, setGateError] = useState('');
-  const [gateConsent, setGateConsent] = useState(true);
+  // Unchecked by default. Consent that arrives pre-ticked, bundled with the
+  // only way to see prices, is not freely given — and it poisons list quality,
+  // because everyone who just wanted the catalog lands on the marketing list.
+  const [gateConsent, setGateConsent] = useState(false);
+
+  const dismissGate = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('catalog_gate_dismissed', 'true');
+    }
+    setGateVisible(false);
+    setGateError('');
+  }, []);
 
   // Second-chance WhatsApp opt-in re-prompt (for visitors who unlocked the
   // catalog but did NOT opt in). Shown at most once / 3 days, stops after 2 dismissals.
@@ -408,7 +437,12 @@ export default function CatalogPage() {
       const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
       setGateAccessGranted(hasAccess);
       setGateLoading(false);
-      if (!hasAccess && !loading) {
+      // Dismissing the gate holds for the tab, not forever: the visitor keeps
+      // browsing without being asked again on every route change, and a fresh
+      // visit still prompts. sessionStorage rather than localStorage for
+      // exactly that reason.
+      const dismissed = sessionStorage.getItem('catalog_gate_dismissed') === 'true';
+      if (!hasAccess && !dismissed && !loading) {
         const timer = setTimeout(() => setGateVisible(true), 15000);
         return () => clearTimeout(timer);
       }
@@ -3058,6 +3092,21 @@ export default function CatalogPage() {
               position: 'relative'
             }}>
 
+              <button
+                type="button"
+                onClick={dismissGate}
+                aria-label={lang === 'en' ? 'Close and keep browsing' : 'Cerrar y seguir viendo'}
+                style={{
+                  position: 'absolute', top: '10px', right: '10px',
+                  width: '44px', height: '44px', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  border: 'none', background: 'transparent',
+                  color: 'var(--text-muted)', cursor: 'pointer', borderRadius: '50%'
+                }}
+              >
+                <X size={20} />
+              </button>
+
               <div style={{ padding: '24px 24px 32px 24px' }}>
               <img src="/logo.png" alt="Peptides Costa Rica Logo" style={{ height: '40px', margin: '0 auto 16px auto', display: 'block', borderRadius: '8px' }} />
               <h2 style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px' }}>
@@ -3109,8 +3158,8 @@ export default function CatalogPage() {
                     </span>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       {lang === 'en'
-                        ? 'By keeping this checked, you consent to receive marketing updates by WhatsApp or email from Peptides Costa Rica. Reply STOP or unsubscribe anytime.'
-                        : 'Al mantener esta casilla marcada, acepta recibir novedades de marketing por WhatsApp o correo de Peptides Costa Rica. Responda BAJA o cancele la suscripción cuando quiera.'}
+                        ? 'By checking this box, you consent to receive marketing updates by WhatsApp or email from Peptides Costa Rica. Reply STOP or unsubscribe anytime.'
+                        : 'Al marcar esta casilla, acepta recibir novedades de marketing por WhatsApp o correo de Peptides Costa Rica. Responda BAJA o cancele la suscripción cuando quiera.'}
                     </span>
                   </span>
                 </label>
@@ -3125,6 +3174,22 @@ export default function CatalogPage() {
                   ) : (
                     lang === 'en' ? 'Unlock Catalog' : 'Desbloquear Catálogo'
                   )}
+                </button>
+
+                {/* An X in the corner is easy to miss and reads as "dismiss the
+                    offer", not "I can still shop". Spelling the way out makes
+                    the gate a prompt rather than a wall — which is what the
+                    landing page promises ("precios transparentes"). */}
+                <button
+                  type="button"
+                  onClick={dismissGate}
+                  style={{
+                    background: 'none', border: 'none', padding: '4px',
+                    color: 'var(--text-muted)', fontSize: '0.82rem',
+                    textDecoration: 'underline', cursor: 'pointer'
+                  }}
+                >
+                  {lang === 'en' ? 'Browse the catalog without signing up' : 'Ver el catálogo sin registrarme'}
                 </button>
 
               </form>
@@ -3741,11 +3806,16 @@ export default function CatalogPage() {
 
             {/* Promo Code UI */}
             <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <CheckoutLabel htmlFor="field-promoCode">
+                {lang === 'en' ? 'Promo code' : 'Código promocional'}
+              </CheckoutLabel>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <input
+                  id="field-promoCode"
                   type="text"
                   className="checkout-input"
-                  placeholder={lang === 'en' ? 'Promo Code' : 'Código Promocional'}
+                  autoComplete="off"
+                  placeholder="WELCOME10"
                   value={promoCodeInput}
                   onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
                   style={{ flex: 1, textTransform: 'uppercase', marginBottom: 0 }}
@@ -3813,11 +3883,15 @@ export default function CatalogPage() {
                 <h3>{lang === 'en' ? 'Contact & Shipping' : 'Contacto y Envío'}</h3>
               </div>
               <div>
+                <CheckoutLabel htmlFor="field-customerName" required>
+                  {lang === 'en' ? 'Full name' : 'Nombre completo'}
+                </CheckoutLabel>
                 <input
                   id="field-customerName"
                   type="text"
                   className="checkout-input"
-                  placeholder={lang === 'en' ? "Your Full Name" : "Su Nombre Completo"}
+                  autoComplete="name"
+                  placeholder={lang === 'en' ? 'e.g. Ana Rodríguez' : 'ej. Ana Rodríguez'}
                   required
                   value={customerName}
                   onChange={(e) => {
@@ -3830,11 +3904,16 @@ export default function CatalogPage() {
               </div>
 
               <div>
+                <CheckoutLabel htmlFor="field-customerEmail" required>
+                  {lang === 'en' ? 'Email address' : 'Correo electrónico'}
+                </CheckoutLabel>
                 <input
                   id="field-customerEmail"
                   type="email"
                   className="checkout-input"
-                  placeholder={lang === 'en' ? "Email Address" : "Correo Electrónico"}
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder={lang === 'en' ? 'e.g. ana@correo.com' : 'ej. ana@correo.com'}
                   required
                   value={customerEmail}
                   onChange={(e) => {
@@ -3847,48 +3926,67 @@ export default function CatalogPage() {
               </div>
               <div>
                 <div className="checkout-phone-row">
-                  <select
-                    className="checkout-input checkout-phone-country"
-                    value={customerPhoneCountry}
-                    onChange={(e) => setCustomerPhoneCountry(e.target.value)}
-                    style={{ appearance: 'auto' }}
-                    aria-label={lang === 'en' ? 'Country code' : 'Código de país'}
-                  >
-                    {PHONE_COUNTRIES.map((country) => (
-                      <option key={country.code} value={country.code}>
-                        {country.flag} +{country.dial} {country.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div>
+                    <CheckoutLabel htmlFor="field-customerPhoneCountry">
+                      {lang === 'en' ? 'Country code' : 'Código de país'}
+                    </CheckoutLabel>
+                    <select
+                      id="field-customerPhoneCountry"
+                      className="checkout-input checkout-phone-country"
+                      autoComplete="tel-country-code"
+                      value={customerPhoneCountry}
+                      onChange={(e) => setCustomerPhoneCountry(e.target.value)}
+                      style={{ appearance: 'auto' }}
+                    >
+                      {PHONE_COUNTRIES.map((country) => (
+                        <option key={country.code} value={country.code}>
+                          {country.flag} +{country.dial} {country.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   {/* Deliberately not driven by phoneLooksValid: that turned the
                       field red on the first digit typed, before anyone had a
                       chance to finish. It goes red on submit and clears on the
                       next keystroke. */}
-                  <input
-                    id="field-customerPhone"
-                    type="tel"
-                    className="checkout-input checkout-phone-number"
-                    placeholder={lang === 'en' ? "WhatsApp Phone Number" : "Número de WhatsApp"}
-                    required
-                    value={customerPhoneNational}
-                    onChange={(e) => {
-                      setCustomerPhoneNational(e.target.value);
-                      if (formErrors.customerPhone) setFormErrors(prev => ({ ...prev, customerPhone: null }));
-                    }}
-                    {...invalidProps('customerPhone', formErrors)}
-                  />
+                  <div>
+                    <CheckoutLabel htmlFor="field-customerPhone" required>
+                      {lang === 'en' ? 'WhatsApp number' : 'Número de WhatsApp'}
+                    </CheckoutLabel>
+                    <input
+                      id="field-customerPhone"
+                      type="tel"
+                      className="checkout-input checkout-phone-number"
+                      autoComplete="tel-national"
+                      inputMode="tel"
+                      placeholder={lang === 'en' ? 'e.g. 8404 6973' : 'ej. 8404 6973'}
+                      required
+                      value={customerPhoneNational}
+                      onChange={(e) => {
+                        setCustomerPhoneNational(e.target.value);
+                        if (formErrors.customerPhone) setFormErrors(prev => ({ ...prev, customerPhone: null }));
+                      }}
+                      {...invalidProps('customerPhone', formErrors)}
+                    />
+                  </div>
                 </div>
                 <FieldError name="customerPhone" message={formErrors.customerPhone} />
               </div>
 
               <div className="checkout-id-grid">
                 <div>
+                  <CheckoutLabel htmlFor="field-customerIdType">
+                    {lang === 'en' ? 'ID type' : 'Tipo de identificación'}
+                  </CheckoutLabel>
                   <select
+                    id="field-customerIdType"
                     className="checkout-input"
+                    /* No standard autofill token covers a CR document type, and
+                       leaving it unset lets Chrome guess it is a country field. */
+                    autoComplete="off"
                     value={customerIdType}
                     onChange={(e) => setCustomerIdType(e.target.value)}
                     style={{ appearance: 'auto', width: '100%' }}
-                    aria-label={lang === 'en' ? 'Identification type' : 'Tipo de identificación'}
                   >
                     <option value="1">{lang === 'en' ? 'National ID' : 'Cédula física'}</option>
                     <option value="6">DIMEX</option>
@@ -3897,11 +3995,21 @@ export default function CatalogPage() {
                   </select>
                 </div>
                 <div>
+                  <CheckoutLabel htmlFor="field-customerIdNumber" required>
+                    {lang === 'en' ? 'ID number' : 'Número de identificación'}
+                  </CheckoutLabel>
+                  {/* Passports are alphanumeric; every other CR document type is
+                      digits only, so the numeric keypad is only safe while a
+                      passport is not the selected type. */}
                   <input
                     id="field-customerIdNumber"
                     type="text"
                     className="checkout-input"
-                    placeholder={lang === 'en' ? 'ID Number' : 'Número de Identificación'}
+                    inputMode={customerIdType === '5' ? 'text' : 'numeric'}
+                    autoComplete="off"
+                    placeholder={customerIdType === '5'
+                      ? (lang === 'en' ? 'e.g. C01X23456' : 'ej. C01X23456')
+                      : (lang === 'en' ? 'e.g. 1 0234 0567' : 'ej. 1 0234 0567')}
                     required
                     value={customerIdNumber}
                     onChange={(e) => {
@@ -3927,11 +4035,13 @@ export default function CatalogPage() {
                 <FieldError name="shippingAddress" message={formErrors.shippingAddress} />
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
-                      {lang === 'en' ? 'Province' : 'Provincia'} *
-                    </label>
+                    <CheckoutLabel htmlFor="field-shippingProvince" required>
+                      {lang === 'en' ? 'Province' : 'Provincia'}
+                    </CheckoutLabel>
                     <select
+                      id="field-shippingProvince"
                       className="checkout-input"
+                      autoComplete="address-level1"
                       value={shippingProvince}
                       onChange={(e) => {
                         setShippingProvince(e.target.value);
@@ -3951,11 +4061,13 @@ export default function CatalogPage() {
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
-                      {lang === 'en' ? 'Canton' : 'Cantón'} *
-                    </label>
+                    <CheckoutLabel htmlFor="field-shippingCanton" required>
+                      {lang === 'en' ? 'Canton' : 'Cantón'}
+                    </CheckoutLabel>
                     <select
+                      id="field-shippingCanton"
                       className="checkout-input"
+                      autoComplete="address-level2"
                       value={shippingCanton}
                       onChange={(e) => {
                         setShippingCanton(e.target.value);
@@ -3979,11 +4091,13 @@ export default function CatalogPage() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
-                      {lang === 'en' ? 'District' : 'Distrito'} *
-                    </label>
+                    <CheckoutLabel htmlFor="field-shippingDistrict" required>
+                      {lang === 'en' ? 'District' : 'Distrito'}
+                    </CheckoutLabel>
                     <select
+                      id="field-shippingDistrict"
                       className="checkout-input"
+                      autoComplete="address-level3"
                       value={shippingDistrict}
                       onChange={(e) => {
                         setShippingDistrict(e.target.value);
@@ -4006,13 +4120,16 @@ export default function CatalogPage() {
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
-                      {lang === 'en' ? 'Postal Code (Optional)' : 'Código Postal (Opcional)'}
-                    </label>
+                    <CheckoutLabel htmlFor="field-shippingZip">
+                      {lang === 'en' ? 'Postal code (optional)' : 'Código postal (opcional)'}
+                    </CheckoutLabel>
                     <input
+                      id="field-shippingZip"
                       type="text"
                       className="checkout-input"
-                      placeholder="e.g. 10201"
+                      autoComplete="postal-code"
+                      inputMode="numeric"
+                      placeholder={lang === 'en' ? 'e.g. 10201' : 'ej. 10201'}
                       value={shippingZip}
                       onChange={(e) => setShippingZip(e.target.value)}
                     />
@@ -4020,11 +4137,13 @@ export default function CatalogPage() {
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.75rem', fontWeight: '700', color: 'var(--text-secondary)' }}>
-                    {lang === 'en' ? 'Detailed Address (landmarks, street details, etc.)' : 'Dirección detallada (señas exactas, calle, casa)'} *
-                  </label>
+                  <CheckoutLabel htmlFor="field-shippingDetailedAddress" required>
+                    {lang === 'en' ? 'Detailed address (landmarks, street details, etc.)' : 'Dirección detallada (señas exactas, calle, casa)'}
+                  </CheckoutLabel>
                   <textarea
+                    id="field-shippingDetailedAddress"
                     className="checkout-input"
+                    autoComplete="street-address"
                     rows={4}
                     style={{ resize: 'vertical' }}
                     placeholder={lang === 'en' ? 'e.g. 200m North of the catholic church, white house with black gate' : 'ej. 200m Norte de la iglesia católica, casa blanca con portón negro'}
@@ -4096,12 +4215,15 @@ export default function CatalogPage() {
                 <div className="card-payment-panel">
                   <div className="card-payment-fields">
                     <div>
+                      <CheckoutLabel htmlFor="field-cardHolder" required>
+                        {lang === 'en' ? 'Name on card' : 'Nombre en la tarjeta'}
+                      </CheckoutLabel>
                       <input
                         id="field-cardHolder"
                         type="text"
                         className="checkout-input"
                         autoComplete="cc-name"
-                        placeholder={lang === 'en' ? 'Name on card' : 'Nombre en la tarjeta'}
+                        placeholder={lang === 'en' ? 'e.g. ANA RODRIGUEZ' : 'ej. ANA RODRIGUEZ'}
                         value={cardDetails.holder}
                         onChange={(e) => {
                           setCardDetails(prev => ({ ...prev, holder: e.target.value }));
@@ -4112,13 +4234,16 @@ export default function CatalogPage() {
                       <FieldError name="cardHolder" message={formErrors.cardHolder} />
                     </div>
                     <div>
+                      <CheckoutLabel htmlFor="field-cardNumber" required>
+                        {lang === 'en' ? 'Card number' : 'Número de tarjeta'}
+                      </CheckoutLabel>
                       <input
                         id="field-cardNumber"
                         type="text"
                         inputMode="numeric"
                         className="checkout-input"
                         autoComplete="cc-number"
-                        placeholder={lang === 'en' ? 'Card number' : 'Número de tarjeta'}
+                        placeholder="1234 5678 9012 3456"
                         value={cardDetails.number}
                         onChange={(e) => {
                           setCardDetails(prev => ({ ...prev, number: e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').trim().slice(0, 23) }));
@@ -4132,13 +4257,16 @@ export default function CatalogPage() {
                         column under 768px — the children size themselves. */}
                     <div className="card-payment-fields__row">
                       <div>
+                        <CheckoutLabel htmlFor="field-cardExpiry" required>
+                          {lang === 'en' ? 'Expiry date' : 'Fecha de vencimiento'}
+                        </CheckoutLabel>
                         <input
                           id="field-cardExpiry"
                           type="text"
                           inputMode="numeric"
                           className="checkout-input"
                           autoComplete="cc-exp"
-                          placeholder="MM/YY"
+                          placeholder={lang === 'en' ? 'MM/YY' : 'MM/AA'}
                           value={cardDetails.expiry}
                           onChange={(e) => {
                             const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
@@ -4151,13 +4279,16 @@ export default function CatalogPage() {
                         <FieldError name="cardExpiry" message={formErrors.cardExpiry} />
                       </div>
                       <div>
+                        <CheckoutLabel htmlFor="field-cardCvv" required>
+                          {lang === 'en' ? 'Security code (CVV)' : 'Código de seguridad (CVV)'}
+                        </CheckoutLabel>
                         <input
                           id="field-cardCvv"
                           type="password"
                           inputMode="numeric"
                           className="checkout-input"
                           autoComplete="cc-csc"
-                          placeholder="CVV"
+                          placeholder={lang === 'en' ? '3 digits' : '3 dígitos'}
                           value={cardDetails.cvv}
                           onChange={(e) => {
                             setCardDetails(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }));

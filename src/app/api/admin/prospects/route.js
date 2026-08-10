@@ -3,10 +3,12 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
   isProspectsTableMissing,
+  mergeRediscoveredProspect,
   normalizeProspectInput,
   normalizeOptionalUrl,
   normalizeProspectPeople,
   normalizeLinkedInProfileUrls,
+  normalizeWhatsAppNumbers,
   scoreProspect,
   PROSPECT_STATUSES,
   CONTACT_PERMISSION_STATUSES,
@@ -19,7 +21,8 @@ const SELECT_FIELDS = [
   'website_url', 'phone', 'email', 'formatted_address', 'city', 'region', 'country',
   'latitude', 'longitude', 'google_maps_url', 'rating', 'user_rating_count',
   'business_status', 'status', 'fit_score', 'fit_reasons', 'contact_permission_status',
-  'contact_source_url', 'enriched_at', 'people', 'linkedin_urls', 'owner_email', 'notes', 'last_contacted_at',
+  'contact_source_url', 'enriched_at', 'people', 'linkedin_urls', 'whatsapp_numbers',
+  'owner_email', 'notes', 'last_contacted_at',
   'next_follow_up_at', 'created_at', 'updated_at',
 ].join(',');
 
@@ -62,12 +65,12 @@ export async function POST(request) {
   }
 
   const supabase = getSupabaseAdmin();
-  const row = { ...input, updated_at: new Date().toISOString() };
+  let row = { ...input, updated_at: new Date().toISOString() };
   let existingId = null;
   if (row.source_external_id) {
     const { data: existing, error: lookupError } = await supabase
       .from('sales_prospects')
-      .select('id')
+      .select(SELECT_FIELDS)
       .eq('source_provider', row.source_provider)
       .eq('source_external_id', row.source_external_id)
       .maybeSingle();
@@ -79,6 +82,12 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unable to save prospect' }, { status: 500 });
     }
     existingId = existing?.id || null;
+    // Saving an already-tracked business refreshes its directory details without
+    // resetting the status, notes, owner or follow-up someone set on it.
+    if (existing) {
+      const { id, created_at, ...merged } = mergeRediscoveredProspect(existing, input);
+      row = { ...merged, updated_at: row.updated_at };
+    }
   }
 
   let query = supabase.from('sales_prospects');
@@ -126,6 +135,7 @@ export async function PATCH(request) {
   if ('enriched_at' in body) updates.enriched_at = body.enriched_at || null;
   if ('people' in body) updates.people = normalizeProspectPeople(body.people);
   if ('linkedin_urls' in body) updates.linkedin_urls = normalizeLinkedInProfileUrls(body.linkedin_urls);
+  if ('whatsapp_numbers' in body) updates.whatsapp_numbers = normalizeWhatsAppNumbers(body.whatsapp_numbers);
   updates.updated_at = new Date().toISOString();
 
   const supabase = getSupabaseAdmin();

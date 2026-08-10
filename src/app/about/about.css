@@ -15,7 +15,7 @@
 }
 
 .about-page .lp-nav a:hover {
-  color: #f58220;
+  color: var(--cta);
 }
 
 .about-hero {
@@ -35,7 +35,7 @@
 .about-eyebrow,
 .about-section-number {
   margin: 0 0 18px;
-  color: #f58220;
+  color: var(--cta);
   font-size: .72rem;
   font-weight: 900;
   letter-spacing: .14em;
@@ -84,7 +84,7 @@
 
 .about-hero-points svg {
   flex-shrink: 0;
-  color: #f58220;
+  color: var(--cta);
 }
 
 .about-cta-actions {
@@ -108,7 +108,7 @@
 }
 
 .about-primary {
-  background: #f58220;
+  background: var(--cta);
   color: #fff;
 }
 
@@ -132,7 +132,7 @@
 .about-process-grid span {
   display: block;
   margin-bottom: 8px;
-  color: #f58220;
+  color: var(--cta);
   font-size: .68rem;
   font-weight: 900;
   letter-spacing: .08em;
@@ -220,7 +220,7 @@
   place-items: center;
   border-radius: 4px;
   background: #fff0e5;
-  color: #f58220;
+  color: var(--cta);
   font-size: .76rem;
   font-weight: 900;
 }
@@ -259,7 +259,7 @@
 
 .about-quote span {
   display: block;
-  color: #f58220;
+  color: var(--cta);
   font-size: 4.5rem;
   line-height: .8;
 }
@@ -315,7 +315,7 @@
 
 .about-process-grid svg {
   margin-bottom: 28px;
-  color: #f58220;
+  color: var(--cta);
 }
 
 .about-process-grid h3 {
