@@ -3,13 +3,16 @@ import { test } from 'node:test';
 
 import {
   buildProspectSearchQuery,
+  dedupeAndRankProspects,
   isProspectsTableMissing,
   normalizeGooglePlace,
   normalizeLinkedInProfileUrls,
   normalizeOpenStreetMapPlace,
+  normalizeOverpassElement,
   normalizeProspectPeople,
   normalizeProspectInput,
   prospectSearchTerm,
+  prospectSearchProfile,
   scoreProspect,
 } from '../src/lib/prospects.mjs';
 import {
@@ -89,10 +92,49 @@ test('turns broad category labels into searchable OpenStreetMap terms', () => {
   assert.equal(prospectSearchTerm('BioLab Heredia'), 'BioLab Heredia');
 });
 
+test('maps business searches to category-aware OpenStreetMap filters', () => {
+  const gym = prospectSearchProfile('personal trainers');
+  assert.equal(gym.term, 'gym');
+  assert.ok(gym.tagFilters.some(([key]) => key === 'leisure'));
+  assert.match(gym.namePattern, /fitness/);
+
+  const custom = prospectSearchProfile('biotechnology accelerator');
+  assert.equal(custom.term, 'biotechnology accelerator');
+  assert.deepEqual(custom.tagFilters, []);
+});
+
 test('builds worldwide searches without forcing a country', () => {
   assert.equal(buildProspectSearchQuery('Gyms and personal trainers', 'Pakistan'), 'gym, Pakistan');
   assert.equal(buildProspectSearchQuery('laboratory', 'Berlin, Germany'), 'laboratory, Berlin, Germany');
   assert.equal(buildProspectSearchQuery('wellness center', ''), 'wellness');
+});
+
+test('normalizes detailed Overpass POIs and ranks complete matches first', () => {
+  const base = normalizeOverpassElement({
+    type: 'node',
+    id: 99,
+    lat: 33.68,
+    lon: 73.04,
+    tags: {
+      name: 'Capital Fitness Club',
+      leisure: 'fitness_centre',
+      website: 'https://capitalfitness.example',
+      phone: '+92 51 1234567',
+      'addr:city': 'Islamabad',
+    },
+  }, { country: 'Pakistan', region: 'Islamabad Capital Territory' });
+  assert.equal(base.source_external_id, 'node:99');
+  assert.equal(base.country, 'Pakistan');
+  assert.equal(base.website_url, 'https://capitalfitness.example/');
+
+  const ranked = dedupeAndRankProspects([
+    { ...base, website_url: null, phone: null, fit_score: 35 },
+    { ...base, website_url: 'https://capitalfitness.example/', phone: '+92 51 1234567', fit_score: 60 },
+    { ...base, source_external_id: 'node:100', organization_name: 'Unrelated Hall', fit_score: 20 },
+  ], 'gym');
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].organization_name, 'Capital Fitness Club');
+  assert.equal(ranked[0].phone, '+92 51 1234567');
 });
 
 test('extracts only explicitly published website contacts and contact links', () => {

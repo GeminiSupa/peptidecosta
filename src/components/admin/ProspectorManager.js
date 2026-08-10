@@ -186,7 +186,11 @@ export default function ProspectorManager({ currentUserProfile }) {
       if (results[0]) chooseProspect(results[0], false);
       else setSelected(null);
       setSelectedSaved(false);
-      setNotice(results.length ? `${results.length} businesses found` : 'No matching businesses found');
+      const resolvedLocation = payload.locationResolved ? ` near ${payload.locationResolved}` : '';
+      const warning = payload.warnings?.[0] ? ` ${payload.warnings[0]}` : '';
+      setNotice(results.length
+        ? `${results.length} businesses found${resolvedLocation} using ${payload.provider || 'OpenStreetMap'}.${warning}`
+        : `No matching businesses found.${warning} Try a nearby city or a broader business term.`);
     } catch (searchError) {
       setError(searchError.message);
     } finally {
@@ -465,7 +469,7 @@ export default function ProspectorManager({ currentUserProfile }) {
           <datalist id="prospector-category-suggestions">{CATEGORY_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
           <input className="prospector-input" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="City, region, or country (optional)" aria-label="City, region, or country" />
           <button className="prospector-btn primary" type="submit" disabled={searching || query.trim().length < 2}>
-            {searching ? <Loader2 size={15} className="mkt-spin" /> : <Search size={15} />} Search area
+            {searching ? <Loader2 size={15} className="mkt-spin" /> : <Search size={15} />} Search businesses
           </button>
         </form>
       ) : (

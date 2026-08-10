@@ -49,6 +49,45 @@ export function prospectSearchTerm(value) {
   return query;
 }
 
+export function prospectSearchProfile(value) {
+  const term = prospectSearchTerm(value);
+  const lower = term.toLowerCase();
+  if (lower === 'gym') return {
+    term,
+    namePattern: 'gym|fitness|health club|crossfit',
+    tagFilters: [
+      ['leisure', '^fitness_centre$'],
+      ['sport', '^(fitness|bodybuilding|weightlifting)$'],
+    ],
+  };
+  if (lower === 'wellness') return {
+    term,
+    namePattern: 'wellness|wellbeing|spa|health centre|health center',
+    tagFilters: [['leisure', '^spa$'], ['healthcare', '^alternative$']],
+  };
+  if (lower === 'nutritionist') return {
+    term,
+    namePattern: 'nutrition|dietitian|dietician',
+    tagFilters: [['healthcare', '^(dietitian|nutrition_counselling)$'], ['office', '^(dietitian|nutritionist)$']],
+  };
+  if (lower === 'sports clinic') return {
+    term,
+    namePattern: 'sports medicine|sports clinic|physio|recovery',
+    tagFilters: [['healthcare', '^(physiotherapist|clinic|sports_medicine)$']],
+  };
+  if (lower === 'aesthetic clinic') return {
+    term,
+    namePattern: 'aesthetic|esthetic|cosmetic|beauty clinic',
+    tagFilters: [['shop', '^beauty$'], ['healthcare', '^(clinic|aesthetic_medicine)$']],
+  };
+  if (lower === 'laboratory') return {
+    term,
+    namePattern: 'laboratory|laboratorio|research lab',
+    tagFilters: [['amenity', '^laboratory$'], ['healthcare', '^laboratory$'], ['office', '^research$']],
+  };
+  return { term, namePattern: term, tagFilters: [] };
+}
+
 export function buildProspectSearchQuery(query, location) {
   return [prospectSearchTerm(query), clean(location, 120)].filter(Boolean).join(', ');
 }
@@ -194,7 +233,7 @@ export function normalizeOpenStreetMapPlace(place = {}) {
     formatted_address: clean(place.display_name, 500) || null,
     city: clean(address.city || address.town || address.village || address.municipality || address.county, 140) || null,
     region: clean(address.state || address.region, 140) || null,
-    country: clean(address.country || 'Costa Rica', 140) || 'Costa Rica',
+    country: clean(address.country || place.country, 140) || null,
     latitude: Number.isFinite(latitude) ? latitude : null,
     longitude: Number.isFinite(longitude) ? longitude : null,
     google_maps_url: Number.isFinite(latitude) && Number.isFinite(longitude)
@@ -209,6 +248,59 @@ export function normalizeOpenStreetMapPlace(place = {}) {
   normalized.fit_score = scored.score;
   normalized.fit_reasons = scored.reasons;
   return normalized;
+}
+
+export function normalizeOverpassElement(element = {}, context = {}) {
+  const tags = element.tags || {};
+  const latitude = Number(element.lat ?? element.center?.lat);
+  const longitude = Number(element.lon ?? element.center?.lon);
+  const address = {
+    city: tags['addr:city:en'] || tags['addr:city'] || tags['addr:town'] || tags['addr:village'] || context.city,
+    state: tags['addr:state'] || tags['addr:province'] || context.region,
+    country: context.country || tags['addr:country'],
+  };
+  const streetAddress = [
+    tags['addr:housenumber'], tags['addr:street'], address.city, address.state, address.country,
+  ].filter(Boolean).join(', ');
+  return normalizeOpenStreetMapPlace({
+    osm_type: element.type,
+    osm_id: element.id,
+    lat: latitude,
+    lon: longitude,
+    name: tags['name:en'] || tags.name || tags.brand || tags.operator,
+    display_name: streetAddress || [tags.name, context.displayName].filter(Boolean).join(', '),
+    type: tags.healthcare || tags.leisure || tags.amenity || tags.office || tags.shop || tags.sport,
+    category: tags.healthcare ? 'healthcare' : tags.leisure ? 'leisure' : tags.amenity ? 'amenity' : null,
+    address,
+    extratags: tags,
+    country: context.country,
+  });
+}
+
+export function dedupeAndRankProspects(prospects, query, limit = 80) {
+  const term = prospectSearchTerm(query).toLowerCase();
+  const tokens = term.split(/[^\p{L}\p{N}]+/u).filter((token) => token.length >= 2);
+  const byKey = new Map();
+  for (const prospect of Array.isArray(prospects) ? prospects : []) {
+    if (!prospect?.organization_name || prospect.organization_name === 'Unnamed business') continue;
+    const coordinates = Number.isFinite(Number(prospect.latitude)) && Number.isFinite(Number(prospect.longitude))
+      ? `${Number(prospect.latitude).toFixed(4)}:${Number(prospect.longitude).toFixed(4)}`
+      : '';
+    const key = prospect.source_external_id
+      || `${prospect.organization_name.toLowerCase().replace(/\W+/g, '')}:${coordinates}`;
+    const haystack = `${prospect.organization_name} ${prospect.category || ''}`.toLowerCase();
+    const relevance = tokens.reduce((score, token) => score + (haystack.includes(token) ? 12 : 0), 0)
+      + (prospect.website_url ? 8 : 0)
+      + (prospect.phone ? 6 : 0)
+      + (prospect.email ? 8 : 0)
+      + Number(prospect.fit_score || 0);
+    const candidate = { ...prospect, search_relevance: relevance };
+    const existing = byKey.get(key);
+    if (!existing || candidate.search_relevance > existing.search_relevance) byKey.set(key, candidate);
+  }
+  return [...byKey.values()]
+    .sort((a, b) => b.search_relevance - a.search_relevance || a.organization_name.localeCompare(b.organization_name))
+    .slice(0, Math.max(1, Math.min(100, limit)));
 }
 
 export function normalizeProspectInput(input = {}) {
