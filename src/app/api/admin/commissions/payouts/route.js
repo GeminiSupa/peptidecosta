@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { recalcPayoutAmounts } from '@/lib/commissionPayouts';
+import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
 export async function PATCH(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
@@ -47,12 +48,19 @@ export async function PATCH(request) {
     const adminNotes =
       body.admin_notes !== undefined ? String(body.admin_notes) : payout.admin_notes;
 
+    // The 2% a staff member earns on her sub-users' orders is not derived from
+    // her own sales, so it survives an edit untouched. Leaving it out here let a
+    // superadmin wipe someone's override off the total just by saving a note.
+    const { rate: currentExchangeRate } = await getDatabaseBackedUsdToCrcRate();
     const recalc = recalcPayoutAmounts({
       usdSales,
       crcSales,
       commissionRate,
       weeklySalary,
       salaryCurrency,
+      exchangeRate: currentExchangeRate,
+      overrideUsd: Number(payout.override_usd || 0),
+      overrideCrc: Number(payout.override_crc || 0),
     });
 
     const { error: updateError } = await supabaseAdmin

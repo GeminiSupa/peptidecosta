@@ -213,10 +213,11 @@ export async function GET(request) {
             <h2 style="font-size:15px;color:#e2e8f0;margin:16px 0 8px;font-weight:600;">Total Affiliate Commission Owed</h2>
             <div style="font-size:26px;font-weight:950;color:#ffffff;line-height:1.2;margin:0 0 4px 0;">
               ${usdCommission > 0 ? `${formatMoney(usdCommission, 'USD')}` : ''}
-              ${usdCommission > 0 && crcCommission > 0 ? ' + ' : ''}
+              ${usdCommission > 0 && crcCommission > 0 ? ' OR ' : ''}
               ${crcCommission > 0 ? `${formatMoney(crcCommission, 'CRC')}` : ''}
               ${usdCommission === 0 && crcCommission === 0 ? '$0.00' : ''}
             </div>
+            ${usdCommission > 0 && crcCommission > 0 ? `<p style="margin:0 0 6px;font-size:12px;font-weight:bold;color:#38bdf8;">One payout shown in two currencies — choose one, not both.</p>` : ''}
             <p style="margin:0;font-size:12px;color:#64748b;">This payout will be sent via your registered method shortly.</p>
           </div>
 
@@ -335,7 +336,7 @@ export async function GET(request) {
                       <td style="padding:12px 10px;font-size:13px;text-align:center;color:#cbd5e1;">${r.closedOrdersCount}</td>
                       <td style="padding:12px 10px;font-size:13px;text-align:right;font-weight:bold;color:#38bdf8;">
                         ${r.usdCommission !== '$0.00' ? r.usdCommission : ''}
-                        ${r.usdCommission !== '$0.00' && r.crcCommission !== '₡0' ? ' + ' : ''}
+                        ${r.usdCommission !== '$0.00' && r.crcCommission !== '₡0' ? '<span style="font-size:10px;color:#64748b;text-transform:uppercase;"> or </span>' : ''}
                         ${r.crcCommission !== '₡0' ? r.crcCommission : ''}
                       </td>
                     </tr>
@@ -362,7 +363,7 @@ export async function GET(request) {
           to: ADMIN_CC_EMAILS,
           subject: `🧬 [Action Required] Weekly Affiliate Payouts Pending Approval (${reportResults.length} Partners)`,
           html: adminEmailHtml,
-          text: `Weekly affiliate reports are generated and pending approval for: ${reportResults.map(r => `${r.name || r.email} (Payout: ${r.usdCommission} + ${r.crcCommission})`).join(', ')}`
+          text: `Weekly affiliate reports are generated and pending approval for: ${reportResults.map(r => `${r.name || r.email} (Payout: ${r.usdCommission} OR ${r.crcCommission})`).join(', ')}\n\nEach pair is one payout expressed in two currencies. Choose one—not both.`
         });
         adminEmailSent = true;
       } catch (mailErr) {

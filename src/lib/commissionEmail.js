@@ -113,7 +113,7 @@ export function buildAgentCommissionEmail({
                 <td width="49%" align="center" valign="top" bgcolor="#f8fafc" style="padding:16px 8px;border:1px solid #dbe3ee;background-color:#f8fafc;">
                   <div style="font:700 10px Arial,sans-serif;color:#64748b;letter-spacing:.8px;text-transform:uppercase;">Commission (${escapeHtml(commissionRateLabel)})</div>
                   <div style="font:700 17px Arial,sans-serif;color:#0f172a;margin-top:8px;">${formatMoney(usdCommission, 'USD')}</div>
-                  <div style="font:700 10px Arial,sans-serif;color:#64748b;margin:3px 0;">AND</div>
+                  <div style="font:700 10px Arial,sans-serif;color:#64748b;margin:3px 0;">OR</div>
                   <div style="font:700 17px Arial,sans-serif;color:#0f172a;">${formatMoney(crcCommission, 'CRC')}</div>
                 </td>
               </tr>
@@ -148,7 +148,7 @@ export function buildAgentCommissionEmail({
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:18px;">
               <tr>
                 <td style="font:13px Arial,sans-serif;color:#475569;">Closed orders: <strong>${sortedOrders.length}</strong></td>
-                <td align="right" style="font:13px Arial,sans-serif;color:#475569;">Sales: <strong>${formatMoney(usdSales, 'USD')} / ${formatMoney(crcSales, 'CRC')}</strong></td>
+                <td align="right" style="font:13px Arial,sans-serif;color:#475569;">Sales: <strong>${formatMoney(usdSales, 'USD')}</strong> or <strong>${formatMoney(crcSales, 'CRC')}</strong></td>
               </tr>
             </table>
 

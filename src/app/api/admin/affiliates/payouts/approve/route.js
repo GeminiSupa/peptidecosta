@@ -91,7 +91,7 @@ export async function POST(request) {
             cc: ADMIN_CC_EMAILS,
             subject: subject,
             html: payout.email_html,
-            text: `Weekly Affiliate Referral Invoice for ${payout.affiliate_name || payout.affiliate_email}.\nGross Referrals USD: ${formatMoney(payout.usd_sales, 'USD')}\nGross Referrals CRC: ${formatMoney(payout.crc_sales, 'CRC')}\nCommission Owed: ${formatMoney(payout.usd_commission, 'USD')} + ${formatMoney(payout.crc_commission, 'CRC')}`
+            text: `Weekly Affiliate Referral Invoice for ${payout.affiliate_name || payout.affiliate_email}.\nGross Referrals USD: ${formatMoney(payout.usd_sales, 'USD')}\nGross Referrals CRC: ${formatMoney(payout.crc_sales, 'CRC')}\nCommission Owed: ${formatMoney(payout.usd_commission, 'USD')} OR ${formatMoney(payout.crc_commission, 'CRC')}\nThat is one payout expressed in two currencies. Choose one—not both.`
           });
           emailSent = true;
         } catch (mailErr) {
