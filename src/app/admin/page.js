@@ -27,7 +27,7 @@ import {
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send, QrCode,
   Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft, Megaphone,
-  PanelLeftClose, PanelLeftOpen, Wallet
+  PanelLeftClose, PanelLeftOpen, Wallet, MapPinned
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
@@ -115,6 +115,7 @@ const EmailMarketingStudio = dynamicTab(() => import('@/components/admin/marketi
 const WhatsAppSession = dynamicTab(() => import('@/components/admin/marketing/WhatsAppSession'), 'Loading WhatsApp session…');
 const CartsManager = dynamicTab(() => import('@/components/admin/CartsManager'), 'Loading carts…');
 const LeadsManager = dynamicTab(() => import('@/components/admin/LeadsManager'), 'Loading leads…');
+const ProspectorManager = dynamicTab(() => import('@/components/admin/ProspectorManager'), 'Loading Prospector…');
 const MessengerInbox = dynamicTab(() => import('@/components/admin/MessengerInbox'), 'Loading messenger…');
 const MessengerPosts = dynamicTab(() => import('@/components/admin/MessengerPosts'), 'Loading posts…');
 const LiveChatInbox = dynamicTab(() => import('@/components/admin/LiveChatInbox'), 'Loading live chat…');
@@ -182,6 +183,8 @@ function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, i
       return newLeads
         ? `${newLeads} new lead${newLeads !== 1 ? 's' : ''} · ${leads.length} total`
         : `${leads.length} lead${leads.length !== 1 ? 's' : ''}`;
+    case 'prospects':
+      return 'Discover and qualify potential Costa Rica business partners';
     case 'live_chat':
       return 'Website chat inbox · reply without WhatsApp';
     case 'reviews':
@@ -1616,6 +1619,10 @@ Core Rules:
       badge: leads.length,
       badgeTone: 'success',
     },
+    prospects: {
+      label: 'Prospector',
+      icon: <MapPinned size={iconSize} />,
+    },
     carts: {
       label: 'Carts',
       icon: <ShoppingCart size={iconSize} />,
@@ -1705,7 +1712,7 @@ Core Rules:
       : ['home', 'orders', 'live_chat', 'leads', 'carts', 'spreadsheet']
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
-    { title: 'Customer Work', tabs: ['live_chat', 'inquiries', 'leads', 'messenger'] },
+    { title: 'Customer Work', tabs: ['live_chat', 'inquiries', 'leads', 'prospects', 'messenger'] },
     { title: 'Marketing', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'my_qr', 'my_team'] },
     { title: 'Admin Tools', tabs: ['analytics', 'cms', 'wa_session', 'team', 'team_chat'] },
   ].map((group) => ({
@@ -6434,6 +6441,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             setSelectedOrderDetails={setSelectedOrderDetails}
             onOpenCustomerProfile={openCustomerProfileHandoff}
           />
+          </ErrorBoundary>
+        )}
+
+        {activeTab === 'prospects' && (
+          <ErrorBoundary>
+            <ProspectorManager currentUserProfile={adminProfile} />
           </ErrorBoundary>
         )}
 
