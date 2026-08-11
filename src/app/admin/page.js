@@ -385,10 +385,8 @@ export default function AdminPage() {
   const [cartFilterValue, setCartFilterValue] = useState('all');
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
-  const [orderSearch, setOrderSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [highlightedProductId, setHighlightedProductId] = useState(null);
-  const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [loadingAbandonedCarts, setLoadingAbandonedCarts] = useState(true);
   const [sendingRecoveryEmail, setSendingRecoveryEmail] = useState({});
   const [sendingRecoveryWhatsApp, setSendingRecoveryWhatsApp] = useState({});
@@ -431,8 +429,6 @@ export default function AdminPage() {
   // Pagination States
   const [leadsCurrentPage, setLeadsCurrentPage] = useState(1);
   const [leadsPerPage, setLeadsPerPage] = useState(25);
-  const [ordersCurrentPage, setOrdersCurrentPage] = useState(1);
-  const [ordersPerPage, setOrdersPerPage] = useState(25);
 
   const [productViews, setProductViews] = useState([]);
   const [isDbConnected, setIsDbConnected] = useState(false);
@@ -5001,10 +4997,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <ErrorBoundary>
           <OrdersManager 
             visibleOrders={visibleOrders}
-            orderStatusFilter={orderStatusFilter} setOrderStatusFilter={setOrderStatusFilter}
-            orderSearch={orderSearch} setOrderSearch={setOrderSearch}
-            ordersPerPage={ordersPerPage} setOrdersPerPage={setOrdersPerPage}
-            ordersCurrentPage={ordersCurrentPage} setOrdersCurrentPage={setOrdersCurrentPage}
             isStaffAgent={isStaffAgent}
             setManualOrderOpen={setManualOrderOpen}
             orders={orders}

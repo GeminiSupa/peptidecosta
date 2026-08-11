@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Database, Download, MessageCircle, Plus, Trash2 } from 'lucide-react';
 import { getAdminVolumeDiscountPct } from '@/lib/adminOrderTotals.mjs';
 import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
@@ -172,10 +172,6 @@ function getOrderAgentSourceLabel(order) {
 
 export default function OrdersManager({
   visibleOrders,
-  orderStatusFilter, setOrderStatusFilter,
-  orderSearch, setOrderSearch,
-  ordersPerPage, setOrdersPerPage,
-  ordersCurrentPage, setOrdersCurrentPage,
   isStaffAgent,
   setManualOrderOpen,
   orders,
@@ -191,8 +187,16 @@ export default function OrdersManager({
   loggedInEmailRef,
   currentAgentName
 }) {
+  // These four only ever drove this table. Holding them in the 7,900-line admin
+  // page meant every keystroke re-rendered the whole dashboard; owning them here
+  // keeps a search to this component.
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('All');
+  const [ordersCurrentPage, setOrdersCurrentPage] = useState(1);
+  const [ordersPerPage, setOrdersPerPage] = useState(25);
+
   const scopedOrders = visibleOrders;
-  const filteredOrders = scopedOrders.filter(o => {
+  const filteredOrders = useMemo(() => scopedOrders.filter(o => {
     if (orderStatusFilter !== 'All') {
       if (String(orderStatusFilter).startsWith('group:')) {
         const groupId = orderStatusFilter.replace('group:', '');
@@ -204,7 +208,7 @@ export default function OrdersManager({
     if (orderSearch) {
       const s = orderSearch.toLowerCase();
       return (
-        o.customer_name?.toLowerCase().includes(s) || 
+        o.customer_name?.toLowerCase().includes(s) ||
         o.customer_phone?.toLowerCase().includes(s) ||
         o.customer_email?.toLowerCase().includes(s) ||
         o.id?.toLowerCase().includes(s) ||
@@ -214,17 +218,18 @@ export default function OrdersManager({
       );
     }
     return true;
-  });
+  }), [scopedOrders, orderStatusFilter, orderSearch]);
 
   const totalOrdersPages = Math.ceil(filteredOrders.length / ordersPerPage);
-  const paginatedOrders = filteredOrders.slice(
-    (ordersCurrentPage - 1) * ordersPerPage,
-    ordersCurrentPage * ordersPerPage
+  const paginatedOrders = useMemo(
+    () => filteredOrders.slice((ordersCurrentPage - 1) * ordersPerPage, ordersCurrentPage * ordersPerPage),
+    [filteredOrders, ordersCurrentPage, ordersPerPage],
   );
-  const groupCounts = ORDER_STATUS_GROUPS.reduce((acc, group) => {
+  // Independent of the search box, so typing must not recount all the tabs.
+  const groupCounts = useMemo(() => ORDER_STATUS_GROUPS.reduce((acc, group) => {
     acc[group.id] = scopedOrders.filter((order) => getOrderStatusGroup(order.status).id === group.id).length;
     return acc;
-  }, {});
+  }, {}), [scopedOrders]);
   const setGroupFilter = (groupId) => {
     setOrderStatusFilter(`group:${groupId}`);
     setOrdersCurrentPage(1);
