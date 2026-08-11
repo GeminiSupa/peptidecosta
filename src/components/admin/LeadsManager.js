@@ -10,6 +10,7 @@ import {
   buildAgentNameResolver,
   historicalAgentForLead,
 } from '@/lib/agentAttribution.mjs';
+import { leadContactPoints } from '@/lib/leadContact.mjs';
 
 const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill={color} style={style} {...props}>
@@ -904,9 +905,18 @@ export default function LeadsManager({
                 </td>
                 <td data-label="Contact Details" style={{ padding: '10px 12px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {(() => {
+                        const { name } = leadContactPoints(lead);
+                        if (!name) return null;
+                        return (
+                          <div style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.85rem', lineHeight: 1.2 }}>
+                            {name}
+                          </div>
+                        );
+                      })()}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ 
-                          background: lead.contact_method === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)', 
+                        <span style={{
+                          background: lead.contact_method === 'whatsapp' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(56, 189, 248, 0.15)',
                           color: lead.contact_method === 'whatsapp' ? '#4ade80' : '#38bdf8', 
                           padding: '4px 8px', 
                           borderRadius: '6px', 
@@ -983,6 +993,24 @@ export default function LeadsManager({
                           </button>
                         )}
                       </div>
+                          {/* The contact point the headline above is not already
+                              showing. A chat visitor who gave both an email and a
+                              phone used to surface with only one of them. */}
+                          {(() => {
+                            const { email, phone, emailIsPrimary, phoneIsPrimary } = leadContactPoints(lead);
+                            const secondary = [
+                              email && !emailIsPrimary ? { key: 'email', icon: '✉️', value: email } : null,
+                              phone && !phoneIsPrimary ? { key: 'phone', icon: '💬', value: phone } : null,
+                            ].filter(Boolean);
+                            if (!secondary.length) return null;
+                            return (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                                {secondary.map((item) => (
+                                  <span key={item.key}>{item.icon} {item.value}</span>
+                                ))}
+                              </div>
+                            );
+                          })()}
                           {(() => {
                             const conv = getLeadConversion(lead);
                             if (conv.converted) {
