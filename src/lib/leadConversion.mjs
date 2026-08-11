@@ -29,51 +29,70 @@ function uniqueValues(values) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
-export function getLeadConversion(lead, orders = []) {
+function phoneTails(values) {
+  return uniqueValues(values.map(normalizePhone).filter((phone) => phone.length >= 8).map((phone) => phone.slice(-8)));
+}
+
+function contactEmails(record, fields) {
+  return uniqueValues(fields.map((field) => normalizeEmail(record?.[field])));
+}
+
+/**
+ * Indexes the paid orders by the identities a lead can be matched on.
+ *
+ * Re-scanning every order for every lead is O(leads x orders) — on live data
+ * that is ~2.9M string comparisons, and because the admin dashboard recomputed
+ * it on every render, a single keystroke anywhere froze the page for seconds.
+ * Build this once per orders list and each lead becomes two map lookups.
+ *
+ * `position` is the order's place in the original list, so a lead that matches
+ * several orders still resolves to the same one the old linear scan returned.
+ */
+export function createPaidOrderIndex(orders = []) {
+  const byEmail = new Map();
+  const byPhoneTail = new Map();
+
+  (orders || []).forEach((order, position) => {
+    if (!orderIsPaid(order)) return;
+
+    for (const email of contactEmails(order, ['customer_email', 'email'])) {
+      if (!byEmail.has(email)) byEmail.set(email, { order, position });
+    }
+    for (const tail of phoneTails([order?.customer_phone, order?.phone])) {
+      if (!byPhoneTail.has(tail)) byPhoneTail.set(tail, { order, position });
+    }
+  });
+
+  return { byEmail, byPhoneTail, isPaidOrderIndex: true };
+}
+
+function asPaidOrderIndex(ordersOrIndex) {
+  return ordersOrIndex?.isPaidOrderIndex ? ordersOrIndex : createPaidOrderIndex(ordersOrIndex);
+}
+
+/** Accepts either a raw orders array or a createPaidOrderIndex() result. */
+export function getLeadConversion(lead, ordersOrIndex = []) {
   if (!lead) return { converted: false };
 
-  const leadEmails = uniqueValues([
-    normalizeEmail(lead.contact_value),
-    normalizeEmail(lead.email),
-  ]);
-
-  const leadPhoneTails = uniqueValues([
-    normalizePhone(lead.contact_value),
-    normalizePhone(lead.phone),
-  ]
-    .filter((phone) => phone.length >= 8)
-    .map((phone) => phone.slice(-8)));
-
+  const leadEmails = contactEmails(lead, ['contact_value', 'email']);
+  const leadPhoneTails = phoneTails([lead.contact_value, lead.phone]);
   if (leadEmails.length === 0 && leadPhoneTails.length === 0) {
     return { converted: false };
   }
 
-  const match = (orders || []).find((order) => {
-    if (!orderIsPaid(order)) return false;
+  const index = asPaidOrderIndex(ordersOrIndex);
+  let match = null;
+  const consider = (hit) => {
+    if (hit && (!match || hit.position < match.position)) match = hit;
+  };
+  for (const email of leadEmails) consider(index.byEmail.get(email));
+  for (const tail of leadPhoneTails) consider(index.byPhoneTail.get(tail));
 
-    const orderEmails = uniqueValues([
-      normalizeEmail(order.customer_email),
-      normalizeEmail(order.email),
-    ]);
-    if (leadEmails.length > 0 && orderEmails.some((email) => leadEmails.includes(email))) {
-      return true;
-    }
-
-    const orderPhoneTails = uniqueValues([
-      normalizePhone(order.customer_phone),
-      normalizePhone(order.phone),
-    ]
-      .filter((phone) => phone.length >= 8)
-      .map((phone) => phone.slice(-8)));
-
-    return leadPhoneTails.length > 0 && orderPhoneTails.some((phone) => leadPhoneTails.includes(phone));
-  });
-
-  return match ? { converted: true, order: match } : { converted: false };
+  return match ? { converted: true, order: match.order } : { converted: false };
 }
 
-export function leadIsActiveForPipeline(lead, orders = []) {
-  return !getLeadConversion(lead, orders).converted;
+export function leadIsActiveForPipeline(lead, ordersOrIndex = []) {
+  return !getLeadConversion(lead, ordersOrIndex).converted;
 }
 
 function parseDateMs(value) {

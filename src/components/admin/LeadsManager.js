@@ -119,7 +119,10 @@ export default function LeadsManager({
 
   const safeLeads = enrichedLeads;
   const totalLeads = safeLeads.length;
-  const convertedLeads = safeLeads.filter(l => getLeadConversion(l).converted).length;
+  const convertedLeads = useMemo(
+    () => safeLeads.filter(l => getLeadConversion(l).converted).length,
+    [safeLeads, getLeadConversion],
+  );
   const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0.0';
   const chatLeads = safeLeads.filter(l => String(l.utm_source || l.source || '').toLowerCase() === 'live_chat').length;
   const adsLeads = safeLeads.filter(l => {

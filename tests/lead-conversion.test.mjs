@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  createPaidOrderIndex,
   getAbandonedCartConversion,
   getLeadConversion,
   leadIsActiveForPipeline,
@@ -108,4 +109,39 @@ test('can ignore cart timing for recovery safety checks', () => {
   ];
 
   assert.equal(getAbandonedCartConversion(cart, orders, { ignoreTiming: true }).converted, true);
+});
+
+test('a prebuilt paid-order index matches a raw orders array exactly', () => {
+  const orders = [
+    { id: 'unpaid', status: 'Pending', customer_email: 'ana@example.com' },
+    { id: 'paid-phone', status: 'Paid', customer_phone: '+506 8888-7777' },
+    { id: 'paid-email', status: 'Order Complete', customer_email: 'Ana@Example.com' },
+  ];
+  const index = createPaidOrderIndex(orders);
+
+  for (const lead of [
+    { contact_value: 'ana@example.com' },
+    { contact_value: '+506 8888-7777' },
+    { contact_value: 'nobody@example.com' },
+    { contact_value: 'not-a-contact' },
+  ]) {
+    assert.deepEqual(getLeadConversion(lead, index), getLeadConversion(lead, orders));
+  }
+});
+
+test('the index resolves to the same order the linear scan picked first', () => {
+  const orders = [
+    { id: 'newest', status: 'Paid', customer_phone: '50688887777' },
+    { id: 'older', status: 'Paid', customer_email: 'ana@example.com' },
+  ];
+  const lead = { contact_value: 'ana@example.com', phone: '+506 8888-7777' };
+
+  assert.equal(getLeadConversion(lead, createPaidOrderIndex(orders)).order.id, 'newest');
+  assert.equal(getLeadConversion(lead, orders).order.id, 'newest');
+});
+
+test('an unpaid order never seeds the index', () => {
+  const index = createPaidOrderIndex([{ id: 'x', status: 'Unpaid', customer_email: 'ana@example.com' }]);
+  assert.equal(index.byEmail.size, 0);
+  assert.equal(leadIsActiveForPipeline({ contact_value: 'ana@example.com' }, index), true);
 });

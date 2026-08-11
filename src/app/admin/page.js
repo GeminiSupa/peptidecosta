@@ -14,6 +14,7 @@ import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { getWhatsAppMessageSource } from '@/lib/whatsappMessageLog';
 import { APPROVED_WHATSAPP_AGENT_TEMPLATES } from '@/lib/whatsappTemplates.mjs';
 import {
+  createPaidOrderIndex,
   getAbandonedCartConversion,
   getLeadConversion as resolveLeadConversion,
   leadIsActiveForPipeline,
@@ -1075,9 +1076,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [isLocalAiDraft, setIsLocalAiDraft] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
 
+  // Built once per orders list instead of re-scanning all orders per lead.
+  const paidOrderIndex = useMemo(() => createPaidOrderIndex(orders), [orders]);
+
   const getLeadConversion = useCallback(
-    (lead) => resolveLeadConversion(lead, orders),
-    [orders]
+    (lead) => resolveLeadConversion(lead, paidOrderIndex),
+    [paidOrderIndex]
   );
 
   const handleLeadFieldUpdate = async (id, fieldName, value) => {
@@ -4091,7 +4095,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     setLastSelectedCartIndex(null);
   }, [abandonedCarts]);
 
-  const filteredLeads = leads.filter(lead => {
+  // Every piece of dashboard state lives in this one component, so an unmemoized
+  // filter here reran on each keystroke in *any* tab's search box — including
+  // Orders, which has nothing to do with leads.
+  const filteredLeads = useMemo(() => leads.filter(lead => {
     // 1. Search Query
     if (leadsSearch.trim() !== '') {
       const q = leadsSearch.toLowerCase();
@@ -4116,9 +4123,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     // 2. Source Filter
     if (leadsSourceFilter !== 'All') {
       if (leadsSourceFilter === 'active') {
-        if (!leadIsActiveForPipeline(lead, orders)) return false;
+        if (!leadIsActiveForPipeline(lead, paidOrderIndex)) return false;
       } else if (leadsSourceFilter === 'converted') {
-        if (leadIsActiveForPipeline(lead, orders)) return false;
+        if (leadIsActiveForPipeline(lead, paidOrderIndex)) return false;
       } else if (leadsSourceFilter === 'Direct') {
         if (lead.utm_source) return false;
       } else if (leadsSourceFilter === 'Ads') {
@@ -4135,7 +4142,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     }
 
     return true;
-  });
+  }), [leads, leadsSearch, leadsSourceFilter, leadsAreaFilter, paidOrderIndex]);
 
   const paginatedLeads = filteredLeads.slice(
     (leadsCurrentPage - 1) * leadsPerPage,
