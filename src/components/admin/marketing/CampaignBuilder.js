@@ -349,6 +349,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
   const [isSending,         setIsSending]         = useState(false);
   const [campaigns,         setCampaigns]         = useState([]);
   const [subscribers,       setSubscribers]       = useState([]);
+  const [leadCandidates,    setLeadCandidates]    = useState([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState(editingCampaignId || '');
   const [subject,           setSubject]           = useState('');
   const [previewText,       setPreviewText]       = useState('');
@@ -364,6 +365,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
   const [isABTest,    setIsABTest]    = useState(false);
   const [subjectB,    setSubjectB]    = useState('');
   const [targetSegment, setTargetSegment] = useState('');
+  const [includeLeads, setIncludeLeads] = useState(false);
   const [deviceMode,  setDeviceMode]  = useState('desktop');
   const [previewHtml, setPreviewHtml] = useState(null);
 
@@ -400,12 +402,13 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     subjectB: isABTest ? subjectB : '',
     isABTest,
     targetSegment,
+    includeLeads,
     previewText,
     replyTo,
     scheduleMode,
     scheduledAt,
     html
-  }), [campaignName, isABTest, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
+  }), [campaignName, includeLeads, isABTest, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
 
   const hasUnsavedChanges = ['pending', 'error', 'recovered'].includes(autosaveStatus);
   const saveStatusText = useMemo(() => {
@@ -454,6 +457,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
         subjectB,
         isABTest,
         targetSegment,
+        includeLeads,
         previewText,
         fromName,
         fromEmail,
@@ -470,7 +474,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       console.warn('Local campaign draft snapshot failed:', error);
       return false;
     }
-  }, [buildCampaignSignature, campaignName, fromEmail, fromName, isABTest, isReady, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
+  }, [buildCampaignSignature, campaignName, fromEmail, fromName, includeLeads, isABTest, isReady, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
 
   useEffect(() => {
     selectedCampaignIdRef.current = selectedCampaignId;
@@ -559,6 +563,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     setSubjectB(snapshot.subjectB || '');
     setIsABTest(Boolean(snapshot.isABTest));
     setTargetSegment(snapshot.targetSegment || '');
+    setIncludeLeads(Boolean(snapshot.includeLeads));
     setPreviewText(snapshot.previewText || '');
     setFromName(snapshot.fromName || 'Costa Peptides');
     setFromEmail(snapshot.fromEmail || '');
@@ -615,9 +620,10 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
 
   const fetchSubscribers = async () => {
     try {
-      const res  = await adminFetch('/api/admin/subscribers');
+      const res  = await adminFetch('/api/admin/subscribers?include_leads=true');
       const data = await res.json();
       if (data.subscribers) setSubscribers(data.subscribers);
+      if (data.lead_candidates) setLeadCandidates(data.lead_candidates);
     } catch (err) {
       console.error('Failed to fetch subscribers:', err);
     }
@@ -638,6 +644,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     setSubjectB(selectedCampaign.subject_line_b || '');
     setIsABTest(Boolean(selectedCampaign.is_ab_test));
     setTargetSegment(selectedCampaign.target_tags?.[0] || '');
+    setIncludeLeads(Boolean(selectedCampaign.include_leads));
     setFromName(selectedCampaign.from_name || 'Costa Peptides');
     setFromEmail(selectedCampaign.from_email || '');
     setReplyTo(selectedCampaign.reply_to || '');
@@ -708,14 +715,27 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     }
   }, [isReady, restoreLocalSnapshot]);
 
-  const estimatedAudience = useMemo(() => {
-    const tags = selectedCampaign?.target_tags || (targetSegment ? [targetSegment] : []);
+  const eligibleSubscribers = useMemo(() => {
+    const tags = targetSegment ? [targetSegment] : [];
     return subscribers.filter(sub => {
       if (sub.status !== 'subscribed') return false;
       if (!tags.length) return true;
       return Array.isArray(sub.tags) && sub.tags.includes(tags[0]);
     });
-  }, [selectedCampaign, subscribers, targetSegment]);
+  }, [subscribers, targetSegment]);
+
+  const eligibleLeads = useMemo(() => {
+    const tags = targetSegment ? [targetSegment] : [];
+    return leadCandidates.filter(lead => {
+      if (!tags.length) return true;
+      return Array.isArray(lead.tags) && lead.tags.includes(tags[0]);
+    });
+  }, [leadCandidates, targetSegment]);
+
+  const estimatedAudience = useMemo(
+    () => includeLeads ? [...eligibleSubscribers, ...eligibleLeads] : eligibleSubscribers,
+    [eligibleLeads, eligibleSubscribers, includeLeads],
+  );
 
   const preflightItems = useMemo(() => {
     const activeSubject = selectedCampaign?.subject_line || subject;
@@ -723,7 +743,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     return [
       { label: 'Campaign name set',              errorLabel: 'Missing campaign name', ok: Boolean(activeTitle?.trim()) },
       { label: 'Subject line ready',             errorLabel: 'Missing subject line', ok: Boolean(activeSubject?.trim()) },
-      { label: 'Audience has subscribers',       errorLabel: 'Audience has no subscribers', ok: estimatedAudience.length > 0 },
+      { label: 'Audience has recipients',        errorLabel: 'Audience has no recipients', ok: estimatedAudience.length > 0 },
       { label: 'Sender credentials configured',  errorLabel: 'Sender credentials not configured', ok: true, note: 'Verified at send time.' },
       { label: 'Unsubscribe footer auto-added',  errorLabel: 'Unsubscribe footer missing', ok: true },
       { label: 'Tracking enabled',               errorLabel: 'Tracking not enabled', ok: true },
@@ -775,6 +795,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
           subject_line_b: isABTest ? subjectB : null,
           is_ab_test: isABTest,
           target_tags: targetSegment ? [targetSegment] : null,
+          include_leads: includeLeads,
           design_json: design, html_content: finalHtml,
           from_name: fromName || null,
           from_email: fromEmail || null,
@@ -890,7 +911,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       }
 
       const label = isTestBatch ? 'A/B test batch' : 'full campaign';
-      if (!confirm(`Send ${label} to ${estimatedAudience.length} subscriber${estimatedAudience.length === 1 ? '' : 's'}?`)) return;
+      if (!confirm(`Send ${label} to ${estimatedAudience.length} recipient${estimatedAudience.length === 1 ? '' : 's'}?`)) return;
 
       setIsSending(true);
       setStatusDetail(`Sending ${label}... Keep this page open until the first batch is confirmed.`);
@@ -958,6 +979,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
           subject_line_b: selectedCampaign.subject_line_b,
           is_ab_test: selectedCampaign.is_ab_test,
           target_tags: selectedCampaign.target_tags,
+          include_leads: Boolean(selectedCampaign.include_leads),
           design_json: selectedCampaign.design_json,
           html_content: selectedCampaign.html_content,
           from_name: selectedCampaign.from_name,
@@ -1153,13 +1175,30 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
               <input type="text" value={campaignName} onChange={e => updateDraftField(setCampaignName, e.target.value)} className="mkt-input" />
             </div>
             <div className="mkt-input-group">
-              <label className="mkt-label">Audience tag <span>Optional · blank sends to all subscribers</span></label>
+              <label className="mkt-label">Audience tag <span>Optional · blank sends to everyone selected below</span></label>
               <div style={{ position: 'relative' }}>
                 <Tag size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
-                <input type="text" value={targetSegment} onChange={e => updateDraftField(setTargetSegment, e.target.value)} placeholder="All subscribers" className="mkt-input" style={{ paddingLeft: '32px' }} />
+                <input type="text" value={targetSegment} onChange={e => updateDraftField(setTargetSegment, e.target.value)} placeholder="All selected recipients" className="mkt-input" style={{ paddingLeft: '32px' }} />
               </div>
             </div>
           </div>
+
+          <fieldset style={{ margin: '4px 0 18px', padding: '14px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', background: 'rgba(255,255,255,0.025)' }}>
+            <legend className="mkt-label" style={{ padding: '0 6px' }}>Campaign recipients</legend>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+              <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '12px', border: `1px solid ${!includeLeads ? 'rgba(52,211,153,0.55)' : 'rgba(255,255,255,0.08)'}`, borderRadius: '8px', cursor: 'pointer', background: !includeLeads ? 'rgba(16,185,129,0.09)' : 'transparent' }}>
+                <input type="radio" name="campaignAudience" checked={!includeLeads} onChange={() => updateDraftField(setIncludeLeads, false)} style={{ marginTop: '3px', accentColor: '#10b981' }} />
+                <span><strong style={{ display: 'block', color: '#f8fafc', fontSize: '13px' }}>Subscribers only</strong><small style={{ color: '#94a3b8' }}>{eligibleSubscribers.length} active email subscriber{eligibleSubscribers.length === 1 ? '' : 's'}</small></span>
+              </label>
+              <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '12px', border: `1px solid ${includeLeads ? 'rgba(56,189,248,0.55)' : 'rgba(255,255,255,0.08)'}`, borderRadius: '8px', cursor: 'pointer', background: includeLeads ? 'rgba(14,165,233,0.09)' : 'transparent' }}>
+                <input type="radio" name="campaignAudience" checked={includeLeads} onChange={() => updateDraftField(setIncludeLeads, true)} style={{ marginTop: '3px', accentColor: '#38bdf8' }} />
+                <span><strong style={{ display: 'block', color: '#f8fafc', fontSize: '13px' }}>Subscribers + CRM leads</strong><small style={{ color: '#94a3b8' }}>{eligibleSubscribers.length + eligibleLeads.length} unique email recipient{eligibleSubscribers.length + eligibleLeads.length === 1 ? '' : 's'} ({eligibleLeads.length} from Leads)</small></span>
+              </label>
+            </div>
+            <p style={{ margin: '10px 0 0', color: '#94a3b8', fontSize: '11px', lineHeight: 1.5 }}>
+              Lead emails are added to Subscribers with the <code>crm_lead</code> tag when the campaign sends. Existing unsubscribes, duplicate emails, and globally blocked addresses are skipped.
+            </p>
+          </fieldset>
 
           {/* Subject lines */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-start' }}>
@@ -1259,7 +1298,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
                 <div className="mkt-panel-kicker">Final check</div>
                 <h3 className="mkt-panel-title">
                   <span className="mkt-audience-count" style={{ marginBottom: 0 }}>
-                    <span>{estimatedAudience.length}</span> eligible subscriber{estimatedAudience.length === 1 ? '' : 's'}
+                    <span>{estimatedAudience.length}</span> eligible recipient{estimatedAudience.length === 1 ? '' : 's'}
                   </span>
                 </h3>
                 {selectedCampaignId && (

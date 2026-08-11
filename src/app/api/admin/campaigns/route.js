@@ -4,7 +4,11 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
-const OPTIONAL_CAMPAIGN_COLUMNS = ['preview_text', 'from_name', 'from_email', 'reply_to'];
+const OPTIONAL_CAMPAIGN_COLUMNS = ['preview_text', 'from_name', 'from_email', 'reply_to', 'include_leads'];
+
+function isMissingLeadAudienceColumn(error) {
+  return String(error?.message || '').includes('include_leads');
+}
 
 function isSchemaCacheColumnError(error) {
   const message = String(error?.message || '');
@@ -31,6 +35,7 @@ async function insertCampaignWithSchemaFallback(supabaseAdmin, row) {
     .single();
 
   if (result.error && isSchemaCacheColumnError(result.error)) {
+    if (row.include_leads && isMissingLeadAudienceColumn(result.error)) return result;
     console.warn('[Campaigns] Sender/preview columns missing from schema cache; retrying draft save without optional fields.');
     result = await supabaseAdmin
       .from('email_campaigns')
@@ -51,6 +56,7 @@ async function updateCampaignWithSchemaFallback(supabaseAdmin, id, updates) {
     .single();
 
   if (result.error && isSchemaCacheColumnError(result.error)) {
+    if (updates.include_leads && isMissingLeadAudienceColumn(result.error)) return result;
     console.warn('[Campaigns] Sender/preview columns missing from schema cache; retrying draft update without optional fields.');
     result = await supabaseAdmin
       .from('email_campaigns')
@@ -156,6 +162,7 @@ export async function POST(request) {
       from_email,
       reply_to,
       preview_text,
+      include_leads,
       scheduled_at
     } = await request.json();
     
@@ -177,10 +184,14 @@ export async function POST(request) {
       from_name: from_name || null,
       from_email: from_email || null,
       reply_to: reply_to || null,
+      include_leads: Boolean(include_leads),
       scheduled_for: scheduled_at || null,
       status
     });
 
+    if (error && isMissingLeadAudienceColumn(error)) {
+      return NextResponse.json({ error: 'Lead audiences need database setup first. Run email-campaign-lead-audience-migration.sql, then try again.' }, { status: 503 });
+    }
     if (error) throw error;
 
     return NextResponse.json({ campaign: data });
@@ -210,6 +221,7 @@ export async function PUT(request) {
       from_email,
       reply_to,
       preview_text,
+      include_leads,
       scheduled_at
     } = await request.json();
 
@@ -229,6 +241,7 @@ export async function PUT(request) {
     if (from_name !== undefined) updates.from_name = from_name || null;
     if (from_email !== undefined) updates.from_email = from_email || null;
     if (reply_to !== undefined) updates.reply_to = reply_to || null;
+    if (include_leads !== undefined) updates.include_leads = Boolean(include_leads);
     if (scheduled_at !== undefined) {
       updates.scheduled_for = scheduled_at || null;
       updates.status = scheduled_at ? 'scheduled' : 'draft';
@@ -236,6 +249,9 @@ export async function PUT(request) {
 
     const { data, error } = await updateCampaignWithSchemaFallback(supabaseAdmin, id, updates);
 
+    if (error && isMissingLeadAudienceColumn(error)) {
+      return NextResponse.json({ error: 'Lead audiences need database setup first. Run email-campaign-lead-audience-migration.sql, then try again.' }, { status: 503 });
+    }
     if (error) throw error;
 
     return NextResponse.json({ campaign: data });

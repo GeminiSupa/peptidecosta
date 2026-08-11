@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { leadSubscriberCandidates } from '@/lib/campaignAudience.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,13 +12,24 @@ export async function GET(request) {
   const supabaseAdmin = getSupabaseAdmin();
 
   try {
+    const includeLeads = new URL(request.url).searchParams.get('include_leads') === 'true';
     const { data, error } = await supabaseAdmin
       .from('email_subscribers')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return NextResponse.json({ subscribers: data });
+    let leadCandidates = [];
+    if (includeLeads) {
+      const { data: leads, error: leadsError } = await supabaseAdmin
+        .from('catalog_leads')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (leadsError) throw leadsError;
+      leadCandidates = leadSubscriberCandidates(leads || [], data || []);
+    }
+
+    return NextResponse.json({ subscribers: data, lead_candidates: leadCandidates });
   } catch (err) {
     console.error('Error fetching subscribers:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

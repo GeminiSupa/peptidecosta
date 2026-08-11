@@ -10,6 +10,7 @@ import {
   isCampaignRackspaceSmtp,
 } from '@/lib/campaignSmtp';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
+import { leadSubscriberCandidates } from '@/lib/campaignAudience.mjs';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
@@ -385,6 +386,26 @@ export async function sendCatalogWelcomeCampaign(email, options = {}) {
   };
 }
 
+async function addCampaignLeadSubscribers(supabase) {
+  const [leadResult, subscriberResult] = await Promise.all([
+    supabase.from('catalog_leads').select('*'),
+    supabase.from('email_subscribers').select('email,status'),
+  ]);
+  if (leadResult.error) throw new CampaignDeliveryError(`Unable to load CRM leads: ${leadResult.error.message}`, 503);
+  if (subscriberResult.error) throw new CampaignDeliveryError(`Unable to check existing subscribers: ${subscriberResult.error.message}`, 503);
+
+  const candidates = leadSubscriberCandidates(leadResult.data || [], subscriberResult.data || []);
+  if (!candidates.length) return { added: 0 };
+
+  const rows = candidates.map(({ id: _virtualId, ...candidate }) => candidate);
+  const { data, error } = await supabase
+    .from('email_subscribers')
+    .upsert(rows, { onConflict: 'email', ignoreDuplicates: true })
+    .select('id');
+  if (error) throw new CampaignDeliveryError(`Unable to add CRM lead emails to this campaign: ${error.message}`, 503);
+  return { added: data?.length || 0 };
+}
+
 export async function deliverCampaign(campaignId, options = {}) {
   const { isTestBatch = false, sendWinner = false, winnerVariant = 'A' } = options;
   const smtp = getCampaignSmtpConfig();
@@ -399,6 +420,8 @@ export async function deliverCampaign(campaignId, options = {}) {
   if (campaign.status === 'scheduled' && campaign.scheduled_for && new Date(campaign.scheduled_for).getTime() > Date.now()) {
     throw new CampaignDeliveryError(`Campaign is scheduled for ${new Date(campaign.scheduled_for).toLocaleString()}`, 409);
   }
+
+  if (campaign.include_leads) await addCampaignLeadSubscribers(supabase);
 
   let subscriberQuery = supabase.from('email_subscribers').select('*').eq('status', 'subscribed');
   if (campaign.target_tags?.length) subscriberQuery = subscriberQuery.contains('tags', [campaign.target_tags[0]]);
