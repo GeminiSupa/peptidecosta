@@ -75,7 +75,7 @@ export function computeOrderTotals(lineItems, currency, exchangeRate = FALLBACK_
   const vialCount = merchandise.reduce((acc, li) => acc + li.qty, 0);
 
   const bac = summarizeBacWater(
-    lineItems.map((li) => ({ product: li.product, qty: li.qty })),
+    lineItems.map((li) => ({ product: li.product, qty: li.qty, unitPrice: li.unitPrice })),
     currency,
     exchangeRate,
   );

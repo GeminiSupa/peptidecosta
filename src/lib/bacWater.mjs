@@ -9,14 +9,13 @@
  *   1. One free vial per peptide purchased, given automatically. Syringes and
  *      other reconstitution supplies do NOT earn a free vial — only peptides do.
  *   2. The gift is separate from the cart. A vial the customer puts in the cart
- *      is an EXTRA, on top of their free ones, and costs
- *      BAC_WATER_UNIT_PRICE_USD. Buy one peptide and add one vial and you
- *      receive two: one free, one paid.
+ *      is an EXTRA, on top of their free ones. The paid 3ml is $10 and the paid
+ *      10ml is $20. Buy one peptide and add one vial and you receive two: one
+ *      free 3ml vial and the paid size the customer selected.
  *   3. BAC water never counts toward the volume discount, and the volume
  *      discount never applies to the BAC charge. It is a flat side charge.
- *   4. A cart containing only BAC water has no peptides to earn a gift, so
- *      every vial is paid, and it must hold at least BAC_WATER_ONLY_MIN_UNITS
- *      before it can check out.
+ *   4. A cart containing only 10ml BAC water must hold at least three vials.
+ *      The existing five-vial floor remains for 3ml-only water orders.
  *
  * Rule 2 is the one worth stating plainly, because the obvious alternative is
  * to let the free allowance absorb what is in the cart — so one peptide plus
@@ -28,6 +27,8 @@
 
 export const BAC_WATER_UNIT_PRICE_USD = 10;
 export const BAC_WATER_ONLY_MIN_UNITS = 5;
+export const BAC_WATER_10ML_UNIT_PRICE_USD = 20;
+export const BAC_WATER_10ML_ONLY_MIN_UNITS = 3;
 
 /** Matches the BAC water listing in either language. */
 export function isBacWater(name) {
@@ -39,8 +40,8 @@ export function isBacWater(name) {
     || n.includes('agua bacteriostatica');
 }
 
-/** The only BAC water size sold. 2ml and 10ml listings are legacy. */
-export const BAC_WATER_SELLABLE_SIZE_ML = 3;
+/** BAC water sizes currently offered. The 2ml listing is legacy. */
+export const BAC_WATER_SELLABLE_SIZES_ML = Object.freeze([3, 10]);
 
 /** Size in ml parsed out of a BAC listing name, or null if it carries none. */
 export function getBacWaterSizeMl(name) {
@@ -52,18 +53,17 @@ export function getBacWaterSizeMl(name) {
 /**
  * Whether a BAC listing may be shown and sold.
  *
- * Only the 3ml is sold now, and the 2ml/10ml rows still exist in the products
- * table. Hiding them is an admin action, which makes a manual step load-bearing
- * for correct pricing — so the rule is enforced here too and a stray row cannot
- * be sold even if it reappears in the database.
+ * Only the 3ml and 10ml are sold now, while the 2ml row still exists in the
+ * products table. Hiding it is an admin action, which makes a manual step
+ * load-bearing for correct pricing — so the rule is enforced here too and a
+ * stray row cannot be sold even if it reappears in the database.
  *
- * A listing with no size in its name is treated as sellable: 3ml is the only
- * size, so an unsized "Bacteriostatic Water" can only mean that one.
+ * A legacy listing with no size in its name is treated as the 3ml product.
  */
 export function isSellableBacWater(name) {
   if (!isBacWater(name)) return false;
   const size = getBacWaterSizeMl(name);
-  return size === null || size === BAC_WATER_SELLABLE_SIZE_ML;
+  return size === null || BAC_WATER_SELLABLE_SIZES_ML.includes(size);
 }
 
 /**
@@ -118,22 +118,40 @@ export function splitCartUnits(cart = []) {
  * the existing BAC row is priced at 0 from its giveaway days — reading that
  * blindly would hand out unlimited free vials.
  */
-export function bacUnitPrice(currency, exchangeRate, priceUsdFromDb = 0) {
-  const fromDb = Number(priceUsdFromDb);
-  const usd = Number.isFinite(fromDb) && fromDb > 0 ? fromDb : BAC_WATER_UNIT_PRICE_USD;
+export function bacUnitPrice(currency, exchangeRate, priceUsdFromDb = 0, productName = '') {
+  const fromDb = parseFloat(String(priceUsdFromDb ?? '').replace(/[^0-9.]/g, ''));
+  const fallbackUsd = getBacWaterSizeMl(productName) === 10
+    ? BAC_WATER_10ML_UNIT_PRICE_USD
+    : BAC_WATER_UNIT_PRICE_USD;
+  const usd = Number.isFinite(fromDb) && fromDb > 0 ? fromDb : fallbackUsd;
   return currency === 'USD' ? usd : Math.round(usd * exchangeRate);
 }
 
 /**
  * The full BAC picture for a cart.
  *
- * @returns {{bacUnits, peptideUnits, discountUnits, freeUnits, paidUnits, unitPrice, charge, shippedUnits}}
+ * `paidLines` preserves each selected size and its own price. `unitPrice` is
+ * retained for older callers when the cart contains a single paid BAC line;
+ * it is null when several differently priced sizes are present.
+ *
+ * @returns {{bacUnits, peptideUnits, discountUnits, freeUnits, paidUnits, paidLines, unitPrice, charge, shippedUnits}}
  */
 export function summarizeBacWater(cart = [], currency = 'USD', exchangeRate = 1) {
   const { bacUnits, peptideUnits, discountUnits } = splitCartUnits(cart);
 
-  const bacLine = (cart || []).find((item) => isBacWater(item?.product ?? item?.name));
-  const unitPrice = bacUnitPrice(currency, exchangeRate, bacLine?.priceUsd ?? bacLine?.price_usd);
+  const paidLines = (cart || [])
+    .filter((item) => isBacWater(item?.product ?? item?.name) && qtyOf(item) > 0)
+    .map((item) => {
+      const product = item?.product ?? item?.name;
+      const qty = qtyOf(item);
+      const suppliedUnitPrice = Number(item?.unitPrice);
+      const unitPrice = Number.isFinite(suppliedUnitPrice) && suppliedUnitPrice > 0
+        ? suppliedUnitPrice
+        : bacUnitPrice(currency, exchangeRate, item?.priceUsd ?? item?.price_usd, product);
+      return { product, qty, unitPrice, charge: qty * unitPrice };
+    });
+  const charge = paidLines.reduce((sum, line) => sum + line.charge, 0);
+  const unitPrice = paidLines.length === 1 ? paidLines[0].unitPrice : null;
 
   // The gift is one per peptide regardless of the cart, and everything in the
   // cart is an extra that is paid for. A customer who never touches the BAC
@@ -147,47 +165,64 @@ export function summarizeBacWater(cart = [], currency = 'USD', exchangeRate = 1)
     discountUnits,
     freeUnits,
     paidUnits,
+    paidLines,
     unitPrice,
-    charge: paidUnits * unitPrice,
+    charge,
     shippedUnits: freeUnits + paidUnits,
   };
 }
 
 /**
- * The BAC-only floor. A cart with any peptide in it is exempt — the minimum
- * exists so a lone water order is worth packing and shipping.
+ * The BAC-only floor. A cart with any non-BAC product in it is exempt — the
+ * minimum exists so a lone water order is worth packing and shipping.
  *
- * @returns {{blocked: boolean, shortfall: number, minUnits: number}}
+ * @returns {{blocked: boolean, shortfall: number, minUnits: number, tenMlOnly: boolean}}
  */
 export function checkBacOnlyMinimum(cart = []) {
   const { bacUnits, discountUnits } = splitCartUnits(cart);
   const bacOnly = bacUnits > 0 && discountUnits === 0;
-  const blocked = bacOnly && bacUnits < BAC_WATER_ONLY_MIN_UNITS;
+  const bacLines = (cart || []).filter((item) => (
+    isBacWater(item?.product ?? item?.name) && qtyOf(item) > 0
+  ));
+  const tenMlOnly = bacOnly && bacLines.every((item) => (
+    getBacWaterSizeMl(item?.product ?? item?.name) === 10
+  ));
+  const minUnits = tenMlOnly
+    ? BAC_WATER_10ML_ONLY_MIN_UNITS
+    : BAC_WATER_ONLY_MIN_UNITS;
+  const blocked = bacOnly && bacUnits < minUnits;
 
   return {
     blocked,
-    shortfall: blocked ? BAC_WATER_ONLY_MIN_UNITS - bacUnits : 0,
-    minUnits: BAC_WATER_ONLY_MIN_UNITS,
+    shortfall: blocked ? minUnits - bacUnits : 0,
+    minUnits,
+    tenMlOnly,
   };
 }
 
 /** Customer-facing wording for the BAC-only floor. Null when the cart passes. */
 export function bacOnlyMinimumMessage(cart = [], lang = 'es') {
-  const { blocked, shortfall, minUnits } = checkBacOnlyMinimum(cart);
+  const { blocked, shortfall, minUnits, tenMlOnly } = checkBacOnlyMinimum(cart);
   if (!blocked) return null;
 
-  return String(lang).toLowerCase().startsWith('en')
-    ? `Water-only orders start at ${minUnits} vials — add ${shortfall} more, or add any peptide.`
-    : `Los pedidos de solo agua empiezan en ${minUnits} viales — agregá ${shortfall} más, o agregá cualquier péptido.`;
+  if (String(lang).toLowerCase().startsWith('en')) {
+    return tenMlOnly
+      ? `Orders containing only 10ml BAC Water start at ${minUnits} vials — add ${shortfall} more, or add any other product.`
+      : `Water-only orders start at ${minUnits} vials — add ${shortfall} more, or add any other product.`;
+  }
+
+  return tenMlOnly
+    ? `Los pedidos que solo contienen Agua Bacteriostática de 10ml empiezan en ${minUnits} viales — agregá ${shortfall} más, o agregá otro producto.`
+    : `Los pedidos de solo agua empiezan en ${minUnits} viales — agregá ${shortfall} más, o agregá otro producto.`;
 }
 
 /**
  * Order lines as the customer, the database and the packing list should see
  * them.
  *
- * A single "BAC Water x5" cart line is resolved into what is actually billed
- * and what is gifted, so the line prices add up to the order subtotal. Without
- * this the cart would show one number and the confirmation email another.
+ * Paid BAC lines keep their selected sizes and prices, while the automatic gift
+ * is always a separate 3ml line. This makes the stored order, packing list and
+ * customer-facing total agree even when 3ml and 10ml are bought together.
  *
  * @param {Array} cart
  * @param {{currency, exchangeRate, priceOf, lang}} opts
@@ -202,17 +237,21 @@ export function buildBacAwareOrderItems(cart = [], opts = {}) {
     .map((item) => ({ product: item.product, qty: item.qty, price: priceOf(item) }));
 
   const bac = summarizeBacWater(cart, currency, exchangeRate);
-  const bacName = (cart || []).find((item) => isBacWater(item?.product))?.product
-    || (isEn ? 'Bacteriostatic Water 3ml' : 'Agua Bacteriostática 3ml');
-
-  if (bac.paidUnits > 0) {
-    items.push({ product: bacName, qty: bac.paidUnits, price: bac.unitPrice });
+  const selectedThreeMlName = (cart || []).find((item) => (
+    isBacWater(item?.product) && getBacWaterSizeMl(item.product) === 3
+  ))?.product;
+  for (const line of bac.paidLines) {
+    items.push({ product: line.product, qty: line.qty, price: line.unitPrice });
   }
   // The gift ships whether or not the customer added any, and is listed
   // separately so the packing list and the order total agree.
   if (bac.freeUnits > 0) {
     items.push({
-      product: `${bacName} ${isEn ? '(Free Gift)' : '(Regalo)'}`,
+      product: selectedThreeMlName
+        ? `${selectedThreeMlName} ${isEn ? '(Free Gift)' : '(Regalo)'}`
+        : isEn
+        ? 'Bacteriostatic Water 3ml (Free Gift)'
+        : 'Agua Bacteriostática 3ml (Regalo)',
       qty: bac.freeUnits,
       price: 0,
     });

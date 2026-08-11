@@ -37,11 +37,11 @@ function parseInclude(searchParams) {
 
 function shapeProduct(p, exchangeRate) {
   // BAC water is priced by rule, not by its product row: that row still reads
-  // "FREE with any purchase" from the giveaway days, and parsing it yields 0.
+  // Some rows still carry giveaway-era copy, and parsing it yields 0.
   // Reporting 0 here taught the bot to tell customers the water is free while
   // checkout charged them BAC_WATER_UNIT_PRICE_USD a vial past the allowance.
   const priceUsd = isBacWater(p.product)
-    ? bacUnitPrice('USD', exchangeRate, parsePrice(p.price_usd))
+    ? bacUnitPrice('USD', exchangeRate, parsePrice(p.price_usd), p.product)
     : parsePrice(p.price_usd);
   const priceCrc = Math.round(priceUsd * exchangeRate);
   return {
@@ -191,8 +191,7 @@ export async function GET(req) {
 
   if (include.has('products')) {
     const rows = results.products.data || [];
-    // Only the 3ml water is sold. The 2ml and 10ml rows still exist, and listing
-    // them here let the bot offer sizes that cannot be bought.
+    // The legacy 2ml row still exists and must not be offered by the bot.
     let shaped = rows
       .filter(p => !isBacWater(p.product) || isSellableBacWater(p.product))
       .map(p => shapeProduct(p, exchangeRate));

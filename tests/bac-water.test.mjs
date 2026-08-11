@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   BAC_WATER_UNIT_PRICE_USD,
   BAC_WATER_ONLY_MIN_UNITS,
+  BAC_WATER_10ML_UNIT_PRICE_USD,
+  BAC_WATER_10ML_ONLY_MIN_UNITS,
   isBacWater,
   isSupplyItem,
   splitCartUnits,
@@ -18,6 +20,7 @@ import {
 
 const peptide = (qty = 1) => ({ product: 'Semaglutide 5mg', qty });
 const bac = (qty = 1, priceUsd) => ({ product: 'BAC Water 3ml', qty, priceUsd });
+const bac10 = (qty = 1, priceUsd) => ({ product: 'BAC Water 10ml', qty, priceUsd });
 const syringe = (qty = 1) => ({ product: 'Insulin Syringe 1ml', qty });
 
 test('recognises BAC water in both languages', () => {
@@ -103,6 +106,21 @@ test('unit price converts to CRC and honours an admin-set price', () => {
   assert.equal(bacUnitPrice('CRC', 500), 5000);
   assert.equal(bacUnitPrice('USD', 500, 12), 12, 'admin price wins');
   assert.equal(bacUnitPrice('USD', 500, 0), 10, 'legacy zero price falls back');
+  assert.equal(bacUnitPrice('USD', 500, 0, 'BAC Water 10ml'), 20);
+  assert.equal(bacUnitPrice('CRC', 500, 0, 'BAC Water 10ml'), 10000);
+  assert.equal(bacUnitPrice('USD', 500, 24, 'BAC Water 10ml'), 24, 'admin can update 10ml later');
+  assert.equal(bacUnitPrice('USD', 500, '$24', 'BAC Water 10ml'), 24, 'formatted DB price works');
+});
+
+test('3ml and 10ml lines keep their own prices', () => {
+  const s = summarizeBacWater([bac(2), bac10(3)], 'USD', 1);
+
+  assert.equal(s.charge, 2 * BAC_WATER_UNIT_PRICE_USD + 3 * BAC_WATER_10ML_UNIT_PRICE_USD);
+  assert.equal(s.unitPrice, null, 'a mixed-size cart has no single BAC unit price');
+  assert.deepEqual(s.paidLines, [
+    { product: 'BAC Water 3ml', qty: 2, unitPrice: 10, charge: 20 },
+    { product: 'BAC Water 10ml', qty: 3, unitPrice: 20, charge: 60 },
+  ]);
 });
 
 test('CRC carts bill the converted price', () => {
@@ -122,9 +140,27 @@ test('water-only orders are held to a five vial floor', () => {
   assert.equal(short.minUnits, BAC_WATER_ONLY_MIN_UNITS);
 });
 
+test('10ml-only orders have a three-vial floor', () => {
+  assert.equal(checkBacOnlyMinimum([bac10(3)]).blocked, false);
+  assert.equal(checkBacOnlyMinimum([bac10(4)]).blocked, false);
+
+  const short = checkBacOnlyMinimum([bac10(1)]);
+  assert.equal(short.blocked, true);
+  assert.equal(short.shortfall, 2);
+  assert.equal(short.minUnits, BAC_WATER_10ML_ONLY_MIN_UNITS);
+  assert.equal(short.tenMlOnly, true);
+});
+
+test('mixed water sizes retain the existing five-vial water-only floor', () => {
+  assert.equal(checkBacOnlyMinimum([bac(1), bac10(2)]).blocked, true);
+  assert.equal(checkBacOnlyMinimum([bac(2), bac10(3)]).blocked, false);
+});
+
 test('any peptide exempts the cart from the floor', () => {
   assert.equal(checkBacOnlyMinimum([peptide(1), bac(1)]).blocked, false);
   assert.equal(checkBacOnlyMinimum([syringe(1), bac(1)]).blocked, false);
+  assert.equal(checkBacOnlyMinimum([peptide(1), bac10(1)]).blocked, false);
+  assert.equal(checkBacOnlyMinimum([syringe(1), bac10(1)]).blocked, false);
   assert.equal(checkBacOnlyMinimum([]).blocked, false);
   assert.equal(checkBacOnlyMinimum([peptide(1)]).blocked, false);
 });
@@ -133,6 +169,9 @@ test('the floor message names the shortfall, and clears once met', () => {
   assert.match(bacOnlyMinimumMessage([bac(2)], 'en'), /add 3 more/);
   assert.match(bacOnlyMinimumMessage([bac(2)], 'es'), /agregá 3 más/);
   assert.equal(bacOnlyMinimumMessage([bac(5)], 'en'), null);
+  assert.match(bacOnlyMinimumMessage([bac10(1)], 'en'), /only 10ml BAC Water.*add 2 more/);
+  assert.match(bacOnlyMinimumMessage([bac10(1)], 'es'), /10ml.*agregá 2 más/);
+  assert.equal(bacOnlyMinimumMessage([bac10(3)], 'en'), null);
 });
 
 test('the volume discount skips the BAC charge', () => {
@@ -182,6 +221,17 @@ test('a water-only order has no gift line at all', () => {
   assert.deepEqual(items, [{ product: 'BAC Water 3ml', qty: 5, price: 10 }]);
 });
 
+test('mixed paid sizes remain separate and the automatic gift stays 3ml', () => {
+  const items = build([peptide(1), bac(2), bac10(3)]);
+
+  assert.deepEqual(items, [
+    { product: 'Semaglutide 5mg', qty: 1, price: 90 },
+    { product: 'BAC Water 3ml', qty: 2, price: 10 },
+    { product: 'BAC Water 10ml', qty: 3, price: 20 },
+    { product: 'BAC Water 3ml (Free Gift)', qty: 1, price: 0 },
+  ]);
+});
+
 test('gift line is localised', () => {
   const items = build([peptide(1)], 'es');
   assert.equal(items[1].product, 'Agua Bacteriostática 3ml (Regalo)');
@@ -223,7 +273,7 @@ test('order lines always sum to the subtotal the customer is charged', () => {
   }
 });
 
-// --- Only the 3ml is sold ---------------------------------------------------
+// --- Sellable BAC sizes -----------------------------------------------------
 
 test('reads the size out of a BAC listing name', () => {
   assert.equal(getBacWaterSizeMl('BAC Water 3ml'), 3);
@@ -233,11 +283,11 @@ test('reads the size out of a BAC listing name', () => {
   assert.equal(getBacWaterSizeMl('Semaglutide 5mg'), null, 'not BAC water at all');
 });
 
-test('only the 3ml listing is sellable', () => {
+test('the 3ml and 10ml listings are sellable', () => {
   assert.equal(isSellableBacWater('BAC Water 3ml'), true);
   assert.equal(isSellableBacWater('BAC Water 2ml'), false);
-  assert.equal(isSellableBacWater('BAC Water 10ml'), false);
-  assert.equal(isSellableBacWater('BACWater10ml'), false, 'no space before the unit');
+  assert.equal(isSellableBacWater('BAC Water 10ml'), true);
+  assert.equal(isSellableBacWater('BACWater10ml'), false, 'no space means it is not recognised as BAC water');
 });
 
 test('an unsized BAC listing is treated as the 3ml', () => {
