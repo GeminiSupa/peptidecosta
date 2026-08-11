@@ -23,8 +23,6 @@ import {
   isBacWater,
   isSellableBacWater,
   bacUnitPrice,
-  getBacWaterSizeMl,
-  BAC_WATER_10ML_PACK_SIZE,
 } from '@/lib/bacWater.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
@@ -49,9 +47,6 @@ function shapeProduct(p, exchangeRate) {
     ? bacUnitPrice('USD', exchangeRate, parsePrice(p.price_usd), p.product)
     : parsePrice(p.price_usd);
   const priceCrc = Math.round(priceUsd * exchangeRate);
-  const packSize = isBacWater(p.product) && getBacWaterSizeMl(p.product) === 10
-    ? BAC_WATER_10ML_PACK_SIZE
-    : 1;
   return {
     id: p.id,
     name: p.product,
@@ -59,9 +54,8 @@ function shapeProduct(p, exchangeRate) {
     status: p.status,
     priceUsd,
     priceCrc,
-    packSize,
-    priceBasisEn: packSize > 1 ? `${packSize}-vial pack; single vials are not sold` : 'per vial',
-    priceBasisES: packSize > 1 ? `paquete de ${packSize} viales; no se venden viales individuales` : 'por vial',
+    priceBasisEn: 'per vial',
+    priceBasisES: 'por vial',
     originalPriceUsd: p.original_price_usd ? parsePrice(p.original_price_usd) : null,
     discount: p.discount || null,
     coa: p.coa || null,

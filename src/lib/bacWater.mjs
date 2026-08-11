@@ -9,13 +9,13 @@
  *   1. One free vial per peptide purchased, given automatically. Syringes and
  *      other reconstitution supplies do NOT earn a free vial — only peptides do.
  *   2. The gift is separate from the cart. A vial the customer puts in the cart
- *      is an EXTRA, on top of their free ones. The paid 3ml is $10 per vial.
- *      The 10ml is sold only as a three-vial pack for $20 total; there is no
- *      single-vial 10ml SKU.
+ *      is an EXTRA, on top of their free ones. Extras are priced per vial:
+ *      $10 for the 3ml, $20 for the 10ml.
  *   3. BAC water never counts toward the volume discount, and the volume
  *      discount never applies to the BAC charge. It is a flat side charge.
- *   4. One 10ml cart unit means one three-vial pack, so the minimum is built
- *      into the SKU. The existing five-vial floor remains for 3ml-only orders.
+ *   4. A water-only order has a vial floor, because it has to be worth packing
+ *      and shipping on its own: three vials when the cart is 10ml only, five
+ *      otherwise. Any non-BAC product in the cart lifts the floor entirely.
  *
  * Rule 2 is the one worth stating plainly, because the obvious alternative is
  * to let the free allowance absorb what is in the cart — so one peptide plus
@@ -27,9 +27,8 @@
 
 export const BAC_WATER_UNIT_PRICE_USD = 10;
 export const BAC_WATER_ONLY_MIN_UNITS = 5;
-export const BAC_WATER_10ML_PACK_PRICE_USD = 20;
-export const BAC_WATER_10ML_PACK_SIZE = 3;
-export const BAC_WATER_10ML_ONLY_MIN_UNITS = BAC_WATER_10ML_PACK_SIZE;
+export const BAC_WATER_10ML_UNIT_PRICE_USD = 20;
+export const BAC_WATER_10ML_ONLY_MIN_UNITS = 3;
 
 /** Matches the BAC water listing in either language. */
 export function isBacWater(name) {
@@ -101,9 +100,7 @@ export function splitCartUnits(cart = []) {
     const name = item?.product ?? item?.name;
 
     if (isBacWater(name)) {
-      bacUnits += getBacWaterSizeMl(name) === 10
-        ? qty * BAC_WATER_10ML_PACK_SIZE
-        : qty;
+      bacUnits += qty;
       continue;
     }
     discountUnits += qty;
@@ -114,16 +111,15 @@ export function splitCartUnits(cart = []) {
 }
 
 /**
- * Price of one sellable unit in the requested currency.
+ * Price of one vial in the requested currency.
  *
- * A sellable unit is one vial for 3ml and one three-vial pack for 10ml. An
- * admin-set product price wins; the constants are fallbacks for giveaway-era
+ * An admin-set product price wins; the constants are fallbacks for giveaway-era
  * rows whose price parses as zero.
  */
 export function bacUnitPrice(currency, exchangeRate, priceUsdFromDb = 0, productName = '') {
   const fromDb = parseFloat(String(priceUsdFromDb ?? '').replace(/[^0-9.]/g, ''));
   const fallbackUsd = getBacWaterSizeMl(productName) === 10
-    ? BAC_WATER_10ML_PACK_PRICE_USD
+    ? BAC_WATER_10ML_UNIT_PRICE_USD
     : BAC_WATER_UNIT_PRICE_USD;
   const usd = Number.isFinite(fromDb) && fromDb > 0 ? fromDb : fallbackUsd;
   return currency === 'USD' ? usd : Math.round(usd * exchangeRate);
@@ -132,9 +128,9 @@ export function bacUnitPrice(currency, exchangeRate, priceUsdFromDb = 0, product
 /**
  * The full BAC picture for a cart.
  *
- * `paidLines` preserves each selected size, sellable-unit quantity, physical
- * vial quantity and price. `unitPrice` is one vial for 3ml or one pack for
- * 10ml; it is null when several differently priced sizes are present.
+ * `paidLines` preserves each selected size, its vial quantity and its per-vial
+ * price. `unitPrice` is the price of one vial; it is null when several
+ * differently priced sizes are present.
  *
  * @returns {{bacUnits, peptideUnits, discountUnits, freeUnits, paidUnits, paidLines, unitPrice, charge, shippedUnits}}
  */
@@ -146,13 +142,11 @@ export function summarizeBacWater(cart = [], currency = 'USD', exchangeRate = 1)
     .map((item) => {
       const product = item?.product ?? item?.name;
       const qty = qtyOf(item);
-      const packSize = getBacWaterSizeMl(product) === 10 ? BAC_WATER_10ML_PACK_SIZE : 1;
-      const vialQty = qty * packSize;
       const suppliedUnitPrice = Number(item?.unitPrice);
       const unitPrice = Number.isFinite(suppliedUnitPrice) && suppliedUnitPrice > 0
         ? suppliedUnitPrice
         : bacUnitPrice(currency, exchangeRate, item?.priceUsd ?? item?.price_usd, product);
-      return { product, qty, vialQty, packSize, unitPrice, charge: qty * unitPrice };
+      return { product, qty, unitPrice, charge: qty * unitPrice };
     });
   const charge = paidLines.reduce((sum, line) => sum + line.charge, 0);
   const unitPrice = paidLines.length === 1 ? paidLines[0].unitPrice : null;
@@ -178,9 +172,11 @@ export function summarizeBacWater(cart = [], currency = 'USD', exchangeRate = 1)
 
 /**
  * The BAC-only floor. A cart with any non-BAC product in it is exempt — the
- * minimum exists so a lone water order is worth packing and shipping. Because
- * one 10ml cart unit is already a three-vial pack, its first valid cart line
- * satisfies the three-vial minimum automatically.
+ * minimum exists so a lone water order is worth packing and shipping.
+ *
+ * A 10ml-only cart needs three vials; every other water-only cart needs five.
+ * A cart mixing the two sizes takes the five-vial floor, which is the safe
+ * reading: the cheaper 3ml is what the lower floor would otherwise subsidise.
  *
  * @returns {{blocked: boolean, shortfall: number, minUnits: number, tenMlOnly: boolean}}
  */
@@ -213,12 +209,12 @@ export function bacOnlyMinimumMessage(cart = [], lang = 'es') {
 
   if (String(lang).toLowerCase().startsWith('en')) {
     return tenMlOnly
-      ? `Orders containing only 10ml BAC Water start at ${minUnits} vials — add ${shortfall} more, or add any other product.`
+      ? `10ml water-only orders start at ${minUnits} vials — add ${shortfall} more, or add any other product.`
       : `Water-only orders start at ${minUnits} vials — add ${shortfall} more, or add any other product.`;
   }
 
   return tenMlOnly
-    ? `Los pedidos que solo contienen Agua Bacteriostática de 10ml empiezan en ${minUnits} viales — agregá ${shortfall} más, o agregá otro producto.`
+    ? `Los pedidos de solo agua de 10ml empiezan en ${minUnits} viales — agregá ${shortfall} más, o agregá otro producto.`
     : `Los pedidos de solo agua empiezan en ${minUnits} viales — agregá ${shortfall} más, o agregá otro producto.`;
 }
 
@@ -247,13 +243,7 @@ export function buildBacAwareOrderItems(cart = [], opts = {}) {
     isBacWater(item?.product) && getBacWaterSizeMl(item.product) === 3
   ))?.product;
   for (const line of bac.paidLines) {
-    items.push({
-      product: line.packSize === BAC_WATER_10ML_PACK_SIZE
-        ? `${line.product} ${isEn ? '(3-vial pack)' : '(Paquete de 3 viales)'}`
-        : line.product,
-      qty: line.qty,
-      price: line.unitPrice,
-    });
+    items.push({ product: line.product, qty: line.qty, price: line.unitPrice });
   }
   // The gift ships whether or not the customer added any, and is listed
   // separately so the packing list and the order total agree.

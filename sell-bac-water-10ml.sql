@@ -1,5 +1,6 @@
--- Restore the 10ml BAC water listing as a three-vial pack for $20 total.
--- The storefront treats one cart unit as one pack; single vials are not sold.
+-- Sell the 10ml BAC water listing at $20 per vial.
+-- One cart unit is one vial. The storefront enforces a 3-vial minimum on carts
+-- that contain nothing but 10ml water; any other product lifts that minimum.
 
 UPDATE public.products
 SET

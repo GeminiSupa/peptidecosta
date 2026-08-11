@@ -31,7 +31,7 @@ import {
   checkBacOnlyMinimum,
   bacOnlyMinimumMessage,
   BAC_WATER_ONLY_MIN_UNITS,
-  BAC_WATER_10ML_PACK_SIZE,
+  BAC_WATER_10ML_ONLY_MIN_UNITS,
   getBacWaterSizeMl,
 } from '@/lib/bacWater.mjs';
 import { 
@@ -277,6 +277,32 @@ const invalidProps = (name, formErrors) => ({
   'aria-invalid': formErrors[name] ? 'true' : undefined,
   'aria-describedby': formErrors[name] ? `error-${name}` : undefined,
 });
+
+/**
+ * Rows in the BAC water breakdown: a description on the left, money on the
+ * right. Product names are long ("Agua Bacteriostática 10ml") and the panel is
+ * narrow on a phone, so the label has to be the part that gives — it wraps and
+ * may break mid-word, while the amount keeps its full width on one line.
+ * Without `minWidth: 0` a flex child refuses to shrink below its content and
+ * the price is pushed out of the panel instead.
+ */
+const bacBreakdownRowStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'baseline',
+  gap: '8px',
+};
+
+const bacBreakdownLabelStyle = {
+  minWidth: 0,
+  flex: '1 1 auto',
+  overflowWrap: 'anywhere',
+};
+
+const bacBreakdownAmountStyle = {
+  flexShrink: 0,
+  whiteSpace: 'nowrap',
+};
 
 export default function CatalogPage() {
   const { links } = useBusinessLinks();
@@ -2400,11 +2426,7 @@ export default function CatalogPage() {
 
     const itemReceipts = cart.map(item => {
       const p = getPriceAsNumber(item, currency);
-      const isTenMlPack = isBacWater(item.product) && getBacWaterSizeMl(item.product) === 10;
-      const itemLabel = isTenMlPack
-        ? `${item.product} (${lang === 'en' ? '3-vial pack' : 'paquete de 3 viales'})`
-        : item.product;
-      return `\n• ${itemLabel} (x${item.qty}) — ${formatPriceVal(p * item.qty, currency)}`;
+      return `\n• ${item.product} (x${item.qty}) — ${formatPriceVal(p * item.qty, currency)}`;
     }).join('');
 
     const discountReceipt = discountPct > 0
@@ -2914,10 +2936,7 @@ export default function CatalogPage() {
                         </div>
                       ) : (
                         getSearchSuggestions().map((match, idx) => {
-                          const isTenMlBac = isBacWater(match.product) && getBacWaterSizeMl(match.product) === 10;
-                          const formattedPrice = isTenMlBac
-                            ? `${formatPriceVal(getPriceAsNumber(match, currency), currency)} · ${BAC_WATER_10ML_PACK_SIZE} ${lang === 'en' ? 'vials' : 'viales'}`
-                            : formatPriceVal(getPriceAsNumber(match, currency), currency);
+                          const formattedPrice = formatPriceVal(getPriceAsNumber(match, currency), currency);
                           const isBac = isBacWater(match.product);
                           const inStock = isBac || isInStock(match.status);
                           const cartItem = cart.find(item => item.product === match.product);
@@ -3348,14 +3367,11 @@ export default function CatalogPage() {
                     </div>
                     <div className="product-pricing">
                       {isBac ? (
-                        // The shelf price is for one sellable unit: a single
-                        // 3ml vial or the required three-vial 10ml pack.
+                        // Both sizes are priced per vial; only the minimum differs.
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                           <span className="price-main">{pMain}</span>
                           <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: '700' }}>
-                            {isTenMlBac
-                              ? (lang === 'en' ? '/ 3 vials' : '/ 3 viales')
-                              : (lang === 'en' ? 'each' : 'c/u')}
+                            {lang === 'en' ? 'each' : 'c/u'}
                           </span>
                         </div>
                       ) : p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd ? (
@@ -3378,14 +3394,17 @@ export default function CatalogPage() {
                       ) : (
                         <span className="price-main">{pMain}</span>
                       )}
+                      {/* The BAC notes are sentences, not prices — flexBasis puts them
+                          on their own full-width line under the price instead of
+                          letting them fight the price for the card's width. */}
                       {isTenMlBac
-                        ? <span className="price-sub" style={{ color: '#0284c7', fontWeight: '700' }}>
+                        ? <span className="price-sub" style={{ color: '#0284c7', fontWeight: '700', flexBasis: '100%' }}>
                             {lang === 'en'
-                              ? 'One 3-vial pack · no single-vial orders'
-                              : 'Un paquete de 3 · no se venden individuales'}
+                              ? `Water-only: ${BAC_WATER_10ML_ONLY_MIN_UNITS} vial minimum`
+                              : `Solo agua: mínimo ${BAC_WATER_10ML_ONLY_MIN_UNITS} viales`}
                           </span>
                         : isBac
-                        ? <span className="price-sub" style={{ color: '#16a34a' }}>{lang === 'en' ? '1 free with every peptide' : '1 gratis con cada péptido'}</span>
+                        ? <span className="price-sub" style={{ color: '#16a34a', flexBasis: '100%' }}>{lang === 'en' ? '1 free with every peptide' : '1 gratis con cada péptido'}</span>
                         : pSub && <span className="price-sub">{promoPct > 0 ? promoPriceLabel(currency === 'USD' ? 'CRC' : 'USD') : pSub}</span>}
                     </div>
                     <div className="stock-badges-slot" style={{ display: 'flex', gap: '8px', justifyContent: viewMode === 'grid' ? 'center' : 'flex-start', marginBottom: '8px' }}>
@@ -3726,21 +3745,12 @@ export default function CatalogPage() {
                 </div>
                 <div className="cart-item-details">
                   <h4 className="cart-item-name">{item.product}</h4>
-                  {isBacWater(item.product) && getBacWaterSizeMl(item.product) === 10 && (
-                    <div style={{ color: '#0284c7', fontSize: '0.7rem', fontWeight: '700', marginBottom: '2px' }}>
-                      {lang === 'en' ? '1 pack = 3 vials' : '1 paquete = 3 viales'}
-                    </div>
-                  )}
                   <div className="cart-item-price">
                     {formatPriceVal(getPriceAsNumber(item, currency) * item.qty, currency)}
                   </div>
                   <div className="cart-item-qty">
                     <button className="cart-qty-btn" onClick={() => updateCartQty(item.product, -1)}><Minus size={12} /></button>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>
-                      {isBacWater(item.product) && getBacWaterSizeMl(item.product) === 10
-                        ? `${item.qty} ${lang === 'en' ? (item.qty === 1 ? 'pack' : 'packs') : (item.qty === 1 ? 'paquete' : 'paquetes')}`
-                        : item.qty}
-                    </span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{item.qty}</span>
                     <button className="cart-qty-btn" onClick={() => updateCartQty(item.product, 1)}><Plus size={12} /></button>
                   </div>
                 </div>
@@ -3825,21 +3835,25 @@ export default function CatalogPage() {
             {getBacSummary().bacUnits > 0 && (
               <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', fontSize: '0.75rem', color: theme === 'dark' ? '#7dd3fc' : '#0369a1', fontWeight: '600' }}>
                 {getBacSummary().freeUnits > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>🎁 {lang === 'en'
+                  <div style={bacBreakdownRowStyle}>
+                    <span style={bacBreakdownLabelStyle}>🎁 {lang === 'en'
                       ? `${getBacSummary().freeUnits} free vial${getBacSummary().freeUnits > 1 ? 's' : ''} (1 per peptide)`
                       : `${getBacSummary().freeUnits} vial${getBacSummary().freeUnits > 1 ? 'es' : ''} gratis (1 por péptido)`}</span>
-                    <span>{formatPriceVal(0, currency)}</span>
+                    <span style={bacBreakdownAmountStyle}>{formatPriceVal(0, currency)}</span>
                   </div>
                 )}
                 {getBacSummary().paidLines.map((line, index) => (
-                  <div key={`${line.product}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', marginTop: getBacSummary().freeUnits > 0 || index > 0 ? '4px' : 0 }}>
-                    <span>{line.packSize === BAC_WATER_10ML_PACK_SIZE
-                      ? (lang === 'en'
-                        ? `${line.qty} ${line.qty === 1 ? 'pack' : 'packs'} (${line.vialQty} vials) × ${formatPriceVal(line.unitPrice, currency)}`
-                        : `${line.qty} ${line.qty === 1 ? 'paquete' : 'paquetes'} (${line.vialQty} viales) × ${formatPriceVal(line.unitPrice, currency)}`)
-                      : `${line.qty} ${line.product} × ${formatPriceVal(line.unitPrice, currency)}`}</span>
-                    <span>{formatPriceVal(line.charge, currency)}</span>
+                  <div
+                    key={`${line.product}-${index}`}
+                    style={{ ...bacBreakdownRowStyle, marginTop: getBacSummary().freeUnits > 0 || index > 0 ? '4px' : 0 }}
+                  >
+                    <span style={bacBreakdownLabelStyle}>
+                      {`${line.qty} × ${line.product}`}
+                      <span style={{ opacity: 0.8, whiteSpace: 'nowrap' }}>
+                        {` (${formatPriceVal(line.unitPrice, currency)} ${lang === 'en' ? 'ea' : 'c/u'})`}
+                      </span>
+                    </span>
+                    <span style={bacBreakdownAmountStyle}>{formatPriceVal(line.charge, currency)}</span>
                   </div>
                 ))}
               </div>
@@ -4520,20 +4534,20 @@ export default function CatalogPage() {
 
             {isBacWater(selectedProduct.product) ? (
               <>
-                <div style={{ marginBottom: '16px', padding: '16px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)', fontSize: '0.85rem', color: '#38bdf8', textAlign: 'center', lineHeight: '1.5' }}>
+                <div style={{ marginBottom: '16px', padding: '16px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)', fontSize: '0.85rem', color: '#38bdf8', textAlign: 'center', lineHeight: '1.5', overflowWrap: 'anywhere' }}>
                   <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>{getBacWaterSizeMl(selectedProduct.product) === 10 ? '💧' : '🎁'}</div>
                   <strong style={{ display: 'block', marginBottom: '4px', fontSize: '0.95rem' }}>
                     {getBacWaterSizeMl(selectedProduct.product) === 10
                       ? (lang === 'en'
-                        ? `${BAC_WATER_10ML_PACK_SIZE} vials for ${getPriceLabel(selectedProduct, currency)} total`
-                        : `${BAC_WATER_10ML_PACK_SIZE} viales por ${getPriceLabel(selectedProduct, currency)} en total`)
+                        ? `${getPriceLabel(selectedProduct, currency)} per vial`
+                        : `${getPriceLabel(selectedProduct, currency)} por vial`)
                       : (lang === 'en' ? 'One Free With Every Peptide' : 'Una Gratis con Cada Péptido')}
                   </strong>
                   <p style={{ margin: 0, color: '#e0f2fe' }}>
                     {getBacWaterSizeMl(selectedProduct.product) === 10
                       ? (lang === 'en'
-                        ? `Sold only as one 3-vial pack for ${getPriceLabel(selectedProduct, currency)}. Single-vial orders are not available. Choose quantity 2 for 6 vials, quantity 3 for 9 vials, and so on. Peptide orders still include a free 3ml vial.`
-                        : `Se vende únicamente en paquetes de 3 viales por ${getPriceLabel(selectedProduct, currency)}. No se venden viales individuales. Elegí cantidad 2 para recibir 6 viales, cantidad 3 para recibir 9 viales, y así sucesivamente. Los pedidos de péptidos siguen incluyendo un vial de 3ml gratis.`)
+                        ? `Water-only orders start at ${BAC_WATER_10ML_ONLY_MIN_UNITS} vials. Add any peptide and that minimum goes away — and your peptide still comes with a free 3ml vial.`
+                        : `Los pedidos de solo agua empiezan en ${BAC_WATER_10ML_ONLY_MIN_UNITS} viales. Agregá cualquier péptido y ese mínimo desaparece — y tu péptido igual incluye un vial de 3ml gratis.`)
                       : (lang === 'en'
                         ? `Every peptide you buy includes a free 3ml vial. Need more? Extra 3ml vials are ${getPriceLabel(selectedProduct, currency)} each. Water-only 3ml orders start at ${BAC_WATER_ONLY_MIN_UNITS} vials.`
                         : `Cada péptido que compres incluye un vial de 3ml gratis. ¿Necesitás más? Los viales adicionales de 3ml cuestan ${getPriceLabel(selectedProduct, currency)} cada uno. Los pedidos de solo agua de 3ml empiezan en ${BAC_WATER_ONLY_MIN_UNITS} viales.`)}
@@ -4543,11 +4557,7 @@ export default function CatalogPage() {
                   className="whatsapp-btn product-detail-cart-button"
                   onClick={() => addToCart(selectedProduct)}
                 >
-                  {getBacWaterSizeMl(selectedProduct.product) === 10
-                    ? (lang === 'en'
-                      ? `Add 3-vial pack · ${getPriceLabel(selectedProduct, currency)}`
-                      : `Agregar paquete de 3 · ${getPriceLabel(selectedProduct, currency)}`)
-                    : (lang === 'en' ? 'Add to Cart' : 'Añadir al Carrito')}
+                  {lang === 'en' ? 'Add to Cart' : 'Añadir al Carrito'}
                 </button>
               </>
             ) : isInStock(selectedProduct.status) && (

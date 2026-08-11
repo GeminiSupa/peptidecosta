@@ -762,6 +762,10 @@ body {
     display: flex;
     align-items: baseline;
     gap: 8px;
+    /* Wrapping only engages when the row would otherwise be squeezed, so a long
+       note (the BAC water rules) drops to its own line instead of compressing
+       the price next to it. Short secondary prices still sit inline. */
+    flex-wrap: wrap;
 }
 
 .price-main {
@@ -776,6 +780,9 @@ body {
     color: var(--text-muted);
     font-weight: 500; /* Lighter secondary price weight, was 600 */
     opacity: 0.9;
+    /* Grid cards are ~150px wide on a phone; let the longest note wrap inside
+       the card rather than run past its edge. */
+    overflow-wrap: anywhere;
 }
 
 .stock-badge {
