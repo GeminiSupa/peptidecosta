@@ -9,13 +9,13 @@
  *   1. One free vial per peptide purchased, given automatically. Syringes and
  *      other reconstitution supplies do NOT earn a free vial — only peptides do.
  *   2. The gift is separate from the cart. A vial the customer puts in the cart
- *      is an EXTRA, on top of their free ones. The paid 3ml is $10 and the paid
- *      10ml is $20. Buy one peptide and add one vial and you receive two: one
- *      free 3ml vial and the paid size the customer selected.
+ *      is an EXTRA, on top of their free ones. The paid 3ml is $10 per vial.
+ *      The 10ml is sold only as a three-vial pack for $20 total; there is no
+ *      single-vial 10ml SKU.
  *   3. BAC water never counts toward the volume discount, and the volume
  *      discount never applies to the BAC charge. It is a flat side charge.
- *   4. A cart containing only 10ml BAC water must hold at least three vials.
- *      The existing five-vial floor remains for 3ml-only water orders.
+ *   4. One 10ml cart unit means one three-vial pack, so the minimum is built
+ *      into the SKU. The existing five-vial floor remains for 3ml-only orders.
  *
  * Rule 2 is the one worth stating plainly, because the obvious alternative is
  * to let the free allowance absorb what is in the cart — so one peptide plus
@@ -27,8 +27,9 @@
 
 export const BAC_WATER_UNIT_PRICE_USD = 10;
 export const BAC_WATER_ONLY_MIN_UNITS = 5;
-export const BAC_WATER_10ML_UNIT_PRICE_USD = 20;
-export const BAC_WATER_10ML_ONLY_MIN_UNITS = 3;
+export const BAC_WATER_10ML_PACK_PRICE_USD = 20;
+export const BAC_WATER_10ML_PACK_SIZE = 3;
+export const BAC_WATER_10ML_ONLY_MIN_UNITS = BAC_WATER_10ML_PACK_SIZE;
 
 /** Matches the BAC water listing in either language. */
 export function isBacWater(name) {
@@ -100,7 +101,9 @@ export function splitCartUnits(cart = []) {
     const name = item?.product ?? item?.name;
 
     if (isBacWater(name)) {
-      bacUnits += qty;
+      bacUnits += getBacWaterSizeMl(name) === 10
+        ? qty * BAC_WATER_10ML_PACK_SIZE
+        : qty;
       continue;
     }
     discountUnits += qty;
@@ -111,17 +114,16 @@ export function splitCartUnits(cart = []) {
 }
 
 /**
- * Per-vial price in the requested currency.
+ * Price of one sellable unit in the requested currency.
  *
- * An admin-set price on the product row wins, so the figure can be changed from
- * the products screen without a deploy. The constant is the fallback because
- * the existing BAC row is priced at 0 from its giveaway days — reading that
- * blindly would hand out unlimited free vials.
+ * A sellable unit is one vial for 3ml and one three-vial pack for 10ml. An
+ * admin-set product price wins; the constants are fallbacks for giveaway-era
+ * rows whose price parses as zero.
  */
 export function bacUnitPrice(currency, exchangeRate, priceUsdFromDb = 0, productName = '') {
   const fromDb = parseFloat(String(priceUsdFromDb ?? '').replace(/[^0-9.]/g, ''));
   const fallbackUsd = getBacWaterSizeMl(productName) === 10
-    ? BAC_WATER_10ML_UNIT_PRICE_USD
+    ? BAC_WATER_10ML_PACK_PRICE_USD
     : BAC_WATER_UNIT_PRICE_USD;
   const usd = Number.isFinite(fromDb) && fromDb > 0 ? fromDb : fallbackUsd;
   return currency === 'USD' ? usd : Math.round(usd * exchangeRate);
@@ -130,9 +132,9 @@ export function bacUnitPrice(currency, exchangeRate, priceUsdFromDb = 0, product
 /**
  * The full BAC picture for a cart.
  *
- * `paidLines` preserves each selected size and its own price. `unitPrice` is
- * retained for older callers when the cart contains a single paid BAC line;
- * it is null when several differently priced sizes are present.
+ * `paidLines` preserves each selected size, sellable-unit quantity, physical
+ * vial quantity and price. `unitPrice` is one vial for 3ml or one pack for
+ * 10ml; it is null when several differently priced sizes are present.
  *
  * @returns {{bacUnits, peptideUnits, discountUnits, freeUnits, paidUnits, paidLines, unitPrice, charge, shippedUnits}}
  */
@@ -144,11 +146,13 @@ export function summarizeBacWater(cart = [], currency = 'USD', exchangeRate = 1)
     .map((item) => {
       const product = item?.product ?? item?.name;
       const qty = qtyOf(item);
+      const packSize = getBacWaterSizeMl(product) === 10 ? BAC_WATER_10ML_PACK_SIZE : 1;
+      const vialQty = qty * packSize;
       const suppliedUnitPrice = Number(item?.unitPrice);
       const unitPrice = Number.isFinite(suppliedUnitPrice) && suppliedUnitPrice > 0
         ? suppliedUnitPrice
         : bacUnitPrice(currency, exchangeRate, item?.priceUsd ?? item?.price_usd, product);
-      return { product, qty, unitPrice, charge: qty * unitPrice };
+      return { product, qty, vialQty, packSize, unitPrice, charge: qty * unitPrice };
     });
   const charge = paidLines.reduce((sum, line) => sum + line.charge, 0);
   const unitPrice = paidLines.length === 1 ? paidLines[0].unitPrice : null;
@@ -174,7 +178,9 @@ export function summarizeBacWater(cart = [], currency = 'USD', exchangeRate = 1)
 
 /**
  * The BAC-only floor. A cart with any non-BAC product in it is exempt — the
- * minimum exists so a lone water order is worth packing and shipping.
+ * minimum exists so a lone water order is worth packing and shipping. Because
+ * one 10ml cart unit is already a three-vial pack, its first valid cart line
+ * satisfies the three-vial minimum automatically.
  *
  * @returns {{blocked: boolean, shortfall: number, minUnits: number, tenMlOnly: boolean}}
  */
@@ -241,7 +247,13 @@ export function buildBacAwareOrderItems(cart = [], opts = {}) {
     isBacWater(item?.product) && getBacWaterSizeMl(item.product) === 3
   ))?.product;
   for (const line of bac.paidLines) {
-    items.push({ product: line.product, qty: line.qty, price: line.unitPrice });
+    items.push({
+      product: line.packSize === BAC_WATER_10ML_PACK_SIZE
+        ? `${line.product} ${isEn ? '(3-vial pack)' : '(Paquete de 3 viales)'}`
+        : line.product,
+      qty: line.qty,
+      price: line.unitPrice,
+    });
   }
   // The gift ships whether or not the customer added any, and is listed
   // separately so the packing list and the order total agree.

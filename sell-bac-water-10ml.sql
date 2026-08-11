@@ -1,5 +1,5 @@
--- Restore the 10ml BAC water listing at $20 per vial.
--- Checkout enforces a three-vial minimum when it is the only product ordered.
+-- Restore the 10ml BAC water listing as a three-vial pack for $20 total.
+-- The storefront treats one cart unit as one pack; single vials are not sold.
 
 UPDATE public.products
 SET
@@ -13,6 +13,7 @@ SET
     ),
     'FM999,999,999,999'
   ),
+  discount = NULL,
   status = 'In Stock'
 WHERE lower(product) = 'bac water 10ml';
 

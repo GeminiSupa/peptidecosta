@@ -19,7 +19,13 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { authorizeBot } from '@/lib/botAuth';
 import { parsePrice, FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
-import { isBacWater, isSellableBacWater, bacUnitPrice } from '@/lib/bacWater.mjs';
+import {
+  isBacWater,
+  isSellableBacWater,
+  bacUnitPrice,
+  getBacWaterSizeMl,
+  BAC_WATER_10ML_PACK_SIZE,
+} from '@/lib/bacWater.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 
 export const runtime = 'nodejs';
@@ -36,14 +42,16 @@ function parseInclude(searchParams) {
 }
 
 function shapeProduct(p, exchangeRate) {
-  // BAC water is priced by rule, not by its product row: that row still reads
-  // Some rows still carry giveaway-era copy, and parsing it yields 0.
-  // Reporting 0 here taught the bot to tell customers the water is free while
-  // checkout charged them BAC_WATER_UNIT_PRICE_USD a vial past the allowance.
+  // BAC water has rule-backed fallbacks because some rows still carry
+  // giveaway-era copy whose parsed price is zero.
+  // Reporting 0 here taught the bot to call paid BAC water free.
   const priceUsd = isBacWater(p.product)
     ? bacUnitPrice('USD', exchangeRate, parsePrice(p.price_usd), p.product)
     : parsePrice(p.price_usd);
   const priceCrc = Math.round(priceUsd * exchangeRate);
+  const packSize = isBacWater(p.product) && getBacWaterSizeMl(p.product) === 10
+    ? BAC_WATER_10ML_PACK_SIZE
+    : 1;
   return {
     id: p.id,
     name: p.product,
@@ -51,6 +59,9 @@ function shapeProduct(p, exchangeRate) {
     status: p.status,
     priceUsd,
     priceCrc,
+    packSize,
+    priceBasisEn: packSize > 1 ? `${packSize}-vial pack; single vials are not sold` : 'per vial',
+    priceBasisES: packSize > 1 ? `paquete de ${packSize} viales; no se venden viales individuales` : 'por vial',
     originalPriceUsd: p.original_price_usd ? parsePrice(p.original_price_usd) : null,
     discount: p.discount || null,
     coa: p.coa || null,
@@ -74,7 +85,7 @@ function buildKnowledgeText({ meta, products, reviews, blogs, landing }) {
       const price = `$${p.priceUsd} / ₡${p.priceCrc.toLocaleString('en-US')}`;
       const disc = p.discount ? `  (discount: ${p.discount})` : '';
       lines.push(`\n### ${p.name} — ${p.category} [${p.status}]`);
-      lines.push(`Price: ${price}${disc}`);
+      lines.push(`Price: ${price} (${p.priceBasisEn})${disc}`);
       if (p.coa) lines.push(`Certificate of Analysis: ${p.coa}`);
       if (p.descriptionEn) lines.push(`EN: ${p.descriptionEn}`);
       if (p.descriptionES) lines.push(`ES: ${p.descriptionES}`);
