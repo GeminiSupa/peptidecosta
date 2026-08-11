@@ -6400,10 +6400,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <ErrorBoundary>
               <CustomersCRM 
 
-              orders={orders} 
-              abandonedCarts={abandonedCarts} 
-              agentProfiles={agentProfiles} 
-              onWhatsAppClick={(recipient) => openWhatsAppComposer(recipient)} 
+              orders={orders}
+              abandonedCarts={abandonedCarts}
+              leads={leads}
+              agentProfiles={agentProfiles}
+              onWhatsAppClick={(recipient) => openWhatsAppComposer(recipient)}
             />
               </ErrorBoundary>
             )}

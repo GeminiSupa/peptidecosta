@@ -16,6 +16,7 @@ import {
   findHistoricalAgent,
   isClosedOrder,
 } from '@/lib/agentAttribution.mjs';
+import { leadContactPoints } from '@/lib/leadContact.mjs';
 import { supabase } from '@/lib/supabase';
 
 const CRM_REMINDERS_KEY = 'peptides_crm_follow_up_reminders_v1';
@@ -168,7 +169,7 @@ const buildSalesScript = (cust) => {
   return `Hi ${firstName}, this is Peptides Costa Rica. ${purchaseLine} I can help you verify COA documentation, current Costa Rica stock, and live CRC pricing before you order.`;
 };
 
-export default function CustomersCRM({ orders = [], abandonedCarts = [], agentProfiles = [], onWhatsAppClick }) {
+export default function CustomersCRM({ orders = [], abandonedCarts = [], leads = [], agentProfiles = [], onWhatsAppClick }) {
   const [searchTerm, setSearchTerm] = useState(() => takeCustomerHandoffSearch());
   const [currentPage, setCurrentPage] = useState(1);
   const [customersPerPage, setCustomersPerPage] = useState(25);
@@ -338,6 +339,69 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], agentPr
       }
     });
     
+    // CRM leads. Without these the Customers tab only held people who had
+    // already ordered, so "Profile" on any of the ~96% of leads who never
+    // bought landed on "No customers found" — which reads as a broken button
+    // rather than an honest empty result.
+    //
+    // Matching on the last 8 digits is deliberate: orders store 506XXXXXXXX
+    // while plenty of leads store the number bare, and an exact compare left
+    // the same person sitting in the tab twice.
+    const idByEmail = new Map();
+    const idByPhoneTail = new Map();
+    for (const [existingId, contact] of Object.entries(map)) {
+      const contactEmail = String(contact.email || '').trim().toLowerCase();
+      if (contactEmail && !idByEmail.has(contactEmail)) idByEmail.set(contactEmail, existingId);
+      const tail = String(contact.phone || contact.whatsappWaId || '').replace(/\D/g, '').slice(-8);
+      if (tail.length === 8 && !idByPhoneTail.has(tail)) idByPhoneTail.set(tail, existingId);
+    }
+
+    leads.forEach((lead) => {
+      const { name, email, phone } = leadContactPoints(lead);
+      if (!email && !phone && !name) return;
+
+      const tail = phone.slice(-8);
+      const existingId = (email && idByEmail.get(email))
+        || (tail.length === 8 && idByPhoneTail.get(tail))
+        || null;
+
+      // Already a customer: keep their order history and just fill the gaps the
+      // lead can answer. This is how a chat that only captured an email reaches
+      // a customer record that only had a phone.
+      if (existingId) {
+        const contact = map[existingId];
+        if (!contact.email && email) contact.email = email;
+        if (!contact.phone && phone) contact.phone = phone;
+        if ((!contact.name || contact.name === 'Unknown' || contact.name === 'Pre-purchase Lead') && name) contact.name = name;
+        contact.leadStatus = contact.leadStatus || lead.status || null;
+        return;
+      }
+
+      const id = email || phone || String(name).toLowerCase();
+      if (map[id]) return;
+
+      map[id] = {
+        id,
+        name: name || 'CRM Lead',
+        email,
+        phone,
+        whatsappWaId: '',
+        location: [lead.city, lead.region, lead.country].filter(Boolean).join(', '),
+        totalSpentUsd: 0,
+        orderCount: 0,
+        lastOrderDate: lead.created_at,
+        isLead: true,
+        isCrmLead: true,
+        leadStatus: lead.status || 'New',
+        leadSource: lead.utm_source || lead.contact_method || 'catalog_lead',
+        lang: lead.language || 'es',
+        purchasedItems: [],
+        owner: null,
+      };
+      if (email) idByEmail.set(email, id);
+      if (tail.length === 8) idByPhoneTail.set(tail, id);
+    });
+
     // Ownership comes from src/lib/agentAttribution.mjs, the same unit-tested
     // module the Leads tab and the checkout backfill use: the agent who closed
     // the customer's EARLIEST order keeps them. Deriving it here a second time
@@ -360,7 +424,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], agentPr
       }
       return b.totalSpentUsd - a.totalSpentUsd || new Date(b.lastOrderDate) - new Date(a.lastOrderDate);
     });
-  }, [orders, abandonedCarts, agentProfiles]);
+  }, [orders, abandonedCarts, leads, agentProfiles]);
 
   const crmStats = useMemo(() => {
     let totalContacts = customers.length;
@@ -388,7 +452,8 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], agentPr
       
       // Tab filter
       if (filterTab === 'customers' && c.isLead) return false;
-      if (filterTab === 'leads' && !c.isLead) return false;
+      if (filterTab === 'leads' && (!c.isLead || c.isCrmLead)) return false;
+      if (filterTab === 'crm_leads' && !c.isCrmLead) return false;
       
       // Agent filter
       if (agentFilter !== 'all') {
@@ -1341,7 +1406,14 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], agentPr
             onClick={() => { setFilterTab('leads'); setCurrentPage(1); }}
           >
             Cart Leads
-            <span className="crm-tab-badge">{customers.filter(c => c.isLead).length}</span>
+            <span className="crm-tab-badge">{customers.filter(c => c.isLead && !c.isCrmLead).length}</span>
+          </button>
+          <button
+            className={`crm-tab ${filterTab === 'crm_leads' ? 'active' : ''}`}
+            onClick={() => { setFilterTab('crm_leads'); setCurrentPage(1); }}
+          >
+            CRM Leads
+            <span className="crm-tab-badge">{customers.filter(c => c.isCrmLead).length}</span>
           </button>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
