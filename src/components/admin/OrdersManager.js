@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useDeferredValue, useMemo, useState } from 'react';
 import { Database, Download, MessageCircle, Plus, Trash2 } from 'lucide-react';
 import { getAdminVolumeDiscountPct } from '@/lib/adminOrderTotals.mjs';
 import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
@@ -195,6 +195,14 @@ export default function OrdersManager({
   const [ordersCurrentPage, setOrdersCurrentPage] = useState(1);
   const [ordersPerPage, setOrdersPerPage] = useState(25);
 
+  // Every order renders twice below (a mobile card and a desktop row, one hidden
+  // by CSS), each carrying two <select>s — so a page rebuilds ~750 elements.
+  // Deferring the term lets the input repaint on the keystroke and hands the
+  // table re-render to React at a lower priority, where the next keystroke can
+  // interrupt it. The box stays bound to `orderSearch`, so typing never lags;
+  // only the results trail it, by a frame.
+  const deferredOrderSearch = useDeferredValue(orderSearch);
+
   const scopedOrders = visibleOrders;
   const filteredOrders = useMemo(() => scopedOrders.filter(o => {
     if (orderStatusFilter !== 'All') {
@@ -205,8 +213,8 @@ export default function OrdersManager({
         return false;
       }
     }
-    if (orderSearch) {
-      const s = orderSearch.toLowerCase();
+    if (deferredOrderSearch) {
+      const s = deferredOrderSearch.toLowerCase();
       return (
         o.customer_name?.toLowerCase().includes(s) ||
         o.customer_phone?.toLowerCase().includes(s) ||
@@ -218,7 +226,7 @@ export default function OrdersManager({
       );
     }
     return true;
-  }), [scopedOrders, orderStatusFilter, orderSearch]);
+  }), [scopedOrders, orderStatusFilter, deferredOrderSearch]);
 
   const totalOrdersPages = Math.ceil(filteredOrders.length / ordersPerPage);
   const paginatedOrders = useMemo(
