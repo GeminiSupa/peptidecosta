@@ -1624,7 +1624,7 @@ Core Rules:
       icon: <MapPinned size={iconSize} />,
     },
     carts: {
-      label: 'Carts',
+      label: 'Abandoned Carts',
       icon: <ShoppingCart size={iconSize} />,
       badge: abandonedCarts.length,
       badgeTone: 'warning',
