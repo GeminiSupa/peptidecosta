@@ -3597,15 +3597,20 @@ Core Rules:
       return recipient.prefilledText.trim();
     }
     
-    // Sanitize recipient name
-    let cleanName = 'Cliente';
+    // Sanitize recipient name. Placeholder labels from the CRM tables belong on
+    // screen, never in a message: greeting a real person "Hola CRM Lead" is
+    // worse than not naming them, and so is "Hola Cliente". With no usable name
+    // the greeting simply drops it.
+    const PLACEHOLDER_NAMES = ['null', 'undefined', 'n/a', 'unknown', 'crm lead', 'pre-purchase lead', 'customer', 'cliente', 'lead'];
+    let cleanName = '';
     if (recipient.name && typeof recipient.name === 'string') {
       const trimmed = recipient.name.trim();
-      const lower = trimmed.toLowerCase();
-      if (trimmed && !['null', 'undefined', 'n/a', 'unknown'].includes(lower)) {
+      if (trimmed && !PLACEHOLDER_NAMES.includes(trimmed.toLowerCase())) {
         cleanName = trimmed;
       }
     }
+    const hola = cleanName ? `¡Hola ${cleanName}!` : '¡Hola!';
+    const holaComma = cleanName ? `¡Hola ${cleanName},` : '¡Hola,';
 
     const agentSig = agentName ? agentName : 'asesor';
     
@@ -3623,14 +3628,14 @@ Core Rules:
     if (recipient.cartItems) {
       switch (templateType) {
         case 'purity':
-          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷 
+          return `${hola} Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷 
 
 Te contacto porque notamos tu interés en ${itemsStr}. Quería recordarte que todos nuestros péptidos cuentan con pureza certificada de laboratorio ≥98% HPLC para garantizar la máxima seguridad en tu investigación.
 
 Realizamos envíos rápidos a todo el país vía Correos de CR y coordinamos pagos seguros vía SINPE Móvil o tarjeta. ¿Te gustaría que te ayude a coordinar tu envío hoy?`;
 
         case 'discount':
-          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+          return `${hola} Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
 
 Queremos apoyarte en tus metas de salud y rendimiento. Por eso, si completas tu orden de ${itemsStr} hoy, puedes aplicar un 10% de descuento adicional utilizando el cupón especial COSTA10.
 
@@ -3640,7 +3645,7 @@ Puedes recuperar tu carrito y aplicar tu cupón directamente ingresando aquí:
 Avísame si deseas que agilice tu orden directamente por este chat. ¡Quedo a tu total disposición!`;
 
         case 'dosing':
-          return `¡Hola ${cleanName}! Te habla ${agentSig} de Peptides Costa Rica. 🇨🇷
+          return `${hola} Te habla ${agentSig} de Peptides Costa Rica. 🇨🇷
 
 Vimos que estabas consultando por ${itemsStr}. Al adquirir péptidos en polvo, sabemos que la matemática de la reconstitución con agua bacteriostática y la dosificación correcta con jeringas de insulina puede ser confusa.
 
@@ -3648,7 +3653,7 @@ Te ofrezco asesoría gratuita y directa sobre cómo prepararlos y administrarlos
 
         case 'standard':
         default:
-          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+          return `${hola} Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
 
 Notamos que dejaste algunos artículos en tu carrito (${itemsStr}). Quería ponerme a tu entera disposición por si tienes alguna consulta sobre la calidad del laboratorio, las formas de pago en Costa Rica, o si gustas que te coordine la entrega vía Correos de CR.
 
@@ -3662,21 +3667,21 @@ Puedes finalizar tu orden de forma segura en este link:
     else if (recipient.orderNumber) {
       switch (templateType) {
         case 'payment':
-          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+          return `${hola} Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
 
 Recibimos tu orden #${recipient.orderNumber} por ${itemsStr}. Quería verificar si tuviste algún inconveniente al realizar tu pago SINPE Móvil o con Tarjeta.
 
 Quedamos atentos a la confirmación o comprobante de pago por este medio para procesar y despachar tus productos de inmediato. ¡Muchas gracias!`;
 
         case 'purity':
-          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+          return `${hola} Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
 
 Muchas gracias por tu compra de ${itemsStr} (Orden #${recipient.orderNumber}). Quería compartirte de forma directa nuestra guía digital de reconstitución, almacenamiento y uso seguro para que comiences tu protocolo de la mejor manera.
 
 ¿Hay algo más en lo que te pueda asesorar o apoyar en este momento? ¡Un gusto atenderte!`;
 
         case 'discount':
-          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+          return `${hola} Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
 
 Te escribo para confirmarte que estamos preparando tu orden #${recipient.orderNumber} conteniendo ${itemsStr}. En las próximas horas te estaremos compartiendo el número de guía de Correos de Costa Rica para que puedas rastrear tu paquete.
 
@@ -3684,7 +3689,7 @@ Te escribo para confirmarte que estamos preparando tu orden #${recipient.orderNu
 
         case 'standard':
         default:
-          return `¡Hola ${cleanName}! Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
+          return `${hola} Te saluda ${agentSig} de Peptides Costa Rica. 🇨🇷
 
 Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Queríamos verificar si todo marcha bien y si tienes alguna duda respecto al envío, las instrucciones de almacenamiento de los viales, o la dosificación.
 
@@ -3692,7 +3697,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       }
     }
 
-    return `Hola ${cleanName}, te saluda ${agentSig} de Peptides Costa Rica. ¿Cómo te podemos ayudar hoy?`;
+    return `${cleanName ? `Hola ${cleanName},` : 'Hola,'} te saluda ${agentSig} de Peptides Costa Rica. ¿Cómo te podemos ayudar hoy?`;
   };
 
   // 3. Open Custom WhatsApp Composer Modal

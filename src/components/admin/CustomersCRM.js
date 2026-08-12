@@ -137,12 +137,19 @@ const formatTimelineDate = (value) => {
   return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 };
 
+// Contacts we have no name for carry a placeholder label so the table has
+// something to show. None of them may reach a customer — "CRM Lead" as a first
+// name is how a real person gets greeted "Hi CRM".
+const GENERIC_CONTACT_NAMES = new Set(['pre-purchase lead', 'crm lead', 'lead', 'unknown', 'customer']);
+
+export const realContactName = (name) => {
+  const trimmed = String(name || '').trim();
+  return trimmed && !GENERIC_CONTACT_NAMES.has(trimmed.toLowerCase()) ? trimmed : '';
+};
+
 const buildSalesScript = (cust) => {
   const rec = resolveRecommendation(cust);
-  const rawName = String(cust.name || '').trim();
-  const lowerName = rawName.toLowerCase();
-  const genericNames = new Set(['pre-purchase lead', 'lead', 'unknown', 'customer']);
-  const firstName = rawName && !genericNames.has(lowerName) ? rawName.split(' ')[0] : 'there';
+  const firstName = realContactName(cust.name).split(' ')[0] || 'there';
   const cartLine = cust.cartItems?.length
     ? `I saw you were reviewing ${cust.cartItems.map(item => item.product).join(', ')}.`
     : `Based on your profile, ${rec.product} is the next item I would check first.`;
@@ -630,7 +637,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
         body: JSON.stringify({
           mode: 'cross_sell',
           context: {
-            customerName: cust.name,
+            customerName: realContactName(cust.name),
             purchasedProducts,
             recommendation: recommendedProduct
           }
@@ -643,7 +650,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
         const contactPhone = cust.whatsappWaId || cust.phone;
         if (onWhatsAppClick) {
           onWhatsAppClick({
-            name: cust.name,
+            name: realContactName(cust.name),
             phone: contactPhone,
             prefilledText: data.text.trim(),
             cartItems: cust.cartItems || []
@@ -1530,7 +1537,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
                       className="admin-btn crm-mobile-wa"
                       onClick={() => {
                         if (onWhatsAppClick) {
-                          onWhatsAppClick({ name: cust.name, phone: contactPhone, cartItems: cust.cartItems || [] });
+                          onWhatsAppClick({ name: realContactName(cust.name), phone: contactPhone, cartItems: cust.cartItems || [] });
                         } else {
                           alert('WhatsApp composer is not available in this view.');
                         }
@@ -1774,7 +1781,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
                             onClick={() => {
                               if (onWhatsAppClick) {
                                 onWhatsAppClick({
-                                  name: cust.name,
+                                  name: realContactName(cust.name),
                                   phone: contactPhone,
                                   cartItems: cust.cartItems || []
                                 });
@@ -1980,6 +1987,26 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* A CRM lead has no order and no cart, so the script below has
+                    nothing to work from — it guesses a product and greets a
+                    stranger by a placeholder. Say what we actually know instead
+                    of offering a send button that writes the wrong message. */}
+                {selectedCustomer.isCrmLead ? (
+                <div className="crm-workspace-card">
+                  <h4><ClipboardList size={16} color="#f97316" /> Lead details</h4>
+                  <div style={{ color: '#94a3b8', fontSize: '0.8rem', lineHeight: 1.7 }}>
+                    <div>Status: <strong style={{ color: '#e2e8f0' }}>{selectedCustomer.leadStatus || 'New'}</strong></div>
+                    <div>Source: <strong style={{ color: '#e2e8f0' }}>{selectedCustomer.leadSource || 'catalog'}</strong></div>
+                    <div>Language: <strong style={{ color: '#e2e8f0' }}>{String(selectedCustomer.lang || 'es').toUpperCase()}</strong></div>
+                    {selectedCustomer.location && <div>Location: <strong style={{ color: '#e2e8f0' }}>{selectedCustomer.location}</strong></div>}
+                  </div>
+                  <p style={{ color: '#64748b', fontSize: '0.76rem', margin: '12px 0 0', lineHeight: 1.6 }}>
+                    This contact has never ordered, so there is no purchase history to build a
+                    sales script from. Work them from the Leads tab, where the pipeline stage
+                    and follow-up tools live.
+                  </p>
+                </div>
+                ) : (
                 <div className="crm-workspace-card">
                   <h4><ClipboardList size={16} color="#f97316" /> Sales script</h4>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
@@ -2023,6 +2050,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
                     )}
                   </div>
                 </div>
+                )}
 
                 <div className="crm-workspace-card">
                   <h4><History size={16} color="#38bdf8" /> Order timeline</h4>
