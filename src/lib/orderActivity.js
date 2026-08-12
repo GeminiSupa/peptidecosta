@@ -19,6 +19,8 @@ export function formatActivityType(type) {
     shipping_cost: 'Shipping cost updated',
     contact_updated: 'Customer contact updated',
     items_updated: 'Order items updated',
+    manual_discount_applied: 'Order discount applied',
+    manual_discount_removed: 'Order discount removed',
   };
   return labels[type] || type;
 }

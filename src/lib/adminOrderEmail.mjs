@@ -30,10 +30,13 @@ export function buildOrderNotificationPayload(order, orderNumber) {
   const promoDiscount = currency === 'CRC'
     ? Number(order.discount_amount_crc || 0)
     : Number(order.discount_amount_usd || 0);
+  const manualDiscount = currency === 'CRC'
+    ? Number(order.manual_discount_amount_crc || 0)
+    : Number(order.manual_discount_amount_usd || 0);
   const total = currency === 'CRC'
     ? Number(order.total_crc || 0)
     : Number(order.total_usd || 0);
-  const volumeDiscount = Math.max(0, itemsAmount - promoDiscount + shipping - total);
+  const volumeDiscount = Math.max(0, itemsAmount - promoDiscount - manualDiscount + shipping - total);
 
   return {
     orderNumber,
@@ -50,6 +53,8 @@ export function buildOrderNotificationPayload(order, orderNumber) {
     subtotal: itemsAmount,
     volumeDiscount,
     promoDiscount,
+    manualDiscount,
+    manualDiscountReason: String(order.manual_discount_reason || '').trim() || null,
     shipping,
     currency,
     paymentMethod: order.payment_method,

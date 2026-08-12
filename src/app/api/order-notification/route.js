@@ -219,6 +219,11 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
                 <td colspan="2" style="text-align:right;padding:8px 16px;font-size:14px;color:#0284c7;font-weight:600;">Promo Discount</td>
                 <td style="text-align:right;padding:8px 16px;font-size:14px;color:#0284c7;font-weight:700;">-${formatMoney(order.promoDiscount, order.currency)}</td>
               </tr>` : ''}
+              ${order.manualDiscount ? `
+              <tr>
+                <td colspan="2" style="text-align:right;padding:8px 16px;font-size:14px;color:#7e22ce;font-weight:600;">Order Discount${order.manualDiscountReason ? ` (${escapeHtml(order.manualDiscountReason)})` : ''}</td>
+                <td style="text-align:right;padding:8px 16px;font-size:14px;color:#7e22ce;font-weight:700;">-${formatMoney(order.manualDiscount, order.currency)}</td>
+              </tr>` : ''}
               ${order.shipping !== undefined ? `
               <tr>
                 <td colspan="2" style="text-align:right;padding:8px 16px;font-size:14px;color:#475569;font-weight:600;">Shipping</td>
@@ -373,6 +378,12 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
             <div style="display:table;width:100%;margin-bottom:8px;font-size:14.5px;">
               <div style="display:table-cell;text-align:left;color:#0284c7;font-weight:600;">${isEn ? 'Promo Discount' : 'Descuento Promocional'}</div>
               <div style="display:table-cell;text-align:right;font-weight:700;color:#0284c7;">-${formatMoney(order.promoDiscount, order.currency)}</div>
+            </div>
+            ` : ''}
+            ${order.manualDiscount ? `
+            <div style="display:table;width:100%;margin-bottom:8px;font-size:14.5px;">
+              <div style="display:table-cell;text-align:left;color:#7e22ce;font-weight:600;">${isEn ? 'Order Discount' : 'Descuento del Pedido'}${order.manualDiscountReason ? ` (${escapeHtml(order.manualDiscountReason)})` : ''}</div>
+              <div style="display:table-cell;text-align:right;font-weight:700;color:#7e22ce;">-${formatMoney(order.manualDiscount, order.currency)}</div>
             </div>
             ` : ''}
             ${order.shipping !== undefined ? `
@@ -597,6 +608,7 @@ export async function POST(request) {
         ...(order.subtotal ? [`Subtotal: ${formatMoney(order.subtotal, order.currency)}`] : []),
         ...(order.volumeDiscount ? [`Volume Discount: -${formatMoney(order.volumeDiscount, order.currency)}`] : []),
         ...(order.promoDiscount ? [`Promo Discount: -${formatMoney(order.promoDiscount, order.currency)}`] : []),
+        ...(order.manualDiscount ? [`Order Discount${order.manualDiscountReason ? ` (${order.manualDiscountReason})` : ''}: -${formatMoney(order.manualDiscount, order.currency)}`] : []),
         ...(order.shipping !== undefined ? [`Shipping: ${order.shipping === 0 ? 'FREE' : formatMoney(order.shipping, order.currency)}`] : []),
         `Total: ${totalPrimary}`,
       ].join('\n');
@@ -655,6 +667,7 @@ export async function POST(request) {
           ...(order.subtotal ? [`Subtotal: ${formatMoney(order.subtotal, order.currency)}`] : []),
           ...(order.volumeDiscount ? [`${orderLang === 'en' ? 'Volume Discount' : 'Descuento Volumen'}: -${formatMoney(order.volumeDiscount, order.currency)}`] : []),
           ...(order.promoDiscount ? [`${orderLang === 'en' ? 'Promo Discount' : 'Descuento Promocional'}: -${formatMoney(order.promoDiscount, order.currency)}`] : []),
+          ...(order.manualDiscount ? [`${orderLang === 'en' ? 'Order Discount' : 'Descuento del Pedido'}${order.manualDiscountReason ? ` (${order.manualDiscountReason})` : ''}: -${formatMoney(order.manualDiscount, order.currency)}`] : []),
           ...(order.shipping !== undefined ? [`${orderLang === 'en' ? 'Shipping' : 'Envío'}: ${order.shipping === 0 ? 'FREE / GRATIS' : formatMoney(order.shipping, order.currency)}`] : []),
           '',
           orderLang === 'en' 

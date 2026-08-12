@@ -125,6 +125,11 @@ export default function OrderDetailPanel({
   const [addProduct, setAddProduct] = useState('');
   const [savingOrder, setSavingOrder] = useState(false);
   const [orderError, setOrderError] = useState('');
+  const [manualDiscountType, setManualDiscountType] = useState(order.manual_discount_type || 'none');
+  const [manualDiscountValue, setManualDiscountValue] = useState(order.manual_discount_value || '');
+  const [manualDiscountReason, setManualDiscountReason] = useState(order.manual_discount_reason || '');
+  const [savingDiscount, setSavingDiscount] = useState(false);
+  const [discountError, setDiscountError] = useState('');
   const [phoneCopied, setPhoneCopied] = useState(false);
   const [cardLinkLoading, setCardLinkLoading] = useState(false);
   const [cardLinkCopied, setCardLinkCopied] = useState(false);
@@ -148,6 +153,10 @@ export default function OrderDetailPanel({
     setShippingAddress(order.shipping_address || '');
     setEditItems(Array.isArray(order.items) ? order.items.map((i) => ({ ...i })) : []);
     setOrderError('');
+    setManualDiscountType(order.manual_discount_type || 'none');
+    setManualDiscountValue(order.manual_discount_value || '');
+    setManualDiscountReason(order.manual_discount_reason || '');
+    setDiscountError('');
     setPhoneCopied(false);
     setCardLinkCopied(false);
     setCardLinkError('');
@@ -198,22 +207,87 @@ export default function OrderDetailPanel({
   const shipping = order.currency === 'USD'
     ? Number(shippingUsd) || 0
     : Number(shippingCrc) || 0;
+  const promoDiscount = order.currency === 'USD'
+    ? Number(order.discount_amount_usd || 0)
+    : Number(order.discount_amount_crc || 0);
   const {
     itemsSubtotal,
     discountPct,
     discountAmount,
+    promoDiscountAmount,
+    manualDiscountAmount,
     total: orderTotal,
-  } = calculateAdminOrderTotals(editItems, shipping);
+  } = calculateAdminOrderTotals(editItems, shipping, {
+    promoDiscountAmount: promoDiscount,
+    manualDiscountType,
+    manualDiscountValue,
+  });
 
-  const patchOrder = async (updates, activityEntry) => {
+  const isSettledOrder = (() => {
+    const normalized = String(order.status || '').toLowerCase();
+    return normalized.includes('paid') || normalized.includes('complete');
+  })();
+
+  const hasManualDiscountChanged =
+    (order.manual_discount_type || 'none') !== manualDiscountType ||
+    Number(order.manual_discount_value || 0) !== Number(manualDiscountValue || 0) ||
+    (String(order.manual_discount_reason || '').trim() || '') !== (manualDiscountReason.trim() || '');
+  const canPersistManualDiscount = Object.hasOwn(order, 'manual_discount_type');
+
+  const patchOrder = async (updates, activityEntry, options = {}) => {
     const res = await adminFetch('/api/admin/orders/update', {
       method: 'PATCH',
-      body: JSON.stringify({ orderId: order.id, updates, activity: activityEntry }),
+      body: JSON.stringify({ orderId: order.id, updates, activity: activityEntry, ...options }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Update failed');
     onUpdated(data.order);
     return data.order;
+  };
+
+  const confirmPaidOrderDiscount = () => {
+    if (!isSettledOrder || !hasManualDiscountChanged) return true;
+    return window.confirm(
+      'This order is already paid or complete. Changing the discount updates the order record only; it does not refund the customer or change a completed card charge. Continue?'
+    );
+  };
+
+  const getManualDiscountUpdates = () => {
+    const type = manualDiscountType === 'percentage' || manualDiscountType === 'fixed'
+      ? manualDiscountType
+      : null;
+    return {
+      manual_discount_type: type,
+      manual_discount_value: type ? Number(manualDiscountValue) || 0 : 0,
+      manual_discount_reason: type ? manualDiscountReason.trim() || null : null,
+    };
+  };
+
+  const saveManualDiscount = async () => {
+    const value = Number(manualDiscountValue || 0);
+    if (manualDiscountType !== 'none' && (!Number.isFinite(value) || value <= 0)) {
+      setDiscountError('Enter a discount greater than zero.');
+      return;
+    }
+    if (manualDiscountType === 'percentage' && value > 100) {
+      setDiscountError('Percentage discount cannot exceed 100%.');
+      return;
+    }
+    if (!confirmPaidOrderDiscount()) return;
+
+    setSavingDiscount(true);
+    setDiscountError('');
+    try {
+      await patchOrder(
+        getManualDiscountUpdates(),
+        { type: 'manual_discount', message: 'Order discount updated by admin' },
+        { acknowledgePaidOrderDiscount: isSettledOrder && hasManualDiscountChanged }
+      );
+    } catch (err) {
+      setDiscountError(err.message);
+    } finally {
+      setSavingDiscount(false);
+    }
   };
 
   const agentOptions = (() => {
@@ -346,6 +420,7 @@ export default function OrderDetailPanel({
       setOrderError('Order must have at least one item.');
       return;
     }
+    if (!confirmPaidOrderDiscount()) return;
 
     setSavingOrder(true);
     setOrderError('');
@@ -359,7 +434,11 @@ export default function OrderDetailPanel({
     const ship = order.currency === 'USD'
       ? Number(shippingUsd) || 0
       : Number(shippingCrc) || 0;
-    const total = calculateAdminOrderTotals(normalizedItems, ship).total;
+    const total = calculateAdminOrderTotals(normalizedItems, ship, {
+      promoDiscountAmount: promoDiscount,
+      manualDiscountType,
+      manualDiscountValue,
+    }).total;
     const totalUsd = order.currency === 'USD' ? Number(total.toFixed(2)) : Number((total / FALLBACK_EXCHANGE_RATE).toFixed(2));
     const totalCrc = order.currency === 'CRC' ? Math.round(total) : Math.round(total * FALLBACK_EXCHANGE_RATE);
 
@@ -375,11 +454,13 @@ export default function OrderDetailPanel({
           shipping_cost_usd: Number(shippingUsd) || 0,
           total_usd: totalUsd,
           total_crc: totalCrc,
+          ...(canPersistManualDiscount || hasManualDiscountChanged ? getManualDiscountUpdates() : {}),
         },
         {
           type: 'items_updated',
           message: 'Customer contact and/or order items updated by admin',
-        }
+        },
+        { acknowledgePaidOrderDiscount: isSettledOrder && hasManualDiscountChanged }
       );
     } catch (err) {
       setOrderError(err.message);
@@ -781,12 +862,91 @@ export default function OrderDetailPanel({
             </button>
           </div>
 
+          <div style={{
+            margin: '14px 0',
+            padding: '14px',
+            borderRadius: '10px',
+            border: '1px solid rgba(56, 189, 248, 0.22)',
+            background: 'rgba(56, 189, 248, 0.06)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '10px', color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem' }}>
+              <BadgePercent size={16} /> Order discount
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 0.8fr) minmax(100px, 0.7fr) minmax(180px, 1.5fr)', gap: '8px' }}>
+              <select
+                className="admin-select"
+                value={manualDiscountType}
+                onChange={(e) => {
+                  setManualDiscountType(e.target.value);
+                  setDiscountError('');
+                }}
+              >
+                <option value="none">No manual discount</option>
+                <option value="percentage">Percentage</option>
+                <option value="fixed">Fixed amount</option>
+              </select>
+              <input
+                className="admin-input"
+                type="number"
+                min="0"
+                max={manualDiscountType === 'percentage' ? '100' : undefined}
+                step={manualDiscountType === 'percentage' ? '0.1' : (order.currency === 'USD' ? '0.01' : '1')}
+                value={manualDiscountValue}
+                onChange={(e) => {
+                  setManualDiscountValue(e.target.value);
+                  setDiscountError('');
+                }}
+                disabled={manualDiscountType === 'none'}
+                placeholder={manualDiscountType === 'percentage' ? 'Percent' : `Amount ${order.currency}`}
+              />
+              <input
+                className="admin-input"
+                value={manualDiscountReason}
+                maxLength={200}
+                onChange={(e) => setManualDiscountReason(e.target.value)}
+                disabled={manualDiscountType === 'none'}
+                placeholder="Reason shown on receipt (optional)"
+              />
+            </div>
+            <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
+              Applied after volume and promo discounts, before shipping.
+            </p>
+            {isSettledOrder && hasManualDiscountChanged && (
+              <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#fbbf24', lineHeight: 1.4 }}>
+                This order is already paid or complete. Saving changes the record only and does not issue a refund.
+              </p>
+            )}
+            {discountError && <p style={{ color: '#f87171', fontSize: '0.8rem', margin: '8px 0 0' }}>{discountError}</p>}
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary"
+              onClick={saveManualDiscount}
+              disabled={savingDiscount || !hasManualDiscountChanged}
+              style={{ marginTop: '10px', width: '100%' }}
+            >
+              <BadgePercent size={14} />
+              {savingDiscount ? 'Saving discount…' : manualDiscountType === 'none' ? 'Remove discount' : 'Apply discount'}
+            </button>
+          </div>
+
           <div className="order-detail-totals">
             <div><span>Items subtotal</span><span>{order.currency === 'USD' ? `$${itemsSubtotal.toFixed(2)}` : `₡${itemsSubtotal.toLocaleString()}`}</span></div>
             {discountPct > 0 && (
               <div style={{ color: '#16a34a' }}>
                 <span>Volume discount ({discountPct}%)</span>
                 <span>{order.currency === 'USD' ? `-$${discountAmount.toFixed(2)}` : `-₡${Math.round(discountAmount).toLocaleString()}`}</span>
+              </div>
+            )}
+            {promoDiscountAmount > 0 && (
+              <div style={{ color: '#38bdf8' }}>
+                <span>Promo discount{order.promo_code ? ` (${order.promo_code})` : ''}</span>
+                <span>{order.currency === 'USD' ? `-$${promoDiscountAmount.toFixed(2)}` : `-₡${Math.round(promoDiscountAmount).toLocaleString()}`}</span>
+              </div>
+            )}
+            {manualDiscountAmount > 0 && (
+              <div style={{ color: '#c084fc' }}>
+                <span>Order discount{manualDiscountReason.trim() ? ` (${manualDiscountReason.trim()})` : ''}</span>
+                <span>{order.currency === 'USD' ? `-$${manualDiscountAmount.toFixed(2)}` : `-₡${Math.round(manualDiscountAmount).toLocaleString()}`}</span>
               </div>
             )}
             <div><span>Shipping</span><span>₡{shippingCrc || 0} / ${shippingUsd || 0}</span></div>

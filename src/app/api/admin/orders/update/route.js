@@ -4,8 +4,9 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { orderVisibleToAgent } from '@/lib/agentOrders';
-import { ORDER_ATTRIBUTION_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAffiliateOrderWhatsApp } from '@/lib/orderWhatsAppAlerts';
+import { calculateAdminOrderTotals, normalizeManualDiscountType } from '@/lib/adminOrderTotals.mjs';
 import {
   applySalesAgentReferral,
   isEligibleSalesAgentProfile,
@@ -13,6 +14,21 @@ import {
 } from '@/lib/salesAgentAffiliate.mjs';
 
 export const runtime = 'nodejs';
+
+const FALLBACK_EXCHANGE_RATE = 454.48;
+const MANUAL_DISCOUNT_FIELDS = [
+  'manual_discount_type',
+  'manual_discount_value',
+  'manual_discount_reason',
+];
+
+const isSettledStatus = (status) => {
+  const normalized = String(status || '').toLowerCase();
+  return normalized.includes('paid') || normalized.includes('complete');
+};
+
+const sameNullableText = (left, right) =>
+  (String(left || '').trim() || null) === (String(right || '').trim() || null);
 
 function affiliateCommissionPatch(order, affiliate) {
   if (!order?.affiliate_id || !affiliate) {
@@ -38,7 +54,7 @@ export async function PATCH(request) {
 
   try {
     const body = await request.json();
-    const { orderId, updates, activity } = body;
+    const { orderId, updates, activity, acknowledgePaidOrderDiscount } = body;
 
     if (!orderId || !updates || typeof updates !== 'object') {
       return NextResponse.json({ error: 'orderId and updates required' }, { status: 400 });
@@ -52,6 +68,7 @@ export async function PATCH(request) {
       'payment_transaction_id', 'payment_provider_status', 'payment_authorization',
       'payment_descriptor', 'payment_provider_response',
       'affiliate_id', 'agent_commission_rate_override', 'agent_commission_source',
+      'manual_discount_type', 'manual_discount_value', 'manual_discount_reason',
     ];
     const patch = {};
     for (const key of allowed) {
@@ -72,6 +89,93 @@ export async function PATCH(request) {
 
     if (!orderVisibleToAgent(currentOrder, auth.profile)) {
       return NextResponse.json({ error: 'Forbidden: order is not visible to this staff member' }, { status: 403 });
+    }
+
+    const manualDiscountRequested = MANUAL_DISCOUNT_FIELDS.some((field) => field in patch);
+    if (manualDiscountRequested) {
+      const manualType = normalizeManualDiscountType(patch.manual_discount_type);
+      const manualValue = Number(patch.manual_discount_value || 0);
+      const manualReason = String(patch.manual_discount_reason || '').trim();
+
+      if (!Number.isFinite(manualValue) || manualValue < 0) {
+        return NextResponse.json({ error: 'Discount value must be zero or greater' }, { status: 400 });
+      }
+      if (manualType === 'percentage' && manualValue > 100) {
+        return NextResponse.json({ error: 'Percentage discount cannot exceed 100%' }, { status: 400 });
+      }
+      if (manualReason.length > 200) {
+        return NextResponse.json({ error: 'Discount reason cannot exceed 200 characters' }, { status: 400 });
+      }
+
+      patch.manual_discount_type = manualType;
+      patch.manual_discount_value = manualType ? manualValue : 0;
+      patch.manual_discount_reason = manualType ? (manualReason || null) : null;
+    }
+
+    const manualDiscountChanged = manualDiscountRequested && (
+      normalizeManualDiscountType(currentOrder.manual_discount_type) !== patch.manual_discount_type ||
+      Number(currentOrder.manual_discount_value || 0) !== Number(patch.manual_discount_value || 0) ||
+      !sameNullableText(currentOrder.manual_discount_reason, patch.manual_discount_reason)
+    );
+
+    if (manualDiscountChanged && isSettledStatus(currentOrder.status) && acknowledgePaidOrderDiscount !== true) {
+      return NextResponse.json({
+        error: 'This order is already paid or complete. Confirm that changing its record does not issue a refund.',
+        requiresPaidOrderAcknowledgement: true,
+      }, { status: 409 });
+    }
+
+    const pricingChanged = [
+      'items',
+      'shipping_cost_crc',
+      'shipping_cost_usd',
+      ...MANUAL_DISCOUNT_FIELDS,
+    ].some((field) => field in patch);
+
+    if (pricingChanged) {
+      const items = 'items' in patch ? patch.items : currentOrder.items;
+      if (!Array.isArray(items) || items.length === 0) {
+        return NextResponse.json({ error: 'Order must have at least one item' }, { status: 400 });
+      }
+      if (items.some((item) => !item?.product || Number(item.qty) <= 0 || Number(item.price) < 0)) {
+        return NextResponse.json({ error: 'Every order item needs a product, positive quantity, and non-negative price' }, { status: 400 });
+      }
+
+      const currency = currentOrder.currency === 'CRC' ? 'CRC' : 'USD';
+      const shippingCrc = Number(('shipping_cost_crc' in patch ? patch.shipping_cost_crc : currentOrder.shipping_cost_crc) || 0);
+      const shippingUsd = Number(('shipping_cost_usd' in patch ? patch.shipping_cost_usd : currentOrder.shipping_cost_usd) || 0);
+      const shipping = currency === 'CRC' ? shippingCrc : shippingUsd;
+      const promoDiscountAmount = currency === 'CRC'
+        ? Number(currentOrder.discount_amount_crc || 0)
+        : Number(currentOrder.discount_amount_usd || 0);
+      const manualType = normalizeManualDiscountType(
+        'manual_discount_type' in patch ? patch.manual_discount_type : currentOrder.manual_discount_type
+      );
+      const manualValue = Number(
+        ('manual_discount_value' in patch ? patch.manual_discount_value : currentOrder.manual_discount_value) || 0
+      );
+      const totals = calculateAdminOrderTotals(items, shipping, {
+        promoDiscountAmount,
+        manualDiscountType: manualType,
+        manualDiscountValue: manualValue,
+      });
+      const primaryTotal = currency === 'CRC' ? Math.round(totals.total) : Number(totals.total.toFixed(2));
+
+      patch.total_usd = currency === 'USD'
+        ? primaryTotal
+        : Number((primaryTotal / FALLBACK_EXCHANGE_RATE).toFixed(2));
+      patch.total_crc = currency === 'CRC'
+        ? primaryTotal
+        : Math.round(primaryTotal * FALLBACK_EXCHANGE_RATE);
+
+      if (manualDiscountRequested || Object.hasOwn(currentOrder, 'manual_discount_amount_usd')) {
+        patch.manual_discount_amount_usd = currency === 'USD'
+          ? Number(totals.manualDiscountAmount.toFixed(2))
+          : Number((totals.manualDiscountAmount / FALLBACK_EXCHANGE_RATE).toFixed(2));
+        patch.manual_discount_amount_crc = currency === 'CRC'
+          ? Math.round(totals.manualDiscountAmount)
+          : Math.round(totals.manualDiscountAmount * FALLBACK_EXCHANGE_RATE);
+      }
     }
 
     const superadminOnlyFields = [
@@ -139,16 +243,37 @@ export async function PATCH(request) {
       }
     }
 
+    if (pricingChanged && !('affiliate_id' in patch) && currentOrder.affiliate_id) {
+      const { data: affiliate, error: affiliateError } = await supabase
+        .from('affiliates')
+        .select('*')
+        .eq('id', currentOrder.affiliate_id)
+        .maybeSingle();
+      if (affiliateError) {
+        return NextResponse.json({ error: affiliateError.message }, { status: 500 });
+      }
+      Object.assign(
+        patch,
+        isSalesAgentAffiliate(affiliate)
+          ? { affiliate_commission_usd: 0, affiliate_commission_crc: 0 }
+          : affiliateCommissionPatch({ ...currentOrder, ...patch }, affiliate)
+      );
+    }
+
+    const authoritativeActivity = manualDiscountChanged
+      ? {
+          type: patch.manual_discount_type ? 'manual_discount_applied' : 'manual_discount_removed',
+          message: patch.manual_discount_type
+            ? `Order discount set to ${patch.manual_discount_type === 'percentage' ? `${patch.manual_discount_value}%` : `${patch.manual_discount_value} ${currentOrder.currency || 'USD'}`}${patch.manual_discount_reason ? ` — ${patch.manual_discount_reason}` : ''}`
+            : 'Order discount removed',
+        }
+      : activity;
+
     let activityLog;
-    if (activity) {
-      const { data: current } = await supabase
-        .from('orders')
-        .select('activity_log')
-        .eq('id', orderId)
-        .single();
-      activityLog = appendOrderActivity(current?.activity_log, {
-        type: activity.type || 'note',
-        message: activity.message || '',
+    if (authoritativeActivity) {
+      activityLog = appendOrderActivity(currentOrder.activity_log, {
+        type: authoritativeActivity.type || 'note',
+        message: authoritativeActivity.message || '',
         by: auth.user.email,
       });
       patch.activity_log = activityLog;
@@ -167,6 +292,12 @@ export async function PATCH(request) {
 
     if (error) {
       console.error('[admin/orders/update]', error.message);
+      const missingColumn = missingColumnFrom(error);
+      if (manualDiscountRequested && missingColumn?.startsWith('manual_discount_')) {
+        return NextResponse.json({
+          error: 'Order discounts are not enabled in the database yet. Run add-manual-order-discounts.sql first.',
+        }, { status: 503 });
+      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
@@ -198,9 +329,10 @@ export async function PATCH(request) {
           const itemsAmount = (data.items || []).reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
           const shippingCost = data.currency === 'CRC' ? Number(data.shipping_cost_crc || 0) : Number(data.shipping_cost_usd || 0);
           const promoDiscount = data.currency === 'CRC' ? Number(data.discount_amount_crc || 0) : Number(data.discount_amount_usd || 0);
+          const manualDiscount = data.currency === 'CRC' ? Number(data.manual_discount_amount_crc || 0) : Number(data.manual_discount_amount_usd || 0);
           const total = data.currency === 'CRC' ? Number(data.total_crc || 0) : Number(data.total_usd || 0);
           
-          let volumeDiscount = itemsAmount - promoDiscount + shippingCost - total;
+          let volumeDiscount = itemsAmount - promoDiscount - manualDiscount + shippingCost - total;
           if (volumeDiscount < 0.01) volumeDiscount = 0; // handle floating point errors
 
           const baseUrl = new URL(request.url).origin;
@@ -222,6 +354,8 @@ export async function PATCH(request) {
                subtotal: itemsAmount,
                volumeDiscount: volumeDiscount,
                promoDiscount: promoDiscount,
+               manualDiscount: manualDiscount,
+               manualDiscountReason: data.manual_discount_reason || null,
                shipping: shippingCost,
                currency: data.currency || 'USD',
                paymentMethod: data.payment_method,

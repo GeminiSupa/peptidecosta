@@ -86,3 +86,19 @@ test('a colon order is summarised in colones and Spanish', () => {
   assert.equal(payload.shipping, 3000);
   assert.equal(payload.lang, 'es');
 });
+
+test('manual discounts are separated from volume discounts in notifications', () => {
+  const payload = buildOrderNotificationPayload({
+    ...ORDER,
+    total_usd: 95,
+    shipping_cost_usd: 10,
+    discount_amount_usd: 5,
+    manual_discount_amount_usd: 10,
+    manual_discount_reason: 'Courtesy adjustment',
+  }, 'TEST-3');
+
+  assert.equal(payload.promoDiscount, 5);
+  assert.equal(payload.manualDiscount, 10);
+  assert.equal(payload.manualDiscountReason, 'Courtesy adjustment');
+  assert.equal(payload.volumeDiscount, 20);
+});

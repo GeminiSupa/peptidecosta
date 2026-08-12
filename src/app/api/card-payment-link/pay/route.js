@@ -86,7 +86,10 @@ export async function POST(request) {
     const supabase = getSupabaseAdmin();
     const { data: order, error } = await supabase
       .from('orders')
-      .select('id, order_number, customer_name, customer_phone, customer_email, shipping_address, currency, total_usd, total_crc, shipping_cost_usd, shipping_cost_crc, items, status')
+      // Keep this tolerant of deployment order: the discount migration may be
+      // applied just after the code deploy, and select('*') does not ask
+      // PostgREST for columns that are not in its schema cache yet.
+      .select('*')
       .eq('order_number', orderNumber)
       .single();
 
@@ -195,7 +198,10 @@ export async function POST(request) {
         const subtotal = items.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
         const currency = order.currency || 'USD';
         const shipping = currency === 'CRC' ? Number(order.shipping_cost_crc || 0) : Number(order.shipping_cost_usd || 0);
+        const promoDiscount = currency === 'CRC' ? Number(order.discount_amount_crc || 0) : Number(order.discount_amount_usd || 0);
+        const manualDiscount = currency === 'CRC' ? Number(order.manual_discount_amount_crc || 0) : Number(order.manual_discount_amount_usd || 0);
         const total = currency === 'CRC' ? Number(order.total_crc || 0) : Number(order.total_usd || 0);
+        const volumeDiscount = Math.max(0, subtotal - promoDiscount - manualDiscount + shipping - total);
 
         await fetch(`${baseUrl}/api/order-notification`, {
           method: 'POST',
@@ -211,8 +217,10 @@ export async function POST(request) {
             totalUsd: order.total_usd,
             totalCrc: order.total_crc,
             subtotal,
-            volumeDiscount: 0,
-            promoDiscount: 0,
+            volumeDiscount,
+            promoDiscount,
+            manualDiscount,
+            manualDiscountReason: order.manual_discount_reason || null,
             shipping,
             currency,
             paymentMethod: 'card',

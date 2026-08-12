@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   calculateAdminOrderTotals,
+  calculateManualDiscountAmount,
   getAdminVolumeDiscountPct,
 } from '../src/lib/adminOrderTotals.mjs';
 
@@ -32,4 +33,39 @@ test('paid BAC water is billed but not discounted', () => {
   assert.equal(totals.discountPct, 15);
   assert.equal(totals.discountAmount, 75);
   assert.equal(totals.total, 445);
+});
+
+test('manual percentage discount applies after volume and promo discounts, before shipping', () => {
+  const totals = calculateAdminOrderTotals(
+    [{ product: 'BPC-157', qty: 5, price: 100 }],
+    25,
+    {
+      promoDiscountAmount: 25,
+      manualDiscountType: 'percentage',
+      manualDiscountValue: 10,
+    }
+  );
+
+  assert.equal(totals.discountAmount, 75);
+  assert.equal(totals.promoDiscountAmount, 25);
+  assert.equal(totals.subtotalAfterPromo, 400);
+  assert.equal(totals.manualDiscountAmount, 40);
+  assert.equal(totals.total, 385);
+});
+
+test('fixed manual discount cannot make merchandise negative or discount shipping', () => {
+  const totals = calculateAdminOrderTotals(
+    [{ product: 'BPC-157', qty: 1, price: 100 }],
+    20,
+    { manualDiscountType: 'fixed', manualDiscountValue: 999 }
+  );
+
+  assert.equal(totals.manualDiscountAmount, 100);
+  assert.equal(totals.total, 20);
+});
+
+test('manual discount helper rejects invalid and over-100 percentage input safely', () => {
+  assert.equal(calculateManualDiscountAmount(100, 'percentage', 250), 100);
+  assert.equal(calculateManualDiscountAmount(100, 'fixed', -5), 0);
+  assert.equal(calculateManualDiscountAmount(100, 'unknown', 20), 0);
 });
