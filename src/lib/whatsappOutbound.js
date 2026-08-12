@@ -1,6 +1,7 @@
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { upsertWhatsAppConversation } from '@/lib/whatsappConversations.mjs';
+import { resolveOutboundWhatsAppChannel } from '@/lib/whatsappChannels.mjs';
 
 /**
  * One outbound WhatsApp send, shared by the admin route and the crons.
@@ -18,12 +19,21 @@ export async function sendWhatsAppMessage({
   customerName = null,
   orderId = null,
   sessionId = null,
+  channelId = null,
+  phoneNumberId = null,
   supabase = null,
 }) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  let outboundChannel;
+  try {
+    outboundChannel = await resolveOutboundWhatsAppChannel(supabase, { channelId, phoneNumberId });
+  } catch (error) {
+    console.error('[WhatsApp Outbound] Could not resolve the sending channel:', error);
+    return { ok: false, status: 400, error: 'The selected WhatsApp channel is unavailable.' };
+  }
+  const sendingPhoneNumberId = outboundChannel.phoneNumberId;
 
-  if (!accessToken || !phoneNumberId) {
+  if (!accessToken || !sendingPhoneNumberId) {
     console.warn('[WhatsApp Outbound] Meta WhatsApp Cloud API credentials are not configured.');
     return { ok: false, status: 500, error: 'Meta WhatsApp credentials (WHATSAPP_ACCESS_TOKEN / WHATSAPP_PHONE_NUMBER_ID) are not configured on the server.' };
   }
@@ -58,7 +68,7 @@ export async function sendWhatsAppMessage({
   console.log(`[WhatsApp Outbound] Sending message to ${cleanPhone} via Meta API...`);
 
   const metaResponse = await fetch(
-    `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`,
+    `https://graph.facebook.com/v25.0/${sendingPhoneNumberId}/messages`,
     {
       method: 'POST',
       headers: {
@@ -102,6 +112,7 @@ export async function sendWhatsAppMessage({
         message_type: mediaUrl ? 'image' : 'text',
         direction: 'outbound',
         source: 'cloud_api',
+        channel_id: outboundChannel.channelId,
         matched_order_id: orderId || null,
         raw_payload: metaData,
         meta_message_id: messageId,
@@ -136,6 +147,7 @@ export async function sendWhatsAppMessage({
         direction: 'outbound',
         matchedOrderId: orderId || null,
         source: 'cloud_api',
+        channelId: outboundChannel.channelId,
         metadata: {
           session_id: sessionId || null,
           meta_message_id: messageId,
@@ -150,5 +162,12 @@ export async function sendWhatsAppMessage({
     }
   }
 
-  return { ok: true, status: 200, messageId, cleanPhone };
+  return {
+    ok: true,
+    status: 200,
+    messageId,
+    cleanPhone,
+    channelId: outboundChannel.channelId,
+    phoneNumberId: sendingPhoneNumberId,
+  };
 }

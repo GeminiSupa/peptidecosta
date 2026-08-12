@@ -1,4 +1,5 @@
 import { resolveAdminTabAccess } from './adminModules.js';
+import { isMissingWhatsAppChannelsSchema } from './whatsappChannels.mjs';
 
 export const WA_CONVERSATION_STATUSES = new Set(['open', 'pending', 'resolved', 'snoozed']);
 export const WA_UNASSIGNED_OWNER = 'unassigned';
@@ -97,10 +98,114 @@ async function findLatestRoutedOrder(supabase, waId, matchedOrderId) {
   return data?.[0] || null;
 }
 
-async function findRoutingOwner(supabase, waId, matchedOrderId) {
+async function findCrmLead(supabase, waId) {
+  const tail = normalizeWaId(waId).slice(-8);
+  if (!tail) return null;
+
+  const { data: identity, error: identityError } = await supabase
+    .from('lead_contact_identities')
+    .select('lead_id')
+    .eq('identity_type', 'phone')
+    .eq('identity_value', tail)
+    .maybeSingle();
+
+  if (!identityError && identity?.lead_id) {
+    const { data: lead, error } = await supabase
+      .from('catalog_leads')
+      .select('id, sales_agent')
+      .eq('id', identity.lead_id)
+      .maybeSingle();
+    if (!error && lead) return lead;
+  }
+
+  // Backward-compatible fallback for deployments where the identity migration
+  // has not been applied yet.
+  const { data: leads, error } = await supabase
+    .from('catalog_leads')
+    .select('id, sales_agent, created_at')
+    .or(`phone.ilike.%${tail}%,contact_value.ilike.%${tail}%`)
+    .order('created_at', { ascending: true })
+    .limit(1);
+
+  if (error) return null;
+  return leads?.[0] || null;
+}
+
+async function ensureInboundCrmLead(supabase, waId, displayName, sourceWhatsappNumber) {
+  const existing = await findCrmLead(supabase, waId);
+  if (existing) return existing;
+
+  const cleanWaId = normalizeWaId(waId);
+  if (!cleanWaId) return null;
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('catalog_leads')
+    .insert({
+      contact_method: 'whatsapp',
+      contact_value: cleanWaId,
+      phone: cleanWaId,
+      name: String(displayName || '').trim() || null,
+      language: 'es',
+      status: 'New',
+      notes: 'Automatically created from an inbound WhatsApp conversation.',
+      source_whatsapp_number: sourceWhatsappNumber || null,
+      whatsapp_consent: false,
+      marketing_consent: false,
+      created_at: now,
+      updated_at: now,
+    })
+    .select('id, sales_agent')
+    .single();
+
+  if (!error && data) return data;
+  if (error?.code === '23505') return findCrmLead(supabase, cleanWaId);
+
+  // Older deployments can keep receiving messages while the CRM migration is
+  // being rolled out; the inbox simply remains unlinked until SQL is applied.
+  console.warn('[WhatsApp Conversations] Could not create inbound CRM lead:', error?.message || error);
+  return null;
+}
+
+async function findRoutingOwner(supabase, waId, matchedOrderId, knownLead = null) {
+  const lead = knownLead || await findCrmLead(supabase, waId);
+  if (lead?.sales_agent) {
+    const profile = await findProfileForSalesAgent(supabase, lead.sales_agent);
+    if (profile) return { profile, leadId: lead.id };
+  }
+
   const order = await findLatestRoutedOrder(supabase, waId, matchedOrderId);
-  if (!order?.sales_agent) return null;
-  return findProfileForSalesAgent(supabase, order.sales_agent);
+  if (!order?.sales_agent) return { profile: null, leadId: lead?.id || null };
+  const profile = await findProfileForSalesAgent(supabase, order.sales_agent);
+  return { profile, leadId: lead?.id || null };
+}
+
+async function syncLeadOwnerFromRouting(supabase, leadId, profile) {
+  if (!leadId || !profileIsRoutable(profile)) return;
+  const owner = String(profile.name || profile.email || '').trim();
+  if (!owner) return;
+
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('catalog_leads')
+    .update({
+      sales_agent: owner,
+      ownership_updated_at: now,
+      ownership_updated_by: 'WhatsApp routing',
+      updated_at: now,
+    })
+    .eq('id', leadId)
+    .is('sales_agent', null)
+    .select('id')
+    .maybeSingle();
+
+  if (error || !data) return;
+  await supabase.from('lead_assignment_events').insert({
+    lead_id: leadId,
+    action: 'auto_assigned',
+    new_agent: owner,
+    reason: 'WhatsApp conversation matched CRM or completed-order owner',
+    actor_email: 'whatsapp-routing',
+  });
 }
 
 export function conversationOwnerKey(conversation) {
@@ -132,6 +237,8 @@ export async function upsertWhatsAppConversation(supabase, {
   messageAt = null,
   matchedOrderId = null,
   source = 'cloud_api',
+  channelId = null,
+  channelDisplayNumber = null,
   metadata = {},
 } = {}) {
   if (!supabase) return { data: null, error: null, available: false };
@@ -165,22 +272,32 @@ export async function upsertWhatsAppConversation(supabase, {
     },
   };
 
+  const crmLead = direction === 'inbound'
+    ? await ensureInboundCrmLead(supabase, cleanWaId, displayName, channelDisplayNumber)
+    : await findCrmLead(supabase, cleanWaId);
+  if (crmLead?.id) patch.contact_lead_id = crmLead.id;
+
   if (displayName) patch.display_name = displayName;
   if (matchedOrderId) patch.matched_order_id = matchedOrderId;
+  if (channelId) patch.channel_id = channelId;
   if (direction === 'inbound' || direction === 'outbound') {
     patch.last_message_at = latestIsoTimestamp(existing?.last_message_at, lastAt);
   }
   if (direction === 'inbound') {
     patch.last_inbound_at = latestIsoTimestamp(existing?.last_inbound_at, lastAt);
+    if (channelId) patch.last_inbound_channel_id = channelId;
     if (existing?.status === 'resolved') patch.status = 'open';
   }
   if (direction === 'outbound') {
     patch.last_outbound_at = latestIsoTimestamp(existing?.last_outbound_at, lastAt);
+    if (channelId) patch.last_outbound_channel_id = channelId;
   }
 
   if (!existing?.assigned_to) {
-    const owner = await findRoutingOwner(supabase, cleanWaId, matchedOrderId);
-    Object.assign(patch, routedOwnerPatch(owner));
+    const routing = await findRoutingOwner(supabase, cleanWaId, matchedOrderId, crmLead);
+    Object.assign(patch, routedOwnerPatch(routing.profile));
+    if (routing.leadId) patch.contact_lead_id = routing.leadId;
+    await syncLeadOwnerFromRouting(supabase, routing.leadId, routing.profile);
   }
 
   const query = existing
@@ -191,7 +308,29 @@ export async function upsertWhatsAppConversation(supabase, {
         created_at: nowIso,
       });
 
-  const { data, error } = await query.select('*').single();
+  let { data, error } = await query.select('*').single();
+  if (error && isMissingWhatsAppChannelsSchema(error)) {
+    const {
+      channel_id,
+      last_inbound_channel_id,
+      last_outbound_channel_id,
+      contact_lead_id,
+      ...legacyPatch
+    } = patch;
+    void channel_id;
+    void last_inbound_channel_id;
+    void last_outbound_channel_id;
+    void contact_lead_id;
+
+    const legacyQuery = existing
+      ? supabase.from('whatsapp_conversations').update(legacyPatch).eq('wa_id', cleanWaId)
+      : supabase.from('whatsapp_conversations').insert({
+          status: 'open',
+          ...legacyPatch,
+          created_at: nowIso,
+        });
+    ({ data, error } = await legacyQuery.select('*').single());
+  }
   if (error && isMissingWhatsappConversationsTable(error)) {
     return { data: null, error: null, available: false };
   }

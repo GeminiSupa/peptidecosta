@@ -9,6 +9,7 @@ import {
   normalizeWaId,
   upsertWhatsAppConversation,
 } from '@/lib/whatsappConversations.mjs';
+import { isMissingWhatsAppChannelsSchema } from '@/lib/whatsappChannels.mjs';
 
 export const runtime = 'nodejs';
 
@@ -74,6 +75,83 @@ async function fetchRoutableAgents(supabase) {
       is_superadmin: Boolean(profile.is_superadmin),
     }))
     .filter((profile) => profile.user_id && (profile.email || profile.name));
+}
+
+async function fetchWhatsAppChannels(supabase) {
+  const { data, error } = await supabase
+    .from('whatsapp_channels')
+    .select('id, phone_number_id, waba_id, display_phone_number, name, source, status')
+    .eq('status', 'active')
+    .order('name', { ascending: true });
+
+  if (error && isMissingWhatsAppChannelsSchema(error)) return [];
+  if (error) throw error;
+  return (data || []).filter((channel) => channel.phone_number_id !== 'legacy-default');
+}
+
+async function syncLinkedCrmOwner(supabase, auth, conversation, action, agent, reason = '') {
+  const leadId = conversation?.contact_lead_id;
+  if (!leadId) return;
+
+  const { data: lead, error: leadError } = await supabase
+    .from('catalog_leads')
+    .select('id, sales_agent')
+    .eq('id', leadId)
+    .maybeSingle();
+  if (leadError) throw leadError;
+  if (!lead) return;
+
+  const previousOwner = String(lead.sales_agent || '').trim();
+  const newOwner = agent ? String(agent.name || agent.email || '').trim() : '';
+  if (previousOwner === newOwner) return;
+
+  if (action === 'claim' && previousOwner) {
+    throw new Error(`This CRM contact already belongs to ${previousOwner}.`);
+  }
+  if ((action === 'transfer' || action === 'release') && !auth.profile.is_superadmin) {
+    throw new Error('Only a superadmin can transfer or release an owned CRM contact.');
+  }
+  if (action === 'transfer' && !String(reason || '').trim()) {
+    throw new Error('A transfer reason is required.');
+  }
+
+  const now = new Date().toISOString();
+  let ownerUpdate = supabase
+    .from('catalog_leads')
+    .update({
+      sales_agent: newOwner || null,
+      ownership_updated_at: now,
+      ownership_updated_by: auth.profile.email || auth.user.email || null,
+      updated_at: now,
+    })
+    .eq('id', lead.id);
+  if (action === 'claim') ownerUpdate = ownerUpdate.is('sales_agent', null);
+  const { data: updatedLead, error: updateError } = await ownerUpdate
+    .select('id, sales_agent')
+    .maybeSingle();
+  if (updateError) throw updateError;
+  if (action === 'claim' && !updatedLead) {
+    const { data: winner } = await supabase
+      .from('catalog_leads')
+      .select('sales_agent')
+      .eq('id', lead.id)
+      .maybeSingle();
+    throw new Error(`This CRM contact was claimed by ${winner?.sales_agent || 'another agent'}.`);
+  }
+
+  const eventAction = newOwner
+    ? (previousOwner ? 'transferred' : 'claimed')
+    : 'unassigned';
+  const { error: eventError } = await supabase.from('lead_assignment_events').insert({
+    lead_id: lead.id,
+    action: eventAction,
+    previous_agent: previousOwner || null,
+    new_agent: newOwner || null,
+    reason: String(reason || '').trim() || 'Claimed from shared WhatsApp inbox',
+    actor_user_id: auth.user.id,
+    actor_email: auth.profile.email || auth.user.email || null,
+  });
+  if (eventError) throw eventError;
 }
 
 function chunkArray(items, size) {
@@ -148,11 +226,12 @@ export async function GET(request) {
     }
 
     const agents = await fetchRoutableAgents(supabase);
+    const channels = await fetchWhatsAppChannels(supabase);
 
     const waIds = conversations.map((conversation) => conversation.wa_id).filter(Boolean);
     const messages = await fetchConversationMessages(supabase, waIds, source);
 
-    return NextResponse.json({ available: true, conversations, messages, agents });
+    return NextResponse.json({ available: true, conversations, messages, agents, channels });
   } catch (err) {
     console.error('[admin/whatsapp-conversations] GET failed:', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
@@ -197,18 +276,30 @@ export async function PATCH(request) {
     }
 
     const patch = { updated_at: new Date().toISOString() };
+    let crmAgent = null;
+    const transferReason = String(body.reason || '').trim().slice(0, 500);
     if (action === 'claim') {
+      crmAgent = auth.profile;
       patch.assigned_to = auth.profile.user_id;
       patch.assigned_to_email = auth.profile.email || auth.user.email || null;
       patch.assigned_to_name = auth.profile.name || auth.profile.email || auth.user.email || null;
       patch.assigned_at = patch.updated_at;
       patch.status = conversation?.status === 'resolved' ? 'open' : (conversation?.status || 'open');
     } else if (action === 'release') {
+      if (!auth.profile.is_superadmin) {
+        return NextResponse.json({ error: 'Only a superadmin can release CRM ownership' }, { status: 403 });
+      }
       patch.assigned_to = null;
       patch.assigned_to_email = null;
       patch.assigned_to_name = null;
       patch.assigned_at = null;
     } else if (action === 'transfer') {
+      if (!auth.profile.is_superadmin) {
+        return NextResponse.json({ error: 'Only a superadmin can transfer CRM ownership' }, { status: 403 });
+      }
+      if (!transferReason) {
+        return NextResponse.json({ error: 'A transfer reason is required' }, { status: 400 });
+      }
       const assignedTo = String(body.assignedTo || '').trim();
       if (!assignedTo) return NextResponse.json({ error: 'assignedTo is required' }, { status: 400 });
 
@@ -223,6 +314,7 @@ export async function PATCH(request) {
         return NextResponse.json({ error: 'Choose an active agent with Sales WhatsApp access' }, { status: 400 });
       }
 
+      crmAgent = agent;
       patch.assigned_to = agent.user_id;
       patch.assigned_to_email = agent.email || null;
       patch.assigned_to_name = agent.name || agent.email || null;
@@ -234,6 +326,15 @@ export async function PATCH(request) {
       patch.status = status;
     } else {
       return NextResponse.json({ error: 'Valid action is required' }, { status: 400 });
+    }
+
+    if (action === 'claim' || action === 'release' || action === 'transfer') {
+      try {
+        await syncLinkedCrmOwner(supabase, auth, conversation, action, crmAgent, transferReason);
+      } catch (error) {
+        const conflict = /already belongs|was claimed|only a superadmin/i.test(error.message || '');
+        return NextResponse.json({ error: error.message }, { status: conflict ? 409 : 400 });
+      }
     }
 
     const { data, error } = await supabase

@@ -165,6 +165,7 @@ ALTER TABLE public.whatsapp_conversations ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow authenticated read whatsapp_conversations" ON public.whatsapp_conversations;
 DROP POLICY IF EXISTS "Allow authenticated update whatsapp_conversations" ON public.whatsapp_conversations;
+DROP POLICY IF EXISTS "Allow assigned WhatsApp inbox reads" ON public.whatsapp_conversations;
 
 CREATE POLICY "Allow assigned WhatsApp inbox reads"
 ON public.whatsapp_conversations

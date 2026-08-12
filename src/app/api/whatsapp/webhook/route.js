@@ -4,6 +4,7 @@ import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 import { buildWhatsAppCustomerContext } from '@/lib/whatsappAiContext';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { upsertWhatsAppConversation } from '@/lib/whatsappConversations.mjs';
+import { getInboundWhatsAppChannel, upsertWhatsAppChannel } from '@/lib/whatsappChannels.mjs';
 import {
   detectWhatsAppIntent,
   setWhatsAppSuppression,
@@ -61,6 +62,18 @@ export async function POST(request) {
       for (const change of changes) {
         const value = change?.value;
         if (!value) continue;
+
+        const inboundChannel = getInboundWhatsAppChannel(value, entry);
+        let channelId = null;
+        if (supabase && inboundChannel) {
+          const channelResult = await upsertWhatsAppChannel(supabase, inboundChannel);
+          if (channelResult.error) {
+            console.error('[WhatsApp Webhook] Failed to register receiving channel:', channelResult.error);
+          } else {
+            channelId = channelResult.data?.id || null;
+          }
+        }
+        const receivingPhoneNumberId = inboundChannel?.phoneNumberId || PHONE_NUMBER_ID;
 
         // ── Handle incoming messages ──
         const messages = value?.messages || [];
@@ -157,7 +170,9 @@ export async function POST(request) {
                 message_type: messageType,
                 direction: 'inbound',
                 source: 'cloud_api',
+                channel_id: channelId,
                 matched_order_id: matchedOrderId,
+                meta_message_id: msg.id || null,
                 raw_payload: body,
               });
 
@@ -171,6 +186,8 @@ export async function POST(request) {
               messageAt: receivedAt,
               direction: 'inbound',
               source: 'cloud_api',
+              channelId,
+              channelDisplayNumber: inboundChannel?.displayPhoneNumber || null,
               matchedOrderId,
               metadata: {
                 webhook_message_id: msg.id || null,
@@ -186,11 +203,11 @@ export async function POST(request) {
 
           // ── Forward notification to the support team ──
           const supportNotificationNumbers = ['50684046973', '50660604775', '18314715559'];
-          if (ACCESS_TOKEN && PHONE_NUMBER_ID && !supportNotificationNumbers.includes(waId)) {
+          if (ACCESS_TOKEN && receivingPhoneNumberId && !supportNotificationNumbers.includes(waId)) {
             const ownerLabel = routedConversation?.assigned_to_name || routedConversation?.assigned_to_email || 'Unassigned';
             const adminNotificationText = `🚨 *New Inbound Message*\n\n*From:* ${displayName || 'Unknown'} (+${waId})\n*Owner:* ${ownerLabel}\n*Find it:* Sales WhatsApp → ${ownerLabel === 'Unassigned' ? 'Unassigned' : ownerLabel}\n*Message:* ${messageText}`;
             supportNotificationNumbers.forEach((supportNumber) => fetch(
-              `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
+              `https://graph.facebook.com/v25.0/${receivingPhoneNumberId}/messages`,
               {
                 method: 'POST',
                 headers: {
@@ -220,9 +237,9 @@ export async function POST(request) {
             });
             const confirmation = isOptOut ? OPT_OUT_CONFIRMATION : OPT_IN_CONFIRMATION;
 
-            if (ACCESS_TOKEN && PHONE_NUMBER_ID) {
+            if (ACCESS_TOKEN && receivingPhoneNumberId) {
               try {
-                await fetch(`https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`, {
+                await fetch(`https://graph.facebook.com/v25.0/${receivingPhoneNumberId}/messages`, {
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${ACCESS_TOKEN}`,
@@ -243,6 +260,7 @@ export async function POST(request) {
                     message_type: 'text',
                     direction: 'outbound',
                     source: 'cloud_api',
+                    channel_id: channelId,
                     raw_payload: { compliance: intent },
                   });
                   await upsertWhatsAppConversation(supabase, {
@@ -250,6 +268,7 @@ export async function POST(request) {
                     displayName: 'System',
                     direction: 'outbound',
                     source: 'cloud_api',
+                    channelId,
                     metadata: { compliance: intent },
                   });
                 }
@@ -263,7 +282,7 @@ export async function POST(request) {
           }
 
           // ── Send auto-reply (within 24h service window — FREE) ──
-          if (ACCESS_TOKEN && PHONE_NUMBER_ID) {
+          if (ACCESS_TOKEN && receivingPhoneNumberId) {
             try {
               let aiAutoReply = !!process.env.GEMINI_API_KEY;
               let aiSystemPrompt = DEFAULT_WHATSAPP_AI_PROMPT;
@@ -435,7 +454,7 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
 
               // Send the reply via WhatsApp Cloud API
               const metaRes = await fetch(
-                `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
+                `https://graph.facebook.com/v25.0/${receivingPhoneNumberId}/messages`,
                 {
                   method: 'POST',
                   headers: {
@@ -464,6 +483,7 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
                   message_type: 'text',
                   direction: 'outbound',
                   source: 'cloud_api',
+                  channel_id: channelId,
                   matched_order_id: matchedOrderId,
                   meta_message_id: metaMessageId,
                   delivery_status: 'sent'
@@ -473,6 +493,7 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
                   displayName: displayName || (isAiGenerated ? 'AI Copilot' : 'Peptides Costa Rica'),
                   direction: 'outbound',
                   source: 'cloud_api',
+                  channelId,
                   matchedOrderId,
                   metadata: { meta_message_id: metaMessageId },
                 });

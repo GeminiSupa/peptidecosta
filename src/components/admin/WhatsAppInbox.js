@@ -314,6 +314,9 @@ const WaChatItem = ({
             </span>
           </div>
           <div className="admin-wa-chat-item-workflow">
+            <span className="admin-wa-owner-chip admin-wa-owner-chip--unassigned">
+              {chat.channelLabel}
+            </span>
             <span className={`admin-wa-owner-chip${isMine ? ' admin-wa-owner-chip--mine' : ''}${isUnassigned ? ' admin-wa-owner-chip--unassigned' : ''}`}>
               {ownerLabel}
             </span>
@@ -355,6 +358,7 @@ export default function WhatsAppInbox({
   whatsappMessages,
   whatsappConversations = [],
   whatsappAgents = [],
+  whatsappChannels = [],
   whatsappTemplates = [],
   conversationRoutingAvailable = true,
   conversationRoutingError = '',
@@ -384,6 +388,7 @@ export default function WhatsAppInbox({
   sendFeedback,
   onDismissSendFeedback,
   currentUserEmail,
+  isSuperadmin = false,
   onOpenCustomerProfile,
 }) {
   const isMobile = useIsMobileWa();
@@ -491,6 +496,17 @@ export default function WhatsAppInbox({
     return map;
   }, [whatsappConversations]);
 
+  const channelsById = useMemo(
+    () => new Map(whatsappChannels.map((channel) => [channel.id, channel])),
+    [whatsappChannels]
+  );
+
+  const getChannelLabel = useCallback((channelId) => {
+    const channel = channelsById.get(channelId);
+    if (!channel) return 'WhatsApp';
+    return channel.name || channel.display_phone_number || `WhatsApp ${String(channel.phone_number_id || '').slice(-4)}`;
+  }, [channelsById]);
+
   const chatsList = useMemo(() => {
     const chatsMap = new Map();
     whatsappConversations.forEach((conversation) => {
@@ -511,6 +527,7 @@ export default function WhatsAppInbox({
         isAiLast: false,
         stage: contactStageByPhone.get(waId) || contactStageByPhone.get(waId.slice(-8)) || 'Contact',
         conversation,
+        channelLabel: getChannelLabel(conversation.last_inbound_channel_id || conversation.channel_id),
         status: conversation.status || 'open',
       });
     });
@@ -547,6 +564,9 @@ export default function WhatsAppInbox({
         isAiLast: m.direction === 'outbound' && m.display_name === 'AI Copilot',
         stage: contactStageByPhone.get(waId) || contactStageByPhone.get(waId.slice(-8)) || 'Contact',
         conversation,
+        channelLabel: getChannelLabel(
+          conversation?.last_inbound_channel_id || m.channel_id || conversation?.channel_id
+        ),
         status: conversation?.status || 'open',
       });
     });
@@ -554,7 +574,7 @@ export default function WhatsAppInbox({
     return Array.from(chatsMap.values()).sort(
       (a, b) => new Date(b.lastMessageAt) - new Date(a.lastMessageAt)
     );
-  }, [contactNamesByPhone, contactStageByPhone, conversationsByWaId, whatsappConversations, whatsappMessages]);
+  }, [contactNamesByPhone, contactStageByPhone, conversationsByWaId, getChannelLabel, whatsappConversations, whatsappMessages]);
 
   // A chat has "unseen" inbound messages when lastInboundAt > the timestamp stored in seenMap
   const hasUnread = useCallback((chat) => {
@@ -633,7 +653,9 @@ export default function WhatsAppInbox({
     setConversationActionError('');
     setConversationActionWaId(waId);
     try {
-      await onConversationAction(waId, 'transfer', { assignedTo });
+      const reason = window.prompt('Why is this CRM contact being transferred?') || '';
+      if (!reason.trim()) return;
+      await onConversationAction(waId, 'transfer', { assignedTo, reason });
       setSelectedTransferAgent('');
       setShowContactActions(false);
     } catch (err) {
@@ -679,7 +701,7 @@ export default function WhatsAppInbox({
     } finally {
       setConversationActionWaId(null);
     }
-  }, [conversationRoutingAvailable, onConversationAction]);
+  }, [conversationRoutingAvailable, onConversationAction, setActiveChatWaId]);
 
   const chatPassesInboxFilter = useCallback((chat) => {
     if (inboxFilter === 'urgent') return chat.status !== 'resolved' && chat.direction === 'inbound' && getReplyWindow(chat.lastInboundAt, now).state === 'urgent';
@@ -1326,6 +1348,11 @@ export default function WhatsAppInbox({
                 {currentChat && (
                   <span className={`admin-wa-stage admin-wa-stage--${currentChat.stage.toLowerCase()}`}>{currentChat.stage}</span>
                 )}
+                {currentChat?.channelLabel && (
+                  <span className="admin-wa-owner-chip admin-wa-owner-chip--unassigned">
+                    Via {currentChat.channelLabel}
+                  </span>
+                )}
                 {currentChatIsResolved && (
                   <span className="admin-wa-owner-chip admin-wa-owner-chip--unassigned">
                     Resolved
@@ -1338,7 +1365,7 @@ export default function WhatsAppInbox({
                   <button type="button" className="admin-wa-inline-action" onClick={() => assignConversationOwner(activeChatWaId)} disabled={conversationActionWaId === activeChatWaId}>
                     {conversationActionWaId === activeChatWaId ? 'Claiming...' : 'Claim'}
                   </button>
-                ) : currentChatIsMine ? (
+                ) : currentChatIsMine && isSuperadmin ? (
                   <button type="button" className="admin-wa-inline-action admin-wa-inline-action--muted" onClick={() => releaseConversationOwner(activeChatWaId)} disabled={conversationActionWaId === activeChatWaId}>
                     {conversationActionWaId === activeChatWaId ? 'Releasing...' : 'Release'}
                   </button>
@@ -1445,6 +1472,9 @@ export default function WhatsAppInbox({
                           {msg.message_text}
                         </div>
                         <div className="admin-wa-bubble-footer">
+                          {msg.channel_id && (
+                            <span title="Company WhatsApp number">{getChannelLabel(msg.channel_id)}</span>
+                          )}
                           <span className="admin-wa-bubble-time">
                             {new Date(msg.created_at).toLocaleTimeString([], {
                               hour: '2-digit',
@@ -1783,7 +1813,7 @@ export default function WhatsAppInbox({
                   <span><UserRound size={20} /></span>
                   <div><strong>Claim conversation</strong><small>Move this chat into your mobile work queue.</small></div>
                 </button>
-              ) : currentChatIsMine ? (
+              ) : currentChatIsMine && isSuperadmin ? (
                 <button type="button" className="admin-wa-action-row" onClick={() => {
                   releaseConversationOwner(activeChatWaId);
                   setShowContactActions(false);
@@ -1792,7 +1822,7 @@ export default function WhatsAppInbox({
                   <div><strong>Release conversation</strong><small>Return it to the open queue for another agent.</small></div>
                 </button>
               ) : null}
-              {whatsappAgents.length > 0 && (
+              {isSuperadmin && whatsappAgents.length > 0 && (
                 <div className="admin-wa-action-row">
                   <span><UserRound size={20} /></span>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>

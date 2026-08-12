@@ -5,6 +5,7 @@ import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { isWhatsAppSuppressed } from '@/lib/whatsappCompliance';
 import { upsertWhatsAppConversation } from '@/lib/whatsappConversations.mjs';
+import { resolveOutboundWhatsAppChannel } from '@/lib/whatsappChannels.mjs';
 import {
   buildWhatsAppTemplateComponents,
   getWhatsAppTemplateDefinition,
@@ -22,7 +23,15 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   try {
-    const { to, templateId, values = {}, customerName = null, orderId = null, sessionId = null } = await request.json();
+    const {
+      to,
+      templateId,
+      values = {},
+      customerName = null,
+      orderId = null,
+      sessionId = null,
+      channelId = null,
+    } = await request.json();
     const template = getWhatsAppTemplateDefinition(templateId);
     if (!template) return jsonError('Choose an approved WhatsApp template.', 400);
 
@@ -32,12 +41,12 @@ export async function POST(request) {
     }
 
     const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const supabase = getSupabaseAdmin();
+    const outboundChannel = await resolveOutboundWhatsAppChannel(supabase, { channelId });
+    const phoneNumberId = outboundChannel.phoneNumberId;
     if (!accessToken || !phoneNumberId) {
       return jsonError('Meta WhatsApp credentials are not configured on the server.', 500);
     }
-
-    const supabase = getSupabaseAdmin();
     if (await isWhatsAppSuppressed(supabase, cleanPhone)) {
       return jsonError('This customer has opted out of WhatsApp messages.', 409);
     }
@@ -91,6 +100,7 @@ export async function POST(request) {
       message_type: 'template',
       direction: 'outbound',
       source: 'cloud_api',
+      channel_id: outboundChannel.channelId,
       matched_order_id: orderId || null,
       raw_payload: {
         ...metaData,
@@ -114,6 +124,7 @@ export async function POST(request) {
       direction: 'outbound',
       matchedOrderId: orderId || null,
       source: 'cloud_api',
+      channelId: outboundChannel.channelId,
       metadata: {
         session_id: sessionId || null,
         meta_message_id: messageId,
@@ -133,6 +144,8 @@ export async function POST(request) {
         language: template.language,
       },
       messageText,
+      channelId: outboundChannel.channelId,
+      phoneNumberId,
     });
   } catch (err) {
     console.error('[admin/whatsapp-template] Unexpected crash:', err);

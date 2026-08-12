@@ -503,6 +503,7 @@ export default function AdminPage() {
   const [whatsappMessages, setWhatsappMessages] = useState([]);
   const [whatsappConversations, setWhatsappConversations] = useState([]);
   const [whatsappAgents, setWhatsappAgents] = useState([]);
+  const [whatsappChannels, setWhatsappChannels] = useState([]);
   const [whatsappConversationRoutingAvailable, setWhatsappConversationRoutingAvailable] = useState(true);
   const [whatsappConversationLoadError, setWhatsappConversationLoadError] = useState('');
   const [loadingWhatsappMessages, setLoadingWhatsappMessages] = useState(true);
@@ -698,6 +699,10 @@ Please draft a perfect next response to this customer. Match their language (Spa
     });
 
     try {
+      const activeConversation = whatsappConversations.find(
+        (conversation) => String(conversation.wa_id || '').replace(/\D/g, '') === activeChatWaId
+      );
+      const channelId = activeConversation?.last_inbound_channel_id || activeConversation?.channel_id || null;
       const res = await adminFetch('/api/admin/whatsapp-template', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -706,6 +711,7 @@ Please draft a perfect next response to this customer. Match their language (Spa
           templateId,
           values,
           customerName: values.customerName || 'Peptides Customer',
+          channelId,
         }),
       });
       const data = await res.json();
@@ -739,6 +745,10 @@ Please draft a perfect next response to this customer. Match their language (Spa
 
     // Optimistically insert message into UI state thread
     const tempId = `temp-${Date.now()}`;
+    const activeConversation = whatsappConversations.find(
+      (conversation) => String(conversation.wa_id || '').replace(/\D/g, '') === activeChatWaId
+    );
+    const channelId = activeConversation?.last_inbound_channel_id || activeConversation?.channel_id || null;
     const optimisticMessage = {
       id: tempId,
       wa_id: activeChatWaId,
@@ -747,6 +757,7 @@ Please draft a perfect next response to this customer. Match their language (Spa
       media_url: mediaUrl,
       message_type: mediaUrl ? 'image' : 'text',
       direction: 'outbound',
+      channel_id: channelId,
       created_at: new Date().toISOString()
     };
     
@@ -760,7 +771,8 @@ Please draft a perfect next response to this customer. Match their language (Spa
           to: activeChatWaId,
           message: textToSend,
           mediaUrl: mediaUrl,
-          customerName: 'Peptides Customer'
+          customerName: 'Peptides Customer',
+          channelId,
         })
       });
 
@@ -2214,6 +2226,7 @@ Core Rules:
       setWhatsappMessages([]);
       setWhatsappConversations([]);
       setWhatsappAgents([]);
+      setWhatsappChannels([]);
       return;
     }
 
@@ -2595,6 +2608,7 @@ Core Rules:
         setWhatsappConversations(data.conversations || []);
         setWhatsappMessages(data.messages || []);
         setWhatsappAgents(data.agents || []);
+        setWhatsappChannels(data.channels || []);
       } catch (err) {
         console.error("Failed to load WhatsApp conversations:", err);
         setWhatsappConversationRoutingAvailable(err.routingAvailable !== false);
@@ -2602,6 +2616,7 @@ Core Rules:
         setWhatsappConversations([]);
         setWhatsappMessages([]);
         setWhatsappAgents([]);
+        setWhatsappChannels([]);
       }
     } else {
       setWhatsappConversationRoutingAvailable(false);
@@ -2609,6 +2624,7 @@ Core Rules:
       setWhatsappConversations([]);
       setWhatsappMessages([]);
       setWhatsappAgents([]);
+      setWhatsappChannels([]);
     }
     setLoadingWhatsappMessages(false);
   };
@@ -2649,6 +2665,7 @@ Core Rules:
       setWhatsappConversations(data.conversations || []);
       setWhatsappMessages(data.messages || []);
       setWhatsappAgents(data.agents || []);
+      setWhatsappChannels(data.channels || []);
     } catch (err) {
       // A failed background poll must stay invisible; the next tick retries.
       console.warn('WhatsApp inbox auto-refresh failed:', err.message);
@@ -6503,6 +6520,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 whatsappMessages={whatsappMessages.filter(m => getWhatsAppMessageSource(m) === 'baileys_session')}
                 whatsappConversations={whatsappConversations}
                 whatsappAgents={whatsappAgents}
+                whatsappChannels={whatsappChannels}
                 whatsappTemplates={APPROVED_WHATSAPP_AGENT_TEMPLATES}
                 conversationRoutingAvailable={whatsappConversationRoutingAvailable}
                 conversationRoutingError={whatsappConversationLoadError}
@@ -6532,6 +6550,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 sendFeedback={baileysSendFeedback}
                 onDismissSendFeedback={() => setBaileysSendFeedback({ status: 'idle', message: '' })}
                 currentUserEmail={loggedInEmail.current}
+                isSuperadmin={Boolean(adminProfile?.is_superadmin)}
                 onOpenCustomerProfile={openCustomerProfileHandoff}
               />
             </div>
@@ -6737,6 +6756,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               whatsappMessages={whatsappMessages}
               whatsappConversations={whatsappConversations}
               whatsappAgents={whatsappAgents}
+              whatsappChannels={whatsappChannels}
               whatsappTemplates={APPROVED_WHATSAPP_AGENT_TEMPLATES}
               conversationRoutingAvailable={whatsappConversationRoutingAvailable}
               conversationRoutingError={whatsappConversationLoadError}
@@ -6766,6 +6786,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               sendingMessage={liveWaSendFeedback.status === 'sending'}
               onDismissSendFeedback={() => setLiveWaSendFeedback({ status: 'idle', message: '' })}
               currentUserEmail={loggedInEmail.current}
+              isSuperadmin={Boolean(adminProfile?.is_superadmin)}
               onOpenCustomerProfile={openCustomerProfileHandoff}
             />
             <div className="admin-whatsapp-analytics-shell">

@@ -21,7 +21,7 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   try {
-    const { to, message, customerName, orderId, sessionId, mediaUrl } = await request.json();
+    const { to, message, customerName, orderId, sessionId, mediaUrl, channelId } = await request.json();
 
     const result = await sendWhatsAppMessage({
       to,
@@ -30,6 +30,7 @@ export async function POST(request) {
       customerName,
       orderId,
       sessionId,
+      channelId,
       supabase,
     });
 
@@ -37,7 +38,12 @@ export async function POST(request) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
-    return NextResponse.json({ success: true, messageId: result.messageId });
+    return NextResponse.json({
+      success: true,
+      messageId: result.messageId,
+      channelId: result.channelId,
+      phoneNumberId: result.phoneNumberId,
+    });
   } catch (err) {
     console.error('[WhatsApp Outbound] Unexpected crash in POST send handler:', err);
     return NextResponse.json({ error: 'Internal Server Error', details: err.message }, { status: 500 });
