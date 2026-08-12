@@ -2,9 +2,10 @@
 -- cannot express "leads only", and a boolean also cannot survive the cron,
 -- which re-reads the campaign row for every batch after the first.
 --
---   subscribers  newsletter/catalog-gate signups only
---   leads        CRM lead emails only
---   all          both
+--   subscribers      newsletter/catalog-gate signups only
+--   non_subscribers  lead emails that never signed up through a form
+--   leads            every lead email, including people who also signed up
+--   all              everyone
 --
 -- include_leads stays in sync so anything still reading it keeps working.
 -- Safe to run more than once.
@@ -16,7 +17,7 @@ DO $$
 BEGIN
   ALTER TABLE public.email_campaigns
     ADD CONSTRAINT email_campaigns_audience_scope_check
-    CHECK (audience_scope IN ('subscribers', 'leads', 'all'));
+    CHECK (audience_scope IN ('subscribers', 'non_subscribers', 'leads', 'all'));
 EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;

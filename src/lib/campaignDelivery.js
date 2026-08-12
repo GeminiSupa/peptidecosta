@@ -16,11 +16,18 @@ import {
   normalizeAudienceScope,
   resolveCampaignAudience,
   scopeIncludesLeads,
+  subscriberMatchesScope,
 } from '@/lib/campaignAudience.mjs';
 import { classifySmtpFailure } from '@/lib/marketingDelivery.mjs';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 const LEAD_UPSERT_CHUNK_SIZE = 500;
+const AUDIENCE_LABELS = {
+  subscribers: 'Newsletter subscribers only',
+  non_subscribers: 'Non-subscribers only',
+  leads: 'CRM leads only',
+  all: 'Everyone with an email',
+};
 // A batch that sends nothing is almost always a provider outage or a bad
 // sender credential. Backing off keeps the 5-minute cron from hammering SMTP.
 const NO_PROGRESS_RETRY_MINUTES = 30;
@@ -489,7 +496,7 @@ async function applyAudienceSelection(supabase, campaign, audience) {
       // Without the column the scope cannot be stored, and "leads" would be
       // read back as include_leads=true — i.e. EVERYONE. Refuse rather than
       // quietly mail a wider audience than the sender chose.
-      if (scope === 'leads') {
+      if (scope === 'leads' || scope === 'non_subscribers') {
         throw new CampaignDeliveryError(
           'Sending to CRM leads only needs database setup first. Run add-campaign-audience-scope.sql, then try again.',
           503,
@@ -549,13 +556,22 @@ export async function deliverCampaign(campaignId, options = {}) {
 
   const blocked = new Set((suppressions || []).map(item => String(item.identity || '').trim().toLowerCase()));
   let targets = subscribers.filter(item => !blocked.has(String(item.email || '').trim().toLowerCase()));
-  // "Leads only" is a subset of email_subscribers, because a lead's address is
-  // copied in there before it can be mailed. Match on the address rather than
-  // the crm_lead tag: a lead who signed up through the catalog gate first
-  // already has a subscriber row, and that row never gets the tag.
-  if (audienceScope === 'leads' && leadEmails) {
-    targets = targets.filter(item => leadEmails.has(String(item.email || '').trim().toLowerCase()));
-    if (!targets.length) throw new CampaignDeliveryError('No CRM lead has a usable email address for this campaign.', 400);
+  // Every group is a slice of email_subscribers, because a lead's address is
+  // copied in there before it can be mailed. See subscriberMatchesScope for how
+  // the four are told apart — notably "leads" matches on the address while
+  // "non_subscribers" matches on the source stamp, so someone who signed up
+  // AND is a lead counts for the first but not the second.
+  if (audienceScope !== 'all') {
+    const before = targets.length;
+    targets = targets.filter(item => subscriberMatchesScope(
+      item,
+      audienceScope,
+      leadEmails ? leadEmails.has(String(item.email || '').trim().toLowerCase()) : false,
+    ));
+    if (!targets.length) {
+      const label = AUDIENCE_LABELS[audienceScope] || audienceScope;
+      throw new CampaignDeliveryError(`No recipient matches "${label}" for this campaign (checked ${before} address${before === 1 ? '' : 'es'}).`, 400);
+    }
   }
   if (!targets.length) throw new CampaignDeliveryError('Every subscriber in this segment is suppressed.', 400);
   const totalEligible = targets.length;

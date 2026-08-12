@@ -8,6 +8,7 @@ import {
   resolveCampaignAudience,
   scopeIncludesLeads,
   scopeIncludesSubscribers,
+  subscriberMatchesScope,
 } from '../src/lib/campaignAudience.mjs';
 
 test('an unsaved "Subscribers + CRM leads" pick beats the saved campaign row', () => {
@@ -127,4 +128,53 @@ test('an old campaign row keeps sending to everyone, not just subscribers', () =
 test('re-sending the same scope needs no campaign write', () => {
   const saved = { audience_scope: 'leads', include_leads: true, target_tags: null };
   assert.equal(resolveCampaignAudience(saved, { scope: 'leads', targetTags: null }).changed, false);
+});
+
+test('the four groups slice the subscriber table correctly', () => {
+  const signup = { email: 'ana@example.com', source: 'catalog_gate' };
+  const copiedLead = { email: 'lead@example.com', source: 'crm_lead' };
+  // Signed up through a form AND present in the lead table.
+  const both = { email: 'both@example.com', source: 'newsletter_form' };
+
+  // subscribers: genuine signups only
+  assert.equal(subscriberMatchesScope(signup, 'subscribers', false), true);
+  assert.equal(subscriberMatchesScope(both, 'subscribers', true), true);
+  assert.equal(subscriberMatchesScope(copiedLead, 'subscribers', true), false);
+
+  // non_subscribers: only rows copied in from the lead table
+  assert.equal(subscriberMatchesScope(copiedLead, 'non_subscribers', true), true);
+  assert.equal(subscriberMatchesScope(signup, 'non_subscribers', false), false);
+  assert.equal(subscriberMatchesScope(both, 'non_subscribers', true), false);
+
+  // leads: anyone whose address is in the lead table, however they got here
+  assert.equal(subscriberMatchesScope(copiedLead, 'leads', true), true);
+  assert.equal(subscriberMatchesScope(both, 'leads', true), true);
+  assert.equal(subscriberMatchesScope(signup, 'leads', false), false);
+
+  // all: everyone
+  for (const person of [signup, copiedLead, both]) {
+    assert.equal(subscriberMatchesScope(person, 'all', true), true);
+  }
+});
+
+test('"subscribers only" cannot drift once leads are copied in', () => {
+  // The bug this guards: after any campaign that included leads, the subscriber
+  // table holds both, and a naive "everyone subscribed" read would mail all.
+  const copiedLead = { email: 'lead@example.com', source: 'crm_lead', status: 'subscribed' };
+  assert.equal(subscriberMatchesScope(copiedLead, 'subscribers', false), false);
+});
+
+test('every lead-derived group triggers the lead copy', () => {
+  assert.equal(scopeIncludesLeads('non_subscribers'), true);
+  assert.equal(scopeIncludesLeads('leads'), true);
+  assert.equal(scopeIncludesLeads('all'), true);
+  assert.equal(scopeIncludesLeads('subscribers'), false);
+});
+
+test('non_subscribers survives a round trip through the scope resolver', () => {
+  const saved = { audience_scope: 'subscribers', include_leads: false, target_tags: null };
+  const resolved = resolveCampaignAudience(saved, { scope: 'non_subscribers', targetTags: null });
+  assert.equal(resolved.scope, 'non_subscribers');
+  assert.equal(resolved.includeLeads, true);
+  assert.equal(resolved.changed, true);
 });

@@ -27,10 +27,20 @@ function normalizeTargetTags(tags) {
   return Array.isArray(tags) && tags.length ? tags : null;
 }
 
-export const AUDIENCE_SCOPES = ['subscribers', 'leads', 'all'];
+export const AUDIENCE_SCOPES = ['subscribers', 'non_subscribers', 'leads', 'all'];
+
+// A lead's address is copied into email_subscribers before it can be mailed,
+// and the copied row is stamped with this source. It is the only durable way to
+// tell the two apart afterwards: once a campaign has run, the subscriber table
+// holds both, and "who signed up" cannot be recomputed from the list itself.
+export const CRM_LEAD_SOURCE = 'crm_lead';
+
+export function subscriberIsFromLead(subscriber) {
+  return String(subscriber?.source || '').trim().toLowerCase() === CRM_LEAD_SOURCE;
+}
 
 /**
- * The three recipient groups, resolved from whichever field a caller has.
+ * The four recipient groups, resolved from whichever field a caller has.
  *
  * `audience_scope` is authoritative; `include_leads` is the older boolean and
  * only says whether leads were in or out, so it can never mean "leads only".
@@ -41,12 +51,37 @@ export function normalizeAudienceScope(value, fallbackIncludeLeads = false) {
   return fallbackIncludeLeads ? 'all' : 'subscribers';
 }
 
+/** Whether the lead table has to be copied into subscribers for this send. */
 export function scopeIncludesLeads(scope) {
-  return scope === 'leads' || scope === 'all';
+  return scope === 'leads' || scope === 'non_subscribers' || scope === 'all';
 }
 
 export function scopeIncludesSubscribers(scope) {
   return scope === 'subscribers' || scope === 'all';
+}
+
+/**
+ * Whether one subscriber row belongs in this scope.
+ *
+ * `isLeadAddress` is membership of the CRM lead table by email; `subscriber`
+ * carries the source stamp. A person can be both — signed up through the form
+ * AND present as a lead — which is what separates `leads` from
+ * `non_subscribers`.
+ */
+export function subscriberMatchesScope(subscriber, scope, isLeadAddress) {
+  switch (scope) {
+    case 'subscribers':
+      // Genuine signups only. Without this, the first campaign that included
+      // leads would leave "subscribers only" quietly meaning everyone.
+      return !subscriberIsFromLead(subscriber);
+    case 'non_subscribers':
+      return subscriberIsFromLead(subscriber);
+    case 'leads':
+      return Boolean(isLeadAddress);
+    case 'all':
+    default:
+      return true;
+  }
 }
 
 // Marketing Studio keeps the audience radio and the audience tag in local state

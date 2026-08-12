@@ -24,7 +24,15 @@ const AUDIENCE_CHOICES = [
     accent: '#10b981',
     activeBorder: 'rgba(52,211,153,0.55)',
     activeBackground: 'rgba(16,185,129,0.09)',
-    count: (subscribers) => `${subscribers} signed up through a form`,
+    hint: 'signed up through a form',
+  },
+  {
+    id: 'non_subscribers',
+    label: 'Non-subscribers only',
+    accent: '#fbbf24',
+    activeBorder: 'rgba(251,191,36,0.55)',
+    activeBackground: 'rgba(245,158,11,0.09)',
+    hint: 'never signed up through a form',
   },
   {
     id: 'leads',
@@ -32,7 +40,7 @@ const AUDIENCE_CHOICES = [
     accent: '#a78bfa',
     activeBorder: 'rgba(167,139,250,0.55)',
     activeBackground: 'rgba(139,92,246,0.09)',
-    count: (_subscribers, leads) => `${leads} lead${leads === 1 ? '' : 's'} with an email address`,
+    hint: 'every lead, including those who also subscribed',
   },
   {
     id: 'all',
@@ -40,7 +48,7 @@ const AUDIENCE_CHOICES = [
     accent: '#38bdf8',
     activeBorder: 'rgba(56,189,248,0.55)',
     activeBackground: 'rgba(14,165,233,0.09)',
-    count: (subscribers, leads) => `${subscribers + leads} unique recipients (${subscribers} subscribers + ${leads} leads)`,
+    hint: 'subscribers and leads, deduplicated',
   },
 ];
 const ACTUAL_SMTP_SENDER = 'info@peptidescostarica.net';
@@ -380,6 +388,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
   const [campaigns,         setCampaigns]         = useState([]);
   const [subscribers,       setSubscribers]       = useState([]);
   const [leadCandidates,    setLeadCandidates]    = useState([]);
+  const [leadEmailTotal,    setLeadEmailTotal]    = useState(0);
   const [selectedCampaignId, setSelectedCampaignId] = useState(editingCampaignId || '');
   const [subject,           setSubject]           = useState('');
   const [previewText,       setPreviewText]       = useState('');
@@ -654,6 +663,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       const data = await res.json();
       if (data.subscribers) setSubscribers(data.subscribers);
       if (data.lead_candidates) setLeadCandidates(data.lead_candidates);
+      setLeadEmailTotal(Number(data.lead_email_total) || 0);
     } catch (err) {
       console.error('Failed to fetch subscribers:', err);
     }
@@ -749,6 +759,8 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     const tags = targetSegment ? [targetSegment] : [];
     return subscribers.filter(sub => {
       if (sub.status !== 'subscribed') return false;
+      // Rows copied in from the lead table are not newsletter signups.
+      if (String(sub.source || '').toLowerCase() === 'crm_lead') return false;
       if (!tags.length) return true;
       return Array.isArray(sub.tags) && sub.tags.includes(tags[0]);
     });
@@ -762,11 +774,24 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     });
   }, [leadCandidates, targetSegment]);
 
+  // "CRM leads only" counts every lead address, including people who ALSO
+  // signed up, so it is larger than the not-yet-a-subscriber list the API
+  // returns. Only the server can enumerate that overlap, hence lead_email_total.
+  const allLeadCount = Math.max(leadEmailTotal, eligibleLeads.length);
+
+  const audienceCounts = useMemo(() => ({
+    subscribers: eligibleSubscribers.length,
+    non_subscribers: eligibleLeads.length,
+    leads: allLeadCount,
+    all: eligibleSubscribers.length + eligibleLeads.length,
+  }), [allLeadCount, eligibleLeads.length, eligibleSubscribers.length]);
+
   const estimatedAudience = useMemo(() => {
-    if (audienceScope === 'leads') return eligibleLeads;
+    if (audienceScope === 'non_subscribers') return eligibleLeads;
+    if (audienceScope === 'leads') return new Array(allLeadCount).fill(null);
     if (audienceScope === 'all') return [...eligibleSubscribers, ...eligibleLeads];
     return eligibleSubscribers;
-  }, [audienceScope, eligibleLeads, eligibleSubscribers]);
+  }, [allLeadCount, audienceScope, eligibleLeads, eligibleSubscribers]);
 
   const preflightItems = useMemo(() => {
     const activeSubject = selectedCampaign?.subject_line || subject;
@@ -943,14 +968,8 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       }
 
       const label = isTestBatch ? 'A/B test batch' : 'full campaign';
-      const audienceBreakdown = [
-        audienceScope === 'leads'
-          ? '- 0 newsletter subscribers (this send is CRM leads only)'
-          : `- ${eligibleSubscribers.length} newsletter subscriber${eligibleSubscribers.length === 1 ? '' : 's'}`,
-        audienceScope === 'subscribers'
-          ? '- 0 CRM leads (pick "CRM leads only" or "Everyone with an email" to include them)'
-          : `- ${eligibleLeads.length} CRM lead${eligibleLeads.length === 1 ? '' : 's'} (added as subscribers when this sends)`,
-      ].join('\n');
+      const chosen = AUDIENCE_CHOICES.find((choice) => choice.id === audienceScope);
+      const audienceBreakdown = `Group: ${chosen?.label || audienceScope}\n(${chosen?.hint || ''})`;
       if (!confirm(`Send ${label} to ${estimatedAudience.length} recipient${estimatedAudience.length === 1 ? '' : 's'}?\n\n${audienceBreakdown}`)) return;
 
       setIsSending(true);
@@ -1251,7 +1270,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
                     />
                     <span>
                       <strong style={{ display: 'block', color: '#f8fafc', fontSize: '13px' }}>{choice.label}</strong>
-                      <small style={{ color: '#94a3b8' }}>{choice.count(eligibleSubscribers.length, eligibleLeads.length)}</small>
+                      <small style={{ color: '#94a3b8' }}>{audienceCounts[choice.id]} recipient{audienceCounts[choice.id] === 1 ? '' : 's'} &middot; {choice.hint}</small>
                     </span>
                   </label>
                 );

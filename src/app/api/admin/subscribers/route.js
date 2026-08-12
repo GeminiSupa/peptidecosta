@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { leadSubscriberCandidates } from '@/lib/campaignAudience.mjs';
+import { emailFromLead, leadSubscriberCandidates } from '@/lib/campaignAudience.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +20,7 @@ export async function GET(request) {
 
     if (error) throw error;
     let leadCandidates = [];
+    let leadEmailTotal = 0;
     if (includeLeads) {
       const { data: leads, error: leadsError } = await supabaseAdmin
         .from('catalog_leads')
@@ -27,9 +28,17 @@ export async function GET(request) {
         .order('created_at', { ascending: false });
       if (leadsError) throw leadsError;
       leadCandidates = leadSubscriberCandidates(leads || [], data || []);
+      // Candidates are the leads NOT already in the subscriber table, which is
+      // the "non-subscribers" group. "CRM leads only" is larger: it includes
+      // the people who are both. The UI cannot derive that from the candidates.
+      leadEmailTotal = new Set((leads || []).map(emailFromLead).filter(Boolean)).size;
     }
 
-    return NextResponse.json({ subscribers: data, lead_candidates: leadCandidates });
+    return NextResponse.json({
+      subscribers: data,
+      lead_candidates: leadCandidates,
+      lead_email_total: leadEmailTotal,
+    });
   } catch (err) {
     console.error('Error fetching subscribers:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
