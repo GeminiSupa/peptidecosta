@@ -7,14 +7,11 @@ import { createUnsubscribeToken } from '@/lib/marketingTokens';
 import { MARKETING_FOOTER_MARKER, applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { clampOutlookButtonSizes, personalizeMergeTags, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
+import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
+const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
 
 export async function POST(request) {

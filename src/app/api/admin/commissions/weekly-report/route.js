@@ -26,17 +26,14 @@ import {
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
 import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
+import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 // Email Configuration from Environment variables
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
+const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
 const ADMIN_CC_EMAILS = process.env.COMMISSION_REPORT_ADMIN_EMAILS
   || 'info@peptidescostarica.net, omerforce@gmail.com';

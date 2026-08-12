@@ -8,6 +8,7 @@ import {
   isTrustpilotConfigured,
 } from '@/lib/trustpilot';
 import nodemailer from 'nodemailer';
+import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
@@ -68,11 +69,7 @@ export async function GET(request) {
 
     const trustpilotEnabled = isTrustpilotConfigured();
     const configStatus = getTrustpilotConfigStatus();
-    const SMTP_HOST = process.env.SMTP_HOST;
-    const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
-    const SMTP_SECURE = process.env.SMTP_SECURE !== 'false';
-    const SMTP_USER = process.env.SMTP_USER;
-    const SMTP_PASS = process.env.SMTP_PASS;
+    const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
 
     if (!trustpilotEnabled && (!SMTP_HOST || !SMTP_USER || !SMTP_PASS)) {
       return NextResponse.json({
