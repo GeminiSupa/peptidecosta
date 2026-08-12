@@ -6430,6 +6430,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             orders={orders}
             agentProfiles={agentProfiles}
             agents={agents}
+            adminProfile={adminProfile}
             loadingLeads={loadingLeads}
             loadAdminData={loadAdminData}
             setExportModalType={setExportModalType}
@@ -6865,6 +6866,33 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   <div>
                     <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Language</label>
                     <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontWeight: 'bold' }}>{currentLead.language ? currentLead.language.toUpperCase() : 'EN'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: CRM OWNERSHIP */}
+              <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.16)' }}>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#6ee7b7', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>CRM Ownership</h3>
+                <div className="admin-form-grid-2">
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Owning Agent</label>
+                    <span style={{ fontSize: '0.9rem', color: '#f8fafc', fontWeight: '800' }}>
+                      {currentLead.sales_agent || selectedLeadDetails.historyOwner || 'Unassigned'}
+                    </span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Company WhatsApp Line</label>
+                    <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{currentLead.source_whatsapp_number || 'Not recorded'}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Ownership Updated By</label>
+                    <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>{currentLead.ownership_updated_by || (selectedLeadDetails.historyOwner ? 'Order history' : 'Not recorded')}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Ownership Updated</label>
+                    <span style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
+                      {currentLead.ownership_updated_at ? new Date(currentLead.ownership_updated_at).toLocaleString() : 'Not recorded'}
+                    </span>
                   </div>
                 </div>
               </div>

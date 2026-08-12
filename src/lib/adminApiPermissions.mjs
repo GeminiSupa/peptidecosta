@@ -17,6 +17,7 @@ const rules = [
   { pattern: /^\/api\/admin\/deals(?:\/|$)/, permissions: ['deals'] },
   { pattern: /^\/api\/admin\/inquiries(?:\/|$)/, permissions: ['inquiries'] },
   { pattern: /^\/api\/admin\/live-chat(?:\/|$)/, permissions: ['live_chat'] },
+  { pattern: /^\/api\/admin\/leads(?:\/|$)/, permissions: ['leads'] },
   { pattern: /^\/api\/admin\/orders(?:\/|$)/, permissions: ['orders'] },
   { pattern: /^\/api\/order-shipped-notification$/, permissions: ['orders'] },
   { pattern: /^\/api\/admin\/products(?:\/|$)/, permissions: ['spreadsheet'] },

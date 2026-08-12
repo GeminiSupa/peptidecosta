@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { 
   Users, Trash2, Upload, Brain, Sparkles, 
-  Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp, Columns3, List, Clock, User, ChevronDown
+  Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp, Columns3, List, Clock, User, ChevronDown, UserPlus, Lock
 } from 'lucide-react';
 import {
   buildAgentHistory,
@@ -11,6 +11,7 @@ import {
   historicalAgentForLead,
 } from '@/lib/agentAttribution.mjs';
 import { leadContactPoints } from '@/lib/leadContact.mjs';
+import { adminFetch } from '@/lib/adminApi';
 
 const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill={color} style={style} {...props}>
@@ -23,6 +24,7 @@ export default function LeadsManager({
   orders = [],
   agentProfiles = [],
   agents = [],
+  adminProfile = null,
   loadingLeads,
   loadAdminData,
   setExportModalType,
@@ -60,6 +62,21 @@ export default function LeadsManager({
   setSelectedOrderDetails,
   onOpenCustomerProfile
 }) {
+
+  const currentAgentName = String(adminProfile?.name || adminProfile?.email || '').trim();
+  const isSuperadmin = Boolean(adminProfile?.is_superadmin);
+  const [addLeadOpen, setAddLeadOpen] = useState(false);
+  const [savingLead, setSavingLead] = useState(false);
+  const [claimingLeadId, setClaimingLeadId] = useState('');
+  const [leadFormError, setLeadFormError] = useState('');
+  const [leadForm, setLeadForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    sourceWhatsappNumber: '',
+    notes: '',
+    salesAgent: currentAgentName,
+  });
 
   const uniqueAreas = Array.from(new Set((leads || []).map(l => l.region || l.city).filter(Boolean))).sort();
 
@@ -149,7 +166,9 @@ export default function LeadsManager({
   // filteredAndSortedLeads dependency array both already referenced this; the
   // declaration itself was missing, so the tab threw "agentFilter is not
   // defined" before it could render a single row.
-  const [agentFilter, setAgentFilter] = useState('all');
+  const [agentFilter, setAgentFilter] = useState(
+    isSuperadmin || !currentAgentName ? 'all' : currentAgentName
+  );
 
   // Declared above filteredAndSortedLeads because the memo body calls it during
   // render — defined below, it would still be in its temporal dead zone.
@@ -174,42 +193,109 @@ export default function LeadsManager({
     };
   };
 
+  const saveLeadOwner = async (lead, salesAgent) => {
+    const agent = getLeadAgentState(lead);
+    const nextOwner = String(salesAgent || '').trim();
+    let reason = '';
+    if (isSuperadmin && agent.displayName !== 'Unassigned' && agent.displayName !== nextOwner) {
+      reason = window.prompt(`Why is this lead being transferred from ${agent.displayName} to ${nextOwner || 'Unassigned'}?`) || '';
+      if (!reason.trim()) return;
+    }
+
+    setClaimingLeadId(lead.id);
+    try {
+      const response = await adminFetch('/api/admin/leads', {
+        method: 'PATCH',
+        body: JSON.stringify({ leadId: lead.id, salesAgent: nextOwner, reason }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not update lead owner');
+      await loadAdminData?.();
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setClaimingLeadId('');
+    }
+  };
+
+  const submitLead = async (event) => {
+    event.preventDefault();
+    setSavingLead(true);
+    setLeadFormError('');
+    try {
+      const response = await adminFetch('/api/admin/leads', {
+        method: 'POST',
+        body: JSON.stringify(leadForm),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not add or claim lead');
+      window.alert(data.message || 'Lead saved.');
+      setAddLeadOpen(false);
+      setLeadForm({
+        name: '',
+        phone: '',
+        email: '',
+        sourceWhatsappNumber: '',
+        notes: '',
+        salesAgent: currentAgentName,
+      });
+      await loadAdminData?.();
+    } catch (error) {
+      setLeadFormError(error.message);
+    } finally {
+      setSavingLead(false);
+    }
+  };
+
   const renderLeadAgentControl = (lead, { compact = false } = {}) => {
     const agent = getLeadAgentState(lead);
 
-    if (!handleLeadFieldUpdate) {
+    if (isSuperadmin) {
       return (
-        <span className={`lead-agent-badge ${agent.state}`} title={agent.title}>
-          <User size={13} />
-          <span>{agent.displayName}</span>
-        </span>
+        <div className={`lead-agent-control ${agent.state}${compact ? ' compact' : ''}`}>
+          <div className="lead-agent-control-top">
+            <span className={`lead-agent-state ${agent.state}`}>{agent.label}</span>
+            {agent.automatic && !agent.claimed && <span className="lead-agent-auto-note">from orders</span>}
+          </div>
+          <label className="lead-agent-select-shell" title={agent.title}>
+            <User size={14} className="lead-agent-icon" />
+            <select
+              className="lead-agent-select"
+              value={agent.claimed}
+              disabled={claimingLeadId === lead.id}
+              onChange={(event) => saveLeadOwner(lead, event.target.value)}
+              aria-label="Lead agent"
+            >
+              <option value="">{agent.automatic ? `Auto - ${agent.automatic}` : 'Unassigned'}</option>
+              {agentOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+            <ChevronDown size={15} className="lead-agent-chevron" aria-hidden="true" />
+          </label>
+        </div>
+      );
+    }
+
+    if (agent.state === 'unassigned' && currentAgentName) {
+      return (
+        <button
+          type="button"
+          className="admin-btn admin-btn-secondary"
+          disabled={claimingLeadId === lead.id}
+          onClick={() => saveLeadOwner(lead, currentAgentName)}
+          style={{ padding: compact ? '5px 8px' : '7px 10px', fontSize: '0.75rem' }}
+        >
+          <UserPlus size={13} /> {claimingLeadId === lead.id ? 'Claiming…' : 'Claim lead'}
+        </button>
       );
     }
 
     return (
-      <div className={`lead-agent-control ${agent.state}${compact ? ' compact' : ''}`}>
-        <div className="lead-agent-control-top">
-          <span className={`lead-agent-state ${agent.state}`}>{agent.label}</span>
-          {agent.automatic && !agent.claimed && <span className="lead-agent-auto-note">from orders</span>}
-        </div>
-        <label className="lead-agent-select-shell" title={agent.title}>
-          <User size={14} className="lead-agent-icon" />
-          <select
-            className="lead-agent-select"
-            value={agent.claimed}
-            onChange={(event) => handleLeadFieldUpdate(lead.id, 'sales_agent', event.target.value || null)}
-            aria-label="Lead agent"
-          >
-            <option value="">
-              {agent.automatic ? `Auto - ${agent.automatic}` : 'Unassigned'}
-            </option>
-            {agentOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <ChevronDown size={15} className="lead-agent-chevron" aria-hidden="true" />
-        </label>
-      </div>
+      <span className={`lead-agent-badge ${agent.state}`} title={agent.title}>
+        {agent.displayName === currentAgentName ? <User size={13} /> : <Lock size={12} />}
+        <span>{agent.displayName === currentAgentName ? 'Mine' : agent.displayName}</span>
+      </span>
     );
   };
 
@@ -220,7 +306,11 @@ export default function LeadsManager({
       if (leadsSearch) {
         const q = leadsSearch.toLowerCase();
         const match = (
+          (l.name || '').toLowerCase().includes(q) ||
+          (l.email || '').toLowerCase().includes(q) ||
+          (l.phone || '').toLowerCase().includes(q) ||
           (l.contact_value || '').toLowerCase().includes(q) ||
+          (l.source_whatsapp_number || '').toLowerCase().includes(q) ||
           (l.city || '').toLowerCase().includes(q) ||
           (l.region || '').toLowerCase().includes(q) ||
           (l.country || '').toLowerCase().includes(q) ||
@@ -567,6 +657,17 @@ export default function LeadsManager({
         </div>
         
         <div className="admin-toolbar-actions">
+          <button
+            type="button"
+            className="admin-btn admin-btn-primary"
+            onClick={() => {
+              setLeadFormError('');
+              setAddLeadOpen(true);
+            }}
+            style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+          >
+            <UserPlus size={14} /> Claim or Add Lead
+          </button>
           {leads.length > 0 && (
             <button
               onClick={() => setExportModalType('leads')}
@@ -677,9 +778,10 @@ export default function LeadsManager({
           onChange={(e) => setAgentFilter(e.target.value)}
           style={{ flex: '0 1 140px', padding: '8px', fontSize: '0.85rem' }}
         >
-          <option value="all">All Agents</option>
+          <option value="all">{isSuperadmin ? 'All Agents' : 'All Visible Leads'}</option>
+          {!isSuperadmin && currentAgentName && <option value={currentAgentName}>My Leads</option>}
           <option value="unassigned">Unassigned</option>
-          {uniqueAgents.map((agent, i) => (
+          {uniqueAgents.filter((agent) => isSuperadmin || agent !== currentAgentName).map((agent, i) => (
             <option key={i} value={agent}>{agent}</option>
           ))}
         </select>
@@ -747,9 +849,11 @@ export default function LeadsManager({
           <button onClick={handleBulkLeadsWhatsApp} style={{ width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', gap: '4px', display: 'inline-flex', background: '#10b981', color: '#fff', border: 'none', cursor: 'pointer' }}>
             <MessageCircle size={12} /> WhatsApp
           </button>
-          <button onClick={handleBulkDeleteLeads} style={{ width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', gap: '4px', display: 'inline-flex', cursor: 'pointer' }}>
-            <Trash2 size={12} /> Delete
-          </button>
+          {isSuperadmin && (
+            <button onClick={handleBulkDeleteLeads} style={{ width: 'auto', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', gap: '4px', display: 'inline-flex', cursor: 'pointer' }}>
+              <Trash2 size={12} /> Delete
+            </button>
+          )}
         </div>
       )}
 
@@ -952,7 +1056,7 @@ export default function LeadsManager({
                           </span>
                         )}
                         {lead.contact_method === 'whatsapp' ? (
-                          <button 
+                          <button
                             onClick={() => openLeadOutreachComposer(lead, 'whatsapp')}
                             style={{
                               color: '#4ade80',
@@ -1181,13 +1285,15 @@ export default function LeadsManager({
                         >
                           Details
                         </button>
-                        <button 
-                          onClick={() => handleLeadDelete && handleLeadDelete(lead.id)}
-                          className="admin-btn admin-btn-danger"
-                          style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '6px', border: 'none' }}
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                        {isSuperadmin && (
+                          <button
+                            onClick={() => handleLeadDelete && handleLeadDelete(lead.id)}
+                            className="admin-btn admin-btn-danger"
+                            style={{ padding: '4px 8px', fontSize: '0.75rem', borderRadius: '6px', border: 'none' }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1218,6 +1324,85 @@ export default function LeadsManager({
           >
             Next
           </button>
+        </div>
+      )}
+
+      {addLeadOpen && (
+        <div className="modal active" onClick={() => !savingLead && setAddLeadOpen(false)} style={{ zIndex: 240 }}>
+          <div className="modal-content" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '620px' }}>
+            <button type="button" className="close-modal" onClick={() => setAddLeadOpen(false)} disabled={savingLead}>&times;</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <div style={{ padding: '9px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.13)', color: '#34d399' }}>
+                <UserPlus size={20} />
+              </div>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Claim or Add Lead</h2>
+                <p style={{ margin: '3px 0 0', color: '#94a3b8', fontSize: '0.78rem' }}>The CRM checks phone, email, existing ownership, and completed-order history before assigning anyone.</p>
+              </div>
+            </div>
+
+            <form onSubmit={submitLead} style={{ marginTop: '18px' }}>
+              <div className="manual-order-grid">
+                <input
+                  className="admin-input"
+                  placeholder="Customer name *"
+                  required
+                  value={leadForm.name}
+                  onChange={(event) => setLeadForm({ ...leadForm, name: event.target.value })}
+                />
+                <input
+                  className="admin-input"
+                  placeholder="WhatsApp number"
+                  value={leadForm.phone}
+                  onChange={(event) => setLeadForm({ ...leadForm, phone: event.target.value })}
+                />
+                <input
+                  className="admin-input"
+                  type="email"
+                  placeholder="Email"
+                  value={leadForm.email}
+                  onChange={(event) => setLeadForm({ ...leadForm, email: event.target.value })}
+                />
+                <input
+                  className="admin-input"
+                  placeholder="Company WhatsApp line used"
+                  value={leadForm.sourceWhatsappNumber}
+                  onChange={(event) => setLeadForm({ ...leadForm, sourceWhatsappNumber: event.target.value })}
+                />
+              </div>
+
+              {isSuperadmin && (
+                <select
+                  className="admin-select"
+                  value={leadForm.salesAgent}
+                  onChange={(event) => setLeadForm({ ...leadForm, salesAgent: event.target.value })}
+                  style={{ width: '100%', marginTop: '10px' }}
+                >
+                  <option value="">Assign to me</option>
+                  {agentOptions.map((agent) => <option key={agent} value={agent}>{agent}</option>)}
+                </select>
+              )}
+
+              <textarea
+                className="admin-input"
+                rows={4}
+                placeholder="Conversation notes, product interest, and next step"
+                value={leadForm.notes}
+                onChange={(event) => setLeadForm({ ...leadForm, notes: event.target.value })}
+                style={{ width: '100%', marginTop: '10px' }}
+              />
+
+              <div style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '8px', background: 'rgba(251, 191, 36, 0.08)', color: '#fbbf24', fontSize: '0.76rem', lineHeight: 1.45 }}>
+                Manual entry does not grant marketing consent. This person remains excluded from promotional WhatsApp campaigns unless they opt in separately.
+              </div>
+
+              {leadFormError && <p style={{ color: '#f87171', fontSize: '0.82rem', margin: '10px 0 0' }}>{leadFormError}</p>}
+
+              <button type="submit" className="admin-btn admin-btn-primary" disabled={savingLead} style={{ width: '100%', marginTop: '14px' }}>
+                <UserPlus size={15} /> {savingLead ? 'Checking ownership…' : 'Check & Save Lead'}
+              </button>
+            </form>
+          </div>
         </div>
       )}
 
