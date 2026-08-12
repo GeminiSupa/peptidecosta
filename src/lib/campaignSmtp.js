@@ -55,7 +55,21 @@ export function identifyCampaignSmtpProvider(host = '') {
   return 'SMTP';
 }
 
+// Campaign volume through the Rackspace mailbox is what got
+// info@peptidescostarica.net blocked for "Spam/Abuse Pattern Detected" on
+// 2026-08-12, after ~1,400 marketing emails went out in two hours. Rackspace
+// warned that a repeat may block the mailbox for good, which would take down
+// receiving for the whole business, not just sending.
+//
+// So campaigns now fail closed. When the campaign sender is rejected -- daily
+// cap, bad credentials, anything -- the send errors out visibly instead of
+// silently rerouting marketing through the shared inbox. Transactional mail
+// keeps its own SMTP_* fallback (see transactionalSmtp.js); only campaign
+// volume is barred. Set CAMPAIGN_SMTP_ALLOW_RACKSPACE_FALLBACK=true to opt
+// back in once the mailbox is provably safe for bulk again.
 export function getCampaignRackspaceFallbackSmtpConfig(primary) {
+  if (readEnv('CAMPAIGN_SMTP_ALLOW_RACKSPACE_FALLBACK') !== 'true') return null;
+
   const host = readEnv('SMTP_HOST');
   const port = Number(readEnv('SMTP_PORT') || 465);
   const user = readEnv('SMTP_USER');

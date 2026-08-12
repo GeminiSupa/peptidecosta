@@ -64,7 +64,13 @@ const identifySmtpProvider = (host = '') => {
   return 'SMTP';
 };
 
+// Cart recovery goes out on the campaign sender and reads as marketing to a
+// spam filter, so it is barred from the Rackspace mailbox for the same reason
+// campaigns are -- see getCampaignRackspaceFallbackSmtpConfig. Same opt-in flag
+// re-enables both together.
 const getRackspaceFallbackSmtpConfig = (primary) => {
+  if (String(process.env.CAMPAIGN_SMTP_ALLOW_RACKSPACE_FALLBACK || '').trim() !== 'true') return null;
+
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT || 465);
   const user = process.env.SMTP_USER;
