@@ -10,9 +10,14 @@ import {
   isCampaignRackspaceSmtp,
 } from '@/lib/campaignSmtp';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
-import { leadSubscriberCandidates } from '@/lib/campaignAudience.mjs';
+import { leadSubscriberCandidates, resolveCampaignAudience } from '@/lib/campaignAudience.mjs';
+import { classifySmtpFailure } from '@/lib/marketingDelivery.mjs';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
+const LEAD_UPSERT_CHUNK_SIZE = 500;
+// A batch that sends nothing is almost always a provider outage or a bad
+// sender credential. Backing off keeps the 5-minute cron from hammering SMTP.
+const NO_PROGRESS_RETRY_MINUTES = 30;
 
 function positiveInteger(value, fallback) {
   const parsed = Number.parseInt(value, 10);
@@ -95,6 +100,13 @@ function campaignSafetyConfig() {
     maxConnections: positiveInteger(
       process.env.EMAIL_CAMPAIGN_SMTP_CONNECTIONS,
       rackspace ? 1 : 5,
+    ),
+    // Vercel kills the function at `maxDuration` (300s). A batch that runs past
+    // that dies mid-loop, which used to strand the campaign in `sending`
+    // forever. Stop sending before the wall and let the cron pick up the rest.
+    sendBudgetMs: positiveInteger(
+      process.env.EMAIL_CAMPAIGN_SEND_BUDGET_MS,
+      240000,
     ),
   };
 }
@@ -398,20 +410,67 @@ async function addCampaignLeadSubscribers(supabase) {
   if (!candidates.length) return { added: 0 };
 
   const rows = candidates.map(({ id: _virtualId, ...candidate }) => candidate);
-  const { data, error } = await supabase
-    .from('email_subscribers')
-    .upsert(rows, { onConflict: 'email', ignoreDuplicates: true })
-    .select('id');
-  if (error) throw new CampaignDeliveryError(`Unable to add CRM lead emails to this campaign: ${error.message}`, 503);
-  return { added: data?.length || 0 };
+  // Thousands of leads in a single upsert can exceed the PostgREST request
+  // limit and fail the whole audience, so copy them across in chunks.
+  let added = 0;
+  for (let offset = 0; offset < rows.length; offset += LEAD_UPSERT_CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('email_subscribers')
+      .upsert(rows.slice(offset, offset + LEAD_UPSERT_CHUNK_SIZE), { onConflict: 'email', ignoreDuplicates: true })
+      .select('id');
+    if (error) throw new CampaignDeliveryError(`Unable to add CRM lead emails to this campaign: ${error.message}`, 503);
+    added += data?.length || 0;
+  }
+  return { added };
+}
+
+// A dead address that fails at SMTP is never written to campaign_sends, so the
+// cron would retry it every batch and the campaign could never reach "sent".
+// Retire it once: block it everywhere, and drop it out of future audiences.
+async function retireBouncedRecipient(supabase, subscriber, error) {
+  const identity = String(subscriber.email || '').trim().toLowerCase();
+  if (!identity) return;
+
+  const [suppression, statusUpdate] = await Promise.all([
+    supabase.from('marketing_suppressions').upsert({
+      identity,
+      channel: 'email',
+      reason: 'hard_bounce',
+      source: 'campaign_send',
+      active: true,
+      metadata: { detail: truncateError(error, 220) },
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'identity,channel' }),
+    supabase.from('email_subscribers').update({ status: 'bounced' }).eq('id', subscriber.id),
+  ]);
+
+  if (suppression.error) console.warn('[Campaign delivery] Could not suppress bounced address:', suppression.error.message);
+  if (statusUpdate.error) console.warn('[Campaign delivery] Could not mark subscriber bounced:', statusUpdate.error.message);
+}
+
+// Persist whatever audience the sender actually picked so this send and every
+// cron batch that follows target the same people. See resolveCampaignAudience.
+async function applyAudienceSelection(supabase, campaign, audience) {
+  const { includeLeads, targetTags, changed } = resolveCampaignAudience(campaign, audience);
+
+  if (changed) {
+    const { error } = await supabase
+      .from('email_campaigns')
+      .update({ include_leads: includeLeads, target_tags: targetTags, updated_at: new Date().toISOString() })
+      .eq('id', campaign.id);
+    if (error) throw new CampaignDeliveryError(`Unable to save the campaign audience before sending: ${error.message}`, 503);
+  }
+
+  return { ...campaign, include_leads: includeLeads, target_tags: targetTags };
 }
 
 export async function deliverCampaign(campaignId, options = {}) {
-  const { isTestBatch = false, sendWinner = false, winnerVariant = 'A' } = options;
+  const { isTestBatch = false, sendWinner = false, winnerVariant = 'A', audience = null } = options;
   const smtp = getCampaignSmtpConfig();
   const supabase = getSupabaseAdmin();
-  const { data: campaign, error: campaignError } = await supabase.from('email_campaigns').select('*').eq('id', campaignId).single();
-  if (campaignError || !campaign) throw new CampaignDeliveryError('Campaign not found', 404);
+  const { data: loadedCampaign, error: campaignError } = await supabase.from('email_campaigns').select('*').eq('id', campaignId).single();
+  if (campaignError || !loadedCampaign) throw new CampaignDeliveryError('Campaign not found', 404);
+  let campaign = loadedCampaign;
   if (!campaign.subject_line || !campaign.html_content) throw new CampaignDeliveryError('Campaign must have a subject and saved email body before sending', 400);
   if (!smtp.configured) throw new CampaignDeliveryError('Campaign email sender credentials are not configured', 500);
   if (campaign.status === 'sending') throw new CampaignDeliveryError('Campaign is already sending', 409);
@@ -420,6 +479,8 @@ export async function deliverCampaign(campaignId, options = {}) {
   if (campaign.status === 'scheduled' && campaign.scheduled_for && new Date(campaign.scheduled_for).getTime() > Date.now()) {
     throw new CampaignDeliveryError(`Campaign is scheduled for ${new Date(campaign.scheduled_for).toLocaleString()}`, 409);
   }
+
+  if (audience && !sendWinner) campaign = await applyAudienceSelection(supabase, campaign, audience);
 
   if (campaign.include_leads) await addCampaignLeadSubscribers(supabase);
 
@@ -464,7 +525,13 @@ export async function deliverCampaign(campaignId, options = {}) {
 
   const claimedStatus = isTestBatch ? 'testing' : 'sending';
   const { data: claimed, error: claimError } = await supabase.from('email_campaigns')
-    .update({ status: claimedStatus, scheduled_for: null, sent_at: campaign.sent_at || new Date().toISOString() })
+    .update({
+      status: claimedStatus,
+      scheduled_for: null,
+      sent_at: campaign.sent_at || new Date().toISOString(),
+      // Stamped so the cron can tell a live batch from one whose function died.
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', campaignId)
     .eq('status', campaign.status)
     .select('id');
@@ -494,12 +561,20 @@ export async function deliverCampaign(campaignId, options = {}) {
   const fallbackTransporter = fallbackSmtp ? createCampaignTransporter(fallbackSmtp, safety) : null;
   let sent = 0;
   let failed = 0;
+  let bounced = 0;
   let fallbackUsed = false;
   let lastError = null;
+  let stoppedOnTimeBudget = false;
   const providerErrors = [];
+  const sendDeadlineAt = Date.now() + safety.sendBudgetMs;
 
   try {
     for (let index = 0; index < batchTargets.length; index += 1) {
+      if (index > 0 && Date.now() >= sendDeadlineAt) {
+        stoppedOnTimeBudget = true;
+        console.warn('[Campaign delivery] Stopping batch early to stay inside the function time limit', { campaignId: campaign.id, sentSoFar: sent, batchSize: batchTargets.length });
+        break;
+      }
       const subscriber = batchTargets[index];
       let sentViaFallback = false;
       try {
@@ -548,7 +623,12 @@ export async function deliverCampaign(campaignId, options = {}) {
         if (error) throw error;
         sent += 1;
       } catch (error) {
-        failed += 1;
+        if (classifySmtpFailure(error) === 'hard') {
+          bounced += 1;
+          await retireBouncedRecipient(supabase, subscriber, error);
+        } else {
+          failed += 1;
+        }
         lastError = truncateError(error);
         console.error('[Campaign delivery] Subscriber send failed', { campaignId: campaign.id, subscriberId: subscriber.id, error: error.message });
       }
@@ -561,15 +641,22 @@ export async function deliverCampaign(campaignId, options = {}) {
     await closeTransporter(fallbackTransporter);
   }
 
+  // Retired addresses are gone for good, so they leave the denominator rather
+  // than sitting in `remaining` and keeping the campaign stuck at "scheduled".
+  const reachableEligible = Math.max(totalEligible - bounced, 0);
   const sentTotal = alreadySent + sent;
-  const remaining = Math.max(totalEligible - sentTotal, 0);
+  const remaining = Math.max(reachableEligible - sentTotal, 0);
+  const madeNoProgress = sent === 0 && bounced === 0 && failed > 0;
+  const nextBatchMinutes = madeNoProgress
+    ? Math.max(safety.batchIntervalMinutes, NO_PROGRESS_RETRY_MINUTES)
+    : safety.batchIntervalMinutes;
   const nextBatchAt = !isTestBatch && remaining > 0
-    ? new Date(Date.now() + safety.batchIntervalMinutes * 60 * 1000).toISOString()
+    ? new Date(Date.now() + nextBatchMinutes * 60 * 1000).toISOString()
     : null;
   const nextStatus = isTestBatch ? 'testing' : remaining > 0 ? 'scheduled' : sentTotal > 0 ? 'sent' : 'draft';
   await supabase
     .from('email_campaigns')
-    .update({ status: nextStatus, scheduled_for: nextBatchAt })
+    .update({ status: nextStatus, scheduled_for: nextBatchAt, updated_at: new Date().toISOString() })
     .eq('id', campaign.id);
 
   const healthStatus = failed === 0 ? 'completed' : sent > 0 ? 'partial' : 'failed';
@@ -578,6 +665,7 @@ export async function deliverCampaign(campaignId, options = {}) {
     completed_at: new Date().toISOString(),
     sent,
     failed,
+    bounced,
     remaining_after_batch: remaining,
     fallback_used: fallbackUsed,
     error_message: lastError,
@@ -593,13 +681,16 @@ export async function deliverCampaign(campaignId, options = {}) {
     batchIntervalMinutes: safety.batchIntervalMinutes,
     fallbackSendDelayMs: safety.fallbackSendDelayMs,
     targeted: batchTargets.length,
-    totalEligible,
+    stoppedOnTimeBudget,
+    includeLeads: Boolean(campaign.include_leads),
+    totalEligible: reachableEligible,
     alreadySent,
     sentTotal,
     remainingBeforeBatch,
     remaining,
     sent,
     failed,
+    bounced,
     nextBatchAt,
     completed: remaining === 0,
   };

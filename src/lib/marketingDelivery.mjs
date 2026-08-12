@@ -31,3 +31,60 @@ export function mapProviderDeliveryStatus(value) {
 export function shouldSuppressForDeliveryStatus(status) {
   return status === 'bounced' || status === 'complained';
 }
+
+// A 5xx that names the recipient is a dead address: retrying it forever keeps a
+// campaign from ever reaching "sent". A 5xx about *us* — auth, relaying, spam
+// scoring, rate limits — must never suppress the recipient, or one bad sender
+// config would quietly burn the whole list.
+const SENDER_SIDE_FAILURE_PATTERNS = [
+  /sender/i,
+  /authenticat/i,
+  /auth failed/i,
+  /not authori[sz]ed/i,
+  /relay/i,
+  /spam/i,
+  /blocked/i,
+  /black ?list/i,
+  /block ?list/i,
+  /rate limit/i,
+  /quota/i,
+  /too many/i,
+  /policy/i,
+  /greylist/i,
+  /try again/i,
+  /reputation/i,
+];
+
+const HARD_BOUNCE_PATTERNS = [
+  /user unknown/i,
+  /unknown user/i,
+  /no such user/i,
+  /no such recipient/i,
+  /no such address/i,
+  /recipient (address )?rejected/i,
+  /address rejected/i,
+  /invalid recipient/i,
+  /recipient not found/i,
+  /mailbox (is )?unavailable/i,
+  /mailbox not found/i,
+  /mailbox does not exist/i,
+  /does ?n[o']t exist/i,
+  /account (has been )?(disabled|suspended|closed)/i,
+  /unrouteable address/i,
+  /domain not found/i,
+  /5\.1\.(1|2|3|10)\b/,
+];
+
+/**
+ * Classifies a nodemailer/SMTP send failure.
+ * Returns 'hard' only when the address itself is provably dead — everything
+ * else is 'soft' so a transient outage never costs us a subscriber.
+ */
+export function classifySmtpFailure(error) {
+  const code = Number(error?.responseCode);
+  if (!Number.isFinite(code) || code < 500 || code > 599) return 'soft';
+
+  const text = `${error?.response || ''} ${error?.message || ''}`;
+  if (SENDER_SIDE_FAILURE_PATTERNS.some(pattern => pattern.test(text))) return 'soft';
+  return HARD_BOUNCE_PATTERNS.some(pattern => pattern.test(text)) ? 'hard' : 'soft';
+}

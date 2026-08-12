@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS public.campaign_delivery_batches (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   campaign_id UUID NOT NULL REFERENCES public.email_campaigns(id) ON DELETE CASCADE,
   trigger_type TEXT NOT NULL DEFAULT 'manual'
-    CHECK (trigger_type IN ('manual', 'scheduled', 'test_batch', 'winner')),
+    CHECK (trigger_type IN ('manual', 'scheduled', 'test_batch', 'winner', 'catalog_welcome')),
   status TEXT NOT NULL DEFAULT 'processing'
     CHECK (status IN ('processing', 'completed', 'partial', 'failed')),
   provider TEXT,
@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.campaign_delivery_batches (
   attempted INTEGER NOT NULL DEFAULT 0,
   sent INTEGER NOT NULL DEFAULT 0,
   failed INTEGER NOT NULL DEFAULT 0,
+  bounced INTEGER NOT NULL DEFAULT 0,
   total_eligible INTEGER NOT NULL DEFAULT 0,
   already_sent INTEGER NOT NULL DEFAULT 0,
   remaining_before_batch INTEGER NOT NULL DEFAULT 0,

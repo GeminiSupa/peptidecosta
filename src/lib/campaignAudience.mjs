@@ -23,6 +23,34 @@ export function emailFromLead(lead) {
   return normalizeCampaignEmail(noteMatch);
 }
 
+function normalizeTargetTags(tags) {
+  return Array.isArray(tags) && tags.length ? tags : null;
+}
+
+// Marketing Studio keeps the audience radio and the audience tag in local state
+// until someone saves the draft, but sending read the last *saved* campaign row.
+// That gap let a send promise "1,481 recipients" and deliver to 43. The sender's
+// live selection wins, and the caller persists it so later cron batches match.
+export function resolveCampaignAudience(campaign = {}, audience = null) {
+  const savedIncludeLeads = Boolean(campaign.include_leads);
+  const savedTargetTags = normalizeTargetTags(campaign.target_tags);
+
+  if (!audience) {
+    return { includeLeads: savedIncludeLeads, targetTags: savedTargetTags, changed: false };
+  }
+
+  const includeLeads = audience.includeLeads === undefined
+    ? savedIncludeLeads
+    : Boolean(audience.includeLeads);
+  const targetTags = audience.targetTags === undefined
+    ? savedTargetTags
+    : normalizeTargetTags(audience.targetTags);
+  const changed = includeLeads !== savedIncludeLeads
+    || JSON.stringify(targetTags) !== JSON.stringify(savedTargetTags);
+
+  return { includeLeads, targetTags, changed };
+}
+
 export function leadSubscriberCandidates(leads = [], existingSubscribers = []) {
   const existingEmails = new Set(
     existingSubscribers.map(subscriber => normalizeCampaignEmail(subscriber?.email)).filter(Boolean),

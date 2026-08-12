@@ -4,7 +4,49 @@ import {
   emailFromLead,
   leadSubscriberCandidates,
   normalizeCampaignEmail,
+  resolveCampaignAudience,
 } from '../src/lib/campaignAudience.mjs';
+
+test('an unsaved "Subscribers + CRM leads" pick beats the saved campaign row', () => {
+  const saved = { include_leads: false, target_tags: null };
+
+  assert.deepEqual(resolveCampaignAudience(saved, { includeLeads: true, targetTags: null }), {
+    includeLeads: true,
+    targetTags: null,
+    changed: true,
+  });
+});
+
+test('falls back to the saved audience when the sender passes none', () => {
+  const saved = { include_leads: true, target_tags: ['vip'] };
+
+  assert.deepEqual(resolveCampaignAudience(saved, null), {
+    includeLeads: true,
+    targetTags: ['vip'],
+    changed: false,
+  });
+  assert.deepEqual(resolveCampaignAudience(saved, {}), {
+    includeLeads: true,
+    targetTags: ['vip'],
+    changed: false,
+  });
+});
+
+test('an empty audience tag means everyone, not a segment of nobody', () => {
+  const saved = { include_leads: true, target_tags: ['leads_7_days'] };
+
+  assert.deepEqual(resolveCampaignAudience(saved, { includeLeads: true, targetTags: [] }), {
+    includeLeads: true,
+    targetTags: null,
+    changed: true,
+  });
+});
+
+test('re-sending the same audience needs no campaign write', () => {
+  const saved = { include_leads: true, target_tags: ['vip'] };
+
+  assert.equal(resolveCampaignAudience(saved, { includeLeads: true, targetTags: ['vip'] }).changed, false);
+});
 
 test('normalizes valid campaign emails and rejects phone contacts', () => {
   assert.equal(normalizeCampaignEmail(' Person@Example.COM '), 'person@example.com');

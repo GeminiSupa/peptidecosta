@@ -911,13 +911,27 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       }
 
       const label = isTestBatch ? 'A/B test batch' : 'full campaign';
-      if (!confirm(`Send ${label} to ${estimatedAudience.length} recipient${estimatedAudience.length === 1 ? '' : 's'}?`)) return;
+      const audienceBreakdown = [
+        `- ${eligibleSubscribers.length} email subscriber${eligibleSubscribers.length === 1 ? '' : 's'}`,
+        includeLeads
+          ? `- ${eligibleLeads.length} CRM lead${eligibleLeads.length === 1 ? '' : 's'} (added as subscribers when this sends)`
+          : '- 0 CRM leads (switch to "Subscribers + CRM leads" to include them)',
+      ].join('\n');
+      if (!confirm(`Send ${label} to ${estimatedAudience.length} recipient${estimatedAudience.length === 1 ? '' : 's'}?\n\n${audienceBreakdown}`)) return;
 
       setIsSending(true);
       setStatusDetail(`Sending ${label}... Keep this page open until the first batch is confirmed.`);
       const res  = await adminFetch('/api/admin/campaigns/send', {
         method: 'POST',
-        body: JSON.stringify({ campaign_id: selectedCampaignId, is_test_batch: isTestBatch }),
+        body: JSON.stringify({
+          campaign_id: selectedCampaignId,
+          is_test_batch: isTestBatch,
+          // The audience radio and tag live in local state until "Save draft".
+          // Send them with the request so delivery targets exactly the audience
+          // this dialog just promised, saved or not.
+          include_leads: includeLeads,
+          target_tags: targetSegment ? [targetSegment] : null,
+        }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to send');
