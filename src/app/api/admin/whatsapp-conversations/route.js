@@ -81,7 +81,6 @@ async function fetchWhatsAppChannels(supabase) {
   const { data, error } = await supabase
     .from('whatsapp_channels')
     .select('id, phone_number_id, waba_id, display_phone_number, name, source, status')
-    .eq('status', 'active')
     .order('name', { ascending: true });
 
   if (error && isMissingWhatsAppChannelsSchema(error)) return [];

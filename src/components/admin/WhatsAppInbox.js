@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, Check, CheckCheck, ChevronLeft, ChevronRight, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus, Maximize2, Minimize2, Trash2 } from 'lucide-react';
+import { Check, CheckCheck, ChevronLeft, ChevronRight, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus, Maximize2, Minimize2, Trash2, Smartphone, Power } from 'lucide-react';
+import { adminFetch } from '@/lib/adminApi';
 import { renderWhatsAppTemplateBody } from '@/lib/whatsappTemplates.mjs';
 
 const INITIAL_CHAT_LIMIT = 30;
@@ -415,7 +416,57 @@ export default function WhatsAppInbox({
   const [conversationActionWaId, setConversationActionWaId] = useState(null);
   const [conversationActionError, setConversationActionError] = useState('');
   const [selectedTransferAgent, setSelectedTransferAgent] = useState('');
+  const [channelForm, setChannelForm] = useState({
+    name: '',
+    displayPhoneNumber: '',
+    phoneNumberId: '',
+    wabaId: '',
+  });
+  const [savingChannel, setSavingChannel] = useState(false);
+  const [channelActionId, setChannelActionId] = useState('');
+  const [channelError, setChannelError] = useState('');
   const [now, setNow] = useState(() => Date.now());
+
+  const saveWhatsAppChannel = async (event) => {
+    event.preventDefault();
+    setSavingChannel(true);
+    setChannelError('');
+    try {
+      const response = await adminFetch('/api/admin/whatsapp-channels', {
+        method: 'POST',
+        body: JSON.stringify(channelForm),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not add WhatsApp number.');
+      setChannelForm({ name: '', displayPhoneNumber: '', phoneNumberId: '', wabaId: '' });
+      await loadAdminData?.();
+    } catch (error) {
+      setChannelError(error.message);
+    } finally {
+      setSavingChannel(false);
+    }
+  };
+
+  const setWhatsAppChannelStatus = async (channel) => {
+    setChannelActionId(channel.id);
+    setChannelError('');
+    try {
+      const response = await adminFetch('/api/admin/whatsapp-channels', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          channelId: channel.id,
+          status: channel.status === 'active' ? 'disabled' : 'active',
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not update WhatsApp number.');
+      await loadAdminData?.();
+    } catch (error) {
+      setChannelError(error.message);
+    } finally {
+      setChannelActionId('');
+    }
+  };
 
   // Pull-to-refresh state
   const scrollRef = useRef(null);
@@ -1723,7 +1774,7 @@ export default function WhatsAppInbox({
         <div className="admin-wa-sheet-backdrop" onClick={() => setShowAiSettings(false)}>
           <section className="admin-wa-sheet" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="wa-ai-settings-title">
             <header className="admin-wa-sheet-header">
-              <div><Brain size={19} /><span><strong id="wa-ai-settings-title">AI assistant</strong><small>Control automatic replies</small></span></div>
+              <div><Settings size={19} /><span><strong id="wa-ai-settings-title">WhatsApp settings</strong><small>Numbers and automatic replies</small></span></div>
               <button type="button" onClick={() => setShowAiSettings(false)} aria-label="Close AI settings"><X size={19} /></button>
             </header>
             <div className="admin-wa-sheet-body">
@@ -1750,6 +1801,90 @@ export default function WhatsAppInbox({
               <button type="button" className="admin-wa-save-btn" onClick={() => handleSaveWhatsappSettings(whatsappSettings)} disabled={savingWaSettings}>
                 {savingWaSettings ? 'Saving…' : 'Save AI settings'}
               </button>
+
+              {isSuperadmin && (
+                <section className="admin-wa-channel-settings" aria-labelledby="wa-channel-settings-title">
+                  <div className="admin-wa-channel-heading">
+                    <span className="admin-wa-channel-icon"><Smartphone size={18} /></span>
+                    <div>
+                      <strong id="wa-channel-settings-title">WhatsApp numbers</strong>
+                      <small>Add each Meta Cloud API number used by your sales team.</small>
+                    </div>
+                  </div>
+
+                  <div className="admin-wa-channel-list">
+                    {whatsappChannels.length === 0 ? (
+                      <p className="admin-wa-channel-empty">No real WhatsApp numbers registered yet.</p>
+                    ) : whatsappChannels.map((channel) => (
+                      <article key={channel.id} className={`admin-wa-channel-card${channel.status === 'disabled' ? ' is-disabled' : ''}`}>
+                        <div>
+                          <strong>{channel.name || 'WhatsApp number'}</strong>
+                          <span>{channel.display_phone_number || 'Visible number not entered'}</span>
+                          <code>Phone ID: {channel.phone_number_id}</code>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setWhatsAppChannelStatus(channel)}
+                          disabled={channelActionId === channel.id}
+                          className={channel.status === 'active' ? 'is-active' : ''}
+                          title={channel.status === 'active' ? 'Disable this sending number' : 'Enable this sending number'}
+                        >
+                          <Power size={14} />
+                          {channelActionId === channel.id
+                            ? 'Saving…'
+                            : channel.status === 'active' ? 'Active' : 'Disabled'}
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+
+                  <form className="admin-wa-channel-form" onSubmit={saveWhatsAppChannel}>
+                    <label>
+                      <span>Internal name</span>
+                      <input
+                        required
+                        placeholder="Sales Costa Rica"
+                        value={channelForm.name}
+                        onChange={(event) => setChannelForm({ ...channelForm, name: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span>Visible WhatsApp number</span>
+                      <input
+                        placeholder="+506 8404-6973"
+                        value={channelForm.displayPhoneNumber}
+                        onChange={(event) => setChannelForm({ ...channelForm, displayPhoneNumber: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span>Meta Phone Number ID *</span>
+                      <input
+                        required
+                        inputMode="numeric"
+                        placeholder="123456789012345"
+                        value={channelForm.phoneNumberId}
+                        onChange={(event) => setChannelForm({ ...channelForm, phoneNumberId: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span>WhatsApp Business Account ID</span>
+                      <input
+                        inputMode="numeric"
+                        placeholder="Optional WABA ID"
+                        value={channelForm.wabaId}
+                        onChange={(event) => setChannelForm({ ...channelForm, wabaId: event.target.value })}
+                      />
+                    </label>
+                    <p className="admin-wa-channel-help">
+                      Find these IDs in Meta Business Manager → WhatsApp Manager → API Setup. The visible phone number alone cannot send API messages, and your server access token must have permission to use the number.
+                    </p>
+                    {channelError && <p className="admin-wa-channel-error">{channelError}</p>}
+                    <button type="submit" className="admin-wa-save-btn" disabled={savingChannel}>
+                      <Plus size={15} /> {savingChannel ? 'Adding number…' : 'Add WhatsApp number'}
+                    </button>
+                  </form>
+                </section>
+              )}
             </div>
           </section>
         </div>

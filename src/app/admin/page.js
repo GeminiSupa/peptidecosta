@@ -23,7 +23,7 @@ import { markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
 import { 
   Lock, LayoutDashboard, ListFilter, Plus, Trash2, Mail, MessageCircle,
   Save, Upload, Download, Share2, Clipboard, LogOut, Check, 
-  AlertCircle, ChevronRight, ChevronUp, ChevronDown, MessageSquare, Database,
+  AlertCircle, ChevronRight, ChevronUp, MessageSquare, Database,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send, QrCode,
@@ -1721,12 +1721,12 @@ Core Rules:
   const desktopPrimaryTabIds = (
     isSubUserProfile
       ? ['my_earnings', 'my_qr', 'team_chat']
-      : ['home', 'orders', 'live_chat', 'leads', 'carts', 'spreadsheet']
+      : ['home', 'orders', 'whatsapp_ai', 'live_chat', 'leads', 'customers', 'carts']
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
-    { title: 'Customer Work', tabs: ['live_chat', 'inquiries', 'leads', 'prospects', 'messenger'] },
-    { title: 'Marketing', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'my_qr', 'my_team'] },
-    { title: 'Admin Tools', tabs: ['analytics', 'cms', 'wa_session', 'team', 'team_chat'] },
+    { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects', 'messenger'] },
+    { title: 'Growth', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'my_qr', 'my_team'] },
+    { title: 'Operations', tabs: ['spreadsheet', 'analytics', 'cms', 'wa_session', 'team', 'team_chat'] },
   ].map((group) => ({
     ...group,
     tabs: group.tabs.filter((tabId) => hasAccess(tabId) && !desktopPrimaryTabIds.includes(tabId)),
@@ -1755,6 +1755,8 @@ Core Rules:
         key={tabId}
         className={`admin-tab-btn ${activeTab === tabId ? 'active' : ''}`}
         onClick={() => navigateToTab(tabId)}
+        aria-current={activeTab === tabId ? 'page' : undefined}
+        title={sidebarCollapsed ? meta.label : undefined}
       >
         {meta.icon}
         <span className="tab-label">{meta.label}</span>
@@ -4846,6 +4848,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <span className="status-text">{isDbConnected ? 'Live Connection' : 'Simulation Mode'}</span>
             </div>
           </div>
+          <div className="admin-sidebar-context">
+            <span>Workspace</span>
+            <strong>{desktopTabMeta[activeTab]?.label || ADMIN_TAB_TITLES[activeTab] || 'Dashboard'}</strong>
+          </div>
           <div className="admin-nav-tools">
             <button
               type="button"
@@ -4884,27 +4890,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             )}
 
-            {desktopSecondaryGroups.length > 0 && (
-              <details
-                className="admin-nav-more-tools"
-                open={desktopSecondaryGroups.some((group) => group.tabs.includes(activeTab)) || undefined}
-              >
-                <summary>
-                  <span>More tools</span>
-                  <ChevronDown size={14} />
-                </summary>
-                <div className="admin-nav-more-groups">
-                  {desktopSecondaryGroups.map((group) => (
-                    <div key={group.title} className="admin-nav-section admin-nav-section--secondary">
-                      <div className="admin-nav-section-title">{group.title}</div>
-                      <div className="admin-nav-section-items">
-                        {group.tabs.map(renderDesktopNavButton)}
-                      </div>
-                    </div>
-                  ))}
+            {desktopSecondaryGroups.map((group) => (
+              <div key={group.title} className="admin-nav-section admin-nav-section--secondary">
+                <div className="admin-nav-section-title">{group.title}</div>
+                <div className="admin-nav-section-items">
+                  {group.tabs.map(renderDesktopNavButton)}
                 </div>
-              </details>
-            )}
+              </div>
+            ))}
           </div>
         </div>
 

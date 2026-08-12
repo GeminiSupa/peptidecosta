@@ -2,6 +2,34 @@ export function normalizePhoneNumberId(value) {
   return String(value || '').trim().replace(/[^0-9A-Za-z_-]/g, '');
 }
 
+export function validateManualWhatsAppChannel(input = {}) {
+  const name = String(input.name || '').trim().slice(0, 80);
+  const phoneNumberId = String(input.phoneNumberId || '').trim();
+  const wabaId = String(input.wabaId || '').trim();
+  const displayPhoneNumber = String(input.displayPhoneNumber || '').trim().slice(0, 40);
+
+  if (!name) return { error: 'A channel name is required.' };
+  if (!/^\d{5,30}$/.test(phoneNumberId)) {
+    return { error: 'Enter the numeric Phone Number ID from Meta, not the visible WhatsApp number.' };
+  }
+  if (wabaId && !/^\d{5,30}$/.test(wabaId)) {
+    return { error: 'The WhatsApp Business Account ID must contain only numbers.' };
+  }
+  const visibleDigits = displayPhoneNumber.replace(/\D/g, '');
+  if (displayPhoneNumber && (visibleDigits.length < 8 || visibleDigits.length > 15)) {
+    return { error: 'Enter a valid visible WhatsApp number including country code.' };
+  }
+
+  return {
+    value: {
+      name,
+      phoneNumberId,
+      wabaId: wabaId || null,
+      displayPhoneNumber: displayPhoneNumber || null,
+    },
+  };
+}
+
 export function getInboundWhatsAppChannel(value, entry = {}) {
   const metadata = value?.metadata || {};
   const phoneNumberId = normalizePhoneNumberId(metadata.phone_number_id);
@@ -84,10 +112,15 @@ export async function resolveOutboundWhatsAppChannel(supabase, {
       .from('whatsapp_channels')
       .select('*')
       .eq('id', channelId)
-      .eq('status', 'active')
       .maybeSingle();
 
     if (error && !isMissingWhatsAppChannelsSchema(error)) throw error;
+    if (data && data.status !== 'active') {
+      throw new Error('The selected WhatsApp number is disabled. Enable it before replying.');
+    }
+    if (!data && !error) {
+      throw new Error('The selected WhatsApp number no longer exists.');
+    }
     if (data?.phone_number_id && data.phone_number_id !== 'legacy-default') {
       return {
         channelId: data.id,

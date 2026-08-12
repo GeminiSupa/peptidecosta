@@ -1600,6 +1600,32 @@
 .admin-wa-settings-field > span { color: #cbd5e1; font-size: .76rem; font-weight: 750; }
 .admin-wa-sheet .admin-wa-prompt-input { min-height: 220px; font-size: .8rem; line-height: 1.5; }
 .admin-wa-sheet .admin-wa-save-btn { width: 100%; min-height: 48px; align-self: stretch; }
+.admin-wa-channel-settings { display: flex; flex-direction: column; gap: 14px; margin-top: 6px; padding-top: 20px; border-top: 1px solid rgba(148,163,184,.16); }
+.admin-wa-channel-heading { display: flex; align-items: center; gap: 10px; }
+.admin-wa-channel-heading > div { display: flex; flex-direction: column; gap: 3px; }
+.admin-wa-channel-heading strong { color: #f8fafc; font-size: .88rem; }
+.admin-wa-channel-heading small { color: #64748b; font-size: .7rem; line-height: 1.4; }
+.admin-wa-channel-icon { display: grid; width: 36px; height: 36px; place-items: center; flex: 0 0 auto; border-radius: 10px; background: rgba(16,185,129,.12); color: #34d399; }
+.admin-wa-channel-list { display: flex; flex-direction: column; gap: 8px; }
+.admin-wa-channel-empty { margin: 0; padding: 12px; border: 1px dashed rgba(148,163,184,.2); border-radius: 10px; color: #64748b; font-size: .74rem; text-align: center; }
+.admin-wa-channel-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px; border: 1px solid rgba(52,211,153,.18); border-radius: 12px; background: rgba(16,185,129,.055); }
+.admin-wa-channel-card.is-disabled { border-color: rgba(148,163,184,.13); background: rgba(148,163,184,.04); opacity: .72; }
+.admin-wa-channel-card > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.admin-wa-channel-card strong { overflow: hidden; color: #f8fafc; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.admin-wa-channel-card span { color: #94a3b8; font-size: .7rem; }
+.admin-wa-channel-card code { overflow: hidden; color: #64748b; font-size: .62rem; text-overflow: ellipsis; }
+.admin-wa-channel-card button { display: inline-flex; min-height: 34px; align-items: center; gap: 5px; flex: 0 0 auto; padding: 6px 9px; border: 1px solid rgba(148,163,184,.18); border-radius: 9px; background: rgba(148,163,184,.08); color: #94a3b8; font-size: .68rem; font-weight: 800; cursor: pointer; }
+.admin-wa-channel-card button.is-active { border-color: rgba(52,211,153,.25); background: rgba(16,185,129,.12); color: #34d399; }
+.admin-wa-channel-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 13px; border: 1px solid rgba(148,163,184,.13); border-radius: 13px; background: rgba(15,23,42,.5); }
+.admin-wa-channel-form label { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
+.admin-wa-channel-form label span { color: #94a3b8; font-size: .68rem; font-weight: 750; }
+.admin-wa-channel-form input { width: 100%; min-width: 0; height: 40px; box-sizing: border-box; border: 1px solid rgba(148,163,184,.16); border-radius: 9px; outline: none; background: #08101d; color: #f8fafc; padding: 0 10px; font-size: .75rem; }
+.admin-wa-channel-form input:focus { border-color: rgba(52,211,153,.55); box-shadow: 0 0 0 3px rgba(16,185,129,.08); }
+.admin-wa-channel-help, .admin-wa-channel-error, .admin-wa-channel-form .admin-wa-save-btn { grid-column: 1 / -1; }
+.admin-wa-channel-help { margin: 0; color: #64748b; font-size: .68rem; line-height: 1.5; }
+.admin-wa-channel-error { margin: 0; padding: 8px 10px; border-radius: 8px; background: rgba(239,68,68,.1); color: #f87171; font-size: .7rem; }
+.admin-wa-channel-form .admin-wa-save-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.admin-sidebar-context { display: none; }
 .admin-wa-context-person { display: flex; align-items: center; gap: 11px; padding-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,.07); }
 .admin-wa-context-person > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .admin-wa-context-person strong { color: #f8fafc; font-size: .95rem; }
@@ -1944,7 +1970,7 @@
         justify-content: flex-start !important;
         align-items: stretch !important;
         gap: 20px !important;
-        overflow-y: auto !important;
+        overflow-y: hidden !important;
         overflow-x: hidden !important;
         /* Opaque, no backdrop blur: at 0.97 alpha the blur was invisible, but
            it forced the whole panel to re-composite on every nav hover. */
@@ -2001,13 +2027,50 @@
         margin-bottom: 0 !important;
         gap: 16px !important;
     }
+
+    .admin-sidebar-context {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        margin-top: -6px;
+        padding: 10px 12px;
+        border: 1px solid rgba(56, 189, 248, 0.12);
+        border-radius: 11px;
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.09), rgba(16, 185, 129, 0.04));
+    }
+
+    .admin-sidebar-context span {
+        color: #64748b;
+        font-size: 0.58rem;
+        font-weight: 850;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+    }
+
+    .admin-sidebar-context strong {
+        overflow: hidden;
+        color: #e2e8f0;
+        font-size: 0.78rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .admin-nav-scroll-wrap {
+        flex: 1 1 auto;
+        min-height: 0;
+        margin: 0 -4px;
+        padding: 0 4px 12px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(148, 163, 184, 0.24) transparent;
+    }
     
     .admin-nav-sections {
         display: flex !important;
         flex-direction: column !important;
         gap: 18px !important;
         flex-grow: 1 !important;
-        margin-top: 10px !important;
+        margin-top: 0 !important;
     }
     
     .admin-nav-section {
@@ -2139,6 +2202,11 @@
         padding-top: 8px !important;
         padding-bottom: 8px !important;
         font-size: 0.8rem !important;
+    }
+
+    .admin-nav-section--secondary + .admin-nav-section--secondary {
+        padding-top: 10px !important;
+        border-top: 1px solid rgba(148, 163, 184, 0.08) !important;
     }
     
     .admin-sidebar-footer {
@@ -2296,6 +2364,7 @@
     }
 
     .admin-sidebar-collapsed .db-status-indicator,
+    .admin-sidebar-collapsed .admin-sidebar-context,
     .admin-sidebar-collapsed .admin-search-label,
     .admin-sidebar-collapsed .admin-search-trigger kbd,
     .admin-sidebar-collapsed .admin-nav-section-title,
@@ -2307,6 +2376,11 @@
 
     .admin-sidebar-collapsed .admin-navbar:hover .db-status-indicator,
     .admin-sidebar-collapsed .admin-navbar:focus-within .db-status-indicator {
+        display: flex !important;
+    }
+
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-sidebar-context,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-sidebar-context {
         display: flex !important;
     }
 
@@ -5837,6 +5911,16 @@
 }
 
 @media (max-width: 768px) {
+    .admin-wa-channel-form {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-wa-channel-help,
+    .admin-wa-channel-error,
+    .admin-wa-channel-form .admin-wa-save-btn {
+        grid-column: 1;
+    }
+
     .admin-toast {
         left: max(12px, env(safe-area-inset-left, 0px));
         right: max(12px, env(safe-area-inset-right, 0px));
