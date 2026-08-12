@@ -2265,14 +2265,12 @@
         width: calc(100% - 82px) !important;
     }
 
-    /* When the collapsed sidebar expands on hover, push the page content
-       aside instead of covering it — no more dashboard text hidden or cut
-       off behind the open menu. */
-    .admin-sidebar-collapsed .admin-navbar:hover ~ .admin-container,
-    .admin-sidebar-collapsed .admin-navbar:focus-within ~ .admin-container {
-        margin-left: 264px !important;
-        width: calc(100% - 264px) !important;
-    }
+    /* The expanded sidebar overlays the page; it must NOT push .admin-container
+       aside. Pushing reflowed the whole dashboard by 182px on hover, and moving
+       the cursor off the sidebar to click something snapped it back — so the
+       button slid out from under the pointer and every click there took two
+       tries. The panel is opaque with a shadow (above), so nothing shows
+       through it while it is open. */
 
     .admin-sidebar-collapsed .admin-nav-logo-container {
         align-items: center !important;
