@@ -1,4 +1,4 @@
-import { Montserrat, Inter } from "next/font/google";
+import localFont from "next/font/local";
 import Script from "next/script";
 import "./globals.css";
 import UTMTracker from "@/components/UTMTracker";
@@ -7,18 +7,26 @@ import GlobalContactForm from "@/components/GlobalContactForm";
 import { LIVE_SITE_URL } from "@/lib/publicUrl";
 import { getTikTokPixelBootstrapScript } from "@/lib/tiktokPixel.mjs";
 
-const montserrat = Montserrat({
+// Served from this repo, not next/font/google. Google's font CDN 404'd twice
+// in one day mid-build (Inter, then Montserrat), and each failure took the
+// whole deploy down while leaving production on stale code — an outage we
+// could neither predict nor fix. These are the same latin subsets Google
+// serves, and both are variable fonts, so one file per family covers every
+// weight the CSS asks for.
+const montserrat = localFont({
+  src: "./fonts/montserrat-latin-variable.woff2",
   variable: "--font-montserrat",
-  subsets: ["latin"],
-  weight: ["400", "600", "800"],
+  weight: "100 900",
+  style: "normal",
   display: "swap",
   preload: true,
 });
 
-const inter = Inter({
+const inter = localFont({
+  src: "./fonts/inter-latin-variable.woff2",
   variable: "--font-inter",
-  subsets: ["latin"],
-  weight: ["400", "700"],
+  weight: "100 900",
+  style: "normal",
   display: "swap",
   preload: false,
 });
@@ -176,7 +184,6 @@ export default async function RootLayout({ children }) {
         {/* Preconnect to critical third-party origins */}
         <link rel="preconnect" href="https://www.googletagmanager.com" />
         <link rel="preconnect" href="https://analytics.tiktok.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://cbanvzipzfmllexraiei.supabase.co" />
         {/* Preload the logo — it's the LCP element on catalog & home */}
         <link
