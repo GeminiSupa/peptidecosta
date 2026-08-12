@@ -10,7 +10,13 @@ import {
   isCampaignRackspaceSmtp,
 } from '@/lib/campaignSmtp';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
-import { leadSubscriberCandidates, resolveCampaignAudience } from '@/lib/campaignAudience.mjs';
+import {
+  emailFromLead,
+  leadSubscriberCandidates,
+  normalizeAudienceScope,
+  resolveCampaignAudience,
+  scopeIncludesLeads,
+} from '@/lib/campaignAudience.mjs';
 import { classifySmtpFailure } from '@/lib/marketingDelivery.mjs';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
@@ -40,6 +46,11 @@ function truncateError(error, maxLength = 500) {
 function normalizeEmail(value) {
   const email = String(value || '').trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+}
+
+function isMissingAudienceScopeColumn(error) {
+  const message = String(error?.message || '');
+  return String(error?.code || '') === '42703' || message.includes('audience_scope');
 }
 
 function isMissingHealthTableError(error) {
@@ -406,8 +417,15 @@ async function addCampaignLeadSubscribers(supabase) {
   if (leadResult.error) throw new CampaignDeliveryError(`Unable to load CRM leads: ${leadResult.error.message}`, 503);
   if (subscriberResult.error) throw new CampaignDeliveryError(`Unable to check existing subscribers: ${subscriberResult.error.message}`, 503);
 
+  // Every lead email, not just the new ones: "leads only" has to include a
+  // lead who already happens to sit in email_subscribers, and the upsert below
+  // deliberately skips those.
+  const leadEmails = new Set(
+    (leadResult.data || []).map(lead => emailFromLead(lead)).filter(Boolean),
+  );
+
   const candidates = leadSubscriberCandidates(leadResult.data || [], subscriberResult.data || []);
-  if (!candidates.length) return { added: 0 };
+  if (!candidates.length) return { added: 0, leadEmails };
 
   const rows = candidates.map(({ id: _virtualId, ...candidate }) => candidate);
   // Thousands of leads in a single upsert can exceed the PostgREST request
@@ -421,7 +439,7 @@ async function addCampaignLeadSubscribers(supabase) {
     if (error) throw new CampaignDeliveryError(`Unable to add CRM lead emails to this campaign: ${error.message}`, 503);
     added += data?.length || 0;
   }
-  return { added };
+  return { added, leadEmails };
 }
 
 // A dead address that fails at SMTP is never written to campaign_sends, so the
@@ -451,17 +469,43 @@ async function retireBouncedRecipient(supabase, subscriber, error) {
 // Persist whatever audience the sender actually picked so this send and every
 // cron batch that follows target the same people. See resolveCampaignAudience.
 async function applyAudienceSelection(supabase, campaign, audience) {
-  const { includeLeads, targetTags, changed } = resolveCampaignAudience(campaign, audience);
+  const { scope, includeLeads, targetTags, changed } = resolveCampaignAudience(campaign, audience);
 
   if (changed) {
-    const { error } = await supabase
-      .from('email_campaigns')
-      .update({ include_leads: includeLeads, target_tags: targetTags, updated_at: new Date().toISOString() })
-      .eq('id', campaign.id);
+    // include_leads is kept in step with the scope so anything still reading
+    // the old boolean stays correct.
+    const row = {
+      audience_scope: scope,
+      include_leads: includeLeads,
+      target_tags: targetTags,
+      updated_at: new Date().toISOString(),
+    };
+    let { error } = await supabase.from('email_campaigns').update(row).eq('id', campaign.id);
+
+    // Until add-campaign-audience-scope.sql is run the column does not exist.
+    // Save what we can rather than refusing to send: without the column the
+    // send falls back to the old two-way choice, which is what it did before.
+    if (error && isMissingAudienceScopeColumn(error)) {
+      // Without the column the scope cannot be stored, and "leads" would be
+      // read back as include_leads=true — i.e. EVERYONE. Refuse rather than
+      // quietly mail a wider audience than the sender chose.
+      if (scope === 'leads') {
+        throw new CampaignDeliveryError(
+          'Sending to CRM leads only needs database setup first. Run add-campaign-audience-scope.sql, then try again.',
+          503,
+        );
+      }
+      const { audience_scope: _dropped, ...legacyRow } = row;
+      ({ error } = await supabase.from('email_campaigns').update(legacyRow).eq('id', campaign.id));
+      if (!error) {
+        console.warn('[Campaign delivery] audience_scope column missing; run add-campaign-audience-scope.sql to enable "CRM leads only".');
+        return { ...campaign, include_leads: includeLeads, target_tags: targetTags };
+      }
+    }
     if (error) throw new CampaignDeliveryError(`Unable to save the campaign audience before sending: ${error.message}`, 503);
   }
 
-  return { ...campaign, include_leads: includeLeads, target_tags: targetTags };
+  return { ...campaign, audience_scope: scope, include_leads: includeLeads, target_tags: targetTags };
 }
 
 export async function deliverCampaign(campaignId, options = {}) {
@@ -482,7 +526,11 @@ export async function deliverCampaign(campaignId, options = {}) {
 
   if (audience && !sendWinner) campaign = await applyAudienceSelection(supabase, campaign, audience);
 
-  if (campaign.include_leads) await addCampaignLeadSubscribers(supabase);
+  const audienceScope = normalizeAudienceScope(campaign.audience_scope, campaign.include_leads);
+  let leadEmails = null;
+  if (scopeIncludesLeads(audienceScope)) {
+    ({ leadEmails } = await addCampaignLeadSubscribers(supabase));
+  }
 
   let subscriberQuery = supabase.from('email_subscribers').select('*').eq('status', 'subscribed');
   if (campaign.target_tags?.length) subscriberQuery = subscriberQuery.contains('tags', [campaign.target_tags[0]]);
@@ -501,6 +549,14 @@ export async function deliverCampaign(campaignId, options = {}) {
 
   const blocked = new Set((suppressions || []).map(item => String(item.identity || '').trim().toLowerCase()));
   let targets = subscribers.filter(item => !blocked.has(String(item.email || '').trim().toLowerCase()));
+  // "Leads only" is a subset of email_subscribers, because a lead's address is
+  // copied in there before it can be mailed. Match on the address rather than
+  // the crm_lead tag: a lead who signed up through the catalog gate first
+  // already has a subscriber row, and that row never gets the tag.
+  if (audienceScope === 'leads' && leadEmails) {
+    targets = targets.filter(item => leadEmails.has(String(item.email || '').trim().toLowerCase()));
+    if (!targets.length) throw new CampaignDeliveryError('No CRM lead has a usable email address for this campaign.', 400);
+  }
   if (!targets.length) throw new CampaignDeliveryError('Every subscriber in this segment is suppressed.', 400);
   const totalEligible = targets.length;
   const sentIds = new Set((previousSends || []).map(item => item.subscriber_id));

@@ -11,8 +11,38 @@ import {
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { MARKETING_FOOTER_MARKER, buildMarketingEmailFooterTemplateHtml } from '@/lib/marketingEmailFooter';
+import { normalizeAudienceScope } from '@/lib/campaignAudience.mjs';
 
 const LOCAL_DRAFT_KEY = 'marketing_studio_local_email_draft_v1';
+
+// The three recipient groups. "Everyone" is subscribers + leads deduplicated by
+// address, which is why it is not simply the two counts added together.
+const AUDIENCE_CHOICES = [
+  {
+    id: 'subscribers',
+    label: 'Newsletter subscribers only',
+    accent: '#10b981',
+    activeBorder: 'rgba(52,211,153,0.55)',
+    activeBackground: 'rgba(16,185,129,0.09)',
+    count: (subscribers) => `${subscribers} signed up through a form`,
+  },
+  {
+    id: 'leads',
+    label: 'CRM leads only',
+    accent: '#a78bfa',
+    activeBorder: 'rgba(167,139,250,0.55)',
+    activeBackground: 'rgba(139,92,246,0.09)',
+    count: (_subscribers, leads) => `${leads} lead${leads === 1 ? '' : 's'} with an email address`,
+  },
+  {
+    id: 'all',
+    label: 'Everyone with an email',
+    accent: '#38bdf8',
+    activeBorder: 'rgba(56,189,248,0.55)',
+    activeBackground: 'rgba(14,165,233,0.09)',
+    count: (subscribers, leads) => `${subscribers + leads} unique recipients (${subscribers} subscribers + ${leads} leads)`,
+  },
+];
 const ACTUAL_SMTP_SENDER = 'info@peptidescostarica.net';
 const EMAIL_TEMPLATE_WIDTH = 600;
 const MOBILE_PREVIEW_WIDTH = 375;
@@ -365,7 +395,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
   const [isABTest,    setIsABTest]    = useState(false);
   const [subjectB,    setSubjectB]    = useState('');
   const [targetSegment, setTargetSegment] = useState('');
-  const [includeLeads, setIncludeLeads] = useState(false);
+  const [audienceScope, setAudienceScope] = useState('subscribers');
   const [deviceMode,  setDeviceMode]  = useState('desktop');
   const [previewHtml, setPreviewHtml] = useState(null);
 
@@ -402,13 +432,13 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     subjectB: isABTest ? subjectB : '',
     isABTest,
     targetSegment,
-    includeLeads,
+    audienceScope,
     previewText,
     replyTo,
     scheduleMode,
     scheduledAt,
     html
-  }), [campaignName, includeLeads, isABTest, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
+  }), [audienceScope, campaignName, isABTest, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
 
   const hasUnsavedChanges = ['pending', 'error', 'recovered'].includes(autosaveStatus);
   const saveStatusText = useMemo(() => {
@@ -457,7 +487,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
         subjectB,
         isABTest,
         targetSegment,
-        includeLeads,
+        audienceScope,
         previewText,
         fromName,
         fromEmail,
@@ -474,7 +504,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       console.warn('Local campaign draft snapshot failed:', error);
       return false;
     }
-  }, [buildCampaignSignature, campaignName, fromEmail, fromName, includeLeads, isABTest, isReady, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
+  }, [audienceScope, buildCampaignSignature, campaignName, fromEmail, fromName, isABTest, isReady, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
 
   useEffect(() => {
     selectedCampaignIdRef.current = selectedCampaignId;
@@ -563,7 +593,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     setSubjectB(snapshot.subjectB || '');
     setIsABTest(Boolean(snapshot.isABTest));
     setTargetSegment(snapshot.targetSegment || '');
-    setIncludeLeads(Boolean(snapshot.includeLeads));
+    setAudienceScope(normalizeAudienceScope(snapshot.audienceScope, snapshot.includeLeads));
     setPreviewText(snapshot.previewText || '');
     setFromName(snapshot.fromName || 'Costa Peptides');
     setFromEmail(snapshot.fromEmail || '');
@@ -644,7 +674,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     setSubjectB(selectedCampaign.subject_line_b || '');
     setIsABTest(Boolean(selectedCampaign.is_ab_test));
     setTargetSegment(selectedCampaign.target_tags?.[0] || '');
-    setIncludeLeads(Boolean(selectedCampaign.include_leads));
+    setAudienceScope(normalizeAudienceScope(selectedCampaign.audience_scope, selectedCampaign.include_leads));
     setFromName(selectedCampaign.from_name || 'Costa Peptides');
     setFromEmail(selectedCampaign.from_email || '');
     setReplyTo(selectedCampaign.reply_to || '');
@@ -732,10 +762,11 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     });
   }, [leadCandidates, targetSegment]);
 
-  const estimatedAudience = useMemo(
-    () => includeLeads ? [...eligibleSubscribers, ...eligibleLeads] : eligibleSubscribers,
-    [eligibleLeads, eligibleSubscribers, includeLeads],
-  );
+  const estimatedAudience = useMemo(() => {
+    if (audienceScope === 'leads') return eligibleLeads;
+    if (audienceScope === 'all') return [...eligibleSubscribers, ...eligibleLeads];
+    return eligibleSubscribers;
+  }, [audienceScope, eligibleLeads, eligibleSubscribers]);
 
   const preflightItems = useMemo(() => {
     const activeSubject = selectedCampaign?.subject_line || subject;
@@ -795,7 +826,8 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
           subject_line_b: isABTest ? subjectB : null,
           is_ab_test: isABTest,
           target_tags: targetSegment ? [targetSegment] : null,
-          include_leads: includeLeads,
+          include_leads: audienceScope !== 'subscribers',
+          audience_scope: audienceScope,
           design_json: design, html_content: finalHtml,
           from_name: fromName || null,
           from_email: fromEmail || null,
@@ -912,10 +944,12 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
 
       const label = isTestBatch ? 'A/B test batch' : 'full campaign';
       const audienceBreakdown = [
-        `- ${eligibleSubscribers.length} email subscriber${eligibleSubscribers.length === 1 ? '' : 's'}`,
-        includeLeads
-          ? `- ${eligibleLeads.length} CRM lead${eligibleLeads.length === 1 ? '' : 's'} (added as subscribers when this sends)`
-          : '- 0 CRM leads (switch to "Subscribers + CRM leads" to include them)',
+        audienceScope === 'leads'
+          ? '- 0 newsletter subscribers (this send is CRM leads only)'
+          : `- ${eligibleSubscribers.length} newsletter subscriber${eligibleSubscribers.length === 1 ? '' : 's'}`,
+        audienceScope === 'subscribers'
+          ? '- 0 CRM leads (pick "CRM leads only" or "Everyone with an email" to include them)'
+          : `- ${eligibleLeads.length} CRM lead${eligibleLeads.length === 1 ? '' : 's'} (added as subscribers when this sends)`,
       ].join('\n');
       if (!confirm(`Send ${label} to ${estimatedAudience.length} recipient${estimatedAudience.length === 1 ? '' : 's'}?\n\n${audienceBreakdown}`)) return;
 
@@ -929,7 +963,8 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
           // The audience radio and tag live in local state until "Save draft".
           // Send them with the request so delivery targets exactly the audience
           // this dialog just promised, saved or not.
-          include_leads: includeLeads,
+          audience_scope: audienceScope,
+          include_leads: audienceScope !== 'subscribers',
           target_tags: targetSegment ? [targetSegment] : null,
         }),
       });
@@ -1199,15 +1234,28 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
 
           <fieldset style={{ margin: '4px 0 18px', padding: '14px', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', background: 'rgba(255,255,255,0.025)' }}>
             <legend className="mkt-label" style={{ padding: '0 6px' }}>Campaign recipients</legend>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
-              <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '12px', border: `1px solid ${!includeLeads ? 'rgba(52,211,153,0.55)' : 'rgba(255,255,255,0.08)'}`, borderRadius: '8px', cursor: 'pointer', background: !includeLeads ? 'rgba(16,185,129,0.09)' : 'transparent' }}>
-                <input type="radio" name="campaignAudience" checked={!includeLeads} onChange={() => updateDraftField(setIncludeLeads, false)} style={{ marginTop: '3px', accentColor: '#10b981' }} />
-                <span><strong style={{ display: 'block', color: '#f8fafc', fontSize: '13px' }}>Subscribers only</strong><small style={{ color: '#94a3b8' }}>{eligibleSubscribers.length} active email subscriber{eligibleSubscribers.length === 1 ? '' : 's'}</small></span>
-              </label>
-              <label style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '12px', border: `1px solid ${includeLeads ? 'rgba(56,189,248,0.55)' : 'rgba(255,255,255,0.08)'}`, borderRadius: '8px', cursor: 'pointer', background: includeLeads ? 'rgba(14,165,233,0.09)' : 'transparent' }}>
-                <input type="radio" name="campaignAudience" checked={includeLeads} onChange={() => updateDraftField(setIncludeLeads, true)} style={{ marginTop: '3px', accentColor: '#38bdf8' }} />
-                <span><strong style={{ display: 'block', color: '#f8fafc', fontSize: '13px' }}>Subscribers + CRM leads</strong><small style={{ color: '#94a3b8' }}>{eligibleSubscribers.length + eligibleLeads.length} unique email recipient{eligibleSubscribers.length + eligibleLeads.length === 1 ? '' : 's'} ({eligibleLeads.length} from Leads)</small></span>
-              </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+              {AUDIENCE_CHOICES.map((choice) => {
+                const active = audienceScope === choice.id;
+                return (
+                  <label
+                    key={choice.id}
+                    style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '12px', border: `1px solid ${active ? choice.activeBorder : 'rgba(255,255,255,0.08)'}`, borderRadius: '8px', cursor: 'pointer', background: active ? choice.activeBackground : 'transparent' }}
+                  >
+                    <input
+                      type="radio"
+                      name="campaignAudience"
+                      checked={active}
+                      onChange={() => updateDraftField(setAudienceScope, choice.id)}
+                      style={{ marginTop: '3px', accentColor: choice.accent }}
+                    />
+                    <span>
+                      <strong style={{ display: 'block', color: '#f8fafc', fontSize: '13px' }}>{choice.label}</strong>
+                      <small style={{ color: '#94a3b8' }}>{choice.count(eligibleSubscribers.length, eligibleLeads.length)}</small>
+                    </span>
+                  </label>
+                );
+              })}
             </div>
             <p style={{ margin: '10px 0 0', color: '#94a3b8', fontSize: '11px', lineHeight: 1.5 }}>
               Lead emails are added to Subscribers with the <code>crm_lead</code> tag when the campaign sends. Existing unsubscribes, duplicate emails, and globally blocked addresses are skipped.

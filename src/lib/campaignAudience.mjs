@@ -27,28 +27,60 @@ function normalizeTargetTags(tags) {
   return Array.isArray(tags) && tags.length ? tags : null;
 }
 
+export const AUDIENCE_SCOPES = ['subscribers', 'leads', 'all'];
+
+/**
+ * The three recipient groups, resolved from whichever field a caller has.
+ *
+ * `audience_scope` is authoritative; `include_leads` is the older boolean and
+ * only says whether leads were in or out, so it can never mean "leads only".
+ */
+export function normalizeAudienceScope(value, fallbackIncludeLeads = false) {
+  const scope = String(value || '').trim().toLowerCase();
+  if (AUDIENCE_SCOPES.includes(scope)) return scope;
+  return fallbackIncludeLeads ? 'all' : 'subscribers';
+}
+
+export function scopeIncludesLeads(scope) {
+  return scope === 'leads' || scope === 'all';
+}
+
+export function scopeIncludesSubscribers(scope) {
+  return scope === 'subscribers' || scope === 'all';
+}
+
 // Marketing Studio keeps the audience radio and the audience tag in local state
 // until someone saves the draft, but sending read the last *saved* campaign row.
 // That gap let a send promise "1,481 recipients" and deliver to 43. The sender's
 // live selection wins, and the caller persists it so later cron batches match.
 export function resolveCampaignAudience(campaign = {}, audience = null) {
-  const savedIncludeLeads = Boolean(campaign.include_leads);
+  const savedScope = normalizeAudienceScope(campaign.audience_scope, campaign.include_leads);
   const savedTargetTags = normalizeTargetTags(campaign.target_tags);
 
   if (!audience) {
-    return { includeLeads: savedIncludeLeads, targetTags: savedTargetTags, changed: false };
+    return {
+      scope: savedScope,
+      includeLeads: scopeIncludesLeads(savedScope),
+      targetTags: savedTargetTags,
+      changed: false,
+    };
   }
 
-  const includeLeads = audience.includeLeads === undefined
-    ? savedIncludeLeads
-    : Boolean(audience.includeLeads);
+  // A caller that only knows the old boolean — a browser tab loaded before this
+  // shipped, or the A/B winner path — must still be able to widen the audience.
+  let scope = savedScope;
+  if (audience.scope !== undefined) {
+    scope = normalizeAudienceScope(audience.scope, audience.includeLeads);
+  } else if (audience.includeLeads !== undefined) {
+    scope = audience.includeLeads ? 'all' : 'subscribers';
+  }
   const targetTags = audience.targetTags === undefined
     ? savedTargetTags
     : normalizeTargetTags(audience.targetTags);
-  const changed = includeLeads !== savedIncludeLeads
+  const changed = scope !== savedScope
     || JSON.stringify(targetTags) !== JSON.stringify(savedTargetTags);
 
-  return { includeLeads, targetTags, changed };
+  return { scope, includeLeads: scopeIncludesLeads(scope), targetTags, changed };
 }
 
 export function leadSubscriberCandidates(leads = [], existingSubscribers = []) {

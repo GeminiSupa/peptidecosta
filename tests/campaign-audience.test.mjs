@@ -3,14 +3,18 @@ import assert from 'node:assert/strict';
 import {
   emailFromLead,
   leadSubscriberCandidates,
+  normalizeAudienceScope,
   normalizeCampaignEmail,
   resolveCampaignAudience,
+  scopeIncludesLeads,
+  scopeIncludesSubscribers,
 } from '../src/lib/campaignAudience.mjs';
 
 test('an unsaved "Subscribers + CRM leads" pick beats the saved campaign row', () => {
   const saved = { include_leads: false, target_tags: null };
 
   assert.deepEqual(resolveCampaignAudience(saved, { includeLeads: true, targetTags: null }), {
+    scope: 'all',
     includeLeads: true,
     targetTags: null,
     changed: true,
@@ -21,11 +25,13 @@ test('falls back to the saved audience when the sender passes none', () => {
   const saved = { include_leads: true, target_tags: ['vip'] };
 
   assert.deepEqual(resolveCampaignAudience(saved, null), {
+    scope: 'all',
     includeLeads: true,
     targetTags: ['vip'],
     changed: false,
   });
   assert.deepEqual(resolveCampaignAudience(saved, {}), {
+    scope: 'all',
     includeLeads: true,
     targetTags: ['vip'],
     changed: false,
@@ -36,6 +42,7 @@ test('an empty audience tag means everyone, not a segment of nobody', () => {
   const saved = { include_leads: true, target_tags: ['leads_7_days'] };
 
   assert.deepEqual(resolveCampaignAudience(saved, { includeLeads: true, targetTags: [] }), {
+    scope: 'all',
     includeLeads: true,
     targetTags: null,
     changed: true,
@@ -77,4 +84,47 @@ test('deduplicates leads and never re-adds an existing unsubscribed address', ()
     source: 'crm_lead',
     status: 'subscribed',
   }]);
+});
+
+test('three recipient groups resolve from the scope, not the old boolean', () => {
+  assert.equal(normalizeAudienceScope('subscribers'), 'subscribers');
+  assert.equal(normalizeAudienceScope('leads'), 'leads');
+  assert.equal(normalizeAudienceScope('all'), 'all');
+  assert.equal(scopeIncludesLeads('subscribers'), false);
+  assert.equal(scopeIncludesLeads('leads'), true);
+  assert.equal(scopeIncludesLeads('all'), true);
+  assert.equal(scopeIncludesSubscribers('leads'), false);
+  assert.equal(scopeIncludesSubscribers('all'), true);
+});
+
+test('a campaign saved before the scope column falls back to its boolean', () => {
+  assert.equal(normalizeAudienceScope(undefined, true), 'all');
+  assert.equal(normalizeAudienceScope(undefined, false), 'subscribers');
+  assert.equal(normalizeAudienceScope(null, true), 'all');
+  // Nonsense never silently widens the audience.
+  assert.equal(normalizeAudienceScope('everyone', false), 'subscribers');
+});
+
+test('picking "CRM leads only" is carried through and persisted', () => {
+  const saved = { include_leads: false, target_tags: null };
+  const resolved = resolveCampaignAudience(saved, { scope: 'leads', targetTags: null });
+
+  assert.equal(resolved.scope, 'leads');
+  assert.equal(resolved.includeLeads, true, 'leads must still be copied into subscribers');
+  assert.equal(resolved.changed, true);
+});
+
+test('an old campaign row keeps sending to everyone, not just subscribers', () => {
+  const legacy = { include_leads: true, target_tags: null };
+  assert.deepEqual(resolveCampaignAudience(legacy, null), {
+    scope: 'all',
+    includeLeads: true,
+    targetTags: null,
+    changed: false,
+  });
+});
+
+test('re-sending the same scope needs no campaign write', () => {
+  const saved = { audience_scope: 'leads', include_leads: true, target_tags: null };
+  assert.equal(resolveCampaignAudience(saved, { scope: 'leads', targetTags: null }).changed, false);
 });

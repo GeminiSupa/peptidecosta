@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
-const OPTIONAL_CAMPAIGN_COLUMNS = ['preview_text', 'from_name', 'from_email', 'reply_to', 'include_leads'];
+const OPTIONAL_CAMPAIGN_COLUMNS = ['preview_text', 'from_name', 'from_email', 'reply_to', 'include_leads', 'audience_scope'];
 
 function isMissingLeadAudienceColumn(error) {
   return String(error?.message || '').includes('include_leads');
@@ -163,6 +163,7 @@ export async function POST(request) {
       reply_to,
       preview_text,
       include_leads,
+      audience_scope,
       scheduled_at
     } = await request.json();
     
@@ -185,6 +186,7 @@ export async function POST(request) {
       from_email: from_email || null,
       reply_to: reply_to || null,
       include_leads: Boolean(include_leads),
+      audience_scope: audience_scope || (include_leads ? 'all' : 'subscribers'),
       scheduled_for: scheduled_at || null,
       status
     });
@@ -222,6 +224,7 @@ export async function PUT(request) {
       reply_to,
       preview_text,
       include_leads,
+      audience_scope,
       scheduled_at
     } = await request.json();
 
@@ -242,6 +245,7 @@ export async function PUT(request) {
     if (from_email !== undefined) updates.from_email = from_email || null;
     if (reply_to !== undefined) updates.reply_to = reply_to || null;
     if (include_leads !== undefined) updates.include_leads = Boolean(include_leads);
+    if (audience_scope !== undefined) updates.audience_scope = audience_scope;
     if (scheduled_at !== undefined) {
       updates.scheduled_for = scheduled_at || null;
       updates.status = scheduled_at ? 'scheduled' : 'draft';
