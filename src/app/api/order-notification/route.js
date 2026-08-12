@@ -5,6 +5,7 @@ import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
 import { getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
 import { splitCartUnits } from '@/lib/bacWater.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
 
 // Environment variables will be read inside the POST handler
 // to ensure they are always fresh in serverless environments.
@@ -22,14 +23,10 @@ const SMTP_TIMEOUTS = {
 };
 
 function getOrderSmtpConfig() {
-  const host = process.env.ORDER_SMTP_HOST || process.env.SMTP_HOST;
-  const port = Number(process.env.ORDER_SMTP_PORT || process.env.SMTP_PORT || 465);
-  const secure = (process.env.ORDER_SMTP_SECURE ?? process.env.SMTP_SECURE) !== 'false';
-  const user = process.env.ORDER_SMTP_USER || process.env.SMTP_USER;
-  const pass = process.env.ORDER_SMTP_PASS || process.env.SMTP_PASS;
-  const fromEmail = process.env.ORDER_NOTIFICATION_FROM_EMAIL || process.env.SMTP_FROM || user || 'info@peptidescostarica.net';
-  const from = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${fromEmail}>`;
-  const replyTo = process.env.ORDER_NOTIFICATION_REPLY_TO || process.env.SMTP_REPLY_TO || fromEmail;
+  const { host, port, secure, user, pass, configured } = getTransactionalSmtpConfig();
+  const fromEmail = readEnv('ORDER_NOTIFICATION_FROM_EMAIL') || readEnv('SMTP_FROM') || user || 'info@peptidescostarica.net';
+  const from = readEnv('ORDER_NOTIFICATION_FROM') || `Peptides Costa Rica <${fromEmail}>`;
+  const replyTo = readEnv('ORDER_NOTIFICATION_REPLY_TO') || readEnv('SMTP_REPLY_TO') || fromEmail;
 
   return {
     host,
@@ -39,7 +36,7 @@ function getOrderSmtpConfig() {
     pass,
     from,
     replyTo,
-    configured: Boolean(host && user && pass),
+    configured,
   };
 }
 

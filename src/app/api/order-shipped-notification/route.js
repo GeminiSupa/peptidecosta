@@ -4,15 +4,9 @@ import { getBusinessLinks } from '@/lib/settings';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
+import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 
-// Transactional mail goes out through ORDER_SMTP_* when it is configured, the
-// same precedence /api/order-notification uses. SMTP_* stays as the fallback
-// provider so a single set of legacy credentials still works on its own.
-const SMTP_HOST = process.env.ORDER_SMTP_HOST || process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.ORDER_SMTP_PORT || process.env.SMTP_PORT || 465);
-const SMTP_SECURE = (process.env.ORDER_SMTP_SECURE ?? process.env.SMTP_SECURE) !== 'false';
-const SMTP_USER = process.env.ORDER_SMTP_USER || process.env.SMTP_USER;
-const SMTP_PASS = process.env.ORDER_SMTP_PASS || process.env.SMTP_PASS;
+const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
 
 // Trustpilot Automatic Feedback Service (AFS): BCC this address on the

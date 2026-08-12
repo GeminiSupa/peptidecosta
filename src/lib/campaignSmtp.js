@@ -1,10 +1,19 @@
-const CAMPAIGN_FROM_EMAIL = process.env.CAMPAIGN_SMTP_FROM_EMAIL
-  || process.env.SMTP_FROM
-  || process.env.SMTP_USER
+// Secrets get pasted into dashboards and piped in from shells, so a stray
+// newline or space rides along more often than not. A trailing "\n" on the host
+// survives all the way to the DNS lookup, which then fails with an error that
+// names neither the variable nor the whitespace.
+function readEnv(name) {
+  const raw = process.env[name];
+  return typeof raw === 'string' ? raw.trim() : raw;
+}
+
+const CAMPAIGN_FROM_EMAIL = readEnv('CAMPAIGN_SMTP_FROM_EMAIL')
+  || readEnv('SMTP_FROM')
+  || readEnv('SMTP_USER')
   || 'info@peptidescostarica.net';
 
 function resolveSecureMode(port) {
-  const raw = process.env.CAMPAIGN_SMTP_SECURE ?? process.env.SMTP_SECURE;
+  const raw = readEnv('CAMPAIGN_SMTP_SECURE') ?? readEnv('SMTP_SECURE');
   const normalized = String(raw || '').trim().toLowerCase();
 
   if (port === 465) return normalized === 'false' ? false : true;
@@ -16,13 +25,13 @@ function resolveSecureMode(port) {
 }
 
 export function getCampaignSmtpConfig() {
-  const host = process.env.CAMPAIGN_SMTP_HOST || process.env.SMTP_HOST;
-  const port = Number(process.env.CAMPAIGN_SMTP_PORT || process.env.SMTP_PORT || 465);
+  const host = readEnv('CAMPAIGN_SMTP_HOST') || readEnv('SMTP_HOST');
+  const port = Number(readEnv('CAMPAIGN_SMTP_PORT') || readEnv('SMTP_PORT') || 465);
   const secure = resolveSecureMode(port);
-  const user = process.env.CAMPAIGN_SMTP_USER || process.env.SMTP_USER;
-  const pass = process.env.CAMPAIGN_SMTP_PASS || process.env.SMTP_PASS;
-  const from = process.env.CAMPAIGN_FROM || `Peptides Costa Rica <${CAMPAIGN_FROM_EMAIL}>`;
-  const replyTo = process.env.CAMPAIGN_REPLY_TO || CAMPAIGN_FROM_EMAIL;
+  const user = readEnv('CAMPAIGN_SMTP_USER') || readEnv('SMTP_USER');
+  const pass = readEnv('CAMPAIGN_SMTP_PASS') || readEnv('SMTP_PASS');
+  const from = readEnv('CAMPAIGN_FROM') || `Peptides Costa Rica <${CAMPAIGN_FROM_EMAIL}>`;
+  const replyTo = readEnv('CAMPAIGN_REPLY_TO') || CAMPAIGN_FROM_EMAIL;
 
   return {
     host,
@@ -47,10 +56,10 @@ export function identifyCampaignSmtpProvider(host = '') {
 }
 
 export function getCampaignRackspaceFallbackSmtpConfig(primary) {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 465);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const host = readEnv('SMTP_HOST');
+  const port = Number(readEnv('SMTP_PORT') || 465);
+  const user = readEnv('SMTP_USER');
+  const pass = readEnv('SMTP_PASS');
   if (!host || !user || !pass) return null;
 
   const isSameAsPrimary = primary
@@ -59,15 +68,15 @@ export function getCampaignRackspaceFallbackSmtpConfig(primary) {
     && primary.user === user;
   if (isSameAsPrimary) return null;
 
-  const fromEmail = process.env.SMTP_FROM || user || 'info@peptidescostarica.net';
+  const fromEmail = readEnv('SMTP_FROM') || user || 'info@peptidescostarica.net';
   return {
     host,
     port,
-    secure: process.env.SMTP_SECURE !== 'false',
+    secure: readEnv('SMTP_SECURE') !== 'false',
     user,
     pass,
-    from: process.env.CAMPAIGN_FROM || `Peptides Costa Rica <${fromEmail}>`,
-    replyTo: process.env.CAMPAIGN_REPLY_TO || process.env.SMTP_REPLY_TO || fromEmail,
+    from: readEnv('CAMPAIGN_FROM') || `Peptides Costa Rica <${fromEmail}>`,
+    replyTo: readEnv('CAMPAIGN_REPLY_TO') || readEnv('SMTP_REPLY_TO') || fromEmail,
     configured: true,
   };
 }
