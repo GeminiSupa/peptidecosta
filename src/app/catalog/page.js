@@ -415,14 +415,6 @@ export default function CatalogPage() {
   // because everyone who just wanted the catalog lands on the marketing list.
   const [gateConsent, setGateConsent] = useState(false);
 
-  const dismissGate = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('catalog_gate_dismissed', 'true');
-    }
-    setGateVisible(false);
-    setGateError('');
-  }, []);
-
   // Second-chance WhatsApp opt-in re-prompt (for visitors who unlocked the
   // catalog but did NOT opt in). Shown at most once / 3 days, stops after 2 dismissals.
   const [showWaReprompt, setShowWaReprompt]           = useState(false);
@@ -473,12 +465,7 @@ export default function CatalogPage() {
       const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
       setGateAccessGranted(hasAccess);
       setGateLoading(false);
-      // Dismissing the gate holds for the tab, not forever: the visitor keeps
-      // browsing without being asked again on every route change, and a fresh
-      // visit still prompts. sessionStorage rather than localStorage for
-      // exactly that reason.
-      const dismissed = sessionStorage.getItem('catalog_gate_dismissed') === 'true';
-      if (!hasAccess && !dismissed && !loading) {
+      if (!hasAccess && !loading) {
         const timer = setTimeout(() => setGateVisible(true), 15000);
         return () => clearTimeout(timer);
       }
@@ -3152,21 +3139,6 @@ export default function CatalogPage() {
               position: 'relative'
             }}>
 
-              <button
-                type="button"
-                onClick={dismissGate}
-                aria-label={lang === 'en' ? 'Close and keep browsing' : 'Cerrar y seguir viendo'}
-                style={{
-                  position: 'absolute', top: '10px', right: '10px',
-                  width: '44px', height: '44px', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center',
-                  border: 'none', background: 'transparent',
-                  color: 'var(--text-muted)', cursor: 'pointer', borderRadius: '50%'
-                }}
-              >
-                <X size={20} />
-              </button>
-
               <div style={{ padding: '24px 24px 32px 24px' }}>
               <img src="/logo.png" alt="Peptides Costa Rica Logo" style={{ height: '40px', margin: '0 auto 16px auto', display: 'block', borderRadius: '8px' }} />
               <h2 style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--text-main)', marginBottom: '8px' }}>
@@ -3234,22 +3206,6 @@ export default function CatalogPage() {
                   ) : (
                     lang === 'en' ? 'Unlock Catalog' : 'Desbloquear Catálogo'
                   )}
-                </button>
-
-                {/* An X in the corner is easy to miss and reads as "dismiss the
-                    offer", not "I can still shop". Spelling the way out makes
-                    the gate a prompt rather than a wall — which is what the
-                    landing page promises ("precios transparentes"). */}
-                <button
-                  type="button"
-                  onClick={dismissGate}
-                  style={{
-                    background: 'none', border: 'none', padding: '4px',
-                    color: 'var(--text-muted)', fontSize: '0.82rem',
-                    textDecoration: 'underline', cursor: 'pointer'
-                  }}
-                >
-                  {lang === 'en' ? 'Browse the catalog without signing up' : 'Ver el catálogo sin registrarme'}
                 </button>
 
               </form>
