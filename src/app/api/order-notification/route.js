@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
 import { taxRecordsCcForCompletedOrder } from '@/lib/taxRecordsEmail.mjs';
 import { buildOrderEmailAddressing, getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
+import { getOrderEmailLogoAttachment, ORDER_EMAIL_LOGO_SRC } from '@/lib/orderEmailBranding.mjs';
 import { splitCartUnits } from '@/lib/bacWater.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
@@ -128,7 +129,8 @@ const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc) =
       
       <!-- Premium Admin Header Banner -->
       <div style="background-color:#0f172a;padding:40px 32px;text-align:center;">
-        <img src="https://catalog.peptidescostarica.net/logo.png?v=2" alt="Peptides Costa Rica" width="140" height="118" style="display:block;width:140px;height:118px;margin:0 auto 16px auto;border-radius:12px;">
+        <img src="${ORDER_EMAIL_LOGO_SRC}" alt="Peptides Costa Rica" width="140" height="118" style="display:block;width:140px;height:118px;margin:0 auto 12px auto;border-radius:12px;color:#ffffff;">
+        <div style="color:#ffffff;font-size:15px;font-weight:800;letter-spacing:1.2px;margin:0 0 16px;">PEPTIDES COSTA RICA</div>
         <h1 style="color:#ffffff !important;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">New Order Received!</h1>
         <p style="color:#e0e7ff !important;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">A new order has been placed on the Peptides Costa Rica catalog.</p>
       </div>
@@ -302,7 +304,8 @@ const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc
       
       <!-- Premium Science Theme Header Banner -->
       <div style="background-color:#0f172a;padding:40px 32px;text-align:center;">
-        <img src="https://catalog.peptidescostarica.net/logo.png?v=2" alt="Peptides Costa Rica" width="140" height="118" style="display:block;width:140px;height:118px;margin:0 auto 16px auto;border-radius:12px;">
+        <img src="${ORDER_EMAIL_LOGO_SRC}" alt="Peptides Costa Rica" width="140" height="118" style="display:block;width:140px;height:118px;margin:0 auto 12px auto;border-radius:12px;color:#ffffff;">
+        <div style="color:#ffffff;font-size:15px;font-weight:800;letter-spacing:1.2px;margin:0 0 16px;">PEPTIDES COSTA RICA</div>
         <h1 style="color:#ffffff !important;font-size:28px;font-weight:800;margin:0 0 10px;letter-spacing:-0.5px;">${strings.title}</h1>
         <p style="color:#e2e8f0 !important;font-size:15px;margin:0;max-width:500px;margin:0 auto;line-height:1.5;">${strings.subtitle}</p>
       </div>
@@ -624,6 +627,7 @@ export async function POST(request) {
         html: adminHtml,
         text: adminText,
         replyTo: order.customerEmail || undefined,
+        attachments: [getOrderEmailLogoAttachment()],
       });
 
       const recipientCount = 1 + addressing.cc.length + addressing.bcc.length;
@@ -685,6 +689,7 @@ export async function POST(request) {
           subject: customerSubject,
           html: customerHtml,
           text: customerText,
+          attachments: [getOrderEmailLogoAttachment()],
         });
 
         results.customerReceipt = { sent: true, messageId: customerInfo.messageId };
