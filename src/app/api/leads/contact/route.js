@@ -4,6 +4,14 @@ import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { resolveLeadOwner } from '@/lib/leadOwner';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { rateLimit } from '@/lib/rateLimit.mjs';
+import nodemailer from 'nodemailer';
+import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
+import { getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
+import {
+  hasLandingQualification,
+  landingQualificationNotes,
+  normalizeLandingQualification,
+} from '@/lib/landingLead.mjs';
 
 // The storefront "Contáctenos" form. This replaced the WhatsApp CTAs, so it is
 // now the only way a visitor who does not want to check out can reach the team
@@ -21,6 +29,59 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const clean = (value, limit = 200) => String(value ?? '').trim().slice(0, limit);
+
+const escapeHtml = (value = '') => String(value)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+async function sendLandingLeadAlert({ name, email, phone, source, qualification, campaign }) {
+  const smtp = getTransactionalSmtpConfig();
+  if (!smtp.configured) {
+    console.warn('[leads/contact] Elastic transactional SMTP is not configured; lead alert skipped.');
+    return;
+  }
+
+  const recipients = await getOrderNotificationRecipients();
+  if (!recipients.length) return;
+
+  const details = landingQualificationNotes(qualification);
+  const lines = [
+    'New landing-page lead',
+    `Name: ${name}`,
+    `Email: ${email || 'Not provided'}`,
+    `Phone: ${phone || 'Not provided'}`,
+    ...details,
+    `Source: ${source}`,
+    campaign ? `Campaign: ${campaign}` : null,
+  ].filter(Boolean);
+
+  const fromEmail = readEnv('ORDER_NOTIFICATION_FROM_EMAIL')
+    || readEnv('CAMPAIGN_SMTP_FROM_EMAIL')
+    || smtp.user;
+  const from = readEnv('ORDER_NOTIFICATION_FROM') || `Peptides Costa Rica <${fromEmail}>`;
+  const transporter = nodemailer.createTransport({
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.secure,
+    auth: { user: smtp.user, pass: smtp.pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
+  });
+
+  await transporter.sendMail({
+    from,
+    to: fromEmail,
+    bcc: recipients.join(', '),
+    replyTo: email || undefined,
+    subject: `New landing-page lead — ${name}`,
+    text: lines.join('\n'),
+    html: `<h2>New landing-page lead</h2><ul>${lines.slice(1).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
+  });
+}
 
 // This is posted to from standalone ad landing pages, which are not served
 // from this domain, so the browser needs CORS to let the request through.
@@ -54,6 +115,7 @@ export async function POST(request) {
     const phoneRaw = clean(body.phone, 40);
     const language = body.language === 'en' ? 'en' : 'es';
     const source = clean(body.source, 60) || 'contact_form';
+    const qualification = normalizeLandingQualification(body);
 
     // Ad campaign tracking. catalog_leads has carried these columns all along
     // but nothing was filling them, so a lead from a paid ad was
@@ -120,6 +182,7 @@ export async function POST(request) {
       utmCampaign || utmSource
         ? `Campaign: ${[utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / ')}`
         : null,
+      ...landingQualificationNotes(qualification),
     ].filter(Boolean).join('\n');
 
     const payload = {
@@ -159,6 +222,23 @@ export async function POST(request) {
         : supabase.from('catalog_leads').insert({ ...row, created_at: nowIso })
     ));
     if (error) throw error;
+
+    // Saving the lead is the source of truth. A temporary email-provider issue
+    // must never make the browser retry and create duplicate CRM activity.
+    if (hasLandingQualification(qualification)) {
+      try {
+        await sendLandingLeadAlert({
+          name,
+          email,
+          phone,
+          source,
+          qualification,
+          campaign: [utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / '),
+        });
+      } catch (alertError) {
+        console.error('[leads/contact] lead alert failed:', alertError);
+      }
+    }
 
     return withCors({ success: true });
   } catch (err) {
