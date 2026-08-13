@@ -199,7 +199,7 @@ export default function CartsManager({
             <ShoppingCart size={22} />
           </div>
           <div>
-            <h2 className="admin-section-title" style={{ margin: 0 }}>Abandoned Carts</h2>
+            <h2 className="admin-section-title" style={{ margin: 0 }}>Carts</h2>
             <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>{(abandonedCarts || []).length} active carts awaiting recovery</p>
           </div>
         </div>
@@ -380,7 +380,7 @@ export default function CartsManager({
       {!filteredAndSortedCarts.length ? (
         <div className="admin-empty-state" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)' }}>
           <div className="empty-icon" style={{ opacity: 0.5 }}><ShoppingCart size={48} /></div>
-          <h3>No Abandoned Carts</h3>
+          <h3>No Carts</h3>
           <p>Your checkout funnel is completely clear right now.</p>
         </div>
       ) : (

@@ -14,7 +14,7 @@ export const ADMIN_MODULES = [
   // so the two are worked together.
   { id: 'leads', label: 'Leads', title: 'Leads', group: 'Core Operations' },
   { id: 'prospects', label: 'Prospector', title: 'Prospector', group: 'Sales & Marketing' },
-  { id: 'carts', label: 'Abandoned Carts', title: 'Abandoned Carts', group: 'Sales & Marketing' },
+  { id: 'carts', label: 'Carts', title: 'Carts', group: 'Sales & Marketing' },
   { id: 'spreadsheet', label: 'Products', title: 'Products', group: 'Core Operations', superadminOnly: true },
   { id: 'customers', label: 'Customers', title: 'Customers', group: 'Core Operations' },
   { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
