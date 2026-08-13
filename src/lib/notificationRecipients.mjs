@@ -10,7 +10,7 @@
  */
 
 export const NOTIFICATION_CHANNELS = ['whatsapp', 'email'];
-export const NOTIFICATION_TYPES = ['new_order'];
+export const NOTIFICATION_TYPES = ['new_order', 'new_lead'];
 
 /** PostgREST says "relation does not exist" one way and "schema cache" another. */
 export function isMissingRecipientsTable(error) {
@@ -22,6 +22,12 @@ export function isMissingRecipientsTable(error) {
     (/notification_recipients/i.test(message) &&
       /does not exist|schema cache|could not find/i.test(message))
   );
+}
+
+export function missingRecipientColumn(error, column) {
+  const message = String(error?.message || '');
+  return (error?.code === '42703' || error?.code === 'PGRST204' || /schema cache|does not exist/i.test(message))
+    && message.includes(column);
 }
 
 const digitsOnly = (value) => String(value ?? '').replace(/\D/g, '');
@@ -56,7 +62,7 @@ export async function getNotificationRecipients(supabase, {
 
   const { data, error } = await supabase
     .from('notification_recipients')
-    .select('label, channel, destination, active, new_order')
+    .select(`label, channel, destination, active, ${type}`)
     .eq('channel', channel)
     .eq('active', true)
     .eq(type, true);

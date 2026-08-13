@@ -12,7 +12,7 @@ export async function PUT(request) {
     const {
       userId, email, password, name, permissions, is_superadmin, commission_rate, weekly_salary,
       salary_currency, commission_structure, avatar_url,
-      notifications_enabled, order_email_notifications, order_whatsapp_notifications, whatsapp_number,
+      notifications_enabled, order_email_notifications, lead_email_notifications, order_whatsapp_notifications, whatsapp_number,
     } = body;
 
     if (!userId) {
@@ -45,6 +45,7 @@ export async function PUT(request) {
     if (avatar_url !== undefined) updateData.avatar_url = avatar_url || null;
     if (notifications_enabled !== undefined) updateData.notifications_enabled = Boolean(notifications_enabled);
     if (order_email_notifications !== undefined) updateData.order_email_notifications = Boolean(order_email_notifications);
+    if (lead_email_notifications !== undefined) updateData.lead_email_notifications = Boolean(lead_email_notifications);
     if (order_whatsapp_notifications !== undefined) updateData.order_whatsapp_notifications = Boolean(order_whatsapp_notifications);
     if (whatsapp_number !== undefined) updateData.whatsapp_number = whatsapp_number ? String(whatsapp_number).trim() : null;
 

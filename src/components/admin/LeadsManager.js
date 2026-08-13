@@ -1199,6 +1199,11 @@ export default function LeadsManager({
                     </td>
                     <td data-label="Agent" className="lead-agent-table-cell" style={{ padding: '10px 12px' }}>
                       {renderLeadAgentControl(lead)}
+                      {lead.response_due_at && !lead.last_contacted_at && (() => {
+                        const due = new Date(lead.response_due_at);
+                        const overdue = due.getTime() < Date.now();
+                        return <span title={`Response due ${due.toLocaleString()}`} style={{ display: 'inline-block', marginTop: 6, fontSize: '.67rem', fontWeight: 800, color: overdue ? '#f87171' : '#fbbf24' }}>{overdue ? '⚠ Response overdue' : `Due ${due.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</span>;
+                      })()}
                     </td>
                     <td data-label="Last Contacted" style={{ padding: '10px 12px' }}>
                       {(() => {

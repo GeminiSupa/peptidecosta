@@ -55,7 +55,7 @@ function NotificationSettings({
   const renderGroup = (title, icon, rows, emptyText) => (
     <div style={panel}>
       <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {icon} {title} <span style={{ color: '#64748b', fontWeight: 'normal' }}>({rows.filter(r => r.active && r.new_order).length} active)</span>
+        {icon} {title} <span style={{ color: '#64748b', fontWeight: 'normal' }}>({rows.filter(r => r.active && (r.new_order || r.new_lead)).length} active)</span>
       </h3>
       {rows.length === 0 ? (
         <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>{emptyText}</p>
@@ -76,6 +76,17 @@ function NotificationSettings({
                 />
                 New order alert
               </label>
+              {r.channel === 'email' && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#94a3b8', cursor: canEdit ? 'pointer' : 'not-allowed' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!r.new_lead}
+                    disabled={!canEdit || savingId === r.id}
+                    onChange={e => onUpdate(r.id, { new_lead: e.target.checked })}
+                  />
+                  Backup lead alert
+                </label>
+              )}
               {canEdit && (
                 <button
                   className="admin-btn"
@@ -100,8 +111,8 @@ function NotificationSettings({
   return (
     <div>
       <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0 0 16px 0', lineHeight: 1.5 }}>
-        Every destination that gets told about a new order. A destination does not have to be a team member — an owner&apos;s
-        second phone can sit here on its own.
+        Destinations for new-order alerts and backup landing-lead alerts. The assigned agent always receives their lead directly;
+        select Backup lead alert only for an owner or operations inbox that should provide coverage.
       </p>
 
       {!tableReady && (
@@ -215,6 +226,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [formAvatarUrl, setFormAvatarUrl] = useState('');
   const [formNotificationsEnabled, setFormNotificationsEnabled] = useState(true);
   const [formOrderEmails, setFormOrderEmails] = useState(true);
+  const [formLeadEmails, setFormLeadEmails] = useState(true);
   const [formOrderWhatsApp, setFormOrderWhatsApp] = useState(false);
   const [formWhatsAppNumber, setFormWhatsAppNumber] = useState('');
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -516,6 +528,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormAvatarUrl(user.avatar_url || '');
       setFormNotificationsEnabled(user.notifications_enabled !== false);
       setFormOrderEmails(user.order_email_notifications !== false);
+      setFormLeadEmails(user.lead_email_notifications !== false);
       setFormOrderWhatsApp(user.order_whatsapp_notifications === true);
       setFormWhatsAppNumber(user.whatsapp_number || '');
     } else {
@@ -532,6 +545,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setFormAvatarUrl('');
       setFormNotificationsEnabled(true);
       setFormOrderEmails(true);
+      setFormLeadEmails(true);
       setFormOrderWhatsApp(false);
       setFormWhatsAppNumber('');
     }
@@ -590,6 +604,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             avatar_url: formAvatarUrl || null,
             notifications_enabled: formNotificationsEnabled,
             order_email_notifications: formOrderEmails,
+            lead_email_notifications: formLeadEmails,
             order_whatsapp_notifications: formOrderWhatsApp,
             whatsapp_number: formWhatsAppNumber
           })
@@ -614,6 +629,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             avatar_url: formAvatarUrl || undefined,
             notifications_enabled: formNotificationsEnabled,
             order_email_notifications: formOrderEmails,
+            lead_email_notifications: formLeadEmails,
             order_whatsapp_notifications: formOrderWhatsApp,
             whatsapp_number: formWhatsAppNumber
           })
@@ -1519,6 +1535,14 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                     checked={formNotificationsEnabled && formOrderEmails}
                     onChange={setFormOrderEmails}
                     activeColor="#38bdf8"
+                  />
+                  <NotificationToggle
+                    icon={<Mail size={14} style={{ color: '#f59e0b' }} />}
+                    title="Eligible for landing leads"
+                    hint="Include this staff member in round-robin assignment and email them their assigned lead."
+                    checked={formNotificationsEnabled && formLeadEmails}
+                    onChange={setFormLeadEmails}
+                    activeColor="#f59e0b"
                   />
                   <NotificationToggle
                     icon={<MessageCircle size={14} style={{ color: '#22c55e' }} />}

@@ -10,6 +10,7 @@
 export const NOTIFICATION_PREFERENCE_COLUMNS = [
   'notifications_enabled',
   'order_email_notifications',
+  'lead_email_notifications',
   'order_whatsapp_notifications',
   'whatsapp_number',
 ];

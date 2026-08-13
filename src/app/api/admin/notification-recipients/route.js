@@ -33,11 +33,21 @@ export async function GET(request) {
   if (auth.error) return auth.error;
 
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('notification_recipients')
-    .select('id, label, channel, destination, new_order, active, created_at')
+    .select('id, label, channel, destination, new_order, new_lead, active, created_at')
     .order('channel', { ascending: true })
     .order('created_at', { ascending: true });
+
+  if (error && String(error.message || '').includes('new_lead')) {
+    const fallback = await supabase
+      .from('notification_recipients')
+      .select('id, label, channel, destination, new_order, active, created_at')
+      .order('channel', { ascending: true })
+      .order('created_at', { ascending: true });
+    data = (fallback.data || []).map((row) => ({ ...row, new_lead: false }));
+    error = fallback.error;
+  }
 
   if (error) {
     if (isMissingRecipientsTable(error)) {
@@ -61,17 +71,34 @@ export async function POST(request) {
     if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
     const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('notification_recipients')
       .insert({
         label: String(body.label).trim(),
         channel,
         destination: normalizeDestination(channel, body.destination),
         new_order: body.new_order !== false,
+        new_lead: body.new_lead === true,
         active: body.active !== false,
       })
       .select()
       .single();
+
+    if (error && String(error.message || '').includes('new_lead')) {
+      const fallback = await supabase
+        .from('notification_recipients')
+        .insert({
+          label: String(body.label).trim(),
+          channel,
+          destination: normalizeDestination(channel, body.destination),
+          new_order: body.new_order !== false,
+          active: body.active !== false,
+        })
+        .select()
+        .single();
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       if (isMissingRecipientsTable(error)) {
@@ -102,6 +129,7 @@ export async function PATCH(request) {
     const patch = {};
     if (body.label !== undefined) patch.label = String(body.label).trim();
     if (body.new_order !== undefined) patch.new_order = body.new_order === true;
+    if (body.new_lead !== undefined) patch.new_lead = body.new_lead === true;
     if (body.active !== undefined) patch.active = body.active === true;
     if (body.destination !== undefined || body.channel !== undefined) {
       const channel = body.channel;
@@ -116,6 +144,10 @@ export async function PATCH(request) {
     }
 
     const supabase = getSupabaseAdmin();
+    if (Object.keys(patch).length === 1 && 'new_lead' in patch) {
+      const { error: columnCheck } = await supabase.from('notification_recipients').select('new_lead').limit(1);
+      if (columnCheck) return NextResponse.json({ error: 'Run landing-lead-system-migration.sql before changing backup lead alerts.' }, { status: 503 });
+    }
     const { data, error } = await supabase
       .from('notification_recipients')
       .update(patch)

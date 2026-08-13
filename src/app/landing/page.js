@@ -28,6 +28,13 @@ import {
 } from 'lucide-react';
 import { buildLandingLeadPayload } from '@/lib/landingLead.mjs';
 import {
+  DEFAULT_LANDING_LEAD_SETTINGS,
+  LANDING_LEAD_SETTINGS_ID,
+  localizedQuestion,
+  normalizeLandingLeadSettings,
+} from '@/lib/landingLeadSettings.mjs';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import {
   GOOGLE_LOCAL_LISTING_URL,
   TRUSTPILOT_RATING,
   TRUSTPILOT_REVIEW_COUNT,
@@ -224,10 +231,10 @@ async function postWithRetry(payload, attempts = 2) {
   throw lastError;
 }
 
-function LeadModal({ open, onClose, lang, source, utm, onSubmitted }) {
+function LeadModal({ open, onClose, lang, source, utm, onSubmitted, settings }) {
   const c = COPY[lang].modal;
   const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState({ category: '', location: '', volume: '', language: lang });
+  const [answers, setAnswers] = useState({});
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', alternatePhone: '', consent: false });
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -263,24 +270,21 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted }) {
     };
   }, [open, onClose]);
 
-  useEffect(() => {
-    setAnswers((current) => ({ ...current, language: current.language || lang }));
-  }, [lang]);
-
   if (!open) return null;
 
-  const optionSets = [c.category, c.location, c.volume, c.languages];
-  const answerKeys = ['category', 'location', 'volume', 'language'];
-  const answerLabels = [answers.category, answers.location, answers.volume, answers.language === 'en' ? 'English' : 'Español'];
+  const questions = settings.questions;
+  const localizedQuestions = questions.map((question) => localizedQuestion(question, lang));
+  const contactStep = questions.length;
+  const totalSteps = contactStep + 1;
+  const answerLabels = questions.map((question) => answers[question.id]?.label).filter(Boolean);
 
-  const choose = (value) => {
-    const key = answerKeys[step];
-    const nextValue = Array.isArray(value) ? value[1] : value;
-    setAnswers((current) => ({ ...current, [key]: nextValue }));
-    fireEvent('enquiry_answer', { step: step + 1, answerKey: key, answer: nextValue });
+  const choose = (option) => {
+    const question = localizedQuestions[step];
+    setAnswers((current) => ({ ...current, [question.id]: { id: option.id, label: option.label } }));
+    fireEvent('enquiry_answer', { step: step + 1, answerKey: question.id, answer: option.id });
     setError('');
     setTimeout(() => {
-      setStep((current) => Math.min(current + 1, 4));
+      setStep((current) => Math.min(current + 1, contactStep));
       fireEvent('enquiry_step', { step: step + 2 });
     }, 180);
   };
@@ -302,16 +306,25 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted }) {
 
     setSending(true);
     setError('');
-    const payload = buildLandingLeadPayload({ form, answers, language: lang, source, utm });
+    const payload = buildLandingLeadPayload({
+      form,
+      answers,
+      questions,
+      language: lang,
+      source,
+      utm,
+      consentText: lang === 'en' ? settings.consentEn : settings.consentEs,
+      consentVersion: settings.consentVersion,
+    });
     try {
       await postWithRetry(payload);
       setSent(true);
       onSubmitted();
       fireEvent('generate_lead', {
-        preferredLanguage: answers.language,
-        category: answers.category,
-        location: answers.location,
-        volume: answers.volume,
+        preferredLanguage: answers.language?.id || lang,
+        category: answers.category?.id || '',
+        location: answers.location?.id || '',
+        volume: answers.volume?.id || '',
         source,
       });
       if (typeof window.gtag === 'function') window.gtag('event', 'generate_lead', { event_category: 'landing_page', source });
@@ -329,9 +342,9 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted }) {
         <button ref={closeRef} type="button" className="lead-modal-close" onClick={onClose} aria-label={c.close} disabled={sending}><X size={20} /></button>
 
         {!sent && (
-          <div className="lead-modal-progress" aria-label={`${c.step} ${step + 1} ${c.of} 5`}>
-            <span>{c.step} {step + 1} {c.of} 5</span>
-            <div><i style={{ width: `${((step + 1) / 5) * 100}%` }} /></div>
+          <div className="lead-modal-progress" aria-label={`${c.step} ${step + 1} ${c.of} ${totalSteps}`}>
+            <span>{c.step} {step + 1} {c.of} {totalSteps}</span>
+            <div><i style={{ width: `${((step + 1) / totalSteps) * 100}%` }} /></div>
           </div>
         )}
 
@@ -342,7 +355,7 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted }) {
             <h2 id="lead-modal-title">{c.successTitle.replace('{name}', form.firstName.trim())}</h2>
             <p>{c.successText}</p>
             <div className="lead-success-summary">
-              {answerLabels.slice(0, 4).map((label) => <span key={label}><Check size={13} /> {label}</span>)}
+              {answerLabels.map((label) => <span key={label}><Check size={13} /> {label}</span>)}
             </div>
             <div className="lead-next">
               <strong>{c.nextTitle}</strong>
@@ -360,19 +373,17 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted }) {
             </div>
             <header className="lead-modal-heading">
               <p className="lead-modal-kicker">Peptides Costa Rica</p>
-              <h2 id="lead-modal-title">{c.titles[step]}</h2>
-              <p>{c.subtitles[step]}</p>
+              <h2 id="lead-modal-title">{step < contactStep ? localizedQuestions[step].title : c.titles[4]}</h2>
+              <p>{step < contactStep ? localizedQuestions[step].subtitle : c.subtitles[4]}</p>
             </header>
 
-            {step < 4 ? (
+            {step < contactStep ? (
               <div className={`lead-option-grid lead-option-grid-${step}`}>
-                {optionSets[step].map((option) => {
-                  const label = Array.isArray(option) ? option[0] : option;
-                  const value = Array.isArray(option) ? option[1] : option;
-                  const selected = answers[answerKeys[step]] === value;
+                {localizedQuestions[step].options.map((option) => {
+                  const selected = answers[localizedQuestions[step].id]?.id === option.id;
                   return (
-                    <button type="button" key={value} className={selected ? 'is-selected' : ''} onClick={() => choose(option)}>
-                      <span>{label}</span><ArrowRight size={17} />
+                    <button type="button" key={option.id} className={selected ? 'is-selected' : ''} onClick={() => choose(option)}>
+                      <span>{option.label}</span><ArrowRight size={17} />
                     </button>
                   );
                 })}
@@ -388,7 +399,7 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted }) {
                   <label><span>{c.phone} *</span><input type="tel" inputMode="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} autoComplete="tel" /></label>
                   <label><span>{c.alternatePhone}</span><input type="tel" inputMode="tel" value={form.alternatePhone} onChange={(event) => setForm({ ...form, alternatePhone: event.target.value })} /></label>
                 </div>
-                <label className="lead-consent"><input type="checkbox" checked={form.consent} onChange={(event) => setForm({ ...form, consent: event.target.checked })} /><span>{c.consent}</span></label>
+                <label className="lead-consent"><input type="checkbox" checked={form.consent} onChange={(event) => setForm({ ...form, consent: event.target.checked })} /><span>{lang === 'en' ? settings.consentEn : settings.consentEs}</span></label>
                 {error && <p className="lead-form-error" role="alert">{error}</p>}
                 <button type="submit" className="lead-primary lead-primary-full" disabled={sending} aria-busy={sending}>
                   {sending ? <><Loader2 className="lead-spin" size={18} />{c.sending}</> : <>{c.submit}<ArrowRight size={18} /></>}
@@ -412,6 +423,7 @@ export default function LeadGenerationLandingPage() {
   const [utm, setUtm] = useState({ utm_source: '', utm_medium: '', utm_campaign: '' });
   const [submitted, setSubmitted] = useState(false);
   const [openFaq, setOpenFaq] = useState(-1);
+  const [leadSettings, setLeadSettings] = useState(DEFAULT_LANDING_LEAD_SETTINGS);
   const started = useRef(false);
   const c = COPY[lang];
 
@@ -431,6 +443,22 @@ export default function LeadGenerationLandingPage() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) return;
+    let active = true;
+    supabase
+      .from('site_settings')
+      .select('value')
+      .eq('id', LANDING_LEAD_SETTINGS_ID)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) console.warn('[landing] Lead settings fallback:', error.message);
+        setLeadSettings(normalizeLandingLeadSettings(data?.value));
+      });
+    return () => { active = false; };
+  }, []);
+
   const openModal = useCallback((trigger) => {
     if (submitted) return;
     started.current = true;
@@ -448,29 +476,29 @@ export default function LeadGenerationLandingPage() {
   useEffect(() => {
     let seen = false;
     try { seen = sessionStorage.getItem(SESSION_KEY) === '1'; } catch { seen = false; }
-    if (seen || submitted) return undefined;
+    if (seen || submitted || !leadSettings.autoOpenEnabled) return undefined;
     const timer = setTimeout(() => {
       if (!started.current && !submitted) {
         try { sessionStorage.setItem(SESSION_KEY, '1'); } catch { /* preview/privacy mode */ }
-        openModal('timer-5000ms');
+        openModal(`timer-${leadSettings.timeTriggerMs}ms`);
       }
-    }, 5000);
+    }, leadSettings.timeTriggerMs);
     return () => clearTimeout(timer);
-  }, [openModal, submitted]);
+  }, [leadSettings.autoOpenEnabled, leadSettings.timeTriggerMs, openModal, submitted]);
 
   useEffect(() => {
     if (submitted) return undefined;
     const onScroll = () => {
       const max = document.documentElement.scrollHeight - window.innerHeight;
-      if (max > 0 && window.scrollY / max >= 0.55 && !started.current) openModal('scroll-55');
+      if (max > 0 && (window.scrollY / max) * 100 >= leadSettings.scrollTriggerPct && !started.current) openModal(`scroll-${leadSettings.scrollTriggerPct}`);
     };
     const onMouseOut = (event) => {
-      if (event.clientY <= 0 && !event.relatedTarget && !started.current && window.innerWidth >= 1040) openModal('exit-intent');
+      if (leadSettings.exitIntentEnabled && event.clientY <= 0 && !event.relatedTarget && !started.current && window.innerWidth >= 1040) openModal('exit-intent');
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     document.addEventListener('mouseout', onMouseOut);
     return () => { window.removeEventListener('scroll', onScroll); document.removeEventListener('mouseout', onMouseOut); };
-  }, [openModal, submitted]);
+  }, [leadSettings.exitIntentEnabled, leadSettings.scrollTriggerPct, openModal, submitted]);
 
   const switchLanguage = () => {
     const next = lang === 'en' ? 'es' : 'en';
@@ -602,7 +630,7 @@ export default function LeadGenerationLandingPage() {
 
       <button type="button" className="lead-floating-cta" onClick={() => cta('floating')}><Sparkles size={17} />{c.heroCta}</button>
 
-      <LeadModal open={modalOpen} onClose={closeModal} lang={lang} source={source} utm={utm} onSubmitted={() => setSubmitted(true)} />
+      <LeadModal open={modalOpen} onClose={closeModal} lang={lang} source={source} utm={utm} settings={leadSettings} onSubmitted={() => setSubmitted(true)} />
     </div>
   );
 }

@@ -6,11 +6,14 @@ import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { rateLimit } from '@/lib/rateLimit.mjs';
 import nodemailer from 'nodemailer';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
-import { getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
+import { getLeadNotificationRecipients } from '@/lib/leadNotificationRecipients';
+import { responseDeadline } from '@/lib/leadNotifications.mjs';
+import { DEFAULT_LANDING_LEAD_SETTINGS, LANDING_LEAD_SETTINGS_ID, normalizeLandingLeadSettings } from '@/lib/landingLeadSettings.mjs';
 import {
   hasLandingQualification,
   landingQualificationNotes,
   normalizeLandingQualification,
+  normalizeStructuredAnswers,
 } from '@/lib/landingLead.mjs';
 
 // The storefront "Contáctenos" form. This replaced the WhatsApp CTAs, so it is
@@ -37,14 +40,41 @@ const escapeHtml = (value = '') => String(value)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
-async function sendLandingLeadAlert({ name, email, phone, source, qualification, campaign }) {
+async function fallbackRoundRobinAgent(supabase) {
+  const { data: profiles, error: profileError } = await supabase.from('admin_profiles').select('*');
+  if (profileError) throw profileError;
+  const eligible = (profiles || [])
+    .filter((profile) => profile.user_id && profile.email)
+    .filter((profile) => profile.is_superadmin !== true)
+    .filter((profile) => (profile.tier || 'staff') === 'staff' && (profile.status || 'active') === 'active')
+    .filter((profile) => profile.notifications_enabled !== false && profile.lead_email_notifications !== false)
+    .filter((profile) => Array.isArray(profile.permissions) && profile.permissions.includes('leads'))
+    .sort((left, right) => String(left.name || left.email).localeCompare(String(right.name || right.email), undefined, { sensitivity: 'base' }));
+  if (!eligible.length) return null;
+
+  const { data: latest } = await supabase
+    .from('catalog_leads')
+    .select('sales_agent, notes, created_at')
+    .ilike('notes', 'Contáctenos form%')
+    .not('sales_agent', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const lastIndex = eligible.findIndex((profile) =>
+    String(profile.name || profile.email).trim().toLowerCase() === String(latest?.sales_agent || '').trim().toLowerCase()
+  );
+  const next = eligible[(lastIndex + 1) % eligible.length];
+  return { agent_name: next.name || next.email, agent_email: next.email, agent_user_id: next.user_id };
+}
+
+async function sendLandingLeadAlert({ name, email, phone, source, qualification, campaign, assignedAgent, assignedAgentEmail, dueAt }) {
   const smtp = getTransactionalSmtpConfig();
   if (!smtp.configured) {
     console.warn('[leads/contact] Elastic transactional SMTP is not configured; lead alert skipped.');
     return;
   }
 
-  const recipients = await getOrderNotificationRecipients();
+  const recipients = await getLeadNotificationRecipients(assignedAgentEmail);
   if (!recipients.length) return;
 
   const details = landingQualificationNotes(qualification);
@@ -54,6 +84,8 @@ async function sendLandingLeadAlert({ name, email, phone, source, qualification,
     `Email: ${email || 'Not provided'}`,
     `Phone: ${phone || 'Not provided'}`,
     ...details,
+    assignedAgent ? `Assigned agent: ${assignedAgent}` : 'Assigned agent: Unassigned — operations follow-up required',
+    dueAt ? `Response due: ${new Date(dueAt).toLocaleString('en-US', { timeZone: 'America/Costa_Rica' })} Costa Rica time` : null,
     `Source: ${source}`,
     campaign ? `Campaign: ${campaign}` : null,
   ].filter(Boolean);
@@ -77,7 +109,7 @@ async function sendLandingLeadAlert({ name, email, phone, source, qualification,
     to: fromEmail,
     bcc: recipients.join(', '),
     replyTo: email || undefined,
-    subject: `New landing-page lead — ${name}`,
+    subject: `New lead assigned${assignedAgent ? ` to ${assignedAgent}` : ''} — ${name}`,
     text: lines.join('\n'),
     html: `<h2>New landing-page lead</h2><ul>${lines.slice(1).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
   });
@@ -115,7 +147,11 @@ export async function POST(request) {
     const phoneRaw = clean(body.phone, 40);
     const language = body.language === 'en' ? 'en' : 'es';
     const source = clean(body.source, 60) || 'contact_form';
-    const qualification = normalizeLandingQualification(body);
+    const structuredQualification = normalizeStructuredAnswers(body.qualification_data);
+    const qualification = { ...normalizeLandingQualification(body), ...structuredQualification };
+    const marketingConsent = body.marketing_consent === true;
+    const consentText = clean(body.consent_text, 800);
+    const consentVersion = clean(body.consent_version, 40);
 
     // Ad campaign tracking. catalog_leads has carried these columns all along
     // but nothing was filling them, so a lead from a paid ad was
@@ -137,11 +173,26 @@ export async function POST(request) {
     if (!email && !phone) {
       return withCors({ error: 'contact_required' }, 400);
     }
+    if (hasLandingQualification(qualification) && !marketingConsent) {
+      return withCors({ error: 'consent_required' }, 400);
+    }
 
     if (!supabaseUrl || !supabaseServiceKey) {
       return withCors({ error: 'server_not_configured' }, 500);
     }
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    let landingSettings = DEFAULT_LANDING_LEAD_SETTINGS;
+    try {
+      const { data: settingsRow } = await supabase
+        .from('site_settings')
+        .select('value')
+        .eq('id', LANDING_LEAD_SETTINGS_ID)
+        .maybeSingle();
+      landingSettings = normalizeLandingLeadSettings(settingsRow?.value);
+    } catch (settingsError) {
+      console.warn('[leads/contact] Lead settings fallback:', settingsError.message);
+    }
 
     // Email is the more stable identity, so it wins as the dedupe key when the
     // visitor gives both. This matches how live chat saves its leads.
@@ -160,13 +211,52 @@ export async function POST(request) {
     // existing owner is never overwritten — an agent who already claimed this
     // lead outranks anything history says.
     const existingOwner = String(existing?.sales_agent || existing?.owner || existing?.assigned_to || '').trim();
-    const owner = await resolveLeadOwner(supabase, {
+    let owner = await resolveLeadOwner(supabase, {
       phone,
       email,
       existingOwner,
       label: 'leads/contact',
     });
     const historyAgent = existingOwner ? '' : owner;
+    let assignedAgentEmail = '';
+    let assignmentSource = historyAgent ? 'order_history' : existingOwner ? 'existing_owner' : '';
+
+    if (!owner && hasLandingQualification(qualification)) {
+      try {
+        const { data: assigned, error: assignError } = await supabase.rpc('assign_next_landing_lead_agent');
+        if (assignError) throw assignError;
+        const agent = Array.isArray(assigned) ? assigned[0] : assigned;
+        owner = clean(agent?.agent_name, 160);
+        assignedAgentEmail = clean(agent?.agent_email, 200).toLowerCase();
+        if (owner) assignmentSource = 'round_robin';
+      } catch (assignError) {
+        console.warn('[leads/contact] Atomic round-robin unavailable, using CRM-history fallback:', assignError.message);
+        try {
+          const agent = await fallbackRoundRobinAgent(supabase);
+          owner = clean(agent?.agent_name, 160);
+          assignedAgentEmail = clean(agent?.agent_email, 200).toLowerCase();
+          if (owner) assignmentSource = 'round_robin';
+        } catch (fallbackError) {
+          console.warn('[leads/contact] Round-robin fallback skipped:', fallbackError.message);
+        }
+      }
+    } else if (owner) {
+      try {
+        const { data: agentProfiles } = await supabase
+          .from('admin_profiles')
+          .select('name, email');
+        const agentProfile = (agentProfiles || []).find((profile) =>
+          [profile.name, profile.email].some((value) => String(value || '').trim().toLowerCase() === owner.toLowerCase())
+        );
+        assignedAgentEmail = clean(agentProfile?.email, 200).toLowerCase();
+      } catch (profileError) {
+        console.warn('[leads/contact] Assigned agent email lookup skipped:', profileError.message);
+      }
+    }
+
+    const dueAt = hasLandingQualification(qualification)
+      ? responseDeadline(nowIso, landingSettings.responseSlaMinutes)
+      : null;
 
     // catalog_leads has no name/email/phone columns on the live schema, so the
     // details are always written into `notes` as well. Otherwise an agent
@@ -179,6 +269,10 @@ export async function POST(request) {
       // Mirrored into the note as well, because `sales_agent` is dropped below
       // if the live table lacks the column — the owner must stay visible.
       historyAgent ? `Owner: ${historyAgent} (returning customer — first closed by this agent)` : null,
+      assignmentSource === 'round_robin' ? `Owner: ${owner} (automatic round-robin assignment)` : null,
+      dueAt ? `Response due: ${dueAt}` : null,
+      marketingConsent ? `Marketing consent: accepted (${consentVersion || 'version not recorded'})` : null,
+      marketingConsent && consentText ? `Consent text: ${consentText}` : null,
       utmCampaign || utmSource
         ? `Campaign: ${[utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / ')}`
         : null,
@@ -198,6 +292,17 @@ export async function POST(request) {
       email: email || null,
       phone: phone || null,
       sales_agent: owner || null,
+      lead_source: source,
+      qualification_data: qualification,
+      marketing_consent: marketingConsent,
+      consent_at: marketingConsent ? nowIso : null,
+      consent_source: marketingConsent ? 'lead_landing_page' : null,
+      consent_text: marketingConsent ? consentText : null,
+      consent_version: marketingConsent ? consentVersion : null,
+      assigned_at: owner ? (existing?.assigned_at || nowIso) : null,
+      response_due_at: dueAt,
+      ownership_updated_at: owner && !existingOwner ? nowIso : existing?.ownership_updated_at || null,
+      ownership_updated_by: owner && !existingOwner ? `system:${assignmentSource || 'history'}` : existing?.ownership_updated_by || null,
       updated_at: nowIso,
       // Only overwrite the campaign on a lead that actually arrived with one,
       // so a returning visitor coming in organically does not erase the ad
@@ -214,14 +319,32 @@ export async function POST(request) {
     const optional = [
       'name', 'email', 'phone', 'sales_agent', 'updated_at',
       'utm_source', 'utm_medium', 'utm_campaign', 'referrer',
+      'lead_source', 'qualification_data', 'marketing_consent', 'consent_at', 'consent_source',
+      'consent_text', 'consent_version', 'assigned_at', 'response_due_at',
+      'ownership_updated_at', 'ownership_updated_by',
     ];
 
-    const { error } = await writeDroppingMissingColumns(payload, optional, (row) => (
+    const { data: saved, error } = await writeDroppingMissingColumns(payload, optional, (row) => (
       existing
-        ? supabase.from('catalog_leads').update(row).eq('id', existing.id)
-        : supabase.from('catalog_leads').insert({ ...row, created_at: nowIso })
+        ? supabase.from('catalog_leads').update(row).eq('id', existing.id).select('id').maybeSingle()
+        : supabase.from('catalog_leads').insert({ ...row, created_at: nowIso }).select('id').maybeSingle()
     ));
     if (error) throw error;
+
+    const leadId = saved?.id || existing?.id;
+    if (leadId && owner && !existingOwner && assignmentSource) {
+      const { error: eventError } = await supabase.from('lead_assignment_events').insert({
+        lead_id: leadId,
+        action: 'auto_assigned',
+        previous_agent: null,
+        new_agent: owner,
+        reason: assignmentSource === 'round_robin'
+          ? 'Landing-page automatic round-robin assignment'
+          : 'Returning customer assigned to earliest completed order owner',
+        actor_email: 'landing-system@peptidescostarica.net',
+      });
+      if (eventError) console.warn('[leads/contact] Assignment audit skipped:', eventError.message);
+    }
 
     // Saving the lead is the source of truth. A temporary email-provider issue
     // must never make the browser retry and create duplicate CRM activity.
@@ -234,6 +357,9 @@ export async function POST(request) {
           source,
           qualification,
           campaign: [utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / '),
+          assignedAgent: owner,
+          assignedAgentEmail,
+          dueAt,
         });
       } catch (alertError) {
         console.error('[leads/contact] lead alert failed:', alertError);

@@ -12,7 +12,7 @@ export async function POST(request) {
     const {
       email, password, name, permissions, is_superadmin, commission_rate, weekly_salary,
       salary_currency, commission_structure, avatar_url,
-      notifications_enabled, order_email_notifications, order_whatsapp_notifications, whatsapp_number,
+      notifications_enabled, order_email_notifications, lead_email_notifications, order_whatsapp_notifications, whatsapp_number,
     } = body;
 
     if (!email || !password || !name) {
@@ -51,6 +51,7 @@ export async function POST(request) {
       // which is opt-in so adding a member never starts messaging their phone.
       notifications_enabled: notifications_enabled !== false,
       order_email_notifications: order_email_notifications !== false,
+      lead_email_notifications: lead_email_notifications !== false,
       order_whatsapp_notifications: order_whatsapp_notifications === true,
       whatsapp_number: whatsapp_number ? String(whatsapp_number).trim() : null,
     };

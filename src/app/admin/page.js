@@ -44,6 +44,7 @@ import DashboardHome from '@/components/admin/DashboardHome';
 import AgentDashboard from '@/components/admin/AgentDashboard';
 import GlobalSearch from '@/components/admin/GlobalSearch';
 import NotificationCenter from '@/components/admin/NotificationCenter';
+import LandingLeadSettingsManager from '@/components/admin/LandingLeadSettingsManager';
 import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
 import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
@@ -5889,6 +5890,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             </div>
 
+            <LandingLeadSettingsManager />
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
               
               {/* Landing Page Settings */}
@@ -6792,6 +6795,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       {/* Lead Details Modal */}
       {selectedLeadDetails && (() => {
         const currentLead = leads.find(l => l.id === selectedLeadDetails.id) || selectedLeadDetails;
+        const qualificationAnswers = Array.isArray(currentLead.qualification_data?.answers)
+          ? currentLead.qualification_data.answers
+          : [];
+        const responseDue = currentLead.response_due_at ? new Date(currentLead.response_due_at) : null;
+        const responseOverdue = responseDue && !currentLead.last_contacted_at && responseDue.getTime() < Date.now();
         return (
         <div className="modal active" onClick={() => setSelectedLeadDetails(null)} style={{ zIndex: 210 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', padding: '30px', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -6883,6 +6891,25 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   </div>
                 </div>
               </div>
+
+              {(qualificationAnswers.length > 0 || currentLead.lead_source || responseDue) && (
+                <div style={{ background: 'rgba(245, 158, 11, 0.06)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                  <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#fbbf24', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Landing Qualification</h3>
+                  <div className="admin-form-grid-2" style={{ marginBottom: qualificationAnswers.length ? 14 : 0 }}>
+                    <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Lead source</label><span style={{ color: '#f8fafc', fontSize: '.85rem' }}>{currentLead.lead_source || 'Landing page'}</span></div>
+                    <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Response deadline</label><span style={{ color: responseOverdue ? '#f87171' : '#86efac', fontSize: '.85rem', fontWeight: 800 }}>{responseDue ? `${responseDue.toLocaleString()}${responseOverdue ? ' — OVERDUE' : ''}` : 'Not set'}</span></div>
+                    <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Assigned at</label><span style={{ color: '#cbd5e1', fontSize: '.82rem' }}>{currentLead.assigned_at ? new Date(currentLead.assigned_at).toLocaleString() : 'Not recorded'}</span></div>
+                    <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Consent</label><span style={{ color: currentLead.marketing_consent ? '#86efac' : '#fca5a5', fontSize: '.82rem', fontWeight: 700 }}>{currentLead.marketing_consent ? `Accepted (${currentLead.consent_version || 'version not recorded'})` : 'Not accepted'}</span></div>
+                  </div>
+                  {qualificationAnswers.map((item, index) => (
+                    <div key={`${item.questionId || 'answer'}-${index}`} style={{ background: 'rgba(0,0,0,.18)', borderRadius: 8, padding: '9px 11px', marginTop: 7 }}>
+                      <div style={{ color: '#94a3b8', fontSize: '.7rem' }}>{item.question}</div>
+                      <div style={{ color: '#f8fafc', fontSize: '.86rem', fontWeight: 700, marginTop: 2 }}>{item.answer}</div>
+                    </div>
+                  ))}
+                  {currentLead.consent_text && <details style={{ marginTop: 12, color: '#94a3b8', fontSize: '.72rem' }}><summary style={{ cursor: 'pointer' }}>View accepted consent text</summary><p style={{ lineHeight: 1.5 }}>{currentLead.consent_text}</p></details>}
+                </div>
+              )}
 
               {/* SECTION: CRM OWNERSHIP */}
               <div style={{ background: 'rgba(16, 185, 129, 0.05)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.16)' }}>
