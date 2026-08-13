@@ -16,7 +16,10 @@
  * before they were moved onto the request path. Waiting is what makes the
  * send observable, and an observable failure is worth a couple of seconds.
  */
-export const ADMIN_EMAIL_TIMEOUT_MS = 8000;
+// This must outlive the mail route's own SMTP connection/greeting budget.
+// Otherwise the caller can abort a healthy cold SMTP connection before the
+// mail route has reached its own timeout and no provider response is recorded.
+export const ADMIN_EMAIL_TIMEOUT_MS = 30000;
 
 export function buildOrderNotificationPayload(order, orderNumber) {
   const items = Array.isArray(order.items) ? order.items : [];
@@ -77,10 +80,17 @@ export async function sendAdminOrderEmail(baseUrl, order, orderNumber, {
     signal: AbortSignal.timeout(timeoutMs),
   });
 
-  if (!response.ok) {
-    const result = await response.json().catch(() => ({}));
-    throw new Error(result?.error || result?.details || `Order notification returned ${response.status}`);
+  const result = await response.json().catch(() => ({}));
+  const adminResult = result?.results?.adminNotification;
+
+  // The notification route historically caught sendMail errors and returned
+  // HTTP 200. Treat its structured failure as a failure too, so order creation
+  // never logs "completed" for an email the SMTP provider did not accept.
+  if (!response.ok || adminResult?.sent === false || result?.success === false) {
+    throw new Error(
+      adminResult?.error || result?.error || result?.details || `Order notification returned ${response.status}`
+    );
   }
 
-  return response.json().catch(() => ({}));
+  return result;
 }

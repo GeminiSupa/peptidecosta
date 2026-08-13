@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
 import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
-import { getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
+import { buildOrderEmailAddressing, getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
 import { splitCartUnits } from '@/lib/bacWater.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
@@ -24,8 +24,10 @@ const SMTP_TIMEOUTS = {
 
 function getOrderSmtpConfig() {
   const { host, port, secure, user, pass, configured } = getTransactionalSmtpConfig();
-  const fromEmail = readEnv('ORDER_NOTIFICATION_FROM_EMAIL') || readEnv('SMTP_FROM') || user || 'info@peptidescostarica.net';
-  const from = readEnv('ORDER_NOTIFICATION_FROM') || `Peptides Costa Rica <${fromEmail}>`;
+  // Order mail always presents the verified company inbox as the sender. The
+  // SMTP login may be an Elastic Email account and must never leak into From.
+  const fromEmail = 'info@peptidescostarica.net';
+  const from = `Peptides Costa Rica <${fromEmail}>`;
   const replyTo = readEnv('ORDER_NOTIFICATION_REPLY_TO') || readEnv('SMTP_REPLY_TO') || fromEmail;
 
   return {
@@ -611,19 +613,22 @@ export async function POST(request) {
       ].join('\n');
 
       const recipients = await getOrderNotificationRecipients();
+      const addressing = buildOrderEmailAddressing(recipients);
 
       const adminInfo = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
         from: smtp.from,
-        to: recipients.join(', '),
+        to: addressing.to,
+        cc: addressing.cc,
+        bcc: addressing.bcc,
         subject: adminSubject,
         html: adminHtml,
         text: adminText,
         replyTo: order.customerEmail || undefined,
       });
 
-      results.adminNotification = { sent: true, messageId: adminInfo.messageId, recipients: recipients.length };
-      console.log(`[Order notification] Admin email dispatched to ${recipients.length} recipients: ${adminInfo.messageId}`);
+      const recipientCount = 1 + addressing.cc.length + addressing.bcc.length;
+      results.adminNotification = { sent: true, messageId: adminInfo.messageId, recipients: recipientCount };
+      console.log(`[Order notification] Admin email dispatched to ${recipientCount} recipients: ${adminInfo.messageId}`);
     } catch (adminErr) {
       console.error('[Order notification] Admin notification failed to send:', adminErr);
       results.adminNotification = { sent: false, error: adminErr.message };
@@ -696,10 +701,18 @@ export async function POST(request) {
     // blocked by Meta with error 131047. The frontend catalog already opens a
     // WhatsApp window for the user to initiate the chat, which is the correct approach.
 
-    return NextResponse.json({
+    const responseBody = {
       success: results.adminNotification.sent || results.customerReceipt.sent,
       results
-    });
+    };
+
+    // An admin-only call is the durable new-order alert. Surface its failure as
+    // an HTTP failure so the caller and deployment logs cannot report success.
+    if (order.adminNotificationOnly === true && !results.adminNotification.sent) {
+      return NextResponse.json(responseBody, { status: 502 });
+    }
+
+    return NextResponse.json(responseBody);
   } catch (err) {
     console.error('[Order notification] Unexpected handler crash:', err);
     return NextResponse.json({ error: 'Internal server error', details: err.message }, { status: 500 });

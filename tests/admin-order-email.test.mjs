@@ -60,6 +60,22 @@ test('a failed send is reported, never swallowed', async () => {
   );
 });
 
+test('a structured SMTP failure returned with HTTP 200 is still reported', async () => {
+  const { fetchImpl } = makeFetch({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      success: false,
+      results: { adminNotification: { sent: false, error: 'Provider rejected sender' } },
+    }),
+  });
+
+  await assert.rejects(
+    () => sendAdminOrderEmail('https://example.test', ORDER, 'TEST-1', { fetchImpl }),
+    /Provider rejected sender/
+  );
+});
+
 test('the payload carries what the team needs to act on the order', () => {
   const payload = buildOrderNotificationPayload(ORDER, 'TEST-1');
 

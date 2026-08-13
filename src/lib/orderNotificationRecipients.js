@@ -1,6 +1,12 @@
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { mergeOrderEmailDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
+export {
+  buildOrderEmailAddressing,
+  ORDER_NOTIFICATION_EXCLUDED_AGENTS,
+  ORDER_NOTIFICATION_INBOX,
+  ORDER_NOTIFICATION_OWNER_BCC,
+} from './orderEmailAddressing.mjs';
 
 /**
  * Recipients of the "New Order Received" admin email.
