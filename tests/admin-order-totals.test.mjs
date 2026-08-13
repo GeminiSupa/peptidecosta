@@ -3,8 +3,19 @@ import assert from 'node:assert/strict';
 import {
   calculateAdminOrderTotals,
   calculateManualDiscountAmount,
+  getAdminShippingCosts,
   getAdminVolumeDiscountPct,
 } from '../src/lib/adminOrderTotals.mjs';
+
+test('shipping entered in the order currency derives the secondary currency', () => {
+  assert.deepEqual(getAdminShippingCosts(2500, 'CRC'), { crc: 2500, usd: 5.5 });
+  assert.deepEqual(getAdminShippingCosts(5.5, 'USD'), { usd: 5.5, crc: 2500 });
+});
+
+test('shipping conversion safely normalizes invalid values and exchange rates', () => {
+  assert.deepEqual(getAdminShippingCosts(-25, 'CRC'), { crc: 0, usd: 0 });
+  assert.deepEqual(getAdminShippingCosts(454.48, 'CRC', 0), { crc: 454, usd: 1 });
+});
 
 test('admin totals exclude gifted BAC water from volume discount tiers', () => {
   const items = [

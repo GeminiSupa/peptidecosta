@@ -5,9 +5,13 @@ import { Copy, Phone, Plus, Trash2, BadgePercent } from 'lucide-react';
 import { formatActivityType } from '@/lib/orderActivity';
 import { adminFetch } from '@/lib/adminApi';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
-import { calculateAdminOrderTotals, getAdminOrderSubtotal } from '@/lib/adminOrderTotals.mjs';
+import {
+  ADMIN_FALLBACK_EXCHANGE_RATE,
+  calculateAdminOrderTotals,
+  getAdminOrderSubtotal,
+  getAdminShippingCosts,
+} from '@/lib/adminOrderTotals.mjs';
 
-const FALLBACK_EXCHANGE_RATE = 454.48;
 const ORDER_STATUS_OPTIONS = [
   'Pending',
   'Payment Pending',
@@ -90,12 +94,12 @@ const inferShippingCosts = (order) => {
 
   return order.currency === 'USD'
     ? {
-        crc: Math.round(inferred * FALLBACK_EXCHANGE_RATE),
+        crc: Math.round(inferred * ADMIN_FALLBACK_EXCHANGE_RATE),
         usd: Number(inferred.toFixed(2)),
       }
     : {
         crc: Math.round(inferred),
-        usd: Number((inferred / FALLBACK_EXCHANGE_RATE).toFixed(2)),
+        usd: Number((inferred / ADMIN_FALLBACK_EXCHANGE_RATE).toFixed(2)),
       };
 };
 
@@ -114,8 +118,9 @@ export default function OrderDetailPanel({
   const [notes, setNotes] = useState(order.internal_notes || '');
   const [savingNotes, setSavingNotes] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [shippingCrc, setShippingCrc] = useState(initialShipping.crc || '');
-  const [shippingUsd, setShippingUsd] = useState(initialShipping.usd || '');
+  const [shippingAmount, setShippingAmount] = useState(
+    (order?.currency === 'USD' ? initialShipping.usd : initialShipping.crc) || ''
+  );
 
   const [customerName, setCustomerName] = useState(order.customer_name || '');
   const [customerPhone, setCustomerPhone] = useState(order.customer_phone || '');
@@ -145,8 +150,7 @@ export default function OrderDetailPanel({
     if (!order) return;
     const nextShipping = inferShippingCosts(order);
     setNotes(order.internal_notes || '');
-    setShippingCrc(nextShipping.crc || '');
-    setShippingUsd(nextShipping.usd || '');
+    setShippingAmount((order.currency === 'USD' ? nextShipping.usd : nextShipping.crc) || '');
     setCustomerName(order.customer_name || '');
     setCustomerPhone(order.customer_phone || '');
     setCustomerEmail(order.customer_email || '');
@@ -204,9 +208,8 @@ export default function OrderDetailPanel({
                             cardPaymentBadge?.label === 'Paid' && 
                             !statusLower.includes('complete') && 
                             !statusLower.includes('cancel');
-  const shipping = order.currency === 'USD'
-    ? Number(shippingUsd) || 0
-    : Number(shippingCrc) || 0;
+  const shipping = Number(shippingAmount) || 0;
+  const shippingCosts = getAdminShippingCosts(shipping, order.currency);
   const promoDiscount = order.currency === 'USD'
     ? Number(order.discount_amount_usd || 0)
     : Number(order.discount_amount_crc || 0);
@@ -352,24 +355,17 @@ export default function OrderDetailPanel({
   };
 
   const saveShipping = async () => {
-    const nextShippingCrc = Number(shippingCrc) || 0;
-    const nextShippingUsd = Number(shippingUsd) || 0;
-    const nextShipping = order.currency === 'USD' ? nextShippingUsd : nextShippingCrc;
-    const nextTotal = calculateAdminOrderTotals(editItems, nextShipping).total;
-    const totalUsd = order.currency === 'USD'
-      ? Number(nextTotal.toFixed(2))
-      : Number((nextTotal / FALLBACK_EXCHANGE_RATE).toFixed(2));
-    const totalCrc = order.currency === 'CRC'
-      ? Math.round(nextTotal)
-      : Math.round(nextTotal * FALLBACK_EXCHANGE_RATE);
+    const nextShipping = Number(shippingAmount) || 0;
+    const nextShippingCosts = getAdminShippingCosts(nextShipping, order.currency);
 
     try {
       await patchOrder({
-        shipping_cost_crc: nextShippingCrc,
-        shipping_cost_usd: nextShippingUsd,
-        total_usd: totalUsd,
-        total_crc: totalCrc,
-      }, { type: 'shipping_cost', message: `Shipping: ₡${shippingCrc} / $${shippingUsd}` });
+        shipping_cost_crc: nextShippingCosts.crc,
+        shipping_cost_usd: nextShippingCosts.usd,
+      }, {
+        type: 'shipping_cost',
+        message: `Shipping: ₡${nextShippingCosts.crc} / $${nextShippingCosts.usd.toFixed(2)}`,
+      });
     } catch (err) {
       alert(err.message);
     }
@@ -431,16 +427,15 @@ export default function OrderDetailPanel({
       price: Number(i.price) || 0,
     }));
 
-    const ship = order.currency === 'USD'
-      ? Number(shippingUsd) || 0
-      : Number(shippingCrc) || 0;
+    const ship = Number(shippingAmount) || 0;
+    const normalizedShippingCosts = getAdminShippingCosts(ship, order.currency);
     const total = calculateAdminOrderTotals(normalizedItems, ship, {
       promoDiscountAmount: promoDiscount,
       manualDiscountType,
       manualDiscountValue,
     }).total;
-    const totalUsd = order.currency === 'USD' ? Number(total.toFixed(2)) : Number((total / FALLBACK_EXCHANGE_RATE).toFixed(2));
-    const totalCrc = order.currency === 'CRC' ? Math.round(total) : Math.round(total * FALLBACK_EXCHANGE_RATE);
+    const totalUsd = order.currency === 'USD' ? Number(total.toFixed(2)) : Number((total / ADMIN_FALLBACK_EXCHANGE_RATE).toFixed(2));
+    const totalCrc = order.currency === 'CRC' ? Math.round(total) : Math.round(total * ADMIN_FALLBACK_EXCHANGE_RATE);
 
     try {
       await patchOrder(
@@ -450,8 +445,8 @@ export default function OrderDetailPanel({
           customer_email: customerEmail.trim() || null,
           shipping_address: shippingAddress.trim() || null,
           items: normalizedItems,
-          shipping_cost_crc: Number(shippingCrc) || 0,
-          shipping_cost_usd: Number(shippingUsd) || 0,
+          shipping_cost_crc: normalizedShippingCosts.crc,
+          shipping_cost_usd: normalizedShippingCosts.usd,
           total_usd: totalUsd,
           total_crc: totalCrc,
           ...(canPersistManualDiscount || hasManualDiscountChanged ? getManualDiscountUpdates() : {}),
@@ -949,7 +944,14 @@ export default function OrderDetailPanel({
                 <span>{order.currency === 'USD' ? `-$${manualDiscountAmount.toFixed(2)}` : `-₡${Math.round(manualDiscountAmount).toLocaleString()}`}</span>
               </div>
             )}
-            <div><span>Shipping</span><span>₡{shippingCrc || 0} / ${shippingUsd || 0}</span></div>
+            <div>
+              <span>Shipping</span>
+              <span>
+                {order.currency === 'USD'
+                  ? `$${shippingCosts.usd.toFixed(2)} (≈ ₡${shippingCosts.crc.toLocaleString()})`
+                  : `₡${shippingCosts.crc.toLocaleString()} (≈ $${shippingCosts.usd.toFixed(2)})`}
+              </span>
+            </div>
             <div className="order-detail-total-line">
               <span>Total (preview)</span>
               <span>{order.currency === 'USD' ? `$${orderTotal.toFixed(2)}` : `₡${Math.round(orderTotal).toLocaleString()}`}</span>
@@ -957,11 +959,33 @@ export default function OrderDetailPanel({
           </div>
 
           <div className="order-detail-shipping-edit" style={{ marginTop: '12px' }}>
-            <label>Shipping cost</label>
+            <label htmlFor="order-shipping-cost">Shipping cost ({order.currency})</label>
             <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-              <input className="admin-input" type="number" placeholder="CRC" value={shippingCrc} onChange={(e) => setShippingCrc(e.target.value)} />
-              <input className="admin-input" type="number" step="0.01" placeholder="USD" value={shippingUsd} onChange={(e) => setShippingUsd(e.target.value)} />
+              <div style={{ position: 'relative', flex: 1 }}>
+                <span
+                  aria-hidden="true"
+                  style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontWeight: 700 }}
+                >
+                  {order.currency === 'USD' ? '$' : '₡'}
+                </span>
+                <input
+                  id="order-shipping-cost"
+                  className="admin-input"
+                  type="number"
+                  min="0"
+                  step={order.currency === 'USD' ? '0.01' : '1'}
+                  placeholder="0"
+                  value={shippingAmount}
+                  onChange={(e) => setShippingAmount(e.target.value)}
+                  style={{ width: '100%', paddingLeft: '30px' }}
+                />
+              </div>
               <button type="button" className="admin-btn admin-btn-secondary" onClick={saveShipping}>Save shipping</button>
+            </div>
+            <div style={{ marginTop: '6px', color: '#94a3b8', fontSize: '0.75rem' }}>
+              {order.currency === 'USD'
+                ? `CRC equivalent is calculated automatically: ₡${shippingCosts.crc.toLocaleString()}`
+                : `USD equivalent is calculated automatically: $${shippingCosts.usd.toFixed(2)}`}
             </div>
           </div>
 

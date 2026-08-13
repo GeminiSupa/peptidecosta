@@ -1,5 +1,7 @@
 import { isBacWater, splitCartUnits } from './bacWater.mjs';
 
+export const ADMIN_FALLBACK_EXCHANGE_RATE = 454.48;
+
 export function getAdminVolumeDiscountPct(items = []) {
   const { discountUnits } = splitCartUnits(items);
   if (discountUnits >= 10) return 20;
@@ -18,6 +20,24 @@ const finiteNonNegative = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
 };
+
+export function getAdminShippingCosts(amount, currency, exchangeRate = ADMIN_FALLBACK_EXCHANGE_RATE) {
+  const primaryAmount = finiteNonNegative(amount);
+  const rate = Number(exchangeRate);
+  const safeRate = Number.isFinite(rate) && rate > 0 ? rate : ADMIN_FALLBACK_EXCHANGE_RATE;
+
+  if (currency === 'USD') {
+    return {
+      usd: Number(primaryAmount.toFixed(2)),
+      crc: Math.round(primaryAmount * safeRate),
+    };
+  }
+
+  return {
+    crc: Math.round(primaryAmount),
+    usd: Number((primaryAmount / safeRate).toFixed(2)),
+  };
+}
 
 export function normalizeManualDiscountType(type) {
   return type === 'percentage' || type === 'fixed' ? type : null;

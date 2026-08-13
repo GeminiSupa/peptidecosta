@@ -6,7 +6,12 @@ import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRe
 import { orderVisibleToAgent } from '@/lib/agentOrders';
 import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAffiliateOrderWhatsApp } from '@/lib/orderWhatsAppAlerts';
-import { calculateAdminOrderTotals, normalizeManualDiscountType } from '@/lib/adminOrderTotals.mjs';
+import {
+  ADMIN_FALLBACK_EXCHANGE_RATE,
+  calculateAdminOrderTotals,
+  getAdminShippingCosts,
+  normalizeManualDiscountType,
+} from '@/lib/adminOrderTotals.mjs';
 import {
   applySalesAgentReferral,
   isEligibleSalesAgentProfile,
@@ -15,7 +20,6 @@ import {
 
 export const runtime = 'nodejs';
 
-const FALLBACK_EXCHANGE_RATE = 454.48;
 const MANUAL_DISCOUNT_FIELDS = [
   'manual_discount_type',
   'manual_discount_value',
@@ -145,6 +149,11 @@ export async function PATCH(request) {
       const shippingCrc = Number(('shipping_cost_crc' in patch ? patch.shipping_cost_crc : currentOrder.shipping_cost_crc) || 0);
       const shippingUsd = Number(('shipping_cost_usd' in patch ? patch.shipping_cost_usd : currentOrder.shipping_cost_usd) || 0);
       const shipping = currency === 'CRC' ? shippingCrc : shippingUsd;
+      if ('shipping_cost_crc' in patch || 'shipping_cost_usd' in patch) {
+        const normalizedShipping = getAdminShippingCosts(shipping, currency);
+        patch.shipping_cost_crc = normalizedShipping.crc;
+        patch.shipping_cost_usd = normalizedShipping.usd;
+      }
       const promoDiscountAmount = currency === 'CRC'
         ? Number(currentOrder.discount_amount_crc || 0)
         : Number(currentOrder.discount_amount_usd || 0);
@@ -163,18 +172,18 @@ export async function PATCH(request) {
 
       patch.total_usd = currency === 'USD'
         ? primaryTotal
-        : Number((primaryTotal / FALLBACK_EXCHANGE_RATE).toFixed(2));
+        : Number((primaryTotal / ADMIN_FALLBACK_EXCHANGE_RATE).toFixed(2));
       patch.total_crc = currency === 'CRC'
         ? primaryTotal
-        : Math.round(primaryTotal * FALLBACK_EXCHANGE_RATE);
+        : Math.round(primaryTotal * ADMIN_FALLBACK_EXCHANGE_RATE);
 
       if (manualDiscountRequested || Object.hasOwn(currentOrder, 'manual_discount_amount_usd')) {
         patch.manual_discount_amount_usd = currency === 'USD'
           ? Number(totals.manualDiscountAmount.toFixed(2))
-          : Number((totals.manualDiscountAmount / FALLBACK_EXCHANGE_RATE).toFixed(2));
+          : Number((totals.manualDiscountAmount / ADMIN_FALLBACK_EXCHANGE_RATE).toFixed(2));
         patch.manual_discount_amount_crc = currency === 'CRC'
           ? Math.round(totals.manualDiscountAmount)
-          : Math.round(totals.manualDiscountAmount * FALLBACK_EXCHANGE_RATE);
+          : Math.round(totals.manualDiscountAmount * ADMIN_FALLBACK_EXCHANGE_RATE);
       }
     }
 
