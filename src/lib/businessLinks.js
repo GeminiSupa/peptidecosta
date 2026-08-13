@@ -5,6 +5,11 @@ export const TRUSTPILOT_REVIEW_URLS = {
   es: 'https://es.trustpilot.com/review/peptidescostarica.net',
 };
 
+// Verified against the public Trustpilot profile on 2026-08-13. Keep the
+// catalog and storefront chrome on one value so they cannot drift apart.
+export const TRUSTPILOT_RATING = '4.4';
+export const TRUSTPILOT_REVIEW_COUNT = 11;
+
 const LEGACY_GOOGLE_LISTING_URLS = new Set([
   'https://maps.app.goo.gl/i52poGFKvSdytYnK6',
   'https://maps.app.goo.gl/G4MqFLWW7y9FXvKi9?g_st=ic',

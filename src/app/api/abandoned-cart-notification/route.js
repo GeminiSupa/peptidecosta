@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
 import { getBusinessLinks } from '@/lib/settings';
-import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
+import { getCampaignSmtpConfig, isElasticCampaignSmtp } from '@/lib/campaignSmtp';
 import { findPaidOrderMatchForCart, markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -62,37 +62,6 @@ const identifySmtpProvider = (host = '') => {
   if (/elasticemail/i.test(host)) return 'Elastic Email';
   if (/rackspace|emailsrvr/i.test(host)) return 'Rackspace';
   return 'SMTP';
-};
-
-// Cart recovery goes out on the campaign sender and reads as marketing to a
-// spam filter, so it is barred from the Rackspace mailbox for the same reason
-// campaigns are -- see getCampaignRackspaceFallbackSmtpConfig. Same opt-in flag
-// re-enables both together.
-const getRackspaceFallbackSmtpConfig = (primary) => {
-  if (String(process.env.CAMPAIGN_SMTP_ALLOW_RACKSPACE_FALLBACK || '').trim() !== 'true') return null;
-
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 465);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return null;
-
-  const isSameAsPrimary = primary
-    && primary.host === host
-    && Number(primary.port) === port
-    && primary.user === user;
-  if (isSameAsPrimary) return null;
-
-  const fromEmail = process.env.SMTP_FROM || user || 'info@peptidescostarica.net';
-  return {
-    host,
-    port,
-    secure: process.env.SMTP_SECURE !== 'false',
-    user,
-    pass,
-    from: process.env.RECOVERY_SMTP_FROM || `Peptides Costa Rica <${fromEmail}>`,
-    replyTo: process.env.RECOVERY_SMTP_REPLY_TO || process.env.SMTP_REPLY_TO || fromEmail,
-  };
 };
 
 const buildItemsRows = (items = [], currency, exchangeRate = 454.48) => items.map((item) => {
@@ -284,6 +253,10 @@ export async function POST(request) {
       console.warn('[Abandoned Cart Notification] Campaign SMTP credentials not set. Recovery email skipped.');
       return NextResponse.json({ sent: false, error: 'Campaign SMTP settings missing' }, { status: 500 });
     }
+    if (!isElasticCampaignSmtp(smtp)) {
+      console.error('[Abandoned Cart Notification] Refused non-Elastic campaign SMTP host.');
+      return NextResponse.json({ sent: false, error: 'Campaign SMTP must use Elastic Email' }, { status: 500 });
+    }
 
     const isEn = lang === 'en';
     const customerSubject = isEn
@@ -344,7 +317,7 @@ export async function POST(request) {
     };
 
     let mailInfo;
-    let mailProvider = identifySmtpProvider(smtp.host);
+    const mailProvider = identifySmtpProvider(smtp.host);
     try {
       mailInfo = await sendWithSmtp(smtp);
     } catch (mailError) {
@@ -359,33 +332,10 @@ export async function POST(request) {
         message: mailError.message,
       });
 
-      const fallbackSmtp = getRackspaceFallbackSmtpConfig(smtp);
-      if (fallbackSmtp) {
-        try {
-          mailInfo = await sendWithSmtp(fallbackSmtp);
-          mailProvider = identifySmtpProvider(fallbackSmtp.host);
-        } catch (fallbackError) {
-          const fallbackProvider = identifySmtpProvider(fallbackSmtp.host);
-          console.error('[Abandoned Cart Notification] Fallback email provider failed:', {
-            provider: fallbackProvider,
-            host: fallbackSmtp.host,
-            port: fallbackSmtp.port,
-            code: fallbackError.code,
-            command: fallbackError.command,
-            responseCode: fallbackError.responseCode,
-            message: fallbackError.message,
-          });
-          return NextResponse.json({
-            error: `${provider} and ${fallbackProvider} failed to send the recovery email`,
-            details: `${provider}: ${mailError.message || 'Email provider error'}; ${fallbackProvider}: ${fallbackError.message || 'Email provider error'}`,
-          }, { status: 502 });
-        }
-      } else {
-        return NextResponse.json({
-          error: `${provider} failed to send the recovery email`,
-          details: mailError.message || 'Email provider error',
-        }, { status: 502 });
-      }
+      return NextResponse.json({
+        error: `${provider} failed to send the recovery email`,
+        details: mailError.message || 'Email provider error',
+      }, { status: 502 });
     }
 
     console.log(`[Abandoned Cart Notification] Recovery email sent to ${customer_email} via ${mailProvider}: ${mailInfo.messageId}`);

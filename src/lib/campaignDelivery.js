@@ -4,9 +4,9 @@ import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { clampOutlookButtonSizes, personalizeMergeTags, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
 import {
-  getCampaignRackspaceFallbackSmtpConfig,
   getCampaignSmtpConfig,
   identifyCampaignSmtpProvider,
+  isElasticCampaignSmtp,
   isCampaignRackspaceSmtp,
 } from '@/lib/campaignSmtp';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
@@ -282,6 +282,7 @@ async function deliverSingleCampaignToSubscriber(supabase, campaign, subscriber,
 
   const smtp = getCampaignSmtpConfig();
   if (!smtp.configured) throw new CampaignDeliveryError('Campaign email sender credentials are not configured', 500);
+  if (!isElasticCampaignSmtp(smtp)) throw new CampaignDeliveryError('Campaign email sender must use Elastic Email', 500);
 
   if (await hasActiveEmailSuppression(supabase, subscriber.email)) {
     return { sent: false, skipped: 'suppressed' };
@@ -298,15 +299,13 @@ async function deliverSingleCampaignToSubscriber(supabase, campaign, subscriber,
   if (previousSend) return { sent: false, skipped: 'already_sent' };
 
   const safety = campaignSafetyConfig();
-  const fallbackSmtp = getCampaignRackspaceFallbackSmtpConfig(smtp);
   const primaryProvider = identifyCampaignSmtpProvider(smtp.host);
-  const fallbackProvider = fallbackSmtp ? identifyCampaignSmtpProvider(fallbackSmtp.host) : null;
   const batchLogId = await createDeliveryBatchLog(supabase, {
     campaign_id: campaign.id,
     trigger_type: options.triggerType || 'catalog_welcome',
     status: 'processing',
     provider: primaryProvider,
-    fallback_provider: fallbackProvider,
+    fallback_provider: null,
     fallback_used: false,
     batch_size: 1,
     attempted: 1,
@@ -316,12 +315,10 @@ async function deliverSingleCampaignToSubscriber(supabase, campaign, subscriber,
     already_sent: 0,
     remaining_before_batch: 1,
     sender_host: smtp.host,
-    fallback_host: fallbackSmtp?.host || null,
+    fallback_host: null,
   });
 
   const transporter = createCampaignTransporter(smtp, safety);
-  const fallbackTransporter = fallbackSmtp ? createCampaignTransporter(fallbackSmtp, safety) : null;
-  let fallbackUsed = false;
   const providerErrors = [];
   const unsubscribeUrl = `${DOMAIN}/api/unsubscribe?t=${encodeURIComponent(createUnsubscribeToken(subscriber.id))}`;
   const mail = {
@@ -346,17 +343,7 @@ async function deliverSingleCampaignToSubscriber(supabase, campaign, subscriber,
         message: truncateError(primaryError, 220),
         at: new Date().toISOString(),
       });
-      if (!fallbackTransporter) throw primaryError;
-      fallbackUsed = true;
-      await fallbackTransporter.sendMail({
-        ...mail,
-        from: fallbackSmtp.from,
-        replyTo: campaign.reply_to || fallbackSmtp.replyTo,
-        headers: {
-          ...mail.headers,
-          'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:${fallbackSmtp.replyTo}?subject=unsubscribe>`,
-        },
-      });
+      throw primaryError;
     }
 
     const { error: sendInsertError } = await supabase
@@ -370,11 +357,11 @@ async function deliverSingleCampaignToSubscriber(supabase, campaign, subscriber,
       sent: 1,
       failed: 0,
       remaining_after_batch: 0,
-      fallback_used: fallbackUsed,
+      fallback_used: false,
       provider_errors: providerErrors.length ? providerErrors : null,
     });
 
-    return { sent: true, skipped: null, campaignId: campaign.id, subscriberId: subscriber.id, fallbackUsed };
+    return { sent: true, skipped: null, campaignId: campaign.id, subscriberId: subscriber.id, fallbackUsed: false };
   } catch (error) {
     await updateDeliveryBatchLog(supabase, batchLogId, {
       status: 'failed',
@@ -382,14 +369,13 @@ async function deliverSingleCampaignToSubscriber(supabase, campaign, subscriber,
       sent: 0,
       failed: 1,
       remaining_after_batch: 1,
-      fallback_used: fallbackUsed,
+      fallback_used: false,
       error_message: truncateError(error),
       provider_errors: providerErrors.length ? providerErrors : null,
     });
     throw error;
   } finally {
     await closeTransporter(transporter);
-    await closeTransporter(fallbackTransporter);
   }
 }
 
@@ -524,6 +510,7 @@ export async function deliverCampaign(campaignId, options = {}) {
   let campaign = loadedCampaign;
   if (!campaign.subject_line || !campaign.html_content) throw new CampaignDeliveryError('Campaign must have a subject and saved email body before sending', 400);
   if (!smtp.configured) throw new CampaignDeliveryError('Campaign email sender credentials are not configured', 500);
+  if (!isElasticCampaignSmtp(smtp)) throw new CampaignDeliveryError('Campaign email sender must use Elastic Email', 500);
   if (campaign.status === 'sending') throw new CampaignDeliveryError('Campaign is already sending', 409);
   if (campaign.status === 'sent' && !sendWinner) throw new CampaignDeliveryError('Campaign was already sent. Duplicate it before sending again.', 409);
   if (campaign.status === 'testing' && campaign.is_ab_test && !sendWinner) throw new CampaignDeliveryError('A/B test is in progress. Pick a winner before sending the remaining subscribers.', 409);
@@ -589,9 +576,8 @@ export async function deliverCampaign(campaignId, options = {}) {
   if (!targets.length) throw new CampaignDeliveryError('No remaining subscribers to send to.', 400);
 
   const safety = campaignSafetyConfig();
-  const fallbackSmtp = getCampaignRackspaceFallbackSmtpConfig(smtp);
   const primaryProvider = identifyCampaignSmtpProvider(smtp.host);
-  const fallbackProvider = fallbackSmtp ? identifyCampaignSmtpProvider(fallbackSmtp.host) : null;
+  const fallbackProvider = null;
   const remainingBeforeBatch = targets.length;
   const batchTargets = targets.slice(0, safety.batchSize);
 
@@ -626,15 +612,13 @@ export async function deliverCampaign(campaignId, options = {}) {
     already_sent: alreadySent,
     remaining_before_batch: remainingBeforeBatch,
     sender_host: smtp.host,
-    fallback_host: fallbackSmtp?.host || null,
+    fallback_host: null,
   });
 
   const transporter = createCampaignTransporter(smtp, safety);
-  const fallbackTransporter = fallbackSmtp ? createCampaignTransporter(fallbackSmtp, safety) : null;
   let sent = 0;
   let failed = 0;
   let bounced = 0;
-  let fallbackUsed = false;
   let lastError = null;
   let stoppedOnTimeBudget = false;
   const providerErrors = [];
@@ -648,7 +632,6 @@ export async function deliverCampaign(campaignId, options = {}) {
         break;
       }
       const subscriber = batchTargets[index];
-      let sentViaFallback = false;
       try {
         const useVariantB = campaign.is_ab_test && ((isTestBatch && index % 2 !== 0) || (sendWinner && winnerVariant === 'B'));
         const variant = useVariantB ? 'B' : 'A';
@@ -676,20 +659,7 @@ export async function deliverCampaign(campaignId, options = {}) {
             message: truncateError(primaryError, 220),
             at: new Date().toISOString(),
           });
-
-          if (!fallbackTransporter) throw primaryError;
-
-          fallbackUsed = true;
-          sentViaFallback = true;
-          await fallbackTransporter.sendMail({
-            ...mail,
-            from: fallbackSmtp.from,
-            replyTo: campaign.reply_to || fallbackSmtp.replyTo,
-            headers: {
-              ...mail.headers,
-              'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:${fallbackSmtp.replyTo}?subject=unsubscribe>`,
-            },
-          });
+          throw primaryError;
         }
         const { error } = await supabase.from('campaign_sends').insert({ campaign_id: campaign.id, subscriber_id: subscriber.id, subject_variant: variant });
         if (error) throw error;
@@ -705,12 +675,11 @@ export async function deliverCampaign(campaignId, options = {}) {
         console.error('[Campaign delivery] Subscriber send failed', { campaignId: campaign.id, subscriberId: subscriber.id, error: error.message });
       }
       if (index < batchTargets.length - 1) {
-        await wait(sentViaFallback ? safety.fallbackSendDelayMs : safety.sendDelayMs);
+        await wait(safety.sendDelayMs);
       }
     }
   } finally {
     await closeTransporter(transporter);
-    await closeTransporter(fallbackTransporter);
   }
 
   // Retired addresses are gone for good, so they leave the denominator rather
@@ -739,7 +708,7 @@ export async function deliverCampaign(campaignId, options = {}) {
     failed,
     bounced,
     remaining_after_batch: remaining,
-    fallback_used: fallbackUsed,
+    fallback_used: false,
     error_message: lastError,
     provider_errors: providerErrors.length ? providerErrors.slice(-10) : null,
   });
@@ -748,7 +717,7 @@ export async function deliverCampaign(campaignId, options = {}) {
     campaignId,
     provider: primaryProvider,
     fallbackProvider,
-    fallbackUsed,
+    fallbackUsed: false,
     batchSize: safety.batchSize,
     batchIntervalMinutes: safety.batchIntervalMinutes,
     fallbackSendDelayMs: safety.fallbackSendDelayMs,

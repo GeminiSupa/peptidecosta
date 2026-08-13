@@ -8,12 +8,10 @@ function readEnv(name) {
 }
 
 const CAMPAIGN_FROM_EMAIL = readEnv('CAMPAIGN_SMTP_FROM_EMAIL')
-  || readEnv('SMTP_FROM')
-  || readEnv('SMTP_USER')
   || 'info@peptidescostarica.net';
 
 function resolveSecureMode(port) {
-  const raw = readEnv('CAMPAIGN_SMTP_SECURE') ?? readEnv('SMTP_SECURE');
+  const raw = readEnv('CAMPAIGN_SMTP_SECURE');
   const normalized = String(raw || '').trim().toLowerCase();
 
   if (port === 465) return normalized === 'false' ? false : true;
@@ -25,11 +23,14 @@ function resolveSecureMode(port) {
 }
 
 export function getCampaignSmtpConfig() {
-  const host = readEnv('CAMPAIGN_SMTP_HOST') || readEnv('SMTP_HOST');
-  const port = Number(readEnv('CAMPAIGN_SMTP_PORT') || readEnv('SMTP_PORT') || 465);
+  // Marketing mail is intentionally isolated from the generic SMTP_* mailbox.
+  // If Elastic Email is missing or rejected, campaigns must stop visibly; they
+  // must never inherit the Rackspace mailbox that receives business mail.
+  const host = readEnv('CAMPAIGN_SMTP_HOST');
+  const port = Number(readEnv('CAMPAIGN_SMTP_PORT') || 2525);
   const secure = resolveSecureMode(port);
-  const user = readEnv('CAMPAIGN_SMTP_USER') || readEnv('SMTP_USER');
-  const pass = readEnv('CAMPAIGN_SMTP_PASS') || readEnv('SMTP_PASS');
+  const user = readEnv('CAMPAIGN_SMTP_USER');
+  const pass = readEnv('CAMPAIGN_SMTP_PASS');
   const from = readEnv('CAMPAIGN_FROM') || `Peptides Costa Rica <${CAMPAIGN_FROM_EMAIL}>`;
   const replyTo = readEnv('CAMPAIGN_REPLY_TO') || CAMPAIGN_FROM_EMAIL;
 
@@ -55,42 +56,6 @@ export function identifyCampaignSmtpProvider(host = '') {
   return 'SMTP';
 }
 
-// Campaign volume through the Rackspace mailbox is what got
-// info@peptidescostarica.net blocked for "Spam/Abuse Pattern Detected" on
-// 2026-08-12, after ~1,400 marketing emails went out in two hours. Rackspace
-// warned that a repeat may block the mailbox for good, which would take down
-// receiving for the whole business, not just sending.
-//
-// So campaigns now fail closed. When the campaign sender is rejected -- daily
-// cap, bad credentials, anything -- the send errors out visibly instead of
-// silently rerouting marketing through the shared inbox. Transactional mail
-// keeps its own SMTP_* fallback (see transactionalSmtp.js); only campaign
-// volume is barred. Set CAMPAIGN_SMTP_ALLOW_RACKSPACE_FALLBACK=true to opt
-// back in once the mailbox is provably safe for bulk again.
-export function getCampaignRackspaceFallbackSmtpConfig(primary) {
-  if (readEnv('CAMPAIGN_SMTP_ALLOW_RACKSPACE_FALLBACK') !== 'true') return null;
-
-  const host = readEnv('SMTP_HOST');
-  const port = Number(readEnv('SMTP_PORT') || 465);
-  const user = readEnv('SMTP_USER');
-  const pass = readEnv('SMTP_PASS');
-  if (!host || !user || !pass) return null;
-
-  const isSameAsPrimary = primary
-    && primary.host === host
-    && Number(primary.port) === port
-    && primary.user === user;
-  if (isSameAsPrimary) return null;
-
-  const fromEmail = readEnv('SMTP_FROM') || user || 'info@peptidescostarica.net';
-  return {
-    host,
-    port,
-    secure: readEnv('SMTP_SECURE') !== 'false',
-    user,
-    pass,
-    from: readEnv('CAMPAIGN_FROM') || `Peptides Costa Rica <${fromEmail}>`,
-    replyTo: readEnv('CAMPAIGN_REPLY_TO') || readEnv('SMTP_REPLY_TO') || fromEmail,
-    configured: true,
-  };
+export function isElasticCampaignSmtp(config = getCampaignSmtpConfig()) {
+  return /(^|\.)smtp\.elasticemail\.com$/i.test(config.host || '');
 }

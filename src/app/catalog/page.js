@@ -10,7 +10,7 @@ import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, cleanPhoneNumber, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import { getTrustpilotReviewUrl } from '@/lib/businessLinks';
+import { getTrustpilotReviewUrl, TRUSTPILOT_RATING } from '@/lib/businessLinks';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
 import { checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct } from '@/lib/promoEligibility.mjs';
 import {
@@ -2848,14 +2848,20 @@ export default function CatalogPage() {
                 </div>
               </a>
               
-              <a href={getTrustpilotReviewUrl(lang, links)} target="_blank" rel="noopener noreferrer" className="trust-badge">
+              <a
+                href={getTrustpilotReviewUrl(lang, links)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="trust-badge"
+                aria-label={`Trustpilot rating ${TRUSTPILOT_RATING} out of 5`}
+              >
                 <div className="tp-star-box">
                   <Star size={10} fill="#fff" color="#fff" />
                 </div>
                 <div className="trust-text">
                   <span className="trust-score">Trustpilot</span>
                   <span className="trust-desc">
-                    5.0 <Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/>
+                    {TRUSTPILOT_RATING} <Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/>
                   </span>
                 </div>
               </a>
