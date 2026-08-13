@@ -24,7 +24,6 @@ import {
   summarizeOrderCommissions,
 } from '@/lib/orderCommission.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
-import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
 import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 
@@ -419,7 +418,6 @@ export async function GET(request) {
         try {
           await transporter.sendMail({
             bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
-            cc: withTaxRecordsCc(),
             from: NOTIFICATION_FROM,
             to: agent.email,
             subject: `Your weekly pay report · ${periodDisplay}`,
@@ -515,7 +513,6 @@ export async function GET(request) {
 
         await transporter.sendMail({
           bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
-          cc: withTaxRecordsCc(),
           from: NOTIFICATION_FROM,
           to: ADMIN_CC_EMAILS,
           subject: `Weekly team pay report · ${periodDisplay}`,

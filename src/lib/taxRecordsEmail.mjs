@@ -19,3 +19,10 @@ export function withTaxRecordsCc(existingCc = '') {
     })
     .join(', ');
 }
+
+export function taxRecordsCcForCompletedOrder(status, existingCc = '') {
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+  const isCompleted = normalizedStatus === 'completed' || normalizedStatus === 'order complete';
+
+  return isCompleted ? withTaxRecordsCc(existingCc) : undefined;
+}
