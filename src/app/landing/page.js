@@ -46,11 +46,12 @@ const SESSION_KEY = 'pcr_landing_enquiry_seen';
 
 const COPY = {
   en: {
-    nav: { why: 'Why us', trust: 'Trust', faq: 'FAQ', request: 'Request information' },
+    nav: { why: 'Why us', trust: 'Trust', faq: 'FAQ', request: 'Request information', catalog: 'Browse catalog' },
     eyebrow: 'Research support, built around you',
     heroTitle: 'Find the right research options without the guesswork.',
     heroText: 'Tell us what you are exploring. A specialist will review your requirements, confirm current availability, and contact you with clear next steps.',
     heroCta: 'Get started today',
+    heroCatalog: 'Browse the catalog',
     heroNote: 'Takes about 60 seconds. No purchase required.',
     heroCardEyebrow: 'Personalized guidance',
     heroCardTitle: 'A clearer way to plan your research order.',
@@ -119,11 +120,12 @@ const COPY = {
     },
   },
   es: {
-    nav: { why: 'Por qué nosotros', trust: 'Confianza', faq: 'Preguntas', request: 'Solicitar información' },
+    nav: { why: 'Por qué nosotros', trust: 'Confianza', faq: 'Preguntas', request: 'Solicitar información', catalog: 'Ver catálogo' },
     eyebrow: 'Apoyo de investigación, pensado para usted',
     heroTitle: 'Encuentre las opciones de investigación correctas sin adivinar.',
     heroText: 'Cuéntenos qué está explorando. Un especialista revisará sus requisitos, confirmará la disponibilidad actual y le contactará con los próximos pasos claros.',
     heroCta: 'Comenzar ahora',
+    heroCatalog: 'Ver el catálogo',
     heroNote: 'Toma aproximadamente 60 segundos. No requiere compra.',
     heroCardEyebrow: 'Orientación personalizada',
     heroCardTitle: 'Una forma más clara de planificar su pedido de investigación.',
@@ -528,6 +530,7 @@ export default function LeadGenerationLandingPage() {
           </nav>
           <div className="lead-header-actions">
             <button type="button" className="lead-lang" onClick={switchLanguage}><Globe2 size={16} />{lang === 'en' ? 'ES' : 'EN'}</button>
+            <Link className="lead-catalog-link" href={`/catalog?lang=${lang}`} onClick={() => fireEvent('catalog_click', { location: 'header' })}>{c.nav.catalog}<ArrowRight size={15} /></Link>
             <button type="button" className="lead-header-cta" onClick={() => cta('header')}>{c.nav.request}</button>
           </div>
         </div>
@@ -543,6 +546,7 @@ export default function LeadGenerationLandingPage() {
               <p>{c.heroText}</p>
               <div className="lead-hero-actions">
                 <button type="button" className="lead-primary" onClick={() => cta('hero')}>{c.heroCta}<ArrowRight size={18} /></button>
+                <Link className="lead-secondary" href={`/catalog?lang=${lang}`} onClick={() => fireEvent('catalog_click', { location: 'hero' })}>{c.heroCatalog}<ArrowRight size={18} /></Link>
                 <span><ShieldCheck size={16} />{c.heroNote}</span>
               </div>
               <div className="lead-mini-proof"><BadgeCheck size={17} /><span>{lang === 'en' ? 'Trusted local support • Research-use only' : 'Soporte local confiable • Solo para investigación'}</span></div>
@@ -620,7 +624,7 @@ export default function LeadGenerationLandingPage() {
 
       <footer className="lead-footer">
         <div className="lead-container lead-footer-grid">
-          <div><Image src="/logo.webp" alt="Peptides Costa Rica" width={76} height={66} /><p>{c.footerBlurb}</p></div>
+          <div><Link href="/" className="lead-footer-brand" aria-label="Peptides Costa Rica home"><Image src="/logo.webp" alt="Peptides Costa Rica" width={190} height={85} /></Link><p>{c.footerBlurb}</p></div>
           <div><strong>{lang === 'en' ? 'Explore' : 'Explorar'}</strong><Link href={`/catalog?lang=${lang}`}>{lang === 'en' ? 'Catalog' : 'Catálogo'}</Link><Link href={`/about?lang=${lang}`}>{lang === 'en' ? 'About us' : 'Nosotros'}</Link><Link href={`/faq?lang=${lang}`}>FAQ</Link></div>
           <div><strong>{lang === 'en' ? 'Policies' : 'Políticas'}</strong><Link href="/privacy-policy">{lang === 'en' ? 'Privacy' : 'Privacidad'}</Link><Link href="/shipping-policy">{lang === 'en' ? 'Shipping' : 'Envíos'}</Link><Link href="/return-refund-policy">{lang === 'en' ? 'Returns' : 'Devoluciones'}</Link></div>
           <div><strong>{lang === 'en' ? 'Contact' : 'Contacto'}</strong><a href="mailto:info@peptidescostarica.net">info@peptidescostarica.net</a><button type="button" onClick={() => cta('footer')}>{c.footerRequest}</button></div>

@@ -122,6 +122,9 @@ test('landing page is first-party lead capture with no messaging handoff', async
   assert.match(page, /fetch\('\/api\/leads\/contact'/);
   assert.match(page, /leadSettings\.timeTriggerMs/);
   assert.match(page, /generate_lead/);
+  assert.match(page, /Browse the catalog/);
+  assert.match(page, /href=\{`\/catalog\?lang=\$\{lang\}`\}/);
+  assert.match(page, /lead-footer-brand/);
   assert.doesNotMatch(page, /wa\.me|buildWhatsAppLink|messagingChannel/);
 });
 
