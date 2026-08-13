@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { taxRecordsCcForCompletedOrder } from '@/lib/taxRecordsEmail.mjs';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 
 const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
@@ -252,8 +253,15 @@ export async function POST(request) {
       alreadyInvited ? null : TRUSTPILOT_AFS_BCC,
     ].filter(Boolean);
 
+    // Accounting's copy of the completed sale has to ride on THIS email. The
+    // other place that CCs the tax inbox (/api/order-notification) is only
+    // reached from admin/orders/update on a not-paid -> paid transition, so an
+    // order that sat in "Paid" before being marked "Order Complete" never
+    // triggers it. This route is the one the admin panel always calls when an
+    // order completes, which makes it the only reliable seat for the CC.
     const customerInfo = await transporter.sendMail({
       bcc: bccList,
+      cc: taxRecordsCcForCompletedOrder(order.status),
       from: NOTIFICATION_FROM,
       to: order.customer_email.trim(),
       subject: customerSubject,

@@ -22,7 +22,7 @@ test('only adds the tax address to completed order receipts', () => {
   assert.equal(taxRecordsCcForCompletedOrder('Shipped'), undefined);
 });
 
-test('keeps PBAGCR off shipping and unapproved weekly reports', () => {
+test('CCs PBAGCR on completion mail but keeps it off unapproved weekly reports', () => {
   const orderRoute = fs.readFileSync('src/app/api/order-notification/route.js', 'utf8');
   const shippedRoute = fs.readFileSync('src/app/api/order-shipped-notification/route.js', 'utf8');
   const weeklyRoute = fs.readFileSync('src/app/api/admin/commissions/weekly-report/route.js', 'utf8');
@@ -30,7 +30,10 @@ test('keeps PBAGCR off shipping and unapproved weekly reports', () => {
 
   assert.match(orderRoute, /customerReceiptOnly/);
   assert.match(orderRoute, /cc: taxRecordsCcForCompletedOrder\(order\.status\)/);
-  assert.doesNotMatch(shippedRoute, /withTaxRecordsCc|taxRecordsCcForCompletedOrder/);
+  // The admin panel reaches this route on EVERY completion, including the
+  // "Paid -> Order Complete" step that /api/order-notification skips. Dropping
+  // the CC here silently cuts accounting out of most completed sales.
+  assert.match(shippedRoute, /cc: taxRecordsCcForCompletedOrder\(order\.status\)/);
   assert.doesNotMatch(weeklyRoute, /withTaxRecordsCc|taxRecordsCcForCompletedOrder/);
   assert.match(approvalRoute, /cc: withTaxRecordsCc\(ADMIN_CC_EMAILS\)/);
 });
