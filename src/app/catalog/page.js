@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { buildWhatsAppLink, cleanPhoneNumber } from '@/lib/whatsapp';
+import { buildWhatsAppLink, cleanPhoneNumber, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getTrustpilotReviewUrl } from '@/lib/businessLinks';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
@@ -385,6 +385,14 @@ export default function CatalogPage() {
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [cartAnimating, setCartAnimating] = useState(false);
   const [sessionId, setSessionId] = useState('');
+
+  const cartItemCount = cart.reduce((total, item) => total + item.qty, 0);
+
+  const openCatalogWhatsApp = () => {
+    logWhatsAppSource('catalog_sticky_cta');
+    localStorage.setItem('whatsapp_source', 'catalog_sticky_cta');
+    window.open(buildWhatsAppLink(links.whatsappNumber), '_blank', 'noopener,noreferrer');
+  };
 
   // Reviews States
   const [reviews, setReviews] = useState([]);
@@ -2747,9 +2755,9 @@ export default function CatalogPage() {
   };
 
   return (
-    <div id="app" className="min-h-screen" suppressHydrationWarning>
+    <div id="app" className="catalog-page-shell min-h-screen" suppressHydrationWarning>
       <CatalogPromoBanner lang={lang} settings={landingSettings} forceActive mode="ticker" />
-      {/* Static Top Header Section */}
+      {/* Utility controls stay in normal flow above the persistent brand row. */}
       <header className="header-top-section">
         <div className="header-top container">
           <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)', textDecoration: 'none', fontWeight: 'bold', marginRight: 'auto' }}>
@@ -2807,7 +2815,10 @@ export default function CatalogPage() {
           </div>
         </div>
 
-        <div className="header-content container">
+      </header>
+
+      <div className="catalog-brand-sticky">
+        <div className="catalog-brand-row container">
           <Link href="/" className="logo logo--emblem">
             <img
               src="/logo.webp"
@@ -2816,6 +2827,22 @@ export default function CatalogPage() {
             />
           </Link>
 
+          <button
+            type="button"
+            className={`catalog-header-cart ${cartAnimating ? 'cart-animating' : ''}`}
+            onClick={() => setIsCartOpen(true)}
+            aria-label={lang === 'en'
+              ? `Open cart, ${cartItemCount} ${cartItemCount === 1 ? 'item' : 'items'}`
+              : `Abrir carrito, ${cartItemCount} ${cartItemCount === 1 ? 'artículo' : 'artículos'}`}
+          >
+            <ShoppingBag size={24} strokeWidth={2.4} aria-hidden="true" />
+            {cartItemCount > 0 && <span className="catalog-header-cart-badge">{cartItemCount}</span>}
+          </button>
+        </div>
+      </div>
+
+      <section className="catalog-proof-section">
+        <div className="header-content container">
           <div className="header-proof-column">
             {/* Trust Seals */}
             <div className="trust-badges-container">
@@ -2863,7 +2890,7 @@ export default function CatalogPage() {
             <PressBand lang={lang} settings={landingSettings} variant="catalog" />
           </div>
         </div>
-      </header>
+      </section>
 
       {/* Compact Sticky Bottom Controls Section */}
       <div className="header-sticky-section">
@@ -3008,19 +3035,6 @@ export default function CatalogPage() {
               title={lang === 'en' ? 'Filters' : 'Filtros'}
             >
               <SlidersHorizontal size={18} />
-            </button>
-            <button 
-              onClick={() => setIsCartOpen(true)}
-              className={`filter-btn nav-cart-btn ${cartAnimating ? 'cart-animating' : ''}`}
-              title="Cart"
-              style={{ position: 'relative' }}
-            >
-              <ShoppingBag size={18} />
-              {cart.length > 0 && (
-                <span className="nav-cart-badge" style={{ position: 'absolute', top: '-5px', right: '-5px', background: 'var(--accent)', color: 'white', fontSize: '0.6rem', padding: '2px 5px', borderRadius: '10px', fontWeight: 'bold' }}>
-                  {cart.reduce((a, b) => a + b.qty, 0)}
-                </span>
-              )}
             </button>
           </div>
 
@@ -3534,20 +3548,15 @@ export default function CatalogPage() {
       )}
 
 
-      {/* Floating Cart FAB & Mobile Bottom Bar */}
+      {/* One bottom action at a time: WhatsApp for an empty cart, checkout once
+          the customer adds an item. Both reserve page space and never cover copy. */}
       <style>{`
         @keyframes cart-badge-pop {
           0%   { transform: scale(0.5); opacity: 0; }
           60%  { transform: scale(1.3); opacity: 1; }
           100% { transform: scale(1);   opacity: 1; }
         }
-        @keyframes cart-fab-pulse {
-          0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.55); }
-          70%  { box-shadow: 0 0 0 14px rgba(34,197,94,0); }
-          100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
-        }
-        
-        /* Default mobile view: bottom bar if items exist, otherwise floating right */
+
         .cart-container-wrapper {
           position: fixed;
           z-index: 900;
@@ -3558,17 +3567,13 @@ export default function CatalogPage() {
           padding: 16px;
           padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
           display: flex;
-          justify-content: flex-end;
-        }
-
-        .cart-container-wrapper.has-items {
           justify-content: center;
-          background: linear-gradient(to top, var(--bg-main) 50%, transparent);
+          background: linear-gradient(to top, var(--bg-main) 52%, transparent);
         }
 
-        .cart-fab-sticky {
+        .cart-fab-sticky,
+        .catalog-whatsapp-sticky {
           pointer-events: all;
-          background: linear-gradient(135deg, #22c55e, #16a34a);
           color: #fff;
           border: none;
           border-radius: 14px;
@@ -3581,80 +3586,41 @@ export default function CatalogPage() {
           align-items: center;
           justify-content: space-between;
           width: 100%;
+          max-width: 560px;
           transition: transform 0.2s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s;
         }
 
-        .cart-fab-sticky:active { transform: scale(0.97); }
-
-        .cart-fab-btn {
-          pointer-events: all;
-          width: 60px;
-          height: 60px;
-          border-radius: 50%;
+        .cart-fab-sticky {
           background: linear-gradient(135deg, #22c55e, #16a34a);
-          border: none;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 6px 24px rgba(34,197,94,0.45);
-          transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s;
-          position: relative;
-        }
-        
-        .cart-fab-btn.empty-anim {
-          animation: cart-fab-pulse 2.5s ease-in-out infinite;
+          box-shadow: 0 8px 30px rgba(34,197,94,0.4);
         }
 
-        .cart-fab-btn:active { transform: scale(0.94); }
-        
-        .cart-fab-badge {
-          position: absolute;
-          top: -4px;
-          right: -4px;
-          background: #ef4444;
-          color: #fff;
-          font-size: 0.72rem;
-          font-weight: 800;
-          width: 22px;
-          height: 22px;
+        .catalog-whatsapp-sticky {
+          justify-content: center;
+          gap: 12px;
+          background: linear-gradient(135deg, #f36a00, #d95300);
+          box-shadow: 0 8px 30px rgba(217,83,0,0.34);
+        }
+
+        .catalog-whatsapp-sticky-icon {
+          width: 32px;
+          height: 32px;
           border-radius: 50%;
+          background: #20c76a;
+          color: #fff;
           display: flex;
           align-items: center;
           justify-content: center;
-          border: 2px solid #fff;
-          animation: cart-badge-pop 0.35s cubic-bezier(.34,1.56,.64,1);
+          flex: 0 0 auto;
         }
+
+        .cart-fab-sticky:active,
+        .catalog-whatsapp-sticky:active { transform: scale(0.97); }
 
         @media (min-width: 900px) {
           .cart-container-wrapper {
             bottom: 24px;
-            right: 24px;
-            left: auto;
-            width: auto;
-            padding: 0;
-            background: none !important;
-          }
-          .cart-fab-sticky {
-            width: 66px;
-            height: 66px;
-            border-radius: 50%;
-            padding: 0;
-            justify-content: center;
-            gap: 0;
-          }
-          .cart-fab-sticky > div:first-child span,
-          .cart-fab-sticky > div:nth-child(2) {
-            display: none !important;
-          }
-          .cart-fab-sticky:hover {
-            transform: translateY(-2px) scale(1.03);
-            box-shadow: 0 6px 24px rgba(34,197,94,0.55);
-          }
-          .cart-fab-btn { width: 66px; height: 66px; }
-          .cart-fab-btn:hover {
-            transform: scale(1.1);
-            box-shadow: 0 8px 32px rgba(34,197,94,0.6);
+            padding-bottom: 0;
           }
         }
       `}</style>
@@ -3670,7 +3636,7 @@ export default function CatalogPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <ShoppingBag size={20} />
                 <span>
-                  {cart.reduce((s, i) => s + i.qty, 0)} {lang === 'en' ? (cart.reduce((s, i) => s + i.qty, 0) === 1 ? 'item' : 'items') : (cart.reduce((s, i) => s + i.qty, 0) === 1 ? 'artículo' : 'artículos')}
+                  {cartItemCount} {lang === 'en' ? (cartItemCount === 1 ? 'item' : 'items') : (cartItemCount === 1 ? 'artículo' : 'artículos')}
                 </span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
@@ -3689,13 +3655,17 @@ export default function CatalogPage() {
             </button>
           ) : (
             <button
-              id="floating-cart-btn"
-              className="cart-fab-btn empty-anim"
-              onClick={() => setIsCartOpen(true)}
-              aria-label={lang === 'en' ? 'Open cart' : 'Abrir carrito'}
-              title={lang === 'en' ? 'Cart' : 'Carrito'}
+              id="catalog-whatsapp-btn"
+              className="catalog-whatsapp-sticky"
+              onClick={openCatalogWhatsApp}
             >
-              <ShoppingBag size={26} color="#fff" />
+              <span className="catalog-whatsapp-sticky-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7A8.38 8.38 0 0 1 4 11.5a8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" />
+                  <path d="M9.4 8.3c.3 2.4 1.9 4 4.3 4.3" />
+                </svg>
+              </span>
+              <span>{lang === 'en' ? 'Order on WhatsApp' : 'Ordenar por WhatsApp'}</span>
             </button>
           )
         )}

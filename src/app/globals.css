@@ -87,7 +87,10 @@ textarea {
 }
 
 html, body {
-    overflow-x: hidden;
+    /* `hidden` makes the root a vertical scroll container too, which prevents
+       catalog descendants from sticking to the viewport in WebKit. `clip`
+       still blocks horizontal bleed without changing the sticky containing block. */
+    overflow-x: clip;
     width: 100%;
 }
 
@@ -141,6 +144,113 @@ body {
 
 [data-theme="dark"] .header-top-section {
     background: rgba(14, 22, 38, 0.85);
+}
+
+/* Catalog brand row: it is deliberately separate from the announcement and
+   utility controls so it can stick without masking either one. */
+.catalog-page-shell {
+    padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+}
+
+.catalog-page-shell > .promo-banner-global {
+    padding-right: 0;
+}
+
+.catalog-brand-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 850;
+    background: rgba(255, 255, 255, 0.94);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 5px 18px rgba(15, 23, 42, 0.07);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+[data-theme="dark"] .catalog-brand-sticky {
+    background: rgba(14, 22, 38, 0.94);
+}
+
+.catalog-brand-row {
+    min-height: 78px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.catalog-brand-sticky .logo-emblem {
+    height: 58px;
+}
+
+.catalog-header-cart {
+    position: relative;
+    width: 50px;
+    height: 50px;
+    flex: 0 0 50px;
+    border: 1px solid rgba(229, 91, 0, 0.22);
+    border-radius: 12px;
+    background: var(--bg-card);
+    color: #e55b00;
+    box-shadow: 0 5px 16px rgba(229, 91, 0, 0.13);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.catalog-header-cart:hover {
+    background: #fff7ed;
+    box-shadow: 0 7px 20px rgba(229, 91, 0, 0.18);
+}
+
+.catalog-header-cart:active {
+    transform: scale(0.96);
+}
+
+.catalog-header-cart-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border: 2px solid var(--bg-card);
+    border-radius: 999px;
+    background: #e55b00;
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 900;
+    line-height: 18px;
+    text-align: center;
+    animation: cart-badge-pop 0.35s cubic-bezier(.34,1.56,.64,1);
+}
+
+.catalog-proof-section {
+    background: rgba(255, 255, 255, 0.85);
+    border-bottom: 1px solid var(--border);
+}
+
+[data-theme="dark"] .catalog-proof-section {
+    background: rgba(14, 22, 38, 0.85);
+}
+
+.catalog-proof-section .header-content {
+    justify-content: center;
+}
+
+.catalog-proof-section .header-proof-column {
+    width: 100%;
+    max-width: 850px;
+    align-items: stretch;
+}
+
+.catalog-page-shell .header-sticky-section {
+    position: relative;
+    top: auto;
 }
 
 .header-sticky-section {
@@ -6632,4 +6742,40 @@ body:has([aria-modal="true"]) .lcw-prompt,
 body:has(.cart-drawer.active) .lcw-launcher,
 body:has(.cart-drawer.active) .lcw-prompt {
   display: none;
+}
+
+@media (max-width: 768px) {
+  .catalog-page-shell > .promo-banner-global,
+  .catalog-page-shell > .promo-banner-global .promo-banner-ticker,
+  .catalog-page-shell > .promo-banner-global .promo-banner-text {
+    height: auto;
+    min-height: 36px;
+  }
+
+  .catalog-page-shell > .promo-banner-global .promo-banner-text {
+    font-size: 0.64rem;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .catalog-brand-row {
+    min-height: 64px;
+    padding: 7px 14px;
+  }
+
+  .catalog-brand-sticky .logo-emblem {
+    height: 50px;
+    border-radius: 10px;
+  }
+
+  .catalog-header-cart {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+    border-radius: 11px;
+  }
+
+  .catalog-proof-section .header-content {
+    padding: 9px 14px 11px;
+  }
 }

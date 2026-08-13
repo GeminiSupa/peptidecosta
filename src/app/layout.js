@@ -2,7 +2,6 @@ import localFont from "next/font/local";
 import Script from "next/script";
 import "./globals.css";
 import UTMTracker from "@/components/UTMTracker";
-import ChatWidget from "@/components/ChatWidget";
 import GlobalContactForm from "@/components/GlobalContactForm";
 import { LIVE_SITE_URL } from "@/lib/publicUrl";
 import { getTikTokPixelBootstrapScript } from "@/lib/tiktokPixel.mjs";
@@ -206,7 +205,6 @@ export default async function RootLayout({ children }) {
         </noscript>
         {children}
         <UTMTracker />
-        <ChatWidget />
         <GlobalContactForm />
         {/* Google Tag Manager */}
         <Script id="gtm" strategy="lazyOnload">
