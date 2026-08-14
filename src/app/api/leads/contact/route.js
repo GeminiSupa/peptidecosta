@@ -67,7 +67,7 @@ async function fallbackRoundRobinAgent(supabase) {
   return { agent_name: next.name || next.email, agent_email: next.email, agent_user_id: next.user_id };
 }
 
-async function sendLandingLeadAlert({ name, email, phone, source, qualification, campaign, assignedAgent, assignedAgentEmail, dueAt }) {
+async function sendLandingLeadAlert({ name, email, phone, source, qualification, campaign, assignedAgent, assignedAgentEmail, dueAt, slaMinutes }) {
   const smtp = getTransactionalSmtpConfig();
   if (!smtp.configured) {
     console.warn('[leads/contact] Elastic transactional SMTP is not configured; lead alert skipped.');
@@ -104,12 +104,23 @@ async function sendLandingLeadAlert({ name, email, phone, source, qualification,
     socketTimeout: 20000,
   });
 
+  // These land in a shared info@ inbox alongside everything else, so the subject
+  // has to answer "where from, who, how urgent" before anyone opens it. "New lead
+  // assigned to X" said none of that — it read the same whether it came from paid
+  // ad traffic on a response clock or the ordinary storefront form.
+  //
+  // The assigned agent is deliberately kept out of the subject and left in the
+  // body: who owns a lead can change, and whether it is auto-assigned at all is
+  // still undecided, so the subject should not depend on it.
+  const sourceLabel = source === 'adwords_lp' ? 'AdWords lead' : 'Landing-page lead';
+  const slaLabel = slaMinutes ? ` (${slaMinutes} min)` : '';
+
   await transporter.sendMail({
     from,
     to: fromEmail,
     bcc: recipients.join(', '),
     replyTo: email || undefined,
-    subject: `New lead assigned${assignedAgent ? ` to ${assignedAgent}` : ''} — ${name}`,
+    subject: `${sourceLabel}${slaLabel} — ${name}`,
     text: lines.join('\n'),
     html: `<h2>New landing-page lead</h2><ul>${lines.slice(1).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
   });
@@ -366,6 +377,7 @@ export async function POST(request) {
           assignedAgent: owner,
           assignedAgentEmail,
           dueAt,
+          slaMinutes: landingSettings.responseSlaMinutes,
         });
       } catch (alertError) {
         console.error('[leads/contact] lead alert failed:', alertError);

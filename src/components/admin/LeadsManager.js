@@ -330,6 +330,14 @@ export default function LeadsManager({
         if (leadsSourceFilter === 'wa_optin' && l.whatsapp_consent !== true) return false;
         if (leadsSourceFilter === 'wa_nooptin' && l.whatsapp_consent === true) return false;
         if (leadsSourceFilter === 'live_chat' && String(l.utm_source || l.source || '').toLowerCase() !== 'live_chat') return false;
+        // lead_source is the reliable answer, but it only exists on leads saved
+        // after add-lead-source-to-leads.sql ran. Older AdWords leads recorded
+        // their origin only in the notes text, so fall back to that rather than
+        // hiding them from their own filter.
+        if (leadsSourceFilter === 'adwords' && !(
+          String(l.lead_source || '').toLowerCase().includes('adwords')
+          || String(l.notes || '').toLowerCase().includes('(adwords')
+        )) return false;
         if (leadsSourceFilter === 'facebook' && !(
           (l.source && String(l.source).toLowerCase().includes('facebook')) ||
           (l.utm_source && String(l.utm_source).toLowerCase().includes('facebook')) ||
@@ -771,6 +779,7 @@ export default function LeadsManager({
           <option value="email">Email</option>
           <option value="live_chat">Live Chat</option>
           <option value="facebook">Facebook Ads</option>
+          <option value="adwords">Google Ads</option>
           <option value="converted">Converted / Won</option>
           <option value="wa_optin">✓ WhatsApp Opt-in</option>
           <option value="wa_nooptin">✗ No WhatsApp Opt-in</option>
@@ -1039,6 +1048,30 @@ export default function LeadsManager({
                         return (
                           <div style={{ color: '#f8fafc', fontWeight: 700, fontSize: '0.85rem', lineHeight: 1.2 }}>
                             {name}
+                          </div>
+                        );
+                      })()}
+                      {(() => {
+                        // Which leads the ad budget actually bought has to be
+                        // readable at a glance, not dug out of the notes text.
+                        const raw = String(lead.lead_source || '').toLowerCase()
+                          || (String(lead.notes || '').toLowerCase().includes('(adwords') ? 'adwords_lp' : '');
+                        if (!raw || raw === 'contact_form') return null;
+                        const isPaid = raw.includes('adwords');
+                        return (
+                          <div style={{
+                            alignSelf: 'flex-start',
+                            background: isPaid ? 'rgba(251, 191, 36, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                            color: isPaid ? '#fbbf24' : '#cbd5e1',
+                            border: `1px solid ${isPaid ? 'rgba(251, 191, 36, 0.35)' : 'rgba(148, 163, 184, 0.3)'}`,
+                            padding: '2px 7px',
+                            borderRadius: '6px',
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '.02em',
+                          }}>
+                            {isPaid ? 'Google Ads form' : raw.replace(/_/g, ' ')}
                           </div>
                         );
                       })()}
