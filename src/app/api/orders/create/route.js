@@ -388,6 +388,18 @@ export async function POST(request) {
       );
     }
 
+    // The checkout page collected this by calling ipapi.co, then db-ip, then
+    // ipify from the customer's browser. Ad blockers block all three, which is
+    // why roughly one order in seven has no address at all, and a value the
+    // browser supplies can be edited by whoever is sending it. The platform
+    // already puts the real client address on the request, so it is read here
+    // and the browser's guess kept only as a local-development fallback.
+    const forwardedFor = request.headers.get('x-forwarded-for')
+      || request.headers.get('x-real-ip')
+      || '';
+    const requestIp = forwardedFor.split(',')[0].trim();
+    if (requestIp) orderRow.ip_address = requestIp;
+
     let { data, error } = await supabase
       .from('orders')
       .insert(orderRow)
