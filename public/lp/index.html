@@ -1126,6 +1126,38 @@ function applyAltContact(){
   });
 }
 
+/* ============================================================
+   Email fallback
+   mailto: only opens something if the device has a mail client
+   registered for it. Phones do; a desktop whose owner lives in
+   webmail usually does not, and there the click did nothing at
+   all — the browser sat on a blank tab and the visitor left.
+   The link itself is untouched, so anyone with a mail app keeps
+   the native handoff. We just watch for that handoff: opening a
+   mail client blurs the page, so if focus never leaves within a
+   second, nothing took it and we open Gmail's web composer.
+   Kept inside the click's user-activation window so the browser
+   does not treat the new tab as an unsolicited popup.
+   ============================================================ */
+function wireEmailFallback(){
+  var compose = "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(CONFIG.email);
+  $$('a[href^="mailto:"]').forEach(function(el){
+    el.addEventListener("click", function(){
+      var handedOff = false;
+      var mark = function(){ handedOff = true; };
+      window.addEventListener("blur", mark);
+      document.addEventListener("visibilitychange", mark);
+      setTimeout(function(){
+        window.removeEventListener("blur", mark);
+        document.removeEventListener("visibilitychange", mark);
+        if (handedOff || document.hidden) return;    // a mail app took it
+        track("cta_click",{location:"email-gmail-fallback",language:lang});
+        window.open(compose, "_blank", "noopener");
+      }, 1000);
+    });
+  });
+}
+
 function track(ev,payload){
   var d = payload||{}; d.event = ev;
   if (window.dataLayer && window.dataLayer.push) window.dataLayer.push(d);
@@ -1652,7 +1684,7 @@ $$("[data-cta]:not([data-open])").forEach(function(el){
 var urlLang=(new URLSearchParams(location.search)).get("lang");
 var navLang=(navigator.language||"en").toLowerCase().indexOf("es")===0?"es":"en";
 setLang(urlLang==="es"||urlLang==="en"?urlLang:navLang);
-onScroll(); updateMeta(); applyAltContact();
+onScroll(); updateMeta(); applyAltContact(); wireEmailFallback();
 })();
 </script>
 </body>
