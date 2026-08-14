@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Copy, Phone, Plus, Trash2, BadgePercent } from 'lucide-react';
 import { formatActivityType } from '@/lib/orderActivity';
 import { adminFetch } from '@/lib/adminApi';
@@ -10,6 +10,7 @@ import {
   calculateAdminOrderTotals,
   getAdminOrderSubtotal,
   getAdminShippingCosts,
+  normalizeAdminOrderCurrency,
 } from '@/lib/adminOrderTotals.mjs';
 
 const ORDER_STATUS_OPTIONS = [
@@ -44,7 +45,7 @@ const parseProductPrice = (product, currency) => {
 };
 
 const getStoredTotal = (order) => {
-  if (order.currency === 'USD') return Number(order.total_usd) || 0;
+  if (normalizeAdminOrderCurrency(order.currency) === 'USD') return Number(order.total_usd) || 0;
   return Number(order.total_crc) || 0;
 };
 
@@ -74,6 +75,7 @@ const getCardPaymentBadge = (order) => {
 };
 
 const inferShippingCosts = (order) => {
+  const currency = normalizeAdminOrderCurrency(order.currency);
   const explicitCrc = Number(order.shipping_cost_crc) || 0;
   const explicitUsd = Number(order.shipping_cost_usd) || 0;
 
@@ -92,7 +94,7 @@ const inferShippingCosts = (order) => {
     return { crc: explicitCrc, usd: explicitUsd };
   }
 
-  return order.currency === 'USD'
+  return currency === 'USD'
     ? {
         crc: Math.round(inferred * ADMIN_FALLBACK_EXCHANGE_RATE),
         usd: Number(inferred.toFixed(2)),
@@ -115,12 +117,15 @@ export default function OrderDetailPanel({
   isSuperadmin = false,
 }) {
   const initialShipping = order ? inferShippingCosts(order) : { crc: 0, usd: 0 };
+  const initialCurrency = normalizeAdminOrderCurrency(order?.currency);
   const [notes, setNotes] = useState(order.internal_notes || '');
   const [savingNotes, setSavingNotes] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [shippingAmount, setShippingAmount] = useState(
-    (order?.currency === 'USD' ? initialShipping.usd : initialShipping.crc) || ''
+    (initialCurrency === 'USD' ? initialShipping.usd : initialShipping.crc) || ''
   );
+  const [savingShipping, setSavingShipping] = useState(false);
+  const shippingSaveInFlightRef = useRef(false);
 
   const [customerName, setCustomerName] = useState(order.customer_name || '');
   const [customerPhone, setCustomerPhone] = useState(order.customer_phone || '');
@@ -149,8 +154,9 @@ export default function OrderDetailPanel({
   useEffect(() => {
     if (!order) return;
     const nextShipping = inferShippingCosts(order);
+    const nextCurrency = normalizeAdminOrderCurrency(order.currency);
     setNotes(order.internal_notes || '');
-    setShippingAmount((order.currency === 'USD' ? nextShipping.usd : nextShipping.crc) || '');
+    setShippingAmount((nextCurrency === 'USD' ? nextShipping.usd : nextShipping.crc) || '');
     setCustomerName(order.customer_name || '');
     setCustomerPhone(order.customer_phone || '');
     setCustomerEmail(order.customer_email || '');
@@ -178,6 +184,8 @@ export default function OrderDetailPanel({
   }, [order]);
 
   if (!order) return null;
+
+  const orderCurrency = normalizeAdminOrderCurrency(order.currency);
 
   const copyCardPaymentLink = async () => {
     setCardLinkLoading(true);
@@ -209,8 +217,8 @@ export default function OrderDetailPanel({
                             !statusLower.includes('complete') && 
                             !statusLower.includes('cancel');
   const shipping = Number(shippingAmount) || 0;
-  const shippingCosts = getAdminShippingCosts(shipping, order.currency);
-  const promoDiscount = order.currency === 'USD'
+  const shippingCosts = getAdminShippingCosts(shipping, orderCurrency);
+  const promoDiscount = orderCurrency === 'USD'
     ? Number(order.discount_amount_usd || 0)
     : Number(order.discount_amount_crc || 0);
   const {
@@ -355,8 +363,12 @@ export default function OrderDetailPanel({
   };
 
   const saveShipping = async () => {
+    if (shippingSaveInFlightRef.current) return;
+    shippingSaveInFlightRef.current = true;
+    setSavingShipping(true);
+
     const nextShipping = Number(shippingAmount) || 0;
-    const nextShippingCosts = getAdminShippingCosts(nextShipping, order.currency);
+    const nextShippingCosts = getAdminShippingCosts(nextShipping, orderCurrency);
 
     try {
       await patchOrder({
@@ -368,6 +380,9 @@ export default function OrderDetailPanel({
       });
     } catch (err) {
       alert(err.message);
+    } finally {
+      shippingSaveInFlightRef.current = false;
+      setSavingShipping(false);
     }
   };
 
@@ -400,7 +415,7 @@ export default function OrderDetailPanel({
       {
         product: product.product,
         qty: 1,
-        price: parseProductPrice(product, order.currency),
+        price: parseProductPrice(product, orderCurrency),
       },
     ]);
     setAddProduct('');
@@ -428,14 +443,14 @@ export default function OrderDetailPanel({
     }));
 
     const ship = Number(shippingAmount) || 0;
-    const normalizedShippingCosts = getAdminShippingCosts(ship, order.currency);
+    const normalizedShippingCosts = getAdminShippingCosts(ship, orderCurrency);
     const total = calculateAdminOrderTotals(normalizedItems, ship, {
       promoDiscountAmount: promoDiscount,
       manualDiscountType,
       manualDiscountValue,
     }).total;
-    const totalUsd = order.currency === 'USD' ? Number(total.toFixed(2)) : Number((total / ADMIN_FALLBACK_EXCHANGE_RATE).toFixed(2));
-    const totalCrc = order.currency === 'CRC' ? Math.round(total) : Math.round(total * ADMIN_FALLBACK_EXCHANGE_RATE);
+    const totalUsd = orderCurrency === 'USD' ? Number(total.toFixed(2)) : Number((total / ADMIN_FALLBACK_EXCHANGE_RATE).toFixed(2));
+    const totalCrc = orderCurrency === 'CRC' ? Math.round(total) : Math.round(total * ADMIN_FALLBACK_EXCHANGE_RATE);
 
     try {
       await patchOrder(
@@ -885,14 +900,14 @@ export default function OrderDetailPanel({
                 type="number"
                 min="0"
                 max={manualDiscountType === 'percentage' ? '100' : undefined}
-                step={manualDiscountType === 'percentage' ? '0.1' : (order.currency === 'USD' ? '0.01' : '1')}
+                step={manualDiscountType === 'percentage' ? '0.1' : (orderCurrency === 'USD' ? '0.01' : '1')}
                 value={manualDiscountValue}
                 onChange={(e) => {
                   setManualDiscountValue(e.target.value);
                   setDiscountError('');
                 }}
                 disabled={manualDiscountType === 'none'}
-                placeholder={manualDiscountType === 'percentage' ? 'Percent' : `Amount ${order.currency}`}
+                placeholder={manualDiscountType === 'percentage' ? 'Percent' : `Amount ${orderCurrency}`}
               />
               <input
                 className="admin-input"
@@ -925,65 +940,72 @@ export default function OrderDetailPanel({
           </div>
 
           <div className="order-detail-totals">
-            <div><span>Items subtotal</span><span>{order.currency === 'USD' ? `$${itemsSubtotal.toFixed(2)}` : `₡${itemsSubtotal.toLocaleString()}`}</span></div>
+            <div><span>Items subtotal</span><span>{orderCurrency === 'USD' ? `$${itemsSubtotal.toFixed(2)}` : `₡${itemsSubtotal.toLocaleString()}`}</span></div>
             {discountPct > 0 && (
               <div style={{ color: '#16a34a' }}>
                 <span>Volume discount ({discountPct}%)</span>
-                <span>{order.currency === 'USD' ? `-$${discountAmount.toFixed(2)}` : `-₡${Math.round(discountAmount).toLocaleString()}`}</span>
+                <span>{orderCurrency === 'USD' ? `-$${discountAmount.toFixed(2)}` : `-₡${Math.round(discountAmount).toLocaleString()}`}</span>
               </div>
             )}
             {promoDiscountAmount > 0 && (
               <div style={{ color: '#38bdf8' }}>
                 <span>Promo discount{order.promo_code ? ` (${order.promo_code})` : ''}</span>
-                <span>{order.currency === 'USD' ? `-$${promoDiscountAmount.toFixed(2)}` : `-₡${Math.round(promoDiscountAmount).toLocaleString()}`}</span>
+                <span>{orderCurrency === 'USD' ? `-$${promoDiscountAmount.toFixed(2)}` : `-₡${Math.round(promoDiscountAmount).toLocaleString()}`}</span>
               </div>
             )}
             {manualDiscountAmount > 0 && (
               <div style={{ color: '#c084fc' }}>
                 <span>Order discount{manualDiscountReason.trim() ? ` (${manualDiscountReason.trim()})` : ''}</span>
-                <span>{order.currency === 'USD' ? `-$${manualDiscountAmount.toFixed(2)}` : `-₡${Math.round(manualDiscountAmount).toLocaleString()}`}</span>
+                <span>{orderCurrency === 'USD' ? `-$${manualDiscountAmount.toFixed(2)}` : `-₡${Math.round(manualDiscountAmount).toLocaleString()}`}</span>
               </div>
             )}
             <div>
               <span>Shipping</span>
               <span>
-                {order.currency === 'USD'
+                {orderCurrency === 'USD'
                   ? `$${shippingCosts.usd.toFixed(2)} (≈ ₡${shippingCosts.crc.toLocaleString()})`
                   : `₡${shippingCosts.crc.toLocaleString()} (≈ $${shippingCosts.usd.toFixed(2)})`}
               </span>
             </div>
             <div className="order-detail-total-line">
               <span>Total (preview)</span>
-              <span>{order.currency === 'USD' ? `$${orderTotal.toFixed(2)}` : `₡${Math.round(orderTotal).toLocaleString()}`}</span>
+              <span>{orderCurrency === 'USD' ? `$${orderTotal.toFixed(2)}` : `₡${Math.round(orderTotal).toLocaleString()}`}</span>
             </div>
           </div>
 
           <div className="order-detail-shipping-edit" style={{ marginTop: '12px' }}>
-            <label htmlFor="order-shipping-cost">Shipping cost ({order.currency})</label>
+            <label htmlFor="order-shipping-cost">Shipping cost ({orderCurrency})</label>
             <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
               <div style={{ position: 'relative', flex: 1 }}>
                 <span
                   aria-hidden="true"
                   style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontWeight: 700 }}
                 >
-                  {order.currency === 'USD' ? '$' : '₡'}
+                  {orderCurrency === 'USD' ? '$' : '₡'}
                 </span>
                 <input
                   id="order-shipping-cost"
                   className="admin-input"
                   type="number"
                   min="0"
-                  step={order.currency === 'USD' ? '0.01' : '1'}
+                  step={orderCurrency === 'USD' ? '0.01' : '1'}
                   placeholder="0"
                   value={shippingAmount}
                   onChange={(e) => setShippingAmount(e.target.value)}
                   style={{ width: '100%', paddingLeft: '30px' }}
                 />
               </div>
-              <button type="button" className="admin-btn admin-btn-secondary" onClick={saveShipping}>Save shipping</button>
+              <button
+                type="button"
+                className="admin-btn admin-btn-secondary"
+                onClick={saveShipping}
+                disabled={savingShipping}
+              >
+                {savingShipping ? 'Saving…' : 'Save shipping'}
+              </button>
             </div>
             <div style={{ marginTop: '6px', color: '#94a3b8', fontSize: '0.75rem' }}>
-              {order.currency === 'USD'
+              {orderCurrency === 'USD'
                 ? `CRC equivalent is calculated automatically: ₡${shippingCosts.crc.toLocaleString()}`
                 : `USD equivalent is calculated automatically: $${shippingCosts.usd.toFixed(2)}`}
             </div>

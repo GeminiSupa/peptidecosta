@@ -2,6 +2,10 @@ import { isBacWater, splitCartUnits } from './bacWater.mjs';
 
 export const ADMIN_FALLBACK_EXCHANGE_RATE = 454.48;
 
+export function normalizeAdminOrderCurrency(currency) {
+  return String(currency || '').trim().toUpperCase() === 'USD' ? 'USD' : 'CRC';
+}
+
 export function getAdminVolumeDiscountPct(items = []) {
   const { discountUnits } = splitCartUnits(items);
   if (discountUnits >= 10) return 20;
@@ -25,8 +29,9 @@ export function getAdminShippingCosts(amount, currency, exchangeRate = ADMIN_FAL
   const primaryAmount = finiteNonNegative(amount);
   const rate = Number(exchangeRate);
   const safeRate = Number.isFinite(rate) && rate > 0 ? rate : ADMIN_FALLBACK_EXCHANGE_RATE;
+  const normalizedCurrency = normalizeAdminOrderCurrency(currency);
 
-  if (currency === 'USD') {
+  if (normalizedCurrency === 'USD') {
     return {
       usd: Number(primaryAmount.toFixed(2)),
       crc: Math.round(primaryAmount * safeRate),

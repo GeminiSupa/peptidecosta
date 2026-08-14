@@ -10,6 +10,7 @@ import {
   ADMIN_FALLBACK_EXCHANGE_RATE,
   calculateAdminOrderTotals,
   getAdminShippingCosts,
+  normalizeAdminOrderCurrency,
   normalizeManualDiscountType,
 } from '@/lib/adminOrderTotals.mjs';
 import {
@@ -145,7 +146,7 @@ export async function PATCH(request) {
         return NextResponse.json({ error: 'Every order item needs a product, positive quantity, and non-negative price' }, { status: 400 });
       }
 
-      const currency = currentOrder.currency === 'CRC' ? 'CRC' : 'USD';
+      const currency = normalizeAdminOrderCurrency(currentOrder.currency);
       const shippingCrc = Number(('shipping_cost_crc' in patch ? patch.shipping_cost_crc : currentOrder.shipping_cost_crc) || 0);
       const shippingUsd = Number(('shipping_cost_usd' in patch ? patch.shipping_cost_usd : currentOrder.shipping_cost_usd) || 0);
       const shipping = currency === 'CRC' ? shippingCrc : shippingUsd;
@@ -273,7 +274,7 @@ export async function PATCH(request) {
       ? {
           type: patch.manual_discount_type ? 'manual_discount_applied' : 'manual_discount_removed',
           message: patch.manual_discount_type
-            ? `Order discount set to ${patch.manual_discount_type === 'percentage' ? `${patch.manual_discount_value}%` : `${patch.manual_discount_value} ${currentOrder.currency || 'USD'}`}${patch.manual_discount_reason ? ` — ${patch.manual_discount_reason}` : ''}`
+            ? `Order discount set to ${patch.manual_discount_type === 'percentage' ? `${patch.manual_discount_value}%` : `${patch.manual_discount_value} ${normalizeAdminOrderCurrency(currentOrder.currency)}`}${patch.manual_discount_reason ? ` — ${patch.manual_discount_reason}` : ''}`
             : 'Order discount removed',
         }
       : activity;
@@ -335,11 +336,12 @@ export async function PATCH(request) {
         }
 
         try {
+          const dataCurrency = normalizeAdminOrderCurrency(data.currency);
           const itemsAmount = (data.items || []).reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
-          const shippingCost = data.currency === 'CRC' ? Number(data.shipping_cost_crc || 0) : Number(data.shipping_cost_usd || 0);
-          const promoDiscount = data.currency === 'CRC' ? Number(data.discount_amount_crc || 0) : Number(data.discount_amount_usd || 0);
-          const manualDiscount = data.currency === 'CRC' ? Number(data.manual_discount_amount_crc || 0) : Number(data.manual_discount_amount_usd || 0);
-          const total = data.currency === 'CRC' ? Number(data.total_crc || 0) : Number(data.total_usd || 0);
+          const shippingCost = dataCurrency === 'CRC' ? Number(data.shipping_cost_crc || 0) : Number(data.shipping_cost_usd || 0);
+          const promoDiscount = dataCurrency === 'CRC' ? Number(data.discount_amount_crc || 0) : Number(data.discount_amount_usd || 0);
+          const manualDiscount = dataCurrency === 'CRC' ? Number(data.manual_discount_amount_crc || 0) : Number(data.manual_discount_amount_usd || 0);
+          const total = dataCurrency === 'CRC' ? Number(data.total_crc || 0) : Number(data.total_usd || 0);
           
           let volumeDiscount = itemsAmount - promoDiscount - manualDiscount + shippingCost - total;
           if (volumeDiscount < 0.01) volumeDiscount = 0; // handle floating point errors
@@ -366,12 +368,12 @@ export async function PATCH(request) {
                manualDiscount: manualDiscount,
                manualDiscountReason: data.manual_discount_reason || null,
                shipping: shippingCost,
-               currency: data.currency || 'USD',
+               currency: dataCurrency,
                paymentMethod: data.payment_method,
                status: data.status,
                customerReceiptOnly: true,
                forceCustomerReceipt: true,
-               lang: data.currency === 'CRC' ? 'es' : 'en',
+               lang: dataCurrency === 'CRC' ? 'es' : 'en',
             })
           });
         } catch (e) {

@@ -5,7 +5,16 @@ import {
   calculateManualDiscountAmount,
   getAdminShippingCosts,
   getAdminVolumeDiscountPct,
+  normalizeAdminOrderCurrency,
 } from '../src/lib/adminOrderTotals.mjs';
+
+test('admin currency normalization matches the CRC-first UI fallback', () => {
+  assert.equal(normalizeAdminOrderCurrency('USD'), 'USD');
+  assert.equal(normalizeAdminOrderCurrency(' usd '), 'USD');
+  assert.equal(normalizeAdminOrderCurrency('CRC'), 'CRC');
+  assert.equal(normalizeAdminOrderCurrency(null), 'CRC');
+  assert.equal(normalizeAdminOrderCurrency('unexpected'), 'CRC');
+});
 
 test('shipping entered in the order currency derives the secondary currency', () => {
   assert.deepEqual(getAdminShippingCosts(2500, 'CRC'), { crc: 2500, usd: 5.5 });
