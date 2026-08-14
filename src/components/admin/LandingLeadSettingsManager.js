@@ -15,6 +15,7 @@ const smallButton = { border: '1px solid rgba(255,255,255,.12)', background: 'rg
 
 export default function LandingLeadSettingsManager() {
   const [settings, setSettings] = useState(clone(DEFAULT_LANDING_LEAD_SETTINGS));
+  const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -27,6 +28,15 @@ export default function LandingLeadSettingsManager() {
       if (!active) return;
       if (error) setMessage(`Could not load saved settings: ${error.message}`);
       setSettings(normalizeLandingLeadSettings(data?.value));
+
+      // Offer the same people the server will actually accept, so the dropdown
+      // cannot be used to name an agent who would silently fall back to rotation.
+      const { data: profiles } = await supabase.from('admin_profiles').select('name, email, permissions, status');
+      if (!active) return;
+      setAgents((profiles || [])
+        .filter((profile) => profile.email && (profile.status || 'active') === 'active')
+        .filter((profile) => Array.isArray(profile.permissions) && profile.permissions.includes('leads'))
+        .sort((left, right) => String(left.name || left.email).localeCompare(String(right.name || right.email))));
       setLoading(false);
     }
     load();
@@ -96,7 +106,7 @@ export default function LandingLeadSettingsManager() {
         <div>
           <div style={{ color: '#38bdf8', textTransform: 'uppercase', fontSize: '.7rem', fontWeight: 800, letterSpacing: '.08em' }}>Lead capture system</div>
           <h3 style={{ color: '#f8fafc', margin: '5px 0', fontSize: '1.05rem' }}>Landing questionnaire, assignment and response SLA</h3>
-          <p style={{ color: '#94a3b8', margin: 0, fontSize: '.8rem', maxWidth: 760, lineHeight: 1.5 }}>Edit the bilingual questions shown at /landing. Answers appear as structured fields in Leads → Lead Profile. New landing leads rotate across active staff agents.</p>
+          <p style={{ color: '#94a3b8', margin: 0, fontSize: '.8rem', maxWidth: 760, lineHeight: 1.5 }}>Edit the bilingual questions shown at /landing. Answers appear as structured fields in Leads → Lead Profile. Choose below whether new leads rotate across the team or all go to one agent.</p>
         </div>
         <button type="button" className="admin-btn admin-btn-primary" onClick={save} disabled={saving}><Save size={15} /> {saving ? 'Publishing…' : 'Publish lead form'}</button>
       </div>
@@ -110,6 +120,46 @@ export default function LandingLeadSettingsManager() {
         <label style={{ color: '#cbd5e1', fontSize: '.76rem' }}>Consent version<input style={{ ...inputStyle, marginTop: 6 }} value={settings.consentVersion} onChange={(event) => changeSetting('consentVersion', event.target.value)} /></label>
         <label style={{ color: '#cbd5e1', fontSize: '.78rem', display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={settings.autoOpenEnabled} onChange={(event) => changeSetting('autoOpenEnabled', event.target.checked)} /> Auto-open questionnaire</label>
         <label style={{ color: '#cbd5e1', fontSize: '.78rem', display: 'flex', alignItems: 'center', gap: 8 }}><input type="checkbox" checked={settings.exitIntentEnabled} onChange={(event) => changeSetting('exitIntentEnabled', event.target.checked)} /> Desktop exit-intent trigger</label>
+      </div>
+
+      <div style={{ background: '#172237', borderRadius: 10, padding: 15, marginBottom: 18 }}>
+        <div style={{ color: '#f8fafc', fontWeight: 700, fontSize: '.86rem', marginBottom: 4 }}>Who gets new landing leads</div>
+        <p style={{ color: '#94a3b8', margin: '0 0 12px', fontSize: '.76rem', lineHeight: 1.5 }}>
+          A contact an agent already owns always stays with that agent — this only decides where brand-new leads go.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12 }}>
+          <label style={{ color: '#cbd5e1', fontSize: '.76rem' }}>Assignment
+            <select
+              style={{ ...inputStyle, marginTop: 6 }}
+              value={settings.assignmentMode}
+              onChange={(event) => changeSetting('assignmentMode', event.target.value)}
+            >
+              <option value="round_robin">Round-robin across all agents</option>
+              <option value="fixed">Always one agent</option>
+            </select>
+          </label>
+          {settings.assignmentMode === 'fixed' && (
+            <label style={{ color: '#cbd5e1', fontSize: '.76rem' }}>Send every lead to
+              <select
+                style={{ ...inputStyle, marginTop: 6 }}
+                value={settings.assignedAgentEmail}
+                onChange={(event) => changeSetting('assignedAgentEmail', event.target.value)}
+              >
+                <option value="">Choose an agent…</option>
+                {agents.map((agent) => (
+                  <option key={agent.email} value={String(agent.email).toLowerCase()}>
+                    {agent.name || agent.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+        {settings.assignmentMode === 'fixed' && !settings.assignedAgentEmail && (
+          <div style={{ color: '#fbbf24', fontSize: '.74rem', marginTop: 10 }}>
+            No agent chosen yet — until one is picked, leads keep rotating across the team.
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 12, marginBottom: 18 }}>

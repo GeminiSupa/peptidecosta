@@ -3,6 +3,13 @@ const clean = (value, limit = 300) => String(value ?? '').trim().slice(0, limit)
 export const LANDING_LEAD_SETTINGS_ID = 'lead_landing_page';
 
 export const DEFAULT_LANDING_LEAD_SETTINGS = {
+  // Who a new landing lead goes to. 'round_robin' spreads them across every
+  // eligible agent; 'fixed' sends every one to assignedAgentEmail. The AdWords
+  // campaign is starting with a single agent and is expected to move back to
+  // rotation once it settles, so this is a setting rather than a code change —
+  // switching it should not need a developer or a deploy.
+  assignmentMode: 'round_robin',
+  assignedAgentEmail: '',
   autoOpenEnabled: true,
   timeTriggerMs: 5000,
   scrollTriggerPct: 55,
@@ -99,6 +106,8 @@ export function normalizeLandingLeadSettings(value = {}) {
     .map(normalizeQuestion);
   return {
     ...DEFAULT_LANDING_LEAD_SETTINGS,
+    assignmentMode: source.assignmentMode === 'fixed' ? 'fixed' : 'round_robin',
+    assignedAgentEmail: clean(source.assignedAgentEmail, 200).toLowerCase(),
     autoOpenEnabled: source.autoOpenEnabled !== false,
     timeTriggerMs: Math.min(60000, Math.max(0, Number(source.timeTriggerMs) || DEFAULT_LANDING_LEAD_SETTINGS.timeTriggerMs)),
     scrollTriggerPct: Math.min(95, Math.max(10, Number(source.scrollTriggerPct) || DEFAULT_LANDING_LEAD_SETTINGS.scrollTriggerPct)),

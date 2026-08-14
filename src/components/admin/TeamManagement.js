@@ -55,7 +55,7 @@ function NotificationSettings({
   const renderGroup = (title, icon, rows, emptyText) => (
     <div style={panel}>
       <h3 style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#f8fafc', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {icon} {title} <span style={{ color: '#64748b', fontWeight: 'normal' }}>({rows.filter(r => r.active && (r.new_order || r.new_lead)).length} active)</span>
+        {icon} {title} <span style={{ color: '#64748b', fontWeight: 'normal' }}>({rows.filter(r => r.active && (r.new_order || r.new_lead || r.adwords_lead)).length} active)</span>
       </h3>
       {rows.length === 0 ? (
         <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>{emptyText}</p>
@@ -77,16 +77,27 @@ function NotificationSettings({
                 New order alert
               </label>
               {r.channel === 'email' && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#94a3b8', cursor: canEdit ? 'pointer' : 'not-allowed' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#94a3b8', cursor: canEdit ? 'pointer' : 'not-allowed' }} title="Every lead form: the catalog Contáctenos form and both landing pages.">
                   <input
                     type="checkbox"
                     checked={!!r.new_lead}
                     disabled={!canEdit || savingId === r.id}
                     onChange={e => onUpdate(r.id, { new_lead: e.target.checked })}
                   />
-                  Backup lead alert
+                  Lead alert (all forms)
                 </label>
               )}
+              {/* Offered on both channels: email goes to the ops inboxes, WhatsApp
+                  to the agent working the campaign on their own phone. */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#fbbf24', cursor: canEdit ? 'pointer' : 'not-allowed' }} title="Only leads from the Google Ads landing page at /lp. Nothing from the storefront.">
+                <input
+                  type="checkbox"
+                  checked={!!r.adwords_lead}
+                  disabled={!canEdit || savingId === r.id}
+                  onChange={e => onUpdate(r.id, { adwords_lead: e.target.checked })}
+                />
+                Google Ads lead alert
+              </label>
               {canEdit && (
                 <button
                   className="admin-btn"

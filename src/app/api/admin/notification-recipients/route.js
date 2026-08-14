@@ -33,20 +33,28 @@ export async function GET(request) {
   if (auth.error) return auth.error;
 
   const supabase = getSupabaseAdmin();
-  let { data, error } = await supabase
-    .from('notification_recipients')
-    .select('id, label, channel, destination, new_order, new_lead, active, created_at')
-    .order('channel', { ascending: true })
-    .order('created_at', { ascending: true });
-
-  if (error && String(error.message || '').includes('new_lead')) {
-    const fallback = await supabase
+  // Each optional flag arrives with its own hand-run migration, so the select is
+  // narrowed one column at a time rather than assuming both landed together.
+  // Whatever is missing reads as false and its tickbox simply stays off.
+  const optionalFlags = ['new_lead', 'adwords_lead'];
+  const present = [...optionalFlags];
+  let data;
+  let error;
+  for (let attempt = 0; attempt <= optionalFlags.length; attempt += 1) {
+    const columns = ['id, label, channel, destination, new_order', ...present, 'active, created_at'].join(', ');
+    ({ data, error } = await supabase
       .from('notification_recipients')
-      .select('id, label, channel, destination, new_order, active, created_at')
+      .select(columns)
       .order('channel', { ascending: true })
-      .order('created_at', { ascending: true });
-    data = (fallback.data || []).map((row) => ({ ...row, new_lead: false }));
-    error = fallback.error;
+      .order('created_at', { ascending: true }));
+    if (!error) break;
+    const missing = present.find((column) => String(error.message || '').includes(column));
+    if (!missing) break;
+    present.splice(present.indexOf(missing), 1);
+  }
+  if (!error) {
+    const absent = optionalFlags.filter((column) => !present.includes(column));
+    data = (data || []).map((row) => ({ ...row, ...Object.fromEntries(absent.map((column) => [column, false])) }));
   }
 
   if (error) {
@@ -79,10 +87,28 @@ export async function POST(request) {
         destination: normalizeDestination(channel, body.destination),
         new_order: body.new_order !== false,
         new_lead: body.new_lead === true,
+        adwords_lead: body.adwords_lead === true,
         active: body.active !== false,
       })
       .select()
       .single();
+
+    if (error && String(error.message || '').includes('adwords_lead')) {
+      const retry = await supabase
+        .from('notification_recipients')
+        .insert({
+          label: String(body.label).trim(),
+          channel,
+          destination: normalizeDestination(channel, body.destination),
+          new_order: body.new_order !== false,
+          new_lead: body.new_lead === true,
+          active: body.active !== false,
+        })
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
 
     if (error && String(error.message || '').includes('new_lead')) {
       const fallback = await supabase
@@ -130,6 +156,7 @@ export async function PATCH(request) {
     if (body.label !== undefined) patch.label = String(body.label).trim();
     if (body.new_order !== undefined) patch.new_order = body.new_order === true;
     if (body.new_lead !== undefined) patch.new_lead = body.new_lead === true;
+    if (body.adwords_lead !== undefined) patch.adwords_lead = body.adwords_lead === true;
     if (body.active !== undefined) patch.active = body.active === true;
     if (body.destination !== undefined || body.channel !== undefined) {
       const channel = body.channel;
@@ -144,9 +171,19 @@ export async function PATCH(request) {
     }
 
     const supabase = getSupabaseAdmin();
-    if (Object.keys(patch).length === 1 && 'new_lead' in patch) {
-      const { error: columnCheck } = await supabase.from('notification_recipients').select('new_lead').limit(1);
-      if (columnCheck) return NextResponse.json({ error: 'Run landing-lead-system-migration.sql before changing backup lead alerts.' }, { status: 503 });
+    // Toggling a flag whose column does not exist yet reports success and
+    // changes nothing, so the tick reappears unticked on the next load with no
+    // explanation. Name the migration instead.
+    for (const [column, migration] of [
+      ['new_lead', 'add-new-lead-to-notification-recipients.sql'],
+      ['adwords_lead', 'add-adwords-lead-to-notification-recipients.sql'],
+    ]) {
+      if (Object.keys(patch).length === 1 && column in patch) {
+        const { error: columnCheck } = await supabase.from('notification_recipients').select(column).limit(1);
+        if (columnCheck) {
+          return NextResponse.json({ error: `Run ${migration} before changing this alert.` }, { status: 503 });
+        }
+      }
     }
     const { data, error } = await supabase
       .from('notification_recipients')

@@ -10,7 +10,7 @@
  */
 
 export const NOTIFICATION_CHANNELS = ['whatsapp', 'email'];
-export const NOTIFICATION_TYPES = ['new_order', 'new_lead'];
+export const NOTIFICATION_TYPES = ['new_order', 'new_lead', 'adwords_lead'];
 
 /** PostgREST says "relation does not exist" one way and "schema cache" another. */
 export function isMissingRecipientsTable(error) {

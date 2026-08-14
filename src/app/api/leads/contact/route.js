@@ -7,6 +7,7 @@ import { rateLimit } from '@/lib/rateLimit.mjs';
 import nodemailer from 'nodemailer';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
 import { getLeadNotificationRecipients } from '@/lib/leadNotificationRecipients';
+import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { responseDeadline } from '@/lib/leadNotifications.mjs';
 import { DEFAULT_LANDING_LEAD_SETTINGS, LANDING_LEAD_SETTINGS_ID, normalizeLandingLeadSettings } from '@/lib/landingLeadSettings.mjs';
 import {
@@ -39,6 +40,31 @@ const escapeHtml = (value = '') => String(value)
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
+
+// The single agent every landing lead goes to while assignmentMode is 'fixed'.
+// Returns null rather than throwing if that agent has since been deactivated or
+// lost the leads permission, so the caller falls back to rotation: a campaign
+// lead must never be left unowned because a setting went stale.
+async function fixedAssignmentAgent(supabase, email) {
+  const wanted = String(email || '').trim().toLowerCase();
+  if (!wanted) return null;
+  const { data: profiles, error } = await supabase.from('admin_profiles').select('*');
+  if (error) throw error;
+  const match = (profiles || []).find((profile) =>
+    String(profile.email || '').trim().toLowerCase() === wanted
+  );
+  if (!match) {
+    console.warn(`[leads/contact] Fixed assignee ${wanted} is not a team member; falling back to round-robin.`);
+    return null;
+  }
+  const eligible = (match.status || 'active') === 'active'
+    && Array.isArray(match.permissions) && match.permissions.includes('leads');
+  if (!eligible) {
+    console.warn(`[leads/contact] Fixed assignee ${wanted} is inactive or lacks the leads permission; falling back to round-robin.`);
+    return null;
+  }
+  return { agent_name: match.name || match.email, agent_email: match.email };
+}
 
 async function fallbackRoundRobinAgent(supabase) {
   const { data: profiles, error: profileError } = await supabase.from('admin_profiles').select('*');
@@ -74,7 +100,7 @@ async function sendLandingLeadAlert({ name, email, phone, source, qualification,
     return;
   }
 
-  const recipients = await getLeadNotificationRecipients(assignedAgentEmail);
+  const recipients = await getLeadNotificationRecipients(assignedAgentEmail, { source });
   if (!recipients.length) return;
 
   const details = landingQualificationNotes(qualification);
@@ -232,6 +258,22 @@ export async function POST(request) {
     let assignedAgentEmail = '';
     let assignmentSource = historyAgent ? 'order_history' : existingOwner ? 'existing_owner' : '';
 
+    // A contact an agent already owns keeps that agent: whoever is mid-conversation
+    // outranks the campaign setting, so pointing AdWords at one agent never yanks
+    // a lead away from the colleague already working it.
+    if (!owner && hasLandingQualification(qualification) && landingSettings.assignmentMode === 'fixed') {
+      try {
+        const agent = await fixedAssignmentAgent(supabase, landingSettings.assignedAgentEmail);
+        if (agent) {
+          owner = clean(agent.agent_name, 160);
+          assignedAgentEmail = clean(agent.agent_email, 200).toLowerCase();
+          if (owner) assignmentSource = 'fixed_agent';
+        }
+      } catch (fixedError) {
+        console.warn('[leads/contact] Fixed assignment lookup failed, falling back to round-robin:', fixedError.message);
+      }
+    }
+
     if (!owner && hasLandingQualification(qualification)) {
       try {
         const { data: assigned, error: assignError } = await supabase.rpc('assign_next_landing_lead_agent');
@@ -281,6 +323,7 @@ export async function POST(request) {
       // if the live table lacks the column — the owner must stay visible.
       historyAgent ? `Owner: ${historyAgent} (returning customer — first closed by this agent)` : null,
       assignmentSource === 'round_robin' ? `Owner: ${owner} (automatic round-robin assignment)` : null,
+      assignmentSource === 'fixed_agent' ? `Owner: ${owner} (campaign leads are set to go to this agent)` : null,
       dueAt ? `Response due: ${dueAt}` : null,
       marketingConsent ? `Marketing consent: accepted (${consentVersion || 'version not recorded'})` : null,
       marketingConsent && consentText ? `Consent text: ${consentText}` : null,
@@ -357,7 +400,9 @@ export async function POST(request) {
         new_agent: owner,
         reason: assignmentSource === 'round_robin'
           ? 'Landing-page automatic round-robin assignment'
-          : 'Returning customer assigned to earliest completed order owner',
+          : assignmentSource === 'fixed_agent'
+            ? 'Landing-page leads are configured to go to a single agent'
+            : 'Returning customer assigned to earliest completed order owner',
         actor_email: 'landing-system@peptidescostarica.net',
       });
       if (eventError) console.warn('[leads/contact] Assignment audit skipped:', eventError.message);
@@ -381,6 +426,19 @@ export async function POST(request) {
         });
       } catch (alertError) {
         console.error('[leads/contact] lead alert failed:', alertError);
+      }
+
+      // Campaign leads only. The storefront form reaches this same route, and
+      // buzzing an agent's personal phone for every catalog enquiry is how an
+      // alert stops being read. Sent after the email and in its own try, so a
+      // WhatsApp outage cannot cost us the email as well.
+      if (source === 'adwords_lp') {
+        try {
+          const result = await sendLandingLeadWhatsAppAlerts(supabase, { name, phone, qualification, dueAt });
+          if (result.sent) console.log(`[leads/contact] WhatsApp lead alert sent to ${result.sent} recipient(s)`);
+        } catch (whatsAppError) {
+          console.error('[leads/contact] WhatsApp lead alert failed:', whatsAppError);
+        }
       }
     }
 
