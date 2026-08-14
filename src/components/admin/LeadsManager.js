@@ -355,9 +355,13 @@ export default function LeadsManager({
       return true;
     });
 
+    // Sort on the last enquiry, not the first. A contact already in the CRM who
+    // fills the landing-page form again updates their existing row, so sorting
+    // by created_at buried the new enquiry at its original date. Falls back to
+    // created_at for rows predating the column.
     result.sort((a, b) => {
-      const timeA = new Date(a.created_at).getTime();
-      const timeB = new Date(b.created_at).getTime();
+      const timeA = new Date(a.last_enquiry_at || a.created_at).getTime();
+      const timeB = new Date(b.last_enquiry_at || b.created_at).getTime();
       return sortDir === 'asc' ? timeA - timeB : timeB - timeA;
     });
 
@@ -1005,7 +1009,27 @@ export default function LeadsManager({
                   />
                 </td>
                 <td data-label="Date" style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
-                  {new Date(lead.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
+                  {(() => {
+                    const fmt = (value) => new Date(value).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+                    // A returning contact's row keeps its original created_at, so
+                    // showing that alone made a same-day enquiry look weeks old.
+                    // Lead with the enquiry date and keep the first-seen date
+                    // underneath, since which one it is matters to the agent.
+                    const enquiry = lead.last_enquiry_at;
+                    const isReturning = enquiry && new Date(enquiry).getTime() - new Date(lead.created_at).getTime() > 60000;
+                    if (!isReturning) return fmt(lead.created_at);
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span>{fmt(enquiry)}</span>
+                        <span style={{ color: '#fbbf24', fontSize: '0.68rem', fontWeight: 700, letterSpacing: '.02em' }}>
+                          ASKED AGAIN
+                        </span>
+                        <span style={{ color: '#94a3b8', fontSize: '0.68rem' }}>
+                          first seen {fmt(lead.created_at)}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </td>
                 <td data-label="Contact Details" style={{ padding: '10px 12px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

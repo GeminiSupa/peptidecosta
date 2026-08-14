@@ -304,6 +304,12 @@ export async function POST(request) {
       ownership_updated_at: owner && !existingOwner ? nowIso : existing?.ownership_updated_at || null,
       ownership_updated_by: owner && !existingOwner ? `system:${assignmentSource || 'history'}` : existing?.ownership_updated_by || null,
       updated_at: nowIso,
+      // When they last asked us something, as opposed to when we first met them.
+      // A returning contact updates their existing row, so without this their
+      // new enquiry keeps the original created_at and sinks down a Leads tab
+      // sorted by arrival date — exactly where nobody is looking. updated_at
+      // cannot stand in for it: an agent editing a note bumps that too.
+      last_enquiry_at: nowIso,
       // Only overwrite the campaign on a lead that actually arrived with one,
       // so a returning visitor coming in organically does not erase the ad
       // that originally won them.
@@ -321,7 +327,7 @@ export async function POST(request) {
       'utm_source', 'utm_medium', 'utm_campaign', 'referrer',
       'lead_source', 'qualification_data', 'marketing_consent', 'consent_at', 'consent_source',
       'consent_text', 'consent_version', 'assigned_at', 'response_due_at',
-      'ownership_updated_at', 'ownership_updated_by',
+      'ownership_updated_at', 'ownership_updated_by', 'last_enquiry_at',
     ];
 
     const { data: saved, error } = await writeDroppingMissingColumns(payload, optional, (row) => (
