@@ -301,7 +301,44 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
             </div>
           </div>
 
-          <label style={labelStyle}>Products on deal</label>
+          {/* A whole-store sale meant ticking every product one at a time, which
+              is both tedious and the kind of thing that gets miscounted under
+              time pressure — and this form does not survive a refresh, so it can
+              have to be done twice. In-stock only is offered separately because
+              a sold-out product can be marked down but not bought. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Products on deal</label>
+            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+              {selected.length} of {products.length} selected
+            </span>
+            <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
+              <button
+                type="button"
+                className="admin-btn"
+                style={{ padding: '3px 9px', fontSize: '0.72rem' }}
+                onClick={() => setSelected(products.map((p) => p.product))}
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                className="admin-btn"
+                style={{ padding: '3px 9px', fontSize: '0.72rem' }}
+                onClick={() => setSelected(products.filter((p) => p.status === 'In Stock').map((p) => p.product))}
+              >
+                In stock only
+              </button>
+              <button
+                type="button"
+                className="admin-btn"
+                style={{ padding: '3px 9px', fontSize: '0.72rem' }}
+                onClick={() => setSelected([])}
+                disabled={selected.length === 0}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
           <div className="admin-input" style={{ width: '100%', maxHeight: '190px', overflowY: 'auto', padding: '8px 12px', background: '#0b1220', border: '1px solid #334155', borderRadius: '8px', marginBottom: '14px' }}>
             {products.map((p) => {
               const isChecked = selected.includes(p.product);
