@@ -49,6 +49,7 @@ import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
 import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
 import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
+import WebsitePanel from '@/components/admin/WebsitePanel';
 import DealOfWeekPanel from '@/components/admin/DealOfWeekPanel';
 import WhatsAppInbox from '@/components/admin/WhatsAppInbox';
 import WhatsAppAnalyticsPanel from '@/components/admin/WhatsAppAnalyticsPanel';
@@ -5840,6 +5841,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             })()}
           </div>
         )}
+
+        {/* TAB: Marketing Website — read-only status for the site rebuild. */}
+        {activeTab === 'website' && <WebsitePanel />}
 
         {/* TAB: CMS */}
         {activeTab === 'cms' && (

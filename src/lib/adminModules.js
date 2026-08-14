@@ -37,6 +37,12 @@ export const ADMIN_MODULES = [
   { id: 'broadcasts', label: 'One-Time Announcements', title: 'One-Time Announcements', group: 'Sales & Marketing' },
   { id: 'analytics', label: 'Analytics', title: 'Analytics & Attribution', group: 'Analytics & Content' },
   { id: 'cms', label: 'CMS', title: 'CMS Drafts & Preview', group: 'Analytics & Content' },
+  // The marketing site at peptidescostarica.net, rebuilt in the separate
+  // peptidecostarica-website repo. Read-only status today: it links out and
+  // reports what has been built. It is the seat the CMS editor takes over when
+  // the site_cms_* tables land, so the nav entry and permission key exist from
+  // the start and staff access does not have to be reassigned later.
+  { id: 'website', label: 'Website', title: 'Marketing Website', group: 'Analytics & Content' },
   { id: 'whatsapp_ai', label: 'Sales WhatsApp', title: 'Sales WhatsApp', group: 'System & AI' },
   { id: 'wa_session', label: 'WhatsApp Device', title: 'WhatsApp Device', group: 'System & AI' },
   { id: 'team', label: 'Team Management', title: 'Team Management', group: 'System & AI', superadminOnly: true },
