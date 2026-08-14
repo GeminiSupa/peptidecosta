@@ -7,6 +7,7 @@ import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { createEmailUnsubscribeToken } from '@/lib/marketingTokens';
 import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
+import { buildTemplateParam } from '@/lib/broadcastTemplateParam.mjs';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
@@ -15,7 +16,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Helper for sending WhatsApp via the official graph API
-async function sendWhatsApp(to, message, templateName = null, firstName = 'Customer', languageCode = 'es') {
+async function sendWhatsApp(to, message, templateName = null, firstName = null, languageCode = 'es', greetingVariable = false) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   if (!token || !phoneNumberId) {
@@ -51,7 +52,7 @@ async function sendWhatsApp(to, message, templateName = null, firstName = 'Custo
               parameters: [
                 {
                   type: 'text',
-                  text: firstName || 'Customer'
+                  text: buildTemplateParam(firstName, languageCode, greetingVariable)
                 }
               ]
             }
@@ -353,7 +354,7 @@ export async function POST(request) {
       let sentEmail = false;
 
       if (channels.whatsapp && contact.phone) {
-        sentWhatsapp = await sendWhatsApp(contact.phone, message, whatsappTemplateName, contact.name, whatsappTemplateLanguage);
+        sentWhatsapp = await sendWhatsApp(contact.phone, message, whatsappTemplateName, contact.name, whatsappTemplateLanguage, channels?.whatsappGreetingVariable);
       }
       
       if (channels.email && contact.email && (message || channels.emailHtmlContent)) {

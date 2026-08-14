@@ -8,6 +8,7 @@ import { hasWhatsAppOptIn } from '@/lib/whatsappCompliance';
 import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
 import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
+import { buildTemplateParam } from '@/lib/broadcastTemplateParam.mjs';
 
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
@@ -19,26 +20,6 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
 function escapeHtml(value) {
   return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-}
-
-// Builds the {{1}} value for a template send. Meta rejects an empty parameter,
-// so a nameless contact always needs *something* readable in that slot.
-//
-// greetingVariable=true is for templates whose {{1}} carries the whole greeting
-// (e.g. "👋 {{1}} ¡Retatrutide...") — a nameless contact then reads "¡Buenas!"
-// rather than an English "Customer" stranded in a Spanish message.
-// greetingVariable=false is the classic shape, where {{1}} is a bare first name
-// and the greeting is baked into the template (e.g. "¡Hola {{1}}!").
-function buildTemplateParam(firstName, languageCode, greetingVariable) {
-  const isEn = String(languageCode || 'es').toLowerCase().startsWith('en');
-  // Meta rejects parameters containing newlines/tabs, so flatten defensively.
-  const name = String(firstName || '').replace(/\s+/g, ' ').trim();
-
-  if (greetingVariable) {
-    if (name) return isEn ? `Hi ${name}` : `Hola ${name}`;
-    return isEn ? 'Hello!' : '¡Buenas!';
-  }
-  return name || (isEn ? 'Customer' : 'Cliente');
 }
 
 async function sendWhatsApp(to, message, templateName = null, firstName = null, languageCode = 'es', greetingVariable = false) {
