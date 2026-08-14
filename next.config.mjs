@@ -60,6 +60,21 @@ const nextConfig = {
     ];
   },
 
+  // The Google Ads landing page ships as a standalone file at
+  // public/lp/index.html rather than as a route, so it stays a straight copy of
+  // what the contractor delivered. Static files only answer on their exact path,
+  // so bare /lp would 404 — this gives the ads a clean URL to point at. Array
+  // rewrites run after the filesystem check, so /lp/index.html keeps serving
+  // itself and nothing else on the site is affected.
+  async rewrites() {
+    return [
+      {
+        source: '/lp',
+        destination: '/lp/index.html',
+      },
+    ];
+  },
+
   async headers() {
     return [
       {
