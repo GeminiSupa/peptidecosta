@@ -7,7 +7,6 @@ import {
   getCampaignSmtpConfig,
   identifyCampaignSmtpProvider,
   isElasticCampaignSmtp,
-  isCampaignRackspaceSmtp,
 } from '@/lib/campaignSmtp';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
 import {
@@ -19,6 +18,7 @@ import {
   subscriberMatchesScope,
 } from '@/lib/campaignAudience.mjs';
 import { classifySmtpFailure } from '@/lib/marketingDelivery.mjs';
+import { getCampaignSafetyConfig } from '@/lib/campaignSafety.mjs';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 const LEAD_UPSERT_CHUNK_SIZE = 500;
@@ -31,16 +31,6 @@ const AUDIENCE_LABELS = {
 // A batch that sends nothing is almost always a provider outage or a bad
 // sender credential. Backing off keeps the 5-minute cron from hammering SMTP.
 const NO_PROGRESS_RETRY_MINUTES = 30;
-
-function positiveInteger(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function nonNegativeInteger(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
-}
 
 function wait(ms) {
   return ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve();
@@ -93,40 +83,6 @@ async function updateDeliveryBatchLog(supabase, id, updates) {
   if (error && !isMissingHealthTableError(error)) {
     console.warn('[Campaign delivery] Batch health update failed:', error.message);
   }
-}
-
-function campaignSafetyConfig() {
-  const rackspace = isCampaignRackspaceSmtp();
-  return {
-    rackspace,
-    batchSize: positiveInteger(
-      process.env.EMAIL_CAMPAIGN_BATCH_SIZE || process.env.EMAIL_CAMPAIGN_MAX_RECIPIENTS_PER_SEND,
-      rackspace ? 50 : 1000,
-    ),
-    batchIntervalMinutes: nonNegativeInteger(
-      process.env.EMAIL_CAMPAIGN_BATCH_INTERVAL_MINUTES,
-      rackspace ? 10 : 0,
-    ),
-    sendDelayMs: positiveInteger(
-      process.env.EMAIL_CAMPAIGN_SEND_DELAY_MS,
-      rackspace ? 2500 : 0,
-    ),
-    fallbackSendDelayMs: positiveInteger(
-      process.env.EMAIL_CAMPAIGN_FALLBACK_SEND_DELAY_MS,
-      2500,
-    ),
-    maxConnections: positiveInteger(
-      process.env.EMAIL_CAMPAIGN_SMTP_CONNECTIONS,
-      rackspace ? 1 : 5,
-    ),
-    // Vercel kills the function at `maxDuration` (300s). A batch that runs past
-    // that dies mid-loop, which used to strand the campaign in `sending`
-    // forever. Stop sending before the wall and let the cron pick up the rest.
-    sendBudgetMs: positiveInteger(
-      process.env.EMAIL_CAMPAIGN_SEND_BUDGET_MS,
-      240000,
-    ),
-  };
 }
 
 function createCampaignTransporter(smtpConfig, safety) {
@@ -298,7 +254,7 @@ async function deliverSingleCampaignToSubscriber(supabase, campaign, subscriber,
   if (previousSendError) throw previousSendError;
   if (previousSend) return { sent: false, skipped: 'already_sent' };
 
-  const safety = campaignSafetyConfig();
+  const safety = getCampaignSafetyConfig();
   const primaryProvider = identifyCampaignSmtpProvider(smtp.host);
   const batchLogId = await createDeliveryBatchLog(supabase, {
     campaign_id: campaign.id,
@@ -575,7 +531,7 @@ export async function deliverCampaign(campaignId, options = {}) {
   }
   if (!targets.length) throw new CampaignDeliveryError('No remaining subscribers to send to.', 400);
 
-  const safety = campaignSafetyConfig();
+  const safety = getCampaignSafetyConfig();
   const primaryProvider = identifyCampaignSmtpProvider(smtp.host);
   const fallbackProvider = null;
   const remainingBeforeBatch = targets.length;

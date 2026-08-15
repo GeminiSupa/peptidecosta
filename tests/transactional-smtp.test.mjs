@@ -51,7 +51,7 @@ test('transactional SMTP ignores generic Rackspace settings', async () => {
   assert.equal(config.pass, undefined);
 });
 
-test('transactional SMTP reuses Elastic campaign credentials with STARTTLS', async () => {
+test('transactional SMTP refuses to reuse Elastic campaign credentials', async () => {
   clearEnv();
   process.env.CAMPAIGN_SMTP_HOST = 'smtp.elasticemail.com';
   process.env.CAMPAIGN_SMTP_PORT = '2525';
@@ -62,12 +62,47 @@ test('transactional SMTP reuses Elastic campaign credentials with STARTTLS', asy
   const { getTransactionalSmtpConfig } = await import('../src/lib/transactionalSmtp.js');
   const config = getTransactionalSmtpConfig();
 
+  assert.equal(config.configured, false);
+  assert.equal(config.host, undefined);
+  assert.equal(config.user, undefined);
+  assert.equal(config.isolated, false);
+});
+
+test('a dedicated Elastic order identity is configured with STARTTLS', async () => {
+  clearEnv();
+  process.env.ORDER_SMTP_HOST = 'smtp.elasticemail.com';
+  process.env.ORDER_SMTP_PORT = '2525';
+  process.env.ORDER_SMTP_SECURE = 'true';
+  process.env.ORDER_SMTP_USER = 'transactional-user';
+  process.env.ORDER_SMTP_PASS = 'transactional-secret';
+  process.env.CAMPAIGN_SMTP_USER = 'marketing-user';
+
+  const { getTransactionalSmtpConfig } = await import('../src/lib/transactionalSmtp.js');
+  const config = getTransactionalSmtpConfig();
+
   assert.equal(config.configured, true);
   assert.equal(config.host, 'smtp.elasticemail.com');
   assert.equal(config.port, 2525);
   assert.equal(config.secure, false);
-  assert.equal(config.user, 'elastic-user');
+  assert.equal(config.user, 'transactional-user');
+  assert.equal(config.isolated, true);
+  assert.equal(config.sharesCampaignIdentity, false);
   assert.equal(config.provider, 'Elastic Email');
+});
+
+test('an order configuration sharing the campaign identity is rejected', async () => {
+  clearEnv();
+  process.env.ORDER_SMTP_HOST = 'smtp.elasticemail.com';
+  process.env.ORDER_SMTP_USER = 'same-user';
+  process.env.ORDER_SMTP_PASS = 'order-secret';
+  process.env.CAMPAIGN_SMTP_USER = 'SAME-USER';
+
+  const { getTransactionalSmtpConfig } = await import('../src/lib/transactionalSmtp.js');
+  const config = getTransactionalSmtpConfig();
+
+  assert.equal(config.configured, false);
+  assert.equal(config.isolated, false);
+  assert.equal(config.sharesCampaignIdentity, true);
 });
 
 test('a dedicated Rackspace order host is rejected', async () => {
