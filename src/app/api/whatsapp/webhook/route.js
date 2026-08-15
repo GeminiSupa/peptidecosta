@@ -514,6 +514,39 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
               .from('whatsapp_messages')
               .update({ delivery_status: status.status })
               .eq('meta_message_id', status.id);
+
+            // Lead-alert sends are also tracked in the durable notification
+            // outbox. Meta's initial response means only "accepted"; these
+            // callbacks are the evidence that Dani's phone received/read it.
+            if (['sent', 'delivered', 'read', 'failed'].includes(status.status)) {
+              const patch = {
+                status: status.status,
+                updated_at: new Date().toISOString(),
+                ...(status.status === 'failed'
+                  ? { error_message: status.errors?.[0]?.message || status.errors?.[0]?.title || 'Meta reported delivery failure' }
+                  : {}),
+              };
+              const { data: leadDeliveryRows, error: leadDeliveryError } = await supabase
+                .from('lead_notification_deliveries')
+                .update(patch)
+                .eq('provider_message_id', status.id)
+                .select('job_id');
+              if (leadDeliveryError && !/lead_notification_deliveries|does not exist|schema cache/i.test(leadDeliveryError.message || '')) {
+                console.warn('[WhatsApp Webhook] Lead alert status update failed:', leadDeliveryError.message);
+              }
+              if (status.status === 'failed' && leadDeliveryRows?.length) {
+                const jobIds = [...new Set(leadDeliveryRows.map((row) => row.job_id).filter(Boolean))];
+                if (jobIds.length) {
+                  await supabase.from('lead_notification_jobs').update({
+                    status: 'partial',
+                    next_attempt_at: new Date().toISOString(),
+                    locked_at: null,
+                    last_error: patch.error_message,
+                    updated_at: new Date().toISOString(),
+                  }).in('id', jobIds);
+                }
+              }
+            }
           }
         }
       }

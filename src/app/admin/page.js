@@ -407,6 +407,7 @@ export default function AdminPage() {
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [manualOrderOpen, setManualOrderOpen] = useState(false);
+  const [manualOrderCustomer, setManualOrderCustomer] = useState(null);
   const [inquiryCount, setInquiryCount] = useState(0);
   const [unreadTeamMsgCount, setUnreadTeamMsgCount] = useState(0);
   const [liveChatUnreadCount, setLiveChatUnreadCount] = useState(0);
@@ -1952,6 +1953,16 @@ Core Rules:
     setSelectedOrderDetails(order);
     setNotifRefreshKey((k) => k + 1);
     navigateToTab('orders');
+  };
+
+  const openManualOrder = (customer = null) => {
+    setManualOrderCustomer(customer);
+    setManualOrderOpen(true);
+  };
+
+  const closeManualOrder = () => {
+    setManualOrderOpen(false);
+    setManualOrderCustomer(null);
   };
 
   // Auth session — bootstrap once per login, not on every token refresh
@@ -4976,7 +4987,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               inquiryCount={inquiryCount}
               onNavigate={navigateToTab}
               onOpenOrder={setSelectedOrderDetails}
-              onCreateOrder={() => setManualOrderOpen(true)}
+              onCreateOrder={() => openManualOrder()}
             />
           )
         )}
@@ -5015,7 +5026,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <OrdersManager 
             visibleOrders={visibleOrders}
             isStaffAgent={isStaffAgent}
-            setManualOrderOpen={setManualOrderOpen}
+            setManualOrderOpen={(open) => (open ? openManualOrder() : closeManualOrder())}
             orders={orders}
             setExportModalType={setExportModalType}
             loadingOrders={loadingOrders}
@@ -6427,6 +6438,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               leads={leads}
               agentProfiles={agentProfiles}
               onWhatsAppClick={(recipient) => openWhatsAppComposer(recipient)}
+              onCreateOrder={openManualOrder}
             />
               </ErrorBoundary>
             )}
@@ -6610,7 +6622,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               adminEmail={loggedInEmail.current}
               products={products}
               onOpenCustomerProfile={openCustomerProfileHandoff}
-              onCreateOrderFromInquiry={() => setManualOrderOpen(true)}
+              onCreateOrderFromInquiry={() => openManualOrder()}
               onNavigate={navigateToTab}
               onWhatsAppClick={openWhatsAppComposer}
             />
@@ -7263,8 +7275,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
       <ManualOrderModal
         open={manualOrderOpen}
-        onClose={() => setManualOrderOpen(false)}
+        onClose={closeManualOrder}
         products={products}
+        orders={orders}
+        initialCustomer={manualOrderCustomer}
         onCreated={handleManualOrderCreated}
       />
 

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Copy, Phone, Plus, Trash2, BadgePercent } from 'lucide-react';
 import { formatActivityType } from '@/lib/orderActivity';
 import { adminFetch } from '@/lib/adminApi';
+import ProductCombobox from './ProductCombobox';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import {
   ADMIN_FALLBACK_EXCHANGE_RATE,
@@ -861,12 +862,14 @@ export default function OrderDetailPanel({
           ))}
 
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-            <select className="admin-select" value={addProduct} onChange={(e) => setAddProduct(e.target.value)} style={{ flex: 1, minWidth: '160px' }}>
-              <option value="">Add product…</option>
-              {products.map((p) => (
-                <option key={p.id || p.product} value={p.product}>{p.product}</option>
-              ))}
-            </select>
+            <ProductCombobox
+              products={products}
+              value={addProduct}
+              placeholder="Type to add a product…"
+              onClear={() => setAddProduct('')}
+              onSelect={(product) => setAddProduct(product.product)}
+              className="order-detail-product-picker"
+            />
             <button type="button" className="admin-btn admin-btn-secondary" onClick={handleAddProduct}>
               <Plus size={14} /> Add
             </button>

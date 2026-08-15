@@ -1,29 +1,54 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Trash2, UserRoundSearch } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { calculateAdminOrderTotals } from '@/lib/adminOrderTotals.mjs';
+import {
+  buildManualOrderCustomerOptions,
+  resolveManualOrderCustomerPrefill,
+} from '@/lib/manualOrderCustomer.mjs';
+import ProductCombobox from './ProductCombobox';
 
 const EMPTY_ITEM = { product: '', qty: 1, price: '' };
+const emptyForm = () => ({
+  customer_name: '', customer_phone: '', customer_email: '', customer_id_number: '', customer_id_type: '1',
+  shipping_address: '', currency: 'CRC', payment_method: 'whatsapp', status: 'Pending', promo_code: '',
+  shipping_cost_crc: 0, shipping_cost_usd: 0, items: [{ ...EMPTY_ITEM }],
+});
 
-export default function ManualOrderModal({ open, onClose, products = [], onCreated }) {
+export default function ManualOrderModal({ open, onClose, products = [], orders = [], initialCustomer = null, onCreated }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [form, setForm] = useState({
-    customer_name: '',
-    customer_phone: '',
-    customer_email: '',
-    customer_id_number: '',
-    shipping_address: '',
-    currency: 'CRC',
-    payment_method: 'whatsapp',
-    status: 'Pending',
-    promo_code: '',
-    shipping_cost_crc: 0,
-    shipping_cost_usd: 0,
-    items: [{ ...EMPTY_ITEM }],
-  });
+  const [form, setForm] = useState(emptyForm);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const wasOpen = useRef(false);
+  const customerOptions = useMemo(() => buildManualOrderCustomerOptions(orders), [orders]);
+
+  const applyCustomer = (customer) => {
+    if (!customer) return;
+    setForm((current) => ({
+      ...current,
+      customer_name: customer.name || '',
+      customer_phone: customer.phone || '',
+      customer_email: customer.email || '',
+      customer_id_number: customer.customerIdNumber || '',
+      customer_id_type: customer.customerIdType || '1',
+      shipping_address: customer.shippingAddress || '',
+    }));
+    setCustomerSearch(customer.searchLabel || [customer.name, customer.email, customer.phone].filter(Boolean).join(' · '));
+  };
+
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      const next = initialCustomer ? resolveManualOrderCustomerPrefill(initialCustomer, orders) : null;
+      setForm(emptyForm());
+      setError('');
+      setCustomerSearch('');
+      if (next) applyCustomer(next);
+    }
+    wasOpen.current = open;
+  }, [open, initialCustomer, orders]);
 
   if (!open) return null;
 
@@ -81,6 +106,7 @@ export default function ManualOrderModal({ open, onClose, products = [], onCreat
             customer_phone: form.customer_phone.trim(),
             customer_email: form.customer_email.trim() || null,
             customer_id_number: form.customer_id_number.trim() || null,
+            customer_id_type: form.customer_id_number.trim() ? form.customer_id_type : null,
             shipping_address: form.shipping_address.trim() || null,
             items: orderItems,
             total_usd: totalUsd,
@@ -114,10 +140,39 @@ export default function ManualOrderModal({ open, onClose, products = [], onCreat
         </p>
 
         <form onSubmit={handleSubmit} className="manual-order-form">
+          <div style={{ background: '#172237', borderRadius: 10, padding: 12, marginBottom: 4 }}>
+            <label htmlFor="manual-order-customer-search" style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: '.76rem', fontWeight: 800, marginBottom: 7 }}>
+              <UserRoundSearch size={14} /> Find an existing customer
+            </label>
+            <input
+              id="manual-order-customer-search"
+              className="admin-input"
+              list="manual-order-customer-options"
+              value={customerSearch}
+              placeholder="Type a name, email, or phone…"
+              onChange={(event) => {
+                const value = event.target.value;
+                setCustomerSearch(value);
+                const selected = customerOptions.find((customer) => customer.searchLabel === value);
+                if (selected) applyCustomer(selected);
+              }}
+              style={{ width: '100%' }}
+            />
+            <datalist id="manual-order-customer-options">
+              {customerOptions.map((customer) => <option key={customer.id} value={customer.searchLabel} />)}
+            </datalist>
+            <div style={{ color: '#64748b', fontSize: '.68rem', marginTop: 6 }}>Selecting a customer fills their latest contact, ID, and shipping details. Everything remains editable.</div>
+          </div>
           <div className="manual-order-grid">
             <input className="admin-input" placeholder="Customer name *" required value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} />
             <input className="admin-input" placeholder="Phone *" required value={form.customer_phone} onChange={(e) => setForm({ ...form, customer_phone: e.target.value })} />
             <input className="admin-input" placeholder="Email" value={form.customer_email} onChange={(e) => setForm({ ...form, customer_email: e.target.value })} />
+            <select className="admin-select" value={form.customer_id_type} onChange={(e) => setForm({ ...form, customer_id_type: e.target.value })}>
+              <option value="1">National ID / Cédula</option>
+              <option value="6">DIMEX</option>
+              <option value="5">Passport</option>
+              <option value="2">Corporate ID</option>
+            </select>
             <input className="admin-input" placeholder="ID number" value={form.customer_id_number} onChange={(e) => setForm({ ...form, customer_id_number: e.target.value })} />
           </div>
           <textarea className="admin-input" placeholder="Shipping address" rows={2} value={form.shipping_address} onChange={(e) => setForm({ ...form, shipping_address: e.target.value })} />
@@ -160,12 +215,13 @@ export default function ManualOrderModal({ open, onClose, products = [], onCreat
           <h4 style={{ margin: '16px 0 8px', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.05em' }}>Items</h4>
           {form.items.map((item, idx) => (
             <div key={idx} className="manual-order-item-row">
-              <select className="admin-select" value={item.product} onChange={(e) => pickProduct(idx, e.target.value)}>
-                <option value="">Select product…</option>
-                {products.map((p) => (
-                  <option key={p.id || p.product} value={p.product}>{p.product}</option>
-                ))}
-              </select>
+              <ProductCombobox
+                products={products}
+                value={item.product}
+                placeholder="Type to find a product…"
+                onClear={() => updateItem(idx, 'product', '')}
+                onSelect={(product) => pickProduct(idx, product.product)}
+              />
               <input className="admin-input" type="number" min="1" placeholder="Qty" value={item.qty} onChange={(e) => updateItem(idx, 'qty', e.target.value)} style={{ width: '70px' }} />
               <input className="admin-input" type="number" min="0" step="0.01" placeholder="Price" value={item.price} onChange={(e) => updateItem(idx, 'price', e.target.value)} style={{ width: '100px' }} />
               <button type="button" className="admin-btn admin-btn-danger" onClick={() => removeItem(idx)} disabled={form.items.length <= 1}>

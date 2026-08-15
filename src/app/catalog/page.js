@@ -1052,6 +1052,11 @@ export default function CatalogPage() {
           },
           device_info: device
         });
+        localStorage.setItem('pcr_analytics_location', JSON.stringify({
+          city: data.city || 'Unknown',
+          region: data.region || 'Unknown',
+          country: data.country_name || 'Unknown',
+        }));
       } catch (err) {
         // Silently ignore to prevent Next.js error overlay from popping up due to browser extensions
       }
@@ -1114,62 +1119,9 @@ export default function CatalogPage() {
     }
   }, [customerName, customerPhone, customerEmail, shippingAddress, shippingProvince, shippingCanton, shippingDistrict, shippingDetailedAddress, shippingZip, customerIdType, customerIdNumber]);
 
-  // Telemetry: Sync visitor session details to Supabase when session and metadata are ready
-  useEffect(() => {
-    if (!sessionId || !customerMetadata || !isSupabaseConfigured || !supabase) return;
-
-    const logVisitorSession = async () => {
-      try {
-        const { city, region, country } = customerMetadata.location_data || {};
-        
-        // Try to fetch current accumulated duration in this session from localStorage (robust heartbeat recovery)
-        const localDuration = parseInt(localStorage.getItem(`catalog_dur_${sessionId}`) || '0', 10);
-
-        // Upsert visitor session row
-        await supabase.from('visitor_sessions').upsert({
-          session_id: sessionId,
-          city: city || 'Unknown',
-          region: region || 'Unknown',
-          country: country || 'Unknown',
-          ip_address: customerMetadata.ip_address || 'Unknown',
-          device_info: customerMetadata.device_info || 'Unknown',
-          catalog_duration: localDuration,
-          last_active: new Date().toISOString()
-        }, { onConflict: 'session_id' });
-      } catch (err) {
-        console.warn('Telemetry visitor session sync warning:', err);
-      }
-    };
-
-    logVisitorSession();
-  }, [sessionId, customerMetadata]);
-
-  // Telemetry: Heartbeat to track how long they keep catalog open
-  useEffect(() => {
-    if (!sessionId || !isSupabaseConfigured || !supabase) return;
-
-    // Start a 15-second heartbeat
-    const intervalId = setInterval(async () => {
-      // 1. Increment local session duration
-      const currentDur = parseInt(localStorage.getItem(`catalog_dur_${sessionId}`) || '0', 10) + 15;
-      localStorage.setItem(`catalog_dur_${sessionId}`, currentDur.toString());
-
-      // 2. Sync to Supabase
-      try {
-        await supabase
-          .from('visitor_sessions')
-          .update({
-            catalog_duration: currentDur,
-            last_active: new Date().toISOString()
-          })
-          .eq('session_id', sessionId);
-      } catch (err) {
-        console.warn('Telemetry heartbeat sync warning:', err);
-      }
-    }, 15000);
-
-    return () => clearInterval(intervalId);
-  }, [sessionId]);
+  // Visitor sessions and heartbeats now go through the server-side first-party
+  // tracker mounted in app/layout. That route captures the trustworthy request
+  // IP and lets visitor_sessions deny anonymous browser writes and reads.
 
   // Telemetry: Storefront Mobile Click tracker for Heatmaps
   useEffect(() => {

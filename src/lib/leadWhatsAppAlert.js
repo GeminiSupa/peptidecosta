@@ -21,25 +21,33 @@ import {
 
 const TIMEOUT_MS = 6000;
 
-export async function sendLandingLeadWhatsAppAlerts(supabase, { name, phone, qualification, dueAt }) {
+export async function sendLandingLeadWhatsAppAlerts(supabase, {
+  name,
+  phone,
+  qualification,
+  dueAt,
+  recipients: suppliedRecipients = null,
+}) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!accessToken || !phoneNumberId) {
     console.warn('[leads/contact] WhatsApp credentials are not configured; lead alert skipped.');
-    return { sent: 0, failed: 0 };
+    return { sent: 0, failed: 0, deliveries: [], error: 'WhatsApp credentials are not configured' };
   }
 
-  let recipients = [];
+  let recipients = Array.isArray(suppliedRecipients) ? suppliedRecipients : [];
   try {
-    const managed = await getNotificationRecipients(supabase, { channel: 'whatsapp', type: 'adwords_lead' });
-    recipients = managed.recipients || [];
+    if (!Array.isArray(suppliedRecipients)) {
+      const managed = await getNotificationRecipients(supabase, { channel: 'whatsapp', type: 'adwords_lead' });
+      recipients = managed.recipients || [];
+    }
   } catch (error) {
     // A missing column means add-adwords-lead-to-notification-recipients.sql has
     // not been run. That is not a reason to fail the lead, which is already saved.
     console.warn('[leads/contact] WhatsApp lead recipients unavailable:', error.message);
-    return { sent: 0, failed: 0 };
+    return { sent: 0, failed: 0, deliveries: [], error: error.message };
   }
-  if (!recipients.length) return { sent: 0, failed: 0 };
+  if (!recipients.length) return { sent: 0, failed: 0, deliveries: [] };
 
   const templateName = process.env.LEAD_ALERT_WHATSAPP_TEMPLATE || LEAD_ALERT_TEMPLATE_NAME;
   const templateLanguage = process.env.LEAD_ALERT_WHATSAPP_TEMPLATE_LANGUAGE || LEAD_ALERT_TEMPLATE_LANGUAGE;
@@ -64,10 +72,18 @@ export async function sendLandingLeadWhatsAppAlerts(supabase, { name, phone, qua
     });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result?.error?.message || `Meta API returned ${response.status}`);
-    return result;
+    return { providerMessageId: result?.messages?.[0]?.id || null };
   }));
 
+  const deliveries = results.map((entry, index) => ({
+    channel: 'whatsapp',
+    destination: recipients[index].destination,
+    label: recipients[index].label || recipients[index].destination,
+    status: entry.status === 'fulfilled' ? 'sent' : 'failed',
+    providerMessageId: entry.status === 'fulfilled' ? entry.value?.providerMessageId || null : null,
+    error: entry.status === 'rejected' ? entry.reason?.message || 'Meta delivery request failed' : null,
+  }));
   const failed = results.filter((entry) => entry.status === 'rejected');
   failed.forEach((entry) => console.error('[leads/contact] WhatsApp lead alert failed:', entry.reason?.message));
-  return { sent: results.length - failed.length, failed: failed.length };
+  return { sent: results.length - failed.length, failed: failed.length, deliveries };
 }

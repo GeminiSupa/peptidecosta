@@ -56,6 +56,7 @@ const NOTIFICATION_TYPE_TABS = {
   inquiry: 'inquiries',
   whatsapp: 'whatsapp_ai',
   facebook: 'messenger',
+  new_lead: 'leads',
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -151,6 +152,11 @@ async function getWhatsappConversationMap(supabase, messages) {
 
 function canSeeNotification(notification, profile, orderMap = new Map()) {
   if (!canAccessNotificationTarget(notification, profile)) return false;
+  const recipient = String(notification?.recipient_email || '').trim().toLowerCase();
+  if (recipient && !profile?.is_superadmin) {
+    const viewer = String(profile?.email || '').trim().toLowerCase();
+    if (!viewer || viewer !== recipient) return false;
+  }
   if (!profile || profile.is_superadmin || !isOrderNotification(notification)) return true;
 
   const ref = String(notification.link_ref || '').trim();

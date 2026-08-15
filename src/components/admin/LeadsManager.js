@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { 
   Users, Trash2, Upload, Brain, Sparkles, 
-  Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp, Columns3, List, Clock, User, ChevronDown, UserPlus, Lock
+  Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp, Columns3, List, Clock, User, ChevronDown, UserPlus, Lock,
+  BellRing, CircleCheck, TriangleAlert, RotateCw,
 } from 'lucide-react';
 import {
   buildAgentHistory,
@@ -12,6 +13,15 @@ import {
 } from '@/lib/agentAttribution.mjs';
 import { leadContactPoints } from '@/lib/leadContact.mjs';
 import { adminFetch } from '@/lib/adminApi';
+import {
+  leadNotificationRecipientSummary,
+  summarizeLeadNotificationJob,
+} from '@/lib/leadNotificationStatus.mjs';
+
+const isGoogleAdsLead = (lead) => {
+  const source = String(lead?.lead_source || lead?.utm_source || '').toLowerCase();
+  return source.includes('adwords') || source.includes('google');
+};
 
 const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) => (
   <svg viewBox="0 0 24 24" width={size} height={size} fill={color} style={style} {...props}>
@@ -68,6 +78,9 @@ export default function LeadsManager({
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [savingLead, setSavingLead] = useState(false);
   const [claimingLeadId, setClaimingLeadId] = useState('');
+  const [notificationJobs, setNotificationJobs] = useState({});
+  const [notificationAuditAvailable, setNotificationAuditAvailable] = useState(null);
+  const [retryingNotificationId, setRetryingNotificationId] = useState('');
   const [leadFormError, setLeadFormError] = useState('');
   const [leadForm, setLeadForm] = useState({
     name: '',
@@ -77,6 +90,51 @@ export default function LeadsManager({
     notes: '',
     salesAgent: currentAgentName,
   });
+
+  const notificationLeadIds = useMemo(
+    () => (leads || []).filter(isGoogleAdsLead).map((lead) => lead.id).filter(Boolean).slice(0, 100),
+    [leads]
+  );
+
+  const loadNotificationJobs = useCallback(async () => {
+    if (!notificationLeadIds.length) {
+      setNotificationJobs({});
+      setNotificationAuditAvailable(true);
+      return;
+    }
+    try {
+      const response = await adminFetch(`/api/admin/lead-notifications?leadIds=${encodeURIComponent(notificationLeadIds.join(','))}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not load alert status');
+      setNotificationAuditAvailable(data.available !== false);
+      setNotificationJobs(Object.fromEntries((data.jobs || []).map((job) => [job.lead_id, job])));
+    } catch (error) {
+      console.warn('[Leads] notification audit unavailable:', error.message);
+      setNotificationAuditAvailable(false);
+    }
+  }, [notificationLeadIds]);
+
+  useEffect(() => {
+    loadNotificationJobs();
+  }, [loadNotificationJobs]);
+
+  const retryLeadNotification = async (job) => {
+    if (!job?.id || !isSuperadmin) return;
+    setRetryingNotificationId(job.id);
+    try {
+      const response = await adminFetch('/api/admin/lead-notifications', {
+        method: 'POST',
+        body: JSON.stringify({ jobId: job.id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not retry alert');
+      await loadNotificationJobs();
+    } catch (error) {
+      window.alert(error.message);
+    } finally {
+      setRetryingNotificationId('');
+    }
+  };
 
   const uniqueAreas = Array.from(new Set((leads || []).map(l => l.region || l.city).filter(Boolean))).sort();
 
@@ -144,7 +202,7 @@ export default function LeadsManager({
   const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0.0';
   const chatLeads = safeLeads.filter(l => String(l.utm_source || l.source || '').toLowerCase() === 'live_chat').length;
   const adsLeads = safeLeads.filter(l => {
-    const source = String(l.utm_source || l.source || '').toLowerCase();
+    const source = String(l.lead_source || l.utm_source || l.source || '').toLowerCase();
     const medium = String(l.utm_medium || '').toLowerCase();
     if (source === 'live_chat') return false;
     return source.includes('facebook') || source.includes('google') || source.includes('ads') || medium.includes('ad') || medium.includes('cpc');
@@ -264,7 +322,7 @@ export default function LeadsManager({
               value={agent.claimed}
               disabled={claimingLeadId === lead.id}
               onChange={(event) => saveLeadOwner(lead, event.target.value)}
-              aria-label="Lead agent"
+              aria-label="Assigned sales agent"
             >
               <option value="">{agent.automatic ? `Auto - ${agent.automatic}` : 'Unassigned'}</option>
               {agentOptions.map((option) => (
@@ -286,16 +344,61 @@ export default function LeadsManager({
           onClick={() => saveLeadOwner(lead, currentAgentName)}
           style={{ padding: compact ? '5px 8px' : '7px 10px', fontSize: '0.75rem' }}
         >
-          <UserPlus size={13} /> {claimingLeadId === lead.id ? 'Claiming…' : 'Claim lead'}
+          <UserPlus size={13} /> {claimingLeadId === lead.id ? 'Claiming…' : 'Claim this lead'}
         </button>
       );
     }
 
     return (
-      <span className={`lead-agent-badge ${agent.state}`} title={agent.title}>
+      <span
+        className={`lead-agent-badge ${agent.state}`}
+        title={agent.displayName === currentAgentName
+          ? 'Assigned to you. Only a superadmin can transfer an assigned lead.'
+          : `${agent.title}. Only a superadmin can transfer an assigned lead.`}
+      >
         {agent.displayName === currentAgentName ? <User size={13} /> : <Lock size={12} />}
-        <span>{agent.displayName === currentAgentName ? 'Mine' : agent.displayName}</span>
+        <span>{agent.displayName === currentAgentName ? 'Assigned to you' : `Assigned to ${agent.displayName}`}</span>
       </span>
+    );
+  };
+
+  const renderLeadNotificationStatus = (lead, { compact = false } = {}) => {
+    if (!isGoogleAdsLead(lead)) return compact ? null : <span className="lead-alert-muted">—</span>;
+    if (notificationAuditAvailable === false) {
+      return (
+        <span className="lead-alert-status unknown" title="Run add-lead-notification-outbox.sql to enable delivery tracking.">
+          <BellRing size={12} /> Tracking unavailable
+        </span>
+      );
+    }
+    const job = notificationJobs[lead.id];
+    const summary = summarizeLeadNotificationJob(job);
+    const recipients = leadNotificationRecipientSummary(job);
+    const Icon = summary.tone === 'success'
+      ? CircleCheck
+      : summary.tone === 'danger' || summary.tone === 'warning'
+        ? TriangleAlert
+        : BellRing;
+    return (
+      <div className={`lead-alert-control${compact ? ' compact' : ''}`}>
+        <span
+          className={`lead-alert-status ${summary.tone}`}
+          title={[summary.detail, recipients].filter(Boolean).join('\n')}
+        >
+          <Icon size={12} /> {summary.label}
+        </span>
+        {isSuperadmin && job && summary.retryable && (
+          <button
+            type="button"
+            className="lead-alert-retry"
+            disabled={retryingNotificationId === job.id}
+            onClick={() => retryLeadNotification(job)}
+            title="Retry only recipients that have not already succeeded"
+          >
+            <RotateCw size={12} /> {retryingNotificationId === job.id ? 'Retrying…' : 'Retry'}
+          </button>
+        )}
+      </div>
     );
   };
 
@@ -440,6 +543,9 @@ export default function LeadsManager({
   const paginatedLeads = filteredLeads.slice((safePage - 1) * leadsPerPage, safePage * leadsPerPage);
 
   const safeSelectedLeads = selectedLeads || [];
+  const notificationJobList = Object.values(notificationJobs);
+  const notificationIssueCount = notificationJobList.filter((job) => ['failed', 'partial'].includes(job.status)).length;
+  const notificationPendingCount = notificationJobList.filter((job) => ['pending', 'processing'].includes(job.status)).length;
 
   const handleLocalSelectLead = (id, checked, shiftKey, index) => {
     if (shiftKey && lastSelectedLeadIndex !== null && handleSelectMultipleLeads) {
@@ -634,6 +740,71 @@ export default function LeadsManager({
           min-width: 190px;
         }
 
+        .lead-notification-health {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          margin: -6px 0 18px;
+          padding: 12px 14px;
+          border: 1px solid rgba(56, 189, 248, 0.2);
+          border-radius: 10px;
+          color: #cbd5e1;
+          background: rgba(14, 165, 233, 0.07);
+          font-size: 0.78rem;
+        }
+
+        .lead-notification-health.warning {
+          border-color: rgba(251, 191, 36, 0.3);
+          background: rgba(251, 191, 36, 0.08);
+        }
+
+        .lead-alert-control {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 6px;
+          min-width: 145px;
+        }
+
+        .lead-alert-control.compact { min-width: 0; }
+
+        .lead-alert-status {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 4px 7px;
+          border-radius: 999px;
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          color: #cbd5e1;
+          background: rgba(148, 163, 184, 0.1);
+          font-size: 0.68rem;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .lead-alert-status.success { color: #86efac; border-color: rgba(34, 197, 94, 0.28); background: rgba(34, 197, 94, 0.1); }
+        .lead-alert-status.warning { color: #fde68a; border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.1); }
+        .lead-alert-status.danger { color: #fca5a5; border-color: rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.1); }
+        .lead-alert-status.pending { color: #7dd3fc; border-color: rgba(56, 189, 248, 0.28); background: rgba(56, 189, 248, 0.1); }
+
+        .lead-alert-retry {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 4px 7px;
+          border: 1px solid rgba(248, 113, 113, 0.26);
+          border-radius: 7px;
+          color: #fecaca;
+          background: rgba(127, 29, 29, 0.18);
+          cursor: pointer;
+          font-size: 0.68rem;
+          font-weight: 800;
+        }
+
+        .lead-alert-retry:disabled { opacity: 0.55; cursor: wait; }
+        .lead-alert-muted { color: #475569; }
+
         @media (max-width: 780px) {
           .lead-agent-control,
           .lead-agent-badge,
@@ -719,6 +890,22 @@ export default function LeadsManager({
           </div>
         </div>
       </div>
+
+      {notificationAuditAvailable !== null && (
+        <div className={`lead-notification-health${notificationIssueCount ? ' warning' : ''}`}>
+          <span>
+            <BellRing size={14} style={{ verticalAlign: '-2px', marginRight: 7 }} />
+            {notificationAuditAvailable === false
+              ? 'Alert delivery tracking is ready in code but its database migration still needs to be installed.'
+              : notificationIssueCount
+                ? `${notificationIssueCount} lead alert${notificationIssueCount === 1 ? '' : 's'} need attention.`
+                : notificationPendingCount
+                  ? `${notificationPendingCount} lead alert${notificationPendingCount === 1 ? '' : 's'} queued or sending.`
+                  : 'Google Ads alert delivery is healthy.'}
+          </span>
+          {notificationAuditAvailable && <span>{notificationJobList.length} tracked enquiries</span>}
+        </div>
+      )}
 
       <div style={{ marginBottom: '20px' }}>
         {generatingLeadsAi ? (
@@ -932,6 +1119,12 @@ export default function LeadsManager({
                         <span className="lead-agent-card-row-label"><User size={12} /> Agent</span>
                         {renderLeadAgentControl(lead, { compact: true })}
                       </div>
+                      {isGoogleAdsLead(lead) && (
+                        <div className="lead-agent-card-row">
+                          <span className="lead-agent-card-row-label"><BellRing size={12} /> Staff alerts</span>
+                          {renderLeadNotificationStatus(lead, { compact: true })}
+                        </div>
+                      )}
                       <div className="lead-mobile-summary">
                         <span><Clock size={12} /> Follow up {getLeadFollowUp(lead)}</span>
                       </div>
@@ -1001,6 +1194,7 @@ export default function LeadsManager({
                 <th style={{ padding: '10px 12px', minWidth: '150px' }}>Location</th>
                 <th style={{ padding: '10px 12px' }}>Attribution</th>
                 <th style={{ padding: '10px 12px' }}>Agent</th>
+                <th style={{ padding: '10px 12px' }}>Staff Alerts</th>
                 <th style={{ padding: '10px 12px' }}>Last Contacted</th>
                 <th style={{ padding: '10px 12px' }}>Browsing History</th>
                 <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
@@ -1261,6 +1455,9 @@ export default function LeadsManager({
                         const overdue = due.getTime() < Date.now();
                         return <span title={`Response due ${due.toLocaleString()}`} style={{ display: 'inline-block', marginTop: 6, fontSize: '.67rem', fontWeight: 800, color: overdue ? '#f87171' : '#fbbf24' }}>{overdue ? '⚠ Response overdue' : `Due ${due.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</span>;
                       })()}
+                    </td>
+                    <td data-label="Staff Alerts" style={{ padding: '10px 12px' }}>
+                      {renderLeadNotificationStatus(lead)}
                     </td>
                     <td data-label="Last Contacted" style={{ padding: '10px 12px' }}>
                       {(() => {

@@ -8,6 +8,7 @@ import nodemailer from 'nodemailer';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
 import { getLeadNotificationRecipients } from '@/lib/leadNotificationRecipients';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
+import { enqueueAndProcessLeadNotification } from '@/lib/leadNotificationDelivery';
 import { responseDeadline } from '@/lib/leadNotifications.mjs';
 import { DEFAULT_LANDING_LEAD_SETTINGS, LANDING_LEAD_SETTINGS_ID, normalizeLandingLeadSettings } from '@/lib/landingLeadSettings.mjs';
 import {
@@ -93,15 +94,40 @@ async function fallbackRoundRobinAgent(supabase) {
   return { agent_name: next.name || next.email, agent_email: next.email, agent_user_id: next.user_id };
 }
 
-async function sendLandingLeadAlert({ name, email, phone, source, qualification, campaign, assignedAgent, assignedAgentEmail, dueAt, slaMinutes }) {
+async function sendLandingLeadAlert({
+  supabase,
+  leadId,
+  enquiryAt,
+  name,
+  email,
+  phone,
+  source,
+  qualification,
+  campaign,
+  assignedAgent,
+  assignedAgentEmail,
+  dueAt,
+  slaMinutes,
+}) {
+  // Once the outbox migration is present, this creates/claims a durable job.
+  // The database trigger already queued the same lead enquiry atomically with
+  // the save, so a timeout here is recovered by the cron instead of silently
+  // losing Dani's alert. Until the migration is run, preserve the legacy send.
+  const queued = await enqueueAndProcessLeadNotification(supabase, {
+    leadId,
+    enquiryAt,
+    source,
+  });
+  if (queued.available) return { outbox: true, ...queued };
+
   const smtp = getTransactionalSmtpConfig();
   if (!smtp.configured) {
     console.warn('[leads/contact] Elastic transactional SMTP is not configured; lead alert skipped.');
-    return;
+    return { outbox: false, emailSent: false };
   }
 
   const recipients = await getLeadNotificationRecipients(assignedAgentEmail, { source });
-  if (!recipients.length) return;
+  if (!recipients.length) return { outbox: false, emailSent: false };
 
   const details = landingQualificationNotes(qualification);
   const lines = [
@@ -150,6 +176,7 @@ async function sendLandingLeadAlert({ name, email, phone, source, qualification,
     text: lines.join('\n'),
     html: `<h2>New landing-page lead</h2><ul>${lines.slice(1).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
   });
+  return { outbox: false, emailSent: true };
 }
 
 // This is posted to from standalone ad landing pages, which are not served
@@ -410,9 +437,13 @@ export async function POST(request) {
 
     // Saving the lead is the source of truth. A temporary email-provider issue
     // must never make the browser retry and create duplicate CRM activity.
+    let notificationResult = null;
     if (hasLandingQualification(qualification)) {
       try {
-        await sendLandingLeadAlert({
+        notificationResult = await sendLandingLeadAlert({
+          supabase,
+          leadId,
+          enquiryAt: nowIso,
           name,
           email,
           phone,
@@ -432,7 +463,7 @@ export async function POST(request) {
       // buzzing an agent's personal phone for every catalog enquiry is how an
       // alert stops being read. Sent after the email and in its own try, so a
       // WhatsApp outage cannot cost us the email as well.
-      if (source === 'adwords_lp') {
+      if (source === 'adwords_lp' && !notificationResult?.outbox) {
         try {
           const result = await sendLandingLeadWhatsAppAlerts(supabase, { name, phone, qualification, dueAt });
           if (result.sent) console.log(`[leads/contact] WhatsApp lead alert sent to ${result.sent} recipient(s)`);
@@ -442,7 +473,20 @@ export async function POST(request) {
       }
     }
 
-    return withCors({ success: true });
+    return withCors({
+      success: true,
+      leadId: saved?.id || existing?.id || null,
+      record: existing ? 'updated' : 'created',
+      assignedAgent: owner || null,
+      notifications: notificationResult?.outbox
+        ? {
+          tracked: true,
+          status: notificationResult.status || notificationResult.job?.status || 'processing',
+          sent: notificationResult.sent ?? null,
+          failed: notificationResult.failed ?? null,
+        }
+        : { tracked: false, status: 'legacy' },
+    });
   } catch (err) {
     console.error('[leads/contact] failed:', err);
     return withCors({ error: 'save_failed' }, 500);

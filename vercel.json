@@ -33,6 +33,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/process-lead-notifications",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/expire-deals",
       "schedule": "0 * * * *"
     }

@@ -176,7 +176,7 @@ const buildSalesScript = (cust) => {
   return `Hi ${firstName}, this is Peptides Costa Rica. ${purchaseLine} I can help you verify COA documentation, current Costa Rica stock, and live CRC pricing before you order.`;
 };
 
-export default function CustomersCRM({ orders = [], abandonedCarts = [], leads = [], agentProfiles = [], onWhatsAppClick }) {
+export default function CustomersCRM({ orders = [], abandonedCarts = [], leads = [], agentProfiles = [], onWhatsAppClick, onCreateOrder }) {
   const [searchTerm, setSearchTerm] = useState(() => takeCustomerHandoffSearch());
   const [currentPage, setCurrentPage] = useState(1);
   const [customersPerPage, setCustomersPerPage] = useState(25);
@@ -1770,6 +1770,9 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
                     {/* Actions Column */}
                     <td data-label="Actions">
                       <div className="crm-compact-actions">
+                        <button className="crm-icon-btn" onClick={() => onCreateOrder?.(cust)} title="Create order with customer details">
+                          <ShoppingBag size={13} />
+                        </button>
                         <button className="crm-icon-btn" onClick={() => openCustomerWorkspace(cust)} title="Open Timeline">
                           <History size={13} />
                         </button>
@@ -1911,9 +1914,14 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
                   ))}
                 </div>
               </div>
-              <button onClick={closeCustomerWorkspace} className="crm-icon-btn" title="Close">
-                <X size={18} />
-              </button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button className="crm-workspace-btn primary" onClick={() => onCreateOrder?.(selectedCustomer)}>
+                  <ShoppingBag size={14} /> Create order
+                </button>
+                <button onClick={closeCustomerWorkspace} className="crm-icon-btn" title="Close">
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div className="crm-workspace-body">

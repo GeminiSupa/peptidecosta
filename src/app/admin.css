@@ -4601,6 +4601,63 @@
     width: 100%;
 }
 
+.product-combobox {
+  position: relative;
+  flex: 1;
+  min-width: 190px;
+}
+
+.product-combobox-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.product-combobox-input {
+  width: 100%;
+  padding-left: 33px !important;
+}
+
+.product-combobox-list {
+  position: absolute;
+  z-index: 260;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  background: #0e1626;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, .4);
+  padding: 5px;
+}
+
+.product-combobox-option {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #e2e8f0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.product-combobox-option small { color: #64748b; white-space: nowrap; }
+.product-combobox-option:hover,
+.product-combobox-option.active { background: #172237; color: #38bdf8; }
+.product-combobox-empty { padding: 12px; color: #64748b; font-size: .78rem; }
+.order-detail-product-picker { min-width: 240px; }
+
 /* Tablet+ enhancements */
 @media (min-width: 480px) {
     .admin-search-trigger {

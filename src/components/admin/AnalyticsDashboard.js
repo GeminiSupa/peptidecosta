@@ -214,6 +214,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [dbCarts, setDbCarts] = useState([]);
   const [dbCampaigns, setDbCampaigns] = useState([]);
   const [dbClickEvents, setDbClickEvents] = useState([]);
+  const [dbAnalyticsEvents, setDbAnalyticsEvents] = useState([]);
 
   // Heatmap UI States
   const heatmapViewMode = 'live';
@@ -266,7 +267,16 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             .eq('is_mobile', true)
             .order('created_at', { ascending: false });
 
-          // 6. Fetch marketing campaigns for analytics
+          // 6. Cross-domain page and conversion events. This table is added by
+          // analytics-v2-migration.sql; an older deployment simply leaves the
+          // new journey panels empty while the existing dashboard keeps working.
+          const { data: analyticsEvents, error: aeErr } = await supabase
+            .from('analytics_events')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(1000);
+
+          // 7. Fetch marketing campaigns for analytics
           try {
             const campRes = await fetch('/api/admin/campaigns');
             if (campRes.ok) {
@@ -282,6 +292,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           if (!clErr && clicks) {
             setDbClickEvents(clicks);
           }
+          if (!aeErr && analyticsEvents) setDbAnalyticsEvents(analyticsEvents);
 
           // If we successfully fetched at least some data, set as live database mode
           if (!sErr && sessions && sessions.length > 0) {
@@ -333,12 +344,34 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const { orders, carts, sessions, productViews, clicks } = getProcessedData();
 
   // Calculate currently active live users (heartbeat within last 45 seconds)
-  const getActiveLiveUsers = () => {
-    const threshold = new Date(Date.now() - 45000);
-    return dbSessions.filter(s => s.last_active && new Date(s.last_active) >= threshold).length;
-  };
+  const activeThreshold = new Date(Date.now() - 45000);
+  const activeLiveSessions = dbSessions
+    .filter((session) => session.last_active && new Date(session.last_active) >= activeThreshold)
+    .sort((left, right) => new Date(right.last_active) - new Date(left.last_active));
+  const activeLiveUsers = activeLiveSessions.length;
+  const knownActiveUsers = activeLiveSessions.filter((session) => session.known_customer).length;
+  const activeDomains = new Set(activeLiveSessions.map((session) => session.hostname).filter(Boolean)).size;
 
-  const activeLiveUsers = getActiveLiveUsers();
+  const livePageCounts = Object.entries(activeLiveSessions.reduce((counts, session) => {
+    const label = `${session.hostname || 'catalog'}${session.current_path || '/catalog'}`;
+    counts[label] = (counts[label] || 0) + 1;
+    return counts;
+  }, {})).sort((left, right) => right[1] - left[1]).slice(0, 8);
+
+  const liveSourceCounts = Object.entries(activeLiveSessions.reduce((counts, session) => {
+    const source = session.last_touch_source || session.utm_source || 'direct';
+    counts[source] = (counts[source] || 0) + 1;
+    return counts;
+  }, {})).sort((left, right) => right[1] - left[1]).slice(0, 6);
+
+  const journeyEvents = dbAnalyticsEvents.filter((event) => {
+    if (!event.created_at) return true;
+    const age = Date.now() - new Date(event.created_at).getTime();
+    if (timeRange === '24h') return age <= 24 * 3600000;
+    if (timeRange === '7d') return age <= 7 * 24 * 3600000;
+    if (timeRange === '30d') return age <= 30 * 24 * 3600000;
+    return true;
+  });
 
   // -------------------------------------------------------------
   // CALCULATE FINANCIAL STATISTICS
@@ -2161,7 +2194,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         <div className="analytics-header-status">
           <span className="analytics-status-live">
             <span className="active-pulse-dot" />
-            {activeLiveUsers} on catalog now
+            {activeLiveUsers} across tracked sites now
           </span>
           <span>·</span>
           <span>Live data</span>
@@ -2173,6 +2206,61 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           )}
         </div>
       </div>
+
+      {/* Cross-domain live visitor journeys */}
+      <section style={{ background: '#0e1626', border: '1px solid rgba(56,189,248,.2)', borderRadius: 14, padding: 18, marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div>
+            <div style={{ color: '#38bdf8', fontSize: '.7rem', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase' }}>Live visitor journeys</div>
+            <h3 style={{ margin: '4px 0', fontSize: '1rem', color: '#f8fafc' }}>Who is on which page, and how they arrived</h3>
+            <p style={{ margin: 0, color: '#94a3b8', fontSize: '.78rem' }}>First-party heartbeat data across every domain using the shared tracker.</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {[['Active', activeLiveUsers], ['Known customers', knownActiveUsers], ['Domains', activeDomains], ['Journey events', journeyEvents.length]].map(([label, value]) => (
+              <div key={label} style={{ background: '#172237', borderRadius: 9, padding: '8px 11px', minWidth: 90 }}>
+                <div style={{ color: '#f8fafc', fontWeight: 900, fontSize: '1rem' }}>{value}</div>
+                <div style={{ color: '#64748b', fontSize: '.66rem' }}>{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {activeLiveSessions.length === 0 ? (
+          <div style={{ color: '#64748b', fontSize: '.8rem', padding: '18px 0' }}>No visitor heartbeat in the last 45 seconds.</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.76rem' }}>
+              <thead>
+                <tr style={{ color: '#64748b', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,.08)' }}>
+                  <th style={{ padding: '8px 6px' }}>Visitor</th><th style={{ padding: '8px 6px' }}>Current page</th><th style={{ padding: '8px 6px' }}>Source</th><th style={{ padding: '8px 6px' }}>Cart</th><th style={{ padding: '8px 6px' }}>Last seen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeLiveSessions.slice(0, 20).map((session) => (
+                  <tr key={session.session_id} style={{ borderBottom: '1px solid rgba(255,255,255,.05)' }}>
+                    <td style={{ padding: '9px 6px', color: session.known_customer ? '#86efac' : '#cbd5e1', fontWeight: 700 }}>{session.known_customer ? 'Known customer' : 'Anonymous'}</td>
+                    <td style={{ padding: '9px 6px', color: '#f8fafc', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.hostname || 'catalog'}{session.current_path || '/catalog'}</td>
+                    <td style={{ padding: '9px 6px', color: '#cbd5e1' }}>{session.last_touch_source || session.utm_source || 'direct'}{session.utm_campaign ? ` · ${session.utm_campaign}` : ''}</td>
+                    <td style={{ padding: '9px 6px', color: Number(session.cart_items) > 0 ? '#fbbf24' : '#64748b' }}>{Number(session.cart_items) || 0} item(s)</td>
+                    <td style={{ padding: '9px 6px', color: '#94a3b8' }}>{new Date(session.last_active).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12, marginTop: 14 }}>
+          <div style={{ background: '#172237', borderRadius: 10, padding: 12 }}>
+            <strong style={{ color: '#f8fafc', fontSize: '.8rem' }}>Live pages</strong>
+            {livePageCounts.map(([page, count]) => <div key={page} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, color: '#94a3b8', fontSize: '.72rem', marginTop: 7 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{page}</span><b style={{ color: '#38bdf8' }}>{count}</b></div>)}
+          </div>
+          <div style={{ background: '#172237', borderRadius: 10, padding: 12 }}>
+            <strong style={{ color: '#f8fafc', fontSize: '.8rem' }}>Live acquisition sources</strong>
+            {liveSourceCounts.map(([source, count]) => <div key={source} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, color: '#94a3b8', fontSize: '.72rem', marginTop: 7 }}><span>{source}</span><b style={{ color: '#34d399' }}>{count}</b></div>)}
+          </div>
+        </div>
+      </section>
 
       {/* 2. Top Metrics */}
       <div className="metrics-grid-4">

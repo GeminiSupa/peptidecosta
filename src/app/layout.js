@@ -3,6 +3,7 @@ import Script from "next/script";
 import "./globals.css";
 import UTMTracker from "@/components/UTMTracker";
 import GlobalContactForm from "@/components/GlobalContactForm";
+import AnalyticsTracker from "@/components/AnalyticsTracker";
 import { LIVE_SITE_URL } from "@/lib/publicUrl";
 import { getTikTokPixelBootstrapScript } from "@/lib/tiktokPixel.mjs";
 
@@ -204,6 +205,7 @@ export default async function RootLayout({ children }) {
           />
         </noscript>
         {children}
+        <AnalyticsTracker />
         <UTMTracker />
         <GlobalContactForm />
         {/* Google Tag Manager */}
