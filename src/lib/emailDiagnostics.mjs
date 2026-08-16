@@ -98,7 +98,7 @@ export function buildEmailDiagnostics({ env = process.env, transactional, campai
     problems.push('Transactional SMTP is NOT configured — every order and lead email is being skipped.');
   }
   if (transactional?.sharesCampaignIdentity) {
-    problems.push('ORDER_SMTP_USER matches CAMPAIGN_SMTP_USER — refused, so a campaign throttle would stop orders.');
+    problems.push('ORDER_SMTP_USER matches CAMPAIGN_SMTP_USER — order mail sends, but on the campaign daily quota. A big blast can still exhaust it. Create a second Elastic credential when convenient.');
   }
   if (fromLeaksLogin(from.orderCompleteReceipt, user)) {
     problems.push('Order-complete receipts are sent FROM the SMTP login, not info@ — set ORDER_NOTIFICATION_FROM.');

@@ -26,14 +26,24 @@ export function getTransactionalSmtpConfig() {
   const campaignUser = readEnv('CAMPAIGN_SMTP_USER');
   const sharesCampaignIdentity = Boolean(user && campaignUser && user.toLowerCase() === campaignUser.toLowerCase());
 
+  // Sharing one login with the campaign account is bad — it shares a daily
+  // quota, so a blast that hits "421 Daily limit exceeded" can take order
+  // receipts with it. Refusing to send at all is worse. That refusal ran from
+  // 15 Aug 2026 and silently dropped every receipt, every accountant tax copy
+  // and every lead alert for days, because the deployment only ever had the one
+  // Elastic credential. Send on a shared login and report it loudly instead:
+  // `isolated` stays false and /api/admin/email-diagnostics keeps naming it
+  // until a second credential exists.
+  const usable = Boolean(host && user && pass && elastic);
+
   return {
     host,
     port,
     secure,
     user,
     pass,
-    configured: Boolean(host && user && pass && elastic && !sharesCampaignIdentity),
-    isolated: Boolean(host && user && pass && elastic && !sharesCampaignIdentity),
+    configured: usable,
+    isolated: usable && !sharesCampaignIdentity,
     sharesCampaignIdentity,
     provider: elastic ? 'Elastic Email' : null,
   };

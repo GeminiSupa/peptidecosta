@@ -90,7 +90,9 @@ test('a dedicated Elastic order identity is configured with STARTTLS', async () 
   assert.equal(config.provider, 'Elastic Email');
 });
 
-test('an order configuration sharing the campaign identity is rejected', async () => {
+// Orders still go out on a shared login, flagged as not isolated. Refusing
+// outright is how every receipt and tax copy went missing for days in Aug 2026.
+test('an order configuration sharing the campaign identity still sends, but is not isolated', async () => {
   clearEnv();
   process.env.ORDER_SMTP_HOST = 'smtp.elasticemail.com';
   process.env.ORDER_SMTP_USER = 'same-user';
@@ -100,7 +102,7 @@ test('an order configuration sharing the campaign identity is rejected', async (
   const { getTransactionalSmtpConfig } = await import('../src/lib/transactionalSmtp.js');
   const config = getTransactionalSmtpConfig();
 
-  assert.equal(config.configured, false);
+  assert.equal(config.configured, true);
   assert.equal(config.isolated, false);
   assert.equal(config.sharesCampaignIdentity, true);
 });
