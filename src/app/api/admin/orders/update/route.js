@@ -6,6 +6,7 @@ import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRe
 import { orderVisibleToAgent } from '@/lib/agentOrders';
 import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAffiliateOrderWhatsApp } from '@/lib/orderWhatsAppAlerts';
+import { isFirstPaidTransition, shouldSendPaidConfirmation } from '@/lib/orderStatusEmails.mjs';
 import {
   ADMIN_FALLBACK_EXCHANGE_RATE,
   calculateAdminOrderTotals,
@@ -326,15 +327,18 @@ export async function PATCH(request) {
 
     // Trigger Customer Receipt if status changed to Paid/Completed
     if (patch.status && currentOrder) {
-      const wasPaid = currentOrder.status && (currentOrder.status.toLowerCase().includes('paid') || currentOrder.status.toLowerCase().includes('complet'));
-      const isNowPaid = patch.status.toLowerCase().includes('paid') || patch.status.toLowerCase().includes('complet');
-
-      if (!wasPaid && isNowPaid) {
+      if (isFirstPaidTransition(currentOrder.status, patch.status)) {
         const { error: cartCleanupError } = await markActiveAbandonedCartsConvertedForOrder(supabase, data);
         if (cartCleanupError) {
           console.warn('[admin/orders/update] Paid cart cleanup failed:', cartCleanupError.message);
         }
+      }
 
+      // Completion is left to /api/order-shipped-notification, which carries
+      // the tracking number and the accounting CC. Sending the confirmation
+      // from here too gave the customer the same receipt twice, one second
+      // apart, and the accountant two tax copies of one sale.
+      if (shouldSendPaidConfirmation(currentOrder.status, patch.status)) {
         try {
           const dataCurrency = normalizeAdminOrderCurrency(data.currency);
           const itemsAmount = (data.items || []).reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
