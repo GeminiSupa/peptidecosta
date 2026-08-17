@@ -1,22 +1,18 @@
 -- Fix Row Level Security (RLS) policies to allow the Next.js frontend to save data
 
 -- 1. Orders
-ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public insert to orders" ON public.orders;
-CREATE POLICY "Allow public insert to orders" ON public.orders FOR INSERT TO public WITH CHECK (true);
-DROP POLICY IF EXISTS "Allow public select to orders" ON public.orders;
-CREATE POLICY "Allow public select to orders" ON public.orders FOR SELECT TO public USING (true);
-DROP POLICY IF EXISTS "Allow public update to orders" ON public.orders;
-CREATE POLICY "Allow public update to orders" ON public.orders FOR UPDATE TO public USING (true);
+-- Order access is intentionally not repaired here anymore. Guest checkout now
+-- writes through the service-role API, and customer-accounts-foundation.sql
+-- owns the complete order policy set. Re-adding public SELECT/UPDATE here would
+-- expose every customer's order ledger.
 
 -- 2. Abandoned Carts
-ALTER TABLE public.abandoned_carts ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow public insert to abandoned_carts" ON public.abandoned_carts;
-CREATE POLICY "Allow public insert to abandoned_carts" ON public.abandoned_carts FOR INSERT TO public WITH CHECK (true);
-DROP POLICY IF EXISTS "Allow public select to abandoned_carts" ON public.abandoned_carts;
-CREATE POLICY "Allow public select to abandoned_carts" ON public.abandoned_carts FOR SELECT TO public USING (true);
-DROP POLICY IF EXISTS "Allow public update to abandoned_carts" ON public.abandoned_carts;
-CREATE POLICY "Allow public update to abandoned_carts" ON public.abandoned_carts FOR UPDATE TO public USING (true);
+-- Cart access is intentionally not repaired here anymore. The storefront now
+-- writes through /api/cart/track on the service role, and
+-- lock-abandoned-carts-rls.sql owns the complete policy set. The public
+-- SELECT/UPDATE/DELETE policies that used to live here exposed every shopper's
+-- name, phone, email, IP, geolocation and cart contents to anyone holding the
+-- anon key — which ships in the JS bundle — and let them delete the table.
 
 -- 3. Product Reviews
 ALTER TABLE public.product_reviews ENABLE ROW LEVEL SECURITY;

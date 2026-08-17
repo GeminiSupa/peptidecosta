@@ -11,5 +11,10 @@ CREATE TABLE IF NOT EXISTS public.abandoned_carts (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Fix permissions for the API
-GRANT ALL ON TABLE public.abandoned_carts TO anon, authenticated, service_role;
+-- Permissions are NOT granted here anymore. This file used to end with
+--   GRANT ALL ON TABLE public.abandoned_carts TO anon, authenticated, service_role;
+-- which handed the anon key — published in the JS bundle — full read, write and
+-- delete over every shopper's contact details, IP, geolocation and cart.
+-- lock-abandoned-carts-rls.sql now owns the grants; the storefront reaches this
+-- table only through /api/cart/track on the service role.
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.abandoned_carts TO service_role;

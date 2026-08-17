@@ -47,7 +47,10 @@ function ThankYouContent() {
       referralBody: "Share Peptides Costa Rica with a research colleague. If they buy, you both get a free Bacteriostatic Water added to your next package!",
       referralCopy: "Copy Referral Link",
       referralCopied: "Copied!",
-      referralWhatsapp: "Share on WhatsApp"
+      referralWhatsapp: "Share on WhatsApp",
+      accountTitle: "📦 Track this order",
+      accountBody: "Create your account with the same email you just used, and this order — along with every order you have placed before — appears in it automatically. Track shipments and reorder in one tap.",
+      accountButton: "Set up my account"
     },
     es: {
       title: "Orden Recibida",
@@ -64,7 +67,10 @@ function ThankYouContent() {
       referralBody: "Comparta Péptidos Costa Rica con un colega de investigación. Si realiza su compra, ¡ambos recibirán un Agua Bacteriostática gratis en su próximo pedido!",
       referralCopy: "Copiar Enlace de Referido",
       referralCopied: "¡Copiado!",
-      referralWhatsapp: "Compartir por WhatsApp"
+      referralWhatsapp: "Compartir por WhatsApp",
+      accountTitle: "📦 Dé seguimiento a este pedido",
+      accountBody: "Cree su cuenta con el mismo correo que acaba de usar y este pedido — junto con todos los que ha hecho antes — aparecerá automáticamente. Siga sus envíos y vuelva a pedir con un solo toque.",
+      accountButton: "Crear mi cuenta"
     }
   };
 
@@ -305,6 +311,54 @@ function ThankYouContent() {
           };
           return null; // Value Exchange Section Removed as requested
         })()}
+
+        {/* Create an account: the order was just placed with a verified email
+            address, so signing up with that same address pulls this order and
+            the customer's whole history into the dashboard on first login. */}
+        <div style={{
+          background: 'rgba(56, 189, 248, 0.06)',
+          border: '1px solid rgba(56, 189, 248, 0.22)',
+          borderRadius: '14px',
+          padding: '20px',
+          marginBottom: '28px',
+          textAlign: 'left'
+        }}>
+          <p style={{
+            margin: '0 0 8px',
+            fontSize: '0.95rem',
+            fontWeight: '800',
+            color: '#38bdf8'
+          }}>
+            {t.accountTitle}
+          </p>
+          <p style={{
+            margin: '0 0 16px',
+            fontSize: '0.85rem',
+            lineHeight: '1.55',
+            color: '#94a3b8'
+          }}>
+            {t.accountBody}
+          </p>
+          <Link href={`/account/login?lang=${lang}`} style={{ textDecoration: 'none' }}>
+            <button
+              className="btn-hover"
+              style={{
+                width: '100%',
+                padding: '12px 24px',
+                background: '#38bdf8',
+                border: 0,
+                borderRadius: '10px',
+                color: '#04121f',
+                fontWeight: '800',
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              {t.accountButton}
+            </button>
+          </Link>
+        </div>
 
         {/* Button & Notice */}
         <div style={{

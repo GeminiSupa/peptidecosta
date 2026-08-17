@@ -41,8 +41,12 @@ import {
   ChevronLeft, ChevronRight,
   Dna, FlaskConical, Syringe, TestTubes, Atom,
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
-  CreditCard, MessageCircle, Lock, Share2
+  CreditCard, MessageCircle, Lock, Share2, User
 } from 'lucide-react';
+import { getCustomerSupabase } from '@/lib/customerSupabase';
+import { useCustomerSession } from '@/hooks/useCustomerSession';
+import { buildReorderLines, mergeReorderIntoCart, reorderNoticeMessage } from '@/lib/reorderCart.mjs';
+import { takeReorder } from '@/lib/reorderHandoff';
 import PressBand from '@/components/PressBand';
 import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import { mergeLandingPageSettings } from '@/lib/landingContent';
@@ -343,6 +347,10 @@ export default function CatalogPage() {
   // Cart & Modals States
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  // Customer accounts: the session drives checkout prefill and stamps new
+  // orders with an owner; the notice reports anything a reorder could not carry.
+  const { session: customerSession, accessToken: customerAccessToken } = useCustomerSession();
+  const [reorderNotice, setReorderNotice] = useState('');
   const [addedProductId, setAddedProductId] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [howToOrderOpen, setHowToOrderOpen] = useState(false);
@@ -949,16 +957,19 @@ export default function CatalogPage() {
 
     // Parse recover_session query parameter and load abandoned cart details
     const recoverSession = urlParams.get('recover_session');
-    if (recoverSession && isSupabaseConfigured && supabase) {
+    if (recoverSession) {
       const loadRecoveredCart = async () => {
         try {
-          const { data, error } = await supabase
-            .from('abandoned_carts')
-            .select('*')
-            .eq('session_id', recoverSession)
-            .single();
-          
-          if (!error && data) {
+          // Reads the cart through the server rather than the anon key, so the
+          // ledger of every shopper's contact details is no longer browser-readable.
+          const res = await fetch('/api/cart/track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'recover', sessionId: recoverSession }),
+          });
+          const { cart: data } = await res.json().catch(() => ({}));
+
+          if (res.ok && data) {
             if (data.cart_data && Array.isArray(data.cart_data) && data.cart_data.length > 0) {
               setCart(data.cart_data);
               localStorage.setItem('cart', JSON.stringify(data.cart_data));
@@ -1119,6 +1130,88 @@ export default function CatalogPage() {
     }
   }, [customerName, customerPhone, customerEmail, shippingAddress, shippingProvince, shippingCanton, shippingDistrict, shippingDetailedAddress, shippingZip, customerIdType, customerIdNumber]);
 
+  // Signed-in customers: fill the checkout from their saved profile and default
+  // address. Only blank fields are touched, so whatever the customer has already
+  // typed on this visit — or a different address they entered deliberately —
+  // always wins over the stored one.
+  useEffect(() => {
+    if (!customerSession?.user) return;
+
+    let active = true;
+
+    const prefill = async () => {
+      const client = getCustomerSupabase();
+      if (!client) return;
+
+      const [{ data: profile }, { data: address }] = await Promise.all([
+        client.from('customer_profiles').select('display_name, phone').eq('user_id', customerSession.user.id).maybeSingle(),
+        client.from('customer_addresses').select('*').eq('is_default', true).maybeSingle(),
+      ]);
+
+      if (!active) return;
+
+      setCustomerEmail((current) => current || customerSession.user.email || '');
+      if (profile?.display_name) setCustomerName((current) => current || profile.display_name);
+      if (profile?.phone) setCustomerPhone((current) => current || profile.phone);
+
+      if (address) {
+        if (address.recipient_name) setCustomerName((current) => current || address.recipient_name);
+        if (address.phone) setCustomerPhone((current) => current || address.phone);
+        if (address.province) {
+          setShippingProvince((current) => {
+            if (current) return current;
+            // Canton and district only make sense under the province they were
+            // saved with, so they travel together or not at all.
+            setShippingCanton(address.canton || '');
+            setShippingDistrict(address.district || '');
+            return address.province;
+          });
+        }
+        if (address.detailed_address) setShippingDetailedAddress((current) => current || address.detailed_address);
+        if (address.postal_code) setShippingZip((current) => current || address.postal_code);
+      }
+    };
+
+    prefill().catch(() => {
+      // A prefill that fails just leaves the form blank — never block checkout.
+    });
+
+    return () => { active = false; };
+  }, [customerSession]);
+
+  // "Order again" from the account area. The account pages stash only product
+  // names and quantities; every price, discount, shipping fee and BAC-water
+  // entitlement is computed here from the live catalog, so a reorder is charged
+  // exactly what a hand-built cart would be.
+  useEffect(() => {
+    if (products.length === 0) return;
+
+    const pending = takeReorder();
+    if (!pending) return;
+
+    const { lines, unavailable, missing } = buildReorderLines(pending.items, products);
+    if (lines.length > 0) {
+      setCart((current) => {
+        const merged = mergeReorderIntoCart(current, lines);
+        try {
+          localStorage.setItem('cart', JSON.stringify(merged));
+        } catch {
+          // Storage full or blocked — the in-memory cart still holds.
+        }
+        return merged;
+      });
+      setIsCartOpen(true);
+    }
+
+    const notice = reorderNoticeMessage({ unavailable, missing }, lang);
+    if (notice) setReorderNotice(notice);
+    else if (lines.length === 0) {
+      setReorderNotice(lang === 'en'
+        ? 'None of those items are available right now.'
+        : 'Ninguno de esos productos está disponible en este momento.');
+    }
+  }, [products, lang]);
+
   // Visitor sessions and heartbeats now go through the server-side first-party
   // tracker mounted in app/layout. That route captures the trustworthy request
   // IP and lets visitor_sessions deny anonymous browser writes and reads.
@@ -1231,21 +1324,31 @@ export default function CatalogPage() {
     };
   }, []);
 
-  // Sync cart to localStorage and Supabase abandoned_carts (only while cart has items)
+  // Sync cart to localStorage and, via /api/cart/track, to abandoned_carts
+  // (only while the cart has items and the shopper is contactable)
   useEffect(() => {
     localStorage.setItem('cart', JSON.stringify(cart));
 
-    if (sessionId && isSupabaseConfigured && supabase && !orderSubmitting) {
+    if (sessionId && !orderSubmitting) {
       const timeoutId = setTimeout(async () => {
+        // Cart tracking now runs through the service-role API. The browser no
+        // longer holds write access to abandoned_carts, so it cannot read or
+        // wipe other shoppers' rows.
+        const trackCart = (payload) => fetch('/api/cart/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, ...payload }),
+        });
+
         try {
           if (localStorage.getItem('checkout_completed_session_id') === sessionId) {
-            await supabase.from('abandoned_carts').delete().eq('session_id', sessionId);
+            await trackCart({ action: 'clear' });
             return;
           }
 
           if (cart.length === 0) {
             localStorage.removeItem('had_items');
-            await supabase.from('abandoned_carts').delete().eq('session_id', sessionId);
+            await trackCart({ action: 'clear' });
             return;
           }
 
@@ -1260,20 +1363,18 @@ export default function CatalogPage() {
             return;
           }
 
-          await supabase.from('abandoned_carts').upsert({
-            session_id: sessionId,
-            cart_data: cart,
-            customer_name: customerName || null,
-            customer_phone: resolvedPhone || null,
-            customer_email: resolvedEmail || null,
-            ip_address: customerMetadata?.ip_address || null,
-            location_data: customerMetadata?.location_data || null,
-            device_info: customerMetadata?.device_info || null,
-            last_updated: new Date().toISOString(),
-            status: 'active',
+          await trackCart({
+            action: 'save',
+            cart,
+            customerName: customerName || null,
+            customerPhone: resolvedPhone || null,
+            customerEmail: resolvedEmail || null,
+            // The server overrides ip_address and device_info from the request
+            // headers; this is sent for the geolocation lookup it cannot repeat.
+            metadata: customerMetadata || null,
             lang: lang || 'es',
-            currency: currency || 'CRC'
-          }, { onConflict: 'session_id' });
+            currency: currency || 'CRC',
+          });
         } catch (err) {
           console.error('Failed to sync abandoned cart:', err);
         }
@@ -2011,9 +2112,16 @@ export default function CatalogPage() {
     try {
       const orderPayload = applyStoredAttribution(orderRow);
 
+      // A signed-in customer's session travels with the order so the server can
+      // stamp its owner. The id itself is never sent from here — the API derives
+      // it from this token, so a tampered payload cannot claim someone else's
+      // account. Guests send no header and check out exactly as before.
       const res = await fetch('/api/orders/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(customerAccessToken ? { Authorization: `Bearer ${customerAccessToken}` } : {}),
+        },
         body: JSON.stringify({ order: orderPayload, sessionId: sessionId || null }),
       });
       const data = await res.json().catch(() => ({}));
@@ -2704,6 +2812,13 @@ export default function CatalogPage() {
             {lang === 'en' ? 'Back' : 'Volver'}
           </Link>
           <div className="header-controls">
+            <Link
+              href="/account"
+              className="admin-link"
+              title={lang === 'en' ? 'My Account' : 'Mi Cuenta'}
+            >
+              <User size={11} /> {lang === 'en' ? 'MY ACCOUNT' : 'MI CUENTA'}
+            </Link>
             <Link href="/admin" className="admin-link" title="Admin Dashboard">
               <Lock size={11} /> ADMIN
             </Link>
@@ -3011,6 +3126,35 @@ export default function CatalogPage() {
             </div>
           </div>
         </div>
+
+        {reorderNotice ? (
+          <div
+            className="container"
+            role="status"
+            style={{
+              margin: '10px auto',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--bg-secondary)',
+              color: 'var(--text-main)',
+              fontSize: '0.88rem',
+              display: 'flex',
+              gap: 12,
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span>{reorderNotice}</span>
+            <button
+              type="button"
+              onClick={() => setReorderNotice('')}
+              aria-label={lang === 'en' ? 'Dismiss' : 'Cerrar'}
+              style={{ background: 'none', border: 0, cursor: 'pointer', color: 'var(--text-muted)' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ) : null}
 
         <nav className="category-nav container">
           <button

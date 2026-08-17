@@ -5,6 +5,11 @@ import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoE
 import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
+import {
+  CustomerSessionError,
+  applyCustomerOrderOwnership,
+  resolveCustomerOrderOwner,
+} from '@/lib/customerOrderOwnership.mjs';
 import { agentMatchKeys } from '@/lib/agentOrders';
 import { CUSTOMER_HISTORY_SOURCE, buildAgentNameResolver, lookupHistoricalAgent } from '@/lib/agentAttribution.mjs';
 import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
@@ -292,7 +297,7 @@ async function sendAgentOrderWhatsApp(supabase, order, orderNumber, orderId = nu
 export async function POST(request) {
   try {
     const body = await request.json();
-    const order = body?.order;
+    let order = body?.order;
 
     if (!order || typeof order !== 'object') {
       return NextResponse.json({ error: 'Missing order payload' }, { status: 400 });
@@ -309,6 +314,19 @@ export async function POST(request) {
     }
 
     const supabase = getSupabaseAdmin();
+
+    try {
+      const customer = await resolveCustomerOrderOwner(
+        supabase,
+        request.headers.get('authorization'),
+      );
+      order = applyCustomerOrderOwnership(order, customer?.id);
+    } catch (error) {
+      if (error instanceof CustomerSessionError) {
+        return NextResponse.json({ error: error.message }, { status: error.status });
+      }
+      throw error;
+    }
 
     if (order.promo_code) {
       const { data: promoData } = await supabase
