@@ -6,8 +6,26 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { sendTaxRecordsCopy } from '@/lib/taxRecordsEmail.mjs';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 
-const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
+// Read at request time, never at module scope.
+//
+// Next.js evaluates a route module once, at load. Destructuring the SMTP config
+// up here froze whatever process.env held at that moment — and a deployment
+// whose build ran before ORDER_SMTP_* existed captured `undefined` and kept it
+// for the life of the deployment. Every completion mail then hit the guard
+// below and skipped, silently, on an HTTP 200.
+//
+// That was survivable while /api/admin/orders/update also mailed the customer
+// on completion, because that route builds its config inside the handler. Once
+// the duplicate-receipt fix made this route the only seat for the completion
+// mail AND the accountant's tax copy, the frozen config took both with it.
+function getMailSettings() {
+  const smtp = getTransactionalSmtpConfig();
+  return {
+    smtp,
+    from: process.env.ORDER_NOTIFICATION_FROM
+      || `Peptides Costa Rica <${smtp.user || 'omerforce@gmail.com'}>`,
+  };
+}
 
 // Trustpilot Automatic Feedback Service (AFS): BCC this address on the
 // order-complete email and Trustpilot sends the customer a verified review
@@ -164,9 +182,18 @@ export async function POST(request) {
       return NextResponse.json({ sent: false, skipped: true, reason: 'No customer email' });
     }
 
-    if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-      console.warn('[Order Shipped Notification] SMTP settings are not configured; email skipped.');
-      return NextResponse.json({ sent: false, skipped: true });
+    const { smtp, from: notificationFrom } = getMailSettings();
+
+    // A completion mail that cannot be sent is not a skip. It is the customer's
+    // receipt and the accountant's only tax copy going missing, and returning
+    // 200 here is what let that happen for days without anyone noticing — the
+    // admin marks the order complete and the screen says nothing is wrong.
+    if (!smtp.configured) {
+      console.error('[Order Shipped Notification] Transactional SMTP is not configured; completion mail NOT sent.');
+      return NextResponse.json({
+        sent: false,
+        error: 'Transactional SMTP is not configured, so the completion email and the accounting copy were not sent. Check ORDER_SMTP_* in the deployment (/api/admin/email-diagnostics).',
+      }, { status: 500 });
     }
 
     const orderLang = order.lang || (order.currency === 'CRC' ? 'es' : 'en');
@@ -175,12 +202,12 @@ export async function POST(request) {
     const totalCrc = order.total_crc ? formatMoney(order.total_crc, 'CRC') : null;
 
     const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
       auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
+        user: smtp.user,
+        pass: smtp.pass,
       }
     });
 
@@ -263,7 +290,7 @@ export async function POST(request) {
     try {
       customerInfo = await transporter.sendMail({
         bcc: bccList,
-        from: NOTIFICATION_FROM,
+        from: notificationFrom,
         to: order.customer_email.trim(),
         subject: customerSubject,
         html: customerHtmlWithTrustpilot,
@@ -279,7 +306,7 @@ export async function POST(request) {
 
     const taxCopy = await sendTaxRecordsCopy({
       transporter,
-      from: NOTIFICATION_FROM,
+      from: notificationFrom,
       order,
       html: customerHtmlWithTrustpilot,
       text: customerText,
