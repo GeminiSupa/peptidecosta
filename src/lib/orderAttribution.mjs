@@ -31,6 +31,15 @@ export function isUuid(value) {
  * Returns a copy of the order with unusable attribution removed, plus the list
  * of fields that were dropped so the cause stays visible in the logs.
  * Null and undefined are left alone — they are already valid for these columns.
+ *
+ * A dropped `campaign_id` is not thrown away. Values like "tesa15_flash_sale"
+ * are share-link labels typed in the admin Share Links tab, not campaign
+ * records — there is nothing to resolve them against, so forcing them into the
+ * uuid column was never going to work. They are kept verbatim in `utm_campaign`
+ * instead, so the sale still carries the label that won it and the marketing
+ * credit survives. That column is optional: ORDER_ATTRIBUTION_COLUMNS lets the
+ * insert drop it on a database where the migration has not been run, because an
+ * order is still worth more than its marketing tag.
  */
 export function sanitizeOrderAttribution(order) {
   if (!order || typeof order !== 'object') return { order, dropped: [] };
@@ -43,8 +52,15 @@ export function sanitizeOrderAttribution(order) {
     if (value === undefined || value === null || value === '') continue;
     if (isUuid(value)) continue;
 
-    dropped.push({ field, value: String(value).slice(0, 60) });
+    const label = String(value).slice(0, 60);
+    dropped.push({ field, value: label });
     sanitized[field] = null;
+
+    // Only campaign_id has a human-readable counterpart worth keeping. A
+    // malformed journey or affiliate id is a bug, not a label.
+    if (field === 'campaign_id' && !sanitized.utm_campaign) {
+      sanitized.utm_campaign = label;
+    }
   }
 
   return { order: sanitized, dropped };

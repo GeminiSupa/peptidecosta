@@ -131,9 +131,15 @@ export async function sendCustomerOrderConfirmation(supabase, order, orderNumber
     const result = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      console.error('[order-whatsapp] Customer WhatsApp alert failed:', result);
+      console.error('[order-whatsapp] Customer WhatsApp alert rejected by Meta:', result);
     } else {
-      console.log('[order-whatsapp] Customer WhatsApp alert sent successfully to', cleanPhone);
+      // Meta returning 200 means ACCEPTED, not delivered. The real outcome
+      // arrives later on the status webhook, which is where a failure and its
+      // error code get logged. Saying "sent successfully" here is what made
+      // every subsequent delivery failure invisible — the message id is logged
+      // instead so the two halves can be matched up.
+      const acceptedId = result.messages?.[0]?.id || 'no-message-id';
+      console.log(`[order-whatsapp] Customer WhatsApp alert accepted by Meta for ${cleanPhone} (message ${acceptedId}) — delivery confirmed separately by webhook`);
       await logOrderAlert(supabase, {
         phone: cleanPhone,
         messageId: result.messages?.[0]?.id,

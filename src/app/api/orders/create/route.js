@@ -4,6 +4,7 @@ import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRe
 import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
+import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import {
   CustomerSessionError,
@@ -418,11 +419,19 @@ export async function POST(request) {
     const requestIp = forwardedFor.split(',')[0].trim();
     if (requestIp) orderRow.ip_address = requestIp;
 
-    let { data, error } = await supabase
-      .from('orders')
-      .insert(orderRow)
-      .select('id, order_number')
-      .single();
+    // utm_campaign arrives via its own hand-run migration
+    // (add-order-utm-campaign.sql). Dropping it rather than failing keeps
+    // checkout working on a database that has not had that file pasted in yet —
+    // the same principle as the attribution sanitizer: an order is worth more
+    // than its marketing tag.
+    let { data, error, droppedColumns } = await writeDroppingMissingColumns(
+      orderRow,
+      ['utm_campaign'],
+      (row) => supabase.from('orders').insert(row).select('id, order_number').single(),
+    );
+    if (droppedColumns?.length) {
+      console.warn(`[orders/create] Order saved without ${droppedColumns.join(', ')} — run the migration to keep it.`);
+    }
 
     if (error && isFkViolation(error) && orderRow.affiliate_id) {
       console.warn('[orders/create] Affiliate FK failed, retrying without affiliate fields:', error.message);

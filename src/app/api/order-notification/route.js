@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
-import { taxRecordsCcForCompletedOrder } from '@/lib/taxRecordsEmail.mjs';
+import { sendTaxRecordsCopy } from '@/lib/taxRecordsEmail.mjs';
 import { buildOrderEmailAddressing, getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
 import { getOrderEmailLogoAttachment, ORDER_EMAIL_LOGO_SRC } from '@/lib/orderEmailBranding.mjs';
 import { splitCartUnits } from '@/lib/bacWater.mjs';
@@ -641,14 +641,19 @@ export async function POST(request) {
 
     //  2. SEND CUSTOMER CONFIRMATION RECEIPT 
     if (!skipCustomer && order.customerEmail && order.customerEmail.trim() !== '') {
+      // Declared out here so the accounting copy below can reuse the same body
+      // after the customer's try/catch has closed.
+      let customerHtml = '';
+      let customerText = '';
+
       try {
         const customerSubject = orderLang === 'en'
           ? `Order Confirmation #${order.orderNumber || ''} - Peptides Costa Rica`
           : `Confirmación de Pedido #${order.orderNumber || ''} - Péptidos Costa Rica`;
-          
-        const customerHtml = buildCustomerHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc, orderLang, links, salesTextEn, salesTextEs, promoCodesList);
-        
-        const customerText = [
+
+        customerHtml = buildCustomerHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc, orderLang, links, salesTextEn, salesTextEs, promoCodesList);
+
+        customerText = [
           isPaid
             ? (orderLang === 'en' ? 'Thank you for your order and payment!' : 'Gracias por su pedido y su pago!')
             : isElectronicGatewayPayment(order.paymentMethod)
@@ -681,11 +686,13 @@ export async function POST(request) {
             : `Necesita ayuda? Contacte a soporte al +506 8404-6973 o responda a este correo.`
         ].join('\n');
 
+        // No accounting CC: the accountant's copy is sent separately below, so
+        // a failure here cannot take it down and customers never see the
+        // address in their headers.
         const customerInfo = await transporter.sendMail({
           from: smtp.from,
           replyTo: smtp.replyTo,
           to: order.customerEmail.trim(),
-          cc: taxRecordsCcForCompletedOrder(order.status),
           subject: customerSubject,
           html: customerHtml,
           text: customerText,
@@ -698,6 +705,22 @@ export async function POST(request) {
         console.error('[Order notification] Customer receipt failed to send:', custErr);
         results.customerReceipt = { sent: false, error: custErr.message };
       }
+
+      // Outside the customer try/catch on purpose — accounting's copy of a
+      // completed sale must go out whether or not the customer's own receipt
+      // did. Never throws, so it cannot break this route either.
+      results.accountingCopy = await sendTaxRecordsCopy({
+        transporter,
+        from: smtp.from,
+        order: {
+          status: order.status,
+          order_number: order.orderNumber || order.order_number,
+          customer_name: order.customerName || order.customer_name,
+        },
+        html: customerHtml,
+        text: customerText,
+        logPrefix: '[Order notification]',
+      });
     }
 
     //  3. SEND CUSTOMER WHATSAPP NOTIFICATION (DISABLED)

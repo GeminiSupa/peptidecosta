@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 import { buildWhatsAppCustomerContext } from '@/lib/whatsappAiContext';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
+import { describeWhatsAppDeliveryError, formatDeliveryFailureLog } from '@/lib/whatsappDeliveryErrors.mjs';
+import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { upsertWhatsAppConversation } from '@/lib/whatsappConversations.mjs';
 import { getInboundWhatsAppChannel, upsertWhatsAppChannel } from '@/lib/whatsappChannels.mjs';
 import {
@@ -507,13 +509,35 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
         // ── Handle message status updates (sent, delivered, read) ──
         const statuses = value?.statuses || [];
         for (const status of statuses) {
-          console.log(`[WhatsApp Webhook] 📊 Status: ${status.status} for message ${status.id}`);
+          // Meta's errors[] is the only place that says WHY a send failed, and
+          // it used to be discarded here — leaving a bare delivery_status of
+          // 'failed' while the sender had already logged "sent successfully".
+          const failure = describeWhatsAppDeliveryError(status);
+          if (failure) {
+            console.error(`[WhatsApp Webhook] ${formatDeliveryFailureLog(status, failure)}`);
+            if (failure.additional?.length) {
+              console.error('[WhatsApp Webhook] Additional errors on same status:', failure.additional);
+            }
+          } else {
+            console.log(`[WhatsApp Webhook] 📊 Status: ${status.status} for message ${status.id}`);
+          }
+
           if (supabase && status.id && status.status) {
-            // Update the delivery_status for the message
-            await supabase
-              .from('whatsapp_messages')
-              .update({ delivery_status: status.status })
-              .eq('meta_message_id', status.id);
+            // delivery_error arrives via its own hand-run migration
+            // (add-whatsapp-delivery-error.sql), so the write drops it rather
+            // than failing the whole status update on a database that has not
+            // had that migration pasted in yet.
+            await writeDroppingMissingColumns(
+              {
+                delivery_status: status.status,
+                ...(failure ? { delivery_error: failure.summary.slice(0, 500) } : {}),
+              },
+              ['delivery_error'],
+              (row) => supabase
+                .from('whatsapp_messages')
+                .update(row)
+                .eq('meta_message_id', status.id),
+            );
 
             // Lead-alert sends are also tracked in the durable notification
             // outbox. Meta's initial response means only "accepted"; these

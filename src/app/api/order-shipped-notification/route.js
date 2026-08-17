@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { taxRecordsCcForCompletedOrder } from '@/lib/taxRecordsEmail.mjs';
+import { sendTaxRecordsCopy } from '@/lib/taxRecordsEmail.mjs';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 
 const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
@@ -253,27 +253,45 @@ export async function POST(request) {
       alreadyInvited ? null : TRUSTPILOT_AFS_BCC,
     ].filter(Boolean);
 
-    // Accounting's copy of the completed sale has to ride on THIS email. The
-    // other place that CCs the tax inbox (/api/order-notification) is only
-    // reached from admin/orders/update on a not-paid -> paid transition, so an
-    // order that sat in "Paid" before being marked "Order Complete" never
-    // triggers it. This route is the one the admin panel always calls when an
-    // order completes, which makes it the only reliable seat for the CC.
-    const customerInfo = await transporter.sendMail({
-      bcc: bccList,
-      cc: taxRecordsCcForCompletedOrder(order.status),
+    // The customer's receipt carries no accounting CC. This route is still the
+    // one the admin panel always calls on completion — /api/order-notification
+    // only fires on a not-paid -> paid transition, so an order that sat in
+    // "Paid" before being marked "Order Complete" never reaches it — but
+    // accounting now gets its own message below rather than a header on this one.
+    let customerInfo = null;
+    let customerError = null;
+    try {
+      customerInfo = await transporter.sendMail({
+        bcc: bccList,
+        from: NOTIFICATION_FROM,
+        to: order.customer_email.trim(),
+        subject: customerSubject,
+        html: customerHtmlWithTrustpilot,
+        text: customerText,
+      });
+      console.log(`[Order Shipped Notification] Customer receipt dispatched: ${customerInfo.messageId} to ${order.customer_email}`);
+    } catch (custErr) {
+      // Caught rather than thrown so a bad customer address cannot also cost
+      // accounting its copy of the sale — the exact failure mode the CC had.
+      customerError = custErr.message;
+      console.error('[Order Shipped Notification] Customer receipt failed to send:', custErr);
+    }
+
+    const taxCopy = await sendTaxRecordsCopy({
+      transporter,
       from: NOTIFICATION_FROM,
-      to: order.customer_email.trim(),
-      subject: customerSubject,
+      order,
       html: customerHtmlWithTrustpilot,
       text: customerText,
+      logPrefix: '[Order Shipped Notification]',
     });
-
-    console.log(`[Order Shipped Notification] Customer receipt dispatched: ${customerInfo.messageId} to ${order.customer_email}`);
 
     // Record that the Trustpilot invitation went out so later resends (and the
     // review-requests cron, which checks the same column) never duplicate it.
-    if (!alreadyInvited && supabase) {
+    // Guarded on the send actually landing: the customer send no longer throws,
+    // so without this a failed receipt would still be marked as invited and the
+    // cron would never retry it.
+    if (customerInfo && !alreadyInvited && supabase) {
       try {
         let update = supabase.from('orders').update({ review_requested_at: new Date().toISOString() });
         update = order.id ? update.eq('id', order.id) : update.eq('order_number', order.order_number);
@@ -283,11 +301,17 @@ export async function POST(request) {
       }
     }
 
+    // Reports both sends separately, so "did accounting get it?" is answerable
+    // from the response and the logs rather than by asking the accountant.
     return NextResponse.json({
-      success: true,
-      messageId: customerInfo.messageId,
-      trustpilotInvited: !alreadyInvited,
-    });
+      success: Boolean(customerInfo),
+      messageId: customerInfo?.messageId || null,
+      customerReceipt: customerInfo
+        ? { sent: true, messageId: customerInfo.messageId }
+        : { sent: false, error: customerError },
+      accountingCopy: taxCopy,
+      trustpilotInvited: Boolean(customerInfo) && !alreadyInvited,
+    }, { status: customerInfo ? 200 : 502 });
   } catch (err) {
     console.error('[Order Shipped Notification] Unexpected handler crash:', err);
     return NextResponse.json({ error: 'Internal server error', details: err.message }, { status: 500 });
