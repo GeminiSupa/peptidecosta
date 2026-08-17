@@ -7,6 +7,8 @@ import { orderVisibleToAgent } from '@/lib/agentOrders';
 import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAffiliateOrderWhatsApp } from '@/lib/orderWhatsAppAlerts';
 import { isFirstPaidTransition, shouldSendPaidConfirmation } from '@/lib/orderStatusEmails.mjs';
+import { shouldRestoreForStatus } from '@/lib/inventoryRestore.mjs';
+import { restoreInventoryForOrder } from '@/lib/inventoryRestoreServer';
 import {
   ADMIN_FALLBACK_EXCHANGE_RATE,
   calculateAdminOrderTotals,
@@ -314,6 +316,16 @@ export async function PATCH(request) {
 
     if (droppedColumns?.length) {
       console.warn('[admin/orders/update] Order attribution columns missing, run add-order-attribution-controls.sql:', droppedColumns.join(', '));
+    }
+
+    // Stock was reserved when the order was placed. A status that means the
+    // sale is off — cancelled, declined, payment blocked, errored — puts it
+    // back. Idempotent and non-throwing, so re-saving a cancelled order cannot
+    // pay the stock out twice and a restore failure cannot fail the edit.
+    if (patch.status && shouldRestoreForStatus(patch.status)) {
+      await restoreInventoryForOrder(supabase, data, {
+        reason: `status set to ${patch.status}`,
+      });
     }
 
     if (

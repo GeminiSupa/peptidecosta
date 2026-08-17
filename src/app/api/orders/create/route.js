@@ -469,6 +469,9 @@ export async function POST(request) {
     }
 
     // --- NEW: Deduct Inventory & Check Low Stock Threshold ---
+    // What this actually removes is written back onto the order, so a later
+    // cancellation returns exactly that and not the order's face quantities.
+    const deductedLines = [];
     try {
       for (const item of order.items) {
         if (!item.product || !item.qty) continue;
@@ -494,6 +497,12 @@ export async function POST(request) {
           .update({ inventory_count: newInventory })
           .eq('product', item.product);
 
+        // Record what was ACTUALLY taken, which the clamp above can make less
+        // than item.qty. Restoring from the order's quantities instead would
+        // invent stock that was never reserved.
+        const takenQty = currentInventory - newInventory;
+        if (takenQty > 0) deductedLines.push({ product: item.product, qty: takenQty });
+
         // Check if we just crossed the threshold, or hit zero
         const crossedThreshold = currentInventory > threshold && newInventory <= threshold;
         const hitZero = currentInventory > 0 && newInventory === 0;
@@ -510,6 +519,19 @@ export async function POST(request) {
     } catch (invErr) {
       console.error('[orders/create] Inventory deduction failed:', invErr);
       // We don't fail the order if inventory deduction fails
+    }
+
+    // Optional column: a database without add-inventory-restore.sql simply does
+    // not keep the record, and restores fall back to the order's quantities.
+    if (deductedLines.length > 0 && data?.id) {
+      const { droppedColumns } = await writeDroppingMissingColumns(
+        { inventory_deducted: deductedLines },
+        ['inventory_deducted'],
+        (row) => supabase.from('orders').update(row).eq('id', data.id),
+      );
+      if (droppedColumns?.length) {
+        console.warn('[orders/create] inventory_deducted not stored — run add-inventory-restore.sql');
+      }
     }
     // --------------------------------------------------------
 

@@ -3269,12 +3269,21 @@ Core Rules:
       order?.sales_agent && `Agent: ${order.sales_agent}`,
     ])) return;
     setOrders(prev => prev.filter(o => o.id !== orderId));
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('orders').delete().eq('id', orderId);
-      } catch(err) {
-        console.error('Order delete error:', err);
+    try {
+      // Goes through the API rather than deleting the row directly: the stock
+      // this order reserved has to be returned before the record that says what
+      // it was holding disappears.
+      const res = await adminFetch('/api/admin/orders/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Order delete error:', data.error || res.statusText);
       }
+    } catch(err) {
+      console.error('Order delete error:', err);
     }
   };
 
