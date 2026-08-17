@@ -33,14 +33,23 @@ function splitName(name = '') {
 
 function parseBillingAddress(shippingAddress = '') {
   const lines = String(shippingAddress || '').split('\n').map(line => line.trim()).filter(Boolean);
-  const area = lines[2] || '';
-  const areaParts = area.split(',').map(part => part.trim()).filter(Boolean);
+
+  // Format from catalog: line[0]=address, line[1]=district,canton,province, line[2]=zip
+  const address = lines[0] || 'N/A';
+  const postalCode = lines[2] || '10101';
+  const locationLine = lines[1] || '';
+  const areaParts = locationLine.split(',').map(part => part.trim()).filter(Boolean);
+
+  // areaParts should be [district, canton, province]
+  // Use canton (index 1) as city, district (index 0) as state
+  const city = areaParts[1] || areaParts[0] || 'San Jose';
+  const state = areaParts[0] || 'San Jose';
 
   return {
-    address: lines[3] || lines[0] || 'N/A',
-    postal_code: lines[4] || '10101',
-    city: areaParts[1] || areaParts[0] || 'San Jose',
-    state: areaParts[0] || 'San Jose',
+    address,
+    postal_code: postalCode,
+    city,
+    state,
     country: 'CR',
   };
 }
@@ -254,7 +263,7 @@ export async function POST(request) {
       status: transaction.status,
       orderStatus,
       transactionId: transaction.id,
-      error: transaction?.error?.messsage || transaction?.error?.message || `Payment ${transaction.status || 'failed'}`,
+      error: transaction?.error?.message || `Payment ${transaction.status || 'failed'}`,
     }, { status: 402 });
   } catch (err) {
     console.error('[card-payment-link/pay]', err);

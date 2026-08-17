@@ -70,7 +70,7 @@ export async function getShieldHubPayTransaction(transactionId, { mode = 'live' 
 
   if (!response.ok || String(data?.id) !== String(transactionId)) {
     throw new Error(
-      data?.errorMessage || data?.error?.messsage || data?.error?.message
+      data?.errorMessage || data?.error?.message
         || `Shield Hub Pay transaction lookup failed (${response.status})`
     );
   }
@@ -98,7 +98,7 @@ export async function processShieldHubPayTransaction(payload, { mode = 'live' } 
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data?.error?.messsage || data?.error?.message || `Shield Hub Pay returned ${response.status}`);
+    throw new Error(data?.error?.message || `Shield Hub Pay returned ${response.status}`);
   }
 
   return data;
