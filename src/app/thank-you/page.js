@@ -5,9 +5,15 @@ import Link from 'next/link';
 import { CheckCircle2, ArrowLeft, ShieldAlert, Sparkles, Send, Calendar } from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
+import { useAccountAccess } from '@/hooks/useAccountAccess';
 
 function ThankYouContent() {
   const { links } = useBusinessLinks();
+  // Unlike the "My Account" nav link, this card actively asks the customer to
+  // create an account. Sending them to a coming-soon notice moments after they
+  // paid would read as a broken promise, so it stays hidden until accounts are
+  // live rather than becoming a dead end.
+  const { allowed: accountsAvailable } = useAccountAccess();
   const [lang, setLang] = useState('es');
   const [mounted, setMounted] = useState(false);
   const [reviewClicked, setReviewClicked] = useState(false);
@@ -315,6 +321,7 @@ function ThankYouContent() {
         {/* Create an account: the order was just placed with a verified email
             address, so signing up with that same address pulls this order and
             the customer's whole history into the dashboard on first login. */}
+        {accountsAvailable ? (
         <div style={{
           background: 'rgba(56, 189, 248, 0.06)',
           border: '1px solid rgba(56, 189, 248, 0.22)',
@@ -359,6 +366,7 @@ function ThankYouContent() {
             </button>
           </Link>
         </div>
+        ) : null}
 
         {/* Button & Notice */}
         <div style={{

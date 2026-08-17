@@ -7,6 +7,8 @@ import { Suspense } from 'react';
 
 import { getCustomerSupabase } from '@/lib/customerSupabase';
 import { useCustomerSession, useStorefrontLang } from '@/hooks/useCustomerSession';
+import { useAccountAccess } from '@/hooks/useAccountAccess';
+import ComingSoon from '../ComingSoon';
 import '../account.css';
 
 const RESEND_SECONDS = 60;
@@ -16,6 +18,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const [lang, setLang] = useStorefrontLang();
   const { session, loading: sessionLoading } = useCustomerSession();
+  const { allowed, checking } = useAccountAccess();
   const isEn = lang === 'en';
 
   const [step, setStep] = useState('email');
@@ -33,8 +36,9 @@ function LoginForm() {
   const next = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/account';
 
   useEffect(() => {
+    if (checking || !allowed) return;
     if (!sessionLoading && session) router.replace(next);
-  }, [session, sessionLoading, next, router]);
+  }, [checking, allowed, session, sessionLoading, next, router]);
 
   useEffect(() => {
     if (cooldown <= 0) return undefined;
@@ -123,6 +127,11 @@ function LoginForm() {
       setBusy(false);
     }
   };
+
+  // Render nothing until the launch gate has decided, so the sign-in form never
+  // flashes up before the coming-soon notice replaces it.
+  if (checking) return null;
+  if (!allowed) return <ComingSoon />;
 
   return (
     <div className="account-auth">

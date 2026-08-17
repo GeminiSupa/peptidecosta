@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 import { useCustomerSession, useStorefrontLang } from '@/hooks/useCustomerSession';
+import { useAccountAccess } from '@/hooks/useAccountAccess';
+import ComingSoon from './ComingSoon';
 import './account.css';
 
 const TABS = [
@@ -28,13 +30,20 @@ export default function AccountShell({ children, title }) {
   const pathname = usePathname();
   const [lang] = useStorefrontLang();
   const { user, loading, configured, signOut } = useCustomerSession();
+  const { allowed, checking } = useAccountAccess();
   const isEn = lang === 'en';
 
   useEffect(() => {
+    // Hold the redirect while the launch gate is undecided, or a gated visitor
+    // gets bounced to the login route before the coming-soon notice can render.
+    if (checking || !allowed) return;
     if (loading || user) return;
     const next = encodeURIComponent(pathname || '/account');
     router.replace(`/account/login?next=${next}`);
-  }, [loading, user, pathname, router]);
+  }, [checking, allowed, loading, user, pathname, router]);
+
+  if (checking) return null;
+  if (!allowed) return <ComingSoon />;
 
   if (!configured) {
     return (
