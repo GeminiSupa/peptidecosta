@@ -2,29 +2,30 @@ import { NextResponse } from 'next/server';
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyCronRequest } from '@/lib/cronAuth';
-import { expireStaleUnpaidOrders } from '@/lib/inventoryRestoreServer';
+import { reportStaleUnpaidOrders } from '@/lib/inventoryRestoreServer';
 import { STALE_ORDER_HOURS } from '@/lib/inventoryRestore.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Returns the stock held by orders that were never paid for.
+// Lists unpaid orders still holding stock. Changes nothing.
 //
-// Inventory is reserved the moment an order is placed. Orders that are
-// cancelled or declined give it back through the admin panel, but an order
-// nobody ever touches — a card checkout abandoned at the payment step, a
-// transfer that never arrives — would hold its vials forever, and the catalog
-// would eventually show "Out of Stock" for stock sitting on the shelf.
+// This began as an auto-expiry that cancelled unpaid orders and returned their
+// vials. It does not cancel anything any more, at Omer's instruction: an order
+// sitting in "Pending" here is very often still being chased on WhatsApp, or
+// was paid by transfer and never marked, and a cron closing those would destroy
+// real sales.
 //
-// Hourly rather than daily so an expired order frees its stock within the hour
-// of crossing the window, not at some fixed time the following day.
+// It is also NOT registered in vercel.json, so it never fires on its own — call
+// it by hand when you want the list. Releasing the stock is done by cancelling
+// the order in the admin panel, which restores it through the same code path.
 
 export async function GET(request) {
   const unauthorized = verifyCronRequest(request);
   if (unauthorized) return unauthorized;
 
   const supabase = getSupabaseAdmin();
-  const result = await expireStaleUnpaidOrders(supabase);
+  const result = await reportStaleUnpaidOrders(supabase);
 
   return NextResponse.json({
     ok: !result.error,

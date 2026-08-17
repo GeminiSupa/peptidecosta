@@ -91,13 +91,17 @@ export async function restoreInventoryForOrder(supabase, order, { reason = 'stat
 }
 
 /**
- * Expire unpaid orders that have held their stock past the window.
+ * Report unpaid orders that have held their stock past the window.
  *
- * Marks them Cancelled and returns the stock in one pass. Only ever touches
- * orders still sitting in an unpaid status — anything a human has moved on is
- * left alone.
+ * REPORT ONLY. This does not change any order's status and does not move any
+ * stock. Automatically cancelling was built and then removed at Omer's
+ * instruction: an unpaid order here is very often still being chased on
+ * WhatsApp, or was settled by transfer and never marked, so a cron closing it
+ * would destroy real sales. Cancelling stays a human decision made in the admin
+ * panel — and doing it there still restores the stock, through
+ * restoreInventoryForOrder above.
  */
-export async function expireStaleUnpaidOrders(supabase, { hours = STALE_ORDER_HOURS, now = new Date() } = {}) {
+export async function reportStaleUnpaidOrders(supabase, { hours = STALE_ORDER_HOURS, now = new Date() } = {}) {
   const cutoff = staleOrderCutoff(now, hours);
   const floor = expiryFloor(now);
 
@@ -125,38 +129,25 @@ export async function expireStaleUnpaidOrders(supabase, { hours = STALE_ORDER_HO
       + 'and were left alone. Close them by hand if they are genuinely dead.',
     );
   }
-  const results = [];
+  const holding = stale.filter((order) => restorableQuantities(order).length > 0);
 
-  for (const order of stale) {
-    if (restorableQuantities(order).length === 0) continue;
-
-    const { error: statusError } = await supabase
-      .from('orders')
-      .update({ status: 'Cancelled' })
-      .eq('id', order.id)
-      // Re-check the status at write time: a customer may have paid between the
-      // read above and this update, and an expiry must never cancel a paid sale.
-      .in('status', ['Pending', 'Payment Pending', 'Pending - Card', 'Pending - Card 3DS']);
-
-    if (statusError) {
-      console.error('[inventory] Could not expire order', order.order_number, statusError.message);
-      continue;
-    }
-
-    const outcome = await restoreInventoryForOrder(
-      supabase,
-      { ...order, status: 'Cancelled' },
-      { reason: `unpaid for over ${hours}h` },
+  if (holding.length > 0) {
+    console.log(
+      `[inventory] ${holding.length} order(s) unpaid for over ${hours}h are still holding stock: `
+      + `${holding.map((o) => o.order_number).join(', ')}. `
+      + 'Nothing was cancelled — cancel in the admin panel to release the stock.',
     );
-    if (outcome.restored) results.push(order.order_number);
   }
 
-  if (results.length > 0) {
-    console.log(`[inventory] Expired ${results.length} unpaid order(s) past ${hours}h: ${results.join(', ')}`);
-  }
   return {
-    expired: results.length,
-    orders: results,
+    cancelled: 0,
+    reportOnly: true,
+    holdingStock: holding.length,
+    orders: holding.map((o) => ({
+      order_number: o.order_number,
+      status: o.status,
+      created_at: o.created_at,
+    })),
     cutoff: cutoff.toISOString(),
     skippedBacklog: backlog,
   };

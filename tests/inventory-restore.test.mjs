@@ -131,3 +131,19 @@ test('an order with no usable creation date is never expired', () => {
   assert.equal(isWithinExpiryWindow({ created_at: null }, now), false);
   assert.equal(isWithinExpiryWindow({ created_at: 'not a date' }, now), false);
 });
+
+test('nothing in this module can cancel an order', async () => {
+  const fs = await import('node:fs');
+  const server = fs.readFileSync('src/lib/inventoryRestoreServer.js', 'utf8');
+  const cron = fs.readFileSync('src/app/api/cron/expire-unpaid-orders/route.js', 'utf8');
+  const vercel = JSON.parse(fs.readFileSync('vercel.json', 'utf8'));
+
+  // Auto-cancelling was built and then removed at Omer's instruction. An unpaid
+  // order is often still being chased, or was settled by transfer and never
+  // marked; a cron closing those would destroy real sales.
+  assert.doesNotMatch(server, /status: 'Cancelled'/);
+  assert.doesNotMatch(cron, /expireStaleUnpaidOrders/);
+
+  // And it is not scheduled, so it cannot run unattended at all.
+  assert.equal(vercel.crons.some((c) => c.path.includes('expire-unpaid-orders')), false);
+});

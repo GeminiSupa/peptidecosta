@@ -7,6 +7,8 @@ import {
   buildTaxRecordsCopy,
   isCompletedOrderStatus,
   sendTaxRecordsCopy,
+  taxRecordsFrom,
+  taxRecordsRecipients,
   withTaxRecordsCc,
 } from '../src/lib/taxRecordsEmail.mjs';
 
@@ -127,4 +129,54 @@ test('does not duplicate the tax inbox when it is already in CC', () => {
     withTaxRecordsCc(`finance@example.com, ${TAX_RECORDS_CC_EMAIL.toUpperCase()}`),
     `finance@example.com, ${TAX_RECORDS_CC_EMAIL.toUpperCase()}`
   );
+});
+
+test('the accounting copy can reach more than one mailbox', async () => {
+  // pbagcr@ is currently rejected at Rackspace's door — mail arrives from
+  // Elastic carrying its own domain in From. A second address on a provider
+  // that does accept the send keeps the tax records flowing meanwhile.
+  const previous = process.env.TAX_RECORDS_CC_EMAIL;
+  process.env.TAX_RECORDS_CC_EMAIL = 'pbagcr@peptidescostarica.net, backup@gmail.com';
+
+  try {
+    assert.deepEqual(taxRecordsRecipients(), [
+      'pbagcr@peptidescostarica.net',
+      'backup@gmail.com',
+    ]);
+    // Whitespace and empty entries from a hand-typed dashboard value.
+    assert.deepEqual(
+      taxRecordsRecipients('  a@b.com ,, c@d.com  '),
+      ['a@b.com', 'c@d.com'],
+    );
+    // Never silently sends nowhere.
+    assert.deepEqual(taxRecordsRecipients(''), ['pbagcr@peptidescostarica.net']);
+  } finally {
+    if (previous === undefined) delete process.env.TAX_RECORDS_CC_EMAIL;
+    else process.env.TAX_RECORDS_CC_EMAIL = previous;
+  }
+});
+
+test('the accounting copy can be sent from a different address than the receipt', async () => {
+  // The rejection is triggered by the From domain, so this message can be
+  // pointed at a sender Rackspace treats as ordinary external mail without
+  // changing anything a customer sees.
+  const previous = process.env.TAX_RECORDS_FROM;
+
+  try {
+    assert.equal(taxRecordsFrom('Shop <info@peptidescostarica.net>'), 'Shop <info@peptidescostarica.net>');
+
+    process.env.TAX_RECORDS_FROM = 'Records <records@mail.example.net>';
+    assert.equal(taxRecordsFrom('Shop <info@peptidescostarica.net>'), 'Records <records@mail.example.net>');
+
+    const sent = [];
+    await sendTaxRecordsCopy({
+      transporter: { sendMail: async (m) => { sent.push(m); return { messageId: 'x' }; } },
+      from: 'Shop <info@peptidescostarica.net>',
+      order: { status: 'Order Complete', order_number: 'PCR-5' },
+    });
+    assert.equal(sent[0].from, 'Records <records@mail.example.net>');
+  } finally {
+    if (previous === undefined) delete process.env.TAX_RECORDS_FROM;
+    else process.env.TAX_RECORDS_FROM = previous;
+  }
 });

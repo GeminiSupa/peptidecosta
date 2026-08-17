@@ -19,6 +19,44 @@ export const TAX_RECORDS_CC_EMAIL =
   process.env.TAX_RECORDS_CC_EMAIL || 'pbagcr@peptidescostarica.net';
 
 /**
+ * Every address that should receive the accounting copy.
+ *
+ * TAX_RECORDS_CC_EMAIL accepts a comma-separated list, because pbagcr@ is
+ * currently unreachable: mail leaves through Elastic carrying
+ * From: info@peptidescostarica.net, and Rackspace refuses its own domain from
+ * an external sender. Nothing lands in Spam — it is rejected at the door, and
+ * the last copy that arrived was 11 Aug, the day before sending moved off
+ * Rackspace.
+ *
+ * That block can only be lifted by Rackspace. Until it is, adding a second
+ * address on a provider that does accept the mail (a Gmail was proven to arrive
+ * from the same send) means the tax records keep flowing instead of piling up
+ * undelivered. Both addresses get the same message, so nothing has to be
+ * re-sent once pbagcr@ is unblocked.
+ */
+export function taxRecordsRecipients(value = process.env.TAX_RECORDS_CC_EMAIL) {
+  const configured = String(value || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return configured.length > 0 ? configured : ['pbagcr@peptidescostarica.net'];
+}
+
+/**
+ * From address for the accounting copy only.
+ *
+ * Separate from the customer receipt's sender on purpose. The rejection is
+ * triggered by the From domain, so pointing just this message at a sender
+ * Rackspace treats as ordinary external mail can get it delivered without
+ * touching what customers see. Defaults to the caller's usual From, so setting
+ * nothing changes nothing.
+ */
+export function taxRecordsFrom(fallbackFrom) {
+  return String(process.env.TAX_RECORDS_FROM || '').trim() || fallbackFrom;
+}
+
+/**
  * CC helper for internal mail only.
  *
  * Still used by the commission approval route, where the recipient is a sales
@@ -63,7 +101,9 @@ export function buildTaxRecordsCopy({ order = {}, html = '', text = '' } = {}) {
   const header = `Copia contable — Pedido ${orderNumber}${customerName ? ` — ${customerName}` : ''}`;
 
   return {
-    to: TAX_RECORDS_CC_EMAIL,
+    // Every configured address on one message, so a blocked mailbox and a
+    // reachable one always hold the identical record.
+    to: taxRecordsRecipients().join(', '),
     subject: header,
     html: `<p style="font:600 14px/1.5 system-ui,sans-serif;color:#334155;margin:0 0 16px">${header}</p>${html}`,
     text: `${header}\n\n${text}`,
@@ -96,11 +136,14 @@ export async function sendTaxRecordsCopy({
   }
 
   const message = buildTaxRecordsCopy({ order, html, text });
+  const sender = taxRecordsFrom(from);
 
   try {
-    const info = await transporter.sendMail({ from, ...message });
-    console.log(`${logPrefix} Accounting copy sent to ${message.to}: ${info.messageId}`);
-    return { sent: true, messageId: info.messageId };
+    const info = await transporter.sendMail({ ...message, from: sender });
+    // Names the sender as well as the recipients: the current failure is caused
+    // by the From domain, so a log line without it cannot explain a rejection.
+    console.log(`${logPrefix} Accounting copy sent from ${sender} to ${message.to}: ${info.messageId}`);
+    return { sent: true, messageId: info.messageId, to: message.to, from: sender };
   } catch (error) {
     // Loud, because silence here is exactly what hid the previous failure.
     console.error(`${logPrefix} Accounting copy FAILED to ${message.to}:`, error.message);

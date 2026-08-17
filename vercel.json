@@ -39,10 +39,6 @@
     {
       "path": "/api/cron/expire-deals",
       "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/expire-unpaid-orders",
-      "schedule": "15 * * * *"
     }
   ]
 }
