@@ -74,3 +74,21 @@ export function verifyJourneyTrackingToken(token) {
     return null;
   }
 }
+
+// Campaign and journey links are rewritten to travel through /api/tracking so
+// the click can be recorded, which puts the real destination in a query
+// parameter. Unsigned, that endpoint is an open redirect: anyone can hand out
+// a link on our own domain that lands wherever they like, and for a business
+// whose deliverability is the product, being the host of a phishing hop costs
+// more than the redirect itself. The signature is minted when the mail is
+// built and checked before the browser is sent anywhere.
+export function createTrackingUrlToken(url) {
+  return sign(String(url || ''));
+}
+
+export function verifyTrackingUrlToken(url, token) {
+  const provided = String(token || '');
+  const expected = createTrackingUrlToken(url);
+  if (provided.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+}

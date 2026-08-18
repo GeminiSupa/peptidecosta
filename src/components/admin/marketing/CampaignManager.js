@@ -3,8 +3,10 @@
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import CampaignDashboard from './CampaignDashboard';
+import CampaignDetail from './CampaignDetail';
+import { useMarketingFeedback } from './useMarketingFeedback';
 
-const CampaignBuilder = dynamic(() => import('./CampaignBuilder'), { 
+const CampaignBuilder = dynamic(() => import('./CampaignBuilder'), {
   ssr: false,
   loading: () => (
     <div className="mkt-loading-state">
@@ -15,24 +17,44 @@ const CampaignBuilder = dynamic(() => import('./CampaignBuilder'), {
 });
 
 export default function CampaignManager({ onDirtyChange }) {
-  const [view, setView] = useState('list'); // 'list' | 'builder'
+  const [view, setView] = useState('list'); // 'list' | 'builder' | 'detail'
   const [editingId, setEditingId] = useState(null);
   const [builderDirty, setBuilderDirty] = useState(false);
+  const { notify, confirm, feedback } = useMarketingFeedback();
 
-  const handleEdit = (id) => {
+  const leaveBuilder = async () => {
+    if (view !== 'builder' || !builderDirty) return true;
+    return confirm({
+      title: 'Discard unsaved changes?',
+      message: 'This campaign has edits that have not been saved to the server.',
+      confirmLabel: 'Discard and leave',
+      tone: 'danger',
+    });
+  };
+
+  const handleEdit = async (id) => {
+    if (!(await leaveBuilder())) return;
     setEditingId(id);
     setBuilderDirty(false);
     setView('builder');
   };
 
-  const handleCreate = () => {
+  const handleViewReport = async (id) => {
+    if (!(await leaveBuilder())) return;
+    setEditingId(id);
+    setBuilderDirty(false);
+    setView('detail');
+  };
+
+  const handleCreate = async () => {
+    if (!(await leaveBuilder())) return;
     setEditingId(null);
     setBuilderDirty(false);
     setView('builder');
   };
 
-  const handleBack = () => {
-    if (builderDirty && !confirm('You have unsaved campaign changes. Leave the builder and discard them?')) return;
+  const handleBack = async () => {
+    if (!(await leaveBuilder())) return;
     setView('list');
     setEditingId(null);
     setBuilderDirty(false);
@@ -45,19 +67,36 @@ export default function CampaignManager({ onDirtyChange }) {
   return (
     <div className="mkt-campaign-manager">
       {view === 'list' && (
-        <CampaignDashboard onEdit={handleEdit} onCreate={handleCreate} />
+        <CampaignDashboard
+          onEdit={handleEdit}
+          onCreate={handleCreate}
+          onViewReport={handleViewReport}
+          notify={notify}
+          confirm={confirm}
+        />
       )}
-      {view === 'builder' && (
+      {view !== 'list' && (
         <div className="mkt-fade-in">
-          <button 
-            onClick={handleBack} 
+          <button
+            onClick={handleBack}
             className="mkt-builder-back"
           >
             <span aria-hidden="true">&larr;</span> Campaigns
           </button>
-          <CampaignBuilder editingCampaignId={editingId} onDirtyChange={setBuilderDirty} />
+          {view === 'builder' && (
+            <CampaignBuilder
+              editingCampaignId={editingId}
+              onDirtyChange={setBuilderDirty}
+              notify={notify}
+              confirm={confirm}
+            />
+          )}
+          {view === 'detail' && (
+            <CampaignDetail campaignId={editingId} onEdit={handleEdit} notify={notify} />
+          )}
         </div>
       )}
+      {feedback}
     </div>
   );
 }

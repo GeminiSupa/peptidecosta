@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { verifyTrackingUrlToken } from '@/lib/marketingTokens';
+import { resolveTrackingDestination, trackingSafeHosts } from '@/lib/trackingRedirect.mjs';
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
 
 export async function GET(request) {
   const url = new URL(request.url);
@@ -7,7 +10,12 @@ export async function GET(request) {
   const campaign_id = url.searchParams.get('c');
   const subscriber_id = url.searchParams.get('s');
 
-  if (!target_url) {
+  const destination = resolveTrackingDestination(target_url, {
+    isSigned: verifyTrackingUrlToken(target_url, url.searchParams.get('k')),
+    safeHosts: trackingSafeHosts(LIVE_SITE_URL),
+  });
+  if (!destination) {
+    console.warn('[Tracking] Refused an unsigned off-domain click redirect');
     return NextResponse.redirect(new URL('/', request.url));
   }
 
@@ -20,7 +28,7 @@ export async function GET(request) {
       const supabaseAdmin = getSupabaseAdmin();
       supabaseAdmin
         .from('campaign_clicks')
-        .insert([{ campaign_id, subscriber_id, target_url, ip_address, user_agent }])
+        .insert([{ campaign_id, subscriber_id, target_url: destination.toString(), ip_address, user_agent }])
         .then(({ error }) => {
           if (error) console.error('Tracking click error:', error);
         });
@@ -30,5 +38,5 @@ export async function GET(request) {
   }
 
   // Redirect to the actual destination
-  return NextResponse.redirect(target_url);
+  return NextResponse.redirect(destination.toString());
 }

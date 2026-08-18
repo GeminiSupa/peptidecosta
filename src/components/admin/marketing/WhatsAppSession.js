@@ -6,6 +6,7 @@ import {
   CheckCircle2, AlertTriangle, Loader2, LogOut,
   RefreshCw, Smartphone, Wifi, WifiOff, MessageCircle,
 } from 'lucide-react';
+import { useMarketingFeedback } from './useMarketingFeedback';
 
 const POLL_INTERVAL_MS = 2500;
 
@@ -37,6 +38,7 @@ function StatusBadge({ state }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function WhatsAppSessionTab() {
+  const { notify, confirm, feedback } = useMarketingFeedback();
   const [status,     setStatus]     = useState({ state: 'disconnected', qrDataUrl: null, number: null, error: null });
   const [loading,    setLoading]    = useState(true);
   const [testPhone,  setTestPhone]  = useState('');
@@ -73,7 +75,14 @@ export default function WhatsAppSessionTab() {
   };
 
   const handleDisconnect = async () => {
-    if (!confirm('Disconnect and wipe saved credentials?')) return;
+    const confirmed = await confirm({
+      title: 'Disconnect WhatsApp?',
+      message: 'The saved session credentials are wiped from the server.',
+      detail: 'Reconnecting means scanning the QR code again from the phone.',
+      confirmLabel: 'Disconnect',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     setLoading(true);
     await adminFetch('/api/admin/whatsapp-session', { method: 'DELETE' });
     setStatus({ state: 'disconnected', qrDataUrl: null, number: null, error: null });
@@ -316,6 +325,7 @@ export default function WhatsAppSessionTab() {
           <p>Click <strong>Connect &amp; Get QR</strong> above, then scan<br />with any WhatsApp number to get started.</p>
         </div>
       )}
+      {feedback}
     </div>
   );
 }

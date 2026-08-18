@@ -3,8 +3,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Ban, CheckCircle2, RefreshCw, RotateCcw, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
+import { useMarketingFeedback } from './useMarketingFeedback';
 
 export default function MarketingSafetyCenter() {
+  const { notify, confirm, feedback } = useMarketingFeedback();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -68,7 +70,14 @@ export default function MarketingSafetyCenter() {
   };
 
   const removeSuppression = async item => {
-    if (!confirm(`Allow marketing to ${item.identity} again?`)) return;
+    const confirmed = await confirm({
+      title: 'Allow marketing again?',
+      message: item.identity,
+      detail: 'They were suppressed for a reason — a bounce, a complaint or an unsubscribe. Re-mailing a complainer costs sender reputation.',
+      confirmLabel: 'Remove suppression',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     const response = await adminFetch(`/api/admin/marketing-safety?id=${item.id}`, { method: 'DELETE' });
     if (response.ok) await load();
   };
@@ -121,6 +130,7 @@ export default function MarketingSafetyCenter() {
           </div>
         </div>
       </>}
+      {feedback}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { createUnsubscribeToken } from '@/lib/marketingTokens';
+import { createTrackingUrlToken, createUnsubscribeToken } from '@/lib/marketingTokens';
 import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { clampOutlookButtonSizes, personalizeMergeTags, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
@@ -130,7 +130,8 @@ function trackedHtml(campaign, subscriber) {
     const absoluteUrl = url.startsWith('/') ? `${DOMAIN}${url}` : url;
     const separator = absoluteUrl.includes('?') ? '&' : '?';
     const destination = `${absoluteUrl}${separator}utm_source=email&utm_medium=campaign&utm_campaign=${campaign.id}`;
-    return `href="${DOMAIN}/api/tracking/click?c=${campaign.id}&s=${subscriber.id}&url=${encodeURIComponent(destination)}"`;
+    const signature = createTrackingUrlToken(destination);
+    return `href="${DOMAIN}/api/tracking/click?c=${campaign.id}&s=${subscriber.id}&url=${encodeURIComponent(destination)}&k=${signature}"`;
   });
   const unsubscribeUrl = `${DOMAIN}/unsubscribe?t=${encodeURIComponent(createUnsubscribeToken(subscriber.id))}`;
   const withFooter = applyMarketingEmailFooter(content, {

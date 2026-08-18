@@ -27,6 +27,39 @@ function isMissingDeliveryHealthTableError(error) {
   return code === '42P01' || code === '42703' || message.includes('campaign_delivery_batches');
 }
 
+function isMissingRelationError(error) {
+  const code = String(error?.code || '');
+  const message = String(error?.message || '');
+  return code === '42P01' || code === 'PGRST205' || message.includes('schema cache');
+}
+
+/**
+ * Unique-per-subscriber engagement, which the embedded `(count)` joins cannot
+ * express: they count event rows, so one person opening five times reads as
+ * five opens. campaign-engagement-stats.sql adds the view that does. Until it
+ * has been run the raw counts still come back and campaignEngagement() marks
+ * them inexact rather than dressing them up as a rate.
+ */
+async function fetchEngagementStats(supabaseAdmin, campaignIds) {
+  if (!campaignIds.length) return {};
+
+  const { data, error } = await supabaseAdmin
+    .from('campaign_engagement_stats')
+    .select('*')
+    .in('campaign_id', campaignIds);
+
+  if (error) {
+    if (!isMissingRelationError(error)) {
+      console.warn('[Campaigns] Engagement stats lookup failed:', error.message);
+    } else {
+      console.warn('[Campaigns] campaign_engagement_stats is missing; run campaign-engagement-stats.sql for per-person open and click rates.');
+    }
+    return {};
+  }
+
+  return Object.fromEntries((data || []).map(row => [row.campaign_id, row]));
+}
+
 async function insertCampaignWithSchemaFallback(supabaseAdmin, row) {
   let result = await supabaseAdmin
     .from('email_campaigns')
@@ -128,12 +161,15 @@ export async function GET(request) {
       }
     }
 
+    const engagementMap = await fetchEngagementStats(supabaseAdmin, campaignIds);
+
     // Merge revenue data into campaigns
     const enrichedCampaigns = data.map(c => ({
       ...c,
       orders_count: revenueMap[c.id]?.count || 0,
       orders_revenue: revenueMap[c.id]?.revenue || 0,
       latest_delivery_batch: deliveryHealthMap[c.id] || null,
+      engagement: engagementMap[c.id] || null,
     }));
 
     return NextResponse.json({ campaigns: enrichedCampaigns });

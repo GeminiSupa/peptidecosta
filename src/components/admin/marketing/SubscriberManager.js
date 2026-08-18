@@ -6,6 +6,7 @@ import {
   Users, Search, Plus, Download, UserPlus, Loader2,
   Edit2, Check, X, Upload, CheckCircle2, XCircle, RefreshCw, Tag,
 } from 'lucide-react';
+import { useMarketingFeedback } from './useMarketingFeedback';
 
 function getInitials(sub) {
   const f = sub.first_name?.[0] || '';
@@ -14,6 +15,7 @@ function getInitials(sub) {
 }
 
 export default function SubscriberManager() {
+  const { notify, confirm, feedback } = useMarketingFeedback();
   const [subscribers, setSubscribers] = useState([]);
   const [loading,     setLoading]     = useState(true);
   const [search,      setSearch]      = useState('');
@@ -59,7 +61,7 @@ export default function SubscriberManager() {
       setNewSub({ email: '', first_name: '', last_name: '' });
       fetchSubscribers();
     } catch (err) {
-      alert('Failed to add subscriber: ' + err.message);
+      notify(`Failed to add subscriber: ${err.message}`, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -86,16 +88,24 @@ export default function SubscriberManager() {
       if (data.error) throw new Error(data.error);
       setSubscribers(subscribers.map(s => s.id === editingId ? data.subscriber : s));
       setEditingId(null);
-    } catch(err) { alert(err.message); }
+    } catch(err) { notify(err.message, 'error'); }
   };
 
   const deleteSubscriber = async (id) => {
-    if (!confirm('Are you sure you want to delete this subscriber?')) return;
+    const confirmed = await confirm({
+      title: 'Delete this subscriber?',
+      message: 'They are removed from the list entirely.',
+      detail: 'To stop mailing someone but keep the record, unsubscribe them instead.',
+      confirmLabel: 'Delete subscriber',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     try {
       const res = await adminFetch(`/api/admin/subscribers?id=${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete subscriber');
       setSubscribers(subscribers.filter(s => s.id !== id));
-    } catch(err) { alert(err.message); }
+      notify('Subscriber deleted.', 'success');
+    } catch(err) { notify(err.message, 'error'); }
   };
 
   const handleBulkImport = (e) => {
@@ -111,17 +121,22 @@ export default function SubscriberManager() {
         const cols = rows[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
         if (cols[0]) parsed.push({ email: cols[0], first_name: cols[1] || '', last_name: cols[2] || '' });
       }
-      if (parsed.length === 0) { alert('No valid rows found. Make sure the first column is email addresses.'); return; }
-      if (!confirm(`Found ${parsed.length} subscribers. Import them now?`)) { e.target.value = ''; return; }
+      if (parsed.length === 0) { notify('No valid rows found. Make sure the first column is email addresses.', 'warning'); return; }
+      const confirmed = await confirm({
+        title: `Import ${parsed.length.toLocaleString()} subscriber${parsed.length === 1 ? '' : 's'}?`,
+        message: 'Existing addresses are skipped rather than duplicated.',
+        confirmLabel: 'Import them',
+      });
+      if (!confirmed) { e.target.value = ''; return; }
       setLoading(true);
       try {
         const res  = await adminFetch('/api/admin/subscribers', { method: 'POST', body: JSON.stringify({ bulk: true, subscribers: parsed }) });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Bulk import failed');
-        alert(`Successfully imported ${data.count || 0} subscribers!`);
+        notify(`Imported ${(data.count || 0).toLocaleString()} subscriber${data.count === 1 ? '' : 's'}.`, 'success');
         fetchSubscribers();
       } catch (err) {
-        alert('Bulk import failed: ' + err.message);
+        notify(`Bulk import failed: ${err.message}`, 'error');
         setLoading(false);
       }
       e.target.value = '';
@@ -417,6 +432,7 @@ export default function SubscriberManager() {
           </div>
         </div>
       )}
+      {feedback}
     </div>
   );
 }

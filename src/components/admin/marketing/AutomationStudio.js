@@ -8,6 +8,7 @@ import {
   ShoppingCart, Sparkles, Users, Zap, Clock, CheckCircle2,
   Eye, X
 } from 'lucide-react';
+import { useMarketingFeedback } from './useMarketingFeedback';
 
 const STAT_CONFIG = {
   subscribers:     { label: 'Audience',        icon: Users,         color: '#34d399' },
@@ -24,6 +25,7 @@ const STATUS_COLOR = {
 };
 
 export default function AutomationStudio() {
+  const { notify, confirm, feedback } = useMarketingFeedback();
   const [summary,     setSummary]     = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [schedulingId, setSchedulingId] = useState('');
@@ -58,7 +60,12 @@ export default function AutomationStudio() {
   };
 
   const scheduleFlow = async (flow) => {
-    if (!confirm(`Schedule "${flow.name}" for the next available run?`)) return;
+    const confirmed = await confirm({
+      title: `Schedule “${flow.name}”?`,
+      message: 'It joins the next available automation run.',
+      confirmLabel: 'Schedule it',
+    });
+    if (!confirmed) return;
     try {
       setSchedulingId(flow.id);
       const res  = await adminFetch('/api/admin/automations', { method: 'POST', body: JSON.stringify({ flowId: flow.id }) });
@@ -66,9 +73,9 @@ export default function AutomationStudio() {
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to schedule');
       await fetchSummary();
       const sent = data.queuedCount ?? 0;
-      alert(data.text || `Automation triggered. ${sent} email${sent === 1 ? '' : 's'} sent.`);
+      notify(data.text || `Automation triggered. ${sent} email${sent === 1 ? '' : 's'} sent.`, 'success');
     } catch (err) {
-      alert('Failed to schedule automation: ' + err.message);
+      notify(`Failed to schedule automation: ${err.message}`, 'error');
     } finally {
       setSchedulingId('');
     }
@@ -258,6 +265,7 @@ export default function AutomationStudio() {
           </div>
         </div>
       )}
+      {feedback}
     </div>
   );
 }

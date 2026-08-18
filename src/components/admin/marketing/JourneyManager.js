@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Clock, Edit3, Loader2, Mail, Pause, Play, Plus, RefreshCw, Save, ShoppingCart, Sparkles, Trash2, UserPlus, X, Zap } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
+import { useMarketingFeedback } from './useMarketingFeedback';
 
 const TEMPLATES = [
   {
@@ -39,6 +40,7 @@ const EMPTY_JOURNEY = {
 };
 
 export default function JourneyManager() {
+  const { notify, confirm, feedback } = useMarketingFeedback();
   const [journeys, setJourneys] = useState([]);
   const [campaignTemplates, setCampaignTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -173,14 +175,18 @@ export default function JourneyManager() {
       if (!response.ok) throw new Error(payload.error || 'Unable to create journey');
       await load();
     } catch (createError) {
-      alert(createError.message);
+      notify(createError.message, 'error');
     } finally {
       setWorkingId('');
     }
   };
 
   const setStatus = async (journey, status) => {
-    if (status === 'active' && !confirm(`Activate “${journey.name}”? Eligible contacts will enter on the next 15-minute run.`)) return;
+    if (status === 'active' && !(await confirm({
+      title: `Activate “${journey.name}”?`,
+      message: 'Eligible contacts start entering on the next 15-minute run.',
+      confirmLabel: 'Activate journey',
+    }))) return;
     setWorkingId(journey.id);
     try {
       const response = await adminFetch('/api/admin/journeys', { method: 'PUT', body: JSON.stringify({ id: journey.id, action: 'status', status }) });
@@ -188,21 +194,28 @@ export default function JourneyManager() {
       if (!response.ok) throw new Error(payload.error || 'Unable to update journey');
       await load();
     } catch (statusError) {
-      alert(statusError.message);
+      notify(statusError.message, 'error');
     } finally {
       setWorkingId('');
     }
   };
 
   const remove = async journey => {
-    if (!confirm(`Delete “${journey.name}” and its enrollment history?`)) return;
+    const confirmed = await confirm({
+      title: `Delete “${journey.name}”?`,
+      message: 'The journey and its enrollment history are removed.',
+      detail: 'Contacts partway through stop where they are and receive no further steps.',
+      confirmLabel: 'Delete journey',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     setWorkingId(journey.id);
     try {
       const response = await adminFetch(`/api/admin/journeys?id=${journey.id}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Unable to delete journey');
       await load();
     } catch (deleteError) {
-      alert(deleteError.message);
+      notify(deleteError.message, 'error');
     } finally {
       setWorkingId('');
     }
@@ -473,6 +486,7 @@ export default function JourneyManager() {
           </div>
         </div>
       )}
+      {feedback}
     </section>
   );
 }

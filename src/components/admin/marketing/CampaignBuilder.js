@@ -380,7 +380,7 @@ function Section({ title, icon: Icon, defaultOpen = true, children }) {
   );
 }
 
-export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
+export default function CampaignBuilder({ editingCampaignId, onDirtyChange, notify, confirm }) {
   const emailEditorRef      = useRef(null);
   const [isReady,           setIsReady]           = useState(false);
   const [isSaving,          setIsSaving]          = useState(false);
@@ -560,10 +560,10 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       
       applyTemplate({ id: 'ai-generated', name: 'AI Template', design: newDesign, subject: parsed.subject });
       setAiPrompt('');
-      alert('✨ AI template generated successfully!');
+      notify('AI template generated. Every block is still editable.', 'success');
     } catch (err) {
       console.error(err);
-      alert('Failed to generate template with AI: ' + err.message);
+      notify(`AI could not generate that template: ${err.message}`, 'error');
     } finally {
       setIsGeneratingAI(false);
     }
@@ -622,8 +622,14 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     setStatusDetail(`Recovered local draft from ${new Date(snapshot.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Save it to store it on the server.`);
   }, [loadEditorDesign]);
 
-  const applyTemplate = (tpl) => {
-    if (hasUnsavedChanges && !confirm('Apply this template and replace your current unsaved email design?')) return;
+  const applyTemplate = async (tpl) => {
+    if (hasUnsavedChanges && !(await confirm({
+      title: 'Replace your unsaved design?',
+      message: 'Applying a template overwrites the email you have been editing.',
+      detail: 'Changes that were never saved to the server cannot be recovered.',
+      confirmLabel: 'Apply template',
+      tone: 'danger',
+    }))) return;
     setSelectedTemplate(tpl.id);
     setShowTemplates(false);
     selectedCampaignIdRef.current = '';
@@ -643,7 +649,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       if (!loadEditorDesign(tpl.design)) setPendingDesign(tpl.design);
     } catch (err) {
       console.error('Failed to load template design:', err);
-      alert('Could not load that template. Please try again.');
+      notify('Could not load that template. Please try again.', 'error');
     }
   };
 
@@ -702,7 +708,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
         loadEditorDesign(selectedCampaign.design_json);
       } catch (err) {
         console.error('Failed to load saved campaign design:', err);
-        alert('Could not load the saved email design for this campaign.');
+        notify('Could not load the saved email design for this campaign.', 'error');
       }
     }
   }, [loadEditorDesign, selectedCampaign, isReady]);
@@ -737,23 +743,35 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
   useEffect(() => {
     if (!isReady || recoveryCheckedRef.current || typeof window === 'undefined') return;
     recoveryCheckedRef.current = true;
-    try {
-      const raw = window.localStorage.getItem(LOCAL_DRAFT_KEY);
-      if (!raw) return;
-      const snapshot = JSON.parse(raw);
-      if (!snapshot?.unsaved || !snapshot.design) return;
-      const savedLabel = snapshot.savedAt
-        ? new Date(snapshot.savedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-        : 'recently';
-      if (window.confirm(`Recovered an unsaved Marketing Studio draft from ${savedLabel}. Restore it now?`)) {
-        restoreLocalSnapshot(snapshot);
-      } else {
-        setStatusDetail('Local recovery draft kept in this browser until your next successful save.');
+
+    const offerRecovery = async () => {
+      try {
+        const raw = window.localStorage.getItem(LOCAL_DRAFT_KEY);
+        if (!raw) return;
+        const snapshot = JSON.parse(raw);
+        if (!snapshot?.unsaved || !snapshot.design) return;
+        const savedLabel = snapshot.savedAt
+          ? new Date(snapshot.savedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : 'recently';
+        const restore = await confirm({
+          title: 'Restore your recovered draft?',
+          message: `An unsaved Marketing Studio draft from ${savedLabel} is still in this browser.`,
+          detail: 'Restoring replaces whatever is currently on the canvas.',
+          confirmLabel: 'Restore draft',
+          cancelLabel: 'Keep editing',
+        });
+        if (restore) {
+          restoreLocalSnapshot(snapshot);
+        } else {
+          setStatusDetail('Local recovery draft kept in this browser until your next successful save.');
+        }
+      } catch (error) {
+        console.warn('Unable to inspect local campaign draft recovery:', error);
       }
-    } catch (error) {
-      console.warn('Unable to inspect local campaign draft recovery:', error);
-    }
-  }, [isReady, restoreLocalSnapshot]);
+    };
+
+    offerRecovery();
+  }, [confirm, isReady, restoreLocalSnapshot]);
 
   const eligibleSubscribers = useMemo(() => {
     const tags = targetSegment ? [targetSegment] : [];
@@ -891,8 +909,8 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
   };
 
   const saveCampaign = useCallback(async () => {
-    if (!subject || (isABTest && !subjectB)) { alert('Please enter subject line(s).'); return; }
-    if (scheduleMode === 'scheduled' && !scheduledAt) { alert('Please pick a scheduled date/time.'); return; }
+    if (!subject || (isABTest && !subjectB)) { notify('Enter the subject line before saving.', 'warning'); return; }
+    if (scheduleMode === 'scheduled' && !scheduledAt) { notify('Pick a date and time for the scheduled send.', 'warning'); return; }
     await persistCampaign({ silent: false });
   }, [isABTest, persistCampaign, scheduleMode, scheduledAt, subject, subjectB]);
 
@@ -937,14 +955,14 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
     if (!selectedCampaignId) {
       const message = 'Cannot send yet: save this campaign as a draft first.';
       setStatusDetail(message);
-      alert(message);
+      notify(message, 'warning');
       return;
     }
     if (!canSend) {
       const blockers = preflightItems.filter(item => !item.ok).map(item => item.errorLabel || item.label);
-      const message = `Cannot send yet:\n\n${blockers.map(label => `- ${label}`).join('\n')}`;
-      setStatusDetail(message.replaceAll('\n', ' '));
-      alert(message);
+      const message = `Cannot send yet: ${blockers.join(', ')}.`;
+      setStatusDetail(message);
+      notify(message, 'warning');
       return;
     }
 
@@ -963,14 +981,21 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
         const message = 'Cannot send yet: send a test email for this exact version first. The campaign changed after the last test.';
         setAutosaveStatus('pending');
         setStatusDetail(message);
-        alert(message);
+        notify(message, 'warning');
         return;
       }
 
       const label = isTestBatch ? 'A/B test batch' : 'full campaign';
       const chosen = AUDIENCE_CHOICES.find((choice) => choice.id === audienceScope);
-      const audienceBreakdown = `Group: ${chosen?.label || audienceScope}\n(${chosen?.hint || ''})`;
-      if (!confirm(`Send ${label} to ${estimatedAudience.length} recipient${estimatedAudience.length === 1 ? '' : 's'}?\n\n${audienceBreakdown}`)) return;
+      const recipients = estimatedAudience.length;
+      const confirmed = await confirm({
+        title: `Send the ${label} to ${recipients.toLocaleString()} recipient${recipients === 1 ? '' : 's'}?`,
+        message: chosen?.label || audienceScope,
+        detail: chosen?.hint ? `${chosen.hint}. Email cannot be recalled once the batch starts.` : 'Email cannot be recalled once the batch starts.',
+        confirmLabel: isTestBatch ? 'Send test batch' : 'Send campaign',
+        tone: 'danger',
+      });
+      if (!confirmed) return;
 
       setIsSending(true);
       setStatusDetail(`Sending ${label}... Keep this page open until the first batch is confirmed.`);
@@ -992,13 +1017,13 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
       const progressText = data.remaining > 0
         ? `${data.message} The cron job will continue the remaining batches.`
         : data.message || 'Campaign sending complete.';
-      alert(progressText);
+      notify(progressText, 'success');
       setStatusDetail(progressText);
       fetchCampaigns();
     } catch (err) {
       const message = `Failed to send: ${err.message}`;
       setStatusDetail(message);
-      alert(message);
+      notify(message, 'error');
     } finally {
       setIsSending(false);
     }

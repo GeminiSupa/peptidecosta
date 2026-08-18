@@ -8,6 +8,7 @@ import AutomationStudio from './AutomationStudio';
 import RevenueOpportunities from './RevenueOpportunities';
 import MarketingSafetyCenter from './MarketingSafetyCenter';
 import { adminFetch } from '@/lib/adminApi';
+import { useMarketingFeedback } from './useMarketingFeedback';
 
 // We dynamically import the campaign manager to handle the list/builder views
 const CampaignManager = dynamic(() => import('./CampaignManager'), { ssr: false });
@@ -24,10 +25,19 @@ export default function EmailMarketingStudio() {
   const [activeTab, setActiveTab] = useState('opportunities');
   const [headerStats, setHeaderStats] = useState({ subscribers: '—', campaigns: '—', sent: '—' });
   const [campaignBuilderDirty, setCampaignBuilderDirty] = useState(false);
+  const { confirm, feedback } = useMarketingFeedback();
 
-  const selectTab = (id) => {
+  const selectTab = async (id) => {
     if (id === activeTab) return;
-    if (activeTab === 'campaigns' && campaignBuilderDirty && !confirm('You have unsaved campaign changes. Switch tabs and discard them?')) return;
+    if (activeTab === 'campaigns' && campaignBuilderDirty) {
+      const leave = await confirm({
+        title: 'Leave the campaign builder?',
+        message: 'This campaign has edits that have not been saved to the server.',
+        confirmLabel: 'Discard and switch',
+        tone: 'danger',
+      });
+      if (!leave) return;
+    }
     setActiveTab(id);
     if (id !== 'campaigns') setCampaignBuilderDirty(false);
   };
@@ -106,6 +116,7 @@ export default function EmailMarketingStudio() {
         {activeTab === 'automations' && <AutomationStudio />}
         {activeTab === 'safety' && <MarketingSafetyCenter />}
       </div>
+      {feedback}
     </div>
   );
 }

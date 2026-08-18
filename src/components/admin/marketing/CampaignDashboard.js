@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/adminApi';
 import { normalizeAudienceScope, scopeIncludesLeads } from '@/lib/campaignAudience.mjs';
+import { campaignEngagement, totalEngagement } from '@/lib/campaignEngagement.mjs';
 import {
   BarChart2, Eye, MousePointerClick, Send, Loader2,
-  Trophy, RefreshCw, TrendingUp, Activity, CopyPlus,
+  Trophy, RefreshCw, TrendingUp, Activity, CopyPlus, Trash2, Pencil,
 } from 'lucide-react';
 
 function RateBar({ value, max = 100, className }) {
@@ -74,7 +75,7 @@ function CampaignHealthCell({ batch }) {
   );
 }
 
-export default function CampaignDashboard({ onEdit, onCreate }) {
+export default function CampaignDashboard({ onEdit, onCreate, onViewReport, notify, confirm }) {
   const [campaigns, setCampaigns] = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [duplicatingId, setDuplicatingId] = useState(null);
@@ -89,13 +90,21 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
       if (data.campaigns) setCampaigns(data.campaigns);
     } catch (err) {
       console.error('Failed to fetch campaigns:', err);
+      notify?.('Could not load campaigns. Check your connection and refresh.', 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const sendWinner = async (campaignId, variant) => {
-    if (!confirm(`Send Subject Line ${variant} to the remaining 80% of subscribers?`)) return;
+    const confirmed = await confirm({
+      title: `Send subject line ${variant} as the winner?`,
+      message: 'This goes to the remaining 80% of the audience who have not been mailed yet.',
+      detail: 'It cannot be recalled once the batch starts.',
+      confirmLabel: `Send ${variant} to the rest`,
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     try {
       const res  = await adminFetch('/api/admin/campaigns/send', {
         method: 'POST',
@@ -103,10 +112,10 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to send winner');
-      alert('Winner is being sent to the remaining subscribers!');
+      notify(`Subject line ${variant} is going out to the remaining subscribers.`, 'success');
       fetchCampaigns();
     } catch (err) {
-      alert('Failed to send winner: ' + err.message);
+      notify(`Failed to send winner: ${err.message}`, 'error');
     }
   };
 
@@ -139,31 +148,37 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || 'Failed to duplicate campaign');
       await fetchCampaigns();
+      notify(`Saved "${data.campaign?.title || `${campaign.title} (Copy)`}" as a new draft.`, 'success');
     } catch (err) {
-      alert('Failed to duplicate: ' + err.message);
+      notify(`Failed to duplicate: ${err.message}`, 'error');
     } finally {
       setDuplicatingId(null);
     }
   };
 
-  const deleteCampaign = async (campaignId) => {
-    if (!confirm('Are you sure you want to delete this campaign?')) return;
+  const deleteCampaign = async (campaign) => {
+    const confirmed = await confirm({
+      title: 'Delete this campaign?',
+      message: campaign.title,
+      detail: 'The campaign and its draft design go away. Send history and analytics stay.',
+      confirmLabel: 'Delete campaign',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     try {
-      const res = await adminFetch(`/api/admin/campaigns?id=${campaignId}`, { method: 'DELETE' });
+      const res = await adminFetch(`/api/admin/campaigns?id=${campaign.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete campaign');
       fetchCampaigns();
+      notify(`Deleted "${campaign.title}".`, 'success');
     } catch (err) {
-      alert(err.message);
+      notify(err.message, 'error');
     }
   };
 
   // Aggregate summary stats
-  const totalSent    = campaigns.reduce((sum, c) => sum + (c.campaign_sends?.[0]?.count || 0), 0);
-  const totalOpens   = campaigns.reduce((sum, c) => sum + (c.campaign_opens?.[0]?.count || 0), 0);
-  const totalClicks  = campaigns.reduce((sum, c) => sum + (c.campaign_clicks?.[0]?.count || 0), 0);
+  const overall      = totalEngagement(campaigns);
+  const totalSent    = overall.sends;
   const totalRevenue = campaigns.reduce((sum, c) => sum + (c.orders_revenue || 0), 0);
-  const avgOpenRate  = totalSent > 0 ? Math.round((totalOpens / totalSent) * 100) : 0;
-  const avgClickRate = totalOpens > 0 ? Math.round((totalClicks / totalOpens) * 100) : 0;
 
   return (
     <div className="mkt-fade-in">
@@ -187,11 +202,11 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
       {campaigns.length > 0 && (
         <div className="mkt-stats-grid mkt-mb-4" style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}>
           {[
-            { label: 'Total Sends',  value: totalSent.toLocaleString(),    icon: Send,              color: '#60a5fa' },
-            { label: 'Avg Open Rate', value: `${avgOpenRate}%`,            icon: Eye,               color: '#34d399' },
-            { label: 'Avg CTR',      value: `${avgClickRate}%`,            icon: MousePointerClick, color: '#a78bfa' },
-            { label: 'Revenue',      value: `$${totalRevenue.toLocaleString()}`, icon: TrendingUp,  color: '#fbbf24' },
-          ].map(({ label, value, icon: Icon, color }) => (
+            { label: 'Total Sends',  value: totalSent.toLocaleString(),   icon: Send,              color: '#60a5fa', hint: `${overall.totalOpens.toLocaleString()} opens logged` },
+            { label: 'Open Rate',    value: `${overall.openRate}%`,       icon: Eye,               color: '#34d399', hint: `${overall.uniqueOpens.toLocaleString()} people` },
+            { label: 'Click Rate',   value: `${overall.clickRate}%`,      icon: MousePointerClick, color: '#a78bfa', hint: `${overall.uniqueClicks.toLocaleString()} people` },
+            { label: 'Revenue',      value: `$${totalRevenue.toLocaleString()}`, icon: TrendingUp,  color: '#fbbf24', hint: null },
+          ].map(({ label, value, icon: Icon, color, hint }) => (
             <div key={label} className="mkt-stat-card">
               <div className="mkt-stat-icon" style={{ color, background: `${color}18`, borderColor: `${color}22` }}>
                 <Icon size={16} />
@@ -199,6 +214,7 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
               <div>
                 <div className="mkt-stat-value" style={{ color, fontSize: '18px' }}>{value}</div>
                 <div className="mkt-stat-label">{label}</div>
+                {hint && <div className="mkt-text-xs mkt-text-muted">{hint}</div>}
               </div>
             </div>
           ))}
@@ -239,19 +255,23 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
               </tr>
             ) : (
               campaigns.map((camp) => {
-                const sends  = camp.campaign_sends?.[0]?.count  || 0;
-                const opens  = camp.campaign_opens?.[0]?.count  || 0;
-                const clicks = camp.campaign_clicks?.[0]?.count || 0;
+                const engagement = campaignEngagement(camp);
+                const { sends, openRate, clickRate, clickToOpenRate } = engagement;
                 const orders  = camp.orders_count   || 0;
                 const revenue = camp.orders_revenue || 0;
-                const openRate  = sends  > 0 ? Math.round((opens  / sends)  * 100) : 0;
-                const clickRate = opens  > 0 ? Math.round((clicks / opens)  * 100) : 0;
 
                 return (
                   <React.Fragment key={camp.id}>
                     <tr>
                       <td data-label="Campaign">
-                        <div style={{ fontWeight: '700', fontSize: '13px', marginBottom: '2px' }}>{camp.title}</div>
+                        <button
+                          type="button"
+                          onClick={() => onViewReport(camp.id)}
+                          className="mkt-linkish"
+                          style={{ fontWeight: '700', fontSize: '13px', marginBottom: '2px' }}
+                        >
+                          {camp.title}
+                        </button>
                         <div className="mkt-text-xs mkt-text-muted">
                           A: {camp.subject_line}
                           {camp.subject_line_b && <><br />B: {camp.subject_line_b}</>}
@@ -281,19 +301,23 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
                         <span style={{ fontWeight: '700', fontSize: '15px' }}>{sends.toLocaleString()}</span>
                       </td>
                       <td data-label="Open Rate">
-                        <div>
+                        <div title={engagement.exact ? `${engagement.uniqueOpens} of ${sends} recipients, ${engagement.totalOpens} opens logged` : 'Approximate until campaign-engagement-stats.sql is run'}>
                           <div className="mkt-flex mkt-items-center mkt-gap-2" style={{ marginBottom: '4px' }}>
                             <span style={{ fontWeight: '700', color: '#34d399', fontSize: '14px' }}>{openRate}%</span>
-                            <span className="mkt-text-xs mkt-text-muted">({opens})</span>
+                            <span className="mkt-text-xs mkt-text-muted">
+                              ({engagement.uniqueOpens.toLocaleString()}{engagement.exact ? '' : '~'})
+                            </span>
                           </div>
                           <RateBar value={openRate} className="opens" />
                         </div>
                       </td>
                       <td data-label="Click Rate">
-                        <div>
+                        <div title={`${engagement.uniqueClicks} of ${sends} recipients clicked · ${clickToOpenRate}% of openers`}>
                           <div className="mkt-flex mkt-items-center mkt-gap-2" style={{ marginBottom: '4px' }}>
                             <span style={{ fontWeight: '700', color: '#60a5fa', fontSize: '14px' }}>{clickRate}%</span>
-                            <span className="mkt-text-xs mkt-text-muted">({clicks})</span>
+                            <span className="mkt-text-xs mkt-text-muted">
+                              ({engagement.uniqueClicks.toLocaleString()}{engagement.exact ? '' : '~'})
+                            </span>
                           </div>
                           <RateBar value={clickRate} className="clicks" />
                         </div>
@@ -310,8 +334,16 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
                       </td>
                       <td data-label="Actions" className="mkt-text-right">
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                          <button
+                            onClick={() => onViewReport(camp.id)}
+                            className="mkt-btn"
+                            style={{ padding: '6px 12px', fontSize: '12px' }}
+                            title="Open the full report: link clicks, engagement and delivery"
+                          >
+                            <BarChart2 size={12} /> Report
+                          </button>
                           <button onClick={() => onEdit(camp.id)} className="mkt-btn" style={{ padding: '6px 12px', fontSize: '12px' }}>
-                            Edit
+                            <Pencil size={12} /> Edit
                           </button>
                           <button
                             onClick={() => duplicateCampaign(camp)}
@@ -323,8 +355,8 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
                             {duplicatingId === camp.id ? <Loader2 size={12} className="animate-spin" /> : <CopyPlus size={12} />}
                             Duplicate
                           </button>
-                          <button onClick={() => deleteCampaign(camp.id)} className="mkt-btn" style={{ padding: '6px 12px', fontSize: '12px', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
-                            Delete
+                          <button onClick={() => deleteCampaign(camp)} className="mkt-btn" style={{ padding: '6px 12px', fontSize: '12px', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
+                            <Trash2 size={12} /> Delete
                           </button>
                         </div>
                       </td>

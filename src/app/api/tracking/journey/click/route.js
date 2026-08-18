@@ -1,7 +1,9 @@
 import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { verifyJourneyTrackingToken } from '@/lib/marketingTokens';
+import { verifyJourneyTrackingToken, verifyTrackingUrlToken } from '@/lib/marketingTokens';
+import { resolveTrackingDestination, trackingSafeHosts } from '@/lib/trackingRedirect.mjs';
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
 
 export async function GET(request) {
   const requestUrl = new URL(request.url);
@@ -9,11 +11,14 @@ export async function GET(request) {
   const rawTarget = requestUrl.searchParams.get('url');
   const payload = verifyJourneyTrackingToken(token);
 
-  let target;
-  try {
-    target = new URL(rawTarget);
-    if (!['http:', 'https:'].includes(target.protocol)) throw new Error('Invalid protocol');
-  } catch {
+  // The journey token signs the enrollment, not the destination, so it cannot
+  // stop this hop being pointed somewhere else.
+  const target = resolveTrackingDestination(rawTarget, {
+    isSigned: verifyTrackingUrlToken(rawTarget, requestUrl.searchParams.get('k')),
+    safeHosts: trackingSafeHosts(LIVE_SITE_URL),
+  });
+  if (!target) {
+    console.warn('[Journey click tracking] Refused an unsigned off-domain redirect');
     return NextResponse.redirect(new URL('/', request.url));
   }
 

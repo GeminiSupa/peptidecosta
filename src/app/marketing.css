@@ -1366,3 +1366,119 @@
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* ══════════════════════════════════════
+   TOASTS + CONFIRM DIALOG
+   Replaces alert()/confirm(), which blocked the tab and threw the message
+   away on dismiss. See useMarketingFeedback.js.
+══════════════════════════════════════ */
+.mkt-toast-stack {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(380px, calc(100vw - 36px));
+  pointer-events: none;
+}
+.mkt-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #14181f;
+  color: #e2e8f0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.42);
+  animation: mkt-fadein 0.2s ease both;
+}
+.mkt-toast span { flex: 1; word-break: break-word; }
+.mkt-toast svg { flex-shrink: 0; margin-top: 1px; }
+.mkt-toast button {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  padding: 1px;
+  line-height: 0;
+}
+.mkt-toast button:hover { color: #fff; }
+.mkt-toast-success { border-color: rgba(52, 211, 153, 0.4); background: #0d1f19; }
+.mkt-toast-success svg { color: #34d399; }
+.mkt-toast-error   { border-color: rgba(248, 113, 113, 0.42); background: #1f1113; }
+.mkt-toast-error svg { color: #f87171; }
+.mkt-toast-warning { border-color: rgba(251, 191, 36, 0.4); background: #1f1a0d; }
+.mkt-toast-warning svg { color: #fbbf24; }
+.mkt-toast-info svg { color: #60a5fa; }
+
+.mkt-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  background: rgba(2, 6, 12, 0.62);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: mkt-fadein 0.15s ease both;
+}
+.mkt-confirm {
+  width: min(420px, 100%);
+  background: #12161d;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+.mkt-confirm h4 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+.mkt-confirm p {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.68);
+}
+.mkt-confirm-detail {
+  font-size: 12px !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.mkt-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@media (max-width: 640px) {
+  .mkt-toast-stack {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    max-width: none;
+  }
+}
+
+/* A table cell that opens a drill-down, without looking like a button. */
+.mkt-linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  display: block;
+}
+.mkt-linkish:hover { color: #34d399; text-decoration: underline; }

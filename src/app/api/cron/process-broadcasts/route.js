@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { canRetryDelivery, isMarketingSuppressed, normalizeMarketingIdentity } from '@/lib/marketingDelivery.mjs';
-import { createEmailUnsubscribeToken, createJourneyTrackingToken } from '@/lib/marketingTokens';
+import { createEmailUnsubscribeToken, createJourneyTrackingToken, createTrackingUrlToken } from '@/lib/marketingTokens';
 import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { hasWhatsAppOptIn } from '@/lib/whatsappCompliance';
 import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
@@ -74,7 +74,7 @@ function addTrackingToHtml(html, tracking) {
   const trackedHtml = String(safeHtml || '').replace(/href="([^"]+)"/g, (match, url) => {
     if (!url.startsWith('http') && !url.startsWith('/')) return match;
     const absoluteUrl = url.startsWith('/') ? `${BASE_URL}${url}` : url;
-    return `href="${BASE_URL}/api/tracking/journey/click?t=${encodeURIComponent(trackingToken)}&url=${encodeURIComponent(absoluteUrl)}"`;
+    return `href="${BASE_URL}/api/tracking/journey/click?t=${encodeURIComponent(trackingToken)}&url=${encodeURIComponent(absoluteUrl)}&k=${createTrackingUrlToken(absoluteUrl)}"`;
   });
   const trackingPixel = `<img src="${BASE_URL}/api/tracking/journey/open?t=${encodeURIComponent(trackingToken)}" width="1" height="1" alt="" style="display:block" />`;
   return trackedHtml.includes('</body>')
@@ -99,7 +99,7 @@ async function sendEmail(to, message, subject, tracking = null, htmlContent = nu
 
     const trackingToken = tracking ? createJourneyTrackingToken(tracking) : null;
     const trackedHref = url => trackingToken
-      ? `${BASE_URL}/api/tracking/journey/click?t=${encodeURIComponent(trackingToken)}&url=${encodeURIComponent(url)}`
+      ? `${BASE_URL}/api/tracking/journey/click?t=${encodeURIComponent(trackingToken)}&url=${encodeURIComponent(url)}&k=${createTrackingUrlToken(url)}`
       : url;
     const escapedMessage = escapeHtml(message).replace(/https?:\/\/[^\s<]+/g, url => `<a href="${trackedHref(url.replace(/&amp;/g, '&'))}" style="color:#059669;text-decoration:underline;">${url}</a>`).replace(/\n/g, '<br>');
     const trackingPixel = trackingToken ? `<img src="${BASE_URL}/api/tracking/journey/open?t=${encodeURIComponent(trackingToken)}" width="1" height="1" alt="" style="display:block" />` : '';
