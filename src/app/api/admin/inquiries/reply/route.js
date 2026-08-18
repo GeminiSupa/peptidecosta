@@ -3,14 +3,19 @@ import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getBusinessLinks } from '@/lib/settings';
-import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
 
 export async function POST(request) {
+  // Read at request time. Destructured at module scope, these froze whatever
+  // process.env held when the route was first loaded, so a deployment built
+  // before ORDER_SMTP_* existed skipped every send on an HTTP 200.
+  const { smtp: mailSmtp } = getOrderMailSettings();
+  const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = mailSmtp;
+
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 

@@ -3,12 +3,10 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
-import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 
 // Email Configuration from Environment variables
-const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
 // The owner is BCC'd on this mail, so they are stripped from the visible
 // recipients rather than named twice on the same envelope.
 const ADMIN_CC_EMAILS = stripOwnerAddress('info@peptidescostarica.net, omerforce@gmail.com');
@@ -20,6 +18,12 @@ const formatMoney = (value, currency) => {
 };
 
 export async function GET(request) {
+  // Read at request time. Destructured at module scope, these froze whatever
+  // process.env held when the route was first loaded, so a deployment built
+  // before ORDER_SMTP_* existed skipped every send on an HTTP 200.
+  const { smtp: mailSmtp, from: NOTIFICATION_FROM } = getOrderMailSettings();
+  const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = mailSmtp;
+
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
   if (auth.error) return auth.error;
 

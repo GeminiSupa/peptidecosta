@@ -252,17 +252,28 @@ test('only approved payout slips reach accounting', () => {
   }
 });
 
-test('payout mail credentials are read per request, not at module load', () => {
-  // A deployment built before ORDER_SMTP_* existed froze `undefined` for the
-  // life of the deployment and skipped every payout mail silently.
+test('no route freezes its mail credentials at module load', () => {
+  // Next evaluates a route module once, when it is first loaded. Destructuring
+  // the SMTP config there captures whatever process.env held at that instant
+  // and keeps it for the life of the deployment — so a build that ran before
+  // ORDER_SMTP_* existed froze `undefined`, and every send behind a
+  // `if (!SMTP_HOST) skip` guard quietly did nothing while answering 200.
+  // Fixed once for the shipped route in 673620e; this stops it coming back
+  // anywhere, rather than naming the routes that had it.
   const moduleScopeRead = /^const \{[^}]*\} = getTransactionalSmtpConfig\(\);/m;
+  const offenders = [];
 
-  for (const path of [
-    'src/app/api/admin/affiliates/payouts/approve/route.js',
-    'src/app/api/admin/commissions/approve/route.js',
-  ]) {
-    const route = fs.readFileSync(path, 'utf8');
-    assert.doesNotMatch(route, moduleScopeRead, `${path} freezes SMTP config at module load`);
-    assert.match(route, /function getMailSettings\(\)/);
-  }
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.js') || entry.name.endsWith('.mjs')) {
+        const source = fs.readFileSync(full, 'utf8');
+        if (moduleScopeRead.test(source)) offenders.push(full);
+      }
+    }
+  };
+  walk('src/app/api');
+
+  assert.deepEqual(offenders, []);
 });

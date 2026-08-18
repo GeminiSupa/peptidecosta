@@ -2,19 +2,24 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
-import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
 // The owner is BCC'd on this mail, so they are stripped from the visible
 // recipients rather than named twice on the same envelope.
 const ADMIN_EMAIL = stripOwnerAddress(process.env.ORDER_NOTIFICATION_TO || 'omerforce@gmail.com');
 
 export async function GET(request) {
+  // Read at request time. Destructured at module scope, these froze whatever
+  // process.env held when the route was first loaded, so a deployment built
+  // before ORDER_SMTP_* existed skipped every send on an HTTP 200.
+  const { smtp: mailSmtp } = getOrderMailSettings();
+  const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = mailSmtp;
+
   try {
     // 1. Basic Auth for Vercel Cron Jobs
     const authHeader = request.headers.get('authorization');

@@ -19,28 +19,13 @@ import {
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
 import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
-import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 
 // The owner is BCC'd on this mail, so they are stripped from the visible
 // recipients rather than named twice on the same envelope.
 const ADMIN_CC_EMAILS = stripOwnerAddress('info@peptidescostarica.net, omerforce@gmail.com');
 
-// Read at request time, never at module scope.
-//
-// Next evaluates a route module once, at load, so destructuring the SMTP config
-// up here froze whatever process.env held at that moment — and a deployment
-// built before ORDER_SMTP_* existed captured `undefined` and kept it for the
-// life of the deployment, skipping every approval mail on an HTTP 200. Same fix
-// the order routes already carry.
-function getMailSettings() {
-  const smtp = getTransactionalSmtpConfig();
-  return {
-    smtp,
-    from: process.env.ORDER_NOTIFICATION_FROM
-      || `Peptides Costa Rica <${smtp.user || 'omerforce@gmail.com'}>`,
-  };
-}
 
 export async function POST(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
@@ -215,7 +200,7 @@ export async function POST(request) {
     let emailError = null;
 
     if (payout.agent_email) {
-      const { smtp, from: notificationFrom } = getMailSettings();
+      const { smtp, from: notificationFrom } = getOrderMailSettings();
       const transporter = smtp.configured ? nodemailer.createTransport({
         host: smtp.host,
         port: smtp.port,

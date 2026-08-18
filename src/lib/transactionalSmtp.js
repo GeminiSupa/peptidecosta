@@ -48,3 +48,23 @@ export function getTransactionalSmtpConfig() {
     provider: elastic ? 'Elastic Email' : null,
   };
 }
+
+/**
+ * The transactional sender, resolved now rather than at module load.
+ *
+ * Next evaluates a route module once, when it is first loaded. A route that
+ * destructures this config at module scope captures whatever process.env held
+ * at that instant and keeps it for the life of the deployment — so a build that
+ * ran before ORDER_SMTP_* existed froze `undefined`, and every send behind a
+ * `if (!SMTP_HOST) skip` guard quietly did nothing while still answering 200.
+ * That is what silently dropped days of order mail; call this inside the
+ * handler instead.
+ */
+export function getOrderMailSettings() {
+  const smtp = getTransactionalSmtpConfig();
+  return {
+    smtp,
+    from: process.env.ORDER_NOTIFICATION_FROM
+      || `Peptides Costa Rica <${smtp.user || 'omerforce@gmail.com'}>`,
+  };
+}

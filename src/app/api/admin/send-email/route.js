@@ -7,14 +7,18 @@ import { createUnsubscribeToken } from '@/lib/marketingTokens';
 import { MARKETING_FOOTER_MARKER, applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { clampOutlookButtonSizes, personalizeMergeTags, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
-import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
-const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
 
 export async function POST(request) {
+  // Read at request time. Destructured at module scope, these froze whatever
+  // process.env held when the route was first loaded, so a deployment built
+  // before ORDER_SMTP_* existed skipped every send on an HTTP 200.
+  const { smtp: mailSmtp, from: NOTIFICATION_FROM } = getOrderMailSettings();
+  const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = mailSmtp;
+
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 

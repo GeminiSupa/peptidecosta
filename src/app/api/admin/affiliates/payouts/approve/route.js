@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { sendTaxRecordsPayoutCopy } from '@/lib/taxRecordsEmail.mjs';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 
@@ -10,21 +10,6 @@ import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 // recipients rather than named twice on the same envelope.
 const ADMIN_CC_EMAILS = stripOwnerAddress('info@peptidescostarica.net, omerforce@gmail.com');
 
-// Read at request time, never at module scope.
-//
-// Next evaluates a route module once, at load, so destructuring the SMTP config
-// up here froze whatever process.env held at that moment — and a deployment
-// built before ORDER_SMTP_* existed captured `undefined` and kept it for the
-// life of the deployment. That silently skipped every payout mail, accounting's
-// copy included. Same fix the order routes already carry.
-function getMailSettings() {
-  const smtp = getTransactionalSmtpConfig();
-  return {
-    smtp,
-    from: process.env.ORDER_NOTIFICATION_FROM
-      || `Peptides Costa Rica <${smtp.user || 'omerforce@gmail.com'}>`,
-  };
-}
 
 const formatMoney = (value, currency) => {
   const amount = Number(value || 0);
@@ -86,7 +71,7 @@ export async function POST(request) {
     let accountingCopy = { sent: false, skipped: 'no email dispatched' };
 
     if (payout.email_html && payout.affiliate_email) {
-      const { smtp, from: notificationFrom } = getMailSettings();
+      const { smtp, from: notificationFrom } = getOrderMailSettings();
       const transporter = smtp.configured ? nodemailer.createTransport({
         host: smtp.host,
         port: smtp.port,

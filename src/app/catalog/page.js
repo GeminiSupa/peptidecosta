@@ -2175,6 +2175,24 @@ export default function CatalogPage() {
     }
   };
 
+  // Put the problem on screen and in focus.
+  //
+  // A blocking error the customer cannot see is the same as no error at all:
+  // they press the button again and nothing happens. Every checkout stop uses
+  // this, so a rule enforced in a handler reads the same as a required field.
+  const revealField = (name) => {
+    setTimeout(() => {
+      const el = document.getElementById(`field-${name}`);
+      if (!el) return;
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      // Centred rather than 'start': the checkout has a sticky header above
+      // and a sticky submit bar below, and either will happily cover a field
+      // parked at the edge of a phone viewport.
+      el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
+      el.focus({ preventScroll: true });
+    }, 100);
+  };
+
   const validateForm = () => {
     const errors = {};
     if (!customerName.trim()) errors.customerName = lang === 'en' ? 'Full name is required.' : 'El nombre completo es requerido.';
@@ -2231,16 +2249,7 @@ export default function CatalogPage() {
     // problem on the page.
     const firstError = Object.keys(errors)[0];
     if (firstError) {
-      setTimeout(() => {
-        const el = document.getElementById(`field-${firstError}`);
-        if (!el) return;
-        const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-        // Centred rather than 'start': the checkout has a sticky header above
-        // and a sticky submit bar below, and either will happily cover a field
-        // parked at the edge of a phone viewport.
-        el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
-        el.focus({ preventScroll: true });
-      }, 100);
+      revealField(firstError);
       return false;
     }
     return true;
@@ -2252,7 +2261,11 @@ export default function CatalogPage() {
     if (!validateForm()) return;
 
     if (checkBacOnlyMinimum(cart).blocked) {
-      alert(bacOnlyMinimumMessage(cart, lang));
+      // The rule already has a red banner in the cart; the customer just could
+      // not see it from the submit button. Taking them to it beats an alert(),
+      // which says what is wrong and then leaves them on the same screen with
+      // nothing marked.
+      revealField('bacMinimum');
       return;
     }
 
@@ -2407,7 +2420,11 @@ export default function CatalogPage() {
     if (cart.length === 0) return;
     if (!validateForm()) return;
     if (checkBacOnlyMinimum(cart).blocked) {
-      alert(bacOnlyMinimumMessage(cart, lang));
+      // The rule already has a red banner in the cart; the customer just could
+      // not see it from the submit button. Taking them to it beats an alert(),
+      // which says what is wrong and then leaves them on the same screen with
+      // nothing marked.
+      revealField('bacMinimum');
       return;
     }
 
@@ -3906,7 +3923,12 @@ export default function CatalogPage() {
 
             {/* Water-only orders have a floor */}
             {checkBacOnlyMinimum(cart).blocked && (
-              <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: '#f87171', fontWeight: '700' }}>
+              <div
+                id="field-bacMinimum"
+                role="alert"
+                tabIndex={-1}
+                style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: '#f87171', fontWeight: '700', outline: 'none' }}
+              >
                 {bacOnlyMinimumMessage(cart, lang)}
               </div>
             )}
