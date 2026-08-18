@@ -4,9 +4,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import EmailEditor from 'react-email-editor';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
 import {
-  AlertTriangle, CheckCircle2, Copy, Eye, Loader2, Save, Send,
+  AlertTriangle, CheckCircle2, Eye, Loader2, Save, Send,
   Users, ChevronDown, ChevronUp, Smartphone, LayoutTemplate,
-  Tag, Layers, Monitor, X, Clock, Trash2, Mail, AtSign, SendHorizonal,
+  Tag, Layers, Monitor, X, Clock, Mail, AtSign, SendHorizonal,
   CalendarClock, TestTube2, CopyPlus, Sparkles
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
@@ -1034,57 +1034,6 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange }) {
         setIsSendingTest(false);
       }
     });
-  };
-
-  const duplicateCampaign = async () => {
-    if (!selectedCampaign) return;
-    try {
-      const res = await adminFetch('/api/admin/campaigns', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: selectedCampaign.title + ' (Copy)',
-          subject_line: selectedCampaign.subject_line,
-          subject_line_b: selectedCampaign.subject_line_b,
-          is_ab_test: selectedCampaign.is_ab_test,
-          target_tags: selectedCampaign.target_tags,
-          include_leads: Boolean(selectedCampaign.include_leads),
-          design_json: selectedCampaign.design_json,
-          html_content: selectedCampaign.html_content,
-          from_name: selectedCampaign.from_name,
-          from_email: selectedCampaign.from_email,
-          reply_to: selectedCampaign.reply_to,
-          preview_text: selectedCampaign.preview_text,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed to duplicate');
-      selectedCampaignIdRef.current = data.campaign.id;
-      hydratedCampaignIdRef.current = data.campaign.id;
-      setSelectedCampaignId(data.campaign.id);
-      fetchCampaigns();
-      alert('✅ Campaign duplicated!');
-    } catch (err) {
-      alert('Failed to duplicate: ' + err.message);
-    }
-  };
-
-  const deleteCampaign = async () => {
-    if (!selectedCampaignId) return;
-    if (!confirm('Are you sure you want to delete this campaign? This cannot be undone.')) return;
-    try {
-      const res = await adminFetch(`/api/admin/campaigns?id=${selectedCampaignId}`, {
-        method: 'DELETE',
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed to delete');
-      selectedCampaignIdRef.current = '';
-      hydratedCampaignIdRef.current = '';
-      setSelectedCampaignId('');
-      fetchCampaigns();
-      alert('Campaign deleted.');
-    } catch (err) {
-      alert('Failed to delete: ' + err.message);
-    }
   };
 
   const openPreview = () => {

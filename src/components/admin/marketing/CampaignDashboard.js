@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/adminApi';
+import { normalizeAudienceScope, scopeIncludesLeads } from '@/lib/campaignAudience.mjs';
 import {
   BarChart2, Eye, MousePointerClick, Send, Loader2,
-  Trophy, RefreshCw, TrendingUp, Activity,
+  Trophy, RefreshCw, TrendingUp, Activity, CopyPlus,
 } from 'lucide-react';
 
 function RateBar({ value, max = 100, className }) {
@@ -76,6 +77,7 @@ function CampaignHealthCell({ batch }) {
 export default function CampaignDashboard({ onEdit, onCreate }) {
   const [campaigns, setCampaigns] = useState([]);
   const [loading,   setLoading]   = useState(true);
+  const [duplicatingId, setDuplicatingId] = useState(null);
 
   useEffect(() => { fetchCampaigns(); }, []);
 
@@ -105,6 +107,42 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
       fetchCampaigns();
     } catch (err) {
       alert('Failed to send winner: ' + err.message);
+    }
+  };
+
+  // A copy is always a fresh draft: the schedule, the status and every send /
+  // open / click stat stay behind with the original. `audience_scope` has to be
+  // carried explicitly — the boolean alone cannot say "leads only", so a copy
+  // that only sent it would silently widen the audience to everyone.
+  const duplicateCampaign = async (campaign) => {
+    const scope = normalizeAudienceScope(campaign.audience_scope, campaign.include_leads);
+    setDuplicatingId(campaign.id);
+    try {
+      const res = await adminFetch('/api/admin/campaigns', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: `${campaign.title} (Copy)`,
+          subject_line: campaign.subject_line,
+          subject_line_b: campaign.subject_line_b,
+          is_ab_test: campaign.is_ab_test,
+          target_tags: campaign.target_tags,
+          audience_scope: scope,
+          include_leads: scopeIncludesLeads(scope),
+          design_json: campaign.design_json,
+          html_content: campaign.html_content,
+          from_name: campaign.from_name,
+          from_email: campaign.from_email,
+          reply_to: campaign.reply_to,
+          preview_text: campaign.preview_text,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to duplicate campaign');
+      await fetchCampaigns();
+    } catch (err) {
+      alert('Failed to duplicate: ' + err.message);
+    } finally {
+      setDuplicatingId(null);
     }
   };
 
@@ -274,6 +312,16 @@ export default function CampaignDashboard({ onEdit, onCreate }) {
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
                           <button onClick={() => onEdit(camp.id)} className="mkt-btn" style={{ padding: '6px 12px', fontSize: '12px' }}>
                             Edit
+                          </button>
+                          <button
+                            onClick={() => duplicateCampaign(camp)}
+                            disabled={duplicatingId === camp.id}
+                            className="mkt-btn"
+                            style={{ padding: '6px 12px', fontSize: '12px' }}
+                            title="Save a new draft with this campaign's design, subject and audience"
+                          >
+                            {duplicatingId === camp.id ? <Loader2 size={12} className="animate-spin" /> : <CopyPlus size={12} />}
+                            Duplicate
                           </button>
                           <button onClick={() => deleteCampaign(camp.id)} className="mkt-btn" style={{ padding: '6px 12px', fontSize: '12px', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}>
                             Delete
