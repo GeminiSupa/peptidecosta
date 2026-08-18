@@ -3,11 +3,28 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { sendTaxRecordsPayoutCopy } from '@/lib/taxRecordsEmail.mjs';
+import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 
-// Email Configuration from Environment variables
-const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
-const ADMIN_CC_EMAILS = 'info@peptidescostarica.net, omerforce@gmail.com';
+// The owner is BCC'd on this mail, so they are stripped from the visible
+// recipients rather than named twice on the same envelope.
+const ADMIN_CC_EMAILS = stripOwnerAddress('info@peptidescostarica.net, omerforce@gmail.com');
+
+// Read at request time, never at module scope.
+//
+// Next evaluates a route module once, at load, so destructuring the SMTP config
+// up here froze whatever process.env held at that moment — and a deployment
+// built before ORDER_SMTP_* existed captured `undefined` and kept it for the
+// life of the deployment. That silently skipped every payout mail, accounting's
+// copy included. Same fix the order routes already carry.
+function getMailSettings() {
+  const smtp = getTransactionalSmtpConfig();
+  return {
+    smtp,
+    from: process.env.ORDER_NOTIFICATION_FROM
+      || `Peptides Costa Rica <${smtp.user || 'omerforce@gmail.com'}>`,
+  };
+}
 
 const formatMoney = (value, currency) => {
   const amount = Number(value || 0);
@@ -66,35 +83,60 @@ export async function POST(request) {
     // 3. Handle Approval & Outbound Email
     let emailSent = false;
     let emailError = null;
+    let accountingCopy = { sent: false, skipped: 'no email dispatched' };
 
     if (payout.email_html && payout.affiliate_email) {
-      const transporter = (SMTP_HOST && SMTP_USER && SMTP_PASS) ? nodemailer.createTransport({
-        host: SMTP_HOST,
-        port: SMTP_PORT,
-        secure: SMTP_SECURE,
+      const { smtp, from: notificationFrom } = getMailSettings();
+      const transporter = smtp.configured ? nodemailer.createTransport({
+        host: smtp.host,
+        port: smtp.port,
+        secure: smtp.secure,
         auth: {
-          user: SMTP_USER,
-          pass: SMTP_PASS,
+          user: smtp.user,
+          pass: smtp.pass,
         }
       }) : null;
 
       if (transporter) {
+        const invoiceText = `Weekly Affiliate Referral Invoice for ${payout.affiliate_name || payout.affiliate_email}.\nGross Referrals USD: ${formatMoney(payout.usd_sales, 'USD')}\nGross Referrals CRC: ${formatMoney(payout.crc_sales, 'CRC')}\nCommission Owed: ${formatMoney(payout.usd_commission, 'USD')} OR ${formatMoney(payout.crc_commission, 'CRC')}\nThat is one payout expressed in two currencies. Choose one—not both.`;
+
         try {
           const subject = `Weekly Affiliate Referral Commissions Invoice - ${payout.affiliate_name || payout.affiliate_email} [${payout.commission_rate}%]`;
           await transporter.sendMail({
             bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
-            from: NOTIFICATION_FROM,
+            from: notificationFrom,
             to: payout.affiliate_email.trim(),
+            // Never the accountant: an affiliate is an outside party, and a CC
+            // would hand them that address. They get their own copy below.
             cc: ADMIN_CC_EMAILS,
             subject: subject,
             html: payout.email_html,
-            text: `Weekly Affiliate Referral Invoice for ${payout.affiliate_name || payout.affiliate_email}.\nGross Referrals USD: ${formatMoney(payout.usd_sales, 'USD')}\nGross Referrals CRC: ${formatMoney(payout.crc_sales, 'CRC')}\nCommission Owed: ${formatMoney(payout.usd_commission, 'USD')} OR ${formatMoney(payout.crc_commission, 'CRC')}\nThat is one payout expressed in two currencies. Choose one—not both.`
+            text: invoiceText
           });
           emailSent = true;
         } catch (mailErr) {
           console.error(`[Affiliate Payout Approval] Email dispatch failure for ${payout.affiliate_email}:`, mailErr);
           emailError = mailErr.message;
         }
+
+        // Outside the affiliate try/catch on purpose — an approved payout is an
+        // expense accounting has to record whether or not the affiliate's own
+        // invoice reached them. Never throws.
+        accountingCopy = await sendTaxRecordsPayoutCopy({
+          transporter,
+          from: notificationFrom,
+          payout: {
+            kind: 'afiliado',
+            name: payout.affiliate_name || payout.affiliate_email,
+            email: payout.affiliate_email,
+            period: payout.start_date && payout.end_date
+              ? `${String(payout.start_date).slice(0, 10)} → ${String(payout.end_date).slice(0, 10)}`
+              : null,
+          },
+          html: payout.email_html,
+          text: invoiceText,
+          logPrefix: '[Affiliate Payout Approval]',
+        });
       } else {
         console.warn('[Affiliate Payout Approval] SMTP credentials missing. Skipping email dispatch.');
         emailError = 'SMTP configurations not set in environment.';
@@ -120,7 +162,10 @@ export async function POST(request) {
       success: true,
       status: 'Approved',
       emailSent,
-      emailError
+      emailError,
+      // Reported rather than swallowed: "did accounting get this payout?" was
+      // unanswerable while the copy rode along as a CC.
+      accountingCopy
     });
 
   } catch (err) {

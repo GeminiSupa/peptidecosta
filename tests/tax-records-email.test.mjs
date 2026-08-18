@@ -5,8 +5,10 @@ import fs from 'node:fs';
 import {
   TAX_RECORDS_CC_EMAIL,
   buildTaxRecordsCopy,
+  buildTaxRecordsPayoutCopy,
   isCompletedOrderStatus,
   sendTaxRecordsCopy,
+  sendTaxRecordsPayoutCopy,
   taxRecordsFrom,
   taxRecordsRecipients,
   withTaxRecordsCc,
@@ -178,5 +180,89 @@ test('the accounting copy can be sent from a different address than the receipt'
   } finally {
     if (previous === undefined) delete process.env.TAX_RECORDS_FROM;
     else process.env.TAX_RECORDS_FROM = previous;
+  }
+});
+
+test('an approved payout copy names the payee and the period', () => {
+  const message = buildTaxRecordsPayoutCopy({
+    payout: { kind: 'afiliado', name: 'Dani', period: '2026-08-04 → 2026-08-10' },
+    html: '<p>invoice</p>',
+    text: 'invoice',
+  });
+
+  assert.equal(message.to, taxRecordsRecipients().join(', '));
+  assert.match(message.subject, /Pago aprobado/);
+  assert.match(message.subject, /afiliado/);
+  assert.match(message.subject, /Dani/);
+  assert.match(message.subject, /2026-08-04/);
+  assert.match(message.html, /invoice/);
+});
+
+test('the payout copy goes to accounting even when the payee send fails', async () => {
+  const sent = [];
+  const transporter = {
+    sendMail: async (message) => {
+      sent.push(message);
+      return { messageId: 'payout-1' };
+    },
+  };
+
+  const result = await sendTaxRecordsPayoutCopy({
+    transporter,
+    from: 'Peptides <info@peptidescostarica.net>',
+    payout: { kind: 'afiliado', name: 'Dani' },
+    html: '<p>invoice</p>',
+    text: 'invoice',
+  });
+
+  assert.equal(result.sent, true);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, taxRecordsRecipients().join(', '));
+});
+
+test('a payout copy with no transport is reported, never thrown', async () => {
+  const result = await sendTaxRecordsPayoutCopy({ transporter: null, payout: { name: 'Dani' } });
+  assert.equal(result.sent, false);
+  assert.equal(result.error, 'no transporter');
+});
+
+test('the affiliate never sees the accountant in CC', () => {
+  // An affiliate is an outside party. The accountant gets their own message;
+  // putting them in the CC would publish that address to every affiliate, which
+  // is the exact mistake the completed-order receipt already had to undo.
+  const route = fs.readFileSync('src/app/api/admin/affiliates/payouts/approve/route.js', 'utf8');
+
+  assert.doesNotMatch(route, /cc: withTaxRecordsCc/);
+  assert.match(route, /sendTaxRecordsPayoutCopy\(/);
+});
+
+test('only approved payout slips reach accounting', () => {
+  // Both approval routes return on rejection before any mail is built, so a
+  // rejected slip — which is not an expense — never reaches the accountant.
+  for (const path of [
+    'src/app/api/admin/affiliates/payouts/approve/route.js',
+    'src/app/api/admin/commissions/approve/route.js',
+  ]) {
+    const route = fs.readFileSync(path, 'utf8');
+    const rejectionReturn = route.indexOf("status: 'Rejected' });");
+    const firstSend = route.indexOf('sendMail');
+
+    assert.ok(rejectionReturn > -1, `${path} has no rejection path`);
+    assert.ok(rejectionReturn < firstSend, `${path} builds mail before returning on rejection`);
+  }
+});
+
+test('payout mail credentials are read per request, not at module load', () => {
+  // A deployment built before ORDER_SMTP_* existed froze `undefined` for the
+  // life of the deployment and skipped every payout mail silently.
+  const moduleScopeRead = /^const \{[^}]*\} = getTransactionalSmtpConfig\(\);/m;
+
+  for (const path of [
+    'src/app/api/admin/affiliates/payouts/approve/route.js',
+    'src/app/api/admin/commissions/approve/route.js',
+  ]) {
+    const route = fs.readFileSync(path, 'utf8');
+    assert.doesNotMatch(route, moduleScopeRead, `${path} freezes SMTP config at module load`);
+    assert.match(route, /function getMailSettings\(\)/);
   }
 });

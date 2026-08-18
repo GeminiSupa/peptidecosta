@@ -20,11 +20,27 @@ import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
 import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 
-// Email Configuration from Environment variables
-const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
-const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
-const ADMIN_CC_EMAILS = 'info@peptidescostarica.net, omerforce@gmail.com';
+// The owner is BCC'd on this mail, so they are stripped from the visible
+// recipients rather than named twice on the same envelope.
+const ADMIN_CC_EMAILS = stripOwnerAddress('info@peptidescostarica.net, omerforce@gmail.com');
+
+// Read at request time, never at module scope.
+//
+// Next evaluates a route module once, at load, so destructuring the SMTP config
+// up here froze whatever process.env held at that moment — and a deployment
+// built before ORDER_SMTP_* existed captured `undefined` and kept it for the
+// life of the deployment, skipping every approval mail on an HTTP 200. Same fix
+// the order routes already carry.
+function getMailSettings() {
+  const smtp = getTransactionalSmtpConfig();
+  return {
+    smtp,
+    from: process.env.ORDER_NOTIFICATION_FROM
+      || `Peptides Costa Rica <${smtp.user || 'omerforce@gmail.com'}>`,
+  };
+}
 
 export async function POST(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
@@ -199,13 +215,14 @@ export async function POST(request) {
     let emailError = null;
 
     if (payout.agent_email) {
-      const transporter = (SMTP_HOST && SMTP_USER && SMTP_PASS) ? nodemailer.createTransport({
-        host: SMTP_HOST,
-        port: SMTP_PORT,
-        secure: SMTP_SECURE,
+      const { smtp, from: notificationFrom } = getMailSettings();
+      const transporter = smtp.configured ? nodemailer.createTransport({
+        host: smtp.host,
+        port: smtp.port,
+        secure: smtp.secure,
         auth: {
-          user: SMTP_USER,
-          pass: SMTP_PASS,
+          user: smtp.user,
+          pass: smtp.pass,
         }
       }) : null;
 
@@ -214,7 +231,7 @@ export async function POST(request) {
           const subject = `Weekly Commissions Invoice - ${payout.agent_name || payout.agent_email} [${commissionRateLabel(commissionSummary.rates, payout.commission_rate)}]`;
           await transporter.sendMail({
             bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
-            from: NOTIFICATION_FROM,
+            from: notificationFrom,
             to: payout.agent_email.trim(),
             cc: withTaxRecordsCc(ADMIN_CC_EMAILS),
             subject: subject,

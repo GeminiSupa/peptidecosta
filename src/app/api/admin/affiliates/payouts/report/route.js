@@ -4,11 +4,14 @@ import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 
 // Email Configuration from Environment variables
 const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
-const ADMIN_CC_EMAILS = 'info@peptidescostarica.net, omerforce@gmail.com';
+// The owner is BCC'd on this mail, so they are stripped from the visible
+// recipients rather than named twice on the same envelope.
+const ADMIN_CC_EMAILS = stripOwnerAddress('info@peptidescostarica.net, omerforce@gmail.com');
 
 const formatMoney = (value, currency) => {
   const amount = Number(value || 0);

@@ -26,6 +26,7 @@ import {
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,8 +35,12 @@ export const maxDuration = 60;
 // Email Configuration from Environment variables
 const { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE, user: SMTP_USER, pass: SMTP_PASS } = getTransactionalSmtpConfig();
 const NOTIFICATION_FROM = process.env.ORDER_NOTIFICATION_FROM || `Peptides Costa Rica <${SMTP_USER || 'omerforce@gmail.com'}>`;
-const ADMIN_CC_EMAILS = process.env.COMMISSION_REPORT_ADMIN_EMAILS
-  || 'info@peptidescostarica.net, omerforce@gmail.com';
+// The owner is BCC'd on this mail, so they are stripped from the visible
+// recipients rather than named twice on the same envelope.
+const ADMIN_CC_EMAILS = stripOwnerAddress(
+  process.env.COMMISSION_REPORT_ADMIN_EMAILS
+    || 'info@peptidescostarica.net, omerforce@gmail.com'
+);
 
 const formatMoney = (value, currency) => {
   const amount = Number(value || 0);

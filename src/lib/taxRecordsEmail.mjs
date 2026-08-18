@@ -111,6 +111,83 @@ export function buildTaxRecordsCopy({ order = {}, html = '', text = '' } = {}) {
 }
 
 /**
+ * The accountant's copy of an approved payout slip.
+ *
+ * Accounting sees the business from both sides: completed sales coming in, and
+ * approved payouts going out. The order copy above covers the first; this
+ * covers the second.
+ *
+ * Sent as its own message rather than a CC on the payee's invoice, and for a
+ * reason the order copy learned the hard way: an affiliate is an outside party,
+ * so a CC hands them the accountant's address. Separately sent, it is also
+ * separately logged and separately survivable.
+ */
+export function buildTaxRecordsPayoutCopy({ payout = {}, html = '', text = '' } = {}) {
+  const payee = payout.name || payout.email || 'sin nombre';
+  const period = payout.period ? ` — ${payout.period}` : '';
+  const header = `Copia contable — Pago aprobado (${payout.kind || 'comisión'}) — ${payee}${period}`;
+
+  return {
+    to: taxRecordsRecipients().join(', '),
+    subject: header,
+    html: `<p style="font:600 14px/1.5 system-ui,sans-serif;color:#334155;margin:0 0 16px">${header}</p>${html}`,
+    text: `${header}\n\n${text}`,
+  };
+}
+
+/**
+ * Hand one prepared accounting message to the transport. Never throws.
+ *
+ * Shared by the order copy and the payout copy so both are logged the same way
+ * and neither can fail its caller.
+ */
+async function dispatchTaxRecordsCopy({ transporter, from, message, logPrefix }) {
+  if (!transporter) {
+    console.error(`${logPrefix} No mail transport configured — accounting copy NOT sent.`);
+    return { sent: false, error: 'no transporter' };
+  }
+
+  const sender = taxRecordsFrom(from);
+
+  try {
+    const info = await transporter.sendMail({ ...message, from: sender });
+    // Names the sender as well as the recipients: the current failure is caused
+    // by the From domain, so a log line without it cannot explain a rejection.
+    console.log(`${logPrefix} Accounting copy sent from ${sender} to ${message.to}: ${info.messageId}`);
+    return { sent: true, messageId: info.messageId, to: message.to, from: sender };
+  } catch (error) {
+    // Loud, because silence here is exactly what hid the previous failure.
+    console.error(`${logPrefix} Accounting copy FAILED to ${message.to}:`, error.message);
+    return { sent: false, error: error.message };
+  }
+}
+
+/**
+ * Send the accountant their copy of an approved payout. Never throws.
+ *
+ * Callers run this after the payee's own send, and only once the slip is
+ * actually approved — a rejected slip is not an expense and accounting has no
+ * use for it.
+ *
+ * @returns {Promise<{sent: boolean, skipped?: string, messageId?: string, error?: string}>}
+ */
+export async function sendTaxRecordsPayoutCopy({
+  transporter,
+  from,
+  payout = {},
+  html = '',
+  text = '',
+  logPrefix = '[Tax records]',
+} = {}) {
+  return dispatchTaxRecordsCopy({
+    transporter,
+    from,
+    message: buildTaxRecordsPayoutCopy({ payout, html, text }),
+    logPrefix,
+  });
+}
+
+/**
  * Send the accountant their copy. Never throws.
  *
  * Callers run this after the customer send and must not have to guard it — an
@@ -130,23 +207,11 @@ export async function sendTaxRecordsCopy({
   if (!isCompletedOrderStatus(order.status)) {
     return { sent: false, skipped: 'not-completed' };
   }
-  if (!transporter) {
-    console.error(`${logPrefix} No mail transport configured — accounting copy NOT sent.`);
-    return { sent: false, error: 'no transporter' };
-  }
 
-  const message = buildTaxRecordsCopy({ order, html, text });
-  const sender = taxRecordsFrom(from);
-
-  try {
-    const info = await transporter.sendMail({ ...message, from: sender });
-    // Names the sender as well as the recipients: the current failure is caused
-    // by the From domain, so a log line without it cannot explain a rejection.
-    console.log(`${logPrefix} Accounting copy sent from ${sender} to ${message.to}: ${info.messageId}`);
-    return { sent: true, messageId: info.messageId, to: message.to, from: sender };
-  } catch (error) {
-    // Loud, because silence here is exactly what hid the previous failure.
-    console.error(`${logPrefix} Accounting copy FAILED to ${message.to}:`, error.message);
-    return { sent: false, error: error.message };
-  }
+  return dispatchTaxRecordsCopy({
+    transporter,
+    from,
+    message: buildTaxRecordsCopy({ order, html, text }),
+    logPrefix,
+  });
 }

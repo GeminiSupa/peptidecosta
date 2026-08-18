@@ -13,6 +13,28 @@ export const ORDER_NOTIFICATION_EXCLUDED_AGENTS = new Set([
 ]);
 
 /**
+ * A visible recipient list with the owner's address taken out.
+ *
+ * The owner is BCC'd on the mail that matters, so naming them in a To or CC as
+ * well puts the address on the envelope twice and shows it to everyone else on
+ * the message. This is the same rule buildOrderEmailAddressing() applies to the
+ * order CC, lifted out so the payout and report mail can hold to it too.
+ *
+ * Falls back to the company inbox rather than returning nothing: a send with no
+ * visible recipient fails outright, and a list that was only ever the owner
+ * still has to reach somebody.
+ *
+ * Not for per-recipient sends. Lead alerts address each destination in its own
+ * message, where a To is the delivery itself and not a duplicate listing.
+ */
+export function stripOwnerAddress(list) {
+  const kept = splitList(Array.isArray(list) ? list.join(',') : list)
+    .filter((email) => emailKey(email) !== emailKey(ORDER_NOTIFICATION_OWNER_BCC));
+
+  return kept.length > 0 ? kept.join(', ') : ORDER_NOTIFICATION_INBOX;
+}
+
+/**
  * New-order headers:
  *   To:  the company inbox
  *   BCC: Omer only
