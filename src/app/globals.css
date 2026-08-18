@@ -2055,7 +2055,17 @@ body {
 
 .payment-method-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* Two across only while a card can actually hold its own contents. In the
+       cart drawer the grid is ~332px, which gave each card 162px — 20px padding
+       + 32px icon + two 9px gaps + a 44px badge leaves ~48px of text, so the
+       detail line broke into four and the badge was pushed 8px outside the
+       border. Below the threshold the cards stack and each gets the full width
+       instead of being squeezed past the point where the text fits.
+
+       230px is what a card needs to hold one: 20px padding + 32px icon + two
+       9px gaps + a 44px badge leaves ~116px of text, which fits both details on
+       two lines. The drawer caps at 380px, so it always stacks. */
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
     gap: 8px;
 }
 
@@ -2110,6 +2120,14 @@ body {
     flex-shrink: 0;
 }
 
+/* The middle column. Without min-width:0 a flex item refuses to shrink below
+   its content's min-content width, so the card overflowed instead of wrapping —
+   the badge was what got pushed out of the box. */
+.payment-method-copy {
+    flex: 1;
+    min-width: 0;
+}
+
 .payment-method-card strong,
 .payment-method-card small {
     display: block;
@@ -2125,12 +2143,15 @@ body {
     color: var(--text-muted);
     font-size: 0.68rem;
     line-height: 1.2;
+    /* Last guard: a single long word still breaks rather than the box. */
+    overflow-wrap: anywhere;
 }
 
 .payment-method-status-badge {
     margin-left: auto;
-    align-self: flex-start;
+    align-self: center;
     flex-shrink: 0;
+    max-width: 100%;
     padding: 3px 7px;
     border-radius: 999px;
     background: rgba(14, 165, 233, 0.12);
@@ -2184,7 +2205,11 @@ body {
 }
 
 .payment-total-notice-detail {
-    max-width: 45%;
+    /* Shrink only when the row genuinely runs out of room, rather than at a
+       fixed 45%: that cap wrapped "Incluye ₡2,500 de envío" onto two lines and
+       orphaned the last word while 56px of the row sat unused. The total keeps
+       its own line either way — the amount beside it is nowrap. */
+    min-width: 0;
     color: #15803d;
     text-align: right;
 }

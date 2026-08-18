@@ -4290,7 +4290,7 @@ export default function CatalogPage() {
                     onClick={() => !method.disabled && setPaymentMethod(method.value)}
                   >
                     <span className="payment-method-icon" style={method.iconColor ? { color: method.iconColor } : {}}>{method.icon}</span>
-                    <span>
+                    <span className="payment-method-copy">
                       <strong>{method.title}</strong>
                       <small>{method.detail}</small>
                     </span>
