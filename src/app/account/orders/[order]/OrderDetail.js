@@ -17,7 +17,9 @@ import {
   orderItems,
   orderPaymentState,
   paymentLabel,
+  billableItemCount,
 } from '@/lib/customerOrderView.mjs';
+import { isGiftLine } from '@/lib/bacWater.mjs';
 import { stashReorder } from '@/lib/reorderHandoff';
 
 export default function OrderDetail({ orderNumber }) {
@@ -57,7 +59,8 @@ export default function OrderDetail({ orderNumber }) {
     return () => { active = false; };
   }, [user, orderNumber]);
 
-  const items = orderItems(order);
+  const items = orderItems(order, lang);
+  const itemCount = billableItemCount(items);
 
   const reorder = () => {
     if (stashReorder({ ...order, items })) router.push(`/catalog?reorder=1&lang=${lang}`);
@@ -118,7 +121,9 @@ export default function OrderDetail({ orderNumber }) {
                   <tr key={`${item?.product}-${index}`}>
                     <td>{item?.product}</td>
                     <td>{item?.qty}</td>
-                    <td>{formatItemPrice(item?.price, order.currency)}</td>
+                    {/* A gift reads as free, not as the em dash an unpriced
+                        line would otherwise get. */}
+                    <td>{isGiftLine(item) ? (isEn ? 'Free' : 'Gratis') : formatItemPrice(item?.price, order.currency)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -129,7 +134,7 @@ export default function OrderDetail({ orderNumber }) {
               {formatOrderTotal(order)}
             </p>
 
-            {items.length > 0 ? (
+            {itemCount > 0 ? (
               <p style={{ marginTop: 14, marginBottom: 0 }}>
                 <button type="button" className="account-btn-secondary" onClick={reorder}>
                   {isEn ? 'Order again' : 'Pedir de nuevo'}

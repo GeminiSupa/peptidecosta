@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  billableItemCount,
   deliveryLabel,
   formatItemPrice,
   formatOrderTotal,
@@ -63,8 +64,62 @@ test('a free gift line shows no price rather than a zero', () => {
 });
 
 test('items survive being stored as JSON text on older rows', () => {
-  assert.deepEqual(orderItems({ items: [{ product: 'A', qty: 1 }] }), [{ product: 'A', qty: 1 }]);
-  assert.deepEqual(orderItems({ items: '[{"product":"A","qty":1}]' }), [{ product: 'A', qty: 1 }]);
+  // A syringe earns no free vial, so these read back exactly as stored.
+  const syringe = { product: 'Insulin Syringe 1ml', qty: 1 };
+  assert.deepEqual(orderItems({ items: [syringe] }), [syringe]);
+  assert.deepEqual(orderItems({ items: '[{"product":"Insulin Syringe 1ml","qty":1}]' }), [syringe]);
   assert.deepEqual(orderItems({ items: 'not json' }), []);
   assert.deepEqual(orderItems({}), []);
+});
+
+test('an old order shows the free vials it shipped with', () => {
+  // Nothing was written to the row; the box still had them in it.
+  const items = orderItems({ items: [{ product: 'Semaglutide 5mg', qty: 2, price: 100 }] }, 'en');
+
+  assert.equal(items.length, 2);
+  assert.equal(items[1].product, 'Bacteriostatic Water 3ml (Free Gift)');
+  assert.equal(items[1].qty, 2);
+  assert.equal(items[1].price, 0);
+});
+
+test('the gift is listed in the customer\'s own language', () => {
+  const es = orderItems({ items: [{ product: 'Semaglutide 5mg', qty: 1, price: 100 }] }, 'es');
+  assert.equal(es[1].product, 'Agua Bacteriostática 3ml (Regalo)');
+});
+
+test('an order already carrying its gift is not given a second one', () => {
+  const items = orderItems({
+    items: [
+      { product: 'Semaglutide 5mg', qty: 1, price: 100 },
+      { product: 'Agua Bacteriostática 3ml (Regalo)', qty: 1, price: 0 },
+    ],
+  }, 'es');
+
+  assert.equal(items.length, 2);
+});
+
+test('free vials are shown but never counted', () => {
+  // The count is what the customer chose and paid for. Counting a gift they
+  // never added would change the number every past order has always shown.
+  const items = orderItems({ items: [{ product: 'Semaglutide 5mg', qty: 2, price: 100 }] }, 'en');
+
+  assert.equal(items.length, 2);
+  assert.equal(billableItemCount(items), 1);
+});
+
+test('the count holds up on carts that earn no gift', () => {
+  assert.equal(billableItemCount([]), 0);
+  assert.equal(billableItemCount(), 0);
+  assert.equal(
+    billableItemCount([{ product: 'BAC Water 3ml', qty: 5, price: 10 }]),
+    1,
+  );
+  // An untagged zero-priced vial on a pre-suffix order is still a gift.
+  assert.equal(
+    billableItemCount([
+      { product: 'Semaglutide 5mg', qty: 1, price: 100 },
+      { product: 'BAC Water 3ml', qty: 1, price: 0 },
+    ]),
+    1,
+  );
 });

@@ -19,6 +19,8 @@ function key(status) {
   return String(status ?? '').trim().toLowerCase();
 }
 
+import { isGiftLine, withBacGiftLines } from './bacWater.mjs';
+
 export function orderPaymentState(order) {
   const status = key(order?.status);
   if (status === 'cancelled') return 'cancelled';
@@ -126,7 +128,7 @@ export function formatOrderDate(value, lang = 'es') {
 }
 
 /** Items are JSONB and older rows predate the current shape — read defensively. */
-export function orderItems(order) {
+function parseOrderItems(order) {
   const items = order?.items;
   if (Array.isArray(items)) return items;
   if (typeof items === 'string') {
@@ -138,4 +140,28 @@ export function orderItems(order) {
     }
   }
   return [];
+}
+
+/**
+ * The order's lines as the customer should see them, free vials included.
+ *
+ * The gift is one 3ml vial per peptide and it ships whether or not the stored
+ * row lists it — orders taken by an agent, and everything placed before the
+ * gift became an explicit line, never had one written down. Showing the box as
+ * the customer will receive it means filling that in here rather than leaving
+ * their own history disagreeing with what arrived.
+ */
+export function orderItems(order, lang = 'es') {
+  return withBacGiftLines(parseOrderItems(order), lang);
+}
+
+/**
+ * How many items an order is said to contain.
+ *
+ * Free vials are listed but not counted: "2 artículos" is what the customer
+ * chose and paid for, and re-counting a gift they never added would change the
+ * number every past order has always shown them.
+ */
+export function billableItemCount(items = []) {
+  return (items || []).filter((item) => !isGiftLine(item)).length;
 }

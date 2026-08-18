@@ -12,6 +12,7 @@ import {
   orderItems,
   orderPaymentState,
   paymentLabel,
+  billableItemCount,
 } from '@/lib/customerOrderView.mjs';
 import { stashReorder } from '@/lib/reorderHandoff';
 
@@ -19,7 +20,8 @@ import { stashReorder } from '@/lib/reorderHandoff';
 export default function OrderCard({ order, lang = 'es' }) {
   const router = useRouter();
   const isEn = lang === 'en';
-  const items = orderItems(order);
+  const items = orderItems(order, lang);
+  const itemCount = billableItemCount(items);
 
   const reorder = () => {
     if (stashReorder({ ...order, items })) router.push(`/catalog?reorder=1&lang=${lang}`);
@@ -34,9 +36,9 @@ export default function OrderCard({ order, lang = 'es' }) {
         <div className="account-order-meta">
           {formatOrderDate(order.created_at, lang)}
           {' · '}
-          {items.length}
+          {itemCount}
           {' '}
-          {items.length === 1
+          {itemCount === 1
             ? (isEn ? 'item' : 'artículo')
             : (isEn ? 'items' : 'artículos')}
         </div>
@@ -58,7 +60,7 @@ export default function OrderCard({ order, lang = 'es' }) {
 
       <div>
         <div className="account-order-total">{formatOrderTotal(order)}</div>
-        {items.length > 0 ? (
+        {itemCount > 0 ? (
           <button
             type="button"
             className="account-btn-secondary"
