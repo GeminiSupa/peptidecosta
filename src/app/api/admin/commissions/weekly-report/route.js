@@ -203,10 +203,17 @@ export async function GET(request) {
     // silently erase the parent's override on the next scan.
     const { data: approvedPayouts } = await supabaseAdmin
       .from('commission_payouts')
-      .select('agent_email, orders_data, override_orders_data')
+      .select('agent_email, orders_data, override_orders_data, start_date, end_date')
       .eq('status', 'Approved');
 
-    const paidIndex = buildPaidOrderIndex(approvedPayouts || []);
+    // Re-running a period has to reproduce it. Orders settled by THIS period's
+    // own approved payout are left out of the guard, or the second scan reports
+    // a week that really earned money as near-zero and mails that to the agent
+    // and the accountant. Earlier periods stay excluded, which is the actual
+    // double-payment this index prevents.
+    const paidIndex = buildPaidOrderIndex(approvedPayouts || [], {
+      excludePeriod: { startDate: startDateStr, endDate: endDateStr },
+    });
 
     // Pending and suspended people earn nothing at all — approval is the gate on
     // money, not just on login. An unapproved invite therefore costs nothing.
@@ -349,17 +356,21 @@ export async function GET(request) {
       });
 
       // 6. Save or update pending payout for this agent + period (dedupe duplicates)
+      // Every status is read, not just Pending: an approved payout for this
+      // period used to be invisible here, so a second scan inserted a *fresh*
+      // Pending row beside the settled one and the week looked owed twice.
       const { data: existingPayouts } = await supabaseAdmin
         .from('commission_payouts')
-        .select('id')
+        .select('id, status')
         .eq('agent_email', agent.email)
-        .eq('status', 'Pending')
         .eq('start_date', startDateStr)
         .eq('end_date', endDateStr)
         .order('created_at', { ascending: false });
 
-      const primaryPayout = existingPayouts?.[0] || null;
-      const duplicateIds = (existingPayouts || []).slice(1).map((p) => p.id);
+      const settledPayout = (existingPayouts || []).find((p) => p.status === 'Approved') || null;
+      const pendingPayouts = (existingPayouts || []).filter((p) => p.status === 'Pending');
+      const primaryPayout = pendingPayouts[0] || null;
+      const duplicateIds = pendingPayouts.slice(1).map((p) => p.id);
 
       if (duplicateIds.length > 0) {
         await supabaseAdmin
@@ -403,16 +414,26 @@ export async function GET(request) {
       // deploy that lands before the SQL cannot take down the weekly scan for
       // staff whose commissions have nothing to do with sub-users.
       let saveError = null;
-      const { error: writeError, droppedColumns } = await writeDroppingMissingColumns(
-        primaryPayout
-          ? payoutPayload
-          : { ...payoutPayload, agent_email: agent.email, status: 'Pending' },
-        SUB_USER_PAYOUT_COLUMNS,
-        (row) => (primaryPayout
-          ? supabaseAdmin.from('commission_payouts').update(row).eq('id', primaryPayout.id)
-          : supabaseAdmin.from('commission_payouts').insert([row]))
-      );
-      saveError = writeError;
+      let droppedColumns = null;
+
+      // An approved payout is settled money. Re-running the scan re-sends the
+      // report — which is the point of running it again — but must not rewrite
+      // or duplicate the row the accountant has already paid against.
+      if (settledPayout) {
+        console.log(`[Weekly Commissions] ${agent.email} already has an approved payout for ${periodDisplay}; re-sending the report without writing.`);
+      } else {
+        const { error: writeError, droppedColumns: dropped } = await writeDroppingMissingColumns(
+          primaryPayout
+            ? payoutPayload
+            : { ...payoutPayload, agent_email: agent.email, status: 'Pending' },
+          SUB_USER_PAYOUT_COLUMNS,
+          (row) => (primaryPayout
+            ? supabaseAdmin.from('commission_payouts').update(row).eq('id', primaryPayout.id)
+            : supabaseAdmin.from('commission_payouts').insert([row]))
+        );
+        saveError = writeError;
+        droppedColumns = dropped;
+      }
 
       if (droppedColumns?.length) {
         console.warn(
@@ -461,6 +482,7 @@ export async function GET(request) {
         agentEmailSent,
         agentEmailError,
         savedSuccessfully: !saveError,
+        alreadySettled: Boolean(settledPayout),
         saveError: saveError ? saveError.message : null
       });
     }

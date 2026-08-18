@@ -113,11 +113,35 @@ export function paidKey(agentEmail, orderId) {
   return `${String(agentEmail || '').trim().toLowerCase()}|${orderId}`;
 }
 
-export function buildPaidOrderIndex(approvedPayouts = []) {
+function sameInstant(left, right) {
+  const a = new Date(left).getTime();
+  const b = new Date(right).getTime();
+  return Number.isFinite(a) && Number.isFinite(b) && a === b;
+}
+
+/**
+ * The orders an agent has already been paid for.
+ *
+ * `excludePeriod` leaves out payouts covering the exact period being scanned.
+ * Without it, re-running a week that has already been approved hollows itself
+ * out: every order the week's own payout settled looks "already paid", so the
+ * rerun reports near-zero sales for a week that really earned money — and then
+ * mails that figure to the agent and the accountant. A report for a closed
+ * period has to reproduce, not decay each time it is asked for.
+ *
+ * The cross-period guard is untouched: orders settled by an *earlier* payout
+ * stay excluded, which is the double-payment this index exists to prevent.
+ */
+export function buildPaidOrderIndex(approvedPayouts = [], { excludePeriod = null } = {}) {
   const index = new Set();
   for (const payout of approvedPayouts || []) {
     const email = payout?.agent_email;
     if (!email) continue;
+    if (
+      excludePeriod
+      && sameInstant(payout?.start_date, excludePeriod.startDate)
+      && sameInstant(payout?.end_date, excludePeriod.endDate)
+    ) continue;
     // Both buckets count as paid for this agent: the orders credited to them
     // directly, and the children's orders their override was calculated on.
     for (const bucket of [payout?.orders_data, payout?.override_orders_data]) {

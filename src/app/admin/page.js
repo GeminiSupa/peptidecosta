@@ -3268,7 +3268,6 @@ Core Rules:
       order?.status && `Status: ${order.status}`,
       order?.sales_agent && `Agent: ${order.sales_agent}`,
     ])) return;
-    setOrders(prev => prev.filter(o => o.id !== orderId));
     try {
       // Goes through the API rather than deleting the row directly: the stock
       // this order reserved has to be returned before the record that says what
@@ -3278,12 +3277,20 @@ Core Rules:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orderId }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        console.error('Order delete error:', data.error || res.statusText);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `Delete failed with status ${res.status}`);
       }
+      // Only now. The row used to be dropped from the list before the request
+      // was even sent, and a failure was logged to a console nobody had open —
+      // so a delete that the database refused looked like it had worked, right
+      // up until the next refresh brought the order back.
+      setOrders(prev => prev.filter(o => o.id !== orderId));
+      setToastMessage(`Order ${order?.order_number ? `#${order.order_number}` : ''} deleted.`.replace('  ', ' '));
+      setTimeout(() => setToastMessage(''), 3000);
     } catch(err) {
       console.error('Order delete error:', err);
+      alert(`Could not delete this order: ${err.message}`);
     }
   };
 

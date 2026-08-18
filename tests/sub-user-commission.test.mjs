@@ -158,3 +158,79 @@ test('an empty history means nothing has been paid yet', () => {
   assert.equal(hasBeenPaid(index, 'maria@peptides.com', 'order-1042'), false);
   assert.equal(hasBeenPaid(buildPaidOrderIndex(), 'anyone@x.com', 'order-1'), false);
 });
+
+// ---------------------------------------------------------------------------
+// Re-running a scan for a period that has already been approved
+// ---------------------------------------------------------------------------
+
+const WEEK = {
+  startDate: '2026-08-10T06:00:00.000Z',
+  endDate: '2026-08-17T05:59:59.999Z',
+};
+
+test('re-scanning an approved week still counts the orders that week paid for', () => {
+  // Without excludePeriod the week hollows itself out: its own approved payout
+  // marks every order paid, so the rerun reports near-zero sales for a week
+  // that really earned money — and mails that to the agent and the accountant.
+  const approved = [{
+    agent_email: 'luis@example.com',
+    orders_data: [{ id: 'order-1042' }],
+    override_orders_data: [],
+    // Postgres hands TIMESTAMPTZ back in its own format, so this must compare
+    // as an instant, not as a string.
+    start_date: '2026-08-10T06:00:00+00:00',
+    end_date: '2026-08-17T05:59:59.999+00:00',
+  }];
+
+  const naive = buildPaidOrderIndex(approved);
+  assert.equal(hasBeenPaid(naive, 'luis@example.com', 'order-1042'), true);
+
+  const rescan = buildPaidOrderIndex(approved, { excludePeriod: WEEK });
+  assert.equal(hasBeenPaid(rescan, 'luis@example.com', 'order-1042'), false);
+});
+
+test('an earlier period stays excluded when a later one is rescanned', () => {
+  // The cross-period guard is the whole point of the index and must survive.
+  const approved = [{
+    agent_email: 'luis@example.com',
+    orders_data: [{ id: 'order-900' }],
+    start_date: '2026-08-03T06:00:00.000Z',
+    end_date: '2026-08-10T05:59:59.999Z',
+  }];
+  const index = buildPaidOrderIndex(approved, { excludePeriod: WEEK });
+  assert.equal(hasBeenPaid(index, 'luis@example.com', 'order-900'), true);
+});
+
+test('a payout sharing only one boundary with the period is not excluded', () => {
+  const approved = [{
+    agent_email: 'luis@example.com',
+    orders_data: [{ id: 'order-901' }],
+    start_date: WEEK.startDate,
+    end_date: '2026-09-01T05:59:59.999Z',
+  }];
+  const index = buildPaidOrderIndex(approved, { excludePeriod: WEEK });
+  assert.equal(hasBeenPaid(index, 'luis@example.com', 'order-901'), true);
+});
+
+test('a payout with unusable dates is never treated as the current period', () => {
+  const approved = [{
+    agent_email: 'luis@example.com',
+    orders_data: [{ id: 'order-902' }],
+    start_date: null,
+    end_date: undefined,
+  }];
+  const index = buildPaidOrderIndex(approved, { excludePeriod: WEEK });
+  assert.equal(hasBeenPaid(index, 'luis@example.com', 'order-902'), true);
+});
+
+test('the override bucket is excluded on a rescan too, not just direct orders', () => {
+  const approved = [{
+    agent_email: 'maria@peptides.com',
+    orders_data: [],
+    override_orders_data: [{ id: 'order-1042' }],
+    start_date: WEEK.startDate,
+    end_date: WEEK.endDate,
+  }];
+  const index = buildPaidOrderIndex(approved, { excludePeriod: WEEK });
+  assert.equal(hasBeenPaid(index, 'maria@peptides.com', 'order-1042'), false);
+});
