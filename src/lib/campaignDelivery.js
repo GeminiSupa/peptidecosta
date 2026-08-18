@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { createTrackingUrlToken, createUnsubscribeToken } from '@/lib/marketingTokens';
+import { eventTimeColumn, eventTimeSelect } from '@/lib/campaignEventColumns.mjs';
 import {
   DORMANT_WINDOW_DAYS, behaviorFilterLabel, behaviorNeedsEngagement, behaviorNeedsOrders,
   buildBehaviorSignals, matchesBehaviorFilter, normalizeBehaviorFilter, signalsFor,
@@ -552,14 +553,15 @@ async function loadBehaviorSignals(supabase, behaviorFilter, targets) {
   // dormant — i.e. a win-back campaign mailing subscribers who are active.
   const gather = async (table, column, values) => {
     const rows = [];
+    const timeColumn = eventTimeColumn(table);
     for (const slice of chunk(values)) {
       for (let from = 0; ; from += EVENT_PAGE_SIZE) {
         const { data, error } = await supabase
           .from(table)
-          .select('subscriber_id, created_at')
+          .select(eventTimeSelect(table, ['subscriber_id']))
           .in(column, slice)
-          .gte('created_at', since)
-          .order('created_at', { ascending: false })
+          .gte(timeColumn, since)
+          .order(timeColumn, { ascending: false })
           .range(from, from + EVENT_PAGE_SIZE - 1);
         if (error) {
           throw new CampaignDeliveryError(

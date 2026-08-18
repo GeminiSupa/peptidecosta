@@ -152,8 +152,8 @@ async function evaluateCondition(supabase, condition, enrollment) {
     const { data: subscriber } = await supabase.from('email_subscribers').select('id').eq('email', String(contact.email).toLowerCase()).maybeSingle();
     if (!subscriber) return false;
     const [{ count: clicks }, { count: opens }] = await Promise.all([
-      supabase.from('campaign_clicks').select('id', { count: 'exact', head: true }).eq('subscriber_id', subscriber.id).gte('created_at', enrollment.enrolled_at),
-      supabase.from('campaign_opens').select('id', { count: 'exact', head: true }).eq('subscriber_id', subscriber.id).gte('created_at', enrollment.enrolled_at),
+      supabase.from('campaign_clicks').select('id', { count: 'exact', head: true }).eq('subscriber_id', subscriber.id).gte('clicked_at', enrollment.enrolled_at),
+      supabase.from('campaign_opens').select('id', { count: 'exact', head: true }).eq('subscriber_id', subscriber.id).gte('opened_at', enrollment.enrolled_at),
     ]);
     return Number(clicks || 0) + Number(opens || 0) > 0;
   }

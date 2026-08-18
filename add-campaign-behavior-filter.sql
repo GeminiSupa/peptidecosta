@@ -29,9 +29,9 @@ EXCEPTION
 END $$;
 
 -- The send resolves this by walking open/click history per address.
-CREATE INDEX IF NOT EXISTS campaign_opens_subscriber_created_idx
-  ON public.campaign_opens (subscriber_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS campaign_clicks_subscriber_created_idx
-  ON public.campaign_clicks (subscriber_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS campaign_opens_subscriber_opened_idx
+  ON public.campaign_opens (subscriber_id, opened_at DESC);
+CREATE INDEX IF NOT EXISTS campaign_clicks_subscriber_clicked_idx
+  ON public.campaign_clicks (subscriber_id, clicked_at DESC);
 
 NOTIFY pgrst, 'reload schema';

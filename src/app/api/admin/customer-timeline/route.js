@@ -60,8 +60,8 @@ export async function GET(request) {
 
     const subscriberIds = subscribers.map(row => row.id);
     const [clicks, opens] = await Promise.all([
-      subscriberIds.length ? safeRows('campaign clicks', supabase.from('campaign_clicks').select('*').in('subscriber_id', subscriberIds).order('created_at', { ascending: false }).limit(1000), warnings) : [],
-      subscriberIds.length ? safeRows('campaign opens', supabase.from('campaign_opens').select('*').in('subscriber_id', subscriberIds).order('created_at', { ascending: false }).limit(1000), warnings) : [],
+      subscriberIds.length ? safeRows('campaign clicks', supabase.from('campaign_clicks').select('*, at:clicked_at').in('subscriber_id', subscriberIds).order('clicked_at', { ascending: false }).limit(1000), warnings) : [],
+      subscriberIds.length ? safeRows('campaign opens', supabase.from('campaign_opens').select('*, at:opened_at').in('subscriber_id', subscriberIds).order('opened_at', { ascending: false }).limit(1000), warnings) : [],
     ]);
 
     const timeline = [
@@ -69,8 +69,8 @@ export async function GET(request) {
       ...carts.map(row => event('cart', row.last_updated || row.created_at, row.status === 'active' ? 'Cart left unfinished' : 'Cart updated', `${(row.cart_data || row.items || []).length || 0} item(s)`, { id: row.id, status: row.status })),
       ...views.map(row => event('view', row.created_at, 'Product viewed', row.product_name || row.product_id || 'Catalog product')),
       ...leads.map(row => event('lead', row.created_at, 'Catalog lead captured', row.contact_method || 'catalog')),
-      ...clicks.map(row => event('click', row.created_at, 'Email link clicked', row.target_url || 'Campaign link', { campaignId: row.campaign_id })),
-      ...opens.map(row => event('open', row.created_at, 'Email opened', 'Campaign engagement', { campaignId: row.campaign_id })),
+      ...clicks.map(row => event('click', row.at, 'Email link clicked', row.target_url || 'Campaign link', { campaignId: row.campaign_id })),
+      ...opens.map(row => event('open', row.at, 'Email opened', 'Campaign engagement', { campaignId: row.campaign_id })),
       ...enrollments.map(row => event('journey', row.enrolled_at, `Entered ${row.marketing_journeys?.name || 'journey'}`, `${row.status} · step ${Number(row.current_step || 0) + 1}`, { status: row.status })),
       ...deliveries.map(row => event('delivery', row.last_attempt_at, `${row.channel} ${row.status}`, row.error || `Attempt ${row.attempt_count}`, { status: row.status, channel: row.channel })),
       ...suppressions.map(row => event('suppression', row.updated_at || row.created_at, `${row.channel} marketing blocked`, row.reason.replaceAll('_', ' '), { reason: row.reason })),

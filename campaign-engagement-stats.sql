@@ -11,6 +11,9 @@
 -- "how many times was this clicked" is still a real question — it is just not
 -- a rate.
 --
+-- The event tables name their timestamps after their own verb — sent_at,
+-- opened_at, clicked_at — not created_at like the rest of the schema.
+--
 -- Safe to run more than once.
 
 CREATE OR REPLACE VIEW public.campaign_engagement_stats
@@ -46,7 +49,7 @@ SELECT
   target_url,
   COUNT(*)::bigint                     AS clicks,
   COUNT(DISTINCT subscriber_id)::bigint AS unique_clicks,
-  MAX(created_at)                      AS last_clicked_at
+  MAX(clicked_at)                      AS last_clicked_at
 FROM public.campaign_clicks
 WHERE target_url IS NOT NULL
 GROUP BY campaign_id, target_url;

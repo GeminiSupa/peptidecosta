@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { ENGAGED_WINDOW_DAYS, DORMANT_WINDOW_DAYS } from '@/lib/campaignBehavior.mjs';
+import { eventTimeSelect } from '@/lib/campaignEventColumns.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,8 +46,8 @@ export async function GET(request) {
   try {
     const [subscribers, opens, clicks, orders] = await Promise.all([
       safeRows('subscribers', supabase.from('email_subscribers').select('id, email').limit(ROW_CAP), warnings),
-      safeRows('opens', supabase.from('campaign_opens').select('subscriber_id, created_at').gte('created_at', since).order('created_at', { ascending: false }).limit(ROW_CAP), warnings),
-      safeRows('clicks', supabase.from('campaign_clicks').select('subscriber_id, created_at').gte('created_at', since).order('created_at', { ascending: false }).limit(ROW_CAP), warnings),
+      safeRows('opens', supabase.from('campaign_opens').select(eventTimeSelect('campaign_opens', ['subscriber_id'])).gte('opened_at', since).order('opened_at', { ascending: false }).limit(ROW_CAP), warnings),
+      safeRows('clicks', supabase.from('campaign_clicks').select(eventTimeSelect('campaign_clicks', ['subscriber_id'])).gte('clicked_at', since).order('clicked_at', { ascending: false }).limit(ROW_CAP), warnings),
       safeRows('orders', supabase.from('orders').select('customer_email').limit(ROW_CAP), warnings),
     ]);
 
@@ -63,11 +64,11 @@ export async function GET(request) {
     // recent event and later ones can be skipped.
     for (const row of opens) {
       const record = touch(emailById.get(row.subscriber_id));
-      if (record && !record.lastOpenAt) record.lastOpenAt = row.created_at;
+      if (record && !record.lastOpenAt) record.lastOpenAt = row.at;
     }
     for (const row of clicks) {
       const record = touch(emailById.get(row.subscriber_id));
-      if (record && !record.lastClickAt) record.lastClickAt = row.created_at;
+      if (record && !record.lastClickAt) record.lastClickAt = row.at;
     }
     for (const row of orders) {
       const record = touch(String(row.customer_email || '').trim().toLowerCase());

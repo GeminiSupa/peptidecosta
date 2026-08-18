@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { eventTimeSelect } from '@/lib/campaignEventColumns.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,7 @@ function rollUpLinks(rows) {
     const entry = links.get(url) || { target_url: url, clicks: 0, subscribers: new Set(), last_clicked_at: null };
     entry.clicks += 1;
     if (row.subscriber_id) entry.subscribers.add(row.subscriber_id);
-    if (!entry.last_clicked_at || row.created_at > entry.last_clicked_at) entry.last_clicked_at = row.created_at;
+    if (!entry.last_clicked_at || row.at > entry.last_clicked_at) entry.last_clicked_at = row.at;
     links.set(url, entry);
   }
   return [...links.values()]
@@ -65,8 +66,8 @@ export async function GET(request) {
     const [engagementRows, linkRows, clickRows, openRows, batches] = await Promise.all([
       safeRows('engagement view', supabase.from('campaign_engagement_stats').select('*').eq('campaign_id', campaignId).limit(1), warnings),
       safeRows('link view', supabase.from('campaign_link_clicks').select('*').eq('campaign_id', campaignId), warnings),
-      safeRows('clicks', supabase.from('campaign_clicks').select('subscriber_id, target_url, created_at').eq('campaign_id', campaignId).order('created_at', { ascending: false }).limit(EVENT_ROW_CAP), warnings),
-      safeRows('opens', supabase.from('campaign_opens').select('subscriber_id, created_at').eq('campaign_id', campaignId).order('created_at', { ascending: false }).limit(EVENT_ROW_CAP), warnings),
+      safeRows('clicks', supabase.from('campaign_clicks').select(eventTimeSelect('campaign_clicks', ['subscriber_id', 'target_url'])).eq('campaign_id', campaignId).order('clicked_at', { ascending: false }).limit(EVENT_ROW_CAP), warnings),
+      safeRows('opens', supabase.from('campaign_opens').select(eventTimeSelect('campaign_opens', ['subscriber_id'])).eq('campaign_id', campaignId).order('opened_at', { ascending: false }).limit(EVENT_ROW_CAP), warnings),
       safeRows('delivery batches', supabase.from('campaign_delivery_batches').select('*').eq('campaign_id', campaignId).order('started_at', { ascending: false }).limit(10), warnings),
     ]);
 
@@ -109,7 +110,7 @@ export async function GET(request) {
 
     const describe = (row, action) => ({
       action,
-      at: row.created_at,
+      at: row.at,
       email: subscriberMap[row.subscriber_id]?.email || null,
       first_name: subscriberMap[row.subscriber_id]?.first_name || null,
       target_url: row.target_url || null,

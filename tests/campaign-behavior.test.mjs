@@ -77,10 +77,12 @@ test('signals are folded per address, keeping the most recent event', () => {
   const subscriberEmails = new Map([['s1', 'Alice@Example.com'], ['s2', 'bob@example.com']]);
   const signals = buildBehaviorSignals({
     opens: [
-      { subscriber_id: 's1', created_at: daysAgo(10) },
-      { subscriber_id: 's1', created_at: daysAgo(2) },
+      // `at` is the alias the queries give the table's own timestamp column —
+      // opened_at here, clicked_at below. See campaignEventColumns.mjs.
+      { subscriber_id: 's1', at: daysAgo(10) },
+      { subscriber_id: 's1', at: daysAgo(2) },
     ],
-    clicks: [{ subscriber_id: 's2', created_at: daysAgo(5) }],
+    clicks: [{ subscriber_id: 's2', at: daysAgo(5) }],
     orders: [{ customer_email: 'ALICE@example.com' }, { customer_email: 'alice@example.com' }],
     subscriberEmails,
   });

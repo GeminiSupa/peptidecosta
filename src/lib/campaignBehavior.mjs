@@ -107,7 +107,12 @@ export function matchesBehaviorFilter(filter, signals = {}, now = Date.now()) {
 
 /**
  * Fold raw event rows into a per-address signal map.
+ *
  * Keys are lowercase emails so subscribers, leads and orders can all meet.
+ * Event rows carry their timestamp as `at` — the campaign tables each name it
+ * differently (opened_at, clicked_at), so callers alias it on the way out of
+ * the database rather than every reader having to know which table it came
+ * from. See campaignEventColumns.mjs.
  */
 export function buildBehaviorSignals({ opens = [], clicks = [], orders = [], subscriberEmails = new Map() } = {}) {
   const signals = new Map();
@@ -123,11 +128,11 @@ export function buildBehaviorSignals({ opens = [], clicks = [], orders = [], sub
 
   for (const row of opens) {
     const record = entry(subscriberEmails.get(row.subscriber_id));
-    if (record) record.lastOpenAt = laterOf(record.lastOpenAt, row.created_at);
+    if (record) record.lastOpenAt = laterOf(record.lastOpenAt, row.at);
   }
   for (const row of clicks) {
     const record = entry(subscriberEmails.get(row.subscriber_id));
-    if (record) record.lastClickAt = laterOf(record.lastClickAt, row.created_at);
+    if (record) record.lastClickAt = laterOf(record.lastClickAt, row.at);
   }
   for (const row of orders) {
     const record = entry(row.customer_email || row.email);
