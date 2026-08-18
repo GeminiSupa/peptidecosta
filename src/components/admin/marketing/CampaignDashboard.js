@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { adminFetch } from '@/lib/adminApi';
 import { normalizeAudienceScope, scopeIncludesLeads } from '@/lib/campaignAudience.mjs';
+import { normalizeBehaviorFilter } from '@/lib/campaignBehavior.mjs';
 import { campaignEngagement, totalEngagement } from '@/lib/campaignEngagement.mjs';
 import {
   BarChart2, Eye, MousePointerClick, Send, Loader2,
@@ -123,6 +124,10 @@ export default function CampaignDashboard({ onEdit, onCreate, onViewReport, noti
   // open / click stat stay behind with the original. `audience_scope` has to be
   // carried explicitly — the boolean alone cannot say "leads only", so a copy
   // that only sent it would silently widen the audience to everyone.
+  //
+  // `behavior_filter` is carried for the same reason and it is the sharper of
+  // the two: it is dropped by omission, and a re-engagement campaign that
+  // loses "gone quiet" does not fail — it sends, to the entire list.
   const duplicateCampaign = async (campaign) => {
     const scope = normalizeAudienceScope(campaign.audience_scope, campaign.include_leads);
     setDuplicatingId(campaign.id);
@@ -137,6 +142,7 @@ export default function CampaignDashboard({ onEdit, onCreate, onViewReport, noti
           target_tags: campaign.target_tags,
           audience_scope: scope,
           include_leads: scopeIncludesLeads(scope),
+          behavior_filter: normalizeBehaviorFilter(campaign.behavior_filter),
           design_json: campaign.design_json,
           html_content: campaign.html_content,
           from_name: campaign.from_name,

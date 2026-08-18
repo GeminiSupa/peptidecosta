@@ -14,7 +14,29 @@ import { MARKETING_FOOTER_MARKER, buildMarketingEmailFooterTemplateHtml } from '
 import { normalizeAudienceScope } from '@/lib/campaignAudience.mjs';
 import { BEHAVIOR_FILTERS, behaviorFilterLabel, matchesBehaviorFilter, normalizeBehaviorFilter, signalsFor } from '@/lib/campaignBehavior.mjs';
 
-const LOCAL_DRAFT_KEY = 'marketing_studio_local_email_draft_v1';
+// The browser backup is per campaign, not per studio.
+//
+// One shared key meant one shared backup, and it failed in both directions.
+// Leaving campaign A unsaved and opening campaign B offered A's draft under a
+// prompt that never named it, so accepting silently moved you into A. And
+// saving B overwrote the key, destroying the very backup A had promised.
+// Keying by id means a recovery offer can only ever be for the campaign in
+// front of you. A campaign that has never been saved has no id yet, so it
+// shares the 'new' slot — see dropLocalSnapshot() for how that is handed over
+// once the server assigns one.
+const LOCAL_DRAFT_PREFIX = 'marketing_studio_local_email_draft_v2';
+const NEW_CAMPAIGN_SLOT = 'new';
+
+const localDraftKey = (campaignId) => `${LOCAL_DRAFT_PREFIX}:${campaignId || NEW_CAMPAIGN_SLOT}`;
+
+const dropLocalSnapshot = (campaignId) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(localDraftKey(campaignId));
+  } catch {
+    // A browser refusing localStorage is not worth failing a save over.
+  }
+};
 
 // Autosave cadence. The editor fires a change event per keystroke and per drag,
 // so the server save waits for a lull; the browser snapshot is cheap and runs
@@ -523,7 +545,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
         html: exported.html,
         signature: buildCampaignSignature(exported.html),
       };
-      window.localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify(snapshot));
+      window.localStorage.setItem(localDraftKey(selectedCampaignIdRef.current), JSON.stringify(snapshot));
       return true;
     } catch (error) {
       console.warn('Local campaign draft snapshot failed:', error);
@@ -859,7 +881,10 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
 
     const offerRecovery = async () => {
       try {
-        const raw = window.localStorage.getItem(LOCAL_DRAFT_KEY);
+        // Only ever this campaign's own backup. A draft belonging to something
+        // else is not an offer worth making — accepting it used to move you
+        // into a different campaign without saying so.
+        const raw = window.localStorage.getItem(localDraftKey(selectedCampaignIdRef.current));
         if (!raw) return;
         const snapshot = JSON.parse(raw);
         if (!snapshot?.unsaved || !snapshot.design) return;
@@ -868,7 +893,8 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
           : 'recently';
         const restore = await confirm({
           title: 'Restore your recovered draft?',
-          message: `An unsaved Marketing Studio draft from ${savedLabel} is still in this browser.`,
+          // Named, so it is obvious what is about to come back.
+          message: `Unsaved changes to "${snapshot.campaignName || 'an untitled campaign'}" from ${savedLabel} are still in this browser.`,
           detail: 'Restoring replaces whatever is currently on the canvas.',
           confirmLabel: 'Restore draft',
           cancelLabel: 'Keep editing',
@@ -1005,8 +1031,13 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
           preview_text: previewText || null,
           scheduled_at: scheduleMode === 'scheduled' && scheduledAt ? new Date(scheduledAt).toISOString() : null,
         };
+        // Method and id must come from the same place, and that place is the
+        // ref. The state lags by a render, so reading the method from it while
+        // the id came from the ref could send a POST carrying an id — and POST
+        // ignores id and inserts, which is a second copy of the campaign.
+        const existingId = selectedCampaignIdRef.current;
         const res  = await adminFetch('/api/admin/campaigns', {
-          method: selectedCampaignId ? 'PUT' : 'POST',
+          method: existingId ? 'PUT' : 'POST',
           body: JSON.stringify(payload),
         });
         const data = await res.json();
@@ -1018,6 +1049,10 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
         setLastSavedAt(new Date());
         setStatusDetail(`${silent ? 'Autosaved' : 'Saved'} to server at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`);
         writeLocalSnapshot({ unsaved: false, source: silent ? 'autosave' : 'server-save' });
+        // The campaign has just been given an id, so its backup now lives
+        // under that id. Clear the 'new' slot it was using, or the next blank
+        // campaign inherits this one's draft and is offered it on open.
+        if (!existingId) dropLocalSnapshot(NEW_CAMPAIGN_SLOT);
         // An autosave fires every few seconds while someone designs; refreshing
         // the whole campaign list each time would be a request per lull.
         if (!silent) fetchCampaigns();
