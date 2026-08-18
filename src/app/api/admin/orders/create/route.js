@@ -3,8 +3,26 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { agentMatchKeys } from '@/lib/agentOrders';
+import { withBacGiftLines } from '@/lib/bacWater.mjs';
 
 export const runtime = 'nodejs';
+
+/**
+ * Write the free BAC water an order has earned onto the order itself.
+ *
+ * The storefront resolves the gift into an explicit line before it posts, and
+ * /api/order-notification fills it in for clients that don't. An order typed in
+ * by an agent goes through neither: it lands here and is written straight to
+ * the table, so the record — and the packing list read off it — is short by the
+ * whole allowance. That is how the vials went missing from phone orders.
+ *
+ * The line is priced at zero and so moves no money: BAC water is already out of
+ * the volume discount tiers and out of the discountable subtotal.
+ */
+function withBacGift(items, currency) {
+  const isEn = String(currency || '').trim().toUpperCase() === 'USD';
+  return withBacGiftLines(items, isEn ? 'en' : 'es');
+}
 
 export async function POST(request) {
   const auth = await verifyAdminSession(request);
@@ -27,6 +45,7 @@ export async function POST(request) {
 
     const row = {
       ...order,
+      items: withBacGift(order.items, order.currency),
       order_number: orderNum,
       source: 'admin_manual',
       status: order.status || 'Pending',

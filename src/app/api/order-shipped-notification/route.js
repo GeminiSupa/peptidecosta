@@ -5,6 +5,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { sendTaxRecordsCopy } from '@/lib/taxRecordsEmail.mjs';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { withBacGiftLines } from '@/lib/bacWater.mjs';
 
 // Read at request time, never at module scope.
 //
@@ -215,10 +216,19 @@ export async function POST(request) {
       ? `Your Order ${order.order_number || ''} has Shipped! - Peptides Costa Rica`
       : `¡Su pedido ${order.order_number || ''} ha sido enviado! - Péptidos Costa Rica`;
       
+    // The free vials, whether or not the stored order lists them.
+    //
+    // This route renders the row exactly as the table holds it, and orders
+    // typed in by an agent — plus everything placed before the gift became an
+    // explicit line — never had one. Both the customer's shipping receipt and
+    // the accountant's copy of it, which reuses this same body, were therefore
+    // describing a smaller box than the one that shipped.
+    const emailItems = withBacGiftLines(order.items, orderLang);
+
     const normalizedOrder = {
       orderNumber: order.order_number || order.id?.substring(0,8),
       shippingAddress: order.shipping_address,
-      items: order.items,
+      items: emailItems,
       currency: order.currency,
       tracking_number: order.tracking_number
     };
@@ -267,7 +277,7 @@ export async function POST(request) {
       normalizedOrder.shippingAddress || 'N/A',
       '',
       `${orderLang === 'en' ? 'Products' : 'Productos'}:`,
-      ...order.items.map(item => `• ${item.product} x${item.qty} (${formatMoney(Number(item.price || 0) * Number(item.qty || 0), order.currency)})`),
+      ...emailItems.map(item => `• ${item.product} x${item.qty} (${formatMoney(Number(item.price || 0) * Number(item.qty || 0), order.currency)})`),
       '',
       orderLang === 'en' 
         ? `Need help? Contact our support desk at ${links.whatsappDisplay} or reply to this email.`

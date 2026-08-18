@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, UserRoundSearch } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { calculateAdminOrderTotals } from '@/lib/adminOrderTotals.mjs';
+import { bacGiftShortfall } from '@/lib/bacWater.mjs';
 import {
   buildManualOrderCustomerOptions,
   resolveManualOrderCustomerPrefill,
@@ -75,6 +76,10 @@ export default function ManualOrderModal({ open, onClose, products = [], orders 
     items[idx] = { ...items[idx], product: name, price: price };
     setForm({ ...form, items });
   };
+
+  // The free vials the route will attach on save. Shown here so an agent taking
+  // a phone order can see what is going in the box before they commit to it.
+  const giftShortfall = bacGiftShortfall(form.items);
 
   const shipping = form.currency === 'USD' ? Number(form.shipping_cost_usd) || 0 : Number(form.shipping_cost_crc) || 0;
   const { discountPct, total } = calculateAdminOrderTotals(form.items, shipping);
@@ -229,6 +234,27 @@ export default function ManualOrderModal({ open, onClose, products = [], orders 
               </button>
             </div>
           ))}
+          {giftShortfall.missing > 0 && (
+            <div
+              className="manual-order-item-row"
+              style={{
+                marginBottom: '8px',
+                padding: '8px 10px',
+                borderRadius: '10px',
+                border: '1px dashed rgba(56, 189, 248, 0.35)',
+                background: 'rgba(56, 189, 248, 0.06)',
+              }}
+            >
+              <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 600, color: '#7dd3fc' }}>
+                🎁 Bacteriostatic Water 3ml{' '}
+                <span style={{ fontWeight: 500, color: '#94a3b8' }}>— added free, 1 per peptide</span>
+              </span>
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#7dd3fc', whiteSpace: 'nowrap' }}>
+                × {giftShortfall.missing}
+              </span>
+            </div>
+          )}
+
           <button type="button" className="admin-btn admin-btn-secondary" onClick={addItem} style={{ marginBottom: '12px' }}>
             <Plus size={14} /> Add item
           </button>

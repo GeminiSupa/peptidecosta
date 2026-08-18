@@ -16,6 +16,8 @@ import {
   buildBacAwareOrderItems,
   getBacWaterSizeMl,
   isSellableBacWater,
+  isGiftLine,
+  bacGiftShortfall,
 } from '../src/lib/bacWater.mjs';
 
 const peptide = (qty = 1) => ({ product: 'Semaglutide 5mg', qty });
@@ -317,4 +319,68 @@ test('an unsized BAC listing is treated as the 3ml', () => {
 test('a non-BAC product is never "sellable BAC water"', () => {
   assert.equal(isSellableBacWater('Semaglutide 5mg'), false);
   assert.equal(isSellableBacWater(null), false);
+});
+
+test('recognises a granted vial by its tag or its zero price', () => {
+  assert.equal(isGiftLine({ product: 'Bacteriostatic Water 3ml (Free Gift)', qty: 1, price: 0 }), true);
+  assert.equal(isGiftLine({ product: 'Agua Bacteriostática 3ml (Regalo)', qty: 2, price: 0 }), true);
+  // Untagged but unpaid: an order placed before the suffix existed.
+  assert.equal(isGiftLine({ product: 'BAC Water 3ml', qty: 1, price: 0 }), true);
+  assert.equal(isGiftLine({ product: 'BAC Water 3ml', qty: 1, price: 10 }), false);
+  // A zero-priced peptide is a promotional line, not a gifted vial.
+  assert.equal(isGiftLine({ product: 'Semaglutide 5mg', qty: 1, price: 0 }), false);
+});
+
+test('an order with no water at all is short its whole allowance', () => {
+  const shortfall = bacGiftShortfall([{ product: 'CJC-1295 without DAC + IPA 10mg', qty: 2, price: 53872 }]);
+  assert.deepEqual(shortfall, { granted: 2, present: 0, missing: 2 });
+});
+
+test('an order carrying its gift line is short nothing', () => {
+  const shortfall = bacGiftShortfall([
+    { product: 'Semaglutide 5mg', qty: 3, price: 100 },
+    { product: 'Agua Bacteriostática 3ml (Regalo)', qty: 3, price: 0 },
+  ]);
+  assert.deepEqual(shortfall, { granted: 3, present: 3, missing: 0 });
+});
+
+test('paid vials do not stand in for the gift', () => {
+  // The regression: two bought vials made the old all-or-nothing check treat
+  // the order as already handled, and the three free ones were never granted.
+  const shortfall = bacGiftShortfall([
+    { product: 'Semaglutide 5mg', qty: 3, price: 100 },
+    { product: 'BAC Water 10ml', qty: 2, price: 20 },
+  ]);
+  assert.deepEqual(shortfall, { granted: 3, present: 0, missing: 3 });
+});
+
+test('a partly granted order is topped up, not re-granted', () => {
+  const shortfall = bacGiftShortfall([
+    { product: 'Semaglutide 5mg', qty: 4, price: 100 },
+    { product: 'Bacteriostatic Water 3ml (Free Gift)', qty: 1, price: 0 },
+  ]);
+  assert.equal(shortfall.missing, 3);
+});
+
+test('supplies and water-only orders earn no free vial', () => {
+  assert.equal(bacGiftShortfall([syringe(3)]).missing, 0);
+  assert.equal(bacGiftShortfall([{ product: 'BAC Water 3ml', qty: 5, price: 10 }]).missing, 0);
+  assert.equal(bacGiftShortfall([]).missing, 0);
+});
+
+test('a gift already granted beyond the allowance is never negative', () => {
+  const shortfall = bacGiftShortfall([
+    { product: 'Semaglutide 5mg', qty: 1, price: 100 },
+    { product: 'Bacteriostatic Water 3ml (Free Gift)', qty: 4, price: 0 },
+  ]);
+  assert.equal(shortfall.missing, 0);
+});
+
+test('what buildBacAwareOrderItems writes leaves nothing missing', () => {
+  const items = buildBacAwareOrderItems([peptide(2), bac(1, 10)], {
+    currency: 'USD',
+    priceOf: () => 100,
+    lang: 'en',
+  });
+  assert.equal(bacGiftShortfall(items).missing, 0);
 });

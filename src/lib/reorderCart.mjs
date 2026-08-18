@@ -17,23 +17,12 @@
 //     back so the customer is told what was left behind instead of quietly
 //     receiving a smaller order.
 
-import { isBacWater } from './bacWater.mjs';
+// Recognising a gift line is a BAC rule, not a reorder rule: the admin order
+// panel has to ask the same question to know whether an order is carrying its
+// allowance. Re-exported so this module's callers keep their existing imports.
+import { isGiftLine, stripGiftSuffix } from './bacWater.mjs';
 
-const GIFT_SUFFIX = /\s*\((?:free gift|regalo)\)\s*$/i;
-
-/** Drop the gift tag so the line still resolves to its underlying product. */
-export function stripGiftSuffix(name) {
-  return String(name ?? '').replace(GIFT_SUFFIX, '').trim();
-}
-
-export function isGiftLine(item) {
-  const name = String(item?.product ?? '');
-  if (GIFT_SUFFIX.test(name)) return true;
-  // A zero-priced BAC line is a granted vial even when the tag is missing —
-  // older orders predate the suffix. Zero-priced peptides are not assumed to be
-  // gifts, because that would silently drop a genuine promotional line.
-  return Number(item?.price) === 0 && isBacWater(stripGiftSuffix(name));
-}
+export { isGiftLine, stripGiftSuffix };
 
 /** Comparison form for product names: case and inner spacing are not identity. */
 function nameKey(value) {

@@ -4,7 +4,7 @@ import { getBusinessLinks } from '@/lib/settings';
 import { sendTaxRecordsCopy } from '@/lib/taxRecordsEmail.mjs';
 import { buildOrderEmailAddressing, getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
 import { getOrderEmailLogoAttachment, ORDER_EMAIL_LOGO_SRC } from '@/lib/orderEmailBranding.mjs';
-import { splitCartUnits } from '@/lib/bacWater.mjs';
+import { withBacGiftLines } from '@/lib/bacWater.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
 
@@ -522,23 +522,14 @@ export async function POST(request) {
     // Add the free Bac Water entitlement — one vial per peptide.
     //
     // The storefront already resolves this into explicit paid and gift lines
-    // before it posts, so only orders that arrived without any BAC line at all
-    // (agent-entered orders, older clients) need it filled in here. Injecting
-    // unconditionally would bill the customer for vials and then gift them the
-    // same count on top.
-    const { peptideUnits, bacUnits } = splitCartUnits(order.items);
-
-    if (peptideUnits > 0 && bacUnits === 0) {
-      const productName = orderLang === 'en'
-        ? 'Bacteriostatic Water 3ml (Free Gift)'
-        : 'Agua Bacteriostática 3ml (Regalo)';
-
-      order.items.push({
-        product: productName,
-        qty: peptideUnits,
-        price: 0
-      });
-    }
+    // before it posts, so only the vials nobody has granted yet are filled in
+    // here. Injecting the whole allowance unconditionally would bill the
+    // customer for vials and then gift them the same count on top.
+    //
+    // What is granted is counted, not merely whether any water is present: an
+    // order carrying two paid vials and no gift line is still owed its free
+    // ones, and the earlier all-or-nothing check dropped them silently.
+    order.items = withBacGiftLines(order.items, orderLang);
 
     if (!smtp.configured) {
       console.warn('[Order notification] Transactional SMTP settings are not configured; email skipped.');

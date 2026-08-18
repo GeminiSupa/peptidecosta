@@ -6,6 +6,7 @@ import { formatActivityType } from '@/lib/orderActivity';
 import { adminFetch } from '@/lib/adminApi';
 import ProductCombobox from './ProductCombobox';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
+import { bacGiftShortfall } from '@/lib/bacWater.mjs';
 import {
   ADMIN_FALLBACK_EXCHANGE_RATE,
   calculateAdminOrderTotals,
@@ -234,6 +235,12 @@ export default function OrderDetailPanel({
     manualDiscountType,
     manualDiscountValue,
   });
+
+  // Free vials the order is entitled to but does not list. Storefront orders
+  // arrive with the gift already written in; orders typed in by an agent, or
+  // placed before the gift became a line, do not — and the box still has to be
+  // packed with them. Derived rather than stored so the archive is covered too.
+  const giftShortfall = bacGiftShortfall(editItems);
 
   const isSettledOrder = (() => {
     const normalized = String(order.status || '').toLowerCase();
@@ -860,6 +867,30 @@ export default function OrderDetailPanel({
               </button>
             </div>
           ))}
+
+          {giftShortfall.missing > 0 && (
+            <div
+              className="manual-order-item-row"
+              style={{
+                marginBottom: '8px',
+                padding: '8px 10px',
+                borderRadius: '10px',
+                border: '1px dashed rgba(56, 189, 248, 0.35)',
+                background: 'rgba(56, 189, 248, 0.06)',
+              }}
+            >
+              <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600, color: '#7dd3fc' }}>
+                🎁 Bacteriostatic Water 3ml{' '}
+                <span style={{ fontWeight: 500, color: '#94a3b8' }}>
+                  — free, 1 per peptide
+                </span>
+              </span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#7dd3fc', whiteSpace: 'nowrap' }}>
+                × {giftShortfall.missing}
+              </span>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#94a3b8' }}>Free</span>
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
             <ProductCombobox

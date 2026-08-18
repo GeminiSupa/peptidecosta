@@ -251,15 +251,88 @@ export function buildBacAwareOrderItems(cart = [], opts = {}) {
     items.push({
       product: selectedThreeMlName
         ? `${selectedThreeMlName} ${isEn ? '(Free Gift)' : '(Regalo)'}`
-        : isEn
-        ? 'Bacteriostatic Water 3ml (Free Gift)'
-        : 'Agua Bacteriostática 3ml (Regalo)',
+        : bacGiftLineName(lang),
       qty: bac.freeUnits,
       price: 0,
     });
   }
 
   return items;
+}
+
+/** The name a granted vial is listed under, in the customer's language. */
+export function bacGiftLineName(lang = 'es') {
+  return String(lang).toLowerCase().startsWith('en')
+    ? 'Bacteriostatic Water 3ml (Free Gift)'
+    : 'Agua Bacteriostática 3ml (Regalo)';
+}
+
+/**
+ * The tag buildBacAwareOrderItems() writes onto a granted vial. Reading it back
+ * is how an order states that its gift is already accounted for.
+ */
+const GIFT_SUFFIX = /\s*\((?:free gift|regalo)\)\s*$/i;
+
+/** Drop the gift tag so the line still resolves to its underlying product. */
+export function stripGiftSuffix(name) {
+  return String(name ?? '').replace(GIFT_SUFFIX, '').trim();
+}
+
+/** Whether an order line is a granted vial rather than a bought one. */
+export function isGiftLine(item) {
+  const name = String(item?.product ?? item?.name ?? '');
+  if (GIFT_SUFFIX.test(name)) return true;
+  // A zero-priced BAC line is a granted vial even when the tag is missing —
+  // older orders predate the suffix. Zero-priced peptides are not assumed to be
+  // gifts, because that would silently drop a genuine promotional line.
+  return Number(item?.price) === 0 && isBacWater(stripGiftSuffix(name));
+}
+
+/**
+ * How much of an order's free allowance is missing from its own lines.
+ *
+ * The storefront resolves the gift into an explicit line before it posts, but
+ * three kinds of order never got one: those an agent typed in by hand, those
+ * from older clients, and every order placed before the gift became a line at
+ * all. Their records show the peptides and no water, so whoever packs the box
+ * is short by exactly the allowance and nothing on the screen says so.
+ *
+ * Recomputing the entitlement from the lines — rather than trusting them to
+ * carry it — is what lets one rule cover the archive and everything since.
+ *
+ * @param {Array<{product?: string, name?: string, qty?: number, price?: number}>} items
+ * @returns {{granted: number, present: number, missing: number}} vial counts
+ */
+export function bacGiftShortfall(items = []) {
+  const { peptideUnits } = splitCartUnits(items);
+  const present = (items || []).reduce(
+    (sum, item) => (isGiftLine(item) ? sum + qtyOf(item) : sum),
+    0,
+  );
+
+  return {
+    granted: peptideUnits,
+    present,
+    missing: Math.max(0, peptideUnits - present),
+  };
+}
+
+/**
+ * An order's lines with any vials it is owed but does not list filled in.
+ *
+ * Four places need this and each used to do it by hand, which is how the rule
+ * drifted apart in the first place: the order record itself, the customer's
+ * receipt, the shipped receipt, and the accountant's copy of both. A caller
+ * that already carries its gift gets its own array back untouched.
+ */
+export function withBacGiftLines(items = [], lang = 'es') {
+  const { missing } = bacGiftShortfall(items);
+  if (missing <= 0) return items || [];
+
+  return [
+    ...(items || []),
+    { product: bacGiftLineName(lang), qty: missing, price: 0 },
+  ];
 }
 
 /**
