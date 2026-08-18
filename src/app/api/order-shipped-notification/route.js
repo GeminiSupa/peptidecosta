@@ -6,6 +6,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { sendTaxRecordsCopy } from '@/lib/taxRecordsEmail.mjs';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 import { withBacGiftLines } from '@/lib/bacWater.mjs';
+import { CORREOS_TRACKING_URL, correosTrackingStrings, hasTrackingNumber } from '@/lib/correosTracking.mjs';
 
 // Read at request time, never at module scope.
 //
@@ -67,6 +68,7 @@ const buildItemsRows = (items = [], currency) => items.map((item) => {
 // Customer HTML Receipt Builder
 const buildCustomerShippedHtml = (order, totalPrimary, totalUsd, totalCrc, lang, links) => {
   const isEn = lang === 'en';
+  const correos = correosTrackingStrings(lang);
   
   const strings = {
     title: isEn ? 'Your Order is on the Way!' : '¡Su pedido está en camino!',
@@ -119,6 +121,17 @@ const buildCustomerShippedHtml = (order, totalPrimary, totalUsd, totalCrc, lang,
             </tr>
           </table>
         </div>
+
+        ${hasTrackingNumber(order.tracking_number) ? `
+        <!-- Where to actually use that number -->
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:18px;margin-bottom:24px;text-align:center;">
+          <h3 style="font-size:14px;font-weight:800;color:#1e40af;margin:0 0 6px;">📍 ${correos.heading}</h3>
+          <p style="font-size:13px;color:#334155;margin:0 0 14px;line-height:1.5;">${correos.body}</p>
+          <a href="${CORREOS_TRACKING_URL}" target="_blank" rel="noopener noreferrer" style="display:inline-block;background:#1d4ed8;color:#ffffff !important;font-weight:bold;padding:12px 22px;border-radius:9px;text-decoration:none;font-size:13.5px;">
+            ${correos.button}
+          </a>
+        </div>
+        ` : ''}
 
         <!-- Shipping Section -->
         <h3 style="font-size:14px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 10px;">📦 ${strings.shippingTo}</h3>
@@ -268,6 +281,7 @@ export async function POST(request) {
       orderLang === 'en' ? 'Your order is on the way!' : '¡Su pedido está en camino!',
       '',
       `${orderLang === 'en' ? 'Tracking Number' : 'Número de Rastreo'}: ${order.tracking_number || 'N/A'}`,
+      ...(hasTrackingNumber(order.tracking_number) ? [correosTrackingStrings(orderLang).textLine] : []),
       '',
       `${orderLang === 'en' ? 'Order Summary' : 'Resumen de su Orden'}:`,
       `• ${orderLang === 'en' ? 'Reference' : 'Referencia'}: ${normalizedOrder.orderNumber}`,
