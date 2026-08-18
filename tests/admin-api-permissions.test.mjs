@@ -29,6 +29,8 @@ test('admin API path rules map sensitive routes to dashboard modules', () => {
   // Saved templates carry campaign designs, so they sit behind the same module.
   assert.deepEqual(adminPermissionsForPath('/api/admin/campaign-templates'), ['marketing']);
   assert.deepEqual(adminPermissionsForPath('/api/admin/marketing-segments'), ['marketing']);
+  // Changing how an order gets paid sits behind the same module as the order.
+  assert.deepEqual(adminPermissionsForPath('/api/admin/orders/payment-method'), ['orders']);
   assert.deepEqual(adminPermissionsForPath('/api/admin/users/avatar'), []);
 });
 

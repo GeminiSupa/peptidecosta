@@ -8,6 +8,11 @@ import ProductCombobox from './ProductCombobox';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import { bacGiftShortfall } from '@/lib/bacWater.mjs';
 import {
+  ORDER_PAYMENT_METHODS,
+  orderPaymentIsSettled,
+  paymentMethodLabel,
+} from '@/lib/orderPaymentMethod.mjs';
+import {
   ADMIN_FALLBACK_EXCHANGE_RATE,
   calculateAdminOrderTotals,
   getAdminOrderSubtotal,
@@ -143,6 +148,9 @@ export default function OrderDetailPanel({
   const [savingDiscount, setSavingDiscount] = useState(false);
   const [discountError, setDiscountError] = useState('');
   const [phoneCopied, setPhoneCopied] = useState(false);
+  const [changingPaymentMethod, setChangingPaymentMethod] = useState(false);
+  const [paymentMethodError, setPaymentMethodError] = useState('');
+  const [paymentMethodNotice, setPaymentMethodNotice] = useState('');
   const [cardLinkLoading, setCardLinkLoading] = useState(false);
   const [cardLinkCopied, setCardLinkCopied] = useState(false);
   const [cardLinkError, setCardLinkError] = useState('');
@@ -189,6 +197,55 @@ export default function OrderDetailPanel({
 
   const orderCurrency = normalizeAdminOrderCurrency(order.currency);
 
+  // A customer who picked WhatsApp and then asks to pay by card used to mean
+  // recreating the order by hand — two records for one sale, with the activity
+  // log, the agent attribution and the commission split between them.
+  const changePaymentMethod = async (nextMethod) => {
+    const current = String(order.payment_method || '').trim().toLowerCase();
+    if (!nextMethod || nextMethod === current) return;
+
+    const label = paymentMethodLabel(nextMethod);
+    if (!window.confirm(`Change this order from ${paymentMethodLabel(current)} to ${label}?`)) return;
+
+    setChangingPaymentMethod(true);
+    setPaymentMethodError('');
+    setPaymentMethodNotice('');
+    setCardLinkCopied(false);
+    setCardLinkError('');
+
+    try {
+      const res = await adminFetch('/api/admin/orders/payment-method', {
+        method: 'POST',
+        body: JSON.stringify({ orderId: order.id, paymentMethod: nextMethod }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Could not change the payment method');
+
+      onUpdated(data.order);
+
+      if (data.paymentUrl) {
+        // Handed over with the change so the agent can paste it straight into
+        // the conversation they are already having.
+        try {
+          await navigator.clipboard.writeText(data.paymentUrl);
+          setPaymentMethodNotice(`Now set to ${label}. The secure card payment link is on your clipboard.`);
+        } catch {
+          setPaymentMethodNotice(`Now set to ${label}. Use "Copy card payment link" below to send it.`);
+        }
+      } else {
+        setPaymentMethodNotice(
+          data.paymentLinkError
+            ? `Now set to ${label}, but ${data.paymentLinkError}`
+            : `Now set to ${label}.`,
+        );
+      }
+    } catch (err) {
+      setPaymentMethodError(err.message);
+    } finally {
+      setChangingPaymentMethod(false);
+    }
+  };
+
   const copyCardPaymentLink = async () => {
     setCardLinkLoading(true);
     setCardLinkCopied(false);
@@ -213,6 +270,7 @@ export default function OrderDetailPanel({
 
   const activity = Array.isArray(order.activity_log) ? order.activity_log : [];
   const cardPaymentBadge = getCardPaymentBadge(order);
+  const paymentIsSettled = orderPaymentIsSettled(order);
   const statusLower = String(order.status || '').toLowerCase();
   const isActionRequired = order.payment_method === 'card' && 
                             cardPaymentBadge?.label === 'Paid' && 
@@ -628,7 +686,54 @@ export default function OrderDetailPanel({
                 <span>Card payment approved. Fulfill order and set status to "Order Complete".</span>
               </div>
             )}
-            <div><label>Payment</label><span>{order.payment_method}</span></div>
+            <div>
+              <label>Payment</label>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {paymentIsSettled ? (
+                  // Money already arrived one way; the record of how must not
+                  // change afterwards.
+                  <>
+                    {paymentMethodLabel(order.payment_method)}
+                    <small style={{ color: 'rgba(255,255,255,0.4)' }}>settled — cannot be changed</small>
+                  </>
+                ) : (
+                  <select
+                    value={String(order.payment_method || '').trim().toLowerCase()}
+                    onChange={(event) => changePaymentMethod(event.target.value)}
+                    disabled={changingPaymentMethod}
+                    aria-label="Payment method"
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.14)',
+                      borderRadius: '7px',
+                      color: '#e2e8f0',
+                      padding: '5px 8px',
+                      fontSize: '0.82rem',
+                    }}
+                  >
+                    {!ORDER_PAYMENT_METHODS.some(m => m.id === String(order.payment_method || '').trim().toLowerCase()) && (
+                      <option value={String(order.payment_method || '')}>{order.payment_method || 'unknown'}</option>
+                    )}
+                    {ORDER_PAYMENT_METHODS.map(method => (
+                      <option key={method.id} value={method.id}>{method.icon} {method.label}</option>
+                    ))}
+                  </select>
+                )}
+                {changingPaymentMethod && <small style={{ color: 'rgba(255,255,255,0.5)' }}>Changing…</small>}
+              </span>
+            </div>
+            {paymentMethodNotice && (
+              <div>
+                <label />
+                <span style={{ color: '#34d399', fontSize: '0.78rem' }}>{paymentMethodNotice}</span>
+              </div>
+            )}
+            {paymentMethodError && (
+              <div>
+                <label />
+                <span style={{ color: '#f87171', fontSize: '0.78rem' }}>{paymentMethodError}</span>
+              </div>
+            )}
             {cardPaymentBadge && (
               <div>
                 <label>Card payment</label>
