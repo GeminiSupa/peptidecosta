@@ -1,5 +1,9 @@
 import nodemailer from 'nodemailer';
 import { createTrackingUrlToken, createUnsubscribeToken } from '@/lib/marketingTokens';
+import {
+  DORMANT_WINDOW_DAYS, behaviorFilterLabel, behaviorNeedsEngagement, behaviorNeedsOrders,
+  buildBehaviorSignals, matchesBehaviorFilter, normalizeBehaviorFilter, signalsFor,
+} from '@/lib/campaignBehavior.mjs';
 import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { clampOutlookButtonSizes, personalizeMergeTags, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
@@ -43,6 +47,10 @@ function truncateError(error, maxLength = 500) {
 function normalizeEmail(value) {
   const email = String(value || '').trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
+}
+
+function isMissingBehaviorFilterColumn(error) {
+  return String(error?.message || '').includes('behavior_filter');
 }
 
 function isMissingAudienceScopeColumn(error) {
@@ -419,7 +427,7 @@ async function retireBouncedRecipient(supabase, subscriber, error) {
 // Persist whatever audience the sender actually picked so this send and every
 // cron batch that follows target the same people. See resolveCampaignAudience.
 async function applyAudienceSelection(supabase, campaign, audience) {
-  const { scope, includeLeads, targetTags, changed } = resolveCampaignAudience(campaign, audience);
+  const { scope, includeLeads, targetTags, behaviorFilter, changed } = resolveCampaignAudience(campaign, audience);
 
   if (changed) {
     // include_leads is kept in step with the scope so anything still reading
@@ -428,9 +436,29 @@ async function applyAudienceSelection(supabase, campaign, audience) {
       audience_scope: scope,
       include_leads: includeLeads,
       target_tags: targetTags,
+      behavior_filter: behaviorFilter,
       updated_at: new Date().toISOString(),
     };
     let { error } = await supabase.from('email_campaigns').update(row).eq('id', campaign.id);
+
+    // Until add-campaign-behavior-filter.sql is run the column does not exist.
+    // A filter narrows the audience, so dropping it silently would mail MORE
+    // people than the sender chose — refuse instead. 'none' changes nothing,
+    // so that one drops through and the send proceeds as it always did.
+    if (error && isMissingBehaviorFilterColumn(error)) {
+      if (behaviorFilter !== 'none') {
+        throw new CampaignDeliveryError(
+          `Targeting "${behaviorFilterLabel(behaviorFilter)}" needs database setup first. Run add-campaign-behavior-filter.sql, then try again.`,
+          503,
+        );
+      }
+      const { behavior_filter: _droppedBehavior, ...withoutBehavior } = row;
+      ({ error } = await supabase.from('email_campaigns').update(withoutBehavior).eq('id', campaign.id));
+      if (!error) {
+        console.warn('[Campaign delivery] behavior_filter column missing; run add-campaign-behavior-filter.sql to enable behavioural targeting.');
+        return { ...campaign, audience_scope: scope, include_leads: includeLeads, target_tags: targetTags, behavior_filter: 'none' };
+      }
+    }
 
     // Until add-campaign-audience-scope.sql is run the column does not exist.
     // Save what we can rather than refusing to send: without the column the
@@ -449,13 +477,110 @@ async function applyAudienceSelection(supabase, campaign, audience) {
       ({ error } = await supabase.from('email_campaigns').update(legacyRow).eq('id', campaign.id));
       if (!error) {
         console.warn('[Campaign delivery] audience_scope column missing; run add-campaign-audience-scope.sql to enable "CRM leads only".');
-        return { ...campaign, include_leads: includeLeads, target_tags: targetTags };
+        return { ...campaign, include_leads: includeLeads, target_tags: targetTags, behavior_filter: behaviorFilter };
       }
     }
     if (error) throw new CampaignDeliveryError(`Unable to save the campaign audience before sending: ${error.message}`, 503);
   }
 
-  return { ...campaign, audience_scope: scope, include_leads: includeLeads, target_tags: targetTags };
+  return { ...campaign, audience_scope: scope, include_leads: includeLeads, target_tags: targetTags, behavior_filter: behaviorFilter };
+}
+
+// orders.customer_email is not normalised on insert — the card-payment and
+// ShieldHubPay paths both store whatever case the customer typed. A server-side
+// `in` against lowercased addresses would therefore miss real orders and quietly
+// drop paying customers out of "has ordered before", so the column is read and
+// matched case-insensitively here instead.
+const ORDER_EMAIL_CAP = 50000;
+const EVENT_PAGE_SIZE = 1000;
+
+async function loadOrderEmails(supabase) {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('customer_email')
+    .not('customer_email', 'is', null)
+    .limit(ORDER_EMAIL_CAP);
+
+  if (error) {
+    throw new CampaignDeliveryError(
+      `Order history could not be read, so order-based targeting cannot be resolved: ${error.message}`,
+      503,
+    );
+  }
+  if ((data || []).length >= ORDER_EMAIL_CAP) {
+    // Silently truncating would mail the wrong list: real customers would look
+    // like prospects. Refuse rather than guess.
+    throw new CampaignDeliveryError(
+      'Too many orders to resolve order-based targeting reliably. Use a different audience filter.',
+      503,
+    );
+  }
+  return data || [];
+}
+
+/**
+ * Load only the history the chosen filter actually needs.
+ *
+ * "none" is the default and by far the common case, so it must cost nothing.
+ * Engagement and order history are each skipped unless a filter depends on it.
+ */
+async function loadBehaviorSignals(supabase, behaviorFilter, targets) {
+  if (normalizeBehaviorFilter(behaviorFilter) === 'none') return null;
+
+  const subscriberIds = targets.map(item => item.id).filter(Boolean);
+  const subscriberEmails = new Map(targets.map(item => [item.id, item.email]));
+  if (!subscriberIds.length) return new Map();
+
+  const wantsEngagement = behaviorNeedsEngagement(behaviorFilter);
+  const wantsOrders = behaviorNeedsOrders(behaviorFilter);
+
+  // Nothing older than the widest window can change any answer: 'engaged' and
+  // 'clicked' look back 90 days, and 'dormant' only asks whether anything
+  // happened inside 180. Bounding the read here is both cheaper and exact.
+  const since = new Date(Date.now() - DORMANT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  // Chunked because Supabase caps the size of an `in` list, and the audience
+  // can be the whole subscriber table.
+  const chunk = (list, size = 500) => {
+    const out = [];
+    for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+    return out;
+  };
+
+  // Paged explicitly: PostgREST applies its own row ceiling to an unbounded
+  // select, and a truncated read here would show up as people wrongly counted
+  // dormant — i.e. a win-back campaign mailing subscribers who are active.
+  const gather = async (table, column, values) => {
+    const rows = [];
+    for (const slice of chunk(values)) {
+      for (let from = 0; ; from += EVENT_PAGE_SIZE) {
+        const { data, error } = await supabase
+          .from(table)
+          .select('subscriber_id, created_at')
+          .in(column, slice)
+          .gte('created_at', since)
+          .order('created_at', { ascending: false })
+          .range(from, from + EVENT_PAGE_SIZE - 1);
+        if (error) {
+          throw new CampaignDeliveryError(
+            `Behavioural targeting needs ${table}, which could not be read: ${error.message}`,
+            503,
+          );
+        }
+        rows.push(...(data || []));
+        if ((data || []).length < EVENT_PAGE_SIZE) break;
+      }
+    }
+    return rows;
+  };
+
+  const [opens, clicks, orders] = await Promise.all([
+    wantsEngagement ? gather('campaign_opens', 'subscriber_id', subscriberIds) : [],
+    wantsEngagement ? gather('campaign_clicks', 'subscriber_id', subscriberIds) : [],
+    wantsOrders ? loadOrderEmails(supabase) : [],
+  ]);
+
+  return buildBehaviorSignals({ opens, clicks, orders, subscriberEmails });
 }
 
 export async function deliverCampaign(campaignId, options = {}) {
@@ -518,6 +643,23 @@ export async function deliverCampaign(campaignId, options = {}) {
     }
   }
   if (!targets.length) throw new CampaignDeliveryError('Every subscriber in this segment is suppressed.', 400);
+
+  // Behavioural targeting narrows whatever the scope produced. It runs after
+  // scope and suppression so it can only ever remove people, never reach past
+  // either into someone who was already excluded.
+  const behaviorFilter = normalizeBehaviorFilter(campaign.behavior_filter);
+  if (behaviorFilter !== 'none') {
+    const before = targets.length;
+    const signals = await loadBehaviorSignals(supabase, behaviorFilter, targets);
+    targets = targets.filter(item => matchesBehaviorFilter(behaviorFilter, signalsFor(signals, item.email)));
+    if (!targets.length) {
+      throw new CampaignDeliveryError(
+        `No recipient matches "${behaviorFilterLabel(behaviorFilter)}" for this campaign (checked ${before} address${before === 1 ? '' : 'es'}).`,
+        400,
+      );
+    }
+  }
+
   const totalEligible = targets.length;
   const sentIds = new Set((previousSends || []).map(item => item.subscriber_id));
   const alreadySent = targets.filter(item => sentIds.has(item.id)).length;

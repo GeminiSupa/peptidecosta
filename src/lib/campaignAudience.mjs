@@ -1,3 +1,5 @@
+import { normalizeBehaviorFilter } from './campaignBehavior.mjs';
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMAIL_IN_TEXT_PATTERN = /[^\s<>()\[\],;:]+@[^\s<>()\[\],;:]+\.[A-Za-z]{2,}/;
 
@@ -91,12 +93,14 @@ export function subscriberMatchesScope(subscriber, scope, isLeadAddress) {
 export function resolveCampaignAudience(campaign = {}, audience = null) {
   const savedScope = normalizeAudienceScope(campaign.audience_scope, campaign.include_leads);
   const savedTargetTags = normalizeTargetTags(campaign.target_tags);
+  const savedBehavior = normalizeBehaviorFilter(campaign.behavior_filter);
 
   if (!audience) {
     return {
       scope: savedScope,
       includeLeads: scopeIncludesLeads(savedScope),
       targetTags: savedTargetTags,
+      behaviorFilter: savedBehavior,
       changed: false,
     };
   }
@@ -112,10 +116,14 @@ export function resolveCampaignAudience(campaign = {}, audience = null) {
   const targetTags = audience.targetTags === undefined
     ? savedTargetTags
     : normalizeTargetTags(audience.targetTags);
+  const behaviorFilter = audience.behaviorFilter === undefined
+    ? savedBehavior
+    : normalizeBehaviorFilter(audience.behaviorFilter);
   const changed = scope !== savedScope
+    || behaviorFilter !== savedBehavior
     || JSON.stringify(targetTags) !== JSON.stringify(savedTargetTags);
 
-  return { scope, includeLeads: scopeIncludesLeads(scope), targetTags, changed };
+  return { scope, includeLeads: scopeIncludesLeads(scope), targetTags, behaviorFilter, changed };
 }
 
 export function leadSubscriberCandidates(leads = [], existingSubscribers = []) {

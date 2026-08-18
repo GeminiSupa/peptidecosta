@@ -1482,3 +1482,48 @@
   display: block;
 }
 .mkt-linkish:hover { color: #34d399; text-decoration: underline; }
+
+/* Saved templates carry a delete affordance, so the card is a wrapper and the
+   clickable body is the inner button. */
+.mkt-template-saved {
+  display: block;
+  padding: 0;
+  cursor: default;
+}
+.mkt-template-saved > button:first-child {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0 12px;
+  width: 100%;
+  min-height: 82px;
+  padding: 12px;
+  padding-right: 36px;
+  background: none;
+  border: none;
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.mkt-template-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: none;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mkt-template-delete:hover {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.12);
+}

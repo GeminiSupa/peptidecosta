@@ -6,14 +6,21 @@ import { LIVE_SITE_URL } from '@/lib/publicUrl';
 import {
   AlertTriangle, CheckCircle2, Eye, Loader2, Save, Send,
   Users, ChevronDown, ChevronUp, Smartphone, LayoutTemplate,
-  Tag, Layers, Monitor, X, Clock, Mail, AtSign, SendHorizonal,
+  Tag, Layers, Monitor, X, Clock, Trash2, Mail, AtSign, SendHorizonal,
   CalendarClock, TestTube2, CopyPlus, Sparkles
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { MARKETING_FOOTER_MARKER, buildMarketingEmailFooterTemplateHtml } from '@/lib/marketingEmailFooter';
 import { normalizeAudienceScope } from '@/lib/campaignAudience.mjs';
+import { BEHAVIOR_FILTERS, behaviorFilterLabel, matchesBehaviorFilter, normalizeBehaviorFilter, signalsFor } from '@/lib/campaignBehavior.mjs';
 
 const LOCAL_DRAFT_KEY = 'marketing_studio_local_email_draft_v1';
+
+// Autosave cadence. The editor fires a change event per keystroke and per drag,
+// so the server save waits for a lull; the browser snapshot is cheap and runs
+// sooner, because a crashed tab is the case it exists for.
+const AUTOSAVE_SERVER_MS = 4000;
+const AUTOSAVE_LOCAL_MS = 1200;
 
 // The three recipient groups. "Everyone" is subscribers + leads deduplicated by
 // address, which is why it is not simply the two counts added together.
@@ -390,6 +397,10 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
   const [leadCandidates,    setLeadCandidates]    = useState([]);
   const [leadEmailTotal,    setLeadEmailTotal]    = useState(0);
   const [selectedCampaignId, setSelectedCampaignId] = useState(editingCampaignId || '');
+  const [savedTemplates, setSavedTemplates] = useState([]);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [showTemplateSave, setShowTemplateSave] = useState(false);
+  const [templateName, setTemplateName] = useState('');
   const [subject,           setSubject]           = useState('');
   const [previewText,       setPreviewText]       = useState('');
   const [campaignName,      setCampaignName]      = useState('New Campaign ' + new Date().toLocaleDateString());
@@ -405,6 +416,9 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
   const [subjectB,    setSubjectB]    = useState('');
   const [targetSegment, setTargetSegment] = useState('');
   const [audienceScope, setAudienceScope] = useState('subscribers');
+  const [behaviorFilter, setBehaviorFilter] = useState('none');
+  const [behaviorSignals, setBehaviorSignals] = useState(null);
+  const [behaviorEstimateApproximate, setBehaviorEstimateApproximate] = useState(false);
   const [deviceMode,  setDeviceMode]  = useState('desktop');
   const [previewHtml, setPreviewHtml] = useState(null);
 
@@ -442,12 +456,13 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
     isABTest,
     targetSegment,
     audienceScope,
+    behaviorFilter,
     previewText,
     replyTo,
     scheduleMode,
     scheduledAt,
     html
-  }), [audienceScope, campaignName, isABTest, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
+  }), [audienceScope, behaviorFilter, campaignName, isABTest, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
 
   const hasUnsavedChanges = ['pending', 'error', 'recovered'].includes(autosaveStatus);
   const saveStatusText = useMemo(() => {
@@ -497,6 +512,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
         isABTest,
         targetSegment,
         audienceScope,
+        behaviorFilter,
         previewText,
         fromName,
         fromEmail,
@@ -513,7 +529,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
       console.warn('Local campaign draft snapshot failed:', error);
       return false;
     }
-  }, [audienceScope, buildCampaignSignature, campaignName, fromEmail, fromName, isABTest, isReady, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
+  }, [audienceScope, behaviorFilter, buildCampaignSignature, campaignName, fromEmail, fromName, isABTest, isReady, previewText, replyTo, scheduleMode, scheduledAt, subject, subjectB, targetSegment]);
 
   useEffect(() => {
     selectedCampaignIdRef.current = selectedCampaignId;
@@ -521,7 +537,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
 
   const markDraftDirty = () => {
     setAutosaveStatus('pending');
-    setStatusDetail('Unsaved changes. Keep designing, then click Save draft when you are ready.');
+    setStatusDetail('Unsaved changes. Autosaving shortly — or press Cmd/Ctrl+S to save now.');
     setLastTestedSignature('');
     setLastTestSentAt(null);
   };
@@ -572,6 +588,8 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
   useEffect(() => {
     fetchCampaigns();
     fetchSubscribers();
+    fetchSavedTemplates();
+    fetchBehaviorSignals();
   }, []);
 
   const loadEditorDesign = useCallback((design) => {
@@ -603,6 +621,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
     setIsABTest(Boolean(snapshot.isABTest));
     setTargetSegment(snapshot.targetSegment || '');
     setAudienceScope(normalizeAudienceScope(snapshot.audienceScope, snapshot.includeLeads));
+    setBehaviorFilter(normalizeBehaviorFilter(snapshot.behaviorFilter));
     setPreviewText(snapshot.previewText || '');
     setFromName(snapshot.fromName || 'Costa Peptides');
     setFromEmail(snapshot.fromEmail || '');
@@ -653,6 +672,99 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
     }
   };
 
+  const fetchBehaviorSignals = async () => {
+    try {
+      const res = await adminFetch('/api/admin/marketing-segments');
+      const data = await res.json();
+      setBehaviorSignals(data.signals || {});
+      setBehaviorEstimateApproximate(Boolean(data.truncated));
+    } catch (err) {
+      // Without these the estimate falls back to the whole scope and says so;
+      // the send still applies the filter server-side either way.
+      console.warn('Could not load behavioural segments:', err);
+    }
+  };
+
+  const fetchSavedTemplates = async () => {
+    try {
+      const res = await adminFetch('/api/admin/campaign-templates');
+      const data = await res.json();
+      setSavedTemplates(data.templates || []);
+    } catch (err) {
+      // The built-in templates still work without these; no need to shout.
+      console.warn('Could not load saved templates:', err);
+    }
+  };
+
+  // A template is a layout, not a campaign: the design and a subject pattern
+  // travel, the audience, tags and schedule deliberately do not. Duplicating a
+  // campaign was the only way to reuse a design before this, and it dragged all
+  // of those along with it.
+  const saveAsTemplate = async () => {
+    const editor = emailEditorRef.current?.editor;
+    if (!isReady || !editor) {
+      notify('The editor is still loading. Try again in a moment.', 'warning');
+      return;
+    }
+
+    const name = templateName.trim();
+    if (!name) {
+      notify('Give the template a name to save it.', 'warning');
+      return;
+    }
+
+    setIsSavingTemplate(true);
+    try {
+      const exported = await new Promise((resolve, reject) => {
+        try {
+          editor.exportHtml(resolve);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      const res = await adminFetch('/api/admin/campaign-templates', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          description: subject.trim() ? `Subject: ${subject.trim()}` : 'Saved from the campaign builder',
+          subject_line: subject.trim() || null,
+          design_json: exported.design,
+          html_content: exported.html,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to save template');
+      await fetchSavedTemplates();
+      setTemplateName('');
+      setShowTemplateSave(false);
+      notify(`Saved "${name}" to your templates.`, 'success');
+    } catch (err) {
+      notify(`Could not save the template: ${err.message}`, 'error');
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
+  const deleteSavedTemplate = async (template) => {
+    const confirmed = await confirm({
+      title: 'Delete this template?',
+      message: template.name,
+      detail: 'Campaigns already built from it are untouched.',
+      confirmLabel: 'Delete template',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      const res = await adminFetch(`/api/admin/campaign-templates?id=${template.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to delete template');
+      setSavedTemplates(current => current.filter(item => item.id !== template.id));
+      notify(`Deleted "${template.name}".`, 'success');
+    } catch (err) {
+      notify(`Could not delete the template: ${err.message}`, 'error');
+    }
+  };
+
   const fetchCampaigns = async () => {
     try {
       const res  = await adminFetch('/api/admin/campaigns');
@@ -691,6 +803,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
     setIsABTest(Boolean(selectedCampaign.is_ab_test));
     setTargetSegment(selectedCampaign.target_tags?.[0] || '');
     setAudienceScope(normalizeAudienceScope(selectedCampaign.audience_scope, selectedCampaign.include_leads));
+    setBehaviorFilter(normalizeBehaviorFilter(selectedCampaign.behavior_filter));
     setFromName(selectedCampaign.from_name || 'Costa Peptides');
     setFromEmail(selectedCampaign.from_email || '');
     setReplyTo(selectedCampaign.reply_to || '');
@@ -804,12 +917,25 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
     all: eligibleSubscribers.length + eligibleLeads.length,
   }), [allLeadCount, eligibleLeads.length, eligibleSubscribers.length]);
 
-  const estimatedAudience = useMemo(() => {
+  const scopedAudience = useMemo(() => {
     if (audienceScope === 'non_subscribers') return eligibleLeads;
     if (audienceScope === 'leads') return new Array(allLeadCount).fill(null);
     if (audienceScope === 'all') return [...eligibleSubscribers, ...eligibleLeads];
     return eligibleSubscribers;
   }, [allLeadCount, audienceScope, eligibleLeads, eligibleSubscribers]);
+
+  // The behaviour filter narrows the scope, never widens it. "CRM leads only"
+  // is a bare count rather than rows — the overlap only the server can
+  // enumerate — so it cannot be filtered here; the send still applies it.
+  const estimatedAudience = useMemo(() => {
+    if (behaviorFilter === 'none' || !behaviorSignals) return scopedAudience;
+    if (audienceScope === 'leads') return scopedAudience;
+    const signalMap = new Map(Object.entries(behaviorSignals));
+    return scopedAudience.filter(person => matchesBehaviorFilter(behaviorFilter, signalsFor(signalMap, person?.email)));
+  }, [audienceScope, behaviorFilter, behaviorSignals, scopedAudience]);
+
+  const behaviorEstimateUnavailable = behaviorFilter !== 'none'
+    && (audienceScope === 'leads' || !behaviorSignals);
 
   const preflightItems = useMemo(() => {
     const activeSubject = selectedCampaign?.subject_line || subject;
@@ -871,6 +997,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
           target_tags: targetSegment ? [targetSegment] : null,
           include_leads: audienceScope !== 'subscribers',
           audience_scope: audienceScope,
+          behavior_filter: behaviorFilter,
           design_json: design, html_content: finalHtml,
           from_name: fromName || null,
           from_email: fromEmail || null,
@@ -889,13 +1016,17 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
         setSelectedCampaignId(data.campaign.id);
         setAutosaveStatus('saved');
         setLastSavedAt(new Date());
-        setStatusDetail(`Saved to server at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`);
-        writeLocalSnapshot({ unsaved: false, source: 'server-save' });
-        fetchCampaigns();
+        setStatusDetail(`${silent ? 'Autosaved' : 'Saved'} to server at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`);
+        writeLocalSnapshot({ unsaved: false, source: silent ? 'autosave' : 'server-save' });
+        // An autosave fires every few seconds while someone designs; refreshing
+        // the whole campaign list each time would be a request per lull.
+        if (!silent) fetchCampaigns();
         return true;
     } catch (err) {
       setAutosaveStatus('error');
-      setStatusDetail(`Save failed: ${err.message}. Your draft is still backed up in this browser; click Save draft to try again.`);
+      setStatusDetail(silent
+        ? `Autosave failed: ${err.message}. Your draft is backed up in this browser — click Save draft to retry.`
+        : `Save failed: ${err.message}. Your draft is still backed up in this browser; click Save draft to try again.`);
       writeLocalSnapshot({ unsaved: true, source: 'server-save-failed' });
       return false;
     } finally {
@@ -912,7 +1043,59 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
     if (!subject || (isABTest && !subjectB)) { notify('Enter the subject line before saving.', 'warning'); return; }
     if (scheduleMode === 'scheduled' && !scheduledAt) { notify('Pick a date and time for the scheduled send.', 'warning'); return; }
     await persistCampaign({ silent: false });
-  }, [isABTest, persistCampaign, scheduleMode, scheduledAt, subject, subjectB]);
+  }, [isABTest, notify, persistCampaign, scheduleMode, scheduledAt, subject, subjectB]);
+
+  // The debounce timers fire long after the render that armed them, so they
+  // read the current save through a ref rather than closing over a stale one.
+  const persistCampaignRef = useRef(persistCampaign);
+  const writeLocalSnapshotRef = useRef(writeLocalSnapshot);
+  useEffect(() => {
+    persistCampaignRef.current = persistCampaign;
+    writeLocalSnapshotRef.current = writeLocalSnapshot;
+  });
+
+  /**
+   * Autosave.
+   *
+   * The status indicator has said "Unsaved changes" since the builder shipped
+   * and nothing ever acted on it: the only path to the server was the Save
+   * draft button, and the local snapshot was only written on a manual save —
+   * so the "your draft is backed up in this browser" reassurance was only true
+   * after you had already saved. A closed tab lost the work.
+   *
+   * Two cadences. The browser snapshot is cheap and runs first, because a
+   * crashed tab is what it is for. The server save waits for a real lull, and
+   * only once the campaign has the fields the API demands — autosaving a
+   * nameless draft would litter the campaign list.
+   */
+  useEffect(() => {
+    if (autosaveStatus !== 'pending' || !isReady) return undefined;
+
+    const localTimer = setTimeout(() => {
+      writeLocalSnapshotRef.current?.({ unsaved: true, source: 'autosave' });
+    }, AUTOSAVE_LOCAL_MS);
+
+    const readyToPersist = campaignName.trim() && subject.trim()
+      && (!isABTest || subjectB.trim())
+      && (scheduleMode !== 'scheduled' || scheduledAt);
+
+    const serverTimer = readyToPersist
+      ? setTimeout(() => { persistCampaignRef.current?.({ silent: true }); }, AUTOSAVE_SERVER_MS)
+      : null;
+
+    return () => {
+      clearTimeout(localTimer);
+      if (serverTimer) clearTimeout(serverTimer);
+    };
+  }, [autosaveStatus, campaignName, isABTest, isReady, scheduleMode, scheduledAt, subject, subjectB]);
+
+  // A tab closed mid-edit still leaves the browser copy behind to recover from.
+  useEffect(() => {
+    if (!hasUnsavedChanges) return undefined;
+    const persistBeforeUnload = () => { writeLocalSnapshotRef.current?.({ unsaved: true, source: 'unload' }); };
+    window.addEventListener('pagehide', persistBeforeUnload);
+    return () => window.removeEventListener('pagehide', persistBeforeUnload);
+  }, [hasUnsavedChanges]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -990,7 +1173,9 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
       const recipients = estimatedAudience.length;
       const confirmed = await confirm({
         title: `Send the ${label} to ${recipients.toLocaleString()} recipient${recipients === 1 ? '' : 's'}?`,
-        message: chosen?.label || audienceScope,
+        message: behaviorFilter === 'none'
+          ? (chosen?.label || audienceScope)
+          : `${chosen?.label || audienceScope} — ${behaviorFilterLabel(behaviorFilter).toLowerCase()}`,
         detail: chosen?.hint ? `${chosen.hint}. Email cannot be recalled once the batch starts.` : 'Email cannot be recalled once the batch starts.',
         confirmLabel: isTestBatch ? 'Send test batch' : 'Send campaign',
         tone: 'danger',
@@ -1009,6 +1194,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
           // this dialog just promised, saved or not.
           audience_scope: audienceScope,
           include_leads: audienceScope !== 'subscribers',
+          behavior_filter: behaviorFilter,
           target_tags: targetSegment ? [targetSegment] : null,
         }),
       });
@@ -1085,7 +1271,7 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
             {autosaveStatus === 'saving' || isSaving ? <Loader2 size={13} className="animate-spin" /> : autosaveStatus === 'error' ? <AlertTriangle size={13} /> : <CheckCircle2 size={13} />}
             {saveStatusText}
           </span>
-          <small>{hasUnsavedChanges ? 'Your editor selection is preserved until you choose Save draft.' : 'Use Cmd/Ctrl+S to save without leaving the editor.'}</small>
+          <small>{hasUnsavedChanges ? 'Autosaving as you work. Cmd/Ctrl+S saves immediately.' : 'Use Cmd/Ctrl+S to save without leaving the editor.'}</small>
         </div>
         <div className="mkt-builder-savebar-actions">
           <button onClick={openPreview} disabled={!isReady} className="mkt-btn">
@@ -1164,10 +1350,53 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
               <strong>Start with a proven layout</strong>
               <span>You can change every block in the editor.</span>
             </div>
-            <button type="button" className="mkt-ai-toggle" onClick={() => setShowAiAssistant(value => !value)} aria-expanded={showAiAssistant}>
-              <Sparkles size={15} /> {showAiAssistant ? 'Hide AI writer' : 'Create with AI'}
-            </button>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button type="button" className="mkt-ai-toggle" onClick={() => setShowAiAssistant(value => !value)} aria-expanded={showAiAssistant}>
+                <Sparkles size={15} /> {showAiAssistant ? 'Hide AI writer' : 'Create with AI'}
+              </button>
+              <button
+                type="button"
+                className="mkt-ai-toggle"
+                onClick={() => { setShowTemplateSave(value => !value); setTemplateName(current => current || campaignName.trim()); }}
+                aria-expanded={showTemplateSave}
+                disabled={!isReady}
+                title="Keep this design as a reusable starting point"
+              >
+                <Save size={15} /> Save as template
+              </button>
+            </div>
           </div>
+
+          {showTemplateSave && (
+            <div className="mkt-ai-assistant">
+              <label className="mkt-label" htmlFor="mkt-template-name">
+                <Save size={15} /> Name this template
+              </label>
+              <div className="mkt-ai-assistant-controls">
+                <input
+                  id="mkt-template-name"
+                  className="mkt-input"
+                  value={templateName}
+                  onChange={event => setTemplateName(event.target.value)}
+                  onKeyDown={event => { if (event.key === 'Enter' && !isSavingTemplate) saveAsTemplate(); }}
+                  placeholder="Monthly restock announcement"
+                  maxLength={80}
+                />
+                <button
+                  type="button"
+                  className="mkt-btn mkt-btn-primary"
+                  onClick={saveAsTemplate}
+                  disabled={isSavingTemplate || !templateName.trim()}
+                >
+                  {isSavingTemplate ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  {isSavingTemplate ? 'Saving…' : 'Save template'}
+                </button>
+              </div>
+              <small className="mkt-text-xs mkt-text-muted">
+                The design and subject line are kept. Audience, tags and schedule are not — those belong to a campaign, not a layout.
+              </small>
+            </div>
+          )}
 
           {showAiAssistant && (
           <div className="mkt-ai-assistant">
@@ -1207,6 +1436,45 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
               </button>
             ))}
           </div>
+
+          {savedTemplates.length > 0 && (
+            <>
+              <div className="mkt-template-toolbar" style={{ marginTop: '18px' }}>
+                <div>
+                  <strong>Your saved templates</strong>
+                  <span>Designs you kept from an earlier campaign.</span>
+                </div>
+              </div>
+              <div className="mkt-template-grid">
+                {savedTemplates.map(tpl => (
+                  <div key={tpl.id} className={`mkt-template-card mkt-template-saved ${selectedTemplate === tpl.id ? 'selected' : ''}`}>
+                    <button
+                      type="button"
+                      onClick={() => applyTemplate({
+                        id: tpl.id,
+                        name: tpl.name,
+                        subject: tpl.subject_line || '',
+                        design: tpl.design_json,
+                      })}
+                    >
+                      <div className="mkt-template-icon">{tpl.icon || '💾'}</div>
+                      <div className="mkt-template-name">{tpl.name}</div>
+                      <div className="mkt-template-desc">{tpl.description || 'Saved design'}</div>
+                    </button>
+                    <button
+                      type="button"
+                      className="mkt-template-delete"
+                      onClick={() => deleteSavedTemplate(tpl)}
+                      aria-label={`Delete template ${tpl.name}`}
+                      title="Delete this template"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </Section>
 
         {/* Campaign settings */}
@@ -1253,6 +1521,30 @@ export default function CampaignBuilder({ editingCampaignId, onDirtyChange, noti
             <p style={{ margin: '10px 0 0', color: '#94a3b8', fontSize: '11px', lineHeight: 1.5 }}>
               Lead emails are added to Subscribers with the <code>crm_lead</code> tag when the campaign sends. Existing unsubscribes, duplicate emails, and globally blocked addresses are skipped.
             </p>
+
+            <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              <label className="mkt-label" htmlFor="mkt-behavior-filter" style={{ marginBottom: '8px' }}>
+                Narrow by behaviour <span style={{ fontWeight: 'normal', opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>(optional)</span>
+              </label>
+              <select
+                id="mkt-behavior-filter"
+                className="mkt-input"
+                value={behaviorFilter}
+                onChange={e => updateDraftField(setBehaviorFilter, e.target.value)}
+                style={{ maxWidth: '340px', margin: 0 }}
+              >
+                {BEHAVIOR_FILTERS.map(filter => (
+                  <option key={filter.id} value={filter.id}>{filter.label} — {filter.hint}</option>
+                ))}
+              </select>
+              <p style={{ margin: '8px 0 0', color: '#94a3b8', fontSize: '11px', lineHeight: 1.5 }}>
+                {behaviorFilter === 'none'
+                  ? 'Everybody in the group above receives this campaign.'
+                  : behaviorEstimateUnavailable
+                    ? 'This filter is applied when the campaign sends. The count above cannot preview it for this group.'
+                    : `${estimatedAudience.length.toLocaleString()} of ${scopedAudience.length.toLocaleString()} in the group above match.${behaviorEstimateApproximate ? ' Approximate — history was read in part. The send applies the filter in full.' : ''}`}
+              </p>
+            </div>
           </fieldset>
 
           {/* Subject lines */}

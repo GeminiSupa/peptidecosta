@@ -25,6 +25,10 @@ test('admin API path rules map sensitive routes to dashboard modules', () => {
   assert.deepEqual(adminPermissionsForPath('/api/admin/prospects/enrich'), ['prospects']);
   assert.deepEqual(adminPermissionsForPath('/api/admin/whatsapp-conversations'), ['whatsapp_ai', 'wa_session']);
   assert.deepEqual(adminPermissionsForPath('/api/messenger/inbox'), ['messenger']);
+  assert.deepEqual(adminPermissionsForPath('/api/admin/campaigns/stats'), ['marketing']);
+  // Saved templates carry campaign designs, so they sit behind the same module.
+  assert.deepEqual(adminPermissionsForPath('/api/admin/campaign-templates'), ['marketing']);
+  assert.deepEqual(adminPermissionsForPath('/api/admin/marketing-segments'), ['marketing']);
   assert.deepEqual(adminPermissionsForPath('/api/admin/users/avatar'), []);
 });
 

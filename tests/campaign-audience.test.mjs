@@ -18,6 +18,7 @@ test('an unsaved "Subscribers + CRM leads" pick beats the saved campaign row', (
     scope: 'all',
     includeLeads: true,
     targetTags: null,
+    behaviorFilter: 'none',
     changed: true,
   });
 });
@@ -29,12 +30,14 @@ test('falls back to the saved audience when the sender passes none', () => {
     scope: 'all',
     includeLeads: true,
     targetTags: ['vip'],
+    behaviorFilter: 'none',
     changed: false,
   });
   assert.deepEqual(resolveCampaignAudience(saved, {}), {
     scope: 'all',
     includeLeads: true,
     targetTags: ['vip'],
+    behaviorFilter: 'none',
     changed: false,
   });
 });
@@ -46,6 +49,7 @@ test('an empty audience tag means everyone, not a segment of nobody', () => {
     scope: 'all',
     includeLeads: true,
     targetTags: null,
+    behaviorFilter: 'none',
     changed: true,
   });
 });
@@ -121,6 +125,7 @@ test('an old campaign row keeps sending to everyone, not just subscribers', () =
     scope: 'all',
     includeLeads: true,
     targetTags: null,
+    behaviorFilter: 'none',
     changed: false,
   });
 });

@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/adminApi';
 import { campaignEngagement } from '@/lib/campaignEngagement.mjs';
 import { normalizeAudienceScope } from '@/lib/campaignAudience.mjs';
+import { behaviorFilterLabel, normalizeBehaviorFilter } from '@/lib/campaignBehavior.mjs';
 import {
   Activity, AlertTriangle, Eye, ExternalLink, Loader2, MousePointerClick,
   Pencil, RefreshCw, Send, TrendingUp, Users,
@@ -99,6 +100,7 @@ export default function CampaignDetail({ campaignId, onEdit, notify }) {
   const { campaign, links = [], recentActivity = [], deliveryBatches = [], revenue, truncated } = data;
   const stats = campaignEngagement({ engagement: data.engagement });
   const scope = normalizeAudienceScope(campaign.audience_scope, campaign.include_leads);
+  const behavior = normalizeBehaviorFilter(campaign.behavior_filter);
   const topLinkClicks = links[0]?.unique_clicks || 0;
 
   return (
@@ -112,6 +114,7 @@ export default function CampaignDetail({ campaignId, onEdit, notify }) {
           </div>
           <div className="mkt-text-xs mkt-text-muted" style={{ marginTop: '4px' }}>
             {SCOPE_LABELS[scope] || scope}
+            {behavior !== 'none' ? ` · ${behaviorFilterLabel(behavior).toLowerCase()}` : ''}
             {campaign.target_tags?.length ? ` · tagged ${campaign.target_tags.join(', ')}` : ''}
             {campaign.sent_at ? ` · sent ${formatWhen(campaign.sent_at)}` : ''}
           </div>
