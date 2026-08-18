@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { normalizeBehaviorFilter } from '@/lib/campaignBehavior.mjs';
+import { planScheduleUpdate } from '@/lib/campaignScheduleStatus.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -272,6 +273,20 @@ export async function PUT(request) {
       return NextResponse.json({ error: 'Campaign ID is required' }, { status: 400 });
     }
 
+    // What the campaign is now, before anything in this request touches it.
+    // The status rule below needs it, and a missing row is worth saying so
+    // plainly rather than letting the update match nothing and look fine.
+    const { data: current, error: currentError } = await supabaseAdmin
+      .from('email_campaigns')
+      .select('status')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (currentError) throw currentError;
+    if (!current) {
+      return NextResponse.json({ error: 'That campaign no longer exists.' }, { status: 404 });
+    }
+
     const updates = {};
     if (title !== undefined) updates.title = title;
     if (subject_line !== undefined) updates.subject_line = subject_line;
@@ -287,9 +302,12 @@ export async function PUT(request) {
     if (include_leads !== undefined) updates.include_leads = Boolean(include_leads);
     if (audience_scope !== undefined) updates.audience_scope = audience_scope;
     if (behavior_filter !== undefined) updates.behavior_filter = normalizeBehaviorFilter(behavior_filter);
-    if (scheduled_at !== undefined) {
-      updates.scheduled_for = scheduled_at || null;
-      updates.status = scheduled_at ? 'scheduled' : 'draft';
+    // Scheduling only means anything before a campaign goes out. The rule and
+    // its reasoning live in campaignScheduleStatus.mjs, where they are tested.
+    const schedule = planScheduleUpdate(current.status, scheduled_at);
+    Object.assign(updates, schedule);
+    if (scheduled_at !== undefined && !('status' in schedule)) {
+      console.log(`[Campaigns] ${id} is "${current.status}"; leaving its status and schedule alone.`);
     }
 
     const { data, error } = await updateCampaignWithSchemaFallback(supabaseAdmin, id, updates);
