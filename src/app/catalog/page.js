@@ -34,6 +34,7 @@ import {
   BAC_WATER_10ML_ONLY_MIN_UNITS,
   getBacWaterSizeMl,
 } from '@/lib/bacWater.mjs';
+import { shouldScheduleWaReprompt, WA_REPROMPT_DELAY_MS } from '@/lib/waReprompt.mjs';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
@@ -483,17 +484,26 @@ export default function CatalogPage() {
   // Second-chance WhatsApp opt-in re-prompt: for visitors who unlocked the
   // catalog but never opted in. Fires once (after 15s), at most once / 3 days,
   // and stops entirely after 2 dismissals so it never becomes a nuisance.
+  //
+  // Never while the cart is open. The prompt is a marketing ask; the open
+  // drawer is a customer trying to pay, and the card lands squarely over the
+  // total and the submit button. The timer does not start while the drawer is
+  // open and restarts when it closes, so the ask is delayed rather than spent:
+  // lastShown is stamped when the card actually appears, and a prompt that was
+  // never shown must not burn its three-day slot.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
-    const optedIn = localStorage.getItem('wa_opted_in') === 'true';
-    if (!hasAccess || optedIn) return;
 
     let state = { lastShown: 0, dismisses: 0 };
     try { state = { ...state, ...JSON.parse(localStorage.getItem('wa_optin_prompt') || '{}') }; } catch {}
-    if (state.dismisses >= 2) return;
-    const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
-    if (state.lastShown && Date.now() - state.lastShown < THREE_DAYS) return;
+
+    const allowed = shouldScheduleWaReprompt({
+      hasAccess: localStorage.getItem('catalog_access_granted') === 'true',
+      optedIn: localStorage.getItem('wa_opted_in') === 'true',
+      isCartOpen,
+      state,
+    });
+    if (!allowed) return;
 
     const stored = localStorage.getItem('catalog_lead_contact') || '';
     if (stored && !stored.includes('@')) setWaRepromptPhone(stored);
@@ -501,9 +511,16 @@ export default function CatalogPage() {
     const timer = setTimeout(() => {
       setShowWaReprompt(true);
       localStorage.setItem('wa_optin_prompt', JSON.stringify({ ...state, lastShown: Date.now() }));
-    }, 15000);
+    }, WA_REPROMPT_DELAY_MS);
     return () => clearTimeout(timer);
-  }, []);
+  }, [isCartOpen]);
+
+  // The other order of events: the card is already up when the cart is opened.
+  // It steps aside without counting a dismissal, because the customer did not
+  // dismiss it — they went to check out.
+  useEffect(() => {
+    if (isCartOpen) setShowWaReprompt(false);
+  }, [isCartOpen]);
 
   const handleWaRepromptSubmit = async (e) => {
     e.preventDefault();
