@@ -91,6 +91,47 @@ export async function restoreInventoryForOrder(supabase, order, { reason = 'stat
 }
 
 /**
+ * Return a deleted order's stock. Never throws.
+ *
+ * The row is gone by the time this runs, so it cannot claim the restore the
+ * way restoreInventoryForOrder() does — and does not need to. A DELETE that
+ * reported rows *is* the claim: Postgres lets exactly one caller remove a
+ * given row, so whoever holds the confirmed delete is the only one who will
+ * ever reach this for that order.
+ *
+ * Which is why the caller deletes first and restores second, against the
+ * in-memory copy of the row. Restoring first reads as the safer order — "the
+ * row still says what it was holding" — but the whole row is loaded before any
+ * of this, so waiting costs nothing. What restoring first did cost was the
+ * delete that then fails: a foreign key still pointing at the order refuses
+ * it, the order stays live, its vials are back on the shelf, and the admin is
+ * shown an error saying nothing happened. Stock silently reads high from then
+ * on. This way a refused delete changes nothing at all.
+ *
+ * @param {object} order the row as it was read before the delete
+ */
+export async function restoreInventoryForDeletedOrder(supabase, order, { reason = 'order deleted' } = {}) {
+  // The status gate is bypassed by the caller passing a cancelled copy: a
+  // deleted order is a cancelled one by definition. inventory_restored_at is
+  // still honoured, so an order whose stock went back when it was cancelled
+  // last week is not paid out again now.
+  const plan = planInventoryRestore(order);
+  if (!plan.restore) return { restored: false, skipped: plan.reason };
+
+  try {
+    const restored = await addBackStock(supabase, plan.lines);
+    console.log(
+      `[inventory] Restored stock for deleted ${order.order_number} (${reason}): `
+      + (restored.map((r) => `${r.product} ${r.from}→${r.to}`).join(', ') || 'no tracked products'),
+    );
+    return { restored: true, lines: restored };
+  } catch (error) {
+    console.error('[inventory] Restore failed for deleted order', order?.order_number, error.message);
+    return { restored: false, error: error.message };
+  }
+}
+
+/**
  * Report unpaid orders that have held their stock past the window.
  *
  * REPORT ONLY. This does not change any order's status and does not move any

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { restoreInventoryForOrder } from '@/lib/inventoryRestoreServer';
+import { restoreInventoryForDeletedOrder } from '@/lib/inventoryRestoreServer';
 
 // Deleting an order used to be a direct browser call, which meant the stock it
 // had reserved vanished with the row — nothing was left to restore it from.
@@ -56,16 +56,15 @@ export async function POST(request) {
     }
     if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
 
-    // Restore before deleting, and only before deleting: once the row is gone
-    // there is no record of what it was holding. A deleted order is a cancelled
-    // one by definition, so the status gate in planInventoryRestore is bypassed
-    // by asking for the restore against a cancelled copy.
-    const inventory = await restoreInventoryForOrder(
-      supabase,
-      { ...order, status: 'Cancelled' },
-      { reason: 'order deleted' },
-    );
-
+    // Delete first, restore second — against the copy of the row already read
+    // above, which is every bit as complete as the row itself.
+    //
+    // The other order looks safer and is not. A delete can be refused after
+    // the fact: a foreign key still pointing at the order sends back 23503,
+    // handled below. Restoring first meant that refusal left the order live
+    // *and* its vials back on the shelf, with the admin reading an error that
+    // says nothing happened — stock reads high from then on and nothing says
+    // why. Nothing is restored now unless the row is confirmed gone.
     const { data: deleted, error: deleteError } = await supabase
       .from('orders')
       .delete()
@@ -75,7 +74,13 @@ export async function POST(request) {
     if (deleteError) {
       console.error('[admin/orders/delete] delete failed', order.order_number, deleteError);
       return NextResponse.json(
-        { error: describeDbError(deleteError, 'Could not delete the order'), code: deleteError.code || null, inventory },
+        {
+          error: describeDbError(deleteError, 'Could not delete the order'),
+          code: deleteError.code || null,
+          // Said explicitly so the admin knows the order is untouched rather
+          // than half-removed, and can retry without wondering about stock.
+          inventory: { restored: false, skipped: 'delete refused — nothing was changed' },
+        },
         { status: 500 },
       );
     }
@@ -86,10 +91,22 @@ export async function POST(request) {
     if (!deleted || deleted.length === 0) {
       console.error('[admin/orders/delete] matched no rows', order.order_number);
       return NextResponse.json(
-        { error: 'The database accepted the delete but removed nothing. The order is still there.', inventory },
+        {
+          error: 'The database accepted the delete but removed nothing. The order is still there.',
+          inventory: { restored: false, skipped: 'order still present — nothing was changed' },
+        },
         { status: 500 },
       );
     }
+
+    // The row is confirmed gone, which is what makes this safe to do without
+    // claiming it. A deleted order is a cancelled one by definition, so the
+    // status gate is bypassed by asking against a cancelled copy.
+    const inventory = await restoreInventoryForDeletedOrder(
+      supabase,
+      { ...order, status: 'Cancelled' },
+      { reason: 'order deleted' },
+    );
 
     console.log(`[admin/orders/delete] ${order.order_number} deleted by ${auth.profile.email}`);
     return NextResponse.json({ success: true, inventory });
