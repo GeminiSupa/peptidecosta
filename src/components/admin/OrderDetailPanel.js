@@ -702,14 +702,7 @@ export default function OrderDetailPanel({
                     onChange={(event) => changePaymentMethod(event.target.value)}
                     disabled={changingPaymentMethod}
                     aria-label="Payment method"
-                    style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      border: '1px solid rgba(255,255,255,0.14)',
-                      borderRadius: '7px',
-                      color: '#e2e8f0',
-                      padding: '5px 8px',
-                      fontSize: '0.82rem',
-                    }}
+                    className="admin-inline-select"
                   >
                     {!ORDER_PAYMENT_METHODS.some(m => m.id === String(order.payment_method || '').trim().toLowerCase()) && (
                       <option value={String(order.payment_method || '')}>{order.payment_method || 'unknown'}</option>

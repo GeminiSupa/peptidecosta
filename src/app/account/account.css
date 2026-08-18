@@ -117,6 +117,18 @@
   word-break: break-all;
 }
 
+/* Correos takes the number on its own lookup page and there is no deep link
+   that pre-fills it, so this is a signpost, not a shortcut to the parcel. */
+.account-track-link {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+.account-track-link:hover { color: var(--cta); }
+
 /* Items table ------------------------------------------------------------ */
 
 .account-items { width: 100%; border-collapse: collapse; font-size: 0.9rem; }

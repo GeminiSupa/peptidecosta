@@ -7,6 +7,7 @@ import OrderCard from './OrderCard';
 import { useCustomerOrders } from '@/hooks/useCustomerOrders';
 import { useCustomerSession, useStorefrontLang } from '@/hooks/useCustomerSession';
 import { orderDeliveryState } from '@/lib/customerOrderView.mjs';
+import { CORREOS_TRACKING_URL, hasTrackingNumber } from '@/lib/correosTracking.mjs';
 
 export default function AccountOverviewPage() {
   const [lang] = useStorefrontLang();
@@ -26,6 +27,19 @@ export default function AccountOverviewPage() {
               <strong>{order.order_number}</strong>
               {' — '}
               <span className="account-tracking">{order.tracking_number}</span>
+              {hasTrackingNumber(order.tracking_number) ? (
+                <>
+                  {' '}
+                  <a
+                    className="account-track-link"
+                    href={CORREOS_TRACKING_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {isEn ? 'Track on Correos ↗' : 'Rastrear en Correos ↗'}
+                  </a>
+                </>
+              ) : null}
             </div>
           ))}
         </div>

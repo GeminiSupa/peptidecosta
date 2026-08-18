@@ -15,6 +15,7 @@ import {
   billableItemCount,
 } from '@/lib/customerOrderView.mjs';
 import { stashReorder } from '@/lib/reorderHandoff';
+import { CORREOS_TRACKING_URL, hasTrackingNumber } from '@/lib/correosTracking.mjs';
 
 /** One row in the order list: number, date, status, total, and a reorder action. */
 export default function OrderCard({ order, lang = 'es' }) {
@@ -50,10 +51,19 @@ export default function OrderCard({ order, lang = 'es' }) {
             {deliveryLabel(order, lang)}
           </span>
         </div>
-        {order.tracking_number ? (
+        {hasTrackingNumber(order.tracking_number) ? (
           <div className="account-order-meta">
             {isEn ? 'Tracking: ' : 'Seguimiento: '}
             <span className="account-tracking">{order.tracking_number}</span>
+            {' '}
+            <a
+              className="account-track-link"
+              href={CORREOS_TRACKING_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {isEn ? 'Track on Correos ↗' : 'Rastrear en Correos ↗'}
+            </a>
           </div>
         ) : null}
       </div>
