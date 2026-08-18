@@ -2240,6 +2240,49 @@ body {
     gap: 8px;
 }
 
+/* Stock ceiling, said on the line it belongs to rather than in a dialog. */
+.cart-item-stock-note {
+    margin: 6px 0 0;
+    color: #f87171;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.35;
+    outline: none;
+}
+
+/* A checkout that stopped, explained where the customer is already looking.
+   Deliberately louder than a field error: this one means the order did not go
+   through, and it has to be impossible to mistake for part of the form. */
+.checkout-blocking-error {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: 12px;
+    background: rgba(239, 68, 68, 0.1);
+    /* Focused by revealField() so screen readers land on it; the ring would
+       otherwise sit on a box that is already unmistakably red. */
+    outline: none;
+}
+
+.checkout-blocking-error strong {
+    display: block;
+    margin-bottom: 3px;
+    color: #f87171;
+    font-size: 0.85rem;
+    font-weight: 800;
+}
+
+.checkout-blocking-error p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.45;
+}
+
 .card-payment-security-note {
     margin: 0;
     padding: 9px 10px;

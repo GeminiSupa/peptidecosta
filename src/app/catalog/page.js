@@ -391,6 +391,13 @@ export default function CatalogPage() {
   });
   const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState({});
+  // Why the order could not be placed, in words the customer can act on.
+  // { title, detail } — see failCheckout().
+  const [checkoutError, setCheckoutError] = useState(null);
+  // The one cart line that just hit its stock ceiling. { product, available }
+  // — see flagStockLimit(). One at a time: it is a response to a tap, not a
+  // standing list of everything that happens to be short.
+  const [stockNotice, setStockNotice] = useState(null);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [cartAnimating, setCartAnimating] = useState(false);
   const [sessionId, setSessionId] = useState('');
@@ -1753,7 +1760,7 @@ export default function CatalogPage() {
     const newQty = existing ? existing.qty + 1 : 1;
 
     if (productObj.inventoryCount !== null && newQty > productObj.inventoryCount) {
-      alert(lang === 'en' ? `Only ${productObj.inventoryCount} units available in stock.` : `Solo ${productObj.inventoryCount} unidades disponibles en inventario.`);
+      flagStockLimit(productObj.product, productObj.inventoryCount);
       return;
     }
 
@@ -1901,17 +1908,32 @@ export default function CatalogPage() {
   };
 
   const updateCartQty = (productName, change) => {
-    setCart(cart.map(item => {
+    let hitLimit = null;
+
+    const next = cart.map(item => {
       if (item.product === productName) {
         const newQty = item.qty + change;
         if (change > 0 && item.inventoryCount !== null && newQty > item.inventoryCount) {
-          alert(lang === 'en' ? `Only ${item.inventoryCount} units available in stock.` : `Solo ${item.inventoryCount} unidades disponibles en inventario.`);
+          // Recorded rather than announced from in here: this runs inside the
+          // map that builds the next cart, and setting state mid-render is how
+          // you get React warning about updating during a render.
+          hitLimit = item.inventoryCount;
           return item; // Max stock reached
         }
         return newQty > 0 ? { ...item, qty: newQty } : null;
       }
       return item;
-    }).filter(Boolean));
+    }).filter(Boolean);
+
+    setCart(next);
+
+    if (hitLimit !== null) {
+      flagStockLimit(productName, hitLimit);
+    } else if (stockNotice?.product === productName) {
+      // They went the other way, or removed the line. The ceiling no longer
+      // applies, so the message about it should not linger.
+      setStockNotice(null);
+    }
   };
 
   const removeFromCart = (productName) => {
@@ -2193,6 +2215,40 @@ export default function CatalogPage() {
     }, 100);
   };
 
+  /**
+   * Stop the checkout and say why, on the page, where the customer is looking.
+   *
+   * alert() did neither well. It states the problem and then disappears, over
+   * a page with nothing marked — so a customer who dismissed it was back at a
+   * button that appeared to do nothing, with no way to re-read what went
+   * wrong. Worse on a phone, where the dialog can be missed entirely.
+   *
+   * Every message here has to survive the same test: it says what happened,
+   * and it says what to do next. "Error 500" says neither.
+   */
+  const failCheckout = (title, detail) => {
+    setCheckoutError({ title, detail });
+    revealField('checkoutError');
+  };
+
+  /**
+   * Say that a product has run out, against the line it is about.
+   *
+   * The alert() this replaces gave a number with nothing to attach it to —
+   * "Only 3 units available" while the tap that caused it silently did
+   * nothing, and on a phone the dialog could be dismissed before it was read.
+   * Showing it on the cart line answers the question the customer actually
+   * has, which is not "how many are there" but "then how many do I have?"
+   *
+   * The cart is opened first when it is closed: the message lives in there,
+   * and a notice nobody can see is the alert() problem over again.
+   */
+  const flagStockLimit = (product, available) => {
+    setStockNotice({ product, available });
+    setIsCartOpen(true);
+    revealField('stock');
+  };
+
   const validateForm = () => {
     const errors = {};
     if (!customerName.trim()) errors.customerName = lang === 'en' ? 'Full name is required.' : 'El nombre completo es requerido.';
@@ -2258,6 +2314,9 @@ export default function CatalogPage() {
   const startCardCheckout = async () => {
     if (cardSubmitLockRef.current || cardSubmitting || cart.length === 0) return;
 
+    // Clear the last failure before trying again, so a banner left on screen
+    // always describes this attempt and never the previous one.
+    setCheckoutError(null);
     if (!validateForm()) return;
 
     if (checkBacOnlyMinimum(cart).blocked) {
@@ -2314,9 +2373,14 @@ export default function CatalogPage() {
     if (!cardSave.ok) {
       setCardSubmitting(false);
       cardSubmitLockRef.current = false;
-      alert(lang === 'en'
-        ? 'Could not save your order. Please try again or contact us on WhatsApp.'
-        : 'No se pudo guardar su pedido. Por favor intente de nuevo o contáctenos por WhatsApp.');
+      // Nothing was charged — worth saying, because "could not save your
+      // order" on a card checkout otherwise reads as "did my card go through?"
+      failCheckout(
+        lang === 'en' ? 'We could not save your order' : 'No pudimos guardar su pedido',
+        lang === 'en'
+          ? 'Your card has not been charged. Please press the button again — if it keeps failing, message us on WhatsApp and we will take the order for you.'
+          : 'No se ha realizado ningún cargo a su tarjeta. Presione el botón de nuevo — si sigue fallando, escríbanos por WhatsApp y tomamos su pedido.',
+      );
       return;
     }
 
@@ -2397,14 +2461,28 @@ export default function CatalogPage() {
         status: 'Declined',
       });
 
-      alert(lang === 'en'
-        ? `Card payment setup failed: ${data.error || 'Unknown error'}`
-        : `Error al configurar el pago con tarjeta: ${data.error || 'Error desconocido'}`);
+      // The gateway's own wording, kept — "insufficient funds" or "card
+      // declined" is something the customer can act on, and paraphrasing it
+      // would only blur the one useful detail. The sentence after it is ours.
+      failCheckout(
+        lang === 'en' ? 'The card payment did not go through' : 'El pago con tarjeta no se completó',
+        [
+          data.error || (lang === 'en' ? 'The bank did not give a reason.' : 'El banco no dio un motivo.'),
+          lang === 'en'
+            ? 'Nothing has been charged. Check the card details above, try another card, or message us on WhatsApp to pay a different way.'
+            : 'No se ha realizado ningún cargo. Revise los datos de la tarjeta arriba, pruebe con otra, o escríbanos por WhatsApp para pagar de otra forma.',
+        ].join(' '),
+      );
       setCardSubmitting(false);
       cardSubmitLockRef.current = false;
     } catch (err) {
       console.error('Card payment error:', err);
-      alert(lang === 'en' ? 'Connection error. Please try again.' : 'Error de conexión. Intente de nuevo.');
+      failCheckout(
+        lang === 'en' ? 'We could not reach the payment service' : 'No pudimos conectar con el servicio de pago',
+        lang === 'en'
+          ? 'Nothing has been charged. Check your internet connection and press the button again, or message us on WhatsApp.'
+          : 'No se ha realizado ningún cargo. Revise su conexión a internet y presione el botón de nuevo, o escríbanos por WhatsApp.',
+      );
       setCardSubmitting(false);
       cardSubmitLockRef.current = false;
     }
@@ -2418,6 +2496,8 @@ export default function CatalogPage() {
       return;
     }
     if (cart.length === 0) return;
+    // As in startCardCheckout: a banner on screen must describe this attempt.
+    setCheckoutError(null);
     if (!validateForm()) return;
     if (checkBacOnlyMinimum(cart).blocked) {
       // The rule already has a red banner in the cart; the customer just could
@@ -2473,9 +2553,12 @@ export default function CatalogPage() {
 
     if (!saveResult.ok) {
       setOrderSubmitting(false);
-      alert(lang === 'en'
-        ? 'Could not save your order. Please try again or contact us on WhatsApp.'
-        : 'No se pudo guardar su pedido. Por favor intente de nuevo o contáctenos por WhatsApp.');
+      failCheckout(
+        lang === 'en' ? 'We could not save your order' : 'No pudimos guardar su pedido',
+        lang === 'en'
+          ? 'Nothing has been sent yet and your cart is untouched. Press the button again — if it keeps failing, message us on WhatsApp and we will take the order for you.'
+          : 'Todavía no se ha enviado nada y su carrito sigue igual. Presione el botón de nuevo — si sigue fallando, escríbanos por WhatsApp y tomamos su pedido.',
+      );
       return;
     }
 
@@ -3815,6 +3898,13 @@ export default function CatalogPage() {
                     <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{item.qty}</span>
                     <button className="cart-qty-btn" onClick={() => updateCartQty(item.product, 1)}><Plus size={12} /></button>
                   </div>
+                  {stockNotice?.product === item.product && (
+                    <p id="field-stock" role="alert" tabIndex={-1} className="cart-item-stock-note">
+                      {lang === 'en'
+                        ? `Only ${stockNotice.available} left in stock — that is all we can send you right now.`
+                        : `Solo quedan ${stockNotice.available} en inventario — es todo lo que podemos enviarle por ahora.`}
+                    </p>
+                  )}
                 </div>
                 <button className="cart-item-remove" onClick={() => removeFromCart(item.product)}>
                   <Trash2 size={16} />
@@ -4340,6 +4430,26 @@ export default function CatalogPage() {
                 ))}
               </div>
               {renderPaymentTotalNotice()}
+
+              {/* Anything that stopped the order, said on the page.
+                  Sits directly above the submit button because that is where
+                  the customer is looking when it appears, and revealField()
+                  brings them here from wherever they happen to be scrolled. */}
+              {checkoutError && (
+                <div
+                  id="field-checkoutError"
+                  role="alert"
+                  tabIndex={-1}
+                  className="checkout-blocking-error"
+                >
+                  <span aria-hidden="true">⚠️</span>
+                  <div>
+                    <strong>{checkoutError.title}</strong>
+                    <p>{checkoutError.detail}</p>
+                  </div>
+                </div>
+              )}
+
               {paymentMethod === 'card' ? (
                 <div className="card-payment-panel">
                   <div className="card-payment-fields">
