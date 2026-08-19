@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Peptides Costa Rica — Premium Research Peptides, Delivered To You</title>
 <meta name="description" content="Premium research peptides from certified laboratories. Verified purity, Certificates of Analysis available and 15% off 5+ vials. Request personalized guidance and current pricing in 45 seconds.">
-<meta name="theme-color" content="#06213F">
+<meta name="theme-color" content="#12307B">
 <!-- Served as a static file, so the app's own favicon handling never sees this
      page. With no icon declared the browser falls back to /favicon.ico, which
      this site does not have — hence the blank tab icon. -->
@@ -119,10 +119,10 @@ a{color:var(--b600);text-underline-offset:3px}
 .hdr{position:sticky;top:0;z-index:80;background:rgba(247,250,253,.86);backdrop-filter:saturate(160%) blur(14px);border-bottom:1px solid transparent;transition:box-shadow .3s,border-color .3s}
 .hdr.stuck{border-bottom-color:var(--line);box-shadow:0 8px 28px -22px rgba(10,27,45,.7)}
 .hdr__in{display:flex;align-items:center;gap:16px;height:74px}
-.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);flex:0 0 auto;min-height:40px}
-.brand__mark{width:36px;height:36px;flex:0 0 auto}
-.brand__name{font-size:1.06rem;font-weight:700;letter-spacing:-.03em;line-height:1.1}
-.brand__name span{color:var(--b500);font-weight:600}
+.brand{display:flex;align-items:center;text-decoration:none;flex:0 0 auto;min-height:40px}
+.brand__logo{height:46px;width:auto;display:block}
+.brand__logo--light{height:44px}
+@media (max-width:400px){ .brand__logo{height:38px} }
 .nav{display:flex;align-items:center;gap:26px;margin-left:auto}
 .nav a{color:var(--ink2);text-decoration:none;font-size:.89rem;font-weight:500;transition:color .2s}
 .nav a:hover{color:var(--b600)}
@@ -134,8 +134,7 @@ a{color:var(--b600);text-underline-offset:3px}
 @media (max-width:400px){
   .hdr__in{gap:8px}
   .brand{gap:8px}
-  .brand__mark{width:32px;height:32px}
-  .brand__name{font-size:.94rem}
+
   .lang button{padding:10px 9px}
   .wrap{padding-inline:16px}
 }
@@ -226,7 +225,9 @@ a{color:var(--b600);text-underline-offset:3px}
 .ratings{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:700px;margin:0 auto}
 .rating{display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px 14px;text-decoration:none;color:inherit;box-shadow:var(--sh-s);transition:transform .25s var(--ease),box-shadow .25s,border-color .25s}
 a.rating:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(--b200)}
-.rating__p{font-size:.78rem;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--ink3)}
+.rating__p{display:inline-flex;align-items:center;gap:7px;font-size:.82rem;font-weight:600;
+  letter-spacing:.01em;text-transform:none;color:var(--ink2)}
+.rating__p svg{flex:0 0 auto;display:block}
 .rating__n{font-size:1.85rem;font-weight:700;line-height:1.15;letter-spacing:-.03em;color:var(--b900)}
 .stars{display:flex;gap:2px;color:#F0A427}
 @media (max-width:560px){.ratings{grid-template-columns:1fr;max-width:320px}}
@@ -269,8 +270,7 @@ a.rating:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(
 .ftr h4{color:#fff;font-size:.78rem;letter-spacing:.13em;text-transform:uppercase;margin-bottom:14px;font-weight:600}
 .ftr ul{list-style:none;padding:0;margin:0;display:grid;gap:5px}
 .ftr ul a{display:inline-block;padding:4px 0}
-.ftr .brand{color:#fff;margin-bottom:12px}
-.ftr .brand__name span{color:var(--cyan-lt)}
+.ftr .brand{margin-bottom:14px}
 .legal{padding-top:22px;font-size:.75rem;color:rgba(255,255,255,.52);line-height:1.7}
 .legal strong{color:rgba(255,255,255,.85)}
 .legal p{margin-bottom:.75em}
@@ -413,13 +413,8 @@ a.rating:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(
 <!-- ============================ HEADER ============================ -->
 <header class="hdr" id="hdr">
   <div class="wrap hdr__in">
-    <a class="brand" href="#top" aria-label="Peptides Costa Rica">
-      <svg class="brand__mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-        <rect width="40" height="40" rx="11" fill="#06213F"/>
-        <circle cx="14" cy="14" r="3.4" fill="#00C2D7"/><circle cx="26.5" cy="17" r="3.4" fill="#3D96EE"/><circle cx="19" cy="27" r="3.4" fill="#1573D6"/>
-        <path d="M14 14l12.5 3M26.5 17L19 27M19 27l-5-13" stroke="#3D96EE" stroke-width="1.5" opacity=".75"/>
-      </svg>
-      <span class="brand__name">Peptides<span> Costa Rica</span></span>
+    <a class="brand" href="#top">
+      <img class="brand__logo" src="data:image/png;base64,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" width="199" height="96" alt="Peptides Costa Rica" fetchpriority="high" decoding="async">
     </a>
 
     <nav class="nav" aria-label="Main">
@@ -582,17 +577,17 @@ a.rating:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(
          so the figures update on their own and stay independently verifiable. -->
     <div class="ratings rv">
       <a class="rating" href="https://www.trustpilot.com/review/peptidescostarica.net" target="_blank" rel="noopener" data-cta="rating-trustpilot">
-        <span class="rating__p" data-i18n="t.tp">Trustpilot</span>
+        <span class="rating__p"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="#00B67A" d="M12 1.6l3.09 6.94 7.41.7-5.6 5.03 1.63 7.35L12 17.9l-6.53 3.72 1.63-7.35-5.6-5.03 7.41-.7z"/></svg><span>Trustpilot</span></span>
         <span class="rating__n">4.2</span>
         <span class="stars" aria-label="4.2 out of 5"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" opacity=".32" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg></span>
       </a>
       <div class="rating">
-        <span class="rating__p" data-i18n="t.g">Google</span>
+        <span class="rating__p"><svg viewBox="0 0 18 18" width="16" height="16" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.81 5.96-2.18l-2.91-2.26c-.8.54-1.84.86-3.05.86-2.34 0-4.33-1.58-5.04-3.71H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.96 10.71A5.41 5.41 0 0 1 3.68 9c0-.59.1-1.17.28-1.71V4.96H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.04l3-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3 2.33C4.67 5.16 6.66 3.58 9 3.58z"/></svg><span>Google</span></span>
         <span class="rating__n">5.0</span>
         <span class="stars" aria-label="5 out of 5"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg></span>
       </div>
       <div class="rating">
-        <span class="rating__p" data-i18n="t.fb">Facebook</span>
+        <span class="rating__p"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#1877F2"/><path fill="#fff" d="M15.12 12.75h2.4l.38-2.94h-2.78V7.94c0-.85.24-1.43 1.46-1.43h1.56V3.88c-.27-.04-1.2-.12-2.28-.12-2.26 0-3.8 1.38-3.8 3.9v2.18H9.66v2.94h2.4V20h3.06v-7.25z"/></svg><span>Facebook</span></span>
         <span class="rating__n">5.0</span>
         <span class="stars" aria-label="5 out of 5"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9L12 2.6Z"/></svg></span>
       </div>
@@ -701,12 +696,7 @@ a.rating:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(
     <div class="ftr__grid">
       <div>
         <a class="brand" href="#top">
-          <svg class="brand__mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
-            <rect width="40" height="40" rx="11" fill="#0A3468"/>
-            <circle cx="14" cy="14" r="3.4" fill="#00C2D7"/><circle cx="26.5" cy="17" r="3.4" fill="#3D96EE"/><circle cx="19" cy="27" r="3.4" fill="#1573D6"/>
-            <path d="M14 14l12.5 3M26.5 17L19 27M19 27l-5-13" stroke="#3D96EE" stroke-width="1.5" opacity=".75"/>
-          </svg>
-          <span class="brand__name">Peptides<span> Costa Rica</span></span>
+          <img class="brand__logo brand__logo--light" src="data:image/png;base64,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" width="199" height="96" alt="Peptides Costa Rica" loading="lazy" decoding="async">
         </a>
         <p style="max-width:32ch" data-i18n="ftr.tag">Premium research peptides. Verified quality, transparent pricing, direct support.</p>
       </div>
@@ -1004,7 +994,6 @@ var ES = {
 "t.eyebrow":"La confianza de nuestros clientes",
 "t.h2":"Valorado por quienes nos compran",
 "t.sub":"Nos enorgullece la confianza y la lealtad de nuestros clientes. Nuestras valoraciones son públicas: compruébalas tú mismo antes de pedir nada.",
-"t.tp":"Trustpilot","t.g":"Google","t.fb":"Facebook",
 "t.f1.t":"Sin pedido mínimo","t.f1.b":"Pide un solo vial o cincuenta. No hay mínimo obligatorio.",
 "t.f2.t":"Un especialista, no un bot","t.f2.b":"Responde una persona real, en inglés o español.",
 "t.f3.t":"Stock verificado primero","t.f3.b":"Confirmamos disponibilidad antes de que te comprometas a nada.",
