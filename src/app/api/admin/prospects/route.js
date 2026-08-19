@@ -36,12 +36,15 @@ export async function GET(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
+  const params = new URL(request.url).searchParams;
+  const offset = Math.max(0, Math.floor(Number(params.get('offset')) || 0));
+  const limit = Math.max(1, Math.min(1000, Math.floor(Number(params.get('limit')) || 1000)));
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from('sales_prospects')
     .select(SELECT_FIELDS)
     .order('updated_at', { ascending: false })
-    .limit(1000);
+    .range(offset, offset + limit - 1);
 
   if (isProspectsTableMissing(error)) return missingTableResponse();
   if (error) {
@@ -49,7 +52,12 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Unable to load prospects' }, { status: 500 });
   }
 
-  return NextResponse.json({ prospects: data || [], setupRequired: false });
+  return NextResponse.json({
+    prospects: data || [],
+    setupRequired: false,
+    hasMore: (data || []).length === limit,
+    nextOffset: offset + (data || []).length,
+  });
 }
 
 export async function POST(request) {

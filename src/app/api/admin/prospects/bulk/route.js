@@ -72,8 +72,11 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const candidates = Array.isArray(body.prospects) ? body.prospects.slice(0, MAX_BATCH) : [];
+  const candidates = Array.isArray(body.prospects) ? body.prospects : [];
   if (!candidates.length) return NextResponse.json({ error: 'No prospects to save' }, { status: 400 });
+  if (candidates.length > MAX_BATCH) {
+    return NextResponse.json({ error: `Save at most ${MAX_BATCH} prospects per batch` }, { status: 400 });
+  }
 
   const inputs = [];
   const failed = [];
@@ -146,19 +149,27 @@ export async function POST(request) {
     }
   }
 
-  for (const { id, row } of toUpdate) {
-    const { data, error } = await supabase
-      .from('sales_prospects')
-      .update(row)
-      .eq('id', id)
-      .select(SELECT_FIELDS)
-      .single();
-    if (error) {
-      console.error('[Prospects] Bulk update failed:', error.message);
-      failed.push({ organization_name: row.organization_name, error: 'Unable to refresh' });
-    } else {
-      saved.push(data);
-      refreshed += 1;
+  if (toUpdate.length) {
+    // Preserve database-managed columns by issuing updates, but run a bounded
+    // group at once instead of making a large refresh wait on 100 serial trips.
+    for (let index = 0; index < toUpdate.length; index += 10) {
+      const group = toUpdate.slice(index, index + 10);
+      const results = await Promise.all(group.map(({ id, row }) => supabase
+        .from('sales_prospects')
+        .update(row)
+        .eq('id', id)
+        .select(SELECT_FIELDS)
+        .single()
+        .then((result) => ({ ...result, row }))));
+      for (const result of results) {
+        if (result.error) {
+          console.error('[Prospects] Bulk refresh failed:', result.error.message);
+          failed.push({ organization_name: result.row.organization_name, error: 'Unable to refresh' });
+        } else {
+          saved.push(result.data);
+          refreshed += 1;
+        }
+      }
     }
   }
 
@@ -183,8 +194,11 @@ export async function PATCH(request) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const ids = Array.isArray(body.ids) ? body.ids.filter(Boolean).slice(0, MAX_BATCH) : [];
+  const ids = Array.isArray(body.ids) ? body.ids.filter(Boolean) : [];
   if (!ids.length) return NextResponse.json({ error: 'Select at least one prospect' }, { status: 400 });
+  if (ids.length > MAX_BATCH) {
+    return NextResponse.json({ error: `Update at most ${MAX_BATCH} prospects per batch` }, { status: 400 });
+  }
 
   const updates = {};
   if (PROSPECT_STATUSES.includes(body.status)) updates.status = body.status;
@@ -220,12 +234,18 @@ export async function DELETE(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
-  const ids = (new URL(request.url).searchParams.get('ids') || '')
-    .split(',')
-    .map((id) => id.trim())
-    .filter(Boolean)
-    .slice(0, MAX_BATCH);
+  let body = {};
+  try {
+    body = await request.json();
+  } catch {
+    // Keep accepting the old query-string form while deployed clients update.
+  }
+  const legacyIds = (new URL(request.url).searchParams.get('ids') || '').split(',');
+  const ids = (Array.isArray(body.ids) ? body.ids : legacyIds).map((id) => String(id || '').trim()).filter(Boolean);
   if (!ids.length) return NextResponse.json({ error: 'Select at least one prospect' }, { status: 400 });
+  if (ids.length > MAX_BATCH) {
+    return NextResponse.json({ error: `Delete at most ${MAX_BATCH} prospects per batch` }, { status: 400 });
+  }
 
   const { error } = await getSupabaseAdmin().from('sales_prospects').delete().in('id', ids);
   if (isProspectsTableMissing(error)) return setupRequired();

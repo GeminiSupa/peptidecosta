@@ -126,6 +126,9 @@ export default function ProspectMap({
     const element = containerRef.current;
     if (!element) return undefined;
     const onWheel = (event) => {
+      // A plain wheel gesture belongs to the page. Requiring a modifier keeps
+      // the map from trapping someone halfway down a long admin screen.
+      if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       const rect = element.getBoundingClientRect();
       const anchor = { x: event.clientX - rect.left, y: event.clientY - rect.top };
@@ -251,6 +254,8 @@ export default function ProspectMap({
       {plotted.length > 0 && (
         <div className="pmap-count"><Crosshair size={12} /> {plotted.length} mapped</div>
       )}
+
+      <div className="pmap-wheel-hint">Ctrl/⌘ + scroll to zoom</div>
 
       {onSearchArea && (
         <div className="pmap-area">

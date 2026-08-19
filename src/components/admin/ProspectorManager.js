@@ -17,6 +17,14 @@ import {
   scoreProspect,
   upgradeContactPermission,
 } from '@/lib/prospects.mjs';
+import {
+  chunkProspects,
+  distanceKmBetween,
+  filterDiscoveryProspects,
+  hasProspectContact,
+  matchesProspectSearch,
+  resolvedDistanceLimit,
+} from '@/lib/prospectFilters.mjs';
 import { canContactProspect } from '@/lib/prospectOutreach.mjs';
 import { readNdjsonStream } from '@/lib/ndjsonStream.mjs';
 import ProspectMap from '@/components/admin/prospector/ProspectMap';
@@ -66,6 +74,7 @@ const ENRICH_CONCURRENCY = 2;
 /** Rows rendered before "Show more"; a thousand buttons is not a list. */
 const PAGE_SIZE = 60;
 const NOTICE_TIMEOUT_MS = 7000;
+const BULK_BATCH_SIZE = 100;
 const CLOSED_STATUSES = ['won', 'lost', 'do_not_contact'];
 
 /** Stable identity for a prospect whether or not it has been saved yet. */
@@ -73,6 +82,10 @@ const prospectKey = (prospect) => (prospect?.id
   || (prospect?.source_external_id ? `${prospect.source_provider}:${prospect.source_external_id}` : null)
   || prospect?.organization_name
   || '');
+
+const directoryIdentity = (prospect) => (prospect?.source_external_id
+  ? `${prospect.source_provider}:${prospect.source_external_id}`
+  : `${prospect?.organization_name || ''}|${prospect?.latitude || ''}|${prospect?.longitude || ''}`);
 
 function locationLabel(prospect) {
   return [prospect.city, prospect.region, prospect.country].filter(Boolean).join(', ')
@@ -130,9 +143,25 @@ export default function ProspectorManager({ currentUserProfile }) {
   const [notice, setNotice] = useState('');
   const [query, setQuery] = useState('Gyms and personal trainers');
   const [location, setLocation] = useState('');
+  const [searchCenter, setSearchCenter] = useState(null);
+  const [distanceChoice, setDistanceChoice] = useState('');
+  const [customDistance, setCustomDistance] = useState('');
+  const [discoveryContact, setDiscoveryContact] = useState('any');
+  const [discoveryMinScore, setDiscoveryMinScore] = useState('0');
+  const [discoveryMinRating, setDiscoveryMinRating] = useState('0');
+  const [discoveryMinReviews, setDiscoveryMinReviews] = useState('0');
+  const [discoverySort, setDiscoverySort] = useState('relevance');
+  const [excludeSaved, setExcludeSaved] = useState(false);
   const [savedSearch, setSavedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
   const [sortBy, setSortBy] = useState('recent');
+  const [savedContactFilter, setSavedContactFilter] = useState('any');
+  const [ownerFilter, setOwnerFilter] = useState('any');
+  const [followUpFilter, setFollowUpFilter] = useState('any');
+  const [permissionFilter, setPermissionFilter] = useState('any');
+  const [pipelineMinScore, setPipelineMinScore] = useState('0');
+  const [sourceFilter, setSourceFilter] = useState('any');
+  const [contactActivityFilter, setContactActivityFilter] = useState('any');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualForm, setManualForm] = useState(EMPTY_FORM);
@@ -149,6 +178,7 @@ export default function ProspectorManager({ currentUserProfile }) {
   const [history, setHistory] = useState({ rows: [], loading: false, setupRequired: false });
   const [expandedMessages, setExpandedMessages] = useState(() => new Set());
   const [confirmRequest, setConfirmRequest] = useState(null);
+  const [bulkProgress, setBulkProgress] = useState(null);
 
   const currentEmail = currentUserProfile?.email || '';
 
@@ -156,6 +186,8 @@ export default function ProspectorManager({ currentUserProfile }) {
   // were queued, so it reads the current lists rather than a captured snapshot.
   const prospectsRef = useRef(prospects);
   const searchResultsRef = useRef(searchResults);
+  const resultNodesRef = useRef(new Map());
+  const detailRef = useRef(null);
   useEffect(() => { prospectsRef.current = prospects; }, [prospects]);
   useEffect(() => { searchResultsRef.current = searchResults; }, [searchResults]);
 
@@ -167,19 +199,36 @@ export default function ProspectorManager({ currentUserProfile }) {
   const selectedSaved = selection.saved && Boolean(selected?.id);
 
   const chooseProspect = useCallback((prospect, saved) => {
-    setSelection({ key: prospectKey(prospect), saved });
+    const key = prospectKey(prospect);
+    setSelection({ key, saved });
     setError('');
+    requestAnimationFrame(() => {
+      resultNodesRef.current.get(key)?.scrollIntoView({ block: 'nearest' });
+      detailRef.current?.scrollTo({ top: 0 });
+      if (window.matchMedia('(max-width: 760px)').matches) {
+        detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
   }, []);
 
   const loadProspects = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const response = await adminFetch('/api/admin/prospects');
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Unable to load prospects');
-      setProspects(payload.prospects || []);
-      setDbSetupRequired(Boolean(payload.setupRequired));
+      const rows = [];
+      let offset = 0;
+      let setupRequired = false;
+      for (let page = 0; page < 20; page += 1) {
+        const response = await adminFetch(`/api/admin/prospects?offset=${offset}&limit=1000`);
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Unable to load prospects');
+        rows.push(...(payload.prospects || []));
+        setupRequired = Boolean(payload.setupRequired);
+        if (!payload.hasMore || !(payload.prospects || []).length) break;
+        offset = payload.nextOffset;
+      }
+      setProspects(rows);
+      setDbSetupRequired(setupRequired);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -207,7 +256,15 @@ export default function ProspectorManager({ currentUserProfile }) {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [view, statusFilter, savedSearch, sortBy]);
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+    setCheckedKeys(new Set());
+  }, [
+    view, statusFilter, savedSearch, savedContactFilter, ownerFilter, followUpFilter,
+    distanceChoice, customDistance, discoveryContact, discoveryMinScore,
+    discoveryMinRating, discoveryMinReviews, discoverySort, excludeSaved,
+    permissionFilter, pipelineMinScore, sourceFilter, contactActivityFilter,
+  ]);
 
   useEffect(() => {
     if (!manualOpen && !confirmRequest) return undefined;
@@ -257,17 +314,22 @@ export default function ProspectorManager({ currentUserProfile }) {
   }, [prospects]);
 
   const filteredSaved = useMemo(() => {
-    const search = savedSearch.trim().toLowerCase();
     const now = Date.now();
     const matched = prospects.filter((prospect) => {
       if (statusFilter === 'active' && CLOSED_STATUSES.includes(prospect.status)) return false;
       if (statusFilter === 'due' && !isFollowUpDue(prospect, now)) return false;
       if (!['active', 'all', 'due'].includes(statusFilter) && prospect.status !== statusFilter) return false;
-      if (!search) return true;
-      return [
-        prospect.organization_name, prospect.category, prospect.city, prospect.region,
-        prospect.phone, prospect.email, prospect.owner_email,
-      ].filter(Boolean).join(' ').toLowerCase().includes(search);
+      if (ownerFilter === 'mine' && prospect.owner_email !== currentEmail) return false;
+      if (ownerFilter === 'unassigned' && prospect.owner_email) return false;
+      if (followUpFilter === 'due' && !isFollowUpDue(prospect, now)) return false;
+      if (followUpFilter === 'unscheduled' && prospect.next_follow_up_at) return false;
+      if (permissionFilter !== 'any' && (prospect.contact_permission_status || 'unknown') !== permissionFilter) return false;
+      if (Number(prospect.fit_score || 0) < Number(pipelineMinScore || 0)) return false;
+      if (sourceFilter !== 'any' && prospect.source_provider !== sourceFilter) return false;
+      if (contactActivityFilter === 'contacted' && !prospect.last_contacted_at) return false;
+      if (contactActivityFilter === 'never' && prospect.last_contacted_at) return false;
+      if (!hasProspectContact(prospect, savedContactFilter)) return false;
+      return matchesProspectSearch(prospect, savedSearch);
     });
 
     const byName = (a, b) => a.organization_name.localeCompare(b.organization_name);
@@ -284,10 +346,11 @@ export default function ProspectorManager({ currentUserProfile }) {
       },
     };
     return [...matched].sort(sorters[sortBy] || sorters.recent);
-  }, [prospects, savedSearch, statusFilter, sortBy]);
-
-  const visibleResults = view === 'discover' ? searchResults : filteredSaved;
-  const pagedResults = useMemo(() => visibleResults.slice(0, visibleCount), [visibleResults, visibleCount]);
+  }, [
+    prospects, savedSearch, statusFilter, sortBy, ownerFilter, currentEmail,
+    followUpFilter, savedContactFilter, permissionFilter, pipelineMinScore,
+    sourceFilter, contactActivityFilter,
+  ]);
 
   // A search result can already be in the pipeline. Saving it again refreshes
   // directory details and keeps the pipeline state, but the operator should see
@@ -300,7 +363,36 @@ export default function ProspectorManager({ currentUserProfile }) {
   const savedMatchFor = useCallback((prospect) => (prospect?.source_external_id
     ? savedByExternalId.get(`${prospect.source_provider}:${prospect.source_external_id}`) || null
     : null), [savedByExternalId]);
+
+  const distanceLimit = resolvedDistanceLimit(distanceChoice, customDistance);
+  const filteredDiscovery = useMemo(() => filterDiscoveryProspects(searchResults, {
+    center: searchCenter,
+    contact: discoveryContact,
+    distanceKm: searchCenter ? distanceLimit : null,
+    excludeSaved,
+    isSaved: (prospect) => Boolean(prospect?.source_external_id && savedByExternalId.has(`${prospect.source_provider}:${prospect.source_external_id}`)),
+    minRating: discoveryMinRating,
+    minReviews: discoveryMinReviews,
+    minScore: discoveryMinScore,
+    sortBy: discoverySort,
+  }), [
+    searchResults, searchCenter, discoveryContact, distanceLimit, excludeSaved,
+    savedByExternalId, discoveryMinRating, discoveryMinScore, discoverySort,
+    discoveryMinReviews,
+  ]);
+
+  const visibleResults = view === 'discover' ? filteredDiscovery : filteredSaved;
+  const pagedResults = useMemo(() => visibleResults.slice(0, visibleCount), [visibleResults, visibleCount]);
   const selectedSavedMatch = !selectedSaved ? savedMatchFor(selected) : null;
+
+  useEffect(() => {
+    const saved = view === 'saved';
+    setSelection((current) => {
+      if (current.saved !== saved) return current;
+      if (current.key && visibleResults.some((item) => prospectKey(item) === current.key)) return current;
+      return { key: visibleResults[0] ? prospectKey(visibleResults[0]) : null, saved };
+    });
+  }, [view, visibleResults]);
 
   /* ---------------------------------------------------------------- search */
 
@@ -326,6 +418,7 @@ export default function ProspectorManager({ currentUserProfile }) {
     const handle = (event) => {
       if (event.type === 'meta') {
         stillScanning = Boolean(event.categorySearch);
+        setSearchCenter(event.searchCenter || null);
         setNotice(event.locationResolved
           ? `Searching ${event.locationResolved}…`
           : 'Searching…');
@@ -338,6 +431,7 @@ export default function ProspectorManager({ currentUserProfile }) {
       }
       if (event.type === 'complete') {
         const results = event.prospects || [];
+        setSearchCenter(event.searchCenter || null);
         applySearchResults(results);
         const where = event.locationResolved ? ` near ${event.locationResolved}` : '';
         const warning = event.warnings?.[0] ? ` ${event.warnings[0]}` : '';
@@ -358,6 +452,7 @@ export default function ProspectorManager({ currentUserProfile }) {
     setSearching(true);
     setError('');
     setNotice('');
+    if (!bbox) setSearchCenter(null);
     if (view !== 'discover') setView('discover');
     try {
       const response = await adminFetch('/api/admin/prospects/search', {
@@ -629,6 +724,8 @@ export default function ProspectorManager({ currentUserProfile }) {
 
   const allVisibleChecked = pagedResults.length > 0
     && pagedResults.every((item) => checkedKeys.has(prospectKey(item)));
+  const allMatchingChecked = visibleResults.length > 0
+    && visibleResults.every((item) => checkedKeys.has(prospectKey(item)));
 
   const toggleAllVisible = () => {
     setCheckedKeys((current) => {
@@ -639,76 +736,120 @@ export default function ProspectorManager({ currentUserProfile }) {
     });
   };
 
-  useEffect(() => { setCheckedKeys(new Set()); }, [view]);
+  const checkAllMatching = () => {
+    setCheckedKeys(new Set(visibleResults.map(prospectKey)));
+  };
+
+  const removeChecked = (keys) => {
+    const removed = new Set(keys);
+    setCheckedKeys((current) => new Set([...current].filter((key) => !removed.has(key))));
+  };
 
   const bulkSave = async () => {
     if (dbSetupRequired) {
       setError('Run prospector-migration.sql before saving prospects.');
       return;
     }
+    const targets = [...checkedProspects];
+    const batches = chunkProspects(targets, BULK_BATCH_SIZE);
+    let created = 0;
+    let refreshed = 0;
+    let failed = 0;
     setSaving(true);
     setError('');
     try {
-      const response = await adminFetch('/api/admin/prospects/bulk', {
-        method: 'POST',
-        body: JSON.stringify({ prospects: checkedProspects }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        if (payload.setupRequired) setDbSetupRequired(true);
-        throw new Error(payload.error || 'Unable to save prospects');
+      for (const [index, batch] of batches.entries()) {
+        setBulkProgress({ label: 'Saving', completed: index * BULK_BATCH_SIZE, total: targets.length });
+        const response = await adminFetch('/api/admin/prospects/bulk', {
+          method: 'POST',
+          body: JSON.stringify({ prospects: batch }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          if (payload.setupRequired) setDbSetupRequired(true);
+          throw new Error(payload.error || 'Unable to save prospects');
+        }
+        const savedRows = payload.saved || [];
+        mergeSaved(savedRows);
+        const savedIdentities = new Set(savedRows.map(directoryIdentity));
+        removeChecked(batch.filter((prospect) => savedIdentities.has(directoryIdentity(prospect))).map(prospectKey));
+        created += Number(payload.created || 0);
+        refreshed += Number(payload.refreshed || 0);
+        failed += payload.failed?.length || 0;
+        setBulkProgress({ label: 'Saving', completed: Math.min((index + 1) * BULK_BATCH_SIZE, targets.length), total: targets.length });
       }
-      mergeSaved(payload.saved || []);
-      setCheckedKeys(new Set());
       const parts = [
-        payload.created ? `${payload.created} added` : '',
-        payload.refreshed ? `${payload.refreshed} refreshed` : '',
-        payload.failed?.length ? `${payload.failed.length} skipped` : '',
+        created ? `${created} added` : '',
+        refreshed ? `${refreshed} refreshed` : '',
+        failed ? `${failed} skipped and left checked` : '',
       ].filter(Boolean);
       setNotice(parts.length ? `Pipeline updated: ${parts.join(', ')}.` : 'Nothing to save.');
     } catch (bulkError) {
-      setError(bulkError.message);
+      setError(`${created + refreshed} saved before the batch stopped. ${bulkError.message}`);
     } finally {
       setSaving(false);
+      setBulkProgress(null);
     }
   };
 
-  const bulkPatch = async (updates, successMessage) => {
+  const bulkPatch = async (updates, actionLabel) => {
+    const targets = checkedProspects.map((item) => item.id).filter(Boolean);
+    const batches = chunkProspects(targets, BULK_BATCH_SIZE);
+    let updated = 0;
     setSaving(true);
     setError('');
     try {
-      const response = await adminFetch('/api/admin/prospects/bulk', {
-        method: 'PATCH',
-        body: JSON.stringify({ ids: checkedProspects.map((item) => item.id).filter(Boolean), ...updates }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Unable to update prospects');
-      mergeSaved(payload.prospects || []);
-      setNotice(successMessage);
-      setCheckedKeys(new Set());
+      for (const [index, ids] of batches.entries()) {
+        setBulkProgress({ label: actionLabel, completed: index * BULK_BATCH_SIZE, total: targets.length });
+        const response = await adminFetch('/api/admin/prospects/bulk', {
+          method: 'PATCH',
+          body: JSON.stringify({ ids, ...updates }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Unable to update prospects');
+        const rows = payload.prospects || [];
+        mergeSaved(rows);
+        removeChecked(rows.map((row) => row.id));
+        updated += rows.length;
+        setBulkProgress({ label: actionLabel, completed: Math.min((index + 1) * BULK_BATCH_SIZE, targets.length), total: targets.length });
+      }
+      setNotice(`${updated} prospect(s) ${actionLabel.toLowerCase()}.`);
     } catch (bulkError) {
-      setError(bulkError.message);
+      setError(`${updated} updated before the batch stopped. ${bulkError.message}`);
     } finally {
       setSaving(false);
+      setBulkProgress(null);
     }
   };
 
   const bulkDelete = async () => {
     const ids = checkedProspects.map((item) => item.id).filter(Boolean);
+    const batches = chunkProspects(ids, BULK_BATCH_SIZE);
+    let deleted = 0;
     setSaving(true);
     setError('');
     try {
-      const response = await adminFetch(`/api/admin/prospects/bulk?ids=${ids.map(encodeURIComponent).join(',')}`, { method: 'DELETE' });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Unable to delete prospects');
-      setProspects((current) => current.filter((item) => !ids.includes(item.id)));
-      setCheckedKeys(new Set());
-      if (ids.includes(selected?.id)) setSelection({ key: null, saved: true });
-      setNotice(`${ids.length} prospect(s) deleted.`);
+      for (const [index, batch] of batches.entries()) {
+        setBulkProgress({ label: 'Deleting', completed: index * BULK_BATCH_SIZE, total: ids.length });
+        const response = await adminFetch('/api/admin/prospects/bulk', {
+          method: 'DELETE',
+          body: JSON.stringify({ ids: batch }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Unable to delete prospects');
+        const deletedIds = payload.deleted || [];
+        setProspects((current) => current.filter((item) => !deletedIds.includes(item.id)));
+        removeChecked(deletedIds);
+        deleted += deletedIds.length;
+        if (deletedIds.includes(selected?.id)) setSelection({ key: null, saved: true });
+        setBulkProgress({ label: 'Deleting', completed: Math.min((index + 1) * BULK_BATCH_SIZE, ids.length), total: ids.length });
+      }
+      setNotice(`${deleted} prospect(s) deleted.`);
     } catch (bulkError) {
-      setError(bulkError.message);
+      setError(`${deleted} deleted before the batch stopped. ${bulkError.message}`);
     } finally {
       setSaving(false);
+      setBulkProgress(null);
     }
   };
 
@@ -815,14 +956,47 @@ export default function ProspectorManager({ currentUserProfile }) {
   const onListKeyDown = (event) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     event.preventDefault();
-    const index = pagedResults.findIndex((item) => prospectKey(item) === selection.key);
+    const index = visibleResults.findIndex((item) => prospectKey(item) === selection.key);
     const step = event.key === 'ArrowDown' ? 1 : -1;
-    const nextIndex = index < 0 ? 0 : Math.min(pagedResults.length - 1, Math.max(0, index + step));
-    const next = pagedResults[nextIndex];
-    if (next) chooseProspect(next, view === 'saved');
+    const nextIndex = index < 0 ? 0 : Math.min(visibleResults.length - 1, Math.max(0, index + step));
+    const next = visibleResults[nextIndex];
+    if (next) {
+      if (nextIndex >= visibleCount) setVisibleCount(Math.ceil((nextIndex + 1) / PAGE_SIZE) * PAGE_SIZE);
+      chooseProspect(next, view === 'saved');
+    }
+  };
+
+  const chooseFromMap = (prospect) => {
+    const index = visibleResults.findIndex((item) => prospectKey(item) === prospectKey(prospect));
+    if (index >= visibleCount) setVisibleCount(Math.ceil((index + 1) / PAGE_SIZE) * PAGE_SIZE);
+    chooseProspect(prospect, view === 'saved');
   };
 
   const askConfirm = (request) => setConfirmRequest(request);
+
+  const clearDiscoveryFilters = () => {
+    setDistanceChoice('');
+    setCustomDistance('');
+    setDiscoveryContact('any');
+    setDiscoveryMinScore('0');
+    setDiscoveryMinRating('0');
+    setDiscoveryMinReviews('0');
+    setDiscoverySort('relevance');
+    setExcludeSaved(false);
+  };
+
+  const clearPipelineFilters = () => {
+    setSavedSearch('');
+    setStatusFilter('active');
+    setSortBy('recent');
+    setSavedContactFilter('any');
+    setOwnerFilter('any');
+    setFollowUpFilter('any');
+    setPermissionFilter('any');
+    setPipelineMinScore('0');
+    setSourceFilter('any');
+    setContactActivityFilter('any');
+  };
 
   return (
     <div className="admin-tab-panel prospector-shell">
@@ -897,27 +1071,153 @@ export default function ProspectorManager({ currentUserProfile }) {
       </div>
 
       {view === 'discover' ? (
-        <form className="prospector-searchbar" onSubmit={onSearchSubmit}>
-          <input className="prospector-input" list="prospector-category-suggestions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Business type or keyword" aria-label="Business type or keyword" />
-          <datalist id="prospector-category-suggestions">{CATEGORY_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
-          <input className="prospector-input" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="City, region, or country (optional)" aria-label="City, region, or country" />
-          <button className="prospector-btn primary" type="submit" disabled={searching || query.trim().length < 2}>
-            {searching ? <Loader2 size={15} className="mkt-spin" /> : <Search size={15} />} Search businesses
-          </button>
-        </form>
+        <>
+          <form className="prospector-searchbar" onSubmit={onSearchSubmit}>
+            <input className="prospector-input" list="prospector-category-suggestions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Business type or keyword" aria-label="Business type or keyword" />
+            <datalist id="prospector-category-suggestions">{CATEGORY_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
+            <input className="prospector-input" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="City, region, or country (optional)" aria-label="City, region, or country" />
+            <button className="prospector-btn primary" type="submit" disabled={searching || query.trim().length < 2}>
+              {searching ? <Loader2 size={15} className="mkt-spin" /> : <Search size={15} />} Search businesses
+            </button>
+          </form>
+          <div className="prospector-filterbar" aria-label="Discovery filters">
+            <label>Distance
+              <select className="prospector-select" value={distanceChoice} onChange={(event) => setDistanceChoice(event.target.value)}>
+                <option value="">Any distance</option>
+                <option value="5">Within 5 km</option>
+                <option value="10">Within 10 km</option>
+                <option value="25">Within 25 km</option>
+                <option value="50">Within 50 km</option>
+                <option value="custom">Custom distance…</option>
+              </select>
+            </label>
+            {distanceChoice === 'custom' && (
+              <label>Custom km
+                <input className="prospector-input" type="number" min="0.1" max="1000" step="0.1" value={customDistance} onChange={(event) => setCustomDistance(event.target.value)} placeholder="e.g. 17.5" />
+              </label>
+            )}
+            <label>Contact data
+              <select className="prospector-select" value={discoveryContact} onChange={(event) => setDiscoveryContact(event.target.value)}>
+                <option value="any">Any contact state</option>
+                <option value="reachable">Phone, email, or WhatsApp</option>
+                <option value="phone">Has phone</option>
+                <option value="email">Has email</option>
+                <option value="whatsapp">Has WhatsApp</option>
+                <option value="website">Has website</option>
+              </select>
+            </label>
+            <label>Fit score
+              <select className="prospector-select" value={discoveryMinScore} onChange={(event) => setDiscoveryMinScore(event.target.value)}>
+                <option value="0">Any score</option>
+                <option value="45">45+ workable</option>
+                <option value="70">70+ strong</option>
+              </select>
+            </label>
+            <label>Rating
+              <select className="prospector-select" value={discoveryMinRating} onChange={(event) => setDiscoveryMinRating(event.target.value)}>
+                <option value="0">Any rating</option>
+                <option value="4">4.0+</option>
+                <option value="4.3">4.3+</option>
+                <option value="4.5">4.5+</option>
+              </select>
+            </label>
+            <label>Review count
+              <select className="prospector-select" value={discoveryMinReviews} onChange={(event) => setDiscoveryMinReviews(event.target.value)}>
+                <option value="0">Any reviews</option>
+                <option value="10">10+ reviews</option>
+                <option value="20">20+ reviews</option>
+                <option value="50">50+ reviews</option>
+              </select>
+            </label>
+            <label>Sort
+              <select className="prospector-select" value={discoverySort} onChange={(event) => setDiscoverySort(event.target.value)}>
+                <option value="relevance">Best match</option>
+                <option value="distance">Nearest first</option>
+                <option value="score">Best fit first</option>
+                <option value="rating">Highest rating</option>
+              </select>
+            </label>
+            <label className="prospector-filter-check">
+              <input type="checkbox" checked={excludeSaved} onChange={(event) => setExcludeSaved(event.target.checked)} /> Exclude saved
+            </label>
+            <button type="button" className="prospector-btn small" onClick={clearDiscoveryFilters}>Clear filters</button>
+            {distanceChoice && !searchCenter && <small className="prospector-filter-hint">Add a location and search, or search the visible map area, to apply distance.</small>}
+            {distanceChoice === 'custom' && searchCenter && !distanceLimit && <small className="prospector-filter-hint">Enter a custom distance greater than 0 km.</small>}
+          </div>
+        </>
       ) : (
-        <div className="prospector-searchbar saved">
-          <input className="prospector-input" value={savedSearch} onChange={(event) => setSavedSearch(event.target.value)} placeholder="Search saved prospects…" aria-label="Search saved prospects" />
-          <select className="prospector-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Prospect status filter">
-            <option value="active">Active pipeline</option>
-            <option value="due">Follow-up due ({stats.due})</option>
-            <option value="all">All statuses</option>
-            {PROSPECT_STATUSES.map((status) => <option key={status} value={status}>{PROSPECT_STATUS_LABELS[status]}</option>)}
-          </select>
-          <select className="prospector-select" value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort saved prospects">
-            {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-        </div>
+        <>
+          <div className="prospector-searchbar saved">
+            <input className="prospector-input" value={savedSearch} onChange={(event) => setSavedSearch(event.target.value)} placeholder="Search name, phone, email, city, or owner…" aria-label="Search saved prospects" />
+            <select className="prospector-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Prospect status filter">
+              <option value="active">Active pipeline</option>
+              <option value="due">Follow-up due ({stats.due})</option>
+              <option value="all">All statuses</option>
+              {PROSPECT_STATUSES.map((status) => <option key={status} value={status}>{PROSPECT_STATUS_LABELS[status]}</option>)}
+            </select>
+            <select className="prospector-select" value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort saved prospects">
+              {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </div>
+          <div className="prospector-filterbar compact" aria-label="Pipeline filters">
+            <label>Contact data
+              <select className="prospector-select" value={savedContactFilter} onChange={(event) => setSavedContactFilter(event.target.value)}>
+                <option value="any">Any contact state</option>
+                <option value="reachable">Ready to contact</option>
+                <option value="phone">Has phone</option>
+                <option value="email">Has email</option>
+                <option value="whatsapp">Has WhatsApp</option>
+                <option value="missing_phone">Missing phone</option>
+                <option value="missing_email">Missing email</option>
+                <option value="no_website">No website</option>
+                <option value="not_enriched">Not enriched</option>
+              </select>
+            </label>
+            <label>Owner
+              <select className="prospector-select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
+                <option value="any">Anyone</option>
+                {currentEmail && <option value="mine">Assigned to me</option>}
+                <option value="unassigned">Unassigned</option>
+              </select>
+            </label>
+            <label>Follow-up
+              <select className="prospector-select" value={followUpFilter} onChange={(event) => setFollowUpFilter(event.target.value)}>
+                <option value="any">Any schedule</option>
+                <option value="due">Overdue now</option>
+                <option value="unscheduled">Unscheduled</option>
+              </select>
+            </label>
+            <label>Permission
+              <select className="prospector-select" value={permissionFilter} onChange={(event) => setPermissionFilter(event.target.value)}>
+                <option value="any">Any permission</option>
+                {CONTACT_PERMISSION_STATUSES.map((status) => <option key={status} value={status}>{PERMISSION_LABELS[status]}</option>)}
+              </select>
+            </label>
+            <label>Fit score
+              <select className="prospector-select" value={pipelineMinScore} onChange={(event) => setPipelineMinScore(event.target.value)}>
+                <option value="0">Any score</option>
+                <option value="45">45+ workable</option>
+                <option value="70">70+ strong</option>
+              </select>
+            </label>
+            <label>Source
+              <select className="prospector-select" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+                <option value="any">Any source</option>
+                <option value="openstreetmap">OpenStreetMap</option>
+                <option value="google_places">Google Places</option>
+                <option value="manual">Manual</option>
+              </select>
+            </label>
+            <label>Contact activity
+              <select className="prospector-select" value={contactActivityFilter} onChange={(event) => setContactActivityFilter(event.target.value)}>
+                <option value="any">Any activity</option>
+                <option value="contacted">Previously contacted</option>
+                <option value="never">Never contacted</option>
+              </select>
+            </label>
+            <button type="button" className="prospector-btn small" onClick={clearPipelineFilters}>Clear filters</button>
+          </div>
+        </>
       )}
 
       <div className="prospector-workspace" id="prospector-workspace">
@@ -928,17 +1228,20 @@ export default function ProspectorManager({ currentUserProfile }) {
               className={`prospector-check${allVisibleChecked ? ' checked' : ''}`}
               onClick={toggleAllVisible}
               disabled={!pagedResults.length}
-              aria-label={allVisibleChecked ? 'Clear selection' : 'Select all visible'}
+              aria-label={allVisibleChecked ? `Clear ${pagedResults.length} shown prospects` : `Check ${pagedResults.length} shown prospects`}
             >
               {allVisibleChecked && <Check size={12} strokeWidth={3} />}
             </button>
             <span>{view === 'discover' ? 'Search results' : 'Saved pipeline'}</span>
-            <span className="count">{visibleResults.length}</span>
+            <span className="count">{pagedResults.length < visibleResults.length ? `${pagedResults.length} of ${visibleResults.length}` : visibleResults.length}</span>
           </div>
 
           {checkedProspects.length > 0 && (
             <div className="prospector-bulkbar">
-              <strong>{checkedProspects.length} selected</strong>
+              <strong>{checkedProspects.length} checked</strong>
+              {allVisibleChecked && !allMatchingChecked && visibleResults.length > pagedResults.length && (
+                <button type="button" className="prospector-btn small" onClick={checkAllMatching} disabled={saving}>Check all {visibleResults.length} matches</button>
+              )}
               {view === 'discover' ? (
                 <button type="button" className="prospector-btn small primary" onClick={bulkSave} disabled={saving || dbSetupRequired}>
                   <Save size={13} /> Save to pipeline
@@ -948,7 +1251,7 @@ export default function ProspectorManager({ currentUserProfile }) {
                   <select
                     className="prospector-select"
                     value=""
-                    onChange={(event) => event.target.value && bulkPatch({ status: event.target.value }, `${checkedProspects.length} moved to ${PROSPECT_STATUS_LABELS[event.target.value]}`)}
+                    onChange={(event) => event.target.value && bulkPatch({ status: event.target.value }, `Moved to ${PROSPECT_STATUS_LABELS[event.target.value]}`)}
                     disabled={saving}
                     aria-label="Set status for selected prospects"
                   >
@@ -956,7 +1259,7 @@ export default function ProspectorManager({ currentUserProfile }) {
                     {PROSPECT_STATUSES.map((status) => <option key={status} value={status}>{PROSPECT_STATUS_LABELS[status]}</option>)}
                   </select>
                   {currentEmail && (
-                    <button type="button" className="prospector-btn small" onClick={() => bulkPatch({ owner_email: currentEmail }, `${checkedProspects.length} assigned to you`)} disabled={saving}>
+                    <button type="button" className="prospector-btn small" onClick={() => bulkPatch({ owner_email: currentEmail }, 'Assigned to you')} disabled={saving}>
                       <UserRoundCheck size={13} /> Assign to me
                     </button>
                   )}
@@ -982,6 +1285,14 @@ export default function ProspectorManager({ currentUserProfile }) {
               <button type="button" className="prospector-btn small" onClick={() => setCheckedKeys(new Set())}>
                 <X size={13} /> Clear
               </button>
+            </div>
+          )}
+
+          {bulkProgress && (
+            <div className="prospector-queuebar" role="status">
+              <Loader2 size={13} className="mkt-spin" />
+              <span>{bulkProgress.label} {bulkProgress.completed} of {bulkProgress.total}</span>
+              <span className="bar"><i style={{ width: `${Math.round((bulkProgress.completed / bulkProgress.total) * 100)}%` }} /></span>
             </div>
           )}
 
@@ -1016,6 +1327,10 @@ export default function ProspectorManager({ currentUserProfile }) {
               return (
                 <div
                   key={key}
+                  ref={(node) => {
+                    if (node) resultNodesRef.current.set(key, node);
+                    else resultNodesRef.current.delete(key);
+                  }}
                   className={`prospector-result${selection.key === key ? ' active' : ''}`}
                   role="listitem"
                 >
@@ -1023,7 +1338,7 @@ export default function ProspectorManager({ currentUserProfile }) {
                     type="button"
                     className={`prospector-check${checkedKeys.has(key) ? ' checked' : ''}`}
                     onClick={() => toggleChecked(key)}
-                    aria-label={`Select ${prospect.organization_name}`}
+                    aria-label={`${checkedKeys.has(key) ? 'Uncheck' : 'Check'} ${prospect.organization_name}`}
                   >
                     {checkedKeys.has(key) && <Check size={12} strokeWidth={3} />}
                   </button>
@@ -1035,6 +1350,9 @@ export default function ProspectorManager({ currentUserProfile }) {
                   >
                     <strong>{prospect.organization_name}</strong>
                     <small>{prospect.category || 'Business'} · {locationLabel(prospect)}</small>
+                    {view === 'discover' && searchCenter && distanceKmBetween(searchCenter, prospect) != null && (
+                      <small>{distanceKmBetween(searchCenter, prospect) < 10 ? distanceKmBetween(searchCenter, prospect).toFixed(1) : Math.round(distanceKmBetween(searchCenter, prospect))} km from search center</small>
+                    )}
                     {view === 'saved' && (
                       <small>
                         {PROSPECT_STATUS_LABELS[prospect.status] || prospect.status}
@@ -1069,13 +1387,13 @@ export default function ProspectorManager({ currentUserProfile }) {
           prospects={visibleResults}
           selectedKey={selection.key}
           keyOf={prospectKey}
-          onSelect={(prospect) => chooseProspect(prospect, view === 'saved')}
+          onSelect={chooseFromMap}
           onSearchArea={view === 'discover' ? (bbox) => runSearch(bbox) : null}
           searching={searching}
           toneOf={prospectScoreTone}
         />
 
-        <aside className="prospector-detail" aria-label="Prospect details">
+        <aside className="prospector-detail" aria-label="Prospect details" ref={detailRef}>
           {!selected ? (
             <>
               <div className="prospector-empty"><Building2 size={34} /><div>Select a prospect to review contact data, fit, ownership, and follow-up.</div></div>
@@ -1098,6 +1416,7 @@ export default function ProspectorManager({ currentUserProfile }) {
                 <span className={`prospector-badge${selected.contact_permission_status === 'do_not_contact' ? ' danger' : selected.contact_permission_status === 'unknown' || !selected.contact_permission_status ? ' warning' : ''}`}>
                   {PERMISSION_LABELS[selected.contact_permission_status || 'unknown']}
                 </span>
+                {view === 'discover' && searchCenter && distanceKmBetween(searchCenter, selected) != null && <span className="prospector-badge">{distanceKmBetween(searchCenter, selected).toFixed(1)} km away</span>}
               </div>
 
               {enrichState[selection.key]?.status === 'scanning' && (

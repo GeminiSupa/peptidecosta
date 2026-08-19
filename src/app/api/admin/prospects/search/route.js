@@ -83,8 +83,15 @@ function locationContext(place) {
   if (!place) return null;
   const bounds = (place.boundingbox || []).map(Number);
   const validBounds = bounds.length === 4 && bounds.every(Number.isFinite);
+  const latitude = Number(place.lat);
+  const longitude = Number(place.lon);
   return {
     bbox: validBounds ? { south: bounds[0], north: bounds[1], west: bounds[2], east: bounds[3] } : null,
+    center: Number.isFinite(latitude) && Number.isFinite(longitude)
+      ? { latitude, longitude }
+      : validBounds
+        ? { latitude: (bounds[0] + bounds[1]) / 2, longitude: (bounds[2] + bounds[3]) / 2 }
+        : null,
     countryCode: String(place.address?.country_code || '').toUpperCase(),
     country: place.address?.country || null,
     city: place.address?.city || place.address?.town || place.address?.village || null,
@@ -98,6 +105,10 @@ function locationContext(place) {
 function bboxContext(bbox) {
   return {
     bbox,
+    center: {
+      latitude: (bbox.south + bbox.north) / 2,
+      longitude: (bbox.west + bbox.east) / 2,
+    },
     countryCode: '',
     country: null,
     city: null,
@@ -249,6 +260,7 @@ async function* streamOpenStreetMapSearch(query, location, bbox) {
     query: textQuery,
     provider,
     locationResolved,
+    searchCenter: context?.center || null,
     // The client uses this to decide whether a second wave is still coming.
     categorySearch: Boolean(context),
   };
@@ -295,6 +307,7 @@ async function* streamOpenStreetMapSearch(query, location, bbox) {
     cached: false,
     provider,
     locationResolved,
+    searchCenter: context?.center || null,
     warnings,
   };
   cacheSet(cacheKey, result, searchCacheTtlMs(warnings));
