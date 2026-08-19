@@ -1,21 +1,26 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, Building2, CalendarClock, CheckCircle2, ChevronRight,
-  ExternalLink, Globe2, ListFilter, Loader2, Mail, MapPin, MapPinned,
+  AlertTriangle, Building2, CalendarClock, Check, CheckCircle2, ChevronRight,
+  Clock, ExternalLink, Globe2, History, ListFilter, Loader2, Mail, MapPin, MapPinned,
   MessageCircle, Phone, Plus, RefreshCw, Save, Search, Send, ShieldCheck, Sparkles,
-  Trash2, UserRoundCheck, X,
+  Trash2, UserRoundCheck, Users, X, Zap,
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import {
   CONTACT_PERMISSION_STATUSES,
+  PROSPECT_SCORE_BANDS,
   PROSPECT_STATUSES,
   PROSPECT_STATUS_LABELS,
+  prospectScoreTone,
   scoreProspect,
   upgradeContactPermission,
 } from '@/lib/prospects.mjs';
 import { canContactProspect } from '@/lib/prospectOutreach.mjs';
+import { readNdjsonStream } from '@/lib/ndjsonStream.mjs';
+import ProspectMap from '@/components/admin/prospector/ProspectMap';
+import prospectorStyles from '@/components/admin/prospector/prospectorStyles';
 
 const EMPTY_FORM = {
   organization_name: '',
@@ -49,6 +54,26 @@ const CATEGORY_SUGGESTIONS = [
   'Research laboratories',
 ];
 
+const SORT_OPTIONS = [
+  { value: 'recent', label: 'Recently updated' },
+  { value: 'score', label: 'Best fit first' },
+  { value: 'followup', label: 'Follow-up soonest' },
+  { value: 'name', label: 'Name A–Z' },
+];
+
+/** How many enrichment scans run at once. */
+const ENRICH_CONCURRENCY = 2;
+/** Rows rendered before "Show more"; a thousand buttons is not a list. */
+const PAGE_SIZE = 60;
+const NOTICE_TIMEOUT_MS = 7000;
+const CLOSED_STATUSES = ['won', 'lost', 'do_not_contact'];
+
+/** Stable identity for a prospect whether or not it has been saved yet. */
+const prospectKey = (prospect) => (prospect?.id
+  || (prospect?.source_external_id ? `${prospect.source_provider}:${prospect.source_external_id}` : null)
+  || prospect?.organization_name
+  || '');
+
 function locationLabel(prospect) {
   return [prospect.city, prospect.region, prospect.country].filter(Boolean).join(', ')
     || prospect.formatted_address
@@ -70,21 +95,35 @@ function localInputDate(value) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function scoreTone(score) {
-  if (score >= 75) return 'high';
-  if (score >= 50) return 'medium';
-  return 'low';
+function timeAgo(value) {
+  const date = new Date(value);
+  if (!value || Number.isNaN(date.getTime())) return '';
+  const seconds = Math.round((Date.now() - date.getTime()) / 1000);
+  const units = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]];
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) return formatter.format(-Math.round(seconds / size), unit);
+  }
+  return 'just now';
+}
+
+/** A follow-up nobody has done yet, on a prospect still in play. */
+function isFollowUpDue(prospect, now = Date.now()) {
+  return Boolean(prospect.next_follow_up_at)
+    && new Date(prospect.next_follow_up_at).getTime() <= now
+    && !CLOSED_STATUSES.includes(prospect.status);
 }
 
 export default function ProspectorManager({ currentUserProfile }) {
   const [view, setView] = useState('discover');
   const [prospects, setProspects] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [selectedSaved, setSelectedSaved] = useState(false);
+  // Selection is a key, not a copy of the row. Holding a copy meant every
+  // background update — an enrichment landing, a bulk status change — left the
+  // detail pane showing a version of the prospect that no longer existed.
+  const [selection, setSelection] = useState({ key: null, saved: false });
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
-  const [enriching, setEnriching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dbSetupRequired, setDbSetupRequired] = useState(false);
   const [error, setError] = useState('');
@@ -93,86 +132,162 @@ export default function ProspectorManager({ currentUserProfile }) {
   const [location, setLocation] = useState('');
   const [savedSearch, setSavedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
+  const [sortBy, setSortBy] = useState('recent');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualForm, setManualForm] = useState(EMPTY_FORM);
   const [notesDraft, setNotesDraft] = useState('');
+  const [notesDirty, setNotesDirty] = useState(false);
+  const [notesJustSaved, setNotesJustSaved] = useState(false);
   const [outreachChannel, setOutreachChannel] = useState('email');
   const [outreachLanguage, setOutreachLanguage] = useState('auto');
   const [outreachDraft, setOutreachDraft] = useState(null);
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
+  const [checkedKeys, setCheckedKeys] = useState(() => new Set());
+  const [enrichState, setEnrichState] = useState({});
+  const [history, setHistory] = useState({ rows: [], loading: false, setupRequired: false });
+  const [expandedMessages, setExpandedMessages] = useState(() => new Set());
+  const [confirmRequest, setConfirmRequest] = useState(null);
 
   const currentEmail = currentUserProfile?.email || '';
 
-  const loadProspects = async ({ preserveSelection = true } = {}) => {
+  // The enrichment queue resolves prospects when it gets to them, not when they
+  // were queued, so it reads the current lists rather than a captured snapshot.
+  const prospectsRef = useRef(prospects);
+  const searchResultsRef = useRef(searchResults);
+  useEffect(() => { prospectsRef.current = prospects; }, [prospects]);
+  useEffect(() => { searchResultsRef.current = searchResults; }, [searchResults]);
+
+  const selected = useMemo(() => {
+    if (!selection.key) return null;
+    const pool = selection.saved ? prospects : searchResults;
+    return pool.find((item) => prospectKey(item) === selection.key) || null;
+  }, [selection, prospects, searchResults]);
+  const selectedSaved = selection.saved && Boolean(selected?.id);
+
+  const chooseProspect = useCallback((prospect, saved) => {
+    setSelection({ key: prospectKey(prospect), saved });
+    setError('');
+  }, []);
+
+  const loadProspects = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const response = await adminFetch('/api/admin/prospects');
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Unable to load prospects');
-      const next = payload.prospects || [];
-      setProspects(next);
+      setProspects(payload.prospects || []);
       setDbSetupRequired(Boolean(payload.setupRequired));
-      if (preserveSelection && selectedSaved && selected?.id) {
-        const refreshed = next.find((item) => item.id === selected.id);
-        if (refreshed) {
-          setSelected(refreshed);
-          setNotesDraft(refreshed.notes || '');
-        }
-      }
     } catch (loadError) {
       setError(loadError.message);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    let active = true;
-    adminFetch('/api/admin/prospects')
-      .then(async (response) => ({ response, payload: await response.json() }))
-      .then(({ response, payload }) => {
-        if (!active) return;
-        if (!response.ok) throw new Error(payload.error || 'Unable to load prospects');
-        setProspects(payload.prospects || []);
-        setDbSetupRequired(Boolean(payload.setupRequired));
-      })
-      .catch((loadError) => { if (active) setError(loadError.message); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
   }, []);
 
+  useEffect(() => { loadProspects(); }, [loadProspects]);
+
   useEffect(() => {
-    setNotesDraft(selectedSaved ? selected?.notes || '' : '');
-  }, [selected, selectedSaved]);
+    setNotesDraft(selected?.notes || '');
+    setNotesDirty(false);
+    setNotesJustSaved(false);
+  }, [selection.key, selected?.notes]);
 
   // A draft belongs to one prospect. Carrying it across a selection change is
   // how a rep emails the wrong gym a message written about another one.
-  useEffect(() => {
-    setOutreachDraft(null);
-  }, [selected?.id, selectedSaved]);
+  useEffect(() => { setOutreachDraft(null); }, [selection.key]);
 
-  const stats = useMemo(() => ({
-    saved: prospects.length,
-    qualified: prospects.filter((item) => ['qualified', 'responded', 'meeting_booked', 'partner', 'won'].includes(item.status)).length,
-    due: prospects.filter((item) => item.next_follow_up_at && new Date(item.next_follow_up_at) <= new Date() && !['won', 'lost', 'do_not_contact'].includes(item.status)).length,
-  }), [prospects]);
+  // A success notice that never leaves pushes the workspace down for the rest
+  // of the session. Errors stay until the next action replaces them.
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(''), NOTICE_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [view, statusFilter, savedSearch, sortBy]);
+
+  useEffect(() => {
+    if (!manualOpen && !confirmRequest) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      setConfirmRequest(null);
+      setManualOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [manualOpen, confirmRequest]);
+
+  const loadHistory = useCallback(async (prospectId) => {
+    if (!prospectId) {
+      setHistory({ rows: [], loading: false, setupRequired: false });
+      return;
+    }
+    setHistory((current) => ({ ...current, loading: true }));
+    try {
+      const response = await adminFetch(`/api/admin/prospects/outreach?prospectId=${encodeURIComponent(prospectId)}`);
+      const payload = await response.json();
+      setHistory({
+        rows: response.ok ? payload.outreach || [] : [],
+        loading: false,
+        setupRequired: Boolean(payload.setupRequired),
+      });
+    } catch {
+      setHistory({ rows: [], loading: false, setupRequired: false });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedSaved || !selected?.id) {
+      setHistory({ rows: [], loading: false, setupRequired: false });
+      return;
+    }
+    loadHistory(selected.id);
+  }, [selectedSaved, selected?.id, loadHistory]);
+
+  const stats = useMemo(() => {
+    const now = Date.now();
+    return {
+      saved: prospects.length,
+      qualified: prospects.filter((item) => ['qualified', 'responded', 'meeting_booked', 'partner', 'won'].includes(item.status)).length,
+      due: prospects.filter((item) => isFollowUpDue(item, now)).length,
+    };
+  }, [prospects]);
 
   const filteredSaved = useMemo(() => {
     const search = savedSearch.trim().toLowerCase();
-    return prospects.filter((prospect) => {
-      if (statusFilter === 'active' && ['won', 'lost', 'do_not_contact'].includes(prospect.status)) return false;
-      if (statusFilter !== 'all' && statusFilter !== 'active' && prospect.status !== statusFilter) return false;
+    const now = Date.now();
+    const matched = prospects.filter((prospect) => {
+      if (statusFilter === 'active' && CLOSED_STATUSES.includes(prospect.status)) return false;
+      if (statusFilter === 'due' && !isFollowUpDue(prospect, now)) return false;
+      if (!['active', 'all', 'due'].includes(statusFilter) && prospect.status !== statusFilter) return false;
       if (!search) return true;
       return [
         prospect.organization_name, prospect.category, prospect.city, prospect.region,
         prospect.phone, prospect.email, prospect.owner_email,
       ].filter(Boolean).join(' ').toLowerCase().includes(search);
     });
-  }, [prospects, savedSearch, statusFilter]);
+
+    const byName = (a, b) => a.organization_name.localeCompare(b.organization_name);
+    const sorters = {
+      recent: (a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0),
+      score: (a, b) => (b.fit_score || 0) - (a.fit_score || 0) || byName(a, b),
+      name: byName,
+      // Nulls last: a prospect with no follow-up date is not overdue, it is
+      // unscheduled, and burying it under the ones that are is the point.
+      followup: (a, b) => {
+        const left = a.next_follow_up_at ? new Date(a.next_follow_up_at).getTime() : Infinity;
+        const right = b.next_follow_up_at ? new Date(b.next_follow_up_at).getTime() : Infinity;
+        return left - right || byName(a, b);
+      },
+    };
+    return [...matched].sort(sorters[sortBy] || sorters.recent);
+  }, [prospects, savedSearch, statusFilter, sortBy]);
 
   const visibleResults = view === 'discover' ? searchResults : filteredSaved;
+  const pagedResults = useMemo(() => visibleResults.slice(0, visibleCount), [visibleResults, visibleCount]);
 
   // A search result can already be in the pipeline. Saving it again refreshes
   // directory details and keeps the pipeline state, but the operator should see
@@ -182,49 +297,102 @@ export default function ProspectorManager({ currentUserProfile }) {
       .filter((item) => item.source_external_id)
       .map((item) => [`${item.source_provider}:${item.source_external_id}`, item]),
   ), [prospects]);
-  const savedMatchFor = (prospect) => (prospect?.source_external_id
+  const savedMatchFor = useCallback((prospect) => (prospect?.source_external_id
     ? savedByExternalId.get(`${prospect.source_provider}:${prospect.source_external_id}`) || null
-    : null);
+    : null), [savedByExternalId]);
   const selectedSavedMatch = !selectedSaved ? savedMatchFor(selected) : null;
 
-  const chooseProspect = (prospect, saved = false) => {
-    setSelected(prospect);
-    setSelectedSaved(saved);
-    setError('');
-  };
+  /* ---------------------------------------------------------------- search */
 
-  const runSearch = async (event) => {
-    event?.preventDefault();
+  const applySearchResults = useCallback((results) => {
+    setSearchResults(results);
+    setSelection((current) => {
+      if (current.saved) return current;
+      if (current.key && results.some((item) => prospectKey(item) === current.key)) return current;
+      return { key: results[0] ? prospectKey(results[0]) : null, saved: false };
+    });
+  }, []);
+
+  /**
+   * Reads the NDJSON search stream, painting each wave as it lands.
+   *
+   * The named-place half answers in a couple of seconds and the category half
+   * can take forty, so the list fills in twice rather than appearing once at
+   * the end of the slowest request.
+   */
+  const consumeSearchStream = useCallback(async (response) => {
+    let stillScanning = false;
+
+    const handle = (event) => {
+      if (event.type === 'meta') {
+        stillScanning = Boolean(event.categorySearch);
+        setNotice(event.locationResolved
+          ? `Searching ${event.locationResolved}…`
+          : 'Searching…');
+        return;
+      }
+      if (event.type === 'partial') {
+        applySearchResults(event.prospects || []);
+        setNotice(`${(event.prospects || []).length} named matches so far${stillScanning ? ' — still scanning categories…' : ''}`);
+        return;
+      }
+      if (event.type === 'complete') {
+        const results = event.prospects || [];
+        applySearchResults(results);
+        const where = event.locationResolved ? ` near ${event.locationResolved}` : '';
+        const warning = event.warnings?.[0] ? ` ${event.warnings[0]}` : '';
+        setNotice(results.length
+          ? `${results.length} businesses found${where} using ${event.provider || 'OpenStreetMap'}.${warning}`
+          : `No matching businesses found.${warning} Try a nearby city or a broader business term.`);
+        return;
+      }
+      if (event.type === 'error') setError(event.error);
+    };
+
+    await readNdjsonStream(response.body, handle, (line) => {
+      console.warn('[Prospector] Skipped an unreadable search event:', line.slice(0, 120));
+    });
+  }, [applySearchResults]);
+
+  const runSearch = useCallback(async (bbox = null) => {
     setSearching(true);
     setError('');
     setNotice('');
+    if (view !== 'discover') setView('discover');
     try {
       const response = await adminFetch('/api/admin/prospects/search', {
         method: 'POST',
-        body: JSON.stringify({ mode: 'search', query, location }),
+        body: JSON.stringify({ mode: 'search', query, location, ...(bbox ? { bbox } : {}) }),
       });
-      const payload = await response.json();
-      if (!response.ok) {
+      if (!response.ok || !response.body) {
+        const payload = await response.json().catch(() => ({}));
         throw new Error(payload.error || 'Unable to search businesses');
       }
-      const results = payload.prospects || [];
-      setSearchResults(results);
-      if (results[0]) chooseProspect(results[0], false);
-      else setSelected(null);
-      setSelectedSaved(false);
-      const resolvedLocation = payload.locationResolved ? ` near ${payload.locationResolved}` : '';
-      const warning = payload.warnings?.[0] ? ` ${payload.warnings[0]}` : '';
-      setNotice(results.length
-        ? `${results.length} businesses found${resolvedLocation} using ${payload.provider || 'OpenStreetMap'}.${warning}`
-        : `No matching businesses found.${warning} Try a nearby city or a broader business term.`);
+      await consumeSearchStream(response);
     } catch (searchError) {
       setError(searchError.message);
     } finally {
       setSearching(false);
     }
+  }, [query, location, view, consumeSearchStream]);
+
+  const onSearchSubmit = (event) => {
+    event.preventDefault();
+    runSearch();
   };
 
-  const saveProspect = async (prospect, extra = {}) => {
+  /* ----------------------------------------------------------------- saves */
+
+  const mergeSaved = useCallback((rows) => {
+    if (!rows.length) return;
+    setProspects((current) => {
+      const byId = new Map(current.map((item) => [item.id, item]));
+      for (const row of rows) byId.set(row.id, row);
+      return [...byId.values()];
+    });
+  }, []);
+
+  const saveProspect = async (prospect) => {
     if (dbSetupRequired) {
       setError('Run prospector-migration.sql before saving prospects.');
       return null;
@@ -234,16 +402,15 @@ export default function ProspectorManager({ currentUserProfile }) {
     try {
       const response = await adminFetch('/api/admin/prospects', {
         method: 'POST',
-        body: JSON.stringify({ ...prospect, ...extra }),
+        body: JSON.stringify(prospect),
       });
       const payload = await response.json();
       if (!response.ok) {
         if (payload.setupRequired) setDbSetupRequired(true);
         throw new Error(payload.error || 'Unable to save prospect');
       }
-      setProspects((current) => [payload.prospect, ...current.filter((item) => item.id !== payload.prospect.id)]);
-      setSelected(payload.prospect);
-      setSelectedSaved(true);
+      mergeSaved([payload.prospect]);
+      setSelection({ key: payload.prospect.id, saved: true });
       setNotice(`${payload.prospect.organization_name} saved to Prospector`);
       return payload.prospect;
     } catch (saveError) {
@@ -254,79 +421,315 @@ export default function ProspectorManager({ currentUserProfile }) {
     }
   };
 
-  const updateSelected = async (updates, successMessage = 'Prospect updated') => {
-    if (!selectedSaved || !selected?.id) return;
-    setSaving(true);
-    setError('');
+  /**
+   * @param {object} [options]
+   * @param {boolean} [options.silent] Skip the global saving/error state.
+   *   The enrichment queue writes rows in the background, and a background
+   *   write must not grey out every button on the screen or overwrite an error
+   *   the operator is reading — the row's own chip reports how it went.
+   */
+  const updateProspect = useCallback(async (id, updates, successMessage, { silent = false } = {}) => {
+    if (!id) return null;
+    if (!silent) {
+      setSaving(true);
+      setError('');
+    }
     try {
       const response = await adminFetch('/api/admin/prospects', {
         method: 'PATCH',
-        body: JSON.stringify({ id: selected.id, ...updates }),
+        body: JSON.stringify({ id, ...updates }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Unable to update prospect');
-      setSelected(payload.prospect);
-      setProspects((current) => current.map((item) => item.id === payload.prospect.id ? payload.prospect : item));
-      setNotice(successMessage);
+      mergeSaved([payload.prospect]);
+      if (successMessage) setNotice(successMessage);
+      return payload.prospect;
     } catch (updateError) {
-      setError(updateError.message);
+      if (!silent) setError(updateError.message);
+      return null;
     } finally {
-      setSaving(false);
+      if (!silent) setSaving(false);
+    }
+  }, [mergeSaved]);
+
+  const updateSelected = (updates, successMessage) => updateProspect(selected?.id, updates, successMessage);
+
+  const saveManualProspect = async (event) => {
+    event.preventDefault();
+    const saved = await saveProspect({ ...manualForm, source_provider: 'manual' });
+    if (saved) {
+      setManualForm(EMPTY_FORM);
+      setManualOpen(false);
+      setView('saved');
     }
   };
 
-  const enrichSelected = async () => {
-    if (!selected?.website_url) return;
-    setEnriching(true);
-    setError('');
-    setNotice('');
+  const commitNotes = async () => {
+    if (!notesDirty || !selected?.id) return;
+    const saved = await updateProspect(selected.id, { notes: notesDraft }, null);
+    if (saved) {
+      setNotesDirty(false);
+      setNotesJustSaved(true);
+      setTimeout(() => setNotesJustSaved(false), 2500);
+    }
+  };
+
+  /* ------------------------------------------------------------ enrichment */
+
+  const setEnrich = useCallback((key, status, message = '') => {
+    setEnrichState((current) => ({ ...current, [key]: { status, message } }));
+  }, []);
+
+  const enrichQueueRef = useRef([]);
+  const enrichRunningRef = useRef(0);
+  // Queued *and* in-flight keys. The queue alone is not enough: a job that has
+  // been shifted off it is still running, and without this a second click
+  // scans the same website again while the first scan is mid-flight.
+  const enrichClaimedRef = useRef(new Set());
+
+  const runEnrichment = useCallback(async (key, saved) => {
+    const pool = saved ? prospectsRef.current : searchResultsRef.current;
+    const target = pool.find((item) => prospectKey(item) === key);
+    if (!target) {
+      setEnrich(key, 'skipped', 'No longer in the list');
+      enrichClaimedRef.current.delete(key);
+      return;
+    }
+    if (!target.website_url) {
+      setEnrich(key, 'skipped', 'No website to scan');
+      enrichClaimedRef.current.delete(key);
+      return;
+    }
+
+    setEnrich(key, 'scanning');
     try {
       const response = await adminFetch('/api/admin/prospects/enrich', {
         method: 'POST',
         body: JSON.stringify({
-          website_url: selected.website_url,
-          organization_name: selected.organization_name,
+          website_url: target.website_url,
+          organization_name: target.organization_name,
         }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Unable to scan the business website');
-      if (!payload.email && !payload.phone && !payload.people?.length && !payload.linkedinUrls?.length && !payload.whatsappNumbers?.length) {
-        setNotice(`No public contacts or decision-makers found across ${payload.pagesScanned?.length || 1} website page(s).`);
+
+      const found = (payload.people?.length || 0) + (payload.emails?.length || 0)
+        + (payload.phones?.length || 0) + (payload.whatsappNumbers?.length || 0)
+        + (payload.linkedinUrls?.length || 0);
+      if (!found) {
+        setEnrich(key, 'done', `Nothing published across ${payload.pagesScanned?.length || 1} page(s)`);
         return;
       }
+
       const updates = {
-        email: payload.email || selected.email || null,
-        phone: payload.phone || selected.phone || null,
-        people: payload.people?.length ? payload.people : selected.people || [],
-        linkedin_urls: payload.linkedinUrls?.length ? payload.linkedinUrls : selected.linkedin_urls || [],
-        whatsapp_numbers: payload.whatsappNumbers?.length ? payload.whatsappNumbers : selected.whatsapp_numbers || [],
+        email: payload.email || target.email || null,
+        phone: payload.phone || target.phone || null,
+        people: payload.people?.length ? payload.people : target.people || [],
+        linkedin_urls: payload.linkedinUrls?.length ? payload.linkedinUrls : target.linkedin_urls || [],
+        whatsapp_numbers: payload.whatsappNumbers?.length ? payload.whatsappNumbers : target.whatsapp_numbers || [],
         // A scan can raise contact permission but must never quietly undo a
         // recorded consent or an opt-out.
         contact_permission_status: upgradeContactPermission(
-          selected.contact_permission_status,
+          target.contact_permission_status,
           payload.permissionStatus,
         ),
         contact_source_url: payload.sourceUrl,
         enriched_at: new Date().toISOString(),
       };
-      const unverifiedNote = payload.contactsVerified ? '' : ' Contacts came from page text rather than published mailto/tel links — verify before outreach.';
-      const resultSummary = `${payload.people?.length || 0} decision-maker(s), ${payload.emails?.length || 0} public email(s), ${payload.phones?.length || 0} phone(s), ${payload.whatsappNumbers?.length || 0} WhatsApp number(s), and ${payload.linkedinUrls?.length || 0} LinkedIn profile(s).${unverifiedNote}`;
-      if (selectedSaved) {
-        await updateSelected(updates, `Found ${resultSummary}`);
+
+      const summary = `${payload.people?.length || 0} decision-maker(s), ${payload.emails?.length || 0} email(s), ${payload.phones?.length || 0} phone(s)`;
+      const unverified = payload.contactsVerified ? '' : ' — unverified, from page text';
+
+      if (saved && target.id) {
+        const updated = await updateProspect(target.id, updates, null, { silent: true });
+        if (!updated) {
+          setEnrich(key, 'failed', 'Scan succeeded but the save failed');
+          return;
+        }
       } else {
-        setSelected((current) => {
-          const enriched = { ...current, ...updates };
-          const scored = scoreProspect(enriched);
-          return { ...enriched, fit_score: scored.score, fit_reasons: scored.reasons };
-        });
-        setNotice(`Found ${resultSummary}. Save the prospect to keep them.`);
+        setSearchResults((current) => current.map((item) => {
+          if (prospectKey(item) !== key) return item;
+          const merged = { ...item, ...updates };
+          const scored = scoreProspect(merged);
+          return { ...merged, fit_score: scored.score, fit_reasons: scored.reasons };
+        }));
       }
+      setEnrich(key, 'done', `${summary}${unverified}`);
     } catch (enrichmentError) {
-      setError(enrichmentError.message);
+      setEnrich(key, 'failed', enrichmentError.message);
     } finally {
-      setEnriching(false);
+      enrichClaimedRef.current.delete(key);
+    }
+  }, [setEnrich, updateProspect]);
+
+  /**
+   * Drains the enrichment queue at a fixed concurrency.
+   *
+   * Each scan fetches up to four pages, verifies MX records and calls a model,
+   * so it can run half a minute. Doing that one prospect at a time behind a
+   * blocked button was the single slowest thing in the tab; doing all eighty at
+   * once would trip every rate limit involved. Two at a time keeps the operator
+   * working while the queue empties behind them.
+   */
+  const pumpEnrichQueue = useCallback(() => {
+    while (enrichRunningRef.current < ENRICH_CONCURRENCY && enrichQueueRef.current.length) {
+      const job = enrichQueueRef.current.shift();
+      enrichRunningRef.current += 1;
+      runEnrichment(job.key, job.saved).finally(() => {
+        enrichRunningRef.current -= 1;
+        pumpEnrichQueue();
+      });
+    }
+  }, [runEnrichment]);
+
+  const enqueueEnrichment = useCallback((items, saved) => {
+    const jobs = [];
+    for (const item of items) {
+      const key = prospectKey(item);
+      if (!key || enrichClaimedRef.current.has(key)) continue;
+      if (!item.website_url) {
+        setEnrich(key, 'skipped', 'No website to scan');
+        continue;
+      }
+      enrichClaimedRef.current.add(key);
+      setEnrich(key, 'queued');
+      jobs.push({ key, saved });
+    }
+    if (!jobs.length) {
+      setNotice('None of those have a website to scan.');
+      return;
+    }
+    enrichQueueRef.current.push(...jobs);
+    setNotice(`${jobs.length} website scan(s) queued. You can keep working — results land on each row.`);
+    pumpEnrichQueue();
+  }, [pumpEnrichQueue, setEnrich]);
+
+  const enrichProgress = useMemo(() => {
+    const values = Object.values(enrichState);
+    const pending = values.filter((entry) => entry.status === 'queued' || entry.status === 'scanning').length;
+    const finished = values.filter((entry) => entry.status === 'done' || entry.status === 'failed').length;
+    return { pending, finished, total: pending + finished };
+  }, [enrichState]);
+
+  /* ---------------------------------------------------------------- bulk */
+
+  const checkedProspects = useMemo(
+    () => visibleResults.filter((item) => checkedKeys.has(prospectKey(item))),
+    [visibleResults, checkedKeys],
+  );
+
+  const toggleChecked = (key) => {
+    setCheckedKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const allVisibleChecked = pagedResults.length > 0
+    && pagedResults.every((item) => checkedKeys.has(prospectKey(item)));
+
+  const toggleAllVisible = () => {
+    setCheckedKeys((current) => {
+      const next = new Set(current);
+      if (allVisibleChecked) pagedResults.forEach((item) => next.delete(prospectKey(item)));
+      else pagedResults.forEach((item) => next.add(prospectKey(item)));
+      return next;
+    });
+  };
+
+  useEffect(() => { setCheckedKeys(new Set()); }, [view]);
+
+  const bulkSave = async () => {
+    if (dbSetupRequired) {
+      setError('Run prospector-migration.sql before saving prospects.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      const response = await adminFetch('/api/admin/prospects/bulk', {
+        method: 'POST',
+        body: JSON.stringify({ prospects: checkedProspects }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        if (payload.setupRequired) setDbSetupRequired(true);
+        throw new Error(payload.error || 'Unable to save prospects');
+      }
+      mergeSaved(payload.saved || []);
+      setCheckedKeys(new Set());
+      const parts = [
+        payload.created ? `${payload.created} added` : '',
+        payload.refreshed ? `${payload.refreshed} refreshed` : '',
+        payload.failed?.length ? `${payload.failed.length} skipped` : '',
+      ].filter(Boolean);
+      setNotice(parts.length ? `Pipeline updated: ${parts.join(', ')}.` : 'Nothing to save.');
+    } catch (bulkError) {
+      setError(bulkError.message);
+    } finally {
+      setSaving(false);
     }
   };
+
+  const bulkPatch = async (updates, successMessage) => {
+    setSaving(true);
+    setError('');
+    try {
+      const response = await adminFetch('/api/admin/prospects/bulk', {
+        method: 'PATCH',
+        body: JSON.stringify({ ids: checkedProspects.map((item) => item.id).filter(Boolean), ...updates }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Unable to update prospects');
+      mergeSaved(payload.prospects || []);
+      setNotice(successMessage);
+      setCheckedKeys(new Set());
+    } catch (bulkError) {
+      setError(bulkError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const bulkDelete = async () => {
+    const ids = checkedProspects.map((item) => item.id).filter(Boolean);
+    setSaving(true);
+    setError('');
+    try {
+      const response = await adminFetch(`/api/admin/prospects/bulk?ids=${ids.map(encodeURIComponent).join(',')}`, { method: 'DELETE' });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Unable to delete prospects');
+      setProspects((current) => current.filter((item) => !ids.includes(item.id)));
+      setCheckedKeys(new Set());
+      if (ids.includes(selected?.id)) setSelection({ key: null, saved: true });
+      setNotice(`${ids.length} prospect(s) deleted.`);
+    } catch (bulkError) {
+      setError(bulkError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteSelected = async () => {
+    if (!selected?.id) return;
+    setSaving(true);
+    try {
+      const response = await adminFetch(`/api/admin/prospects?id=${encodeURIComponent(selected.id)}`, { method: 'DELETE' });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Unable to delete prospect');
+      setProspects((current) => current.filter((item) => item.id !== selected.id));
+      setSelection({ key: null, saved: true });
+      setNotice('Prospect deleted');
+    } catch (deleteError) {
+      setError(deleteError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /* ------------------------------------------------------------- outreach */
 
   const draftOutreach = async () => {
     if (!selectedSaved || !selected?.id) return;
@@ -357,9 +760,6 @@ export default function ProspectorManager({ currentUserProfile }) {
 
   const sendOutreach = async () => {
     if (!selectedSaved || !selected?.id || !outreachDraft) return;
-    const target = outreachDraft.channel === 'email' ? 'email' : 'WhatsApp';
-    if (!confirm(`Send this ${target} message to ${outreachDraft.recipient}?`)) return;
-
     setSending(true);
     setError('');
     setNotice('');
@@ -384,7 +784,14 @@ export default function ProspectorManager({ currentUserProfile }) {
         setNotice(`Email sent to ${payload.recipient}.`);
       }
       setOutreachDraft(null);
-      await loadProspects();
+      // The send route already returned the updated row; refetching the whole
+      // pipeline to learn one status was the most expensive no-op in the tab.
+      if (payload.prospect) {
+        setProspects((current) => current.map((item) => (
+          item.id === payload.prospect.id ? { ...item, ...payload.prospect } : item
+        )));
+      }
+      loadHistory(selected.id);
     } catch (sendError) {
       setError(sendError.message);
     } finally {
@@ -392,147 +799,34 @@ export default function ProspectorManager({ currentUserProfile }) {
     }
   };
 
-  const saveManualProspect = async (event) => {
-    event.preventDefault();
-    const saved = await saveProspect({ ...manualForm, source_provider: 'manual' });
-    if (saved) {
-      setManualForm(EMPTY_FORM);
-      setManualOpen(false);
-      setView('saved');
-    }
-  };
-
-  const deleteSelected = async () => {
-    if (!selectedSaved || !selected?.id) return;
-    if (!confirm(`Delete ${selected.organization_name} from Prospector?`)) return;
-    setSaving(true);
-    try {
-      const response = await adminFetch(`/api/admin/prospects?id=${encodeURIComponent(selected.id)}`, { method: 'DELETE' });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Unable to delete prospect');
-      setProspects((current) => current.filter((item) => item.id !== selected.id));
-      setSelected(null);
-      setSelectedSaved(false);
-      setNotice('Prospect deleted');
-    } catch (deleteError) {
-      setError(deleteError.message);
-    } finally {
-      setSaving(false);
-    }
-  };
+  /* --------------------------------------------------------------- render */
 
   // Mirrors the server gate so a blocked send is explained before it is tried,
   // never instead of the server check.
   const outreachPermission = selected ? canContactProspect(selected, outreachChannel) : null;
+  const scoreBand = PROSPECT_SCORE_BANDS.find((band) => band.tone === prospectScoreTone(selected?.fit_score || 0));
 
   const mapQuery = selected
-    ? selected.latitude != null && selected.longitude != null
+    ? (selected.latitude != null && selected.longitude != null
       ? `${selected.latitude},${selected.longitude}`
-      : selected.formatted_address || locationLabel(selected)
+      : selected.formatted_address || locationLabel(selected))
     : '';
-  const hasCoordinates = selected && Number.isFinite(Number(selected.latitude)) && Number.isFinite(Number(selected.longitude));
-  const mapSrc = hasCoordinates
-    ? (() => {
-        const latitude = Number(selected.latitude);
-        const longitude = Number(selected.longitude);
-        const delta = 0.018;
-        const bbox = [longitude - delta, latitude - delta, longitude + delta, latitude + delta].join(',');
-        return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${encodeURIComponent(`${latitude},${longitude}`)}`;
-      })()
-    : '';
+
+  const onListKeyDown = (event) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    const index = pagedResults.findIndex((item) => prospectKey(item) === selection.key);
+    const step = event.key === 'ArrowDown' ? 1 : -1;
+    const nextIndex = index < 0 ? 0 : Math.min(pagedResults.length - 1, Math.max(0, index + step));
+    const next = pagedResults[nextIndex];
+    if (next) chooseProspect(next, view === 'saved');
+  };
+
+  const askConfirm = (request) => setConfirmRequest(request);
 
   return (
     <div className="admin-tab-panel prospector-shell">
-      <style>{`
-        .prospector-shell { color: #e5edf8; }
-        .prospector-header { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-bottom:18px; }
-        .prospector-heading { display:flex; align-items:center; gap:12px; }
-        .prospector-heading-icon { width:44px; height:44px; border-radius:13px; display:grid; place-items:center; background:linear-gradient(135deg,#2563eb,#0ea5e9); box-shadow:0 8px 24px rgba(14,165,233,.22); }
-        .prospector-heading h2 { margin:0; font-size:1.25rem; }
-        .prospector-heading p { margin:4px 0 0; color:#94a3b8; font-size:.86rem; }
-        .prospector-header-actions { display:flex; flex-wrap:wrap; gap:8px; }
-        .prospector-btn { min-height:38px; border-radius:9px; border:1px solid rgba(148,163,184,.2); padding:8px 13px; background:#111d30; color:#dce7f6; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:7px; }
-        .prospector-btn:hover { border-color:rgba(56,189,248,.55); background:#14243a; }
-        .prospector-btn.primary { background:linear-gradient(135deg,#2563eb,#0ea5e9); border-color:transparent; color:#fff; }
-        .prospector-btn.danger { color:#fca5a5; border-color:rgba(248,113,113,.22); }
-        .prospector-btn:disabled { opacity:.55; cursor:not-allowed; }
-        .prospector-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-bottom:16px; }
-        .prospector-stat { background:#0e1929; border:1px solid rgba(148,163,184,.12); border-radius:11px; padding:12px 14px; display:flex; align-items:center; gap:10px; }
-        .prospector-stat svg { color:#38bdf8; }
-        .prospector-stat strong { display:block; font-size:1.1rem; }
-        .prospector-stat span { color:#94a3b8; font-size:.76rem; }
-        .prospector-tabs { display:flex; gap:6px; margin-bottom:14px; border-bottom:1px solid rgba(148,163,184,.14); }
-        .prospector-tab { border:0; background:transparent; color:#94a3b8; padding:10px 13px; cursor:pointer; display:inline-flex; gap:7px; align-items:center; font-weight:700; border-bottom:2px solid transparent; }
-        .prospector-tab.active { color:#7dd3fc; border-bottom-color:#38bdf8; }
-        .prospector-alert { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border-radius:10px; margin-bottom:12px; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.2); color:#fde68a; }
-        .prospector-alert.error { background:rgba(239,68,68,.08); border-color:rgba(239,68,68,.22); color:#fecaca; }
-        .prospector-alert.success { background:rgba(34,197,94,.08); border-color:rgba(34,197,94,.2); color:#bbf7d0; }
-        .prospector-searchbar { display:grid; grid-template-columns:minmax(220px,1.3fr) minmax(150px,.75fr) auto; gap:9px; margin-bottom:14px; }
-        .prospector-input,.prospector-select,.prospector-textarea { width:100%; border:1px solid rgba(148,163,184,.18); background:#0d1727; color:#e5edf8; border-radius:9px; padding:9px 11px; outline:none; }
-        .prospector-input:focus,.prospector-select:focus,.prospector-textarea:focus { border-color:#38bdf8; box-shadow:0 0 0 3px rgba(56,189,248,.1); }
-        .prospector-workspace { display:grid; grid-template-columns:minmax(250px,.72fr) minmax(360px,1.25fr) minmax(290px,.82fr); min-height:520px; border:1px solid rgba(148,163,184,.14); border-radius:13px; overflow:hidden; background:#0b1524; }
-        .prospector-results { border-right:1px solid rgba(148,163,184,.14); background:#0d1727; min-width:0; }
-        .prospector-results-head { padding:13px 14px; border-bottom:1px solid rgba(148,163,184,.12); color:#94a3b8; font-size:.78rem; font-weight:800; display:flex; justify-content:space-between; }
-        .prospector-result-list { max-height:474px; overflow:auto; }
-        .prospector-result { width:100%; border:0; border-bottom:1px solid rgba(148,163,184,.1); background:transparent; color:#e2e8f0; padding:13px 14px; text-align:left; cursor:pointer; display:grid; grid-template-columns:1fr auto; gap:9px; }
-        .prospector-result:hover,.prospector-result.active { background:rgba(37,99,235,.12); }
-        .prospector-result.active { box-shadow:inset 3px 0 #38bdf8; }
-        .prospector-result strong { display:block; font-size:.88rem; margin-bottom:4px; }
-        .prospector-result small { color:#94a3b8; display:block; line-height:1.4; }
-        .prospector-result small.prospector-saved-flag { color:#86efac; font-weight:700; }
-        .prospector-score { width:38px; height:38px; border-radius:10px; display:grid; place-items:center; font-size:.78rem; font-weight:900; }
-        .prospector-score.high { background:rgba(34,197,94,.12); color:#86efac; }
-        .prospector-score.medium { background:rgba(245,158,11,.12); color:#fcd34d; }
-        .prospector-score.low { background:rgba(148,163,184,.12); color:#cbd5e1; }
-        .prospector-map { position:relative; min-height:520px; background:radial-gradient(circle at center,#1c3048,#0b1524 70%); }
-        .prospector-map { position:relative; }
-        .prospector-map iframe { width:100%; height:100%; min-height:520px; border:0; filter:saturate(.82) contrast(.95); }
-        .prospector-map-attribution { position:absolute; right:7px; bottom:7px; padding:3px 6px; border-radius:5px; background:rgba(255,255,255,.9); color:#334155; font-size:.65rem; text-decoration:none; }
-        .prospector-map-empty { position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:30px; color:#94a3b8; }
-        .prospector-map-empty svg { margin:0 auto 10px; color:#334155; }
-        .prospector-detail { padding:17px; background:#0e1929; overflow:auto; max-height:520px; }
-        .prospector-detail h3 { margin:0; font-size:1.05rem; }
-        .prospector-detail-sub { color:#94a3b8; font-size:.78rem; margin:5px 0 13px; }
-        .prospector-badges { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
-        .prospector-badge { border-radius:999px; padding:4px 8px; background:rgba(56,189,248,.1); color:#7dd3fc; font-size:.7rem; font-weight:800; text-transform:capitalize; }
-        .prospector-badge.warning { background:rgba(245,158,11,.1); color:#fcd34d; }
-        .prospector-badge.danger { background:rgba(239,68,68,.1); color:#fca5a5; }
-        .prospector-detail-row { display:grid; grid-template-columns:21px 1fr; gap:8px; margin:10px 0; color:#cbd5e1; font-size:.82rem; }
-        .prospector-detail-row svg { color:#64748b; margin-top:1px; }
-        .prospector-detail-row a { color:#7dd3fc; text-decoration:none; overflow-wrap:anywhere; }
-        .prospector-fit { margin:14px 0; padding:11px; border-left:3px solid #38bdf8; background:rgba(56,189,248,.06); }
-        .prospector-fit-title { display:flex; justify-content:space-between; gap:8px; font-size:.78rem; font-weight:800; margin-bottom:6px; }
-        .prospector-fit ul { margin:0; padding-left:17px; color:#a8b7ca; font-size:.76rem; line-height:1.55; }
-        .prospector-people { margin:14px 0; padding-top:12px; border-top:1px solid rgba(148,163,184,.14); }
-        .prospector-people-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:9px; font-size:.78rem; font-weight:800; }
-        .prospector-person { padding:10px; margin-bottom:7px; border:1px solid rgba(148,163,184,.14); border-radius:9px; background:rgba(15,23,42,.42); }
-        .prospector-person strong { display:block; font-size:.82rem; }
-        .prospector-person-title { color:#94a3b8; font-size:.72rem; margin:2px 0 7px; }
-        .prospector-person-links { display:flex; flex-wrap:wrap; gap:8px; font-size:.7rem; }
-        .prospector-person-links a { color:#7dd3fc; text-decoration:none; }
-        .prospector-person-proof { color:#64748b; font-size:.65rem; margin-top:6px; }
-        .prospector-linkedin-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
-        .prospector-wa-list { display:flex; flex-wrap:wrap; gap:10px; }
-        .prospector-wa-list a { color:#86efac; text-decoration:none; font-weight:700; }
-        .prospector-outreach { margin:16px 0 0; padding-top:13px; border-top:1px solid rgba(148,163,184,.14); }
-        .prospector-outreach-controls { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:9px; }
-        .prospector-outreach-controls .prospector-btn { grid-column:1/-1; }
-        .prospector-detail label { display:grid; gap:5px; color:#94a3b8; font-size:.72rem; font-weight:800; margin-top:10px; }
-        .prospector-detail-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:13px; }
-        .prospector-empty { padding:36px 18px; text-align:center; color:#64748b; }
-        .prospector-empty svg { margin-bottom:8px; }
-        .prospector-modal-backdrop { position:fixed; inset:0; z-index:1200; background:rgba(2,6,23,.78); display:grid; place-items:center; padding:20px; }
-        .prospector-modal { width:min(720px,100%); max-height:90vh; overflow:auto; background:#0e1929; border:1px solid rgba(148,163,184,.2); border-radius:15px; box-shadow:0 25px 70px rgba(0,0,0,.45); }
-        .prospector-modal-head { display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid rgba(148,163,184,.14); }
-        .prospector-modal-head h3 { margin:0; }
-        .prospector-modal-close { border:0; background:transparent; color:#94a3b8; cursor:pointer; }
-        .prospector-form { padding:18px; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-        .prospector-form label { display:grid; gap:5px; color:#94a3b8; font-size:.76rem; font-weight:800; }
-        .prospector-form .full { grid-column:1/-1; }
-        .prospector-form-actions { grid-column:1/-1; display:flex; justify-content:flex-end; gap:8px; padding-top:5px; }
-        @media(max-width:1120px){ .prospector-workspace{grid-template-columns:minmax(240px,.75fr) minmax(360px,1.25fr)} .prospector-detail{grid-column:1/-1;max-height:none;border-top:1px solid rgba(148,163,184,.14)} }
-        @media(max-width:760px){ .prospector-header{flex-direction:column}.prospector-stats{grid-template-columns:1fr}.prospector-searchbar{grid-template-columns:1fr}.prospector-workspace{display:block}.prospector-results{border-right:0}.prospector-result-list{max-height:330px}.prospector-map,.prospector-map iframe{min-height:340px}.prospector-detail{max-height:none}.prospector-form{grid-template-columns:1fr}.prospector-form .full,.prospector-form-actions{grid-column:1}.prospector-modal-backdrop{padding:10px} }
-      `}</style>
+      <style>{prospectorStyles}</style>
 
       <div className="prospector-header">
         <div className="prospector-heading">
@@ -540,7 +834,7 @@ export default function ProspectorManager({ currentUserProfile }) {
           <div><h2>Prospector</h2><p>Worldwide business discovery, public contact enrichment, qualification, and follow-up.</p></div>
         </div>
         <div className="prospector-header-actions">
-          <button type="button" className="prospector-btn" onClick={() => loadProspects()} disabled={loading}>
+          <button type="button" className="prospector-btn" onClick={loadProspects} disabled={loading}>
             <RefreshCw size={14} className={loading ? 'mkt-spin' : ''} /> Refresh
           </button>
           <button type="button" className="prospector-btn primary" onClick={() => setManualOpen(true)}>
@@ -550,16 +844,34 @@ export default function ProspectorManager({ currentUserProfile }) {
       </div>
 
       <div className="prospector-stats">
-        <div className="prospector-stat"><Building2 size={19} /><div><strong>{stats.saved}</strong><span>Saved prospects</span></div></div>
-        <div className="prospector-stat"><UserRoundCheck size={19} /><div><strong>{stats.qualified}</strong><span>Qualified or active</span></div></div>
-        <div className="prospector-stat"><CalendarClock size={19} /><div><strong>{stats.due}</strong><span>Follow-ups due</span></div></div>
+        <button
+          type="button"
+          className={`prospector-stat${view === 'saved' && statusFilter === 'all' ? ' active' : ''}`}
+          onClick={() => { setView('saved'); setStatusFilter('all'); }}
+        >
+          <Building2 size={19} /><div><strong>{stats.saved}</strong><span>Saved prospects</span></div>
+        </button>
+        <button
+          type="button"
+          className={`prospector-stat${view === 'saved' && statusFilter === 'qualified' ? ' active' : ''}`}
+          onClick={() => { setView('saved'); setStatusFilter('qualified'); }}
+        >
+          <UserRoundCheck size={19} /><div><strong>{stats.qualified}</strong><span>Qualified or active</span></div>
+        </button>
+        <button
+          type="button"
+          className={`prospector-stat due${view === 'saved' && statusFilter === 'due' ? ' active' : ''}`}
+          onClick={() => { setView('saved'); setStatusFilter('due'); setSortBy('followup'); }}
+        >
+          <CalendarClock size={19} /><div><strong>{stats.due}</strong><span>Follow-ups due — open the queue</span></div>
+        </button>
       </div>
 
       <div className="prospector-tabs" role="tablist" aria-label="Prospector views">
-        <button type="button" role="tab" aria-selected={view === 'discover'} className={`prospector-tab${view === 'discover' ? ' active' : ''}`} onClick={() => { setView('discover'); setSelected(null); setSelectedSaved(false); }}>
+        <button type="button" role="tab" aria-selected={view === 'discover'} aria-controls="prospector-workspace" className={`prospector-tab${view === 'discover' ? ' active' : ''}`} onClick={() => { setView('discover'); setSelection({ key: null, saved: false }); }}>
           <Search size={15} /> Discover businesses
         </button>
-        <button type="button" role="tab" aria-selected={view === 'saved'} className={`prospector-tab${view === 'saved' ? ' active' : ''}`} onClick={() => { setView('saved'); setSelected(null); setSelectedSaved(false); }}>
+        <button type="button" role="tab" aria-selected={view === 'saved'} aria-controls="prospector-workspace" className={`prospector-tab${view === 'saved' ? ' active' : ''}`} onClick={() => { setView('saved'); setSelection({ key: null, saved: true }); }}>
           <Save size={15} /> Saved pipeline <span>({prospects.length})</span>
         </button>
       </div>
@@ -567,11 +879,25 @@ export default function ProspectorManager({ currentUserProfile }) {
       {dbSetupRequired && (
         <div className="prospector-alert"><AlertTriangle size={18} /><div><strong>Database setup required</strong><div>Run <code>prospector-migration.sql</code> in Supabase. Discovery can still be tested, but saving is disabled.</div></div></div>
       )}
-      {error && <div className="prospector-alert error"><AlertTriangle size={18} /><div>{error}</div></div>}
-      {notice && <div className="prospector-alert success"><CheckCircle2 size={18} /><div>{notice}</div></div>}
+      <div role="alert">
+        {error && (
+          <div className="prospector-alert error">
+            <AlertTriangle size={18} /><div>{error}</div>
+            <button type="button" className="prospector-alert-dismiss" onClick={() => setError('')} aria-label="Dismiss error"><X size={15} /></button>
+          </div>
+        )}
+      </div>
+      <div role="status" aria-live="polite">
+        {notice && (
+          <div className="prospector-alert success">
+            <CheckCircle2 size={18} /><div>{notice}</div>
+            <button type="button" className="prospector-alert-dismiss" onClick={() => setNotice('')} aria-label="Dismiss message"><X size={15} /></button>
+          </div>
+        )}
+      </div>
 
       {view === 'discover' ? (
-        <form className="prospector-searchbar" onSubmit={runSearch}>
+        <form className="prospector-searchbar" onSubmit={onSearchSubmit}>
           <input className="prospector-input" list="prospector-category-suggestions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Business type or keyword" aria-label="Business type or keyword" />
           <datalist id="prospector-category-suggestions">{CATEGORY_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
           <input className="prospector-input" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="City, region, or country (optional)" aria-label="City, region, or country" />
@@ -580,45 +906,188 @@ export default function ProspectorManager({ currentUserProfile }) {
           </button>
         </form>
       ) : (
-        <div className="prospector-searchbar">
+        <div className="prospector-searchbar saved">
           <input className="prospector-input" value={savedSearch} onChange={(event) => setSavedSearch(event.target.value)} placeholder="Search saved prospects…" aria-label="Search saved prospects" />
           <select className="prospector-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Prospect status filter">
             <option value="active">Active pipeline</option>
+            <option value="due">Follow-up due ({stats.due})</option>
             <option value="all">All statuses</option>
             {PROSPECT_STATUSES.map((status) => <option key={status} value={status}>{PROSPECT_STATUS_LABELS[status]}</option>)}
           </select>
-          <div />
+          <select className="prospector-select" value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort saved prospects">
+            {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
         </div>
       )}
 
-      <div className="prospector-workspace">
+      <div className="prospector-workspace" id="prospector-workspace">
         <section className="prospector-results" aria-label={view === 'discover' ? 'Business search results' : 'Saved prospects'}>
-          <div className="prospector-results-head"><span>{view === 'discover' ? 'Search results' : 'Saved pipeline'}</span><span>{visibleResults.length}</span></div>
-          <div className="prospector-result-list">
+          <div className="prospector-results-head">
+            <button
+              type="button"
+              className={`prospector-check${allVisibleChecked ? ' checked' : ''}`}
+              onClick={toggleAllVisible}
+              disabled={!pagedResults.length}
+              aria-label={allVisibleChecked ? 'Clear selection' : 'Select all visible'}
+            >
+              {allVisibleChecked && <Check size={12} strokeWidth={3} />}
+            </button>
+            <span>{view === 'discover' ? 'Search results' : 'Saved pipeline'}</span>
+            <span className="count">{visibleResults.length}</span>
+          </div>
+
+          {checkedProspects.length > 0 && (
+            <div className="prospector-bulkbar">
+              <strong>{checkedProspects.length} selected</strong>
+              {view === 'discover' ? (
+                <button type="button" className="prospector-btn small primary" onClick={bulkSave} disabled={saving || dbSetupRequired}>
+                  <Save size={13} /> Save to pipeline
+                </button>
+              ) : (
+                <>
+                  <select
+                    className="prospector-select"
+                    value=""
+                    onChange={(event) => event.target.value && bulkPatch({ status: event.target.value }, `${checkedProspects.length} moved to ${PROSPECT_STATUS_LABELS[event.target.value]}`)}
+                    disabled={saving}
+                    aria-label="Set status for selected prospects"
+                  >
+                    <option value="">Set status…</option>
+                    {PROSPECT_STATUSES.map((status) => <option key={status} value={status}>{PROSPECT_STATUS_LABELS[status]}</option>)}
+                  </select>
+                  {currentEmail && (
+                    <button type="button" className="prospector-btn small" onClick={() => bulkPatch({ owner_email: currentEmail }, `${checkedProspects.length} assigned to you`)} disabled={saving}>
+                      <UserRoundCheck size={13} /> Assign to me
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="prospector-btn small danger"
+                    disabled={saving}
+                    onClick={() => askConfirm({
+                      title: `Delete ${checkedProspects.length} prospect(s)?`,
+                      body: 'They are removed from the pipeline along with their notes, follow-ups and outreach history. This cannot be undone.',
+                      confirmLabel: 'Delete',
+                      tone: 'danger',
+                      run: bulkDelete,
+                    })}
+                  >
+                    <Trash2 size={13} /> Delete
+                  </button>
+                </>
+              )}
+              <button type="button" className="prospector-btn small" onClick={() => enqueueEnrichment(checkedProspects, view === 'saved')} disabled={saving}>
+                <Zap size={13} /> Find decision-makers
+              </button>
+              <button type="button" className="prospector-btn small" onClick={() => setCheckedKeys(new Set())}>
+                <X size={13} /> Clear
+              </button>
+            </div>
+          )}
+
+          {enrichProgress.total > 0 && enrichProgress.pending > 0 && (
+            <div className="prospector-queuebar">
+              <Loader2 size={13} className="mkt-spin" />
+              <span>Scanning {enrichProgress.pending} of {enrichProgress.total}</span>
+              <span className="bar"><i style={{ width: `${Math.round((enrichProgress.finished / enrichProgress.total) * 100)}%` }} /></span>
+            </div>
+          )}
+
+          { }
+          <div
+            className="prospector-result-list"
+            role="list"
+            aria-label="Prospects — use the up and down arrows to move between them"
+            tabIndex={0}
+            onKeyDown={onListKeyDown}
+          >
             {loading && view === 'saved' ? (
               <div className="prospector-empty"><Loader2 size={28} className="mkt-spin" /><div>Loading prospects…</div></div>
-            ) : visibleResults.length === 0 ? (
-              <div className="prospector-empty"><ListFilter size={30} /><div>{view === 'discover' ? 'Search a business type and area to begin.' : 'No prospects match these filters.'}</div></div>
-            ) : visibleResults.map((prospect) => (
-              <button key={prospect.id || prospect.source_external_id} type="button" className={`prospector-result${selected && (selected.id || selected.source_external_id) === (prospect.id || prospect.source_external_id) ? ' active' : ''}`} onClick={() => chooseProspect(prospect, view === 'saved')}>
-                <div><strong>{prospect.organization_name}</strong><small>{prospect.category || 'Business'} · {locationLabel(prospect)}</small>{view === 'saved' && <small>{PROSPECT_STATUS_LABELS[prospect.status] || prospect.status}</small>}{view === 'discover' && savedMatchFor(prospect) && <small className="prospector-saved-flag">In pipeline · {PROSPECT_STATUS_LABELS[savedMatchFor(prospect).status] || savedMatchFor(prospect).status}</small>}</div>
-                <span className={`prospector-score ${scoreTone(prospect.fit_score || 0)}`}>{prospect.fit_score || 0}</span>
+            ) : !pagedResults.length ? (
+              <div className="prospector-empty">
+                <ListFilter size={30} />
+                <div>{view === 'discover' ? 'Search a business type and area to begin.' : 'No prospects match these filters.'}</div>
+              </div>
+            ) : pagedResults.map((prospect) => {
+              const key = prospectKey(prospect);
+              const queue = enrichState[key];
+              const savedMatch = view === 'discover' ? savedMatchFor(prospect) : null;
+              const due = view === 'saved' && isFollowUpDue(prospect);
+              return (
+                <div
+                  key={key}
+                  className={`prospector-result${selection.key === key ? ' active' : ''}`}
+                  role="listitem"
+                >
+                  <button
+                    type="button"
+                    className={`prospector-check${checkedKeys.has(key) ? ' checked' : ''}`}
+                    onClick={() => toggleChecked(key)}
+                    aria-label={`Select ${prospect.organization_name}`}
+                  >
+                    {checkedKeys.has(key) && <Check size={12} strokeWidth={3} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="prospector-result-body"
+                    aria-current={selection.key === key ? 'true' : undefined}
+                    onClick={() => chooseProspect(prospect, view === 'saved')}
+                  >
+                    <strong>{prospect.organization_name}</strong>
+                    <small>{prospect.category || 'Business'} · {locationLabel(prospect)}</small>
+                    {view === 'saved' && (
+                      <small>
+                        {PROSPECT_STATUS_LABELS[prospect.status] || prospect.status}
+                        {due && <span style={{ color: '#fcd34d', fontWeight: 700 }}> · follow-up due</span>}
+                      </small>
+                    )}
+                    {savedMatch && <small className="prospector-saved-flag">In pipeline · {PROSPECT_STATUS_LABELS[savedMatch.status] || savedMatch.status}</small>}
+                    {queue && (
+                      <small>
+                        <span className={`prospector-queue-chip ${queue.status}`}>
+                          {queue.status === 'scanning' && <Loader2 size={9} className="mkt-spin" />}
+                          {queue.status}
+                        </span>
+                        {queue.message ? ` ${queue.message}` : ''}
+                      </small>
+                    )}
+                  </button>
+                  <span className={`prospector-score ${prospectScoreTone(prospect.fit_score || 0)}`}>{prospect.fit_score || 0}</span>
+                </div>
+              );
+            })}
+
+            {visibleResults.length > pagedResults.length && (
+              <button type="button" className="prospector-loadmore" onClick={() => setVisibleCount((current) => current + PAGE_SIZE)}>
+                Show {Math.min(PAGE_SIZE, visibleResults.length - pagedResults.length)} more of {visibleResults.length}
               </button>
-            ))}
+            )}
           </div>
         </section>
 
-        <section className="prospector-map" aria-label="Selected prospect map">
-          {mapSrc ? (
-            <><iframe title={`Map for ${selected?.organization_name || 'selected prospect'}`} src={mapSrc} loading="lazy" referrerPolicy="no-referrer-when-downgrade" allowFullScreen /><a className="prospector-map-attribution" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a></>
-          ) : (
-            <div className="prospector-map-empty"><div><MapPin size={42} /><strong>Select a business to view its location</strong><p>The map follows the selected search result or saved prospect.</p></div></div>
-          )}
-        </section>
+        <ProspectMap
+          prospects={visibleResults}
+          selectedKey={selection.key}
+          keyOf={prospectKey}
+          onSelect={(prospect) => chooseProspect(prospect, view === 'saved')}
+          onSearchArea={view === 'discover' ? (bbox) => runSearch(bbox) : null}
+          searching={searching}
+          toneOf={prospectScoreTone}
+        />
 
         <aside className="prospector-detail" aria-label="Prospect details">
           {!selected ? (
-            <div className="prospector-empty"><Building2 size={34} /><div>Select a prospect to review contact data, fit, ownership, and follow-up.</div></div>
+            <>
+              <div className="prospector-empty"><Building2 size={34} /><div>Select a prospect to review contact data, fit, ownership, and follow-up.</div></div>
+              <div className="prospector-legend">
+                {PROSPECT_SCORE_BANDS.map((band) => (
+                  <div className="prospector-legend-row" key={band.tone}>
+                    <span className={`prospector-legend-swatch ${band.tone}`} />
+                    <b>{band.min}+ {band.label}</b> — {band.hint}
+                  </div>
+                ))}
+              </div>
+            </>
           ) : (
             <>
               <h3>{selected.organization_name}</h3>
@@ -631,9 +1100,11 @@ export default function ProspectorManager({ currentUserProfile }) {
                 </span>
               </div>
 
-              {enriching ? <div className="prospector-detail-row"><Loader2 size={15} className="mkt-spin" /><span>Scanning the public website and contact pages…</span></div> : null}
-              <div className="prospector-detail-row"><Phone size={15} /><span>{selected.phone || 'No public business phone found'}</span></div>
-              <div className="prospector-detail-row"><Mail size={15} /><span>{selected.email || 'No work email saved'}</span></div>
+              {enrichState[selection.key]?.status === 'scanning' && (
+                <div className="prospector-detail-row"><Loader2 size={15} className="mkt-spin" /><span>Scanning the public website and contact pages…</span></div>
+              )}
+              <div className={`prospector-detail-row${selected.phone ? '' : ' muted'}`}><Phone size={15} /><span>{selected.phone || 'No public business phone found'}</span></div>
+              <div className={`prospector-detail-row${selected.email ? '' : ' muted'}`}><Mail size={15} /><span>{selected.email || 'No work email saved'}</span></div>
               {(selected.whatsapp_numbers || []).length > 0 && (
                 <div className="prospector-detail-row"><MessageCircle size={15} /><span className="prospector-wa-list">
                   {selected.whatsapp_numbers.map((number) => (
@@ -641,17 +1112,26 @@ export default function ProspectorManager({ currentUserProfile }) {
                   ))}
                 </span></div>
               )}
-              <div className="prospector-detail-row"><Globe2 size={15} />{selected.website_url ? <a href={selected.website_url} target="_blank" rel="noopener noreferrer">{selected.website_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a> : <span>No website found</span>}</div>
+              <div className={`prospector-detail-row${selected.website_url ? '' : ' muted'}`}><Globe2 size={15} />{selected.website_url ? <a href={selected.website_url} target="_blank" rel="noopener noreferrer">{selected.website_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a> : <span>No website found</span>}</div>
               {selected.contact_source_url && <div className="prospector-detail-row"><ShieldCheck size={15} /><a href={selected.contact_source_url} target="_blank" rel="noopener noreferrer">Contact source</a></div>}
               <div className="prospector-detail-row"><MapPin size={15} /><span>{selected.formatted_address || locationLabel(selected)}</span></div>
+              {selectedSaved && selected.last_contacted_at && (
+                <div className="prospector-detail-row"><Clock size={15} /><span>Last contacted {timeAgo(selected.last_contacted_at)}</span></div>
+              )}
 
               <div className="prospector-fit">
-                <div className="prospector-fit-title"><span><Sparkles size={13} /> Fit score</span><span>{selected.fit_score || 0}/100</span></div>
+                <div className="prospector-fit-title">
+                  <span><Sparkles size={13} /> Fit score</span>
+                  <span>
+                    <span className={`prospector-fit-band ${scoreBand?.tone}`}>{scoreBand?.label}</span>
+                    {' '}{selected.fit_score || 0}/100
+                  </span>
+                </div>
                 <ul>{(selected.fit_reasons || []).length ? selected.fit_reasons.map((reason) => <li key={reason}>{reason}</li>) : <li>Complete business details to improve scoring.</li>}</ul>
               </div>
 
               <div className="prospector-people">
-                <div className="prospector-people-head"><span><UserRoundCheck size={14} /> Public decision-makers</span><span>{selected.people?.length || 0}</span></div>
+                <div className="prospector-people-head"><span><Users size={14} /> Public decision-makers</span><span>{selected.people?.length || 0}</span></div>
                 {(selected.people || []).map((person, index) => (
                   <div className="prospector-person" key={`${person.full_name}-${person.job_title || index}`}>
                     <strong>{person.full_name}</strong>
@@ -665,9 +1145,15 @@ export default function ProspectorManager({ currentUserProfile }) {
                     <div className="prospector-person-proof">{person.verification_status === 'published_domain_valid' ? 'Published email · receiving domain confirmed' : 'Published-source record'} · {person.confidence || 0}% extraction confidence</div>
                   </div>
                 ))}
-                {!selected.people?.length && <div className="prospector-person-title">Run public contact discovery to scan Team, About, leadership, and Contact pages.</div>}
+                {!selected.people?.length && (
+                  <div className="prospector-person-title">
+                    {selected.website_url
+                      ? 'Run public contact discovery to scan Team, About, leadership, and Contact pages.'
+                      : 'No website on record, so there is nothing to scan. Add one above, or find the decision-maker by hand.'}
+                  </div>
+                )}
                 {(selected.linkedin_urls || []).length > 0 && (
-                  <div className="prospector-linkedin-list">{selected.linkedin_urls.map((url, index) => <a className="prospector-btn" key={url} href={url} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> Profile {index + 1}</a>)}</div>
+                  <div className="prospector-linkedin-list">{selected.linkedin_urls.map((url, index) => <a className="prospector-btn small" key={url} href={url} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /> Profile {index + 1}</a>)}</div>
                 )}
               </div>
 
@@ -679,28 +1165,50 @@ export default function ProspectorManager({ currentUserProfile }) {
                     </select>
                   </label>
                   <label>Contact permission
-                    <select className="prospector-select" value={selected.contact_permission_status || 'unknown'} onChange={(event) => updateSelected({ contact_permission_status: event.target.value }, 'Contact permission updated')} disabled={saving}>
+                    <select className="prospector-select" value={selected.contact_permission_status || 'unknown'} onChange={(event) => updateSelected({ contact_permission_status: event.target.value }, event.target.value === 'do_not_contact' ? 'Marked do not contact — the prospect was also moved out of the active pipeline' : 'Contact permission updated')} disabled={saving}>
                       {CONTACT_PERMISSION_STATUSES.map((status) => <option key={status} value={status}>{PERMISSION_LABELS[status]}</option>)}
                     </select>
                   </label>
                   <label>Next follow-up
                     <input className="prospector-input" type="datetime-local" value={localInputDate(selected.next_follow_up_at)} onChange={(event) => updateSelected({ next_follow_up_at: event.target.value ? new Date(event.target.value).toISOString() : null }, 'Follow-up scheduled')} disabled={saving} />
                   </label>
-                  <label>Notes
-                    <textarea className="prospector-textarea" rows="4" value={notesDraft} onChange={(event) => setNotesDraft(event.target.value)} placeholder="Qualification notes, decision-maker, next step…" />
+                  <label>
+                    <span className="prospector-notes-head">
+                      Notes
+                      {notesDirty && <span className="prospector-dirty">Unsaved — saves when you click away</span>}
+                      {!notesDirty && notesJustSaved && <span className="prospector-saved-tick">Saved</span>}
+                    </span>
+                    <textarea
+                      className="prospector-textarea"
+                      rows="4"
+                      value={notesDraft}
+                      onChange={(event) => { setNotesDraft(event.target.value); setNotesDirty(true); }}
+                      onBlur={commitNotes}
+                      placeholder="Qualification notes, decision-maker, next step…"
+                    />
                   </label>
                   <div className="prospector-detail-actions">
-                    <button type="button" className="prospector-btn primary" onClick={() => updateSelected({ notes: notesDraft }, 'Notes saved')} disabled={saving}><Save size={14} /> Save notes</button>
+                    <button type="button" className="prospector-btn primary" onClick={commitNotes} disabled={saving || !notesDirty}><Save size={14} /> Save notes</button>
                     {currentEmail && selected.owner_email !== currentEmail && <button type="button" className="prospector-btn" onClick={() => updateSelected({ owner_email: currentEmail }, 'Prospect assigned to you')} disabled={saving}><UserRoundCheck size={14} /> Assign to me</button>}
                     <button type="button" className="prospector-btn" onClick={() => updateSelected({ status: 'contacted', last_contacted_at: new Date().toISOString() }, 'Contact logged')} disabled={saving || selected.contact_permission_status === 'do_not_contact'}><CheckCircle2 size={14} /> Mark contacted</button>
-                    <button type="button" className="prospector-btn danger" onClick={deleteSelected} disabled={saving}><Trash2 size={14} /> Delete</button>
+                    <button
+                      type="button"
+                      className="prospector-btn danger"
+                      disabled={saving}
+                      onClick={() => askConfirm({
+                        title: `Delete ${selected.organization_name}?`,
+                        body: 'The prospect leaves the pipeline along with its notes, follow-ups and outreach history. This cannot be undone.',
+                        confirmLabel: 'Delete',
+                        tone: 'danger',
+                        run: deleteSelected,
+                      })}
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
                   </div>
 
                   <div className="prospector-outreach">
-                    <div className="prospector-people-head">
-                      <span><Send size={14} /> AI outreach &amp; booking</span>
-                      {selected.meeting_booked_at && <span className="prospector-badge">Meeting {new Date(selected.meeting_booked_at).toLocaleDateString()}</span>}
-                    </div>
+                    <div className="prospector-people-head"><span><Send size={14} /> AI outreach</span></div>
 
                     <div className="prospector-outreach-controls">
                       <select className="prospector-select" value={outreachChannel} onChange={(event) => { setOutreachChannel(event.target.value); setOutreachDraft(null); }} aria-label="Outreach channel">
@@ -718,7 +1226,9 @@ export default function ProspectorManager({ currentUserProfile }) {
                     </div>
 
                     {!outreachPermission?.allowed && (
-                      <div className="prospector-person-title">{outreachPermission?.reason}</div>
+                      <div className="prospector-alert" style={{ marginBottom: 0 }}>
+                        <AlertTriangle size={15} /><small>{outreachPermission?.reason}</small>
+                      </div>
                     )}
 
                     {outreachDraft && (
@@ -732,7 +1242,19 @@ export default function ProspectorManager({ currentUserProfile }) {
                           <textarea className="prospector-textarea" rows="9" value={outreachDraft.body} onChange={(event) => setOutreachDraft({ ...outreachDraft, body: event.target.value })} />
                         </label>
                         <div className="prospector-detail-actions">
-                          <button type="button" className="prospector-btn primary" onClick={sendOutreach} disabled={sending || drafting}>
+                          <button
+                            type="button"
+                            className="prospector-btn primary"
+                            disabled={sending || drafting}
+                            onClick={() => askConfirm({
+                              title: outreachDraft.channel === 'email' ? 'Send this email?' : 'Open WhatsApp with this message?',
+                              body: outreachDraft.channel === 'email'
+                                ? `It goes to ${outreachDraft.recipient} now, with the disclosure line appended. You are responsible for what it says.`
+                                : `WhatsApp opens with this message prefilled for ${outreachDraft.recipient}. Nothing is delivered until you press send there.`,
+                              confirmLabel: outreachDraft.channel === 'email' ? 'Send email' : 'Open WhatsApp',
+                              run: sendOutreach,
+                            })}
+                          >
                             {sending ? <Loader2 size={14} className="mkt-spin" /> : outreachDraft.channel === 'email' ? <Mail size={14} /> : <MessageCircle size={14} />}
                             {outreachDraft.channel === 'email' ? ' Send email' : ' Open in WhatsApp'}
                           </button>
@@ -744,6 +1266,56 @@ export default function ProspectorManager({ currentUserProfile }) {
                       </>
                     )}
                   </div>
+
+                  <div className="prospector-timeline">
+                    <div className="prospector-people-head">
+                      <span><History size={14} /> Outreach history</span>
+                      <span>{history.rows.length}</span>
+                    </div>
+                    {history.loading && <div className="prospector-person-title"><Loader2 size={12} className="mkt-spin" /> Loading…</div>}
+                    {!history.loading && history.setupRequired && (
+                      <div className="prospector-person-title">Run <code>prospect-outreach-migration.sql</code> to record and show sent messages.</div>
+                    )}
+                    {!history.loading && !history.setupRequired && !history.rows.length && (
+                      <div className="prospector-person-title">Nothing has been sent to this business yet.</div>
+                    )}
+                    {history.rows.map((row) => {
+                      const expanded = expandedMessages.has(row.id);
+                      return (
+                        <div className={`prospector-timeline-item${row.status === 'failed' ? ' failed' : ''}`} key={row.id}>
+                          <div className="prospector-timeline-when">
+                            {row.channel === 'email' ? <Mail size={11} /> : <MessageCircle size={11} />}
+                            {timeAgo(row.created_at)}
+                            <span>· {row.to_identity}</span>
+                            {row.status === 'failed' && <span style={{ color: '#fca5a5' }}>· failed</span>}
+                          </div>
+                          {row.subject && <div className="prospector-timeline-subject">{row.subject}</div>}
+                          <p className="prospector-timeline-body">
+                            {expanded || row.body.length <= 180 ? row.body : `${row.body.slice(0, 180)}…`}
+                          </p>
+                          {row.body.length > 180 && (
+                            <button
+                              type="button"
+                              className="prospector-timeline-toggle"
+                              onClick={() => setExpandedMessages((current) => {
+                                const next = new Set(current);
+                                if (next.has(row.id)) next.delete(row.id);
+                                else next.add(row.id);
+                                return next;
+                              })}
+                            >
+                              {expanded ? 'Show less' : 'Show full message'}
+                            </button>
+                          )}
+                          <div className="prospector-timeline-meta">
+                            {row.sent_by_label ? `Sent by ${row.sent_by_label}` : 'Sender no longer on the team'}
+                            {row.permission_basis ? ` · basis: ${PERMISSION_LABELS[row.permission_basis] || row.permission_basis}` : ''}
+                            {row.error ? ` · ${row.error}` : ''}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </>
               ) : (
                 <>
@@ -751,7 +1323,7 @@ export default function ProspectorManager({ currentUserProfile }) {
                     <div className="prospector-alert" style={{ marginTop: '12px' }}><CheckCircle2 size={16} /><small>Already in your pipeline as <strong>{PROSPECT_STATUS_LABELS[selectedSavedMatch.status] || selectedSavedMatch.status}</strong>. Saving refreshes the directory details and any new contacts; status, notes, owner and follow-up stay as they are.</small></div>
                   )}
                   <div className="prospector-detail-actions">
-                    <button type="button" className="prospector-btn primary" onClick={() => saveProspect(selected)} disabled={saving || dbSetupRequired || enriching}>{saving ? <Loader2 size={14} className="mkt-spin" /> : <Save size={14} />} {selectedSavedMatch ? 'Refresh saved record' : 'Save to Prospector'}</button>
+                    <button type="button" className="prospector-btn primary" onClick={() => saveProspect(selected)} disabled={saving || dbSetupRequired}>{saving ? <Loader2 size={14} className="mkt-spin" /> : <Save size={14} />} {selectedSavedMatch ? 'Refresh saved record' : 'Save to Prospector'}</button>
                   </div>
                 </>
               )}
@@ -759,13 +1331,47 @@ export default function ProspectorManager({ currentUserProfile }) {
               <div className="prospector-detail-actions">
                 {(selected.google_maps_url || mapQuery) && <a className="prospector-btn" href={selected.google_maps_url || `https://www.openstreetmap.org/search?query=${encodeURIComponent(mapQuery)}`} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} /> Open source map</a>}
                 {selected.website_url && <a className="prospector-btn" href={selected.website_url} target="_blank" rel="noopener noreferrer"><ChevronRight size={14} /> Visit website</a>}
-                {selected.website_url && <button type="button" className="prospector-btn" onClick={enrichSelected} disabled={enriching || saving}>{enriching ? <Loader2 size={14} className="mkt-spin" /> : <Search size={14} />} Find decision-makers</button>}
+                <button
+                  type="button"
+                  className="prospector-btn"
+                  onClick={() => enqueueEnrichment([selected], selectedSaved)}
+                  disabled={!selected.website_url || ['queued', 'scanning'].includes(enrichState[selection.key]?.status)}
+                  title={selected.website_url ? 'Scan the public website for decision-makers and contacts' : 'This business has no website on record to scan'}
+                >
+                  <Zap size={14} /> Find decision-makers
+                </button>
               </div>
+              {enrichState[selection.key]?.status === 'failed' && (
+                <div className="prospector-alert error" style={{ marginTop: '10px', marginBottom: 0 }}><AlertTriangle size={15} /><small>{enrichState[selection.key].message}</small></div>
+              )}
               <div className="prospector-alert" style={{ marginTop: '14px', marginBottom: 0 }}><ShieldCheck size={16} /><small>Discovery uses OpenStreetMap. Contact enrichment only reads details published on the business website; it does not guess personal data or add anyone to marketing audiences.</small></div>
             </>
           )}
         </aside>
       </div>
+
+      {confirmRequest && (
+        <div className="prospector-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmRequest(null); }}>
+          <div className="prospector-modal confirm" role="dialog" aria-modal="true" aria-labelledby="prospector-confirm-title">
+            <div className="prospector-modal-head">
+              <h3 id="prospector-confirm-title">{confirmRequest.title}</h3>
+              <button type="button" className="prospector-modal-close" onClick={() => setConfirmRequest(null)} aria-label="Cancel"><X size={20} /></button>
+            </div>
+            <div className="prospector-modal-body"><p>{confirmRequest.body}</p></div>
+            <div className="prospector-modal-actions">
+              <button type="button" className="prospector-btn" onClick={() => setConfirmRequest(null)}>Cancel</button>
+              <button
+                type="button"
+                className={`prospector-btn ${confirmRequest.tone === 'danger' ? 'danger' : 'primary'}`}
+                autoFocus
+                onClick={() => { const { run } = confirmRequest; setConfirmRequest(null); run(); }}
+              >
+                {confirmRequest.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {manualOpen && (
         <div className="prospector-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setManualOpen(false); }}>
@@ -781,8 +1387,8 @@ export default function ProspectorManager({ currentUserProfile }) {
               <label>City or canton<input className="prospector-input" value={manualForm.city} onChange={(event) => setManualForm({ ...manualForm, city: event.target.value })} /></label>
               <label>Province or state<input className="prospector-input" value={manualForm.region} onChange={(event) => setManualForm({ ...manualForm, region: event.target.value })} /></label>
               <label className="full">Country<input className="prospector-input" value={manualForm.country} onChange={(event) => setManualForm({ ...manualForm, country: event.target.value })} placeholder="Costa Rica, Germany, Japan…" /></label>
-              <label>Latitude<input className="prospector-input" type="number" step="any" value={manualForm.latitude} onChange={(event) => setManualForm({ ...manualForm, latitude: event.target.value })} /></label>
-              <label>Longitude<input className="prospector-input" type="number" step="any" value={manualForm.longitude} onChange={(event) => setManualForm({ ...manualForm, longitude: event.target.value })} /></label>
+              <label>Latitude<input className="prospector-input" type="number" step="any" value={manualForm.latitude} onChange={(event) => setManualForm({ ...manualForm, latitude: event.target.value })} placeholder="9.9281 — optional, puts it on the map" /></label>
+              <label>Longitude<input className="prospector-input" type="number" step="any" value={manualForm.longitude} onChange={(event) => setManualForm({ ...manualForm, longitude: event.target.value })} placeholder="-84.0907" /></label>
               <label className="full">Contact permission<select className="prospector-select" value={manualForm.contact_permission_status} onChange={(event) => setManualForm({ ...manualForm, contact_permission_status: event.target.value })}>{CONTACT_PERMISSION_STATUSES.map((status) => <option key={status} value={status}>{PERMISSION_LABELS[status]}</option>)}</select></label>
               <label className="full">Notes<textarea className="prospector-textarea" rows="4" value={manualForm.notes} onChange={(event) => setManualForm({ ...manualForm, notes: event.target.value })} /></label>
               <div className="prospector-form-actions"><button type="button" className="prospector-btn" onClick={() => setManualOpen(false)}>Cancel</button><button type="submit" className="prospector-btn primary" disabled={saving || dbSetupRequired}>{saving ? <Loader2 size={14} className="mkt-spin" /> : <Plus size={14} />} Add prospect</button></div>

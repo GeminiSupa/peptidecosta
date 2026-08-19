@@ -7,6 +7,9 @@ import {
   expandAnchoredTagPattern,
   isProspectsTableMissing,
   isRetryableOverpassStatus,
+  matchesTargetCategory,
+  prospectScoreTone,
+  PROSPECT_SCORE_BANDS,
   overpassEndpoints,
   searchCacheTtlMs,
   SEARCH_CACHE_TTL_MS,
@@ -41,13 +44,77 @@ test('scores useful public business signals without inventing contact permission
     city: 'Escazú',
   });
 
-  assert.equal(result.score, 85);
+  assert.equal(result.score, 70);
   assert.deepEqual(result.reasons, [
     'Target business category',
     'Active business website',
     'Public business phone',
+    'Location identified',
     'Strong public rating',
   ]);
+  // Nothing here establishes a lawful basis, so the permission point is absent.
+  assert.ok(!result.reasons.includes('Contact permission established'));
+});
+
+test('the same business scores the same however its category is spelled', () => {
+  const spellings = ['fitness_centre', 'fitness centre', 'Fitness_Center', 'sports_medicine_clinic', 'clinic'];
+  for (const category of spellings) {
+    assert.ok(
+      matchesTargetCategory({ category }),
+      `${category} should be recognised as a target category`,
+    );
+  }
+  assert.ok(!matchesTargetCategory({ category: 'hardware', organization_name: 'Ferretería López' }));
+});
+
+test('an unmistakable name counts when the directory left the category blank', () => {
+  assert.ok(matchesTargetCategory({ category: null, organization_name: 'Gimnasio Olimpo' }));
+  assert.ok(matchesTargetCategory({ category: '', organization_name: 'CrossFit Escazú' }));
+});
+
+test('a fully worked prospect reaches 100 without any Google ratings', () => {
+  const result = scoreProspect({
+    category: 'fitness centre',
+    website_url: 'https://example.test',
+    phone: '+506 2222 2222',
+    email: 'info@example.test',
+    city: 'Escazú',
+    people: [{ full_name: 'Ana Ruiz', job_title: 'Owner' }],
+    contact_permission_status: 'business_contact',
+  });
+
+  assert.equal(result.score, 100);
+  assert.ok(result.reasons.includes('Named decision-maker on file'));
+});
+
+test('score bands describe the scale the scores are actually on', () => {
+  assert.equal(prospectScoreTone(100), 'high');
+  assert.equal(prospectScoreTone(70), 'high');
+  assert.equal(prospectScoreTone(69), 'medium');
+  assert.equal(prospectScoreTone(45), 'medium');
+  assert.equal(prospectScoreTone(44), 'low');
+  assert.equal(prospectScoreTone(0), 'low');
+  // Every band has to be reachable, or the colour carries no information.
+  assert.deepEqual(PROSPECT_SCORE_BANDS.map((band) => band.tone), ['high', 'medium', 'low']);
+});
+
+test('a well-tagged gym is not filed as a thin record', () => {
+  const gym = normalizeOverpassElement({
+    type: 'node',
+    id: 7,
+    lat: 9.93,
+    lon: -84.08,
+    tags: {
+      name: 'Iron House Gym',
+      leisure: 'fitness_centre',
+      website: 'https://ironhouse.example',
+      'contact:phone': '+506 2222 3333',
+    },
+  }, { country: 'Costa Rica', city: 'San José' });
+
+  assert.equal(gym.category, 'fitness centre');
+  assert.ok(gym.fit_reasons.includes('Target business category'));
+  assert.equal(prospectScoreTone(gym.fit_score), 'high');
 });
 
 test('normalizes Google Places details into the prospect shape', () => {
@@ -70,7 +137,7 @@ test('normalizes Google Places details into the prospect shape', () => {
   assert.equal(result.latitude, 9.918);
   assert.equal(result.longitude, -84.139);
   assert.equal(result.phone, '+506 2222 2222');
-  assert.ok(result.fit_score >= 75);
+  assert.ok(result.fit_score >= 70);
 });
 
 test('normalizes free OpenStreetMap results with public contact tags', () => {
