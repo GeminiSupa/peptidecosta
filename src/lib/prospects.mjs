@@ -167,23 +167,55 @@ export function normalizeLinkedInProfileUrls(urls) {
   }))].slice(0, 30);
 }
 
-export function scoreProspect(prospect = {}) {
-  let score = 15;
-  const reasons = [];
-  const targetTypes = new Set([
-    'gym',
-    'fitness_center',
-    'personal_trainer',
-    'wellness_center',
-    'nutritionist',
-    'sports_medicine_clinic',
-    'medical_clinic',
-    'health_consultant',
-    'spa',
-  ]);
+/**
+ * Category words that mean "this is someone we sell to".
+ *
+ * Held as spaced lowercase fragments and compared against a equally flattened
+ * category, because the same business arrives spelled three different ways:
+ * Google says `sports_medicine_clinic`, OpenStreetMap says `fitness_centre`,
+ * and normalizeOpenStreetMapPlace strips the underscores again for display. A
+ * fragment list survives all three; an exact-value list matched none of them.
+ */
+const TARGET_CATEGORY_STEMS = [
+  'gym', 'gimnasio', 'fitness', 'health club', 'crossfit', 'personal trainer',
+  'wellness', 'wellbeing', 'spa',
+  'nutrition', 'dietitian', 'dietician',
+  'physio', 'rehabilitation', 'sports medicine', 'sports clinic',
+  'clinic', 'clinica', 'doctor', 'medical', 'health centre', 'health center', 'health consultant',
+  'aesthetic', 'esthetic', 'cosmetic', 'beauty',
+  'laboratory', 'laboratorio', 'research',
+];
 
-  const primaryType = clean(prospect.primary_type || prospect.primaryType || prospect.category, 120).toLowerCase();
-  if ([...targetTypes].some((type) => primaryType.includes(type))) {
+/** Flattens `Fitness_Centre` and `fitness centre` onto the same string. */
+function flattenCategory(value) {
+  return clean(value, 240).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+export function matchesTargetCategory(prospect = {}) {
+  const category = flattenCategory(prospect.primary_type || prospect.primaryType || prospect.category);
+  if (category && TARGET_CATEGORY_STEMS.some((stem) => category.includes(stem))) return true;
+  // A directory entry with a thin category can still be unmistakable by name —
+  // "Gimnasio Olimpo" is a gym whether or not anyone tagged it as one.
+  const name = flattenCategory(prospect.organization_name || prospect.displayName?.text);
+  return Boolean(name) && TARGET_CATEGORY_STEMS.some((stem) => name.includes(stem));
+}
+
+/**
+ * Scores how much work a prospect still needs before it can be sold to.
+ *
+ * The weights are chosen so a fully worked prospect — right category, website,
+ * phone, published work email, a named decision-maker, and an established
+ * contact permission — reaches exactly 100 without any Google Places data.
+ * Ratings and review counts stay in the model for the Google shape, but they
+ * are worth 5 apiece instead of 10, because OpenStreetMap never supplies them
+ * and the previous weighting quietly made 20 of the 100 points unreachable for
+ * every prospect the app can actually discover.
+ */
+export function scoreProspect(prospect = {}) {
+  let score = 10;
+  const reasons = [];
+
+  if (matchesTargetCategory(prospect)) {
     score += 20;
     reasons.push('Target business category');
   }
@@ -199,20 +231,44 @@ export function scoreProspect(prospect = {}) {
     score += 15;
     reasons.push('Work email available');
   }
-  if (Number(prospect.rating) >= 4.3) {
-    score += 10;
-    reasons.push('Strong public rating');
+  if (Array.isArray(prospect.people) && prospect.people.length) {
+    score += 15;
+    reasons.push('Named decision-maker on file');
   }
-  if (Number(prospect.user_rating_count || prospect.userRatingCount) >= 20) {
+  if (['business_contact', 'consented'].includes(prospect.contact_permission_status)) {
     score += 10;
-    reasons.push('Established review volume');
+    reasons.push('Contact permission established');
   }
   if (prospect.city || prospect.region || prospect.formatted_address || prospect.formattedAddress) {
     score += 5;
     reasons.push('Location identified');
   }
+  if (Number(prospect.rating) >= 4.3) {
+    score += 5;
+    reasons.push('Strong public rating');
+  }
+  if (Number(prospect.user_rating_count || prospect.userRatingCount) >= 20) {
+    score += 5;
+    reasons.push('Established review volume');
+  }
 
-  return { score: Math.min(100, score), reasons: reasons.slice(0, 4) };
+  return { score: Math.min(100, score), reasons: reasons.slice(0, 5) };
+}
+
+/**
+ * Score bands, shared by the list chip and the legend that explains it.
+ *
+ * A band is only meaningful against the scale above: 70 is a prospect with a
+ * verified way in, 45 is one worth enriching, below that is a directory entry.
+ */
+export const PROSPECT_SCORE_BANDS = [
+  { tone: 'high', min: 70, label: 'Ready to contact', hint: 'Category match plus a verified contact route.' },
+  { tone: 'medium', min: 45, label: 'Worth enriching', hint: 'Right kind of business, contact details still missing.' },
+  { tone: 'low', min: 0, label: 'Thin record', hint: 'Little more than a name and a location so far.' },
+];
+
+export function prospectScoreTone(score) {
+  return PROSPECT_SCORE_BANDS.find((band) => Number(score || 0) >= band.min)?.tone || 'low';
 }
 
 export function normalizeGooglePlace(place = {}) {
@@ -246,8 +302,12 @@ export function normalizeOpenStreetMapPlace(place = {}) {
   const whatsapp = normalizeWhatsAppNumbers([tags['contact:whatsapp'], tags.whatsapp, place.whatsapp]);
   const latitude = Number(place.lat);
   const longitude = Number(place.lon);
+  // Same precedence Overpass results already use, so a beauty salon or a
+  // sport=fitness studio arriving straight from Nominatim is categorised the
+  // way the identical POI would be through the category query.
   const category = clean(
-    tags.healthcare || tags.leisure || tags.amenity || tags.office || place.type || place.category,
+    tags.healthcare || tags.leisure || tags.amenity || tags.office
+      || tags.shop || tags.sport || place.type || place.category,
     160,
   ).replaceAll('_', ' ');
   const normalized = {
