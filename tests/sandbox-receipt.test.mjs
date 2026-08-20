@@ -54,3 +54,16 @@ test('the Payment Test panel is actually reachable from the dashboard', async ()
   assert.match(adminPage, /activeTab === 'payment_test'/);
   assert.match(adminPage, /<TestPaymentPanel \/>/);
 });
+
+test('the desktop sidebar lists Payment Test, not just the module registry', () => {
+  // Registering the module and mounting the panel is not enough to see it.
+  // The desktop sidebar is a hardcoded list of tab ids in admin/page.js with
+  // its own group names ("Operations", not "System & AI"), so a module missing
+  // from that array renders nowhere on desktop however correctly it is
+  // declared. That is exactly how this tab stayed invisible.
+  const adminPage = fs.readFileSync('src/app/admin/page.js', 'utf8');
+  const operations = adminPage.match(/\{ title: 'Operations', tabs: \[([^\]]*)\] \}/);
+
+  assert.ok(operations, 'the Operations sidebar group has moved or been renamed');
+  assert.match(operations[1], /'payment_test'/);
+});
