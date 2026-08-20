@@ -27,6 +27,8 @@ import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
+import { sendTaxRecordsPayoutCopy } from '@/lib/taxRecordsEmail.mjs';
+import { hasPositivePayout, summarizeCommissionScan } from '@/lib/commissionScan.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -179,6 +181,7 @@ export async function GET(request) {
     }
 
     const reportResults = [];
+    const skippedNoPay = [];
 
     if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
       console.warn('[Weekly Commissions] SMTP credentials missing. Skipping email dispatch.');
@@ -291,16 +294,6 @@ export async function GET(request) {
         overrideRate,
       });
 
-      // Ignore non-commission staff, but keep configured agents in the all-agent report
-      // even when their result for the week is zero. An agent with no sales of her
-      // own but an override owed must not be skipped.
-      if (
-        agentOrders.length === 0
-        && overrideOrders.length === 0
-        && weeklySalary === 0
-        && rate === 0
-      ) continue;
-
       const commissionSummary = summarizeOrderCommissions(
         agentOrders,
         rate,
@@ -334,6 +327,29 @@ export async function GET(request) {
         overrideUsd,
         overrideCrc,
       });
+
+      // A commission rate is configuration, not money owed. The old scan made
+      // Pending $0 rows for every configured agent with no sales, which is why
+      // a rerun appeared to contain only Brian and Sean. Remove stale Pending
+      // zero rows for this exact period and keep them out of reports and email.
+      if (!hasPositivePayout({ totalPayoutUsd, totalPayoutCrc })) {
+        const { data: rejectedRows, error: rejectError } = await supabaseAdmin
+          .from('commission_payouts')
+          .update({ status: 'Rejected', approved_at: new Date().toISOString() })
+          .eq('agent_email', agent.email)
+          .eq('start_date', startDateStr)
+          .eq('end_date', endDateStr)
+          .eq('status', 'Pending')
+          .select('id');
+
+        skippedNoPay.push({
+          name: agent.name || agent.email,
+          email: agent.email,
+          rejectedPendingRows: rejectedRows?.length || 0,
+          cleanupError: rejectError?.message || null,
+        });
+        continue;
+      }
 
       // Individual report: Outlook-safe, light, and limited to this agent.
       const { html: emailHtml, text: emailText } = buildAgentCommissionEmail({
@@ -461,6 +477,26 @@ export async function GET(request) {
         }
       }
 
+      // Approval is what makes a payout an accounting record. When an already
+      // approved week is scanned again, resend a dedicated copy directly to
+      // the accounting inbox; merely rebuilding the report used to send only
+      // the admin summary and leave PBAG with nothing.
+      const accountingCopy = settledPayout
+        ? await sendTaxRecordsPayoutCopy({
+          transporter,
+          from: NOTIFICATION_FROM,
+          payout: {
+            kind: 'comisión de equipo',
+            name: agent.name || agent.email,
+            email: agent.email,
+            period: periodDisplay,
+          },
+          html: emailHtml,
+          text: emailText,
+          logPrefix: `[Weekly Commissions] ${agent.email}`,
+        })
+        : { sent: false, skipped: 'not-approved' };
+
       reportResults.push({
         agentId: agent.id,
         name: agent.name,
@@ -481,6 +517,7 @@ export async function GET(request) {
         totalPayoutCrc,
         agentEmailSent,
         agentEmailError,
+        accountingCopy,
         savedSuccessfully: !saveError,
         alreadySettled: Boolean(settledPayout),
         saveError: saveError ? saveError.message : null
@@ -557,6 +594,8 @@ export async function GET(request) {
       }
     }
 
+    const summary = summarizeCommissionScan(reportResults, skippedNoPay);
+
     return NextResponse.json({
       success: true,
       period: {
@@ -566,6 +605,8 @@ export async function GET(request) {
         timeZone: 'America/Costa_Rica',
       },
       payoutReport: reportResults,
+      skippedNoPay,
+      summary,
       adminNotification: {
         emailSent: adminEmailSent,
         error: adminEmailError

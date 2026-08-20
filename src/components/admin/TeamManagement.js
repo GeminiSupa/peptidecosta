@@ -7,6 +7,7 @@ import AgentDashboard from './AgentDashboard';
 import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { getOrderSalesAmounts, isCommissionEligibleOrder, orderBelongsToAgent } from '@/lib/agentOrders';
 import { ADMIN_MODULE_LABELS, ASSIGNABLE_ADMIN_MODULE_IDS, ASSIGNABLE_ADMIN_MODULES } from '@/lib/adminModules';
+import { payoutMatchesPeriod } from '@/lib/commissionScan.mjs';
 
 /** One labelled on/off row in the member notification panel. */
 function NotificationToggle({ icon, title, hint, checked, onChange, activeColor = '#38bdf8' }) {
@@ -215,6 +216,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [targetAgent, setTargetAgent] = useState('all'); // 'all' or an agent email
   const [payoutFilterAgent, setPayoutFilterAgent] = useState('all');
   const [payoutFilterStatus, setPayoutFilterStatus] = useState('pending');
+  const [payoutFilterPeriod, setPayoutFilterPeriod] = useState(null);
+  const [commissionScanResult, setCommissionScanResult] = useState(null);
   const [expandedPayoutId, setExpandedPayoutId] = useState(null);
   const [pendingByPayout, setPendingByPayout] = useState({}); // payoutId -> pending (not-yet-paid) orders for that week
   const [pendingLoadingId, setPendingLoadingId] = useState(null);
@@ -419,11 +422,20 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
           : scanPeriod === 'custom' ? `custom range (${customStartDate} to ${customEndDate})`
           : 'current week-to-date (Mon-Now)';
         const agentMsg = targetAgent !== 'all' ? ` for ${users.find(u => u.email === targetAgent)?.name || targetAgent}` : '';
-        alert(`Commission scan complete for ${periodMsg}${agentMsg}.\n\nExisting pending payout for the same agent + period was updated (not duplicated).`);
+        const summary = data.summary || {};
+        const accountingLine = summary.approved > 0
+          ? `${summary.accountingSent || 0} approved report${summary.accountingSent === 1 ? '' : 's'} delivered to accounting${summary.accountingFailed ? `; ${summary.accountingFailed} failed` : ''}.`
+          : 'No approved reports needed to be resent to accounting.';
+        const cleanupLine = summary.cleanupFailed
+          ? ` ${summary.cleanupFailed} old zero-dollar row${summary.cleanupFailed === 1 ? '' : 's'} could not be cleared.`
+          : '';
+        alert(`Commission scan complete for ${periodMsg}${agentMsg}.\n\n${summary.reports || 0} payable report${summary.reports === 1 ? '' : 's'} found. ${accountingLine}\n${summary.skippedNoPay || 0} zero-dollar profile${summary.skippedNoPay === 1 ? '' : 's'} skipped.${cleanupLine}`);
+        setCommissionScanResult({ period: data.period, summary });
         setActiveSubTab('payouts');
-        setPayoutFilterStatus('pending');
-        if (targetAgent !== 'all') setPayoutFilterAgent(targetAgent);
-        fetchPayouts();
+        setPayoutFilterStatus('active');
+        setPayoutFilterPeriod(data.period || null);
+        setPayoutFilterAgent(targetAgent);
+        await fetchPayouts();
       } else {
         alert(`Failed to sync commissions: ${data.error}`);
       }
@@ -437,12 +449,14 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const filteredPayouts = useMemo(() => {
     return payouts.filter((p) => {
       if (payoutFilterAgent !== 'all' && p.agent_email !== payoutFilterAgent) return false;
+      if (!payoutMatchesPeriod(p, payoutFilterPeriod)) return false;
+      if (payoutFilterStatus === 'active' && p.status !== 'Pending' && p.status !== 'Approved') return false;
       if (payoutFilterStatus === 'pending' && p.status !== 'Pending') return false;
       if (payoutFilterStatus === 'approved' && p.status !== 'Approved') return false;
       if (payoutFilterStatus === 'rejected' && p.status !== 'Rejected') return false;
       return true;
     });
-  }, [payouts, payoutFilterAgent, payoutFilterStatus]);
+  }, [payouts, payoutFilterAgent, payoutFilterPeriod, payoutFilterStatus]);
 
   const pendingDuplicateAgents = useMemo(() => {
     const pending = payouts.filter((p) => p.status === 'Pending');
@@ -1027,6 +1041,47 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             </div>
           )}
 
+          {commissionScanResult && (
+            <div style={{
+              background: (commissionScanResult.summary?.accountingFailed || commissionScanResult.summary?.cleanupFailed) ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+              border: `1px solid ${(commissionScanResult.summary?.accountingFailed || commissionScanResult.summary?.cleanupFailed) ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.25)'}`,
+              borderRadius: '10px',
+              padding: '12px 16px',
+              marginBottom: '16px',
+              fontSize: '0.85rem',
+              color: (commissionScanResult.summary?.accountingFailed || commissionScanResult.summary?.cleanupFailed) ? '#fca5a5' : '#bbf7d0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+              flexWrap: 'wrap',
+            }}>
+              <span>
+                <strong>{commissionScanResult.period?.label || 'Commission scan'}:</strong>{' '}
+                {commissionScanResult.summary?.reports || 0} payable reports ·{' '}
+                {commissionScanResult.summary?.accountingSent || 0} accounting copies sent
+                {commissionScanResult.summary?.accountingFailed
+                  ? ` · ${commissionScanResult.summary.accountingFailed} accounting deliveries failed`
+                  : ''}
+                {' · '}{commissionScanResult.summary?.skippedNoPay || 0} zero-dollar profiles skipped
+                {commissionScanResult.summary?.cleanupFailed
+                  ? ` · ${commissionScanResult.summary.cleanupFailed} old zero-dollar rows could not be cleared`
+                  : ''}
+              </span>
+              <button
+                type="button"
+                className="admin-btn"
+                onClick={() => {
+                  setCommissionScanResult(null);
+                  setPayoutFilterPeriod(null);
+                }}
+                style={{ padding: '5px 10px', fontSize: '0.72rem' }}
+              >
+                Show all periods
+              </button>
+            </div>
+          )}
+
           <div className="admin-toolbar-filters" style={{ marginBottom: '16px' }}>
             <select
               value={payoutFilterAgent}
@@ -1046,6 +1101,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
               style={{ minWidth: '140px', background: '#0e1626', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem' }}
             >
               <option value="pending">Pending only</option>
+              <option value="active">Pending + Approved</option>
               <option value="all">All statuses</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
