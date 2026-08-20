@@ -26,6 +26,8 @@ import {
   OPT_IN_CONFIRMATION,
 } from './whatsappCompliance';
 import { insertWhatsAppMessage } from './whatsappMessageLog';
+import { upsertWhatsAppConversation } from './whatsappConversations.mjs';
+import { extractWhatsAppAdAttribution } from './whatsappWorkflow.mjs';
 
 // ── Lazy imports (Baileys is ESM-only, load dynamically) ──────────────────
 let makeWASocket, useMultiFileAuthState, DisconnectReason, makeCacheableSignalKeyStore,
@@ -477,6 +479,35 @@ export async function startSession() {
       if (insertError) {
         console.error('[WA Session] ❌ Failed to log incoming message to DB:', insertError);
       }
+
+      const externalAd = msg.message?.extendedTextMessage?.contextInfo?.externalAdReply;
+      const adAttribution = externalAd && (externalAd.ctwaClid || externalAd.sourceId)
+        ? extractWhatsAppAdAttribution({
+            referral: {
+              source_id: externalAd.sourceId,
+              source_url: externalAd.sourceUrl,
+              source_type: 'ad',
+              headline: externalAd.title,
+              body: externalAd.body,
+              ctwa_clid: externalAd.ctwaClid,
+              media_type: externalAd.mediaType,
+            },
+          })
+        : null;
+      const { error: conversationError } = await upsertWhatsAppConversation(supabase, {
+        waId,
+        displayName,
+        direction: 'inbound',
+        source: 'baileys_session',
+        adAttribution,
+        metadata: {
+          baileys_message_id: msg.key.id || null,
+          ad_attribution: adAttribution?.details || null,
+        },
+      });
+      if (conversationError) {
+        console.error('[WA Session] ❌ Failed to create or update CRM conversation:', conversationError);
+      }
     });
 
   } catch (err) {
@@ -652,6 +683,17 @@ export function sendWAMessage(to, text, opts = {}) {
         },
       });
       if (logErr) console.error('[WA Session] ❌ Failed to log outbound message:', logErr);
+      const { error: conversationError } = await upsertWhatsAppConversation(supabase, {
+        waId: digits,
+        direction: 'outbound',
+        source: 'baileys_session',
+        isHumanOutbound: !opts.isSystemReply,
+        metadata: {
+          human_sender: opts.isSystemReply ? null : (opts.sentBy || null),
+          system_reply: Boolean(opts.isSystemReply),
+        },
+      });
+      if (conversationError) console.error('[WA Session] ❌ Failed to update CRM conversation:', conversationError);
     }
     return true;
   };

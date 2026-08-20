@@ -4,12 +4,14 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { resolveAdminTabAccess } from '@/lib/adminModules';
 import {
   WA_CONVERSATION_STATUSES,
+  claimWhatsAppConversation,
   conversationVisibleToProfile,
   isMissingWhatsappConversationsTable,
   normalizeWaId,
   upsertWhatsAppConversation,
 } from '@/lib/whatsappConversations.mjs';
 import { isMissingWhatsAppChannelsSchema } from '@/lib/whatsappChannels.mjs';
+import { sanitizeWhatsAppLabels, sanitizeWhatsAppPriority } from '@/lib/whatsappWorkflow.mjs';
 
 export const runtime = 'nodejs';
 
@@ -86,6 +88,38 @@ async function fetchWhatsAppChannels(supabase) {
   if (error && isMissingWhatsAppChannelsSchema(error)) return [];
   if (error) throw error;
   return (data || []).filter((channel) => channel.phone_number_id !== 'legacy-default');
+}
+
+function isMissingConversationReadsTable(error) {
+  const message = String(error?.message || '');
+  return ['42P01', 'PGRST205'].includes(error?.code)
+    || (/whatsapp_conversation_reads/i.test(message) && /does not exist|schema cache|could not find/i.test(message));
+}
+
+async function fetchViewerReadMap(supabase, profile, conversations) {
+  const ids = conversations.map((conversation) => conversation.id).filter(Boolean);
+  if (!profile?.user_id || !ids.length) return new Map();
+  const rows = [];
+  for (const chunk of chunkArray(ids, 100)) {
+    const { data, error } = await supabase
+      .from('whatsapp_conversation_reads')
+      .select('conversation_id,last_seen_at,manually_unread')
+      .eq('user_id', profile.user_id)
+      .in('conversation_id', chunk);
+    if (error && isMissingConversationReadsTable(error)) return new Map();
+    if (error) throw error;
+    rows.push(...(data || []));
+  }
+  return new Map(rows.map((row) => [row.conversation_id, row]));
+}
+
+function withViewerReadState(conversation, readMap) {
+  const read = readMap.get(conversation.id);
+  return {
+    ...conversation,
+    viewer_last_seen_at: read?.last_seen_at || null,
+    viewer_manually_unread: Boolean(read?.manually_unread),
+  };
 }
 
 async function syncLinkedCrmOwner(supabase, auth, conversation, action, agent, reason = '') {
@@ -226,11 +260,18 @@ export async function GET(request) {
 
     const agents = await fetchRoutableAgents(supabase);
     const channels = await fetchWhatsAppChannels(supabase);
+    const readMap = await fetchViewerReadMap(supabase, auth.profile, conversations);
 
     const waIds = conversations.map((conversation) => conversation.wa_id).filter(Boolean);
     const messages = await fetchConversationMessages(supabase, waIds, source);
 
-    return NextResponse.json({ available: true, conversations, messages, agents, channels });
+    return NextResponse.json({
+      available: true,
+      conversations: conversations.map((conversation) => withViewerReadState(conversation, readMap)),
+      messages,
+      agents,
+      channels,
+    });
   } catch (err) {
     console.error('[admin/whatsapp-conversations] GET failed:', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
@@ -274,17 +315,54 @@ export async function PATCH(request) {
       return NextResponse.json({ error: 'Forbidden: this conversation belongs to another agent' }, { status: 403 });
     }
 
+    if (action === 'read') {
+      if (!conversationVisibleToProfile(conversation, auth.profile)) {
+        return NextResponse.json({ error: 'Forbidden: conversation is not visible to this agent' }, { status: 403 });
+      }
+      const manualUnread = Boolean(body.manualUnread);
+      const requestedSeenAt = new Date(body.lastSeenAt || conversation.last_inbound_at || Date.now());
+      const lastSeenAt = Number.isFinite(requestedSeenAt.getTime()) ? requestedSeenAt.toISOString() : new Date().toISOString();
+      const { data: readState, error: readError } = await supabase
+        .from('whatsapp_conversation_reads')
+        .upsert({
+          conversation_id: conversation.id,
+          user_id: auth.profile.user_id,
+          last_seen_at: lastSeenAt,
+          manually_unread: manualUnread,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'conversation_id,user_id' })
+        .select('last_seen_at,manually_unread')
+        .single();
+      if (readError && isMissingConversationReadsTable(readError)) {
+        return NextResponse.json({ error: 'Run whatsapp-crm-reliability-migration.sql to enable shared read state.' }, { status: 409 });
+      }
+      if (readError) throw readError;
+      return NextResponse.json({
+        ok: true,
+        conversation: {
+          ...conversation,
+          viewer_last_seen_at: readState.last_seen_at,
+          viewer_manually_unread: Boolean(readState.manually_unread),
+        },
+      });
+    }
+
+    if (action === 'claim') {
+      const claimed = await claimWhatsAppConversation(supabase, {
+        conversation,
+        profile: auth.profile,
+        actorEmail: auth.user.email || auth.profile.email || '',
+      });
+      if (claimed.error) {
+        return NextResponse.json({ error: claimed.error.message }, { status: claimed.conflict ? 409 : 500 });
+      }
+      return NextResponse.json({ ok: true, conversation: claimed.data });
+    }
+
     const patch = { updated_at: new Date().toISOString() };
     let crmAgent = null;
     const transferReason = String(body.reason || '').trim().slice(0, 500);
-    if (action === 'claim') {
-      crmAgent = auth.profile;
-      patch.assigned_to = auth.profile.user_id;
-      patch.assigned_to_email = auth.profile.email || auth.user.email || null;
-      patch.assigned_to_name = auth.profile.name || auth.profile.email || auth.user.email || null;
-      patch.assigned_at = patch.updated_at;
-      patch.status = conversation?.status === 'resolved' ? 'open' : (conversation?.status || 'open');
-    } else if (action === 'release') {
+    if (action === 'release') {
       if (!auth.profile.is_superadmin) {
         return NextResponse.json({ error: 'Only a superadmin can release CRM ownership' }, { status: 403 });
       }
@@ -323,11 +401,39 @@ export async function PATCH(request) {
       const status = requestedStatus(body.status);
       if (!status) return NextResponse.json({ error: 'Valid status is required' }, { status: 400 });
       patch.status = status;
+      if (status === 'resolved' || status === 'pending') patch.needs_human_reply = false;
+      if (status === 'open') {
+        patch.needs_human_reply = Boolean(
+          conversation.last_inbound_at
+          && new Date(conversation.last_inbound_at) > new Date(conversation.last_human_outbound_at || 0)
+        );
+      }
+    } else if (action === 'workflow') {
+      if (body.priority !== undefined) patch.priority = sanitizeWhatsAppPriority(body.priority);
+      if (body.labels !== undefined) patch.labels = sanitizeWhatsAppLabels(body.labels);
+      if (body.followUpAt !== undefined) {
+        if (body.followUpAt) {
+          const followUp = new Date(body.followUpAt);
+          if (!Number.isFinite(followUp.getTime())) {
+            return NextResponse.json({ error: 'Enter a valid follow-up date.' }, { status: 400 });
+          }
+          patch.follow_up_at = followUp.toISOString();
+          patch.follow_up_note = String(body.followUpNote || '').trim().slice(0, 1000) || null;
+          patch.labels = sanitizeWhatsAppLabels([...(patch.labels || conversation.labels || []), 'Follow Up']);
+          patch.status = 'snoozed';
+          patch.needs_human_reply = false;
+        } else {
+          patch.follow_up_at = null;
+          patch.follow_up_note = null;
+          patch.labels = sanitizeWhatsAppLabels((patch.labels || conversation.labels || []).filter((label) => label !== 'Follow Up'));
+          if (conversation.status === 'snoozed') patch.status = 'open';
+        }
+      }
     } else {
       return NextResponse.json({ error: 'Valid action is required' }, { status: 400 });
     }
 
-    if (action === 'claim' || action === 'release' || action === 'transfer') {
+    if (action === 'release' || action === 'transfer') {
       try {
         await syncLinkedCrmOwner(supabase, auth, conversation, action, crmAgent, transferReason);
       } catch (error) {

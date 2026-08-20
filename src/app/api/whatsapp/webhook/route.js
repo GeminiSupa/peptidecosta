@@ -6,6 +6,7 @@ import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { describeWhatsAppDeliveryError, formatDeliveryFailureLog } from '@/lib/whatsappDeliveryErrors.mjs';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { upsertWhatsAppConversation } from '@/lib/whatsappConversations.mjs';
+import { extractWhatsAppAdAttribution } from '@/lib/whatsappWorkflow.mjs';
 import { getInboundWhatsAppChannel, upsertWhatsAppChannel } from '@/lib/whatsappChannels.mjs';
 import {
   detectWhatsAppIntent,
@@ -87,6 +88,7 @@ export async function POST(request) {
           const messageType = msg?.type || 'text';
           const timestamp = msg?.timestamp;
           const receivedAt = new Date().toISOString();
+          const adAttribution = extractWhatsAppAdAttribution(msg);
 
           // Get display name from contacts array
           const contact = contacts.find(c => c.wa_id === waId);
@@ -191,9 +193,11 @@ export async function POST(request) {
               channelId,
               channelDisplayNumber: inboundChannel?.displayPhoneNumber || null,
               matchedOrderId,
+              adAttribution,
               metadata: {
                 webhook_message_id: msg.id || null,
                 webhook_timestamp: timestamp || null,
+                ad_attribution: adAttribution?.details || null,
               },
             });
             if (conversationError) {

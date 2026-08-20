@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, CheckCheck, ChevronLeft, ChevronRight, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus, Maximize2, Minimize2, Trash2, Smartphone, Power } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { renderWhatsAppTemplateBody } from '@/lib/whatsappTemplates.mjs';
+import { conversationNeedsHumanReply, WHATSAPP_WORKFLOW_LABELS } from '@/lib/whatsappWorkflow.mjs';
 
 const INITIAL_CHAT_LIMIT = 30;
 const SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -199,12 +200,18 @@ function getOwnerDisplay(ownerKey, currentAgentKey) {
 // Ranking is driven by when the CUSTOMER last wrote, not by who spoke last.
 // The AI auto-replies within seconds, which used to flip a fresh customer
 // message to "outbound" and bury the chat below ~1800 others.
-function getPriorityScore(chat, isUnread, replyWindow) {
+function isFollowUpDue(chat, now = Date.now()) {
+  if (!chat?.followUpAt || chat.status === 'resolved') return false;
+  const dueAt = new Date(chat.followUpAt).getTime();
+  return Number.isFinite(dueAt) && dueAt <= now;
+}
+
+function getPriorityScore(chat, isUnread, replyWindow, now) {
   if (chat.status === 'resolved') return 5;
-  const customerWaiting = isUnread || chat.direction === 'inbound';
+  const customerWaiting = isUnread || chat.needsHumanReply || isFollowUpDue(chat, now);
   if (customerWaiting && replyWindow.state === 'urgent') return 0;
   if (isUnread) return 1;
-  if (chat.direction === 'inbound') return 2;
+  if (chat.needsHumanReply || isFollowUpDue(chat, now)) return 2;
   if (chat.stage === 'Cart') return 3;
   return 4;
 }
@@ -302,8 +309,11 @@ const WaChatItem = ({
           <div className="admin-wa-chat-item-bottom">
             <span className="admin-wa-chat-item-preview">{chat.lastMessageText || 'Photo'}</span>
             <span className="admin-wa-chat-flags">
-              {chat.direction === 'inbound' && chat.status !== 'resolved' && (
-                <span className="admin-wa-waiting-chip">Waiting</span>
+              {chat.needsHumanReply && chat.status !== 'resolved' && (
+                <span className="admin-wa-waiting-chip">Needs human</span>
+              )}
+              {!chat.needsHumanReply && isFollowUpDue(chat) && (
+                <span className="admin-wa-waiting-chip">Follow up due</span>
               )}
               {chat.isAiLast ? (
                 <span className="admin-wa-badge admin-wa-badge--ai">AI</span>
@@ -321,6 +331,14 @@ const WaChatItem = ({
             <span className={`admin-wa-owner-chip${isMine ? ' admin-wa-owner-chip--mine' : ''}${isUnassigned ? ' admin-wa-owner-chip--unassigned' : ''}`}>
               {ownerLabel}
             </span>
+            {chat.priority !== 'normal' && (
+              <span className={`admin-wa-priority-chip admin-wa-priority-chip--${chat.priority}`}>
+                {chat.priority}
+              </span>
+            )}
+            {(chat.labels || []).slice(0, 2).map((label) => (
+              <span key={label} className="admin-wa-label-chip">{label}</span>
+            ))}
             <span className={`admin-wa-sla-chip admin-wa-sla-chip--${replyWindow.state}`}>
               {chat.status === 'resolved' ? 'Resolved' : replyWindow.label}
             </span>
@@ -580,6 +598,10 @@ export default function WhatsAppInbox({
         conversation,
         channelLabel: getChannelLabel(conversation.last_inbound_channel_id || conversation.channel_id),
         status: conversation.status || 'open',
+        needsHumanReply: conversationNeedsHumanReply(conversation),
+        priority: conversation.priority || 'normal',
+        labels: Array.isArray(conversation.labels) ? conversation.labels : [],
+        followUpAt: conversation.follow_up_at || null,
       });
     });
 
@@ -619,6 +641,10 @@ export default function WhatsAppInbox({
           conversation?.last_inbound_channel_id || m.channel_id || conversation?.channel_id
         ),
         status: conversation?.status || 'open',
+        needsHumanReply: conversationNeedsHumanReply(conversation || existing?.conversation || {}),
+        priority: conversation?.priority || existing?.priority || 'normal',
+        labels: Array.isArray(conversation?.labels) ? conversation.labels : (existing?.labels || []),
+        followUpAt: conversation?.follow_up_at || existing?.followUpAt || null,
       });
     });
 
@@ -640,16 +666,24 @@ export default function WhatsAppInbox({
     [chatsList, hasUnread]
   );
   const waitingCount = useMemo(
-    () => chatsList.filter((chat) => chat.status !== 'resolved' && chat.direction === 'inbound').length,
-    [chatsList]
+    () => chatsList.filter((chat) => chat.status !== 'resolved' && (chat.needsHumanReply || isFollowUpDue(chat, now))).length,
+    [chatsList, now]
   );
   const hotCartCount = useMemo(
     () => chatsList.filter((chat) => chat.status !== 'resolved' && chat.stage === 'Cart').length,
     [chatsList]
   );
   const urgentCount = useMemo(
-    () => chatsList.filter((chat) => chat.status !== 'resolved' && chat.direction === 'inbound' && getReplyWindow(chat.lastInboundAt, now).state === 'urgent').length,
+    () => chatsList.filter((chat) => chat.status !== 'resolved' && chat.needsHumanReply && getReplyWindow(chat.lastInboundAt, now).state === 'urgent').length,
     [chatsList, now]
+  );
+  const importantCount = useMemo(
+    () => chatsList.filter((chat) => chat.status !== 'resolved' && (chat.priority !== 'normal' || chat.labels.includes('Important'))).length,
+    [chatsList]
+  );
+  const followUpCount = useMemo(
+    () => chatsList.filter((chat) => chat.status !== 'resolved' && (chat.followUpAt || chat.labels.includes('Follow Up'))).length,
+    [chatsList]
   );
   const resolvedCount = useMemo(
     () => chatsList.filter((chat) => chat.status === 'resolved').length,
@@ -734,6 +768,19 @@ export default function WhatsAppInbox({
     }
   }, [conversationRoutingAvailable, onConversationAction]);
 
+  const updateConversationWorkflow = useCallback(async (waId, workflow) => {
+    if (!waId || !conversationRoutingAvailable || !onConversationAction) return;
+    setConversationActionError('');
+    setConversationActionWaId(waId);
+    try {
+      await onConversationAction(waId, 'workflow', workflow);
+    } catch (err) {
+      setConversationActionError(err.message || 'Could not update conversation workflow.');
+    } finally {
+      setConversationActionWaId(null);
+    }
+  }, [conversationRoutingAvailable, onConversationAction]);
+
   const deleteConversation = useCallback(async (waId) => {
     if (!waId) return;
     if (!window.confirm('Are you sure you want to permanently delete this conversation and all its messages?')) return;
@@ -755,9 +802,11 @@ export default function WhatsAppInbox({
   }, [conversationRoutingAvailable, onConversationAction, setActiveChatWaId]);
 
   const chatPassesInboxFilter = useCallback((chat) => {
-    if (inboxFilter === 'urgent') return chat.status !== 'resolved' && chat.direction === 'inbound' && getReplyWindow(chat.lastInboundAt, now).state === 'urgent';
+    if (inboxFilter === 'urgent') return chat.status !== 'resolved' && chat.needsHumanReply && getReplyWindow(chat.lastInboundAt, now).state === 'urgent';
     if (inboxFilter === 'unread') return chat.status !== 'resolved' && hasUnread(chat);
-    if (inboxFilter === 'needs_reply') return chat.status !== 'resolved' && chat.direction === 'inbound';
+    if (inboxFilter === 'needs_reply') return chat.status !== 'resolved' && (chat.needsHumanReply || isFollowUpDue(chat, now));
+    if (inboxFilter === 'important') return chat.status !== 'resolved' && (chat.priority !== 'normal' || chat.labels.includes('Important'));
+    if (inboxFilter === 'follow_up') return chat.status !== 'resolved' && (chat.followUpAt || chat.labels.includes('Follow Up'));
     if (inboxFilter === 'hot_cart') return chat.status !== 'resolved' && chat.stage === 'Cart';
     if (inboxFilter === 'resolved') return chat.status === 'resolved';
     return true;
@@ -802,8 +851,8 @@ export default function WhatsAppInbox({
     }
 
     return [...result].sort((a, b) => {
-      const aPriority = getPriorityScore(a, hasUnread(a), getReplyWindow(a.lastInboundAt, now));
-      const bPriority = getPriorityScore(b, hasUnread(b), getReplyWindow(b.lastInboundAt, now));
+      const aPriority = getPriorityScore(a, hasUnread(a), getReplyWindow(a.lastInboundAt, now), now);
+      const bPriority = getPriorityScore(b, hasUnread(b), getReplyWindow(b.lastInboundAt, now), now);
       if (aPriority !== bPriority) return aPriority - bPriority;
       return new Date(getSortTimestamp(b, 'customer') || 0) - new Date(getSortTimestamp(a, 'customer') || 0);
     });
@@ -855,6 +904,32 @@ export default function WhatsAppInbox({
   const currentChatIsMine = currentOwnerKey === currentAgentKey;
   const currentChatIsUnassigned = currentOwnerKey === WA_UNASSIGNED_OWNER;
   const currentChatIsResolved = currentChat?.status === 'resolved';
+  const currentLabels = currentChat?.labels || [];
+
+  const toggleWorkflowLabel = (label) => {
+    const labels = currentLabels.includes(label)
+      ? currentLabels.filter((item) => item !== label)
+      : [...currentLabels, label];
+    updateConversationWorkflow(activeChatWaId, { labels });
+  };
+
+  const scheduleConversationFollowUp = () => {
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const defaultDate = [
+      tomorrow.getFullYear(),
+      String(tomorrow.getMonth() + 1).padStart(2, '0'),
+      String(tomorrow.getDate()).padStart(2, '0'),
+    ].join('-') + ` ${String(tomorrow.getHours()).padStart(2, '0')}:${String(tomorrow.getMinutes()).padStart(2, '0')}`;
+    const raw = window.prompt('Follow-up date and time (YYYY-MM-DD HH:MM)', defaultDate);
+    if (!raw) return;
+    const followUp = new Date(raw.replace(' ', 'T'));
+    if (!Number.isFinite(followUp.getTime())) {
+      setConversationActionError('Enter a valid follow-up date and time.');
+      return;
+    }
+    const note = window.prompt('Follow-up note (optional)', currentChat?.conversation?.follow_up_note || '') || '';
+    updateConversationWorkflow(activeChatWaId, { followUpAt: followUp.toISOString(), followUpNote: note });
+  };
 
   const customerContextSummary = useMemo(() => {
     if (!customerContext) return null;
@@ -1071,12 +1146,14 @@ export default function WhatsAppInbox({
   // Counts change the tab widths, so re-measure when they do.
   useEffect(() => {
     syncTabOverflow();
-  }, [syncTabOverflow, waitingCount, urgentCount, hotCartCount, unreadCount, resolvedCount, chatsList.length]);
+  }, [syncTabOverflow, waitingCount, urgentCount, hotCartCount, unreadCount, importantCount, followUpCount, resolvedCount, chatsList.length]);
 
   const filterTabs = [
     { id: 'needs_reply', label: 'Waiting', count: waitingCount },
     { id: 'urgent', label: 'Urgent', count: urgentCount },
     { id: 'hot_cart', label: 'Hot carts', count: hotCartCount },
+    { id: 'important', label: 'Important', count: importantCount },
+    { id: 'follow_up', label: 'Follow up', count: followUpCount },
     { id: 'unread', label: 'Unread', count: unreadCount },
     { id: 'resolved', label: 'Resolved', count: resolvedCount },
     { id: 'all', label: 'All', count: chatsList.length },
@@ -1409,6 +1486,12 @@ export default function WhatsAppInbox({
                     Resolved
                   </span>
                 )}
+                {currentChat?.needsHumanReply && !currentChatIsResolved && (
+                  <span className="admin-wa-waiting-chip">Needs human</span>
+                )}
+                {currentLabels.map((label) => (
+                  <span key={label} className="admin-wa-label-chip">{label}</span>
+                ))}
                 <span className={`admin-wa-owner-chip${currentChatIsMine ? ' admin-wa-owner-chip--mine' : ''}${currentChatIsUnassigned ? ' admin-wa-owner-chip--unassigned' : ''}`}>
                   {currentOwnerLabel}
                 </span>
@@ -1992,6 +2075,60 @@ export default function WhatsAppInbox({
                     </button>
                   </div>
                 </div>
+              )}
+              <div className="admin-wa-action-row">
+                <span><Clock size={20} /></span>
+                <div style={{ width: '100%' }}>
+                  <strong>Priority</strong>
+                  <small>Shown directly in the conversation list.</small>
+                  <select
+                    className="admin-inline-select"
+                    value={currentChat?.priority || 'normal'}
+                    onChange={(event) => updateConversationWorkflow(activeChatWaId, { priority: event.target.value })}
+                    disabled={conversationActionWaId === activeChatWaId}
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+              <div className="admin-wa-action-row">
+                <span><Plus size={20} /></span>
+                <div style={{ width: '100%' }}>
+                  <strong>Visible labels</strong>
+                  <small>Agents can see these without opening the chat.</small>
+                  <div className="admin-wa-workflow-labels">
+                    {WHATSAPP_WORKFLOW_LABELS.filter((label) => label !== 'Follow Up').map((label) => (
+                      <button
+                        key={label}
+                        type="button"
+                        className={currentLabels.includes(label) ? 'active' : ''}
+                        onClick={() => toggleWorkflowLabel(label)}
+                        disabled={conversationActionWaId === activeChatWaId}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <button type="button" className="admin-wa-action-row" onClick={scheduleConversationFollowUp}>
+                <span><Clock size={20} /></span>
+                <div>
+                  <strong>{currentChat?.followUpAt ? 'Reschedule follow-up' : 'Schedule follow-up'}</strong>
+                  <small>{currentChat?.followUpAt ? new Date(currentChat.followUpAt).toLocaleString() : 'Return this conversation to the queue at a chosen time.'}</small>
+                </div>
+              </button>
+              {currentChat?.followUpAt && (
+                <button
+                  type="button"
+                  className="admin-wa-action-row"
+                  onClick={() => updateConversationWorkflow(activeChatWaId, { followUpAt: null })}
+                >
+                  <span><X size={20} /></span>
+                  <div><strong>Clear follow-up</strong><small>Remove the date and Follow Up label.</small></div>
+                </button>
               )}
               <button
                 type="button"

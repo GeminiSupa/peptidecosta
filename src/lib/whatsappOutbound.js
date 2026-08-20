@@ -22,6 +22,8 @@ export async function sendWhatsAppMessage({
   channelId = null,
   phoneNumberId = null,
   supabase = null,
+  isHumanOutbound = false,
+  senderName = null,
 }) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   let outboundChannel;
@@ -106,7 +108,7 @@ export async function sendWhatsAppMessage({
 
       const { error: logErr } = await insertWhatsAppMessage(supabase, {
         wa_id: cleanPhone,
-        display_name: cleanDisplayName,
+        display_name: senderName || cleanDisplayName,
         message_text: message || '',
         media_url: mediaUrl || null,
         message_type: mediaUrl ? 'image' : 'text',
@@ -148,9 +150,11 @@ export async function sendWhatsAppMessage({
         matchedOrderId: orderId || null,
         source: 'cloud_api',
         channelId: outboundChannel.channelId,
+        isHumanOutbound,
         metadata: {
           session_id: sessionId || null,
           meta_message_id: messageId,
+          human_sender: isHumanOutbound ? (senderName || null) : null,
         },
       });
 

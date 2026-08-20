@@ -1,5 +1,6 @@
 import { resolveAdminTabAccess } from './adminModules.js';
-import { isMissingWhatsAppChannelsSchema } from './whatsappChannels.mjs';
+import { writeDroppingMissingColumns } from './optionalColumns.mjs';
+import { mergeWhatsAppLeadQualification } from './whatsappWorkflow.mjs';
 
 export const WA_CONVERSATION_STATUSES = new Set(['open', 'pending', 'resolved', 'snoozed']);
 export const WA_UNASSIGNED_OWNER = 'unassigned';
@@ -112,7 +113,7 @@ async function findCrmLead(supabase, waId) {
   if (!identityError && identity?.lead_id) {
     const { data: lead, error } = await supabase
       .from('catalog_leads')
-      .select('id, sales_agent')
+      .select('id, sales_agent, lead_source, qualification_data, utm_source, utm_medium, referrer')
       .eq('id', identity.lead_id)
       .maybeSingle();
     if (!error && lead) return lead;
@@ -122,7 +123,7 @@ async function findCrmLead(supabase, waId) {
   // has not been applied yet.
   const { data: leads, error } = await supabase
     .from('catalog_leads')
-    .select('id, sales_agent, created_at')
+    .select('id, sales_agent, lead_source, qualification_data, utm_source, utm_medium, referrer, created_at')
     .or(`phone.ilike.%${tail}%,contact_value.ilike.%${tail}%`)
     .order('created_at', { ascending: true })
     .limit(1);
@@ -131,9 +132,31 @@ async function findCrmLead(supabase, waId) {
   return leads?.[0] || null;
 }
 
-async function ensureInboundCrmLead(supabase, waId, displayName, sourceWhatsappNumber) {
+async function ensureInboundCrmLead(supabase, waId, displayName, sourceWhatsappNumber, adAttribution = null) {
   const existing = await findCrmLead(supabase, waId);
-  if (existing) return existing;
+  if (existing) {
+    if (!adAttribution) return existing;
+
+    const attributionPatch = {
+      lead_source: existing.lead_source || adAttribution.leadSource,
+      utm_source: existing.utm_source || adAttribution.utmSource,
+      utm_medium: existing.utm_medium || adAttribution.utmMedium,
+      referrer: existing.referrer || adAttribution.details?.source_url || null,
+      qualification_data: mergeWhatsAppLeadQualification(existing.qualification_data, adAttribution),
+      updated_at: new Date().toISOString(),
+    };
+    const { data: attributedLead, error: attributionError } = await supabase
+      .from('catalog_leads')
+      .update(attributionPatch)
+      .eq('id', existing.id)
+      .select('id, sales_agent, lead_source, qualification_data, utm_source, utm_medium, referrer')
+      .single();
+    if (attributionError) {
+      console.warn('[WhatsApp Conversations] Could not attach ad attribution to lead:', attributionError.message);
+      return existing;
+    }
+    return attributedLead;
+  }
 
   const cleanWaId = normalizeWaId(waId);
   if (!cleanWaId) return null;
@@ -148,13 +171,18 @@ async function ensureInboundCrmLead(supabase, waId, displayName, sourceWhatsappN
       language: 'es',
       status: 'New',
       notes: 'Automatically created from an inbound WhatsApp conversation.',
+      lead_source: adAttribution?.leadSource || 'whatsapp_inbound',
+      utm_source: adAttribution?.utmSource || 'whatsapp',
+      utm_medium: adAttribution?.utmMedium || 'messaging',
+      referrer: adAttribution?.details?.source_url || null,
+      qualification_data: mergeWhatsAppLeadQualification({}, adAttribution),
       source_whatsapp_number: sourceWhatsappNumber || null,
       whatsapp_consent: false,
       marketing_consent: false,
       created_at: now,
       updated_at: now,
     })
-    .select('id, sales_agent')
+    .select('id, sales_agent, lead_source, qualification_data, utm_source, utm_medium, referrer')
     .single();
 
   if (!error && data) return data;
@@ -218,6 +246,134 @@ export function conversationVisibleToProfile(conversation, profile) {
   return !owner || owner === profile.user_id;
 }
 
+export async function claimWhatsAppConversation(supabase, {
+  conversation,
+  profile,
+  actorEmail = '',
+} = {}) {
+  if (!supabase || !conversation?.wa_id || !profile?.user_id) {
+    return { data: null, error: new Error('Conversation and agent are required.'), conflict: false };
+  }
+  if (conversation.assigned_to === profile.user_id) {
+    return { data: conversation, error: null, conflict: false, claimed: false };
+  }
+  if (conversation.assigned_to) {
+    return {
+      data: conversation,
+      error: new Error(`This conversation belongs to ${conversation.assigned_to_name || conversation.assigned_to_email || 'another agent'}.`),
+      conflict: true,
+      claimed: false,
+    };
+  }
+
+  const claimedAt = new Date().toISOString();
+  const ownerName = String(profile.name || profile.email || actorEmail || '').trim();
+  const { data: claimed, error: claimError } = await supabase
+    .from('whatsapp_conversations')
+    .update({
+      assigned_to: profile.user_id,
+      assigned_to_email: profile.email || actorEmail || null,
+      assigned_to_name: ownerName || null,
+      assigned_at: claimedAt,
+      updated_at: claimedAt,
+      status: conversation.status === 'resolved' ? 'open' : (conversation.status || 'open'),
+    })
+    .eq('wa_id', conversation.wa_id)
+    .is('assigned_to', null)
+    .select('*')
+    .maybeSingle();
+
+  if (claimError) return { data: null, error: claimError, conflict: false, claimed: false };
+  if (!claimed) {
+    const { data: winner } = await supabase
+      .from('whatsapp_conversations')
+      .select('*')
+      .eq('wa_id', conversation.wa_id)
+      .maybeSingle();
+    return {
+      data: winner || null,
+      error: new Error(`This conversation was claimed by ${winner?.assigned_to_name || winner?.assigned_to_email || 'another agent'}.`),
+      conflict: true,
+      claimed: false,
+    };
+  }
+
+  if (claimed.contact_lead_id) {
+    const { data: lead, error: leadError } = await supabase
+      .from('catalog_leads')
+      .select('id, sales_agent')
+      .eq('id', claimed.contact_lead_id)
+      .maybeSingle();
+    if (leadError) {
+      await supabase
+        .from('whatsapp_conversations')
+        .update({ assigned_to: null, assigned_to_email: null, assigned_to_name: null, assigned_at: null, updated_at: new Date().toISOString() })
+        .eq('wa_id', conversation.wa_id)
+        .eq('assigned_to', profile.user_id)
+        .eq('assigned_at', claimedAt);
+      return { data: null, error: leadError, conflict: false, claimed: false };
+    }
+
+    const previousOwner = String(lead?.sales_agent || '').trim();
+    if (previousOwner && previousOwner.toLowerCase() !== ownerName.toLowerCase()) {
+      await supabase
+        .from('whatsapp_conversations')
+        .update({ assigned_to: null, assigned_to_email: null, assigned_to_name: null, assigned_at: null, updated_at: new Date().toISOString() })
+        .eq('wa_id', conversation.wa_id)
+        .eq('assigned_to', profile.user_id)
+        .eq('assigned_at', claimedAt);
+      return {
+        data: null,
+        error: new Error(`This CRM contact already belongs to ${previousOwner}.`),
+        conflict: true,
+        claimed: false,
+      };
+    }
+
+    if (!previousOwner && ownerName) {
+      const { data: updatedLead, error: updateError } = await supabase
+        .from('catalog_leads')
+        .update({
+          sales_agent: ownerName,
+          ownership_updated_at: claimedAt,
+          ownership_updated_by: actorEmail || profile.email || ownerName,
+          updated_at: claimedAt,
+        })
+        .eq('id', claimed.contact_lead_id)
+        .is('sales_agent', null)
+        .select('id')
+        .maybeSingle();
+
+      if (updateError || !updatedLead) {
+        await supabase
+          .from('whatsapp_conversations')
+          .update({ assigned_to: null, assigned_to_email: null, assigned_to_name: null, assigned_at: null, updated_at: new Date().toISOString() })
+          .eq('wa_id', conversation.wa_id)
+          .eq('assigned_to', profile.user_id)
+          .eq('assigned_at', claimedAt);
+        return {
+          data: null,
+          error: updateError || new Error('This CRM contact was claimed by another agent.'),
+          conflict: true,
+          claimed: false,
+        };
+      }
+
+      const { error: eventError } = await supabase.from('lead_assignment_events').insert({
+        lead_id: claimed.contact_lead_id,
+        action: 'claimed',
+        new_agent: ownerName,
+        reason: 'Claimed from shared WhatsApp inbox',
+        actor_user_id: profile.user_id,
+        actor_email: actorEmail || profile.email || null,
+      });
+      if (eventError) console.warn('[WhatsApp Conversations] Claim audit event failed:', eventError.message);
+    }
+  }
+
+  return { data: claimed, error: null, conflict: false, claimed: true };
+}
+
 function latestIsoTimestamp(...values) {
   const timestamps = values
     .map((value) => {
@@ -239,6 +395,8 @@ export async function upsertWhatsAppConversation(supabase, {
   source = 'cloud_api',
   channelId = null,
   channelDisplayNumber = null,
+  adAttribution = null,
+  isHumanOutbound = false,
   metadata = {},
 } = {}) {
   if (!supabase) return { data: null, error: null, available: false };
@@ -273,7 +431,7 @@ export async function upsertWhatsAppConversation(supabase, {
   };
 
   const crmLead = direction === 'inbound'
-    ? await ensureInboundCrmLead(supabase, cleanWaId, displayName, channelDisplayNumber)
+    ? await ensureInboundCrmLead(supabase, cleanWaId, displayName, channelDisplayNumber, adAttribution)
     : await findCrmLead(supabase, cleanWaId);
   if (crmLead?.id) patch.contact_lead_id = crmLead.id;
 
@@ -285,12 +443,19 @@ export async function upsertWhatsAppConversation(supabase, {
   }
   if (direction === 'inbound') {
     patch.last_inbound_at = latestIsoTimestamp(existing?.last_inbound_at, lastAt);
+    patch.needs_human_reply = true;
+    patch.status = 'open';
     if (channelId) patch.last_inbound_channel_id = channelId;
     if (existing?.status === 'resolved') patch.status = 'open';
   }
   if (direction === 'outbound') {
     patch.last_outbound_at = latestIsoTimestamp(existing?.last_outbound_at, lastAt);
     if (channelId) patch.last_outbound_channel_id = channelId;
+  }
+  if (direction === 'outbound' && isHumanOutbound) {
+    patch.last_human_outbound_at = latestIsoTimestamp(existing?.last_human_outbound_at, lastAt);
+    patch.needs_human_reply = false;
+    patch.status = 'pending';
   }
 
   if (!existing?.assigned_to) {
@@ -300,37 +465,26 @@ export async function upsertWhatsAppConversation(supabase, {
     await syncLeadOwnerFromRouting(supabase, routing.leadId, routing.profile);
   }
 
-  const query = existing
-    ? supabase.from('whatsapp_conversations').update(patch).eq('wa_id', cleanWaId)
-    : supabase.from('whatsapp_conversations').insert({
-        status: 'open',
-        ...patch,
-        created_at: nowIso,
-      });
-
-  let { data, error } = await query.select('*').single();
-  if (error && isMissingWhatsAppChannelsSchema(error)) {
-    const {
-      channel_id,
-      last_inbound_channel_id,
-      last_outbound_channel_id,
-      contact_lead_id,
-      ...legacyPatch
-    } = patch;
-    void channel_id;
-    void last_inbound_channel_id;
-    void last_outbound_channel_id;
-    void contact_lead_id;
-
-    const legacyQuery = existing
-      ? supabase.from('whatsapp_conversations').update(legacyPatch).eq('wa_id', cleanWaId)
-      : supabase.from('whatsapp_conversations').insert({
-          status: 'open',
-          ...legacyPatch,
-          created_at: nowIso,
-        });
-    ({ data, error } = await legacyQuery.select('*').single());
-  }
+  const payload = existing ? patch : { status: 'open', ...patch, created_at: nowIso };
+  const optionalColumns = [
+    'channel_id',
+    'last_inbound_channel_id',
+    'last_outbound_channel_id',
+    'contact_lead_id',
+    'last_human_outbound_at',
+    'needs_human_reply',
+    'priority',
+    'labels',
+    'follow_up_at',
+    'follow_up_note',
+  ];
+  const result = await writeDroppingMissingColumns(payload, optionalColumns, (current) => {
+    const query = existing
+      ? supabase.from('whatsapp_conversations').update(current).eq('wa_id', cleanWaId)
+      : supabase.from('whatsapp_conversations').insert(current);
+    return query.select('*').single();
+  });
+  const { data, error } = result;
   if (error && isMissingWhatsappConversationsTable(error)) {
     return { data: null, error: null, available: false };
   }

@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { isWhatsAppSuppressed } from '@/lib/whatsappCompliance';
-import { upsertWhatsAppConversation } from '@/lib/whatsappConversations.mjs';
+import { claimWhatsAppConversation, upsertWhatsAppConversation } from '@/lib/whatsappConversations.mjs';
 import { resolveOutboundWhatsAppChannel } from '@/lib/whatsappChannels.mjs';
 import {
   buildWhatsAppTemplateComponents,
@@ -59,6 +59,27 @@ export async function POST(request) {
       return jsonError(`Missing template field: ${missingVariables[0].label}`, 400);
     }
 
+    const ensured = await upsertWhatsAppConversation(supabase, {
+      waId: cleanPhone,
+      source: 'cloud_api',
+      channelId: outboundChannel.channelId,
+    });
+    if (!ensured.available || ensured.error || !ensured.data) {
+      return jsonError(ensured.error?.message || 'WhatsApp conversation routing is unavailable.', 503);
+    }
+    const conversation = ensured.data;
+    if (conversation.assigned_to && conversation.assigned_to !== auth.profile.user_id && !auth.profile.is_superadmin) {
+      return jsonError(`This conversation belongs to ${conversation.assigned_to_name || conversation.assigned_to_email || 'another agent'}.`, 409);
+    }
+    if (!conversation.assigned_to) {
+      const claim = await claimWhatsAppConversation(supabase, {
+        conversation,
+        profile: auth.profile,
+        actorEmail: auth.user.email || auth.profile.email || '',
+      });
+      if (claim.error) return jsonError(claim.error.message, claim.conflict ? 409 : 500);
+    }
+
     const components = buildWhatsAppTemplateComponents(template, values);
     const metaPayload = {
       messaging_product: 'whatsapp',
@@ -95,7 +116,7 @@ export async function POST(request) {
 
     const { error: logErr } = await insertWhatsAppMessage(supabase, {
       wa_id: cleanPhone,
-      display_name: displayName || 'Peptides Customer',
+      display_name: auth.profile.name || auth.profile.email || auth.user.email || 'Sales agent',
       message_text: messageText,
       message_type: 'template',
       direction: 'outbound',
@@ -125,10 +146,12 @@ export async function POST(request) {
       matchedOrderId: orderId || null,
       source: 'cloud_api',
       channelId: outboundChannel.channelId,
+      isHumanOutbound: true,
       metadata: {
         session_id: sessionId || null,
         meta_message_id: messageId,
         template_id: template.id,
+        human_sender: auth.profile.name || auth.profile.email || auth.user.email || null,
       },
     });
     if (conversationErr) {

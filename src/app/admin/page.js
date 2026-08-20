@@ -138,7 +138,7 @@ const FacebookIcon = ({ size = 14, style, ...props }) => (
 
 const FALLBACK_EXCHANGE_RATE = 454.48;
 // How often an open WhatsApp inbox silently re-fetches conversations.
-const WHATSAPP_REFRESH_MS = 30 * 1000;
+const WHATSAPP_REFRESH_MS = 15 * 1000;
 
 const cartHasItems = (cartData) => Array.isArray(cartData) && cartData.length > 0;
 
@@ -520,20 +520,18 @@ export default function AdminPage() {
   const [draftingAiReply, setDraftingAiReply] = useState(false);
   const [liveWaSendFeedback, setLiveWaSendFeedback] = useState({ status: 'idle', message: '' });
 
-  // ── WA unread tracking (localStorage-backed) ──────────────────────────────
-  // seenMap: { [waId]: isoTimestamp } — the lastInboundAt we have "seen"
-  const [seenMap, setSeenMap] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('wa_seen_map') || '{}'); } catch { return {}; }
-  });
+  // Per-agent read state is returned by the server. It is intentionally
+  // separate from the shared "needs human reply" work queue.
+  const [seenMap, setSeenMap] = useState({});
 
-  const markSeen = (waId, lastInboundAt) => {
-    if (!waId || !lastInboundAt) return;
-    setSeenMap(prev => {
-      const next = { ...prev, [waId]: lastInboundAt };
-      try { localStorage.setItem('wa_seen_map', JSON.stringify(next)); } catch {}
-      return next;
-    });
-  };
+  const syncSeenMapFromConversations = useCallback((conversations) => {
+    setSeenMap(Object.fromEntries((conversations || []).map((conversation) => [
+      String(conversation.wa_id || '').replace(/\D/g, ''),
+      conversation.viewer_manually_unread
+        ? new Date(0).toISOString()
+        : (conversation.viewer_last_seen_at || ''),
+    ])));
+  }, []);
 
   const handleWhatsAppConversationAction = async (waId, action, extra = {}) => {
     if (action === 'delete') {
@@ -561,6 +559,20 @@ export default function AdminPage() {
       });
     }
     return data.conversation;
+  };
+
+  const markSeen = async (waId, lastInboundAt) => {
+    if (!waId || !lastInboundAt) return;
+    const manualUnread = new Date(lastInboundAt).getTime() === 0;
+    setSeenMap((prev) => ({ ...prev, [waId]: lastInboundAt }));
+    try {
+      await handleWhatsAppConversationAction(waId, 'read', {
+        lastSeenAt: manualUnread ? new Date().toISOString() : lastInboundAt,
+        manualUnread,
+      });
+    } catch (error) {
+      console.warn('Could not sync WhatsApp read state:', error.message);
+    }
   };
 
   // Auto-mark current open chat as seen when new messages arrive
@@ -2621,6 +2633,7 @@ Core Rules:
           ? (data.error || 'WhatsApp conversation routing table is not installed yet.')
           : '');
         setWhatsappConversations(data.conversations || []);
+        syncSeenMapFromConversations(data.conversations || []);
         setWhatsappMessages(data.messages || []);
         setWhatsappAgents(data.agents || []);
         setWhatsappChannels(data.channels || []);
@@ -2678,6 +2691,7 @@ Core Rules:
       const data = await res.json();
       if (!res.ok || data.available === false) return; // keep what is on screen
       setWhatsappConversations(data.conversations || []);
+      syncSeenMapFromConversations(data.conversations || []);
       setWhatsappMessages(data.messages || []);
       setWhatsappAgents(data.agents || []);
       setWhatsappChannels(data.channels || []);
@@ -2687,7 +2701,7 @@ Core Rules:
     } finally {
       refreshingWhatsappRef.current = false;
     }
-  }, [adminProfile]);
+  }, [adminProfile, syncSeenMapFromConversations]);
 
   useEffect(() => {
     if (!isAuthenticated || profileLoading || !adminProfile) return undefined;
@@ -2708,6 +2722,27 @@ Core Rules:
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [isAuthenticated, profileLoading, adminProfile, activeTab, refreshWhatsappInbox]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !adminProfile || !supabase) return undefined;
+    if (activeTab !== 'whatsapp_ai' && activeTab !== 'wa_session') return undefined;
+
+    let refreshTimer = null;
+    const scheduleRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => refreshWhatsappInbox(), 250);
+    };
+    const channel = supabase
+      .channel(`whatsapp-inbox-${adminProfile.user_id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_conversations' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_messages' }, scheduleRefresh)
+      .subscribe();
+
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      supabase.removeChannel(channel);
+    };
+  }, [activeTab, adminProfile, isAuthenticated, refreshWhatsappInbox]);
 
   // Auth Handlers
   const handleLogin = async (e) => {
