@@ -38,6 +38,22 @@ const MESSAGES = {
     es: 'Faltan algunos de sus datos. Revise el formulario e intente de nuevo.',
   },
 
+  // Only the pay-by-link page asks for this: the order was taken on
+  // WhatsApp, so we may have no address for the receipt yet.
+  email_required: {
+    retryable: true,
+    en: 'Please enter an email address so we can send you the receipt.',
+    es: 'Ingrese un correo electrónico para poder enviarle el comprobante.',
+  },
+
+  // A payment link that is malformed, expired, tampered with, or points at
+  // an order that no longer exists. Pressing the button again cannot help.
+  link_invalid: {
+    retryable: false,
+    en: 'This payment link is no longer valid. Message us on WhatsApp and we will send you a fresh one.',
+    es: 'Este enlace de pago ya no es válido. Escríbanos por WhatsApp y le enviamos uno nuevo.',
+  },
+
   already_paid: {
     retryable: false,
     en: 'This order has already been paid — there is nothing more to do. Your receipt is on its way by email.',

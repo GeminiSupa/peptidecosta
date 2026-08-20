@@ -6,6 +6,8 @@ import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } fr
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, ORDER_STATUS } from '@/lib/paymentOutcome.mjs';
 import { sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
+import { parseBillingAddress } from '@/lib/billingAddress.mjs';
+import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
 
 export const runtime = 'nodejs';
 
@@ -33,29 +35,6 @@ function splitName(name = '') {
   };
 }
 
-function parseBillingAddress(shippingAddress = '') {
-  const lines = String(shippingAddress || '').split('\n').map(line => line.trim()).filter(Boolean);
-
-  // Format from catalog: line[0]=address, line[1]=district,canton,province, line[2]=zip
-  const address = lines[0] || 'N/A';
-  const postalCode = lines[2] || '10101';
-  const locationLine = lines[1] || '';
-  const areaParts = locationLine.split(',').map(part => part.trim()).filter(Boolean);
-
-  // areaParts should be [district, canton, province]
-  // Use canton (index 1) as city, district (index 0) as state
-  const city = areaParts[1] || areaParts[0] || 'San Jose';
-  const state = areaParts[0] || 'San Jose';
-
-  return {
-    address,
-    postal_code: postalCode,
-    city,
-    state,
-    country: 'CR',
-  };
-}
-
 function statusToOrderStatus(status) {
   return gatewayStatusToOrderStatus(status, {
     onUnknown: (raw) => console.warn(`[card-payment-link/pay] Unrecognised gateway status "${raw}"; order left pending for review.`),
@@ -75,21 +54,38 @@ function buildPaymentPatch(status, transaction, email) {
   };
 }
 
-export async function POST(request) {
-  try {
-    if (!isShieldHubPayConfigured()) {
-      return NextResponse.json({ error: 'Shield Hub Pay credentials are not configured' }, { status: 500 });
-    }
+/**
+ * Stop the payment with something the customer can read.
+ *
+ * The paying customer here is not a developer looking at a console. Every
+ * internal reason is logged and none of them is returned.
+ */
+function stopPayment(key, lang, httpStatus, internalReason) {
+  const { message, retryable, code } = cardCheckoutMessage(key, lang);
+  if (internalReason) console.error(`[card-payment-link/pay] ${code}: ${internalReason}`);
+  return NextResponse.json({ error: message, errorCode: code, retryable }, { status: httpStatus });
+}
 
+export async function POST(request) {
+  // Declared out here so the catch can still answer in the customer language.
+  let customerLang = 'es';
+
+  try {
     const body = await request.json();
     const { orderNumber, token, card, customerEmail, customerIp, lang = 'es' } = body;
+    customerLang = lang === 'en' ? 'en' : 'es';
+
+    // Checked after the body is read so the reply is in their language.
+    if (!isShieldHubPayConfigured()) {
+      return stopPayment('unavailable', customerLang, 500, 'Shield Hub Pay credentials are not configured');
+    }
 
     if (!orderNumber || !token) {
-      return NextResponse.json({ error: 'Payment link is missing order or token details' }, { status: 400 });
+      return stopPayment('link_invalid', lang, 400, 'Payment link is missing order or token details');
     }
 
     if (!verifyCardPaymentOrderToken(orderNumber, token)) {
-      return NextResponse.json({ error: 'Payment link signature is invalid. Please request a fresh card payment link.' }, { status: 403 });
+      return stopPayment('link_invalid', lang, 403, 'Payment link signature is invalid');
     }
 
     const supabase = getSupabaseAdmin();
@@ -103,27 +99,27 @@ export async function POST(request) {
       .single();
 
     if (error || !order) {
-      return NextResponse.json({ error: error?.message || 'Order not found' }, { status: 404 });
+      return stopPayment('link_invalid', lang, 404, error?.message || 'Order not found');
     }
 
     const currentStatus = String(order.status || '').toLowerCase();
     if (currentStatus.includes('paid') || currentStatus.includes('complete')) {
-      return NextResponse.json({ error: 'This order is already paid' }, { status: 409 });
+      return stopPayment('already_paid', lang, 409, 'Order is already settled');
     }
 
     const amountUsd = Number(order.total_usd || 0);
     if (!amountUsd || amountUsd <= 0) {
-      return NextResponse.json({ error: 'Order total is missing' }, { status: 400 });
+      return stopPayment('unavailable', lang, 400, 'Order total is missing');
     }
 
     const email = String(customerEmail || order.customer_email || '').trim();
     if (!email) {
-      return NextResponse.json({ error: 'Email is required for card payment' }, { status: 400 });
+      return stopPayment('email_required', lang, 400, 'Email is required for card payment');
     }
 
     const normalizedCard = normalizeCard(card, order.customer_name);
     if (!normalizedCard.holder || normalizedCard.number.length < 12 || normalizedCard.cvv.length < 3 || !normalizedCard.expiry_month || !normalizedCard.expiry_year) {
-      return NextResponse.json({ error: 'Missing or invalid card details' }, { status: 400 });
+      return stopPayment('card_details', lang, 400, 'Missing or invalid card details');
     }
 
     // Atomically claim the order so two concurrent requests can't both charge it.
@@ -133,7 +129,7 @@ export async function POST(request) {
     if (!claim.claimed) {
       const state = await describeOrderPaymentState(supabase, order.order_number);
       if (state === 'settled') {
-        return NextResponse.json({ error: 'This order is already paid' }, { status: 409 });
+        return stopPayment('already_paid', lang, 409, 'Order is already settled');
       }
       return NextResponse.json(
         { error: 'A payment for this order is already being processed. Please wait a moment before trying again.' },
@@ -247,6 +243,9 @@ export async function POST(request) {
     }, { status: 402 });
   } catch (err) {
     console.error('[card-payment-link/pay]', err);
-    return NextResponse.json({ error: err.message || 'Card payment failed' }, { status: 502 });
+    // Never err.message. This is exactly where "Shield Hub Pay returned 500"
+    // reached a customer part-way through a 918 dollar order, with no idea
+    // whether they had been charged or what to do next.
+    return stopPayment('unconfirmed', customerLang, 502, err.message);
   }
 }
