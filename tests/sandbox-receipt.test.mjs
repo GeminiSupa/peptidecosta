@@ -37,3 +37,20 @@ test('the panel can ask for the Spanish receipt most customers get', () => {
   assert.match(panel, /useState\('es'\)/);
   assert.match(route, /body\.lang === 'en' \? 'en' : 'es'/);
 });
+
+test('the Payment Test panel is actually reachable from the dashboard', async () => {
+  // It was not: the component and its API route both existed while nothing
+  // imported the panel, so there was no sidebar entry and no way in.
+  const { ADMIN_MODULES, ADMIN_TAB_IDS } = await import('../src/lib/adminModules.js');
+  const adminPage = fs.readFileSync('src/app/admin/page.js', 'utf8');
+
+  const entry = ADMIN_MODULES.find((m) => m.id === 'payment_test');
+  assert.ok(entry, 'payment_test is not registered as an admin module');
+  assert.equal(entry.superadminOnly, true, 'sandbox charges must stay superadmin-only');
+  assert.ok(ADMIN_TAB_IDS.has('payment_test'));
+  assert.ok(!entry.hiddenFromNav, 'it must appear in the sidebar');
+
+  assert.match(adminPage, /import TestPaymentPanel from '@\/components\/admin\/TestPaymentPanel'/);
+  assert.match(adminPage, /activeTab === 'payment_test'/);
+  assert.match(adminPage, /<TestPaymentPanel \/>/);
+});

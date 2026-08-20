@@ -34,6 +34,7 @@ import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
 import ExportModal from '@/components/admin/ExportModal';
 import TeamManagement from '@/components/admin/TeamManagement';
+import TestPaymentPanel from '@/components/admin/TestPaymentPanel';
 import TeamChat from '@/components/admin/TeamChat';
 import AffiliatesManager from '@/components/admin/AffiliatesManager';
 import MyReferralQr from '@/components/admin/MyReferralQr';
@@ -1716,6 +1717,10 @@ Core Rules:
     team: {
       label: 'Team',
       icon: <Shield size={iconSize} />,
+    },
+    payment_test: {
+      label: 'Payment Test',
+      icon: <FlaskConical size={iconSize} style={{ color: activeTab === 'payment_test' ? 'inherit' : '#34d399' }} />,
     },
     team_chat: {
       label: 'Team Chat',
@@ -6559,6 +6564,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'team' && (
           <div className="admin-orders-tab admin-tab-panel">
             <TeamManagement currentUserProfile={adminProfile} currentUserEmail={loggedInEmail.current} onTeamChanged={fetchAgents} />
+          </div>
+        )}
+
+        {activeTab === 'payment_test' && (
+          <div className="admin-orders-tab admin-tab-panel" style={{ padding: '20px' }}>
+            <ErrorBoundary>
+              <TestPaymentPanel />
+            </ErrorBoundary>
           </div>
         )}
 

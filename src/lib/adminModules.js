@@ -46,6 +46,9 @@ export const ADMIN_MODULES = [
   { id: 'whatsapp_ai', label: 'Sales WhatsApp', title: 'Sales WhatsApp', group: 'System & AI' },
   { id: 'wa_session', label: 'WhatsApp Device', title: 'WhatsApp Device', group: 'System & AI' },
   { id: 'team', label: 'Team Management', title: 'Team Management', group: 'System & AI', superadminOnly: true },
+  // Sandbox card payments. The panel and its route existed for a while with
+  // nothing mounting them, so there was no way to reach it from the dashboard.
+  { id: 'payment_test', label: 'Payment Test', title: 'Payment Test (Sandbox)', group: 'System & AI', superadminOnly: true },
   { id: 'team_chat', label: 'Team Chat', title: 'Team Chat', group: 'System & AI', alwaysAvailable: true },
   // A sub-user's entire dashboard: this plus my_qr, and nothing else.
   // Deliberately NOT hiddenFromNav — the mobile "More" sheet is built from
