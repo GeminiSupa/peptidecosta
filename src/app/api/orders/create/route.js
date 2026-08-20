@@ -14,6 +14,7 @@ import {
 import { agentMatchKeys } from '@/lib/agentOrders';
 import { CUSTOMER_HISTORY_SOURCE, buildAgentNameResolver, lookupHistoricalAgent } from '@/lib/agentAttribution.mjs';
 import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
+import { identityMessage, validateCustomerName } from '@/lib/checkoutIdentity.mjs';
 import {
   applySalesAgentReferral,
   isEligibleSalesAgentProfile,
@@ -313,6 +314,17 @@ export async function POST(request) {
     if (!Array.isArray(order.items) || order.items.length === 0) {
       return NextResponse.json({ error: 'Order must include at least one item' }, { status: 400 });
     }
+
+    // The same rules the checkout form runs, run again here. The browser is not
+    // the authority: a stale tab, a retry from a saved payload or a direct post
+    // would otherwise write a name nobody can address a package to. Names are
+    // stored normalized so the staff alert and the courier label match.
+    const orderLang = order.lang === 'en' ? 'en' : 'es';
+    const nameCheck = validateCustomerName(order.customer_name);
+    if (!nameCheck.ok) {
+      return NextResponse.json({ error: identityMessage(nameCheck.reason, orderLang) }, { status: 400 });
+    }
+    order.customer_name = nameCheck.name;
 
     const supabase = getSupabaseAdmin();
 

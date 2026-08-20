@@ -35,6 +35,11 @@ import {
   getBacWaterSizeMl,
 } from '@/lib/bacWater.mjs';
 import { shouldScheduleWaReprompt, WA_REPROMPT_DELAY_MS } from '@/lib/waReprompt.mjs';
+import {
+  identityMessage,
+  normalizeCustomerName,
+  validateCustomerName,
+} from '@/lib/checkoutIdentity.mjs';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
@@ -2251,7 +2256,12 @@ export default function CatalogPage() {
 
   const validateForm = () => {
     const errors = {};
-    if (!customerName.trim()) errors.customerName = lang === 'en' ? 'Full name is required.' : 'El nombre completo es requerido.';
+    // Presence alone let real junk through — a single letter, a held-down key,
+    // a phone number in the name box — and every one of those becomes a sales
+    // rep chasing an order they cannot address. The shared rules still allow a
+    // Costa Rican company named after its own cédula jurídica.
+    const nameCheck = validateCustomerName(customerName);
+    if (!nameCheck.ok) errors.customerName = identityMessage(nameCheck.reason, lang);
     
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!customerEmail.trim()) {
@@ -2343,9 +2353,14 @@ export default function CatalogPage() {
     const shippingCosts = getShippingCostFields(currency, exchangeRate, getShippingFee());
     const orderItems = buildOrderItems(cart);
 
+    // Saved exactly as the alert, the invoice and the courier label will show
+    // it: validateForm has already accepted the name, so this only strips the
+    // stray spaces a phone keyboard adds.
+    const cleanName = normalizeCustomerName(customerName);
+
     const cardSave = await saveOrderToDatabase({
       order_number: orderNum,
-      customer_name: customerName,
+      customer_name: cleanName,
       customer_phone: customerPhone,
       customer_email: customerEmail || null,
       shipping_address: shippingAddress,
@@ -2415,7 +2430,7 @@ export default function CatalogPage() {
           amount: cardAmount,
           currency: cardCurrency,
           orderNumber: orderNum,
-          customerName,
+          customerName: cleanName,
           customerPhone,
           customerEmail,
           shippingAddress,
@@ -2523,9 +2538,14 @@ export default function CatalogPage() {
 
     const whatsappSource = typeof window !== 'undefined' ? localStorage.getItem('whatsapp_source') : null;
 
+    // Saved exactly as the alert, the invoice and the courier label will show
+    // it: validateForm has already accepted the name, so this only strips the
+    // stray spaces a phone keyboard adds.
+    const cleanName = normalizeCustomerName(customerName);
+
     const saveResult = await saveOrderToDatabase({
       order_number: orderNum,
-      customer_name: customerName,
+      customer_name: cleanName,
       customer_phone: customerPhone,
       customer_email: customerEmail || null,
       shipping_address: shippingAddress,
@@ -2564,7 +2584,7 @@ export default function CatalogPage() {
 
     await sendOrderNotification({
       orderNumber: orderNum,
-      customerName,
+      customerName: cleanName,
       customerPhone,
       customerEmail,
       shippingAddress,
@@ -2593,8 +2613,8 @@ export default function CatalogPage() {
     const idTypeName = customerIdType === '1' ? 'National ID' : customerIdType === '6' ? 'DIMEX' : customerIdType === '5' ? 'Passport' : customerIdType === '2' ? 'Corporate ID' : customerIdType;
     const idTypeNameEs = customerIdType === '1' ? 'Cédula física' : customerIdType === '6' ? 'DIMEX' : customerIdType === '5' ? 'Pasaporte' : customerIdType === '2' ? 'Cédula jurídica' : customerIdType;
     const receiptDetails = lang === 'en'
-      ? `\n\n*Customer Details:*\n• Name: ${customerName}\n• ID: ${customerIdNumber} (${idTypeName})\n• Phone: ${customerPhone}\n• Address: ${shippingAddress}\n\n*Ordered Items:*`
-      : `\n\n*Detalles del Cliente:*\n• Nombre: ${customerName}\n• Identificación: ${customerIdNumber} (${idTypeNameEs})\n• Teléfono: ${customerPhone}\n• Dirección: ${shippingAddress}\n\n*Artículos Pedidos:*`;
+      ? `\n\n*Customer Details:*\n• Name: ${cleanName}\n• ID: ${customerIdNumber} (${idTypeName})\n• Phone: ${customerPhone}\n• Address: ${shippingAddress}\n\n*Ordered Items:*`
+      : `\n\n*Detalles del Cliente:*\n• Nombre: ${cleanName}\n• Identificación: ${customerIdNumber} (${idTypeNameEs})\n• Teléfono: ${customerPhone}\n• Dirección: ${shippingAddress}\n\n*Artículos Pedidos:*`;
 
     const itemReceipts = cart.map(item => {
       const p = getPriceAsNumber(item, currency);
@@ -4105,6 +4125,9 @@ export default function CatalogPage() {
                 <CheckoutLabel htmlFor="field-customerName" required>
                   {lang === 'en' ? 'Full name' : 'Nombre completo'}
                 </CheckoutLabel>
+                {/* Spacing is tidied on blur, never while typing: a field
+                    that reacts to the first letter is the mistake the phone
+                    input below already documents. */}
                 <input
                   id="field-customerName"
                   type="text"
@@ -4117,6 +4140,7 @@ export default function CatalogPage() {
                     setCustomerName(e.target.value);
                     if (formErrors.customerName) setFormErrors(prev => ({ ...prev, customerName: null }));
                   }}
+                  onBlur={(e) => setCustomerName(normalizeCustomerName(e.target.value))}
                   {...invalidProps('customerName', formErrors)}
                 />
                 <FieldError name="customerName" message={formErrors.customerName} />
