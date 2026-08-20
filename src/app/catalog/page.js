@@ -446,6 +446,10 @@ export default function CatalogPage() {
 
   // Card Payment State
   const [cardSubmitting, setCardSubmitting] = useState(false);
+  // Set when trying again cannot help, and in the `unconfirmed` case would be
+  // actively harmful: every attempt builds a NEW order number, and the
+  // double-charge lock only guards a single one.
+  const [cardRetryBlocked, setCardRetryBlocked] = useState(false);
   // Synchronous double-submit guard. The `cardSubmitting` state guard updates too
   // late to stop a fast second click, so a ref blocks re-entry the instant the
   // handler fires — repeated charge attempts are what trip the gateway's
@@ -2466,32 +2470,52 @@ export default function CatalogPage() {
         return;
       }
 
-      // The gateway's own wording, kept — "insufficient funds" or "card
-      // declined" is something the customer can act on, and paraphrasing it
-      // would only blur the one useful detail. The sentence after it is ours.
+      // Two different things arrive here.
       //
-      // No "above" or "below" here. The notice is placed by the layout, not by
-      // this string, and it read "check the card details above" while sitting
-      // directly above those very fields. A direction we cannot guarantee is
-      // worse than no direction at all.
+      // A gateway decline carries the bank's own wording — "insufficient
+      // funds", "Card brand not allowed" — which is the one useful detail and
+      // is kept verbatim; the sentence after it is ours. Everything else is a
+      // checkout stop the server has already phrased for the customer, and
+      // adding "try another card" to those would contradict them.
+      //
+      // No "above" or "below" in either. The notice is placed by the layout,
+      // not by this string, and it read "check the card details above" while
+      // sitting directly above those very fields.
+      const isGatewayDecline = !data.errorCode || data.errorCode === 'declined';
       failCheckout(
-        lang === 'en' ? 'The card payment did not go through' : 'El pago con tarjeta no se completó',
-        [
-          endSentence(data.error) || (lang === 'en' ? 'The bank did not give a reason.' : 'El banco no dio un motivo.'),
-          lang === 'en'
-            ? 'Nothing has been charged. Check your card details, try another card, or message us on WhatsApp to pay a different way.'
-            : 'No se ha realizado ningún cargo. Revise los datos de su tarjeta, pruebe con otra, o escríbanos por WhatsApp para pagar de otra forma.',
-        ].join(' '),
+        data.errorCode === 'unconfirmed'
+          ? (lang === 'en' ? 'We could not confirm your payment' : 'No pudimos confirmar su pago')
+          : data.errorCode === 'already_paid'
+            ? (lang === 'en' ? 'This order is already paid' : 'Este pedido ya fue pagado')
+            : (lang === 'en' ? 'The card payment did not go through' : 'El pago con tarjeta no se completó'),
+        isGatewayDecline
+          ? [
+            endSentence(data.error) || (lang === 'en' ? 'The bank did not give a reason.' : 'El banco no dio un motivo.'),
+            lang === 'en'
+              ? 'Nothing has been charged. Check your card details, try another card, or message us on WhatsApp to pay a different way.'
+              : 'No se ha realizado ningún cargo. Revise los datos de su tarjeta, pruebe con otra, o escríbanos por WhatsApp para pagar de otra forma.',
+          ].join(' ')
+          : data.error,
       );
+
+      if (data.retryable === false) {
+        // Leave the button locked. `cardSubmitting` is not reused for this:
+        // it renders a spinner, and a spinner would say "still working" when
+        // the answer is "stop and talk to us".
+        setCardRetryBlocked(true);
+      }
       setCardSubmitting(false);
       cardSubmitLockRef.current = false;
     } catch (err) {
       console.error('Card payment error:', err);
+      // "Nothing has been charged" was a guess here too. A request that fails
+      // in the browser usually never arrived, but a charge whose response was
+      // lost on the way back looks exactly the same from this side.
       failCheckout(
         lang === 'en' ? 'We could not reach the payment service' : 'No pudimos conectar con el servicio de pago',
         lang === 'en'
-          ? 'Nothing has been charged. Check your internet connection and press the button again, or message us on WhatsApp.'
-          : 'No se ha realizado ningún cargo. Revise su conexión a internet y presione el botón de nuevo, o escríbanos por WhatsApp.',
+          ? 'Check your internet connection and press the button again. If you have already seen a charge from us, do not try again — message us on WhatsApp and we will finish your order.'
+          : 'Revise su conexión a internet y presione el botón de nuevo. Si ya vio un cargo de nuestra parte, no lo intente de nuevo — escríbanos por WhatsApp y completamos su pedido.',
       );
       setCardSubmitting(false);
       cardSubmitLockRef.current = false;
@@ -4568,11 +4592,16 @@ export default function CatalogPage() {
                       themselves; validateForm now names it and scrolls to it. */}
                   <button
                     type="button"
-                    disabled={cardSubmitting || cart.length === 0 || checkBacOnlyMinimum(cart).blocked}
+                    disabled={cardSubmitting || cardRetryBlocked || cart.length === 0 || checkBacOnlyMinimum(cart).blocked}
                     onClick={startCardCheckout}
                     className="card-payment-btn"
                   >
-                    {cardSubmitting ? (
+                    {cardRetryBlocked ? (
+                      <>
+                        <MessageCircle size={18} />
+                        {lang === 'en' ? 'Message us on WhatsApp' : 'Escríbanos por WhatsApp'}
+                      </>
+                    ) : cardSubmitting ? (
                       <>
                         <div className="sync-spinner" style={{ width: '16px', height: '16px' }}></div>
                         {lang === 'en' ? 'Redirecting to payment...' : 'Redirigiendo al pago...'}

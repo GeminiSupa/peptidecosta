@@ -5,6 +5,7 @@ import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } fr
 import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, ORDER_STATUS } from '@/lib/paymentOutcome.mjs';
 import { sendCardHandoffReceipt, sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
+import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { getPublicSiteUrl } from '@/lib/publicUrl';
 import { sendCustomerOrderConfirmation } from '@/lib/orderWhatsAppAlerts';
@@ -130,17 +131,35 @@ function statusToOrderStatus(status) {
   });
 }
 
+/**
+ * Stop the checkout with something the customer can read.
+ *
+ * The internal reason is logged, never returned: a buyer has no use for
+ * "credentials are not configured" and no business being told it.
+ */
+function stopCheckout(key, lang, httpStatus, internalReason) {
+  const { message, retryable, code } = cardCheckoutMessage(key, lang);
+  if (internalReason) console.error(`[Shield Hub Pay] ${code}: ${internalReason}`);
+  return NextResponse.json({ error: message, errorCode: code, retryable }, { status: httpStatus });
+}
+
 export async function POST(req) {
   // Read before the try so the catch can still name the order it was charging.
   let failedOrderNumber = null;
+  let customerLang = 'es';
 
   try {
-    if (!isShieldHubPayConfigured()) {
-      return NextResponse.json({ error: 'Shield Hub Pay credentials are not configured' }, { status: 500 });
-    }
-
     const body = await req.json();
     failedOrderNumber = body?.orderNumber || null;
+    customerLang = body?.lang === 'en' ? 'en' : 'es';
+
+    // Checked after the body is read so the customer is answered in their own
+    // language rather than a default one.
+    if (!isShieldHubPayConfigured()) {
+      return stopCheckout('unavailable', customerLang, 500,
+        'Shield Hub Pay credentials are not configured');
+    }
+
     const {
       amount,
       currency = 'USD',
@@ -155,16 +174,18 @@ export async function POST(req) {
     } = body;
 
     if (!amount || !orderNumber || !customerName || !customerPhone || !customerEmail || !shippingAddress) {
-      return NextResponse.json({ error: 'Missing required billing fields' }, { status: 400 });
+      return stopCheckout('missing_details', lang, 400,
+        `Missing required billing fields for ${orderNumber || 'unknown order'}`);
     }
 
     if (currency !== 'USD') {
-      return NextResponse.json({ error: 'Card payments are currently configured for USD only' }, { status: 400 });
+      return stopCheckout('unavailable', lang, 400,
+        `Card payment attempted in ${currency}; only USD is configured`);
     }
 
     const normalizedCard = normalizeCard(card, customerName);
     if (!normalizedCard.holder || normalizedCard.number.length < 12 || normalizedCard.cvv.length < 3 || !normalizedCard.expiry_month || !normalizedCard.expiry_year) {
-      return NextResponse.json({ error: 'Missing or invalid card details' }, { status: 400 });
+      return stopCheckout('card_details', lang, 400, `Invalid card details for ${orderNumber}`);
     }
 
     // Atomically claim the order so two concurrent requests can't both charge it
@@ -176,15 +197,12 @@ export async function POST(req) {
     if (!claim.claimed) {
       const state = await describeOrderPaymentState(supabase, orderNumber);
       if (state === 'not_found') {
-        return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+        return stopCheckout('unavailable', lang, 404, `Order ${orderNumber} not found`);
       }
       if (state === 'settled') {
-        return NextResponse.json({ error: 'This order is already paid' }, { status: 409 });
+        return stopCheckout('already_paid', lang, 409, `Order ${orderNumber} is already settled`);
       }
-      return NextResponse.json(
-        { error: 'A payment for this order is already being processed. Please wait a moment before trying again.' },
-        { status: 409 },
-      );
+      return stopCheckout('in_progress', lang, 409, `Order ${orderNumber} is already being charged`);
     }
 
     const name = splitName(customerName);
@@ -305,6 +323,10 @@ export async function POST(req) {
       status: transaction.status,
       orderStatus,
       transactionId: transaction.id,
+      // Labelled so the checkout knows this one carries the bank's own
+      // wording and still deserves our "try another card" sentence.
+      errorCode: 'declined',
+      retryable: true,
       error: declineReason || `Payment ${transaction.status || 'failed'}`,
     }, { status: 402 });
   } catch (error) {
@@ -316,7 +338,11 @@ export async function POST(req) {
     // way to the gateway reaches the team by the dashboard bell alone.
     await sendDeferredTeamAlertOnFailure(failedOrderNumber);
 
-    return NextResponse.json({ error: error.message || 'Card payment failed' }, { status: 502 });
+    // Never `error.message` here. It is raw exception text, and worse, it was
+    // shown to the customer beside an invitation to try again — while we have
+    // no idea whether the card was charged.
+    return stopCheckout('unconfirmed', customerLang, 502,
+      `Charge for ${failedOrderNumber || 'unknown order'} threw: ${error.message}`);
   }
 }
 
