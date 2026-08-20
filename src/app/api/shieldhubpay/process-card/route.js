@@ -2,6 +2,9 @@ import { NextResponse, after } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
+import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, ORDER_STATUS } from '@/lib/paymentOutcome.mjs';
+import { sendCardHandoffReceipt, sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
+import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { getPublicSiteUrl } from '@/lib/publicUrl';
 import { sendCustomerOrderConfirmation } from '@/lib/orderWhatsAppAlerts';
@@ -122,20 +125,22 @@ async function updateOrderStatus(orderNumber, status, transaction, orderContact 
 }
 
 function statusToOrderStatus(status) {
-  if (status === 'Approved') return 'Paid';
-  if (status === 'Declined') return 'Declined';
-  if (status === 'Failed') return 'Error';
-  if (status === 'Redirect') return 'Pending - Card 3DS';
-  return `Payment ${status || 'Pending'}`;
+  return gatewayStatusToOrderStatus(status, {
+    onUnknown: (raw) => console.warn(`[Shield Hub Pay] Unrecognised gateway status "${raw}"; order left pending for review.`),
+  });
 }
 
 export async function POST(req) {
+  // Read before the try so the catch can still name the order it was charging.
+  let failedOrderNumber = null;
+
   try {
     if (!isShieldHubPayConfigured()) {
       return NextResponse.json({ error: 'Shield Hub Pay credentials are not configured' }, { status: 500 });
     }
 
     const body = await req.json();
+    failedOrderNumber = body?.orderNumber || null;
     const {
       amount,
       currency = 'USD',
@@ -214,14 +219,49 @@ export async function POST(req) {
     const orderStatus = statusToOrderStatus(transaction.status);
     await updateOrderStatus(orderNumber, orderStatus, transaction, { customerEmail, customerPhone });
 
-    if (transaction.status === 'Approved') {
+    // Ask the shared classifier, not `transaction.status === 'Approved'`. The
+    // gateway answers "Approved" here and "approved" when a transaction is
+    // re-read for a webhook, and the exact-match version of this line sent a
+    // settled payment down the declined branch.
+    const outcome = classifyPaymentOutcome(orderStatus);
+    const declineReason = outcome === 'paid' ? null : declineReasonFrom(transaction);
+
+    // Tell the customer how it ended, from here.
+    //
+    // The checkout page used to send this from the browser after reading the
+    // response. That leaves the one message the customer actually cares about
+    // dependent on their tab surviving the round trip — and on a 3DS redirect
+    // the tab is already gone. Sent on the request path rather than in
+    // after(), for the same reason the order alerts were moved out of it: work
+    // queued there on this deployment has gone missing before, and a receipt
+    // nobody can prove was sent is the problem being fixed.
+    if (outcome !== 'pending') {
+      const { data: orderRow } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('order_number', orderNumber)
+        .maybeSingle();
+
+      if (orderRow) {
+        // /api/orders/create held the team's alert for this order, so this
+        // one mail is both the new-order alert and the payment outcome.
+        await sendPaymentResultEmails(baseUrl, orderRow, orderNumber, {
+          declineReason,
+          firstTeamAlert: true,
+        });
+      } else {
+        console.warn(`[Shield Hub Pay] No order row for ${orderNumber}; payment result email not sent`);
+      }
+    }
+
+    if (outcome === 'paid') {
       // orders/create holds the customer confirmation back for card orders so
       // nobody is told "confirmed" before the charge clears. This is where it
       // gets sent — after the response, so a slow Meta round-trip is not added
       // to the wait the customer sits through on the payment screen.
       after(async () => {
         try {
-          const { data: orderData } = await supabase.from('orders').select('*').eq('order_number', orderNumber).single();
+          const { data: orderData } = await supabase.from('orders').select('*').eq('order_number', orderNumber).maybeSingle();
           if (orderData) {
             await sendCustomerOrderConfirmation(supabase, orderData, orderNumber, orderData.id);
           } else {
@@ -234,7 +274,23 @@ export async function POST(req) {
       return NextResponse.json({ ok: true, status: transaction.status, orderStatus, transactionId: transaction.id });
     }
 
-    if (transaction.status === 'Redirect' && transaction.redirect_url && transaction.redirect_url !== 'No URL') {
+    if (orderStatus === ORDER_STATUS.CARD_3DS && transaction.redirect_url && transaction.redirect_url !== 'No URL') {
+      // Queued rather than awaited: the customer is about to be sent to their
+      // bank and must not sit through an SMTP round trip first. If it is lost,
+      // the webhook still delivers the real answer once the bank replies.
+      after(async () => {
+        try {
+          const { data: orderRow } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('order_number', orderNumber)
+            .maybeSingle();
+          if (orderRow) await sendCardHandoffReceipt(baseUrl, orderRow, orderNumber);
+        } catch (mailErr) {
+          console.error('[Shield Hub Pay] 3DS hand-off receipt failed:', mailErr);
+        }
+      });
+
       return NextResponse.json({
         ok: true,
         status: transaction.status,
@@ -249,10 +305,35 @@ export async function POST(req) {
       status: transaction.status,
       orderStatus,
       transactionId: transaction.id,
-      error: transaction?.error?.message || `Payment ${transaction.status || 'failed'}`,
+      error: declineReason || `Payment ${transaction.status || 'failed'}`,
     }, { status: 402 });
   } catch (error) {
     console.error('[Shield Hub Pay] Card processing failed:', error);
+
+    // The order row exists but the charge never produced an answer, so no
+    // result mail is coming. /api/orders/create held its team alert for this
+    // order expecting one — send it now, or a real order that failed on the
+    // way to the gateway reaches the team by the dashboard bell alone.
+    await sendDeferredTeamAlertOnFailure(failedOrderNumber);
+
     return NextResponse.json({ error: error.message || 'Card payment failed' }, { status: 502 });
+  }
+}
+
+/** Never throws: this runs inside a catch that already has a response to send. */
+async function sendDeferredTeamAlertOnFailure(orderNumber) {
+  if (!orderNumber) return;
+  try {
+    const supabase = getSupabaseAdmin();
+    const { data: orderRow } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('order_number', orderNumber)
+      .maybeSingle();
+    if (orderRow) {
+      await sendAdminOrderEmail(APP_URL.replace(/\/$/, ''), orderRow, orderNumber);
+    }
+  } catch (mailErr) {
+    console.error('[Shield Hub Pay] Deferred team alert failed:', mailErr.message);
   }
 }

@@ -4,6 +4,8 @@ import { verifyCardPaymentOrderToken, getPublicBaseUrl } from '@/lib/cardPayment
 import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
+import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, ORDER_STATUS } from '@/lib/paymentOutcome.mjs';
+import { sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
 
 export const runtime = 'nodejs';
 
@@ -55,11 +57,9 @@ function parseBillingAddress(shippingAddress = '') {
 }
 
 function statusToOrderStatus(status) {
-  if (status === 'Approved') return 'Paid';
-  if (status === 'Declined') return 'Declined';
-  if (status === 'Failed') return 'Error';
-  if (status === 'Redirect') return 'Pending - Card 3DS';
-  return `Payment ${status || 'Pending'}`;
+  return gatewayStatusToOrderStatus(status, {
+    onUnknown: (raw) => console.warn(`[card-payment-link/pay] Unrecognised gateway status "${raw}"; order left pending for review.`),
+  });
 }
 
 function buildPaymentPatch(status, transaction, email) {
@@ -184,7 +184,10 @@ export async function POST(request) {
       console.warn('[card-payment-link/pay] Payment metadata columns unavailable; updated status only:', updateError.message);
     }
 
-    if (orderStatus === 'Paid') {
+    const outcome = classifyPaymentOutcome(orderStatus);
+    const declineReason = outcome === 'paid' ? null : declineReasonFrom(transaction);
+
+    if (outcome === 'paid') {
       const { error: cartCleanupError } = await markActiveAbandonedCartsConvertedForOrder(supabase, {
         ...order,
         status: orderStatus,
@@ -201,54 +204,31 @@ export async function POST(request) {
         link_tab: 'orders',
         link_ref: order.order_number,
       });
+    }
 
-      try {
-        const items = Array.isArray(order.items) ? order.items : [];
-        const subtotal = items.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.qty) || 0)), 0);
-        const currency = order.currency || 'USD';
-        const shipping = currency === 'CRC' ? Number(order.shipping_cost_crc || 0) : Number(order.shipping_cost_usd || 0);
-        const promoDiscount = currency === 'CRC' ? Number(order.discount_amount_crc || 0) : Number(order.discount_amount_usd || 0);
-        const manualDiscount = currency === 'CRC' ? Number(order.manual_discount_amount_crc || 0) : Number(order.manual_discount_amount_usd || 0);
-        const total = currency === 'CRC' ? Number(order.total_crc || 0) : Number(order.total_usd || 0);
-        const volumeDiscount = Math.max(0, subtotal - promoDiscount - manualDiscount + shipping - total);
+    // One place builds this mail now, for both endings. This route only ever
+    // sent a receipt on success, so a customer who followed a payment link and
+    // had their card refused was told nothing at all.
+    if (outcome !== 'pending') {
+      const { data: orderRow } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', order.id)
+        .maybeSingle();
 
-        await fetch(`${baseUrl}/api/order-notification`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderNumber: order.order_number,
-            customerName: order.customer_name,
-            customerPhone: order.customer_phone,
-            customerEmail: email,
-            shippingAddress: order.shipping_address,
-            items,
-            total,
-            totalUsd: order.total_usd,
-            totalCrc: order.total_crc,
-            subtotal,
-            volumeDiscount,
-            promoDiscount,
-            manualDiscount,
-            manualDiscountReason: order.manual_discount_reason || null,
-            shipping,
-            currency,
-            paymentMethod: 'card',
-            status: orderStatus,
-            customerReceiptOnly: true,
-            forceCustomerReceipt: true,
-            lang,
-          }),
+      if (orderRow) {
+        await sendPaymentResultEmails(baseUrl, orderRow, order.order_number, {
+          declineReason,
+          logPrefix: '[card-payment-link/pay]',
         });
-      } catch (notifyError) {
-        console.error('[card-payment-link/pay] Customer receipt failed:', notifyError);
       }
     }
 
-    if (transaction.status === 'Approved') {
+    if (outcome === 'paid') {
       return NextResponse.json({ ok: true, status: transaction.status, orderStatus, transactionId: transaction.id });
     }
 
-    if (transaction.status === 'Redirect' && transaction.redirect_url && transaction.redirect_url !== 'No URL') {
+    if (orderStatus === ORDER_STATUS.CARD_3DS && transaction.redirect_url && transaction.redirect_url !== 'No URL') {
       return NextResponse.json({
         ok: true,
         status: transaction.status,
@@ -263,7 +243,7 @@ export async function POST(request) {
       status: transaction.status,
       orderStatus,
       transactionId: transaction.id,
-      error: transaction?.error?.message || `Payment ${transaction.status || 'failed'}`,
+      error: declineReason || `Payment ${transaction.status || 'failed'}`,
     }, { status: 402 });
   } catch (err) {
     console.error('[card-payment-link/pay]', err);

@@ -2399,29 +2399,6 @@ export default function CatalogPage() {
       return;
     }
 
-    const orderNotificationPayload = {
-      orderNumber: orderNum,
-      customerName,
-      customerPhone,
-      customerEmail,
-      shippingAddress,
-      customerIdType,
-      customerIdNumber,
-      items: orderItems,
-      total: totalVal,
-      totalUsd,
-      totalCrc,
-      subtotal: getCartTotal(),
-      volumeDiscount: getCartTotal() - getDiscountedTotal(),
-      promoDiscount: getPromoDiscountAmount(),
-      shipping: getShippingFee(),
-      currency,
-      paymentMethod: 'card',
-      status: 'Pending - Card',
-      customerReceiptOnly: true,
-      lang,
-    };
-
     try {
       const res = await fetch('/api/shieldhubpay/process-card', {
         method: 'POST',
@@ -2450,31 +2427,30 @@ export default function CatalogPage() {
 
       const data = await res.json();
 
+      // No mail is sent from here any more.
+      //
+      // This page used to post the customer's receipt itself, once it had read
+      // the charge result. Three things went wrong with that. On a 3DS
+      // redirect the tab left for the bank straight after mailing "awaiting
+      // confirmation", and nothing ever sent the real answer. When the request
+      // failed or timed out, a charge that had actually cleared was mailed as
+      // "Declined". And any customer who closed the tab got nothing at all.
+      //
+      // /api/shieldhubpay/process-card now sends it, from the status it wrote
+      // to the order — and /api/shieldhubpay/webhook sends it for the 3DS
+      // answers that arrive after this page is gone.
       if (data.paymentUrl) {
-        await sendOrderNotification({
-          ...orderNotificationPayload,
-          status: data.orderStatus || orderNotificationPayload.status,
-        });
         window.location.href = data.paymentUrl;
         return;
       }
 
       if (data.ok) {
-        await sendOrderNotification({
-          ...orderNotificationPayload,
-          status: data.orderStatus || 'Paid',
-        });
         if (sessionId) localStorage.setItem('checkout_completed_session_id', sessionId);
         setCart([]);
         localStorage.removeItem('cart');
         window.location.href = `/thank-you?lang=${lang}&order=${encodeURIComponent(orderNum)}`;
         return;
       }
-
-      await sendOrderNotification({
-        ...orderNotificationPayload,
-        status: 'Declined',
-      });
 
       // The gateway's own wording, kept — "insufficient funds" or "card
       // declined" is something the customer can act on, and paraphrasing it

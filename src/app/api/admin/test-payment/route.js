@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { getPublicSiteUrl } from '@/lib/publicUrl';
+import { declineReasonFrom, gatewayStatusToOrderStatus } from '@/lib/paymentOutcome.mjs';
 
 export const runtime = 'nodejs';
 
@@ -33,11 +34,9 @@ function normalizeCard(card = {}) {
 }
 
 function statusToOrderStatus(status) {
-  if (status === 'Approved') return 'Paid';
-  if (status === 'Declined') return 'Declined';
-  if (status === 'Failed') return 'Error';
-  if (status === 'Redirect') return 'Pending - Card 3DS';
-  return `Payment ${status || 'Pending'}`;
+  return gatewayStatusToOrderStatus(status, {
+    onUnknown: (raw) => console.warn(`[admin/test-payment] Unrecognised gateway status "${raw}"; order left pending for review.`),
+  });
 }
 
 export async function POST(request) {
@@ -181,7 +180,7 @@ export async function POST(request) {
       transactionId: transaction.id || null,
       error: transaction.status === 'Approved'
         ? null
-        : (transaction?.error?.messsage || transaction?.error?.message || `Payment ${transaction.status || 'failed'}`),
+        : (declineReasonFrom(transaction) || `Payment ${transaction.status || 'failed'}`),
     });
   } catch (err) {
     console.error('[test-payment]', err);

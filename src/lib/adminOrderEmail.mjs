@@ -21,7 +21,25 @@
 // mail route has reached its own timeout and no provider response is recorded.
 export const ADMIN_EMAIL_TIMEOUT_MS = 30000;
 
-export function buildOrderNotificationPayload(order, orderNumber) {
+/**
+ * The /api/order-notification body for one order row.
+ *
+ * Defaults to the team's new-order alert, which is all this ever built. The
+ * options exist so the payment-result mail can reuse the same arithmetic
+ * instead of a fourth hand-rolled copy of it — the totals, the discounts and
+ * the shipping line are worked out here and nowhere else.
+ */
+export function buildOrderNotificationPayload(order, orderNumber, {
+  adminNotificationOnly = true,
+  customerReceiptOnly = false,
+  forceCustomerReceipt = false,
+  notificationKind = 'new-order',
+  declineReason = null,
+  // True when /api/orders/create held its alert back for this order, so the
+  // result mail is the team's first and only sight of it.
+  firstTeamAlert = false,
+  status = undefined,
+} = {}) {
   const items = Array.isArray(order.items) ? order.items : [];
   const currency = order.currency || 'USD';
   const itemsAmount = items.reduce((sum, item) => {
@@ -61,10 +79,21 @@ export function buildOrderNotificationPayload(order, orderNumber) {
     shipping,
     currency,
     paymentMethod: order.payment_method,
-    status: order.status || 'Pending',
-    // The browser already mailed the customer their receipt, so this call is
-    // for the team only. Dropping this flag double-mails every customer.
-    adminNotificationOnly: true,
+    status: status || order.status || 'Pending',
+    customerIdType: order.customer_id_type,
+    customerIdNumber: order.customer_id_number,
+    // What the gateway said when it refused, so the customer is told why
+    // rather than just "declined". Null on anything that went through.
+    declineReason,
+    // 'new-order' is the alert raised the moment an order is saved;
+    // 'payment-result' is the follow-up that says how the card ended.
+    notificationKind,
+    firstTeamAlert,
+    // Which of the two mails this call is allowed to send. The team alert is
+    // admin-only: dropping that flag double-mails every customer.
+    adminNotificationOnly,
+    customerReceiptOnly,
+    forceCustomerReceipt,
     lang: currency === 'CRC' ? 'es' : 'en',
   };
 }

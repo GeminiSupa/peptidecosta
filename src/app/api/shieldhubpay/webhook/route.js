@@ -2,17 +2,18 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isShieldHubPayConfigured, getShieldHubPayTransaction } from '@/lib/shieldHubPay';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
+import { declineReasonFrom, gatewayStatusToOrderStatus } from '@/lib/paymentOutcome.mjs';
+import { sendPaymentResultEmails, shouldSendPaymentResultEmail } from '@/lib/paymentResultEmail.mjs';
+import { getPublicSiteUrl } from '@/lib/publicUrl';
 
 export const runtime = 'nodejs';
 
 const FINAL_PAID = new Set(['Paid', 'Completed', 'Shipped', 'Delivered']);
 
 function statusToOrderStatus(status) {
-  if (status === 'Approved') return 'Paid';
-  if (status === 'Declined') return 'Declined';
-  if (status === 'Failed') return 'Error';
-  if (status === 'Redirect') return 'Pending - Card 3DS';
-  return `Payment ${status || 'Pending'}`;
+  return gatewayStatusToOrderStatus(status, {
+    onUnknown: (raw) => console.warn(`[Shield Hub Pay webhook] Unrecognised gateway status "${raw}"; order left pending for review.`),
+  });
 }
 
 function buildPaymentPatch(status, payload) {
@@ -85,7 +86,9 @@ export async function POST(req) {
       return NextResponse.json({ received: true, ignored: 'already_settled' });
     }
 
-    if (existing.status !== statusText) {
+    const statusChanged = existing.status !== statusText;
+
+    if (statusChanged) {
       const { error } = await supabase
         .from('orders')
         .update(buildPaymentPatch(statusText, payload))
@@ -102,6 +105,34 @@ export async function POST(req) {
           return NextResponse.json({ error: 'Database update failed' }, { status: 500 });
         }
         console.warn('[Shield Hub Pay webhook] Payment metadata columns unavailable; updated status only:', error.message);
+      }
+    }
+
+    // Say how it ended, to the customer and to the team.
+    //
+    // This route used to change the status and tell nobody. That is the whole
+    // story of a 3DS payment: the browser leaves for the bank having already
+    // mailed "awaiting confirmation", the answer arrives here minutes later,
+    // and the customer is never told — whether it cleared or was refused. The
+    // last word they had was "pending", which is exactly the complaint.
+    //
+    // Gated on the status actually changing, because the gateway may deliver
+    // the same webhook more than once, and because a direct charge has already
+    // mailed its own result before any webhook arrives.
+    if (statusChanged && shouldSendPaymentResultEmail(statusText)) {
+      const { data: orderRow } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('order_number', orderNumber)
+        .maybeSingle();
+
+      if (orderRow) {
+        await sendPaymentResultEmails(getPublicSiteUrl(req.url), orderRow, orderNumber, {
+          declineReason: declineReasonFrom(payload),
+          // A card order's team alert was held at creation, so this is it.
+          firstTeamAlert: String(orderRow.payment_method || '').toLowerCase() === 'card',
+          logPrefix: '[Shield Hub Pay webhook]',
+        });
       }
     }
 

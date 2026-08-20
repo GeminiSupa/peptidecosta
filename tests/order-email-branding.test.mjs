@@ -19,9 +19,13 @@ test('order emails embed the live logo instead of relying on remote image loadin
 });
 
 test('both order messages attach the embedded logo and retain a text brand fallback', () => {
+  // The two templates moved to src/lib/orderEmailTemplates.mjs so their
+  // wording could be rendered and asserted on; the sendMail calls that attach
+  // the logo stayed behind in the route.
   const route = fs.readFileSync('src/app/api/order-notification/route.js', 'utf8');
+  const templates = fs.readFileSync('src/lib/orderEmailTemplates.mjs', 'utf8');
 
   assert.equal((route.match(/attachments: \[getOrderEmailLogoAttachment\(\)\]/g) || []).length, 2);
-  assert.equal((route.match(/PEPTIDES COSTA RICA<\/div>/g) || []).length, 2);
-  assert.doesNotMatch(route, /<img src="https:\/\/catalog\.peptidescostarica\.net\/logo\.png/);
+  assert.equal((templates.match(/PEPTIDES COSTA RICA<\/div>/g) || []).length, 2);
+  assert.doesNotMatch(templates, /<img src="https:\/\/catalog\.peptidescostarica\.net\/logo\.png/);
 });

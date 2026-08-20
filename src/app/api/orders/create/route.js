@@ -617,7 +617,15 @@ export async function POST(request) {
         : ['customer WhatsApp', sendCustomerOrderConfirmation(supabase, savedOrderForAlerts, data.order_number, data.id)],
       ['agent WhatsApp', sendAgentOrderWhatsApp(supabase, savedOrderForAlerts, data.order_number, data.id)],
       ['affiliate WhatsApp', sendAffiliateOrderWhatsApp(supabase, savedOrderForAlerts, data.order_number, data.id)],
-      ['admin email', sendAdminOrderEmail(baseUrl, savedOrderForAlerts, data.order_number)],
+      // A card order's alert is held until the charge answers, so the team
+      // gets one email that states the outcome instead of two — the first of
+      // which could only ever say "PENDING - CARD", whether the card was about
+      // to be approved or refused. The bell row above is raised either way, so
+      // the order is never invisible while the charge is in flight.
+      // Sent by /api/shieldhubpay/process-card, or by the webhook for 3DS.
+      order.payment_method === 'card'
+        ? ['admin email (deferred to payment result)', Promise.resolve()]
+        : ['admin email', sendAdminOrderEmail(baseUrl, savedOrderForAlerts, data.order_number)],
     ];
     const alertResults = await Promise.allSettled(alerts.map(([, promise]) => promise));
     alertResults.forEach((result, index) => {
