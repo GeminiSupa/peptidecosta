@@ -50,11 +50,14 @@ export async function GET(request) {
   // cannot embed across that boundary.
   const senderIds = [...new Set(rows.map((row) => row.sent_by).filter(Boolean))];
   let senders = {};
+  let senderLookupFailed = false;
   if (senderIds.length) {
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profileError } = await supabase
       .from('admin_profiles')
       .select('user_id,name,email')
       .in('user_id', senderIds);
+    senderLookupFailed = Boolean(profileError);
+    if (profileError) console.error('[Prospect outreach] Sender lookup failed:', profileError.message);
     senders = Object.fromEntries((profiles || []).map((profile) => [
       profile.user_id,
       profile.name || profile.email || null,
@@ -65,6 +68,7 @@ export async function GET(request) {
     outreach: rows.map(({ sent_by: sentBy, ...row }) => ({
       ...row,
       sent_by_label: senders[sentBy] || null,
+      sender_lookup_failed: senderLookupFailed,
     })),
     setupRequired: false,
   });

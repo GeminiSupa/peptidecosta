@@ -328,8 +328,8 @@ export function normalizeOpenStreetMapPlace(place = {}) {
     city: clean(address.city || address.town || address.village || address.municipality || address.county, 140) || null,
     region: clean(address.state || address.region, 140) || null,
     country: clean(address.country || place.country, 140) || null,
-    latitude: Number.isFinite(latitude) ? latitude : null,
-    longitude: Number.isFinite(longitude) ? longitude : null,
+    latitude: Number.isFinite(latitude) && latitude >= -90 && latitude <= 90 ? latitude : null,
+    longitude: Number.isFinite(longitude) && longitude >= -180 && longitude <= 180 ? longitude : null,
     google_maps_url: Number.isFinite(latitude) && Number.isFinite(longitude)
       ? `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=17/${latitude}/${longitude}`
       : null,
@@ -422,8 +422,8 @@ export function normalizeProspectInput(input = {}) {
     city: clean(input.city, 140) || null,
     region: clean(input.region, 140) || null,
     country: clean(input.country, 140) || null,
-    latitude: Number.isFinite(latitude) ? latitude : null,
-    longitude: Number.isFinite(longitude) ? longitude : null,
+    latitude: Number.isFinite(latitude) && latitude >= -90 && latitude <= 90 ? latitude : null,
+    longitude: Number.isFinite(longitude) && longitude >= -180 && longitude <= 180 ? longitude : null,
     google_maps_url: normalizeOptionalUrl(input.google_maps_url),
     rating: Number.isFinite(rating) ? rating : null,
     user_rating_count: Number.isFinite(reviewCount) ? Math.max(0, Math.round(reviewCount)) : null,
@@ -437,7 +437,7 @@ export function normalizeProspectInput(input = {}) {
     whatsapp_numbers: normalizeWhatsAppNumbers(input.whatsapp_numbers || []),
     owner_email: clean(input.owner_email, 240).toLowerCase() || null,
     notes: clean(input.notes, 5000) || '',
-    next_follow_up_at: input.next_follow_up_at || null,
+    next_follow_up_at: normalizeOptionalProspectDate(input.next_follow_up_at),
   };
   const scored = scoreProspect(normalized);
   normalized.fit_score = Number.isFinite(Number(input.fit_score))
@@ -447,6 +447,34 @@ export function normalizeProspectInput(input = {}) {
     ? input.fit_reasons.map((reason) => clean(reason, 200)).filter(Boolean).slice(0, 6)
     : scored.reasons;
   return normalized;
+}
+
+/** Normalize an optional client-supplied date without letting Invalid Date reach Postgres. */
+export function normalizeOptionalProspectDate(value) {
+  if (value === '' || value == null) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+/** Human-readable validation for write APIs; normalization alone must not hide bad input. */
+export function prospectInputError(input = {}) {
+  const website = String(input.website_url || '').trim();
+  if (website && !normalizeOptionalUrl(website)) return 'Enter a valid website URL';
+
+  const hasLatitude = input.latitude !== '' && input.latitude != null;
+  const hasLongitude = input.longitude !== '' && input.longitude != null;
+  if (hasLatitude !== hasLongitude) return 'Enter both latitude and longitude, or leave both blank';
+  if (hasLatitude) {
+    const latitude = Number(input.latitude);
+    const longitude = Number(input.longitude);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return 'Latitude must be between -90 and 90';
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) return 'Longitude must be between -180 and 180';
+  }
+
+  if (input.next_follow_up_at && !normalizeOptionalProspectDate(input.next_follow_up_at)) {
+    return 'Enter a valid follow-up date';
+  }
+  return null;
 }
 
 export function upgradeContactPermission(existing, incoming) {

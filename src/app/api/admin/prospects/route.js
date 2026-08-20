@@ -8,7 +8,9 @@ import {
   normalizeOptionalUrl,
   normalizeProspectPeople,
   normalizeLinkedInProfileUrls,
+  normalizeOptionalProspectDate,
   normalizeWhatsAppNumbers,
+  prospectInputError,
   scoreProspect,
   PROSPECT_STATUSES,
   CONTACT_PERMISSION_STATUSES,
@@ -64,7 +66,15 @@ export async function POST(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
-  const input = normalizeProspectInput(await request.json());
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+  const validationError = prospectInputError(body);
+  if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+  const input = normalizeProspectInput(body);
   if (!input.organization_name) {
     return NextResponse.json({ error: 'Organization name is required' }, { status: 400 });
   }
@@ -118,7 +128,12 @@ export async function PATCH(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
-  const body = await request.json();
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
   if (!body.id) return NextResponse.json({ error: 'Prospect ID is required' }, { status: 400 });
 
   const updates = {};
@@ -129,7 +144,13 @@ export async function PATCH(request) {
   }
   if ('owner_email' in body) updates.owner_email = String(body.owner_email || '').trim().toLowerCase() || null;
   if ('notes' in body) updates.notes = String(body.notes || '').trim().slice(0, 5000);
-  if ('next_follow_up_at' in body) updates.next_follow_up_at = body.next_follow_up_at || null;
+  if ('next_follow_up_at' in body) {
+    const followUp = normalizeOptionalProspectDate(body.next_follow_up_at);
+    if (body.next_follow_up_at && !followUp) {
+      return NextResponse.json({ error: 'Enter a valid follow-up date' }, { status: 400 });
+    }
+    updates.next_follow_up_at = followUp;
+  }
   if ('last_contacted_at' in body) updates.last_contacted_at = body.last_contacted_at || null;
   if ('email' in body) {
     const email = String(body.email || '').trim().toLowerCase().slice(0, 240);
@@ -187,7 +208,12 @@ export async function DELETE(request) {
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Prospect ID is required' }, { status: 400 });
 
-  const { error } = await getSupabaseAdmin().from('sales_prospects').delete().eq('id', id);
+  const { data, error } = await getSupabaseAdmin()
+    .from('sales_prospects')
+    .delete()
+    .eq('id', id)
+    .select('id')
+    .maybeSingle();
   if (isProspectsTableMissing(error)) {
     return NextResponse.json({ error: 'Run prospector-migration.sql first.', setupRequired: true }, { status: 503 });
   }
@@ -195,5 +221,6 @@ export async function DELETE(request) {
     console.error('[Prospects] Delete failed:', error.message);
     return NextResponse.json({ error: 'Unable to delete prospect' }, { status: 500 });
   }
+  if (!data) return NextResponse.json({ error: 'Prospect not found' }, { status: 404 });
   return NextResponse.json({ success: true });
 }

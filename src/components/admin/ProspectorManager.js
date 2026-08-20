@@ -162,6 +162,7 @@ export default function ProspectorManager({ currentUserProfile }) {
   const [pipelineMinScore, setPipelineMinScore] = useState('0');
   const [sourceFilter, setSourceFilter] = useState('any');
   const [contactActivityFilter, setContactActivityFilter] = useState('any');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [manualOpen, setManualOpen] = useState(false);
   const [manualForm, setManualForm] = useState(EMPTY_FORM);
@@ -175,7 +176,8 @@ export default function ProspectorManager({ currentUserProfile }) {
   const [sending, setSending] = useState(false);
   const [checkedKeys, setCheckedKeys] = useState(() => new Set());
   const [enrichState, setEnrichState] = useState({});
-  const [history, setHistory] = useState({ rows: [], loading: false, setupRequired: false });
+  const [history, setHistory] = useState({ rows: [], loading: false, setupRequired: false, error: '' });
+  const [whatsappHandoffUrl, setWhatsappHandoffUrl] = useState('');
   const [expandedMessages, setExpandedMessages] = useState(() => new Set());
   const [confirmRequest, setConfirmRequest] = useState(null);
   const [bulkProgress, setBulkProgress] = useState(null);
@@ -188,8 +190,20 @@ export default function ProspectorManager({ currentUserProfile }) {
   const searchResultsRef = useRef(searchResults);
   const resultNodesRef = useRef(new Map());
   const detailRef = useRef(null);
+  const historyRequestRef = useRef(0);
+  const searchAbortRef = useRef(null);
   useEffect(() => { prospectsRef.current = prospects; }, [prospects]);
   useEffect(() => { searchResultsRef.current = searchResults; }, [searchResults]);
+
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 761px)');
+    setFiltersOpen(query.matches);
+    const onChange = (event) => setFiltersOpen(event.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => () => searchAbortRef.current?.abort(), []);
 
   const selected = useMemo(() => {
     if (!selection.key) return null;
@@ -246,7 +260,10 @@ export default function ProspectorManager({ currentUserProfile }) {
 
   // A draft belongs to one prospect. Carrying it across a selection change is
   // how a rep emails the wrong gym a message written about another one.
-  useEffect(() => { setOutreachDraft(null); }, [selection.key]);
+  useEffect(() => {
+    setOutreachDraft(null);
+    setWhatsappHandoffUrl('');
+  }, [selection.key]);
 
   // A success notice that never leaves pushes the workspace down for the rest
   // of the session. Errors stay until the next action replaces them.
@@ -268,37 +285,60 @@ export default function ProspectorManager({ currentUserProfile }) {
 
   useEffect(() => {
     if (!manualOpen && !confirmRequest) return undefined;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const dialog = document.querySelector('.prospector-modal[role="dialog"]');
     const onKeyDown = (event) => {
-      if (event.key !== 'Escape') return;
-      setConfirmRequest(null);
-      setManualOpen(false);
+      if (event.key === 'Escape') {
+        setConfirmRequest(null);
+        setManualOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab' || !dialog) return;
+      const focusable = [...dialog.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]')];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onKeyDown);
+      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+    };
   }, [manualOpen, confirmRequest]);
 
   const loadHistory = useCallback(async (prospectId) => {
+    const requestId = historyRequestRef.current + 1;
+    historyRequestRef.current = requestId;
     if (!prospectId) {
-      setHistory({ rows: [], loading: false, setupRequired: false });
+      setHistory({ rows: [], loading: false, setupRequired: false, error: '' });
       return;
     }
-    setHistory((current) => ({ ...current, loading: true }));
+    setHistory((current) => ({ ...current, loading: true, error: '' }));
     try {
       const response = await adminFetch(`/api/admin/prospects/outreach?prospectId=${encodeURIComponent(prospectId)}`);
       const payload = await response.json();
+      if (requestId !== historyRequestRef.current) return;
       setHistory({
         rows: response.ok ? payload.outreach || [] : [],
         loading: false,
         setupRequired: Boolean(payload.setupRequired),
+        error: response.ok || payload.setupRequired ? '' : payload.error || 'Unable to load outreach history',
       });
-    } catch {
-      setHistory({ rows: [], loading: false, setupRequired: false });
+    } catch (historyError) {
+      if (requestId !== historyRequestRef.current) return;
+      setHistory({ rows: [], loading: false, setupRequired: false, error: historyError.message || 'Unable to load outreach history' });
     }
   }, []);
 
   useEffect(() => {
     if (!selectedSaved || !selected?.id) {
-      setHistory({ rows: [], loading: false, setupRequired: false });
+      historyRequestRef.current += 1;
+      setHistory({ rows: [], loading: false, setupRequired: false, error: '' });
       return;
     }
     loadHistory(selected.id);
@@ -308,7 +348,7 @@ export default function ProspectorManager({ currentUserProfile }) {
     const now = Date.now();
     return {
       saved: prospects.length,
-      qualified: prospects.filter((item) => ['qualified', 'responded', 'meeting_booked', 'partner', 'won'].includes(item.status)).length,
+      qualified: prospects.filter((item) => item.status === 'qualified').length,
       due: prospects.filter((item) => isFollowUpDue(item, now)).length,
     };
   }, [prospects]);
@@ -388,7 +428,9 @@ export default function ProspectorManager({ currentUserProfile }) {
   useEffect(() => {
     const saved = view === 'saved';
     setSelection((current) => {
-      if (current.saved !== saved) return current;
+      if (current.saved !== saved) {
+        return { key: visibleResults[0] ? prospectKey(visibleResults[0]) : null, saved };
+      }
       if (current.key && visibleResults.some((item) => prospectKey(item) === current.key)) return current;
       return { key: visibleResults[0] ? prospectKey(visibleResults[0]) : null, saved };
     });
@@ -399,7 +441,7 @@ export default function ProspectorManager({ currentUserProfile }) {
   const applySearchResults = useCallback((results) => {
     setSearchResults(results);
     setSelection((current) => {
-      if (current.saved) return current;
+      if (current.saved) return { key: results[0] ? prospectKey(results[0]) : null, saved: false };
       if (current.key && results.some((item) => prospectKey(item) === current.key)) return current;
       return { key: results[0] ? prospectKey(results[0]) : null, saved: false };
     });
@@ -449,6 +491,9 @@ export default function ProspectorManager({ currentUserProfile }) {
   }, [applySearchResults]);
 
   const runSearch = useCallback(async (bbox = null) => {
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
     setSearching(true);
     setError('');
     setNotice('');
@@ -458,6 +503,7 @@ export default function ProspectorManager({ currentUserProfile }) {
       const response = await adminFetch('/api/admin/prospects/search', {
         method: 'POST',
         body: JSON.stringify({ mode: 'search', query, location, ...(bbox ? { bbox } : {}) }),
+        signal: controller.signal,
       });
       if (!response.ok || !response.body) {
         const payload = await response.json().catch(() => ({}));
@@ -465,9 +511,12 @@ export default function ProspectorManager({ currentUserProfile }) {
       }
       await consumeSearchStream(response);
     } catch (searchError) {
-      setError(searchError.message);
+      if (searchError.name !== 'AbortError') setError(searchError.message);
     } finally {
-      setSearching(false);
+      if (searchAbortRef.current === controller) {
+        searchAbortRef.current = null;
+        setSearching(false);
+      }
     }
   }, [query, location, view, consumeSearchStream]);
 
@@ -874,6 +923,7 @@ export default function ProspectorManager({ currentUserProfile }) {
 
   const draftOutreach = async () => {
     if (!selectedSaved || !selected?.id) return;
+    setWhatsappHandoffUrl('');
     setDrafting(true);
     setError('');
     setNotice('');
@@ -901,6 +951,8 @@ export default function ProspectorManager({ currentUserProfile }) {
 
   const sendOutreach = async () => {
     if (!selectedSaved || !selected?.id || !outreachDraft) return;
+    const popup = outreachDraft.channel === 'whatsapp' ? window.open('', '_blank') : null;
+    if (popup) popup.opener = null;
     setSending(true);
     setError('');
     setNotice('');
@@ -918,11 +970,15 @@ export default function ProspectorManager({ currentUserProfile }) {
       if (!response.ok) throw new Error(payload.error || 'Unable to send outreach');
 
       if (payload.handoffUrl) {
-        // WhatsApp opens in the rep's own client; see whatsappHandoffUrl.
-        window.open(payload.handoffUrl, '_blank', 'noopener,noreferrer');
-        setNotice('WhatsApp opened with the message prefilled. Press send there to deliver it.');
+        setWhatsappHandoffUrl(payload.handoffUrl);
+        if (popup) {
+          popup.location.replace(payload.handoffUrl);
+          setNotice('WhatsApp opened with the message prefilled. Press Send there, then return and use Mark contacted.');
+        } else {
+          setNotice('Your browser blocked the WhatsApp window. Use the Open WhatsApp link below.');
+        }
       } else {
-        setNotice(`Email sent to ${payload.recipient}.`);
+        setNotice(`Email sent to ${payload.recipient}.${payload.warning ? ` ${payload.warning}` : ''}`);
       }
       setOutreachDraft(null);
       // The send route already returned the updated row; refetching the whole
@@ -932,8 +988,9 @@ export default function ProspectorManager({ currentUserProfile }) {
           item.id === payload.prospect.id ? { ...item, ...payload.prospect } : item
         )));
       }
-      loadHistory(selected.id);
+      if (!payload.handoffUrl) loadHistory(selected.id);
     } catch (sendError) {
+      if (popup) popup.close();
       setError(sendError.message);
     } finally {
       setSending(false);
@@ -946,6 +1003,15 @@ export default function ProspectorManager({ currentUserProfile }) {
   // never instead of the server check.
   const outreachPermission = selected ? canContactProspect(selected, outreachChannel) : null;
   const scoreBand = PROSPECT_SCORE_BANDS.find((band) => band.tone === prospectScoreTone(selected?.fit_score || 0));
+  const discoveryFilterCount = [
+    Boolean(distanceChoice), discoveryContact !== 'any', discoveryMinScore !== '0',
+    discoveryMinRating !== '0', discoveryMinReviews !== '0', discoverySort !== 'relevance', excludeSaved,
+  ].filter(Boolean).length;
+  const pipelineFilterCount = [
+    savedContactFilter !== 'any', ownerFilter !== 'any', followUpFilter !== 'any',
+    permissionFilter !== 'any', pipelineMinScore !== '0', sourceFilter !== 'any',
+    contactActivityFilter !== 'any',
+  ].filter(Boolean).length;
 
   const mapQuery = selected
     ? (selected.latitude != null && selected.longitude != null
@@ -964,6 +1030,15 @@ export default function ProspectorManager({ currentUserProfile }) {
       if (nextIndex >= visibleCount) setVisibleCount(Math.ceil((nextIndex + 1) / PAGE_SIZE) * PAGE_SIZE);
       chooseProspect(next, view === 'saved');
     }
+  };
+
+  const onTabKeyDown = (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const nextView = event.key === 'ArrowLeft' || event.key === 'Home' ? 'discover' : 'saved';
+    setView(nextView);
+    setSelection({ key: null, saved: nextView === 'saved' });
+    document.getElementById(`prospector-tab-${nextView}`)?.focus();
   };
 
   const chooseFromMap = (prospect) => {
@@ -1030,7 +1105,7 @@ export default function ProspectorManager({ currentUserProfile }) {
           className={`prospector-stat${view === 'saved' && statusFilter === 'qualified' ? ' active' : ''}`}
           onClick={() => { setView('saved'); setStatusFilter('qualified'); }}
         >
-          <UserRoundCheck size={19} /><div><strong>{stats.qualified}</strong><span>Qualified or active</span></div>
+          <UserRoundCheck size={19} /><div><strong>{stats.qualified}</strong><span>Qualified prospects</span></div>
         </button>
         <button
           type="button"
@@ -1042,10 +1117,10 @@ export default function ProspectorManager({ currentUserProfile }) {
       </div>
 
       <div className="prospector-tabs" role="tablist" aria-label="Prospector views">
-        <button type="button" role="tab" aria-selected={view === 'discover'} aria-controls="prospector-workspace" className={`prospector-tab${view === 'discover' ? ' active' : ''}`} onClick={() => { setView('discover'); setSelection({ key: null, saved: false }); }}>
+        <button id="prospector-tab-discover" type="button" role="tab" tabIndex={view === 'discover' ? 0 : -1} aria-selected={view === 'discover'} aria-controls="prospector-workspace" className={`prospector-tab${view === 'discover' ? ' active' : ''}`} onKeyDown={onTabKeyDown} onClick={() => { setView('discover'); setSelection({ key: null, saved: false }); }}>
           <Search size={15} /> Discover businesses
         </button>
-        <button type="button" role="tab" aria-selected={view === 'saved'} aria-controls="prospector-workspace" className={`prospector-tab${view === 'saved' ? ' active' : ''}`} onClick={() => { setView('saved'); setSelection({ key: null, saved: true }); }}>
+        <button id="prospector-tab-saved" type="button" role="tab" tabIndex={view === 'saved' ? 0 : -1} aria-selected={view === 'saved'} aria-controls="prospector-workspace" className={`prospector-tab${view === 'saved' ? ' active' : ''}`} onKeyDown={onTabKeyDown} onClick={() => { setView('saved'); setSelection({ key: null, saved: true }); }}>
           <Save size={15} /> Saved pipeline <span>({prospects.length})</span>
         </button>
       </div>
@@ -1080,7 +1155,10 @@ export default function ProspectorManager({ currentUserProfile }) {
               {searching ? <Loader2 size={15} className="mkt-spin" /> : <Search size={15} />} Search businesses
             </button>
           </form>
-          <div className="prospector-filterbar" aria-label="Discovery filters">
+          <button type="button" className="prospector-filter-toggle" aria-expanded={filtersOpen} aria-controls="prospector-discovery-filters" onClick={() => setFiltersOpen((open) => !open)}>
+            <ListFilter size={15} /> Filters{discoveryFilterCount ? ` (${discoveryFilterCount} active)` : ''}
+          </button>
+          {filtersOpen && <div id="prospector-discovery-filters" className="prospector-filterbar" aria-label="Discovery filters">
             <label>Distance
               <select className="prospector-select" value={distanceChoice} onChange={(event) => setDistanceChoice(event.target.value)}>
                 <option value="">Any distance</option>
@@ -1143,7 +1221,7 @@ export default function ProspectorManager({ currentUserProfile }) {
             <button type="button" className="prospector-btn small" onClick={clearDiscoveryFilters}>Clear filters</button>
             {distanceChoice && !searchCenter && <small className="prospector-filter-hint">Add a location and search, or search the visible map area, to apply distance.</small>}
             {distanceChoice === 'custom' && searchCenter && !distanceLimit && <small className="prospector-filter-hint">Enter a custom distance greater than 0 km.</small>}
-          </div>
+          </div>}
         </>
       ) : (
         <>
@@ -1159,7 +1237,10 @@ export default function ProspectorManager({ currentUserProfile }) {
               {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
-          <div className="prospector-filterbar compact" aria-label="Pipeline filters">
+          <button type="button" className="prospector-filter-toggle" aria-expanded={filtersOpen} aria-controls="prospector-pipeline-filters" onClick={() => setFiltersOpen((open) => !open)}>
+            <ListFilter size={15} /> More filters{pipelineFilterCount ? ` (${pipelineFilterCount} active)` : ''}
+          </button>
+          {filtersOpen && <div id="prospector-pipeline-filters" className="prospector-filterbar compact" aria-label="Pipeline filters">
             <label>Contact data
               <select className="prospector-select" value={savedContactFilter} onChange={(event) => setSavedContactFilter(event.target.value)}>
                 <option value="any">Any contact state</option>
@@ -1216,11 +1297,11 @@ export default function ProspectorManager({ currentUserProfile }) {
               </select>
             </label>
             <button type="button" className="prospector-btn small" onClick={clearPipelineFilters}>Clear filters</button>
-          </div>
+          </div>}
         </>
       )}
 
-      <div className="prospector-workspace" id="prospector-workspace">
+      <div className="prospector-workspace" id="prospector-workspace" role="tabpanel" aria-labelledby={`prospector-tab-${view}`}>
         <section className="prospector-results" aria-label={view === 'discover' ? 'Business search results' : 'Saved prospects'}>
           <div className="prospector-results-head">
             <button
@@ -1296,6 +1377,13 @@ export default function ProspectorManager({ currentUserProfile }) {
             </div>
           )}
 
+          {searching && (
+            <div className="prospector-queuebar" role="status">
+              <Loader2 size={13} className="mkt-spin" />
+              <span>Searching public business directories…</span>
+            </div>
+          )}
+
           {enrichProgress.total > 0 && enrichProgress.pending > 0 && (
             <div className="prospector-queuebar">
               <Loader2 size={13} className="mkt-spin" />
@@ -1304,7 +1392,6 @@ export default function ProspectorManager({ currentUserProfile }) {
             </div>
           )}
 
-          { }
           <div
             className="prospector-result-list"
             role="list"
@@ -1422,12 +1509,12 @@ export default function ProspectorManager({ currentUserProfile }) {
               {enrichState[selection.key]?.status === 'scanning' && (
                 <div className="prospector-detail-row"><Loader2 size={15} className="mkt-spin" /><span>Scanning the public website and contact pages…</span></div>
               )}
-              <div className={`prospector-detail-row${selected.phone ? '' : ' muted'}`}><Phone size={15} /><span>{selected.phone || 'No public business phone found'}</span></div>
-              <div className={`prospector-detail-row${selected.email ? '' : ' muted'}`}><Mail size={15} /><span>{selected.email || 'No work email saved'}</span></div>
+              <div className={`prospector-detail-row${selected.phone ? '' : ' muted'}`}><Phone size={15} />{selected.phone ? <a href={`tel:${selected.phone}`}>{selected.phone}</a> : <span>No public business phone found</span>}</div>
+              <div className={`prospector-detail-row${selected.email ? '' : ' muted'}`}><Mail size={15} />{selected.email ? <a href={`mailto:${selected.email}`}>{selected.email}</a> : <span>No work email saved</span>}</div>
               {(selected.whatsapp_numbers || []).length > 0 && (
                 <div className="prospector-detail-row"><MessageCircle size={15} /><span className="prospector-wa-list">
                   {selected.whatsapp_numbers.map((number) => (
-                    <a key={number} href={`https://wa.me/${number.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">{number}</a>
+                    <a key={String(number)} href={`https://wa.me/${String(number).replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer">{String(number)}</a>
                   ))}
                 </span></div>
               )}
@@ -1530,11 +1617,11 @@ export default function ProspectorManager({ currentUserProfile }) {
                     <div className="prospector-people-head"><span><Send size={14} /> AI outreach</span></div>
 
                     <div className="prospector-outreach-controls">
-                      <select className="prospector-select" value={outreachChannel} onChange={(event) => { setOutreachChannel(event.target.value); setOutreachDraft(null); }} aria-label="Outreach channel">
+                      <select className="prospector-select" value={outreachChannel} onChange={(event) => { setOutreachChannel(event.target.value); setOutreachDraft(null); setWhatsappHandoffUrl(''); }} aria-label="Outreach channel">
                         <option value="email">Email</option>
                         <option value="whatsapp">WhatsApp</option>
                       </select>
-                      <select className="prospector-select" value={outreachLanguage} onChange={(event) => setOutreachLanguage(event.target.value)} aria-label="Outreach language">
+                      <select className="prospector-select" value={outreachLanguage} onChange={(event) => { setOutreachLanguage(event.target.value); setOutreachDraft(null); }} aria-label="Outreach language">
                         <option value="auto">Auto language</option>
                         <option value="es">Spanish</option>
                         <option value="en">English</option>
@@ -1560,11 +1647,14 @@ export default function ProspectorManager({ currentUserProfile }) {
                         <label>Message to {outreachDraft.recipient}
                           <textarea className="prospector-textarea" rows="9" value={outreachDraft.body} onChange={(event) => setOutreachDraft({ ...outreachDraft, body: event.target.value })} />
                         </label>
+                        <div className={`prospector-character-count${outreachDraft.body.trim().length < 20 || outreachDraft.body.length > 4000 ? ' invalid' : ''}`}>
+                          {outreachDraft.body.length}/4,000 characters{outreachDraft.body.trim().length < 20 ? ' — enter at least 20' : ''}
+                        </div>
                         <div className="prospector-detail-actions">
                           <button
                             type="button"
                             className="prospector-btn primary"
-                            disabled={sending || drafting}
+                            disabled={sending || drafting || !outreachPermission?.allowed || outreachDraft.body.trim().length < 20 || outreachDraft.body.length > 4000 || (outreachDraft.channel === 'email' && !outreachDraft.subject.trim())}
                             onClick={() => askConfirm({
                               title: outreachDraft.channel === 'email' ? 'Send this email?' : 'Open WhatsApp with this message?',
                               body: outreachDraft.channel === 'email'
@@ -1584,6 +1674,12 @@ export default function ProspectorManager({ currentUserProfile }) {
                         )}
                       </>
                     )}
+
+                    {whatsappHandoffUrl && (
+                      <a className="prospector-btn primary prospector-handoff" href={whatsappHandoffUrl} target="_blank" rel="noopener noreferrer">
+                        <MessageCircle size={14} /> Open WhatsApp message
+                      </a>
+                    )}
                   </div>
 
                   <div className="prospector-timeline">
@@ -1595,11 +1691,18 @@ export default function ProspectorManager({ currentUserProfile }) {
                     {!history.loading && history.setupRequired && (
                       <div className="prospector-person-title">Run <code>prospect-outreach-migration.sql</code> to record and show sent messages.</div>
                     )}
-                    {!history.loading && !history.setupRequired && !history.rows.length && (
+                    {!history.loading && history.error && (
+                      <div className="prospector-history-error">
+                        <span>{history.error}</span>
+                        <button type="button" className="prospector-btn small" onClick={() => loadHistory(selected.id)}><RefreshCw size={12} /> Retry</button>
+                      </div>
+                    )}
+                    {!history.loading && !history.setupRequired && !history.error && !history.rows.length && (
                       <div className="prospector-person-title">Nothing has been sent to this business yet.</div>
                     )}
                     {history.rows.map((row) => {
                       const expanded = expandedMessages.has(row.id);
+                      const messageBody = String(row.body || '');
                       return (
                         <div className={`prospector-timeline-item${row.status === 'failed' ? ' failed' : ''}`} key={row.id}>
                           <div className="prospector-timeline-when">
@@ -1610,9 +1713,9 @@ export default function ProspectorManager({ currentUserProfile }) {
                           </div>
                           {row.subject && <div className="prospector-timeline-subject">{row.subject}</div>}
                           <p className="prospector-timeline-body">
-                            {expanded || row.body.length <= 180 ? row.body : `${row.body.slice(0, 180)}…`}
+                            {expanded || messageBody.length <= 180 ? messageBody : `${messageBody.slice(0, 180)}…`}
                           </p>
-                          {row.body.length > 180 && (
+                          {messageBody.length > 180 && (
                             <button
                               type="button"
                               className="prospector-timeline-toggle"
@@ -1624,10 +1727,10 @@ export default function ProspectorManager({ currentUserProfile }) {
                               })}
                             >
                               {expanded ? 'Show less' : 'Show full message'}
-                            </button>
+                          </button>
                           )}
                           <div className="prospector-timeline-meta">
-                            {row.sent_by_label ? `Sent by ${row.sent_by_label}` : 'Sender no longer on the team'}
+                            {row.sent_by_label ? `Sent by ${row.sent_by_label}` : row.sender_lookup_failed ? 'Sender unavailable' : 'Sender no longer on the team'}
                             {row.permission_basis ? ` · basis: ${PERMISSION_LABELS[row.permission_basis] || row.permission_basis}` : ''}
                             {row.error ? ` · ${row.error}` : ''}
                           </div>
@@ -1701,13 +1804,13 @@ export default function ProspectorManager({ currentUserProfile }) {
               <label>Business category<input className="prospector-input" value={manualForm.category} onChange={(event) => setManualForm({ ...manualForm, category: event.target.value })} /></label>
               <label>Public business phone<input className="prospector-input" type="tel" value={manualForm.phone} onChange={(event) => setManualForm({ ...manualForm, phone: event.target.value })} /></label>
               <label>Work email<input className="prospector-input" type="email" value={manualForm.email} onChange={(event) => setManualForm({ ...manualForm, email: event.target.value })} /></label>
-              <label className="full">Website<input className="prospector-input" type="url" value={manualForm.website_url} onChange={(event) => setManualForm({ ...manualForm, website_url: event.target.value })} placeholder="https://…" /></label>
+              <label className="full">Website<input className="prospector-input" type="text" inputMode="url" value={manualForm.website_url} onChange={(event) => setManualForm({ ...manualForm, website_url: event.target.value })} placeholder="example.com" /></label>
               <label className="full">Address<input className="prospector-input" value={manualForm.formatted_address} onChange={(event) => setManualForm({ ...manualForm, formatted_address: event.target.value })} /></label>
               <label>City or canton<input className="prospector-input" value={manualForm.city} onChange={(event) => setManualForm({ ...manualForm, city: event.target.value })} /></label>
               <label>Province or state<input className="prospector-input" value={manualForm.region} onChange={(event) => setManualForm({ ...manualForm, region: event.target.value })} /></label>
               <label className="full">Country<input className="prospector-input" value={manualForm.country} onChange={(event) => setManualForm({ ...manualForm, country: event.target.value })} placeholder="Costa Rica, Germany, Japan…" /></label>
-              <label>Latitude<input className="prospector-input" type="number" step="any" value={manualForm.latitude} onChange={(event) => setManualForm({ ...manualForm, latitude: event.target.value })} placeholder="9.9281 — optional, puts it on the map" /></label>
-              <label>Longitude<input className="prospector-input" type="number" step="any" value={manualForm.longitude} onChange={(event) => setManualForm({ ...manualForm, longitude: event.target.value })} placeholder="-84.0907" /></label>
+              <label>Latitude<input className="prospector-input" type="number" min="-90" max="90" step="any" value={manualForm.latitude} onChange={(event) => setManualForm({ ...manualForm, latitude: event.target.value })} placeholder="9.9281 — optional, puts it on the map" /></label>
+              <label>Longitude<input className="prospector-input" type="number" min="-180" max="180" step="any" value={manualForm.longitude} onChange={(event) => setManualForm({ ...manualForm, longitude: event.target.value })} placeholder="-84.0907" /></label>
               <label className="full">Contact permission<select className="prospector-select" value={manualForm.contact_permission_status} onChange={(event) => setManualForm({ ...manualForm, contact_permission_status: event.target.value })}>{CONTACT_PERMISSION_STATUSES.map((status) => <option key={status} value={status}>{PERMISSION_LABELS[status]}</option>)}</select></label>
               <label className="full">Notes<textarea className="prospector-textarea" rows="4" value={manualForm.notes} onChange={(event) => setManualForm({ ...manualForm, notes: event.target.value })} /></label>
               <div className="prospector-form-actions"><button type="button" className="prospector-btn" onClick={() => setManualOpen(false)}>Cancel</button><button type="submit" className="prospector-btn primary" disabled={saving || dbSetupRequired}>{saving ? <Loader2 size={14} className="mkt-spin" /> : <Plus size={14} />} Add prospect</button></div>

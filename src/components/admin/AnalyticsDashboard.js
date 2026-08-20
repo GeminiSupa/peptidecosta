@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { 
   TrendingUp, Users, ShoppingCart, Clock, 
   MapPin, Eye, DollarSign, Award, Target,
   RefreshCw, BarChart2, Calendar, ShieldAlert,
   Smartphone, Monitor, ChevronRight, ChevronDown, Zap, AlertTriangle, Play, HelpCircle, CreditCard, MessageCircle, Upload, Sparkles, Brain,
-  Dna, Atom, Phone
+  Dna, Atom, Phone, Mail
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -13,6 +12,14 @@ import 'jspdf-autotable';
 import ExportModal from './ExportModal';
 import { adminFetch } from '@/lib/adminApi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
+import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
+import {
+  acquisitionChannelRows,
+  campaignPerformanceRows,
+  isPendingAnalyticsOrder,
+  isSuccessfulAnalyticsOrder,
+  revenueTrendRows,
+} from '@/lib/analyticsDashboard.mjs';
 
 export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [], onNavigate }) {
   const [explainerTopic, setExplainerTopic] = useState(null);
@@ -164,7 +171,7 @@ Analyze the following store metrics and provide a comprehensive executive e-comm
 - Gross Revenue: $${totalRevenueUsd.toFixed(2)} (CRC ${totalRevenueCrc.toLocaleString()})
 - Total Paid Orders: ${successfulOrders.length}
 - Average Order Value (AOV): $${aovUsd.toFixed(2)}
-- Conversion Rate: ${orderConversionRate.toFixed(2)}% (visitors: ${uniqueVisitorCount}, orders: ${orders.length})
+- Conversion Rate: ${orderConversionRate.toFixed(2)}% (visitors: ${uniqueVisitorCount}, paid orders: ${successfulOrders.length})
 - Abandoned Cart Rate: ${cartAbandonmentRate.toFixed(2)}% (active abandoned: ${activeAbandonedCarts.length})
 - Potential Recoverable Revenue from Carts: $${potentialAbandonedRevenueUsd.toFixed(2)}
 - Average Catalog Engagement: ${formatDuration(averageDurationSeconds)}
@@ -215,6 +222,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [dbCampaigns, setDbCampaigns] = useState([]);
   const [dbClickEvents, setDbClickEvents] = useState([]);
   const [dbAnalyticsEvents, setDbAnalyticsEvents] = useState([]);
+  const [analyticsMeta, setAnalyticsMeta] = useState(null);
+  const [analyticsErrors, setAnalyticsErrors] = useState([]);
+  const [campaignError, setCampaignError] = useState('');
 
   // Heatmap UI States
   const heatmapViewMode = 'live';
@@ -234,75 +244,35 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       setLoading(true);
       let liveConnected = false;
 
-      if (isSupabaseConfigured && supabase) {
-        try {
-          // 1. Fetch sessions
-          const { data: sessions, error: sErr } = await supabase
-            .from('visitor_sessions')
-            .select('*')
-            .order('created_at', { ascending: false });
-          
-          // 2. Fetch product views
-          const { data: views, error: vErr } = await supabase
-            .from('product_views')
-            .select('*')
-            .order('created_at', { ascending: false });
+      try {
+        const response = await adminFetch(`/api/admin/analytics-dashboard?range=${encodeURIComponent(timeRange)}`);
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Analytics data request failed.');
 
-          // 3. Fetch latest orders
-          const { data: oData, error: oErr } = await supabase
-            .from('orders')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-          // 4. Fetch latest abandoned carts
-          const { data: cData, error: cErr } = await supabase
-            .from('abandoned_carts')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-          // 5. Fetch latest click events
-          const { data: clicks, error: clErr } = await supabase
-            .from('click_events')
-            .select('*')
-            .eq('is_mobile', true)
-            .order('created_at', { ascending: false });
-
-          // 6. Cross-domain page and conversion events. This table is added by
-          // analytics-v2-migration.sql; an older deployment simply leaves the
-          // new journey panels empty while the existing dashboard keeps working.
-          const { data: analyticsEvents, error: aeErr } = await supabase
-            .from('analytics_events')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(1000);
-
-          // 7. Fetch marketing campaigns for analytics
-          try {
-            const campRes = await fetch('/api/admin/campaigns');
-            if (campRes.ok) {
-              const campData = await campRes.json();
-              if (campData.campaigns) setDbCampaigns(campData.campaigns);
-            }
-          } catch(e) { console.error("Error fetching campaigns for analytics", e); }
-
-          if (!sErr && sessions) setDbSessions(sessions);
-          if (!vErr && views) setDbProductViews(views);
-          if (!oErr && oData) setDbOrders(oData);
-          if (!cErr && cData) setDbCarts(cData);
-          if (!clErr && clicks) {
-            setDbClickEvents(clicks);
-          }
-          if (!aeErr && analyticsEvents) setDbAnalyticsEvents(analyticsEvents);
-
-          // If we successfully fetched at least some data, set as live database mode
-          if (!sErr && sessions && sessions.length > 0) {
-            liveConnected = true;
-          } else if (oData && oData.length > 0) {
-            liveConnected = true; // Orders are populated
-          }
-        } catch (err) {
-          console.error("Database analytics fetch failed:", err);
-        }
+        const data = payload.data || {};
+        setDbSessions(data.sessions || []);
+        setDbProductViews(data.productViews || []);
+        setDbOrders(data.orders || []);
+        setDbCarts(data.carts || []);
+        setDbClickEvents(data.clicks || []);
+        setDbAnalyticsEvents(data.events || []);
+        setDbCampaigns(data.campaigns || []);
+        setAnalyticsMeta({
+          counts: payload.counts || {},
+          sampled: payload.sampled || [],
+          sampleLimit: payload.sampleLimit || 1000,
+          range: payload.range || timeRange,
+        });
+        const sourceErrors = payload.errors || [];
+        setAnalyticsErrors(sourceErrors.filter((error) => error.source !== 'campaigns'));
+        setCampaignError(sourceErrors.find((error) => error.source === 'campaigns')?.message || '');
+        liveConnected = Object.values(payload.counts || {}).some((count) => Number(count || 0) > 0);
+      } catch (err) {
+        console.error('Database analytics fetch failed:', err);
+        setAnalyticsMeta(null);
+        setAnalyticsErrors([{ source: 'dashboard', message: err.message }]);
+        setDbCampaigns([]);
+        setCampaignError(err.message);
       }
 
       setIsLive(liveConnected);
@@ -310,11 +280,11 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     };
 
     fetchDbAnalytics();
-  }, [refreshKey]);
+  }, [refreshKey, timeRange]);
 
   const getProcessedData = () => {
-    const rawOrders = parentOrders.length > 0 ? parentOrders : dbOrders;
-    const rawCarts = parentCarts.length > 0 ? parentCarts : dbCarts;
+    const rawOrders = analyticsMeta ? dbOrders : (parentOrders.length > 0 ? parentOrders : dbOrders);
+    const rawCarts = analyticsMeta ? dbCarts : (parentCarts.length > 0 ? parentCarts : dbCarts);
     const rawSessions = dbSessions;
     const rawViews = dbProductViews;
     const rawClicks = dbClickEvents;
@@ -322,8 +292,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     // Filter by Time Range
     const now = new Date();
     const filterByTime = (item) => {
-      if (!item.created_at) return true;
-      const date = new Date(item.created_at);
+      const timestamp = item.last_active || item.created_at;
+      if (!timestamp) return true;
+      const date = new Date(timestamp);
       const diffMs = now - date;
 
       if (timeRange === '24h') return diffMs <= 24 * 3600000;
@@ -378,9 +349,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // -------------------------------------------------------------
   
   // Successful orders (Paid, Completed, Order Complete)
-  const successfulOrders = orders.filter(o => 
-    o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'order complete'
-  );
+  const successfulOrders = orders.filter(isSuccessfulAnalyticsOrder);
   
   const totalRevenueUsd = successfulOrders.reduce((sum, o) => sum + (parseFloat(o.total_usd) || 0), 0);
   const totalRevenueCrc = successfulOrders.reduce((sum, o) => sum + (parseFloat(o.total_crc) || 0), 0);
@@ -390,7 +359,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const aovCrc = successfulOrders.length > 0 ? (totalRevenueCrc / successfulOrders.length) : 0;
 
   // Pipeline (Pending orders)
-  const pendingOrders = orders.filter(o => o.status?.toLowerCase() === 'pending');
+  const pendingOrders = orders.filter(isPendingAnalyticsOrder);
   const pipelineUsd = pendingOrders.reduce((sum, o) => sum + (parseFloat(o.total_usd) || 0), 0);
   const pipelineCrc = pendingOrders.reduce((sum, o) => sum + (parseFloat(o.total_crc) || 0), 0);
 
@@ -399,8 +368,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // -------------------------------------------------------------
 
   // Placed Orders / Total Visitor Sessions
-  const uniqueVisitorCount = Math.max(sessions.length, 1);
-  const orderConversionRate = (orders.length / uniqueVisitorCount) * 100;
+  const uniqueVisitorCount = Number(analyticsMeta?.counts?.sessions ?? sessions.length);
+  const orderConversionRate = uniqueVisitorCount > 0
+    ? Math.min((successfulOrders.length / uniqueVisitorCount) * 100, 100)
+    : 0;
 
   // Abandoned Carts stats
   const activeAbandonedCarts = carts.filter(c => c.status === 'active');
@@ -420,13 +391,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   };
 
   const potentialAbandonedRevenueUsd = activeAbandonedCarts.reduce((sum, c) => sum + calculateCartValue(c.cart_data), 0);
-  const potentialAbandonedRevenueCrc = Math.round(potentialAbandonedRevenueUsd * 454.48); // Simulated exchange rate fallback
+  const potentialAbandonedRevenueCrc = Math.round(potentialAbandonedRevenueUsd * FALLBACK_EXCHANGE_RATE);
 
   // Average Catalog duration (Page Open time)
   const durationSessions = sessions.filter(s => s.catalog_duration > 0);
   const averageDurationSeconds = durationSessions.length > 0
     ? (durationSessions.reduce((sum, s) => sum + s.catalog_duration, 0) / durationSessions.length)
-    : 180; // default 3 mins if empty
+    : 0;
 
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -440,8 +411,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     return ua.includes('mobi') || ua.includes('android') || ua.includes('iphone');
   }).length;
   const desktopCount = Math.max(sessions.length - mobileCount, 0);
-  const mobilePct = sessions.length > 0 ? (mobileCount / sessions.length) * 100 : 60;
-  const desktopPct = sessions.length > 0 ? (desktopCount / sessions.length) * 100 : 40;
+  const mobilePct = sessions.length > 0 ? (mobileCount / sessions.length) * 100 : 0;
+  const desktopPct = sessions.length > 0 ? (desktopCount / sessions.length) * 100 : 0;
 
   // -------------------------------------------------------------
   // CUSTOMER GEOGRAPHIC INSIGHTS (CITIES)
@@ -464,11 +435,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   // Top Cities by Placed Orders
   const orderCityCounts = {};
-  const getWhatsAppAttributionSource = (order) => {
-    if (order.whatsapp_source) return order.whatsapp_source;
+  const getOrderAttributionSource = (order) => {
+    if (order.whatsapp_source) return `WhatsApp: ${order.whatsapp_source}`;
     if (order.campaign_id) return 'Marketing Studio campaigns';
     if (order.journey_id) return 'Marketing journeys';
-    return 'organic';
+    if (String(order.source || '').toLowerCase() === 'admin_manual') return 'Admin manual';
+    if (String(order.source || '').toLowerCase() === 'woocommerce') return 'WooCommerce';
+    return 'Catalog / organic';
   };
 
   orders.forEach(o => {
@@ -654,7 +627,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   // Payment channels and Source metrics
   const paymentBreakdown = {};
-  const whatsappSourceBreakdown = {};
+  const orderSourceBreakdown = {};
   
   orders.forEach(o => {
     const method = normalizePaymentMethod(o.payment_method);
@@ -666,14 +639,15 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       paymentBreakdown[method].revenue += (parseFloat(o.total_usd) || 0);
     }
     
-    // WhatsApp sources
-    const source = getWhatsAppAttributionSource(o);
-    if (!whatsappSourceBreakdown[source]) {
-      whatsappSourceBreakdown[source] = { count: 0, revenue: 0 };
+    // Order attribution sources. This includes WhatsApp when it was recorded,
+    // without falsely labeling every unattributed order as WhatsApp traffic.
+    const source = getOrderAttributionSource(o);
+    if (!orderSourceBreakdown[source]) {
+      orderSourceBreakdown[source] = { count: 0, revenue: 0 };
     }
-    whatsappSourceBreakdown[source].count += 1;
+    orderSourceBreakdown[source].count += 1;
     if (o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'order complete') {
-      whatsappSourceBreakdown[source].revenue += (parseFloat(o.total_usd) || 0);
+      orderSourceBreakdown[source].revenue += (parseFloat(o.total_usd) || 0);
     }
   });
 
@@ -681,29 +655,21 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     ? Math.max(...Object.values(paymentBreakdown).map(p => p.count)) 
     : 1;
 
-  const maxSourceCount = Object.keys(whatsappSourceBreakdown).length > 0 
-    ? Math.max(...Object.values(whatsappSourceBreakdown).map(s => s.count)) 
+  const maxSourceCount = Object.keys(orderSourceBreakdown).length > 0
+    ? Math.max(...Object.values(orderSourceBreakdown).map(s => s.count))
     : 1;
 
   // -------------------------------------------------------------
   // RECHARTS VISUAL DATA
   // -------------------------------------------------------------
-  const revenueChartDataMap = {};
-  successfulOrders.forEach(o => {
-    if (!o.created_at) return;
-    const dateObj = new Date(o.created_at);
-    const dateKey = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
-    if (!revenueChartDataMap[dateKey]) {
-      revenueChartDataMap[dateKey] = { name: dateKey, revenueUsd: 0, revenueCrc: 0, orders: 0 };
-    }
-    revenueChartDataMap[dateKey].revenueUsd += (parseFloat(o.total_usd) || 0);
-    revenueChartDataMap[dateKey].revenueCrc += (parseFloat(o.total_crc) || 0);
-    revenueChartDataMap[dateKey].orders += 1;
-  });
-  const revenueChartData = Object.values(revenueChartDataMap).sort((a,b) => {
-     const parse = (str) => { const [m,d] = str.split('/'); return parseInt(m)*100 + parseInt(d); };
-     return parse(a.name) - parse(b.name);
-  });
+  const revenueChartData = revenueTrendRows(successfulOrders).map((row) => ({
+    ...row,
+    name: new Date(`${row.key}T12:00:00Z`).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      ...(timeRange === 'all' ? { year: '2-digit' } : {}),
+    }),
+  }));
 
   const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'];
   const pieChartData = productMetrics.slice(0, 5).map((p, index) => ({
@@ -714,38 +680,34 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   // --- NEW MARKETING ANALYTICS ---
   // 1. Email Campaign Performance
-  const campaignChartData = (dbCampaigns || []).slice(0, 5).map(c => {
-    const sent = c.recipient_count || 1;
-    const opens = c.campaign_opens?.[0]?.count || 0;
-    const clicks = c.campaign_clicks?.[0]?.count || 0;
-    return {
-      name: c.subject ? c.subject.substring(0, 15) + '...' : 'Campaign',
-      openRate: Math.round((opens / sent) * 100),
-      clickRate: Math.round((clicks / sent) * 100)
-    };
-  });
+  const campaignChartData = campaignPerformanceRows(dbCampaigns, timeRange);
 
   // 2. UTM Source/Traffic Channels
-  const sourceMap = {};
-  orders.forEach(o => {
-    const src = o.tracking_source || 'direct/unknown';
-    sourceMap[src] = (sourceMap[src] || 0) + 1;
-  });
-  const trafficChartData = Object.entries(sourceMap).map(([name, value], index) => ({
-    name,
-    value,
+  const trafficChartData = acquisitionChannelRows(journeyEvents).map((entry, index) => ({
+    ...entry,
     color: COLORS[index % COLORS.length]
-  })).sort((a,b) => b.value - a.value);
+  }));
 
   // 3. Cart Abandonment Funnel
-  const totalViews = productViews.length;
-  const totalCarts = carts.length + orders.length; 
-  const totalCheckouts = orders.length;
+  const totalSessions = Number(analyticsMeta?.counts?.sessions ?? sessions.length);
+  const totalViews = Number(analyticsMeta?.counts?.productViews ?? productViews.length);
+  const totalCarts = Number(analyticsMeta?.counts?.carts ?? carts.length);
+  const totalCheckouts = successfulOrders.length;
   const funnelChartData = [
-    { name: 'Views', value: totalViews, fill: '#3b82f6' },
+    { name: 'Sessions', value: totalSessions, fill: '#38bdf8' },
+    { name: 'Product interest', value: totalViews, fill: '#8b5cf6' },
     { name: 'Carts', value: totalCarts, fill: '#f59e0b' },
-    { name: 'Purchased', value: totalCheckouts, fill: '#10b981' }
+    { name: 'Paid orders', value: totalCheckouts, fill: '#10b981' }
   ];
+  const totalJourneyEvents = Number(analyticsMeta?.counts?.events ?? journeyEvents.length);
+  const sampledSourceLabels = (analyticsMeta?.sampled || []).map((source) => ({
+    sessions: 'sessions',
+    productViews: 'product views',
+    orders: 'orders',
+    carts: 'carts',
+    clicks: 'mobile clicks',
+    events: 'journey events',
+  }[source] || source));
 
   const handleExport = (format) => {
     setExportLoading(true);
@@ -2193,19 +2155,24 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
         <div className="analytics-header-status">
           <span className="analytics-status-live">
-            <span className="active-pulse-dot" />
+            {isLive && <span className="active-pulse-dot" />}
             {activeLiveUsers} across tracked sites now
           </span>
           <span>·</span>
-          <span>Live data</span>
-          {loading && (
-            <>
-              <span>·</span>
-              <span>Refreshing…</span>
-            </>
-          )}
+          <span>{loading ? 'Refreshing…' : analyticsErrors.length > 0 ? 'Partial data' : isLive ? 'Live data' : 'No tracked data in this range'}</span>
         </div>
       </div>
+
+      {analyticsErrors.length > 0 && (
+        <div role="alert" style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.28)', borderRadius: 10, color: '#fecaca', padding: '10px 13px', marginBottom: 12, fontSize: '.78rem' }}>
+          Some analytics sources could not be loaded: {analyticsErrors.map((error) => error.source).join(', ')}. Refresh to try again.
+        </div>
+      )}
+      {sampledSourceLabels.length > 0 && (
+        <div style={{ background: 'rgba(56,189,248,.07)', border: '1px solid rgba(56,189,248,.2)', borderRadius: 10, color: '#bae6fd', padding: '10px 13px', marginBottom: 12, fontSize: '.78rem' }}>
+          Database row totals are exact. Detailed breakdowns use the latest available records for {sampledSourceLabels.join(', ')}.
+        </div>
+      )}
 
       {/* Cross-domain live visitor journeys */}
       <section style={{ background: '#0e1626', border: '1px solid rgba(56,189,248,.2)', borderRadius: 14, padding: 18, marginBottom: 20 }}>
@@ -2216,7 +2183,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             <p style={{ margin: 0, color: '#94a3b8', fontSize: '.78rem' }}>First-party heartbeat data across every domain using the shared tracker.</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {[['Active', activeLiveUsers], ['Known customers', knownActiveUsers], ['Domains', activeDomains], ['Journey events', journeyEvents.length]].map(([label, value]) => (
+            {[['Active', activeLiveUsers], ['Known customers', knownActiveUsers], ['Domains', activeDomains], ['Journey events', totalJourneyEvents]].map(([label, value]) => (
               <div key={label} style={{ background: '#172237', borderRadius: 9, padding: '8px 11px', minWidth: 90 }}>
                 <div style={{ color: '#f8fafc', fontWeight: 900, fontSize: '1rem' }}>{value}</div>
                 <div style={{ color: '#64748b', fontSize: '.66rem' }}>{label}</div>
@@ -2416,14 +2383,14 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             {orderConversionRate.toFixed(1)}%
           </div>
           <div className="metric-value-secondary">
-            {orders.length} orders / {uniqueVisitorCount} traffic sessions
+            {successfulOrders.length} paid orders / {uniqueVisitorCount} traffic sessions
           </div>
           {expandedMetric === 'conversion' && (
             <div className="metric-card-detail">
               {[
                 { label: 'Sessions', val: uniqueVisitorCount, color: '#38bdf8' },
-                { label: 'Product Views', val: productViews.length, color: '#a78bfa' },
-                { label: 'Carts', val: carts.length, color: '#f59e0b' },
+                { label: 'Product Views', val: totalViews, color: '#a78bfa' },
+                { label: 'Carts', val: totalCarts, color: '#f59e0b' },
                 { label: 'Paid Orders', val: successfulOrders.length, color: '#34d399' },
               ].map(step => (
                 <div key={step.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -2544,17 +2511,17 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   </div>
                 </div>
                 <div className="funnel-stage">
-                  <div className="funnel-stage-progress" style={{ width: `${Math.min((productViews.length / uniqueVisitorCount) * 100, 100)}%` }}></div>
+                  <div className="funnel-stage-progress" style={{ width: `${uniqueVisitorCount > 0 ? Math.min((totalViews / uniqueVisitorCount) * 100, 100) : 0}%` }}></div>
                   <div className="funnel-stage-content">
                     <span>2. Product clicks</span>
-                    <strong>{productViews.length}</strong>
+                    <strong>{totalViews}</strong>
                   </div>
                 </div>
                 <div className="funnel-stage">
-                  <div className="funnel-stage-progress" style={{ width: `${Math.min((carts.length / uniqueVisitorCount) * 100, 100)}%` }}></div>
+                  <div className="funnel-stage-progress" style={{ width: `${uniqueVisitorCount > 0 ? Math.min((totalCarts / uniqueVisitorCount) * 100, 100) : 0}%` }}></div>
                   <div className="funnel-stage-content">
                     <span>3. Carts Created</span>
-                    <strong>{carts.length}</strong>
+                    <strong>{totalCarts}</strong>
                   </div>
                 </div>
                 <div className="funnel-stage">
@@ -2616,27 +2583,27 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               )}
             </div>
 
-            {/* WhatsApp Source Channels */}
+            {/* Order Source Channels */}
             <div>
               <p style={{ fontSize: '0.875rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '14px', fontWeight: 600 }}>
-                WhatsApp Attribution Sources
+                Order Attribution Sources
               </p>
 
-              {Object.keys(whatsappSourceBreakdown).length === 0 ? (
+              {Object.keys(orderSourceBreakdown).length === 0 ? (
                 <div style={{ color: '#64748b', fontSize: '0.875rem', padding: '10px 0' }}>No source attribution data.</div>
               ) : (
                 <div className="bar-chart-list">
-                  {Object.entries(whatsappSourceBreakdown)
+                  {Object.entries(orderSourceBreakdown)
                     .sort((a, b) => b[1].count - a[1].count)
                     .map(([source, data]) => {
                     const pct = (data.count / maxSourceCount) * 100;
-                    const color = '#34d399'; // Green theme for WhatsApp
+                    const color = '#34d399';
                     
                     return (
                       <div className="bar-chart-row" key={source}>
                         <div className="bar-row-label-row">
                           <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ color: color, display: 'flex', alignItems: 'center' }}><MessageCircle size={14} /></span>
+                            <span style={{ color: color, display: 'flex', alignItems: 'center' }}><Target size={14} /></span>
                             <span style={{ textTransform: 'capitalize' }}>{source}</span>
                           </span>
                           <span className="bar-row-value" style={{ color: color }}>
@@ -2666,7 +2633,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         {/* Email Campaign Performance */}
         <div className="dashboard-section-card" style={{ overflowX: 'auto' }}>
           <div className="section-card-title">
-            <MessageCircle size={16} style={{ color: '#ec4899' }} />
+            <Mail size={16} style={{ color: '#ec4899' }} />
             <span>Email Marketing Performance</span>
           </div>
           <div style={{ width: '100%', minWidth: '400px', height: '260px' }}>
@@ -2686,9 +2653,24 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: '0.85rem' }}>No campaign data available</div>
+              <div role={campaignError ? 'alert' : undefined} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: campaignError ? '#fca5a5' : '#64748b', fontSize: '0.85rem', textAlign: 'center', padding: 20 }}>
+                {campaignError
+                  ? `Could not load campaign analytics: ${campaignError}`
+                  : dbCampaigns.length > 0
+                    ? 'No sent campaigns in the selected date range.'
+                    : 'No email campaigns have been created yet.'}
+              </div>
             )}
           </div>
+          {campaignChartData.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: 10 }}>
+              {campaignChartData.map((campaign) => (
+                <span key={campaign.id} title={campaign.name} style={{ color: '#94a3b8', fontSize: '.7rem' }}>
+                  <strong style={{ color: '#e2e8f0' }}>{campaign.name}</strong>: {campaign.sends.toLocaleString()} sent · {campaign.uniqueOpens.toLocaleString()} unique opens · {campaign.uniqueClicks.toLocaleString()} unique clicks{campaign.exact ? '' : ' (estimated)'}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Traffic Channels & Funnel */}
@@ -2718,7 +2700,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           <div style={{ flex: 1, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px' }}>
             <div className="section-card-title">
               <MapPin size={16} style={{ color: '#facc15' }} />
-              <span>UTM Acquisition Channels</span>
+              <span>Tracked Acquisition Sources</span>
             </div>
             <div style={{ width: '100%', height: '160px', display: 'flex', alignItems: 'center' }}>
                {trafficChartData.length > 0 ? (
@@ -2734,7 +2716,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                    </PieChart>
                  </ResponsiveContainer>
                ) : (
-                 <div style={{ width: '100%', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>No UTM tracking data</div>
+                 <div style={{ width: '100%', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>No tracked UTM or referral visitors in this range.</div>
                )}
             </div>
           </div>

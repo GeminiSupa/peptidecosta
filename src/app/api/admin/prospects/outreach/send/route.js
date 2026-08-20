@@ -15,6 +15,7 @@ import {
 import { PROSPECT_OUTREACH_FIELDS, resolveBookingUrl } from '@/lib/prospectOutreachServer';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 const escapeHtml = (value) => String(value ?? '')
   .replaceAll('&', '&amp;')
@@ -52,13 +53,14 @@ ${paragraphs}
 
 async function isEmailSuppressed(supabase, email) {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('marketing_suppressions')
       .select('id')
       .eq('active', true)
       .eq('identity', email)
       .in('channel', ['email', 'all'])
       .limit(1);
+    if (error) throw error;
     return Array.isArray(data) && data.length > 0;
   } catch (err) {
     // Same fail-safe as the WhatsApp path: an unverifiable suppression list is
@@ -71,6 +73,7 @@ async function isEmailSuppressed(supabase, email) {
 async function logOutreach(supabase, row) {
   const { error } = await supabase.from('prospect_outreach').insert(row);
   if (error) console.error('[Prospect outreach] Log insert failed:', error.message);
+  return error || null;
 }
 
 export async function POST(request) {
@@ -78,7 +81,13 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   try {
-    const { prospectId, channel, subject = '', body = '' } = await request.json();
+    let requestBody;
+    try {
+      requestBody = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
+    const { prospectId, channel, subject = '', body = '' } = requestBody;
     const outreachChannel = normalizeOutreachChannel(channel);
     const messageBody = String(body || '').trim();
 
@@ -123,8 +132,31 @@ export async function POST(request) {
       sent_by: auth.user.id,
     };
 
+    // A WhatsApp handoff is not delivery. Return the link without marking the
+    // prospect contacted or writing a false "sent" history row; the rep can use
+    // Mark contacted after they actually press Send in WhatsApp.
+    if (outreachChannel === 'whatsapp') {
+      const handoffUrl = whatsappHandoffUrl(permission.identity, messageBody);
+      if (!handoffUrl) return NextResponse.json({ error: 'Unable to build a WhatsApp link for this number.' }, { status: 400 });
+      return NextResponse.json({
+        success: true,
+        channel: outreachChannel,
+        recipient: permission.identity,
+        bookingUrl,
+        handoffUrl,
+        handoffReason: WHATSAPP_HANDOFF_REASON,
+        prospect: null,
+      });
+    }
+
+    // Do not deliver mail if its audit trail is unavailable. Sending first and
+    // discovering the migration is missing afterwards creates invisible mail.
+    const { error: historyError } = await supabase.from('prospect_outreach').select('id').limit(1);
+    if (historyError) {
+      return NextResponse.json({ error: 'Outreach history is unavailable, so the email was not sent. Run prospect-outreach-migration.sql and try again.', setupRequired: isProspectsTableMissing(historyError) }, { status: 503 });
+    }
+
     let providerId = null;
-    let handoffUrl = null;
 
     if (outreachChannel === 'email') {
       const smtp = getCampaignSmtpConfig();
@@ -138,6 +170,9 @@ export async function POST(request) {
         port: smtp.port,
         secure: smtp.secure,
         auth: { user: smtp.user, pass: smtp.pass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 20000,
       });
 
       try {
@@ -156,13 +191,9 @@ export async function POST(request) {
       } finally {
         transporter.close();
       }
-    } else {
-      // Deliberately not an automated send — see whatsappHandoffUrl.
-      handoffUrl = whatsappHandoffUrl(permission.identity, messageBody);
-      if (!handoffUrl) return NextResponse.json({ error: 'Unable to build a WhatsApp link for this number.' }, { status: 400 });
     }
 
-    await logOutreach(supabase, { ...baseLog, status: 'sent', provider_id: providerId });
+    const logError = await logOutreach(supabase, { ...baseLog, status: 'sent', provider_id: providerId });
 
     const updates = { ...prospectUpdatesForSend(prospect.status), updated_at: new Date().toISOString() };
     const { data: updated, error: updateError } = await supabase
@@ -179,8 +210,12 @@ export async function POST(request) {
       channel: outreachChannel,
       recipient: permission.identity,
       bookingUrl,
-      handoffUrl,
-      handoffReason: handoffUrl ? WHATSAPP_HANDOFF_REASON : null,
+      handoffUrl: null,
+      handoffReason: null,
+      warning: [
+        logError ? 'Its history entry could not be recorded.' : '',
+        updateError ? 'The prospect status could not be updated.' : '',
+      ].filter(Boolean).join(' ') || null,
       prospect: updated || null,
     });
   } catch (err) {

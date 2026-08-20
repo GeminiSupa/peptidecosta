@@ -55,12 +55,13 @@ export async function hasWhatsAppOptIn(supabase, phone) {
   if (digits.length < 8) return false;
   const last8 = digits.slice(-8);
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('catalog_leads')
       .select('id')
       .eq('whatsapp_consent', true)
       .ilike('contact_value', `%${last8}%`)
       .limit(1);
+    if (error) throw error;
     return Array.isArray(data) && data.length > 0;
   } catch (err) {
     console.error('[WhatsApp Compliance] Opt-in lookup failed:', err.message);
@@ -90,13 +91,14 @@ export async function isWhatsAppSuppressed(supabase, phone) {
   const identity = String(phone).replace(/\D/g, '');
   if (!identity) return false;
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('marketing_suppressions')
       .select('id')
       .eq('active', true)
       .eq('identity', identity)
       .in('channel', ['whatsapp', 'all'])
       .limit(1);
+    if (error) throw error;
     return Array.isArray(data) && data.length > 0;
   } catch (err) {
     // Fail SAFE for marketing: if we cannot verify, treat as suppressed so we

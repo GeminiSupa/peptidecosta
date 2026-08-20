@@ -193,7 +193,9 @@ const finiteCoordinate = (value) => {
 const coordinatesOf = (item) => {
   const latitude = finiteCoordinate(item?.latitude);
   const longitude = finiteCoordinate(item?.longitude);
-  return latitude === null || longitude === null ? null : { latitude, longitude };
+  if (latitude === null || latitude < -90 || latitude > 90) return null;
+  if (longitude === null || longitude < -180 || longitude > 180) return null;
+  return { latitude, longitude };
 };
 
 export const hasCoordinates = (item) => coordinatesOf(item) !== null;

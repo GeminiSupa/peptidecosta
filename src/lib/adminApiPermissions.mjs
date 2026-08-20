@@ -1,6 +1,7 @@
 import { resolveAdminTabAccess } from './adminModules.js';
 
 const rules = [
+  { pattern: /^\/api\/admin\/analytics-dashboard$/, permissions: ['analytics'] },
   { pattern: /^\/api\/admin\/abandoned-carts(?:\/|$)/, permissions: ['carts'] },
   { pattern: /^\/api\/abandoned-cart-whatsapp$/, permissions: ['carts'] },
   { pattern: /^\/api\/admin\/automations(?:\/|$)/, permissions: ['marketing'] },

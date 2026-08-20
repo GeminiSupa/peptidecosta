@@ -5,6 +5,8 @@ import {
   isProspectsTableMissing,
   mergeRediscoveredProspect,
   normalizeProspectInput,
+  normalizeOptionalProspectDate,
+  prospectInputError,
   PROSPECT_STATUSES,
   CONTACT_PERMISSION_STATUSES,
 } from '@/lib/prospects.mjs';
@@ -81,6 +83,11 @@ export async function POST(request) {
   const inputs = [];
   const failed = [];
   for (const candidate of candidates) {
+    const validationError = prospectInputError(candidate);
+    if (validationError) {
+      failed.push({ organization_name: candidate?.organization_name || 'Unnamed business', error: validationError });
+      continue;
+    }
     const input = normalizeProspectInput(candidate);
     if (!input.organization_name) {
       failed.push({ organization_name: 'Unnamed business', error: 'Organization name is required' });
@@ -209,7 +216,13 @@ export async function PATCH(request) {
     if (body.contact_permission_status === 'do_not_contact') updates.status = 'do_not_contact';
   }
   if ('owner_email' in body) updates.owner_email = String(body.owner_email || '').trim().toLowerCase() || null;
-  if ('next_follow_up_at' in body) updates.next_follow_up_at = body.next_follow_up_at || null;
+  if ('next_follow_up_at' in body) {
+    const followUp = normalizeOptionalProspectDate(body.next_follow_up_at);
+    if (body.next_follow_up_at && !followUp) {
+      return NextResponse.json({ error: 'Enter a valid follow-up date' }, { status: 400 });
+    }
+    updates.next_follow_up_at = followUp;
+  }
 
   if (!Object.keys(updates).length) {
     return NextResponse.json({ error: 'Nothing to change' }, { status: 400 });
@@ -247,11 +260,16 @@ export async function DELETE(request) {
     return NextResponse.json({ error: `Delete at most ${MAX_BATCH} prospects per batch` }, { status: 400 });
   }
 
-  const { error } = await getSupabaseAdmin().from('sales_prospects').delete().in('id', ids);
+  const { data, error } = await getSupabaseAdmin()
+    .from('sales_prospects')
+    .delete()
+    .in('id', ids)
+    .select('id');
   if (isProspectsTableMissing(error)) return setupRequired();
   if (error) {
     console.error('[Prospects] Bulk delete failed:', error.message);
     return NextResponse.json({ error: 'Unable to delete prospects' }, { status: 500 });
   }
-  return NextResponse.json({ success: true, deleted: ids });
+  const deleted = (data || []).map((row) => row.id);
+  return NextResponse.json({ success: true, deleted });
 }

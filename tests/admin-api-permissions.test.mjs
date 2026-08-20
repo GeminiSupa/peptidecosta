@@ -14,6 +14,7 @@ const staff = (permissions = []) => ({
 });
 
 test('admin API path rules map sensitive routes to dashboard modules', () => {
+  assert.deepEqual(adminPermissionsForPath('/api/admin/analytics-dashboard'), ['analytics']);
   assert.deepEqual(adminPermissionsForPath('/api/admin/orders/update'), ['orders']);
   assert.deepEqual(adminPermissionsForPath('/api/admin/abandoned-carts/update'), ['carts']);
   assert.deepEqual(adminPermissionsForPath('/api/admin/products'), ['spreadsheet']);

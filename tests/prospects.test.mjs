@@ -22,10 +22,25 @@ import {
   normalizeOverpassElement,
   normalizeProspectPeople,
   normalizeProspectInput,
+  normalizeOptionalProspectDate,
+  prospectInputError,
   prospectSearchTerm,
   prospectSearchProfile,
   scoreProspect,
 } from '../src/lib/prospects.mjs';
+
+test('manual prospect validation rejects hidden coordinate and date errors', () => {
+  assert.match(prospectInputError({ latitude: 91, longitude: 10 }), /Latitude/);
+  assert.match(prospectInputError({ latitude: 9.9 }), /both latitude and longitude/);
+  assert.match(prospectInputError({ website_url: 'http://[broken' }), /website URL/);
+  assert.match(prospectInputError({ next_follow_up_at: 'not-a-date' }), /follow-up date/);
+  assert.equal(prospectInputError({ latitude: 9.9, longitude: -84.1, website_url: 'example.com' }), null);
+
+  const normalized = normalizeProspectInput({ organization_name: 'Out of range', latitude: 120, longitude: 300 });
+  assert.equal(normalized.latitude, null);
+  assert.equal(normalized.longitude, null);
+  assert.equal(normalizeOptionalProspectDate('not-a-date'), null);
+});
 import {
   decodeCloudflareEmail,
   extractPublishedContacts,

@@ -172,6 +172,7 @@ export default function ProspectMap({
 
   const handlePointerDown = (event) => {
     if (event.button !== 0) return;
+    if (event.target.closest('.pmap-controls, .pmap-area, .pmap-attribution')) return;
     dragRef.current = { x: event.clientX, y: event.clientY, moved: 0 };
     setDragging(true);
   };
@@ -205,6 +206,8 @@ export default function ProspectMap({
       className={`pmap${dragging ? ' dragging' : ''}`}
       ref={containerRef}
       onPointerDown={handlePointerDown}
+      role="region"
+      aria-label={`Prospect map with ${plotted.length} mapped businesses`}
     >
       <div className="pmap-tiles" aria-hidden="true">
         {tiles.map((tile) => (

@@ -118,6 +118,8 @@ test('prospects with no coordinates are not plotted', () => {
   assert.equal(hasCoordinates({ latitude: null, longitude: -84 }), false);
   assert.equal(hasCoordinates({ latitude: '', longitude: '' }), false);
   assert.equal(hasCoordinates({ latitude: 0, longitude: 0 }), true, 'a real 0,0 is still a place');
+  assert.equal(hasCoordinates({ latitude: 91, longitude: 0 }), false);
+  assert.equal(hasCoordinates({ latitude: 0, longitude: 181 }), false);
   assert.equal(hasCoordinates({}), false);
   assert.equal(fitView([{ latitude: null, longitude: null }], { width: 600, height: 520 }), null);
   assert.equal(fitView([], { width: 600, height: 520 }), null);

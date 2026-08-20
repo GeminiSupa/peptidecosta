@@ -12,6 +12,7 @@ import {
 import { PROSPECT_OUTREACH_FIELDS, getCalBookingBaseUrl, resolveBookingUrl } from '@/lib/prospectOutreachServer';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 const OPENAI_MODEL = 'gpt-4o-mini';
 const GEMINI_MODEL = 'gemini-flash-latest';
@@ -26,6 +27,7 @@ async function draftWithOpenAI(prompt, apiKey) {
       response_format: { type: 'json_object' },
       temperature: 0.7,
     }),
+    signal: AbortSignal.timeout(20000),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || 'AI drafting failed');
@@ -40,6 +42,7 @@ async function draftWithGemini(prompt, apiKey) {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: 'application/json' },
     }),
+    signal: AbortSignal.timeout(20000),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || 'AI drafting failed');
@@ -51,7 +54,13 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   try {
-    const { prospectId, channel, language = 'auto' } = await request.json();
+    let requestBody;
+    try {
+      requestBody = await request.json();
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    }
+    const { prospectId, channel, language = 'auto' } = requestBody;
     const outreachChannel = normalizeOutreachChannel(channel);
     if (!prospectId) return NextResponse.json({ error: 'Prospect ID is required' }, { status: 400 });
     if (!outreachChannel) return NextResponse.json({ error: 'Choose email or WhatsApp' }, { status: 400 });
