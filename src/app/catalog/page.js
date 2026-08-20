@@ -35,6 +35,7 @@ import {
   getBacWaterSizeMl,
 } from '@/lib/bacWater.mjs';
 import { shouldScheduleWaReprompt, WA_REPROMPT_DELAY_MS } from '@/lib/waReprompt.mjs';
+import { formatPrice as formatPriceVal, roundToCents } from '@/lib/money.mjs';
 import {
   identityMessage,
   normalizeCustomerName,
@@ -1651,11 +1652,6 @@ export default function CatalogPage() {
     return parseFloat(clean) || 0;
   };
 
-  const formatPriceVal = (val, cur) => {
-    if (cur === 'USD') return `$${val}`;
-    return `₡${Math.round(val).toLocaleString('en-US')}`;
-  };
-
   const getPriceAsNumber = (prod, cur, rate = exchangeRate) => {
     // BAC has size-specific fallback prices for giveaway-era product rows.
     if (isBacWater(prod.product)) {
@@ -2062,7 +2058,12 @@ export default function CatalogPage() {
   const getFinalTotal = () => {
     const items = getDiscountedTotal();
     const promo = getPromoDiscountAmount();
-    return (items - promo) + getShippingFee();
+    const total = (items - promo) + getShippingFee();
+    // Rounded at the source, not just where it is printed. This value is also
+    // saved as the order total and handed to the card gateway, and a sum of
+    // dollar amounts that carries fifteen decimal places is simply wrong
+    // before anyone displays it. Colones are already whole numbers.
+    return currency === 'USD' ? roundToCents(total) : total;
   };
 
   const handleApplyPromo = async (codeOverride = null) => {
