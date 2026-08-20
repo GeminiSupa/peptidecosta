@@ -4,7 +4,8 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { getPublicSiteUrl } from '@/lib/publicUrl';
-import { declineReasonFrom, gatewayStatusToOrderStatus } from '@/lib/paymentOutcome.mjs';
+import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus } from '@/lib/paymentOutcome.mjs';
+import { buildOrderNotificationPayload } from '@/lib/adminOrderEmail.mjs';
 
 export const runtime = 'nodejs';
 
@@ -39,6 +40,60 @@ function statusToOrderStatus(status) {
   });
 }
 
+/**
+ * Send the admin the receipt a real customer would get for this outcome.
+ *
+ * Customer copy only, and only to the address of the superadmin who pressed
+ * the button. The team's own alert is deliberately not sent: every real card
+ * order already produces one, so there is nothing to learn from a sandbox copy
+ * and no reason to put a TEST order in everyone's inbox.
+ *
+ * It goes through /api/order-notification rather than rendering the template
+ * here, so what lands in the inbox has travelled the exact path a real receipt
+ * travels — same builder, same SMTP settings, same failure modes.
+ *
+ * Never throws: a sandbox mail problem must not fail the payment test itself.
+ */
+async function sendSandboxReceipt({ order, orderNumber, outcome, declineReason, to, lang, enabled = true }) {
+  if (!enabled) return null;
+  if (outcome === 'pending') return { sent: false, skipped: 'not-settled' };
+  if (!to) return { sent: false, skipped: 'no-admin-email' };
+
+  try {
+    const payload = buildOrderNotificationPayload(
+      // 'card-test' marks the order in the database; the receipt should read
+      // as the card receipt it is standing in for.
+      { ...order, payment_method: 'card', customer_email: to },
+      orderNumber,
+      {
+        adminNotificationOnly: false,
+        customerReceiptOnly: true,
+        forceCustomerReceipt: true,
+        notificationKind: 'payment-result',
+        declineReason,
+      },
+    );
+    // Sandbox orders are USD, which would always pick English. Most customers
+    // read the Spanish one, so the panel chooses.
+    payload.lang = lang;
+
+    const response = await fetch(`${APP_URL.replace(/\/$/, '')}/api/order-notification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(30000),
+    });
+    const result = await response.json().catch(() => ({}));
+    const customer = result?.results?.customerReceipt;
+
+    if (customer?.sent) return { sent: true, to };
+    return { sent: false, to, error: customer?.error || result?.error || `HTTP ${response.status}` };
+  } catch (error) {
+    console.error('[admin/test-payment] Sandbox receipt failed:', error.message);
+    return { sent: false, to, error: error.message };
+  }
+}
+
 export async function POST(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
   if (auth.error) return auth.error;
@@ -66,7 +121,7 @@ export async function POST(request) {
         customer_phone: '00000000',
         customer_email: auth.user?.email || 'test@admin.local',
         shipping_address: 'TEST — sandbox payment, nothing to ship',
-        items: [],
+        items: [{ product: 'TEST ITEM (sandbox payment)', qty: 1, price: amount }],
         currency: 'USD',
         total_usd: amount,
         total_crc: 0,
@@ -105,7 +160,7 @@ export async function POST(request) {
 
     const { data: order, error: lookupErr } = await supabase
       .from('orders')
-      .select('order_number, total_usd, payment_method')
+      .select('*')
       .eq('order_number', orderNumber)
       .maybeSingle();
 
@@ -173,14 +228,28 @@ export async function POST(request) {
       })
       .eq('order_number', orderNumber);
 
+    const outcome = classifyPaymentOutcome(orderStatus);
+    const declineReason = outcome === 'paid' ? null : declineReasonFrom(transaction);
+
+    const receipt = await sendSandboxReceipt({
+      order: { ...order, status: orderStatus },
+      orderNumber,
+      outcome,
+      declineReason,
+      to: auth.user?.email,
+      lang: body.lang === 'en' ? 'en' : 'es',
+      enabled: body.sendReceipt !== false,
+    });
+
     return NextResponse.json({
-      ok: transaction.status === 'Approved',
+      ok: outcome === 'paid',
       status: transaction.status,
       orderStatus,
       transactionId: transaction.id || null,
-      error: transaction.status === 'Approved'
+      receipt,
+      error: outcome === 'paid'
         ? null
-        : (declineReasonFrom(transaction) || `Payment ${transaction.status || 'failed'}`),
+        : (declineReason || `Payment ${transaction.status || 'failed'}`),
     });
   } catch (err) {
     console.error('[test-payment]', err);

@@ -17,6 +17,9 @@ const btnStyle = { display: 'inline-flex', alignItems: 'center', gap: '8px', pad
 export default function TestPaymentPanel() {
   const [amount, setAmount] = useState('1.00');
   const [card, setCard] = useState({ holder: 'Test Admin', number: '4242 4242 4242 4242', expiry: '12/30', cvv: '123' });
+  // Sandbox orders are USD, which would otherwise always produce the English
+  // receipt. Most customers read the Spanish one, so it is the default here.
+  const [receiptLang, setReceiptLang] = useState('es');
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState([]);
 
@@ -32,10 +35,12 @@ export default function TestPaymentPanel() {
     return data.orderNumber;
   };
 
-  const payOnce = async (orderNumber) => {
+  const payOnce = async (orderNumber, { sendReceipt = true } = {}) => {
     const res = await adminFetch('/api/admin/test-payment', {
       method: 'POST',
-      body: JSON.stringify({ action: 'pay', orderNumber, card }),
+      // The burst test is about the double-charge lock, not the receipt. Its
+      // winning attempt would otherwise mail one on every run.
+      body: JSON.stringify({ action: 'pay', orderNumber, card, lang: receiptLang, sendReceipt }),
     });
     const data = await res.json().catch(() => ({}));
     return { httpStatus: res.status, ...data };
@@ -53,6 +58,14 @@ export default function TestPaymentPanel() {
           ? `APPROVED — ${orderNumber} (txn ${r.transactionId || '?'})`
           : `${r.status || 'DECLINED'} — ${orderNumber}: ${r.error || 'no detail'}`,
       });
+      if (r.receipt) {
+        addLog({
+          kind: r.receipt.sent ? 'success' : 'fail',
+          text: r.receipt.sent
+            ? `Customer receipt sent to ${r.receipt.to} — check your inbox for what the buyer sees.`
+            : `Customer receipt NOT sent: ${r.receipt.error || r.receipt.skipped || 'unknown reason'}`,
+        });
+      }
     } catch (err) {
       addLog({ kind: 'fail', text: `Error: ${err.message}` });
     } finally {
@@ -65,7 +78,7 @@ export default function TestPaymentPanel() {
     try {
       const orderNumber = await createOrder();
       addLog({ kind: 'info', text: `Created ${orderNumber} — firing 5 simultaneous payment attempts...` });
-      const results = await Promise.all([1, 2, 3, 4, 5].map(() => payOnce(orderNumber).catch((e) => ({ error: e.message }))));
+      const results = await Promise.all([1, 2, 3, 4, 5].map(() => payOnce(orderNumber, { sendReceipt: false }).catch((e) => ({ error: e.message }))));
       const approved = results.filter((r) => r.ok).length;
       const blocked = results.filter((r) => r.blocked).length;
       const failed = results.length - approved - blocked;
@@ -115,11 +128,22 @@ export default function TestPaymentPanel() {
           customers are unaffected. Test orders are marked <code>TEST-</code> and can be deleted below.
           Sandbox cards: <code>4242 4242 4242 4242</code> approves; use your gateway&apos;s decline cards
           (e.g. endings <code>4341</code>, <code>4846</code>) to test failures.
+          {' '}Each single payment also emails <strong>you</strong> the receipt the customer would get
+          for that outcome — approved or declined. Your team is not copied.</p>
+        <p style={{ margin: '10px 0 0', fontSize: '0.85rem', lineHeight: 1.6, opacity: 0.85 }}>
+          The burst test fires five attempts at once to prove the double-charge lock, and sends no mail.
         </p>
       </div>
 
       <div style={panelStyle}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+          <div>
+            <label style={labelStyle}>Receipt language</label>
+            <select style={inputStyle} value={receiptLang} onChange={(e) => setReceiptLang(e.target.value)}>
+              <option value="es">Spanish (most customers)</option>
+              <option value="en">English</option>
+            </select>
+          </div>
           <div>
             <label style={labelStyle}>Amount (USD)</label>
             <input style={inputStyle} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" />

@@ -2232,6 +2232,19 @@ export default function CatalogPage() {
    * Every message here has to survive the same test: it says what happened,
    * and it says what to do next. "Error 500" says neither.
    */
+  /**
+   * Close the gateway's sentence so ours can start.
+   *
+   * Shield Hub Pay returns "Card brand not allowed" with no full stop, and
+   * joining that to our own line produced "Card brand not allowed Nothing has
+   * been charged." on screen — one run-on sentence out of two.
+   */
+  const endSentence = (text) => {
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return '';
+    return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+  };
+
   const failCheckout = (title, detail) => {
     setCheckoutError({ title, detail });
     revealField('checkoutError');
@@ -2456,13 +2469,18 @@ export default function CatalogPage() {
       // The gateway's own wording, kept — "insufficient funds" or "card
       // declined" is something the customer can act on, and paraphrasing it
       // would only blur the one useful detail. The sentence after it is ours.
+      //
+      // No "above" or "below" here. The notice is placed by the layout, not by
+      // this string, and it read "check the card details above" while sitting
+      // directly above those very fields. A direction we cannot guarantee is
+      // worse than no direction at all.
       failCheckout(
         lang === 'en' ? 'The card payment did not go through' : 'El pago con tarjeta no se completó',
         [
-          data.error || (lang === 'en' ? 'The bank did not give a reason.' : 'El banco no dio un motivo.'),
+          endSentence(data.error) || (lang === 'en' ? 'The bank did not give a reason.' : 'El banco no dio un motivo.'),
           lang === 'en'
-            ? 'Nothing has been charged. Check the card details above, try another card, or message us on WhatsApp to pay a different way.'
-            : 'No se ha realizado ningún cargo. Revise los datos de la tarjeta arriba, pruebe con otra, o escríbanos por WhatsApp para pagar de otra forma.',
+            ? 'Nothing has been charged. Check your card details, try another card, or message us on WhatsApp to pay a different way.'
+            : 'No se ha realizado ningún cargo. Revise los datos de su tarjeta, pruebe con otra, o escríbanos por WhatsApp para pagar de otra forma.',
         ].join(' '),
       );
       setCardSubmitting(false);

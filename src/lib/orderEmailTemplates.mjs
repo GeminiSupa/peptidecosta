@@ -328,8 +328,11 @@ export const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, t
           <p style="color:${isDeclined ? '#991b1b' : '#166534'}; font-size:14px; margin:0 0 18px; font-weight:500; line-height:1.5;">
             ${isDeclined
               ? (isEn
-                ? `Your card was not charged.${declineReason ? ` Your bank's reason: “${escapeHtml(declineReason)}”.` : ''} Nothing has been taken from your account. Please try again with another card, or message us on WhatsApp and we will take the order for you.`
-                : `No se realizó ningún cargo a su tarjeta.${declineReason ? ` El motivo de su banco: “${escapeHtml(declineReason)}”.` : ''} No se ha debitado nada de su cuenta. Intente nuevamente con otra tarjeta, o escríbanos por WhatsApp y tomamos su pedido.`)
+                // "Reason given", not "your bank's reason" — "Card brand not
+                // allowed" is the gateway refusing a card type we do not
+                // accept, and the customer's bank never saw the transaction.
+                ? `Your card was not charged and nothing has left your account.${declineReason ? ` Reason given: “${escapeHtml(declineReason)}”.` : ''} Please try again with another card, or message us on WhatsApp and we will take the order for you.`
+                : `No se realizó ningún cargo a su tarjeta y no se ha debitado nada de su cuenta.${declineReason ? ` Motivo indicado: “${escapeHtml(declineReason)}”.` : ''} Intente nuevamente con otra tarjeta, o escríbanos por WhatsApp y tomamos su pedido.`)
               : isGatewayPayment
                 ? (isEn
                   ? 'No WhatsApp payment action is needed for this order. We will update your order once the payment processor confirms the transaction.'
