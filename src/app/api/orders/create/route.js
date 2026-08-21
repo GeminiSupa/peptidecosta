@@ -4,6 +4,8 @@ import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRe
 import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
+import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
+import { checkoutOrderStatus } from '@/lib/checkoutOrderStatus.mjs';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import {
@@ -52,6 +54,15 @@ async function applyTrustedAgentReferralAttribution(supabase, untrustedOrder) {
       .maybeSingle();
     affiliate = data || null;
   }
+
+  // The browser does not get to say what a referral earns. These two columns
+  // arrived in the POST body and were written down as given, and the weekly
+  // affiliate scan sums them straight off the row onto an invoice somebody
+  // approves and pays. Recomputed here from the affiliate's own stored rate, so
+  // the figure on that invoice is ours. The sales-agent branches below zero
+  // these deliberately — they pay through the agent report instead — and still
+  // win, because they run after this.
+  Object.assign(order, affiliateCommissionPatch(order, affiliate));
 
   if (isSalesAgentAffiliate(affiliate)) {
     const { data: profile } = await supabase
@@ -314,6 +325,16 @@ export async function POST(request) {
     if (!Array.isArray(order.items) || order.items.length === 0) {
       return NextResponse.json({ error: 'Order must include at least one item' }, { status: 400 });
     }
+
+    // The opening status is ours, not the caller's. This route is public and
+    // runs as service-role, so a posted `status: 'Paid'` used to create a
+    // settled order that no money had ever been attached to — one the weekly
+    // commission scan then counted as a real sale. Derived from the payment
+    // method, which is the only thing that has ever decided it in practice.
+    //
+    // Set here rather than just before the insert so the alerts and the
+    // abandoned-cart cleanup further down read the same status the row gets.
+    order.status = checkoutOrderStatus(order.payment_method);
 
     // The same rules the checkout form runs, run again here. The browser is not
     // the authority: a stale tab, a retry from a saved payload or a direct post

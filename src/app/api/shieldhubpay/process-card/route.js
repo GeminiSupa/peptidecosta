@@ -184,7 +184,37 @@ export async function POST(req) {
     }
 
     const name = splitName(customerName);
-    const formattedAmount = normalizeAmount(amount, currency);
+
+    // Price the charge from the order row, never from the request body.
+    //
+    // `amount` is POSTed by the browser, and until this existed it was handed
+    // straight to the gateway. A $900 order could be charged $1 by anyone
+    // willing to edit the request, and the order still came back marked Paid.
+    // The claim above already returned the stored row, so the authoritative
+    // figure is in hand without a second read.
+    const storedAmount = Number(claim.order?.total_usd || 0);
+    if (!Number.isFinite(storedAmount) || storedAmount <= 0) {
+      // Nothing trustworthy to charge. Release the claim first, or the order is
+      // stranded in PROCESSING_STATUS with no way for the customer to retry.
+      await releaseOrderClaim(supabase, orderNumber);
+      return stopCheckout('unavailable', lang, 400,
+        `Order ${orderNumber} has no usable stored USD total; refusing to charge a request-supplied amount`);
+    }
+
+    // Logged, not refused. The two figures are expected to differ by a few
+    // cents on a colón order: the row stores total_usd rounded to whole dollars
+    // while the checkout sends the same conversion to two decimals. Refusing on
+    // that difference would reject every CRC card payment. What matters is that
+    // the number below comes from the database — a disagreement worth chasing
+    // shows up here without standing between a real customer and their order.
+    const requestedAmount = Number(amount);
+    if (Number.isFinite(requestedAmount) && Math.abs(requestedAmount - storedAmount) > 0.01) {
+      console.warn(
+        `[Shield Hub Pay] Amount mismatch for ${orderNumber}: request said ${requestedAmount}, charging stored ${storedAmount}`
+      );
+    }
+
+    const formattedAmount = normalizeAmount(storedAmount, currency);
     const baseUrl = APP_URL.replace(/\/$/, '');
 
     let transaction;

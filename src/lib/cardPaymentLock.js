@@ -22,7 +22,13 @@ const DEFAULT_RETRY_STATUS = 'Pending - Card';
  * Atomically claim an order for card processing.
  * Only one concurrent caller can win; the rest get { claimed: false }.
  *
- * @returns {Promise<{ claimed: boolean, error?: any }>}
+ * The winner also gets the order's stored money columns back, because the
+ * charge that follows must be priced from the database rather than from the
+ * request that asked for it. The UPDATE already returns the row it changed, so
+ * carrying the amount out of here costs nothing and removes the need for a
+ * separate "what is this order worth" read that a caller could forget to do.
+ *
+ * @returns {Promise<{ claimed: boolean, order?: object, error?: any }>}
  */
 export async function claimOrderForPayment(supabase, orderNumber) {
   if (!supabase || !orderNumber) return { claimed: false };
@@ -37,10 +43,11 @@ export async function claimOrderForPayment(supabase, orderNumber) {
     .not('status', 'ilike', '%paid%')
     .not('status', 'ilike', '%complete%')
     .neq('status', PROCESSING_STATUS)
-    .select('order_number');
+    .select('order_number, total_usd, total_crc, currency');
 
   if (error) return { claimed: false, error };
-  return { claimed: Array.isArray(data) && data.length > 0 };
+  const claimed = Array.isArray(data) && data.length > 0;
+  return claimed ? { claimed: true, order: data[0] } : { claimed: false };
 }
 
 /**

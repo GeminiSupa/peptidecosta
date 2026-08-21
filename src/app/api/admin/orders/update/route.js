@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
+import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { orderVisibleToAgent } from '@/lib/agentOrders';
 import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
@@ -37,24 +38,6 @@ const isSettledStatus = (status) => {
 
 const sameNullableText = (left, right) =>
   (String(left || '').trim() || null) === (String(right || '').trim() || null);
-
-function affiliateCommissionPatch(order, affiliate) {
-  if (!order?.affiliate_id || !affiliate) {
-    return {
-      affiliate_commission_usd: 0,
-      affiliate_commission_crc: 0,
-    };
-  }
-
-  const rate = Number(affiliate.commission_rate || 0);
-  const usdBase = Math.max(0, Number(order.total_usd || 0) - Number(order.shipping_cost_usd || 0));
-  const crcBase = Math.max(0, Number(order.total_crc || 0) - Number(order.shipping_cost_crc || 0));
-
-  return {
-    affiliate_commission_usd: Number((usdBase * rate).toFixed(2)),
-    affiliate_commission_crc: Math.round(crcBase * rate),
-  };
-}
 
 export async function PATCH(request) {
   const auth = await verifyAdminSession(request);

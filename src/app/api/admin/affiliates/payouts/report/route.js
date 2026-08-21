@@ -3,6 +3,8 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
+import { COMMISSION_ELIGIBLE_ORDER_STATUSES } from '@/lib/agentAttribution.mjs';
+import { getOrderSalesAmounts } from '@/lib/agentOrders';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 
@@ -81,13 +83,19 @@ export async function GET(request) {
     const startDateStr = startDate.toISOString();
     const endDateStr = endDate.toISOString();
 
-    // Fetch all non-cancelled orders with an affiliate ID in the scanned period
+    // Orders in the period that an affiliate is actually owed commission on.
+    //
+    // This used to ask only for orders that were not Cancelled, which is not
+    // the same question. A refused card sits at 'Declined', a customer who
+    // never paid sits at 'Pending', and neither was excluded — so affiliates
+    // were invoiced for sales that brought in no money. Commission follows the
+    // money, so it waits for the same statuses the sales-agent scan waits for.
     let query = supabaseAdmin
       .from('orders')
       .select('*')
       .gte('created_at', startDateStr)
       .lte('created_at', endDateStr)
-      .not('status', 'eq', 'Cancelled')
+      .in('status', COMMISSION_ELIGIBLE_ORDER_STATUSES)
       .not('affiliate_id', 'is', null);
 
     if (targetAffiliateId) {
@@ -157,12 +165,14 @@ export async function GET(request) {
       let crcCommission = 0;
 
       for (const order of affOrders) {
-        const totalAmount = Number(order.total || 0);
-        if (order.currency === 'USD') {
-          usdSales += totalAmount;
-        } else {
-          crcSales += totalAmount;
-        }
+        // `order.total` is not a column — orders carry total_usd and total_crc.
+        // Reading it yielded undefined on every row, which is why these
+        // invoices have always shown gross referrals of zero next to a real
+        // commission figure. getOrderSalesAmounts is what the sales-agent scan
+        // reads, and it fills both currencies from whichever one is stored.
+        const amounts = getOrderSalesAmounts(order);
+        usdSales += amounts.usd;
+        crcSales += amounts.crc;
         usdCommission += Number(order.affiliate_commission_usd || 0);
         crcCommission += Number(order.affiliate_commission_crc || 0);
       }
