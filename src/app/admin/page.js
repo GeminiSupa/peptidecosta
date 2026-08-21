@@ -3155,9 +3155,33 @@ Core Rules:
       if (res.ok && data.order) {
         savedOrder = data.order;
         handleOrderUpdated(data.order);
+      } else {
+        // The row above was changed on screen before the server was asked. A
+        // refusal used to stop right here, leaving the new status showing on a
+        // record that still held the old one — the panel said "Refunded" while
+        // nothing had been refunded, and the only clue was a console line.
+        // Put the row back and say why.
+        const restored = prevOrder?.status ?? null;
+        if (restored !== null) {
+          setOrders((current) => current.map((o) => (o.id === orderId ? { ...o, status: restored } : o)));
+          setSelectedOrderDetails((current) => (
+            current?.id === orderId ? { ...current, status: restored } : current
+          ));
+        }
+        alert(data.error || `Could not change the status (server returned ${res.status}). The order is unchanged.`);
+        return;
       }
     } catch (err) {
       console.error('Order status update error:', err);
+      const restored = prevOrder?.status ?? null;
+      if (restored !== null) {
+        setOrders((current) => current.map((o) => (o.id === orderId ? { ...o, status: restored } : o)));
+        setSelectedOrderDetails((current) => (
+          current?.id === orderId ? { ...current, status: restored } : current
+        ));
+      }
+      alert('Could not reach the server, so the status was not changed. Check your connection and try again.');
+      return;
     }
 
     if (newStatus !== 'Completed' && newStatus !== 'Order Complete') return;

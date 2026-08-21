@@ -89,7 +89,10 @@ export async function PATCH(request) {
     // actually refunded on it, which the agent's pay would then be based on.
     if (patch.status && isRefundStatus(patch.status)) {
       return NextResponse.json({
-        error: 'Use the Refund box on the order to record a refund — it checks the amount against what the customer paid.',
+        error: 'The status list cannot record a refund. Open the order and use the red '
+          + 'Refund box in the Transaction section — it checks the amount against what '
+          + 'the customer paid, emails them, and adjusts the agent\'s commission. '
+          + 'This order has not been changed.',
       }, { status: 400 });
     }
 

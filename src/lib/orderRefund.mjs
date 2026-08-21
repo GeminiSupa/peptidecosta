@@ -85,6 +85,11 @@ export function orderCanBeRefunded(order) {
     const remaining = refundableRemaining(order);
     return remaining.usd > 0 || remaining.crc > 0;
   }
+  // 'Processing' is money received and the parcel not yet sent — the most
+  // likely moment for a customer to change their mind, and the one isPaidLike
+  // misses because the word contains neither "paid" nor "complete". The
+  // customer dashboard already counts it as settled; so does this.
+  if (String(status).trim().toLowerCase() === 'processing') return true;
   return isPaidLike(status);
 }
 

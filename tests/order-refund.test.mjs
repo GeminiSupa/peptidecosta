@@ -7,6 +7,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
   ORDER_STATUS_PARTLY_REFUNDED,
@@ -232,4 +233,42 @@ test('no debts leaves the pay untouched', () => {
   assert.equal(out.payableUsd, 123.45);
   assert.equal(out.payableCrc, 56000);
   assert.equal(out.applied.length, 0);
+});
+
+// --- what can be refunded, and what the panel must not silently accept -------
+
+test('an order being prepared can still be refunded', () => {
+  // "Processing" is money in, parcel not yet gone: the likeliest moment for a
+  // customer to change their mind. isPaidLike misses it because the word holds
+  // neither "paid" nor "complete", so it is allowed explicitly.
+  assert.equal(orderCanBeRefunded(paidOrder({ status: 'Processing' })), true);
+  assert.equal(planRefund(paidOrder({ status: 'Processing' }), { amount: 10 }).ok, true);
+});
+
+test('every settled status the panel writes can be refunded', () => {
+  for (const status of ['Paid', 'Processing', 'Order Complete', 'Completed']) {
+    assert.equal(orderCanBeRefunded(paidOrder({ status })), true, `${status} should be refundable`);
+  }
+});
+
+test('the status dropdown cannot write a refund status', () => {
+  const route = fs.readFileSync('src/app/api/admin/orders/update/route.js', 'utf8');
+  // Setting the label without the amount check would leave an order reading
+  // "Refunded" with nothing refunded on it, which the agent's pay is based on.
+  assert.match(route, /if \(patch\.status && isRefundStatus\(patch\.status\)\)/);
+  assert.match(route, /Refund box/);
+});
+
+test('a rejected status change is put back on screen, not left showing', () => {
+  const page = fs.readFileSync('src/app/admin/page.js', 'utf8');
+  const handler = page.slice(
+    page.indexOf('const handleOrderStatusUpdate'),
+    page.indexOf('const handleOrderStatusUpdate') + 3000,
+  );
+
+  // The row is changed optimistically before the server is asked. Without a
+  // rollback the panel showed "Refunded" on an order the server had refused,
+  // with the only clue in the browser console.
+  assert.match(handler, /prevOrder\?\.status/, 'the previous status must be restored');
+  assert.match(handler, /alert\(data\.error/, 'the server reason must be shown');
 });
