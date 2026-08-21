@@ -1,18 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Briefcase, TrendingUp, DollarSign, Target, ClipboardList,
-  ChevronRight, ChevronLeft, Wallet, Camera, Upload,
+  ChevronRight, ChevronLeft, Wallet, Camera, Upload, Loader2,
+  RefreshCw, AlertTriangle, CheckCircle2,
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { getOrderSalesAmounts } from '@/lib/agentOrders';
-
-function formatDay(dateStr) {
-  if (!dateStr) return '';
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
+import {
+  AGENT_ANALYTICS_MAX_WEEK_OFFSET,
+  formatAgentDate,
+  preferredAgentMoney,
+} from '@/lib/agentDashboard.mjs';
 
 function formatMoney(val, curr) {
   const num = Number(val || 0);
@@ -34,51 +34,83 @@ export default function AgentDashboard({
 }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [weekOffset, setWeekOffset] = useState(0);
   const [avatarUrl, setAvatarUrl] = useState(currentUserProfile?.avatar_url || '');
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const [avatarNotice, setAvatarNotice] = useState('');
+  const statsRef = useRef(stats);
+  const analyticsRequestRef = useRef(0);
+  const analyticsAbortRef = useRef(null);
+  const avatarInputRef = useRef(null);
+
+  useEffect(() => { statsRef.current = stats; }, [stats]);
 
   useEffect(() => {
     setAvatarUrl(currentUserProfile?.avatar_url || '');
   }, [currentUserProfile?.avatar_url]);
 
   const fetchAnalytics = useCallback(async () => {
-    setLoading(true);
+    analyticsAbortRef.current?.abort();
+    const controller = new AbortController();
+    analyticsAbortRef.current = controller;
+    const requestId = analyticsRequestRef.current + 1;
+    analyticsRequestRef.current = requestId;
+    if (statsRef.current) setRefreshing(true);
+    else setLoading(true);
     setError('');
     try {
-      const response = await adminFetch(`/api/agent/analytics?weekOffset=${weekOffset}`);
-      const data = await response.json();
-      if (data.success) {
-        setStats(data.stats);
-      } else {
-        setError(data.error || 'Failed to load your dashboard');
-      }
+      const response = await adminFetch(`/api/agent/analytics?weekOffset=${weekOffset}`, { signal: controller.signal });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || 'Failed to load your dashboard');
+      if (requestId !== analyticsRequestRef.current) return;
+      setStats({
+        ...data.stats,
+        weekOrders: Array.isArray(data.stats?.weekOrders) ? data.stats.weekOrders : [],
+        weekPendingOrders: Array.isArray(data.stats?.weekPendingOrders) ? data.stats.weekPendingOrders : [],
+        recentPayouts: Array.isArray(data.stats?.recentPayouts) ? data.stats.recentPayouts : [],
+      });
     } catch (err) {
+      if (err.name === 'AbortError' || requestId !== analyticsRequestRef.current) return;
       console.error(err);
-      setError('Could not load your earnings data');
+      setError(err.message || 'Could not load your earnings data');
+    } finally {
+      if (requestId === analyticsRequestRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+        if (analyticsAbortRef.current === controller) analyticsAbortRef.current = null;
+      }
     }
-    setLoading(false);
   }, [weekOffset]);
 
   useEffect(() => {
     fetchAnalytics();
+    return () => analyticsAbortRef.current?.abort();
   }, [fetchAnalytics]);
 
   if (loading) {
-    return <p className="dashboard-empty" style={{ padding: '32px 0' }}>Loading your dashboard…</p>;
+    return <div className="agent-dashboard-state" role="status"><Loader2 size={22} className="mkt-spin" /> Loading your dashboard…</div>;
   }
-  if (error) {
-    return <p className="dashboard-empty" style={{ padding: '32px 0', color: '#f87171' }}>{error}</p>;
+  if (error && !stats) {
+    return (
+      <div className="agent-dashboard-state error" role="alert">
+        <AlertTriangle size={22} />
+        <span>{error}</span>
+        <button type="button" className="admin-btn admin-btn-secondary" onClick={fetchAnalytics}>Try again</button>
+      </div>
+    );
   }
   if (!stats) return null;
 
   const name = currentUserProfile?.name || currentUserEmail?.split('@')[0] || 'Agent';
   const isSubUser = variant === 'sub_user';
+  const isToday = variant === 'today';
   const salaryCurr = stats.salaryCurrency || 'USD';
-  const viewingPastWeek = (stats.weekOffset || 0) > 0;
+  const viewingPastWeek = weekOffset > 0;
   const weekRange = stats.weekStartDate
-    ? `${formatDay(stats.weekStartDate)} – ${formatDay(stats.weekEndDate)}`
+    ? `${formatAgentDate(stats.weekStartDate)} – ${formatAgentDate(stats.weekEndDate)}`
     : '';
   const weekWord = viewingPastWeek
     ? `week of ${weekRange}`
@@ -96,24 +128,30 @@ export default function AgentDashboard({
   const weekSalesCrc = wp ? wp.crcSales : stats.currentWeekSalesCRC;
   const weekCommUsd = wp ? wp.usdCommission : stats.currentWeekCommissionUSD;
   const weekCommCrc = wp ? wp.crcCommission : stats.currentWeekCommissionCRC;
+  const weekOverrideUsd = wp ? 0 : Number(stats.currentWeekOverrideUSD || 0);
+  const weekOverrideCrc = wp ? 0 : Number(stats.currentWeekOverrideCRC || 0);
   const estWeekPayUsd = wp
     ? wp.totalPayoutUsd
-    : stats.currentWeekCommissionUSD + (salaryCurr === 'USD' ? Number(stats.weeklySalary || 0) : 0);
+    : Number(stats.currentWeekCommissionUSD || 0) + weekOverrideUsd + (salaryCurr === 'USD' ? Number(stats.weeklySalary || 0) : 0);
   const estWeekPayCrc = wp
     ? wp.totalPayoutCrc
-    : stats.currentWeekCommissionCRC + (salaryCurr === 'CRC' ? Number(stats.weeklySalary || 0) : 0);
+    : Number(stats.currentWeekCommissionCRC || 0) + weekOverrideCrc + (salaryCurr === 'CRC' ? Number(stats.weeklySalary || 0) : 0);
   const payLabelWord = wp ? 'Pay' : 'Est. pay';
 
   const weekPendingList = stats.weekPendingOrders || [];
-  const moneyOrEmpty = (usd, crc) => (usd > 0 ? formatMoney(usd, 'USD') : crc > 0 ? formatMoney(crc, 'CRC') : formatMoney(0, salaryCurr));
+  const preferredMoney = (usd, crc, currency = salaryCurr) => {
+    const preferred = preferredAgentMoney(usd, crc, currency);
+    return formatMoney(preferred.value, preferred.currency);
+  };
+  const moneyOrEmpty = (usd, crc) => preferredMoney(usd, crc);
 
   const renderOrderRow = (o) => {
     const { usd, crc } = getOrderSalesAmounts(o);
-    const display = o.currency === 'CRC' || (!usd && crc) ? `₡${crc.toLocaleString()}` : `$${usd}`;
+    const display = o.currency === 'CRC' || (!usd && crc) ? formatMoney(crc, 'CRC') : formatMoney(usd, 'USD');
     return (
-      <button key={o.id} type="button" className="dashboard-mini-row" onClick={() => onOpenOrder?.(o)}>
-        <div>
-          <div className="dashboard-mini-title">#{o.order_number || o.id.slice(0, 8)}</div>
+      <button key={o.id} type="button" className="dashboard-mini-row agent-dashboard-order-row" onClick={() => onOpenOrder?.(o)}>
+        <div className="agent-dashboard-row-main">
+          <div className="dashboard-mini-title">#{o.order_number || String(o.id || '').slice(0, 8)}</div>
           <div className="dashboard-mini-sub">{o.customer_name || 'Customer'}</div>
           {o.commission_source_label && (
             <div className="dashboard-mini-sub" style={{ color: o.agent_commission_source === 'agent_referral' ? '#5eead4' : undefined }}>
@@ -121,7 +159,7 @@ export default function AgentDashboard({
             </div>
           )}
         </div>
-        <div style={{ textAlign: 'right' }}>
+        <div className="agent-dashboard-row-value">
           <div className="dashboard-mini-val">{display}</div>
           <div className="dashboard-mini-sub">{o.status || 'Pending'}</div>
         </div>
@@ -131,8 +169,18 @@ export default function AgentDashboard({
 
   const handleAvatarUpload = async (file) => {
     if (!file) return;
+    const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+    if (!allowedTypes.has(file.type)) {
+      setAvatarError('Choose a JPG, PNG, WebP, or GIF image.');
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setAvatarError('Profile image must be 4MB or smaller.');
+      return;
+    }
     setAvatarUploading(true);
-    setError('');
+    setAvatarError('');
+    setAvatarNotice('');
     try {
       const form = new FormData();
       form.append('file', file);
@@ -143,21 +191,28 @@ export default function AgentDashboard({
       const data = await response.json();
       if (!response.ok || data.error) throw new Error(data.error || 'Avatar upload failed');
       setAvatarUrl(data.avatarUrl);
+      setAvatarNotice('Profile photo updated.');
     } catch (err) {
-      setError(err.message || 'Could not upload profile photo');
+      setAvatarError(err.message || 'Could not upload profile photo');
+    } finally {
+      setAvatarUploading(false);
     }
-    setAvatarUploading(false);
   };
 
   return (
-    <div className="dashboard-home agent-dashboard">
+    <div className={`dashboard-home agent-dashboard${isToday ? ' today-dashboard' : ''}`}>
       <div className="dashboard-home-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
-          <label
+        <div className="agent-dashboard-heading">
+          <button
+            type="button"
+            aria-label="Change profile photo"
             title="Upload profile photo"
+            disabled={avatarUploading}
+            onClick={() => avatarInputRef.current?.click()}
             style={{
               width: '58px',
               height: '58px',
+              padding: 0,
               borderRadius: '50%',
               overflow: 'hidden',
               display: 'flex',
@@ -183,18 +238,19 @@ export default function AgentDashboard({
             <span style={{ position: 'absolute', right: '-2px', bottom: '-2px', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#38bdf8', color: '#082f49', border: '2px solid #0f172a', boxShadow: '0 4px 12px rgba(0,0,0,0.25)' }}>
               {avatarUploading ? <Upload size={13} /> : <Camera size={13} />}
             </span>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              disabled={avatarUploading}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = '';
-                if (file) handleAvatarUpload(file);
-              }}
-              style={{ display: 'none' }}
-            />
-          </label>
+          </button>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            disabled={avatarUploading}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) handleAvatarUpload(file);
+            }}
+            hidden
+          />
           <div style={{ minWidth: 0 }}>
             <h2 className="dashboard-home-title">{title}</h2>
             <p className="dashboard-home-subtitle">
@@ -202,11 +258,12 @@ export default function AgentDashboard({
             </p>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="agent-dashboard-controls" aria-label="Select reporting week">
           <button
             type="button"
             className="admin-btn admin-btn-secondary"
-            onClick={() => setWeekOffset((w) => w + 1)}
+            onClick={() => setWeekOffset((w) => Math.min(w + 1, AGENT_ANALYTICS_MAX_WEEK_OFFSET))}
+            disabled={refreshing || weekOffset >= AGENT_ANALYTICS_MAX_WEEK_OFFSET}
             title="Previous week"
           >
             <ChevronLeft size={16} /> Prev week
@@ -215,8 +272,7 @@ export default function AgentDashboard({
             type="button"
             className="admin-btn admin-btn-secondary"
             onClick={() => setWeekOffset((w) => Math.max(w - 1, 0))}
-            disabled={!viewingPastWeek}
-            style={!viewingPastWeek ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+            disabled={refreshing || !viewingPastWeek}
             title="Next week"
           >
             Next week <ChevronRight size={16} />
@@ -226,15 +282,47 @@ export default function AgentDashboard({
               type="button"
               className="admin-btn admin-btn-secondary"
               onClick={() => setWeekOffset(0)}
+              disabled={refreshing}
             >
               This week
             </button>
           )}
-          <button type="button" className="admin-btn admin-btn-secondary" onClick={fetchAnalytics}>
-            Refresh
+          <button type="button" className="admin-btn admin-btn-secondary" onClick={fetchAnalytics} disabled={refreshing}>
+            <RefreshCw size={16} className={refreshing ? 'mkt-spin' : undefined} />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
       </div>
+
+      {avatarError && (
+        <div className="agent-dashboard-alert error" role="alert">
+          <AlertTriangle size={17} /> <span>{avatarError}</span>
+        </div>
+      )}
+      {avatarNotice && (
+        <div className="agent-dashboard-alert success" role="status">
+          <CheckCircle2 size={17} /> <span>{avatarNotice}</span>
+        </div>
+      )}
+      {error && (
+        <div className="agent-dashboard-alert error" role="alert">
+          <AlertTriangle size={17} />
+          <span>{error}</span>
+          <button type="button" className="admin-btn admin-btn-secondary" onClick={fetchAnalytics}>Try again</button>
+        </div>
+      )}
+      {stats.weekPayoutError && (
+        <div className="agent-dashboard-alert warning" role="alert">
+          <AlertTriangle size={17} />
+          <span>{stats.weekPayoutError} The amount below is a live estimate.</span>
+          <button type="button" className="admin-btn admin-btn-secondary" onClick={fetchAnalytics}>Retry</button>
+        </div>
+      )}
+      {refreshing && (
+        <div className="agent-dashboard-refreshing" role="status">
+          <Loader2 size={15} className="mkt-spin" /> Updating dashboard…
+        </div>
+      )}
 
       <div className="dashboard-kpi-grid">
         <div className="dashboard-kpi-card">
@@ -243,9 +331,7 @@ export default function AgentDashboard({
           </div>
           <div>
             <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>
-              {stats.currentMonthSalesUSD > 0
-                ? formatMoney(stats.currentMonthSalesUSD, 'USD')
-                : formatMoney(stats.currentMonthSalesCRC, 'CRC')}
+              {preferredMoney(stats.currentMonthSalesUSD, stats.currentMonthSalesCRC)}
             </div>
             <div className="dashboard-kpi-label">My sales this month</div>
             <div className="dashboard-mini-sub">{stats.currentMonthOrdersCount} completed</div>
@@ -257,7 +343,7 @@ export default function AgentDashboard({
           </div>
           <div>
             <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>
-              {stats.todaySalesUSD > 0 ? formatMoney(stats.todaySalesUSD, 'USD') : formatMoney(stats.todaySalesCRC, 'CRC')}
+              {preferredMoney(stats.todaySalesUSD, stats.todaySalesCRC)}
             </div>
             <div className="dashboard-kpi-label">My sales today</div>
             <div className="dashboard-mini-sub">{stats.todayOrdersCount} order{stats.todayOrdersCount !== 1 ? 's' : ''}</div>
@@ -270,9 +356,7 @@ export default function AgentDashboard({
           </div>
           <div>
             <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>
-              {weekSalesUsd > 0
-                ? formatMoney(weekSalesUsd, 'USD')
-                : formatMoney(weekSalesCrc, 'CRC')}
+              {preferredMoney(weekSalesUsd, weekSalesCrc)}
             </div>
             <div className="dashboard-kpi-label">My sales {weekWord}</div>
             <div className="dashboard-mini-sub">{stats.currentWeekOrdersCount} completed</div>
@@ -285,7 +369,7 @@ export default function AgentDashboard({
           </div>
           <div>
             <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>
-              {estWeekPayUsd > 0 ? formatMoney(estWeekPayUsd, 'USD') : formatMoney(estWeekPayCrc, 'CRC')}
+              {preferredMoney(estWeekPayUsd, estWeekPayCrc)}
             </div>
             <div className="dashboard-kpi-label">{payLabelWord} {weekWord}</div>
             <div className="dashboard-mini-sub">
@@ -293,7 +377,7 @@ export default function AgentDashboard({
                 ? `From payout report · ${wp.status === 'Approved' ? 'Paid' : 'Pending'}`
                 : isSubUser
                   ? `${stats.commissionRate}% of your orders`
-                  : `${stats.currentWeekCommissionRateLabel || `${stats.commissionRate}%`} commission + salary`}
+                  : `${stats.currentWeekCommissionRateLabel || `${stats.commissionRate}%`} commission${stats.currentWeekOverrideCount > 0 ? ' + team override' : ''} + salary`}
             </div>
           </div>
         </div>
@@ -352,17 +436,21 @@ export default function AgentDashboard({
                 <div className="dashboard-mini-sub">On your assigned orders</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                {weekCommUsd > 0 && (
-                  <div className="dashboard-mini-val">{formatMoney(weekCommUsd, 'USD')}</div>
-                )}
-                {weekCommCrc > 0 && (
-                  <div className="dashboard-mini-val">{formatMoney(weekCommCrc, 'CRC')}</div>
-                )}
-                {weekCommUsd === 0 && weekCommCrc === 0 && (
-                  <div className="dashboard-mini-sub">$0</div>
-                )}
+                <div className="dashboard-mini-val">{preferredMoney(weekCommUsd, weekCommCrc)}</div>
               </div>
             </div>
+            {!isSubUser && !wp && stats.currentWeekOverrideCount > 0 && (
+              <div className="dashboard-mini-row" style={{ cursor: 'default' }}>
+                <Target size={16} style={{ color: '#fbbf24' }} />
+                <div style={{ flex: 1 }}>
+                  <div className="dashboard-mini-title">Team override earned · {weekWord}</div>
+                  <div className="dashboard-mini-sub">
+                    {stats.currentWeekOverrideRate}% on {stats.currentWeekOverrideCount} sub-user order{stats.currentWeekOverrideCount === 1 ? '' : 's'}
+                  </div>
+                </div>
+                <div className="dashboard-mini-val">{preferredMoney(weekOverrideUsd, weekOverrideCrc)}</div>
+              </div>
+            )}
           </div>
         </section>
 
@@ -408,18 +496,20 @@ export default function AgentDashboard({
 
       <section className="dashboard-section">
         <h3 className="dashboard-section-title">Payout history</h3>
-        {stats.recentPayouts.length === 0 ? (
+        {stats.payoutHistoryError && (
+          <div className="agent-dashboard-alert warning" role="alert">
+            <AlertTriangle size={17} />
+            <span>{stats.payoutHistoryError}</span>
+            <button type="button" className="admin-btn admin-btn-secondary" onClick={fetchAnalytics}>Retry</button>
+          </div>
+        )}
+        {!stats.payoutHistoryError && stats.recentPayouts.length === 0 ? (
           <p className="dashboard-empty">No payout records yet.</p>
-        ) : (
+        ) : !stats.payoutHistoryError ? (
           <div className="dashboard-mini-list">
             {stats.recentPayouts.map((p) => {
-              const period = `${new Date(p.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${new Date(p.end_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-              const total =
-                p.total_payout_usd > 0
-                  ? formatMoney(p.total_payout_usd, 'USD')
-                  : p.total_payout_crc > 0
-                    ? formatMoney(p.total_payout_crc, 'CRC')
-                    : '$0.00';
+              const period = `${formatAgentDate(p.start_date)} – ${formatAgentDate(p.end_date)}`;
+              const total = preferredMoney(p.total_payout_usd, p.total_payout_crc, p.salary_currency || salaryCurr);
               return (
                 <div key={p.id} className="dashboard-mini-row" style={{ cursor: 'default' }}>
                   <div style={{ flex: 1 }}>
@@ -437,7 +527,7 @@ export default function AgentDashboard({
               );
             })}
           </div>
-        )}
+        ) : null}
       </section>
 
       <p className="dashboard-mini-sub" style={{ marginTop: '8px' }}>

@@ -5031,6 +5031,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               currentUserProfile={adminProfile}
               currentUserEmail={adminProfile?.email}
               title="My Pay"
+              variant="today"
               onOpenOrder={setSelectedOrderDetails}
               onNavigate={navigateToTab}
             />

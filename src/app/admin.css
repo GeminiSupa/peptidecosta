@@ -4148,6 +4148,100 @@
 
 .dashboard-empty { font-size: 0.85rem; color: #64748b; margin: 0; }
 
+/* Staff Today tab — keep these interaction/layout rules isolated from Home. */
+.agent-dashboard-state {
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px;
+    color: #94a3b8;
+    text-align: center;
+}
+
+.agent-dashboard-state.error { color: #fca5a5; }
+
+.today-dashboard .agent-dashboard-heading {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.today-dashboard .agent-dashboard-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.today-dashboard .agent-dashboard-controls .admin-btn {
+    min-height: 42px;
+}
+
+.today-dashboard .agent-dashboard-controls .admin-btn:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+}
+
+.today-dashboard .agent-dashboard-controls .admin-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.today-dashboard .agent-dashboard-alert {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: -6px 0 14px;
+    padding: 10px 12px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-size: 0.78rem;
+}
+
+.today-dashboard .agent-dashboard-alert span { flex: 1; }
+
+.today-dashboard .agent-dashboard-alert .admin-btn {
+    width: auto;
+    min-height: 34px;
+    padding: 6px 10px;
+}
+
+.today-dashboard .agent-dashboard-alert.error {
+    color: #fecaca;
+    border-color: rgba(248, 113, 113, 0.3);
+    background: rgba(127, 29, 29, 0.18);
+}
+
+.today-dashboard .agent-dashboard-alert.warning {
+    color: #fde68a;
+    border-color: rgba(251, 191, 36, 0.3);
+    background: rgba(120, 53, 15, 0.18);
+}
+
+.today-dashboard .agent-dashboard-alert.success {
+    color: #a7f3d0;
+    border-color: rgba(52, 211, 153, 0.3);
+    background: rgba(6, 78, 59, 0.18);
+}
+
+.today-dashboard .agent-dashboard-refreshing {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: -8px 0 12px;
+    color: #94a3b8;
+    font-size: 0.75rem;
+}
+
+.today-dashboard .agent-dashboard-order-row {
+    min-height: 52px;
+}
+
+.today-dashboard .agent-dashboard-row-main { min-width: 0; flex: 1; }
+.today-dashboard .agent-dashboard-row-value { text-align: right; flex-shrink: 0; }
+
 /* Global search — full-width on mobile */
 .global-search-overlay {
     position: fixed;
@@ -4707,6 +4801,16 @@
 
     .dashboard-home-header .admin-btn {
         width: auto;
+    }
+
+    .today-dashboard .agent-dashboard-controls {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .today-dashboard .agent-dashboard-controls .admin-btn:last-child:nth-child(odd) {
+        grid-column: auto;
     }
 
     .dashboard-home-title { font-size: 1.6rem; }
