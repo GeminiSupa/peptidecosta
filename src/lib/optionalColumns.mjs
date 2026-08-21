@@ -78,6 +78,15 @@ export const SUB_USER_PAYOUT_COLUMNS = [
   'override_sales_usd',
   'override_sales_crc',
   'override_orders_data',
+  // Refund clawbacks — arrive via add-order-refunds.sql. Dropped rather than
+  // failing the write, so a deploy that lands before the SQL is pasted in
+  // cannot take down the weekly scan for everyone. The pay is simply not
+  // reduced until the migration is run.
+  'adjustment_usd',
+  'adjustment_crc',
+  'adjustments_data',
+  'adjustment_carried_usd',
+  'adjustment_carried_crc',
 ];
 
 export const SUB_USER_PROFILE_COLUMNS = [

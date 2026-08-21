@@ -20,8 +20,20 @@
  * the unit tests can reach it and `agentOrders.js` imports it back.
  */
 
-/** An order only counts as "closed" once it reaches one of these statuses. */
-export const COMMISSION_ELIGIBLE_ORDER_STATUSES = ['Paid', 'Completed', 'Order Complete'];
+/**
+ * An order only counts as "closed" once it reaches one of these statuses.
+ *
+ * 'Partly Refunded' belongs here even though money went back. The agent still
+ * closed a sale — the customer kept part of it — and Omer's rule is that they
+ * earn on the part that stuck. Leaving it out would pay them nothing on an
+ * order the customer largely kept. What stops them earning on the returned
+ * portion is getOrderSalesAmounts, which nets refunds off the sale before any
+ * rate is applied.
+ *
+ * 'Refunded' is deliberately absent: nothing was kept, so there is no sale to
+ * report and a zero-value line would only clutter the statement.
+ */
+export const COMMISSION_ELIGIBLE_ORDER_STATUSES = ['Paid', 'Completed', 'Order Complete', 'Partly Refunded'];
 
 const ELIGIBLE_STATUSES = new Set(
   COMMISSION_ELIGIBLE_ORDER_STATUSES.map((status) => status.toLowerCase()),

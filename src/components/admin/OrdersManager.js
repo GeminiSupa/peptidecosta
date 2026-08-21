@@ -13,6 +13,8 @@ const ORDER_STATUS_OPTIONS = [
   'Error',
   'Processing',
   'Order Complete',
+  'Refunded',
+  'Partly Refunded',
   'Cancelled',
 ];
 
@@ -44,6 +46,16 @@ const ORDER_STATUS_GROUPS = [
     filterLabel: 'Complete',
     statuses: ['Order Complete', 'Completed'],
     nextStatus: 'Order Complete',
+  },
+  {
+    id: 'refunded',
+    label: 'Refunded',
+    filterLabel: 'Refunded',
+    statuses: ['Refunded', 'Partly Refunded'],
+    // No nextStatus: a refund is recorded through the refund box on the order,
+    // which checks the amount against what was paid. Letting the bulk status
+    // control set it would write the label without any of that.
+    nextStatus: null,
   },
   {
     id: 'failed',

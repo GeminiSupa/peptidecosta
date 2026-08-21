@@ -19,6 +19,7 @@ import {
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
 import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
+import { applyCommissionAdjustments } from '@/lib/orderRefund.mjs';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 
@@ -235,6 +236,24 @@ export async function POST(request) {
       }
     }
 
+    // Refund clawbacks are settled here rather than at scan time.
+    //
+    // The scan only previews them: a payout can be re-scanned, edited or
+    // rejected, and consuming a debt against a slip that never gets approved
+    // would forgive money the agent still owes. Approval is the moment the pay
+    // actually leaves, so it is the moment the debt is recovered.
+    const { data: openDebts } = await supabaseAdmin
+      .from('commission_adjustments')
+      .select('*')
+      .eq('agent_email', payout.agent_email)
+      .is('settled_at', null);
+
+    const adjusted = applyCommissionAdjustments(
+      recalculated.total_payout_usd,
+      recalculated.total_payout_crc,
+      openDebts || [],
+    );
+
     // 4. Update payout status to Approved.
     // The override columns are dropped if add-sub-user-override-to-payouts.sql
     // has not been run yet, so approving an ordinary staff payout keeps working
@@ -246,8 +265,13 @@ export async function POST(request) {
         crc_sales: crcSales,
         usd_commission: recalculated.usd_commission,
         crc_commission: recalculated.crc_commission,
-        total_payout_usd: recalculated.total_payout_usd,
-        total_payout_crc: recalculated.total_payout_crc,
+        total_payout_usd: adjusted.payableUsd,
+        total_payout_crc: adjusted.payableCrc,
+        adjustment_usd: adjusted.deductedUsd,
+        adjustment_crc: adjusted.deductedCrc,
+        adjustments_data: adjusted.applied,
+        adjustment_carried_usd: adjusted.carriedUsd,
+        adjustment_carried_crc: adjusted.carriedCrc,
         // Stored decorated so the Team dashboard shows the same per-order rates
         // this email did, instead of falling back to the flat profile rate.
         orders_data: reportedOrders,
@@ -279,11 +303,39 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Failed to update payout approval state in DB.' }, { status: 500 });
     }
 
+    // Only now that the payout is recorded as Approved. Doing this earlier and
+    // then failing the write above would forgive a debt against pay that was
+    // never approved.
+    for (const entry of adjusted.applied) {
+      if (!entry.id) continue;
+      const debt = (openDebts || []).find((row) => row.id === entry.id);
+      if (!debt) continue;
+
+      const { error: debtError } = await supabaseAdmin
+        .from('commission_adjustments')
+        .update({
+          applied_usd: Number(debt.applied_usd || 0) + entry.amount_usd,
+          applied_crc: Number(debt.applied_crc || 0) + entry.amount_crc,
+          // Only a debt this payout cleared outright is closed. A partly
+          // recovered one stays open and is picked up again next week.
+          settled_at: entry.settles ? new Date().toISOString() : null,
+        })
+        .eq('id', entry.id);
+
+      if (debtError) {
+        // Loud: a debt that was deducted from pay but not marked as recovered
+        // would be deducted a second time next week.
+        console.error(`[Commission Approval] Failed to mark adjustment ${entry.id} recovered:`, debtError.message);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       status: 'Approved',
       emailSent,
-      emailError
+      emailError,
+      adjustmentUsd: adjusted.deductedUsd,
+      adjustmentCarriedUsd: adjusted.carriedUsd,
     });
 
   } catch (err) {

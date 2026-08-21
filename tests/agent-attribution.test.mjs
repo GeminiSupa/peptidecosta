@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  COMMISSION_ELIGIBLE_ORDER_STATUSES,
   CUSTOMER_HISTORY_SOURCE,
   buildAgentHistory,
   buildAgentNameResolver,
@@ -317,7 +318,15 @@ test('the lookup only asks the database about closed orders', async () => {
   assert.equal(seen.length, 2, 'one query for the phone, one for the email');
   for (const query of seen) {
     assert.equal(query.table, 'orders');
-    assert.deepEqual(query.values, ['Paid', 'Completed', 'Order Complete']);
+    // Tracks the shared constant rather than a copy of it, so adding a status
+    // there (a partly refunded order is still a closed sale, and still the
+    // agent's customer) does not fail this for the wrong reason.
+    assert.deepEqual(query.values, COMMISSION_ELIGIBLE_ORDER_STATUSES);
+    // The point of the test: an order that never settled must never decide who
+    // a customer belongs to.
+    for (const unpaid of ['Pending', 'Pending - Card', 'Declined', 'Error', 'Cancelled']) {
+      assert.ok(!query.values.includes(unpaid), `${unpaid} must not be queried as a closed order`);
+    }
   }
   // Email is matched case-insensitively and without wildcards.
   assert.equal(seen[1].value, 'joe@example.com');

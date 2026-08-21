@@ -21,6 +21,9 @@ export const runtime = 'nodejs';
 
 const BUCKET = 'product-pics';
 
+/** One year, as seconds. See the note at the upload call. */
+const IMAGE_CACHE_SECONDS = '31536000';
+
 // Must match the bucket's own file_size_limit. Checked here as well so an
 // oversized file is refused with its actual size named, rather than with the
 // bucket's own message, which nobody can act on.
@@ -76,6 +79,15 @@ export async function POST(request) {
       .upload(path, Buffer.from(await file.arrayBuffer()), {
         contentType: file.type || 'image/jpeg',
         upsert: false,
+        // A year. Supabase defaults to an hour, which means every visitor
+        // re-downloads every product image once an hour, all month — the
+        // catalogue is ~9 MB of images and that was the bulk of an egress
+        // allowance that went 10% over.
+        //
+        // Safe to cache this hard because the filename above is a timestamp
+        // plus random suffix: a replaced image is a NEW path, so nobody is
+        // ever served a stale one. Never reuse a path for different content.
+        cacheControl: IMAGE_CACHE_SECONDS,
       });
 
     // Passed back as-is rather than replaced with a guess: the guess is what

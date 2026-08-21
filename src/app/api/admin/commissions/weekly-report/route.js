@@ -8,6 +8,7 @@ import {
   orderBelongsToAgent,
 } from '@/lib/agentOrders';
 import { getPeriodLabel, recalcPayoutAmounts } from '@/lib/commissionPayouts';
+import { applyCommissionAdjustments } from '@/lib/orderRefund.mjs';
 import {
   buildPaidOrderIndex,
   computeOverrideAmounts,
@@ -328,6 +329,19 @@ export async function GET(request) {
         overrideCrc,
       });
 
+      // Commission already paid on an order that was later refunded comes off
+      // this week's pay. Applied to the total rather than to the commission
+      // line so a refund can also eat into salary — the debt is a debt, not a
+      // discount on one component. Never takes the pay below zero: whatever
+      // this week cannot cover waits for the next one.
+      const { data: openDebts } = await supabaseAdmin
+        .from('commission_adjustments')
+        .select('*')
+        .eq('agent_email', agent.email)
+        .is('settled_at', null);
+
+      const adjusted = applyCommissionAdjustments(totalPayoutUsd, totalPayoutCrc, openDebts || []);
+
       // A commission rate is configuration, not money owed. The old scan made
       // Pending $0 rows for every configured agent with no sales, which is why
       // a rerun appeared to contain only Brian and Sean. Remove stale Pending
@@ -411,8 +425,17 @@ export async function GET(request) {
         crc_commission: crcCommission,
         weekly_salary_paid: weeklySalary,
         salary_currency: salaryCurrency,
-        total_payout_usd: totalPayoutUsd,
-        total_payout_crc: totalPayoutCrc,
+        // What is actually payable after refund clawbacks. Floored at zero by
+        // applyCommissionAdjustments — a payslip is never negative.
+        total_payout_usd: adjusted.payableUsd,
+        total_payout_crc: adjusted.payableCrc,
+        adjustment_usd: adjusted.deductedUsd,
+        adjustment_crc: adjusted.deductedCrc,
+        // Named orders, so a short payslip explains itself instead of the agent
+        // having to ask why.
+        adjustments_data: adjusted.applied,
+        adjustment_carried_usd: adjusted.carriedUsd,
+        adjustment_carried_crc: adjusted.carriedCrc,
         orders_data: reportedAgentOrders,
         // Kept separate from orders_data so approving this payout marks these
         // orders paid for THIS agent only, leaving the sub-user's own 8% intact.

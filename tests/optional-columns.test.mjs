@@ -44,6 +44,14 @@ const PAYOUT = {
   override_sales_usd: 3120,
   override_sales_crc: 0,
   override_orders_data: [{ id: 'o-1042' }],
+  // Refund clawbacks, which arrive with add-order-refunds.sql. Same deal as the
+  // override columns: a deploy that lands before the SQL is pasted in must give
+  // these up rather than fail the whole payout write.
+  adjustment_usd: 25,
+  adjustment_crc: 11250,
+  adjustments_data: [{ order_number: 'WPCR-1', amount_usd: 25 }],
+  adjustment_carried_usd: 0,
+  adjustment_carried_crc: 0,
 };
 
 test('a payout still saves on a database that has never heard of sub-users', () => {
