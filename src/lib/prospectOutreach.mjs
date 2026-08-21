@@ -6,6 +6,8 @@
  * be sent can be tested without SMTP, Meta, or a database.
  */
 
+import { channelPermissionFor } from './prospectPermissions.mjs';
+
 export const OUTREACH_CHANNELS = ['email', 'whatsapp'];
 
 /**
@@ -49,14 +51,35 @@ export function canContactProspect(prospect, channel) {
   if (!prospect) return { allowed: false, reason: 'Prospect not found.', identity: null, basis: null };
   if (!normalizedChannel) return { allowed: false, reason: 'Choose email or WhatsApp.', identity: null, basis: null };
 
-  const permission = prospect.contact_permission_status || 'unknown';
-  if (permission === 'do_not_contact' || prospect.status === 'do_not_contact') {
+  const permission = channelPermissionFor(prospect, normalizedChannel);
+  if (prospect.contact_permission_status === 'do_not_contact' || prospect.status === 'do_not_contact') {
     return { allowed: false, reason: 'This prospect is marked do not contact.', identity: null, basis: null };
   }
-  if (!CONTACTABLE_PERMISSIONS.has(permission)) {
+  if (permission.status === 'do_not_contact') {
+    return { allowed: false, reason: `This prospect is marked do not contact by ${normalizedChannel}.`, identity: null, basis: null };
+  }
+  if (!CONTACTABLE_PERMISSIONS.has(permission.status)) {
     return {
       allowed: false,
-      reason: 'Contact permission is still unknown. Run decision-maker discovery, or set the permission manually once you have verified a published business contact.',
+      reason: `${normalizedChannel === 'email' ? 'Email' : 'WhatsApp'} permission is still unknown. Verify evidence for this channel before drafting or sending.`,
+      identity: null,
+      basis: null,
+    };
+  }
+  if (permission.status === 'business_contact'
+    && (permission.basis !== 'published_business_contact' || !permission.sourceUrl)) {
+    return {
+      allowed: false,
+      reason: `The published ${normalizedChannel} contact is missing its source URL. Verify the channel evidence again.`,
+      identity: null,
+      basis: null,
+    };
+  }
+  if (permission.status === 'consented'
+    && (permission.basis !== 'express_consent' || (!permission.sourceUrl && !permission.evidence))) {
+    return {
+      allowed: false,
+      reason: `${normalizedChannel === 'email' ? 'Email' : 'WhatsApp'} consent is missing evidence. Record where or how consent was received.`,
       identity: null,
       basis: null,
     };
@@ -67,14 +90,47 @@ export function canContactProspect(prospect, channel) {
     if (!EMAIL_PATTERN.test(email)) {
       return { allowed: false, reason: 'No valid work email saved for this prospect.', identity: null, basis: null };
     }
-    return { allowed: true, reason: '', identity: email, basis: permission };
+    return {
+      allowed: true,
+      reason: '',
+      identity: email,
+      basis: permission.basis,
+      permissionStatus: permission.status,
+      sourceUrl: permission.sourceUrl,
+      evidence: permission.evidence,
+    };
   }
 
   const number = prospectWhatsAppNumber(prospect);
   if (!number) {
     return { allowed: false, reason: 'No usable WhatsApp number saved for this prospect.', identity: null, basis: null };
   }
-  return { allowed: true, reason: '', identity: number, basis: permission };
+  return {
+    allowed: true,
+    reason: '',
+    identity: number,
+    basis: permission.basis,
+    permissionStatus: permission.status,
+    sourceUrl: permission.sourceUrl,
+    evidence: permission.evidence,
+  };
+}
+
+export function outreachDisclosure(permission = {}, channel = 'email') {
+  const channelLabel = channel === 'whatsapp' ? 'WhatsApp' : 'email';
+  if (permission.basis === 'express_consent') {
+    return `You received this because your business gave permission for ${channelLabel} contact. Reply "remove" and we will not contact you again.`;
+  }
+  if (permission.basis === 'published_business_contact' && permission.sourceUrl) {
+    let source = 'your public business website';
+    try {
+      source = new URL(permission.sourceUrl).hostname.replace(/^www\./, '');
+    } catch {
+      // canContactProspect already requires a normalized URL; retain safe copy.
+    }
+    return `You received this because this ${channelLabel} contact was published as a business contact at ${source}. Reply "remove" and we will not contact you again.`;
+  }
+  return `You received this based on recorded ${channelLabel} permission. Reply "remove" and we will not contact you again.`;
 }
 
 /**
@@ -123,7 +179,12 @@ function prospectContext(prospect) {
   return lines.filter(Boolean).join('\n');
 }
 
-export function buildOutreachPrompt(prospect, { channel, bookingUrl, language = 'auto' } = {}) {
+export function buildOutreachPrompt(prospect, {
+  channel,
+  bookingUrl,
+  language = 'auto',
+  permission = null,
+} = {}) {
   const isEmail = channel === 'email';
   const decisionMaker = (prospect.people || []).find((person) => person?.full_name);
   const languageRule = language === 'es'
@@ -131,6 +192,9 @@ export function buildOutreachPrompt(prospect, { channel, bookingUrl, language = 
     : language === 'en'
       ? 'Write in English.'
       : 'Write in the language the business most likely uses day to day, inferred from its country and website. Default to Spanish for Costa Rica and the rest of Latin America, English elsewhere.';
+  const contactBasisRule = permission?.basis === 'express_consent'
+    ? 'State plainly that you are following up using the contact permission the business provided. Do not claim the address came from a public listing.'
+    : 'State plainly that the contact details were found on the business\'s public website. Do not claim prior consent.';
 
   return `You write first-touch B2B outreach for "Peptides Costa Rica", a research peptide supplier that partners with gyms, wellness centers, clinics, and laboratories.
 
@@ -148,7 +212,7 @@ Rules:
 - One clear ask: book a 15-minute call using this link, which you must include verbatim exactly once: ${bookingUrl}
 - Never make medical, dosage, therapeutic, or human-use claims. These are research products. No health outcomes, no dosing, no "treatment".
 - No hype, no superlatives, no "I hope this email finds you well", no fake urgency.
-- State plainly that we found them through their public business listing.
+- ${contactBasisRule}
 
 Return ONLY minified JSON: {"subject":"…","body":"…"}${isEmail ? ' — subject under 60 characters, no emoji.' : ' — leave subject as an empty string.'}`;
 }

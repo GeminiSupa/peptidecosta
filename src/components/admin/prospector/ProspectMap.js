@@ -39,6 +39,7 @@ export default function ProspectMap({
   selectedKey = null,
   keyOf,
   onSelect,
+  ownerLabelOf = () => '',
   onSearchArea = null,
   searching = false,
   toneOf = () => 'low',
@@ -222,21 +223,30 @@ export default function ProspectMap({
         ))}
       </div>
 
-      {pins.map(({ key, item, point, selected }) => (
-        <button
-          key={key}
-          type="button"
-          className={`pmap-pin ${toneOf(item.fit_score || 0)}${selected ? ' selected' : ''}`}
-          style={{ transform: `translate3d(${point.x}px, ${point.y}px, 0)` }}
-          onClick={() => { if (!wasDrag()) onSelect?.(item); }}
-          title={`${item.organization_name} · fit ${item.fit_score || 0}`}
-          aria-label={`${item.organization_name}, fit score ${item.fit_score || 0}`}
-          aria-pressed={selected}
-        >
-          <span className="pmap-pin-dot" />
-          {selected && <span className="pmap-pin-label">{item.organization_name}</span>}
-        </button>
-      ))}
+      {pins.map(({ key, item, point, selected }) => {
+        const ownerLabel = ownerLabelOf(item);
+        const ownerDescription = ownerLabel ? `, owner ${ownerLabel}` : '';
+        return (
+          <button
+            key={key}
+            type="button"
+            className={`pmap-pin ${toneOf(item.fit_score || 0)}${selected ? ' selected' : ''}`}
+            style={{ transform: `translate3d(${point.x}px, ${point.y}px, 0)` }}
+            onClick={() => { if (!wasDrag()) onSelect?.(item); }}
+            title={`${item.organization_name} · fit ${item.fit_score || 0}${ownerLabel ? ` · owner ${ownerLabel}` : ''}`}
+            aria-label={`${item.organization_name}, fit score ${item.fit_score || 0}${ownerDescription}`}
+            aria-pressed={selected}
+          >
+            <span className="pmap-pin-dot" />
+            {selected && (
+              <span className="pmap-pin-label">
+                <b>{item.organization_name}</b>
+                {ownerLabel && <small>Owner: {ownerLabel}</small>}
+              </span>
+            )}
+          </button>
+        );
+      })}
 
       {!plotted.length && (
         <div className="pmap-empty">

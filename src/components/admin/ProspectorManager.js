@@ -26,6 +26,23 @@ import {
   resolvedDistanceLimit,
 } from '@/lib/prospectFilters.mjs';
 import { canContactProspect } from '@/lib/prospectOutreach.mjs';
+import {
+  matchesProspectReadiness,
+  prospectContactReadiness,
+} from '@/lib/prospectReadiness.mjs';
+import { enrichmentJobUiState } from '@/lib/prospectEnrichmentJobs.mjs';
+import {
+  normalizeProspectOwnerEmail,
+  prospectOwnerLabel,
+  prospectOwnerState,
+} from '@/lib/prospectOwnership.mjs';
+import {
+  PROSPECT_PERMISSION_CHANNELS,
+  channelPermissionFor,
+  permissionBasisLabel,
+  permissionStatusTone,
+  summarizeChannelPermissions,
+} from '@/lib/prospectPermissions.mjs';
 import { readNdjsonStream } from '@/lib/ndjsonStream.mjs';
 import ProspectMap from '@/components/admin/prospector/ProspectMap';
 import prospectorStyles from '@/components/admin/prospector/prospectorStyles';
@@ -43,7 +60,6 @@ const EMPTY_FORM = {
   latitude: '',
   longitude: '',
   notes: '',
-  contact_permission_status: 'unknown',
 };
 
 const PERMISSION_LABELS = {
@@ -120,6 +136,21 @@ function timeAgo(value) {
   return 'just now';
 }
 
+function channelPermissionDraft(prospect, channel) {
+  const permission = channelPermissionFor(prospect || {}, channel);
+  return {
+    status: permission?.status || 'unknown',
+    source_url: permission?.sourceUrl || '',
+    evidence: permission?.evidence || '',
+  };
+}
+
+function permissionDraftsFor(prospect) {
+  return Object.fromEntries(PROSPECT_PERMISSION_CHANNELS.map(
+    (channel) => [channel, channelPermissionDraft(prospect, channel)],
+  ));
+}
+
 /** A follow-up nobody has done yet, on a prospect still in play. */
 function isFollowUpDue(prospect, now = Date.now()) {
   return Boolean(prospect.next_follow_up_at)
@@ -158,7 +189,7 @@ export default function ProspectorManager({ currentUserProfile }) {
   const [savedContactFilter, setSavedContactFilter] = useState('any');
   const [ownerFilter, setOwnerFilter] = useState('any');
   const [followUpFilter, setFollowUpFilter] = useState('any');
-  const [permissionFilter, setPermissionFilter] = useState('any');
+  const [readinessFilter, setReadinessFilter] = useState('any');
   const [pipelineMinScore, setPipelineMinScore] = useState('0');
   const [sourceFilter, setSourceFilter] = useState('any');
   const [contactActivityFilter, setContactActivityFilter] = useState('any');
@@ -176,13 +207,16 @@ export default function ProspectorManager({ currentUserProfile }) {
   const [sending, setSending] = useState(false);
   const [checkedKeys, setCheckedKeys] = useState(() => new Set());
   const [enrichState, setEnrichState] = useState({});
+  const [activeEnrichmentKeys, setActiveEnrichmentKeys] = useState(() => new Set());
+  const [enrichmentJobsSetupRequired, setEnrichmentJobsSetupRequired] = useState(false);
   const [history, setHistory] = useState({ rows: [], loading: false, setupRequired: false, error: '' });
   const [whatsappHandoffUrl, setWhatsappHandoffUrl] = useState('');
   const [expandedMessages, setExpandedMessages] = useState(() => new Set());
   const [confirmRequest, setConfirmRequest] = useState(null);
   const [bulkProgress, setBulkProgress] = useState(null);
+  const [permissionDrafts, setPermissionDrafts] = useState(() => permissionDraftsFor(null));
 
-  const currentEmail = currentUserProfile?.email || '';
+  const currentEmail = normalizeProspectOwnerEmail(currentUserProfile?.email);
 
   // The enrichment queue resolves prospects when it gets to them, not when they
   // were queued, so it reads the current lists rather than a captured snapshot.
@@ -192,8 +226,15 @@ export default function ProspectorManager({ currentUserProfile }) {
   const detailRef = useRef(null);
   const historyRequestRef = useRef(0);
   const searchAbortRef = useRef(null);
+  const enrichTimerRefs = useRef(new Map());
+  const pumpEnrichQueueRef = useRef(() => {});
+  const queueDurableJobsRef = useRef(() => {});
   useEffect(() => { prospectsRef.current = prospects; }, [prospects]);
   useEffect(() => { searchResultsRef.current = searchResults; }, [searchResults]);
+  useEffect(() => () => {
+    for (const timer of enrichTimerRefs.current.values()) clearTimeout(timer);
+    enrichTimerRefs.current.clear();
+  }, []);
 
   useEffect(() => {
     const query = window.matchMedia('(min-width: 761px)');
@@ -258,6 +299,10 @@ export default function ProspectorManager({ currentUserProfile }) {
     setNotesJustSaved(false);
   }, [selection.key, selected?.notes]);
 
+  useEffect(() => {
+    setPermissionDrafts(permissionDraftsFor(selected));
+  }, [selected]);
+
   // A draft belongs to one prospect. Carrying it across a selection change is
   // how a rep emails the wrong gym a message written about another one.
   useEffect(() => {
@@ -280,7 +325,7 @@ export default function ProspectorManager({ currentUserProfile }) {
     view, statusFilter, savedSearch, savedContactFilter, ownerFilter, followUpFilter,
     distanceChoice, customDistance, discoveryContact, discoveryMinScore,
     discoveryMinRating, discoveryMinReviews, discoverySort, excludeSaved,
-    permissionFilter, pipelineMinScore, sourceFilter, contactActivityFilter,
+    readinessFilter, pipelineMinScore, sourceFilter, contactActivityFilter,
   ]);
 
   useEffect(() => {
@@ -363,7 +408,7 @@ export default function ProspectorManager({ currentUserProfile }) {
       if (ownerFilter === 'unassigned' && prospect.owner_email) return false;
       if (followUpFilter === 'due' && !isFollowUpDue(prospect, now)) return false;
       if (followUpFilter === 'unscheduled' && prospect.next_follow_up_at) return false;
-      if (permissionFilter !== 'any' && (prospect.contact_permission_status || 'unknown') !== permissionFilter) return false;
+      if (!matchesProspectReadiness(prospect, readinessFilter)) return false;
       if (Number(prospect.fit_score || 0) < Number(pipelineMinScore || 0)) return false;
       if (sourceFilter !== 'any' && prospect.source_provider !== sourceFilter) return false;
       if (contactActivityFilter === 'contacted' && !prospect.last_contacted_at) return false;
@@ -388,7 +433,7 @@ export default function ProspectorManager({ currentUserProfile }) {
     return [...matched].sort(sorters[sortBy] || sorters.recent);
   }, [
     prospects, savedSearch, statusFilter, sortBy, ownerFilter, currentEmail,
-    followUpFilter, savedContactFilter, permissionFilter, pipelineMinScore,
+    followUpFilter, savedContactFilter, readinessFilter, pipelineMinScore,
     sourceFilter, contactActivityFilter,
   ]);
 
@@ -598,6 +643,38 @@ export default function ProspectorManager({ currentUserProfile }) {
 
   const updateSelected = (updates, successMessage) => updateProspect(selected?.id, updates, successMessage);
 
+  const claimProspect = async (prospect) => {
+    if (!prospect?.id) return null;
+    setSaving(true);
+    setError('');
+    try {
+      const response = await adminFetch('/api/admin/prospects', {
+        method: 'PATCH',
+        body: JSON.stringify({ id: prospect.id, action: 'claim' }),
+      });
+      const payload = await response.json();
+      // A conflict carries the fresh row so the stale owner display is repaired
+      // before the operator reads the error.
+      if (payload.prospect) mergeSaved([payload.prospect]);
+      if (!response.ok) throw new Error(payload.error || 'Unable to claim prospect');
+      setNotice(payload.alreadyOwned ? 'This prospect is already assigned to you.' : 'Prospect claimed by you.');
+      return payload.prospect;
+    } catch (claimError) {
+      setError(claimError.message);
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveChannelPermission = async (channel) => {
+    if (!selected?.id || !permissionDrafts[channel]) return;
+    const saved = await updateProspect(selected.id, {
+      channel_permissions: { [channel]: permissionDrafts[channel] },
+    }, `${channel === 'email' ? 'Email' : 'WhatsApp'} permission evidence saved`);
+    if (saved) setPermissionDrafts(permissionDraftsFor(saved));
+  };
+
   const saveManualProspect = async (event) => {
     event.preventDefault();
     const saved = await saveProspect({ ...manualForm, source_provider: 'manual' });
@@ -631,9 +708,41 @@ export default function ProspectorManager({ currentUserProfile }) {
   // scans the same website again while the first scan is mid-flight.
   const enrichClaimedRef = useRef(new Set());
 
-  const runEnrichment = useCallback(async (key, saved) => {
+  const setEnrichFromJob = useCallback((job) => {
+    if (!job?.prospect_id) return;
+    if (job.status === 'queued' || job.status === 'running') {
+      setActiveEnrichmentKeys((current) => {
+        if (current.has(job.prospect_id)) return current;
+        const next = new Set(current);
+        next.add(job.prospect_id);
+        return next;
+      });
+    }
+    const state = enrichmentJobUiState(job);
+    setEnrich(job.prospect_id, state.status, state.message);
+  }, [setEnrich]);
+
+  const updateDurableJob = useCallback(async (jobId, action, workerId, extra = {}) => {
+    const response = await adminFetch('/api/admin/prospects/enrichment-jobs', {
+      method: 'PATCH',
+      body: JSON.stringify({ jobId, action, workerId, ...extra }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      const error = new Error(payload.error || 'Unable to update enrichment job');
+      error.payload = payload;
+      throw error;
+    }
+    if (payload.job) setEnrichFromJob(payload.job);
+    return payload;
+  }, [setEnrichFromJob]);
+
+  const runEnrichment = useCallback(async (key, saved, durableJob = null) => {
     const pool = saved ? prospectsRef.current : searchResultsRef.current;
     const target = pool.find((item) => prospectKey(item) === key);
+    const workerId = durableJob ? crypto.randomUUID() : null;
+    let activeJob = durableJob;
+    let retryJob = null;
     if (!target) {
       setEnrich(key, 'skipped', 'No longer in the list');
       enrichClaimedRef.current.delete(key);
@@ -647,22 +756,75 @@ export default function ProspectorManager({ currentUserProfile }) {
 
     setEnrich(key, 'scanning');
     try {
-      const response = await adminFetch('/api/admin/prospects/enrich', {
-        method: 'POST',
-        body: JSON.stringify({
-          website_url: target.website_url,
-          organization_name: target.organization_name,
-        }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Unable to scan the business website');
+      if (durableJob) {
+        const claimed = await updateDurableJob(durableJob.id, 'claim', workerId);
+        activeJob = claimed.job;
+      }
+
+      let payload = activeJob?.result_payload || null;
+      if (!payload) {
+        const response = await adminFetch('/api/admin/prospects/enrich', {
+          method: 'POST',
+          body: JSON.stringify({
+            website_url: target.website_url,
+            organization_name: target.organization_name,
+          }),
+        });
+        payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Unable to scan the business website');
+        // Preserve the expensive scan before touching the prospect row. If the
+        // save is interrupted, a resumed job reuses this payload.
+        if (durableJob) {
+          const checkpoint = await updateDurableJob(activeJob.id, 'checkpoint', workerId, { result: payload });
+          activeJob = checkpoint.job;
+        }
+      }
 
       const found = (payload.people?.length || 0) + (payload.emails?.length || 0)
         + (payload.phones?.length || 0) + (payload.whatsappNumbers?.length || 0)
         + (payload.linkedinUrls?.length || 0);
       if (!found) {
+        const scanOnlyUpdates = {
+          contact_source_url: payload.sourceUrl || target.contact_source_url || null,
+          enriched_at: new Date().toISOString(),
+        };
+        if (saved && target.id) {
+          const updated = await updateProspect(target.id, scanOnlyUpdates, null, { silent: true });
+          if (!updated) throw new Error('Scan succeeded but the prospect save failed');
+        } else {
+          setSearchResults((current) => current.map((item) => (
+            prospectKey(item) === key ? { ...item, ...scanOnlyUpdates } : item
+          )));
+        }
+        if (durableJob) await updateDurableJob(activeJob.id, 'complete', workerId);
         setEnrich(key, 'done', `Nothing published across ${payload.pagesScanned?.length || 1} page(s)`);
         return;
+      }
+
+      const emailPermissionStatus = upgradeContactPermission(
+        target.email_permission_status,
+        payload.emailPermissionStatus,
+      );
+      const whatsappPermissionStatus = upgradeContactPermission(
+        target.whatsapp_permission_status,
+        payload.whatsappPermissionStatus,
+      );
+      const emailPermissionRaised = emailPermissionStatus !== (target.email_permission_status || 'unknown');
+      const whatsappPermissionRaised = whatsappPermissionStatus !== (target.whatsapp_permission_status || 'unknown');
+      const channelPermissions = {};
+      if (emailPermissionRaised) {
+        channelPermissions.email = {
+          status: emailPermissionStatus,
+          source_url: payload.emailPermissionSourceUrl,
+          evidence: payload.emailPermissionEvidence,
+        };
+      }
+      if (whatsappPermissionRaised) {
+        channelPermissions.whatsapp = {
+          status: whatsappPermissionStatus,
+          source_url: payload.whatsappPermissionSourceUrl,
+          evidence: payload.whatsappPermissionEvidence,
+        };
       }
 
       const updates = {
@@ -671,14 +833,17 @@ export default function ProspectorManager({ currentUserProfile }) {
         people: payload.people?.length ? payload.people : target.people || [],
         linkedin_urls: payload.linkedinUrls?.length ? payload.linkedinUrls : target.linkedin_urls || [],
         whatsapp_numbers: payload.whatsappNumbers?.length ? payload.whatsappNumbers : target.whatsapp_numbers || [],
-        // A scan can raise contact permission but must never quietly undo a
-        // recorded consent or an opt-out.
-        contact_permission_status: upgradeContactPermission(
-          target.contact_permission_status,
-          payload.permissionStatus,
-        ),
+        email_permission_status: emailPermissionStatus,
+        email_permission_basis: emailPermissionRaised ? 'published_business_contact' : target.email_permission_basis || null,
+        email_permission_source_url: emailPermissionRaised ? payload.emailPermissionSourceUrl : target.email_permission_source_url || null,
+        email_permission_evidence: emailPermissionRaised ? payload.emailPermissionEvidence : target.email_permission_evidence || null,
+        whatsapp_permission_status: whatsappPermissionStatus,
+        whatsapp_permission_basis: whatsappPermissionRaised ? 'published_business_contact' : target.whatsapp_permission_basis || null,
+        whatsapp_permission_source_url: whatsappPermissionRaised ? payload.whatsappPermissionSourceUrl : target.whatsapp_permission_source_url || null,
+        whatsapp_permission_evidence: whatsappPermissionRaised ? payload.whatsappPermissionEvidence : target.whatsapp_permission_evidence || null,
         contact_source_url: payload.sourceUrl,
         enriched_at: new Date().toISOString(),
+        ...(Object.keys(channelPermissions).length ? { channel_permissions: channelPermissions } : {}),
       };
 
       const summary = `${payload.people?.length || 0} decision-maker(s), ${payload.emails?.length || 0} email(s), ${payload.phones?.length || 0} phone(s)`;
@@ -687,24 +852,39 @@ export default function ProspectorManager({ currentUserProfile }) {
       if (saved && target.id) {
         const updated = await updateProspect(target.id, updates, null, { silent: true });
         if (!updated) {
-          setEnrich(key, 'failed', 'Scan succeeded but the save failed');
-          return;
+          throw new Error('Scan succeeded but the prospect save failed');
         }
       } else {
         setSearchResults((current) => current.map((item) => {
           if (prospectKey(item) !== key) return item;
           const merged = { ...item, ...updates };
+          merged.contact_permission_status = summarizeChannelPermissions(merged);
           const scored = scoreProspect(merged);
           return { ...merged, fit_score: scored.score, fit_reasons: scored.reasons };
         }));
       }
+      if (durableJob) await updateDurableJob(activeJob.id, 'complete', workerId);
       setEnrich(key, 'done', `${summary}${unverified}`);
     } catch (enrichmentError) {
-      setEnrich(key, 'failed', enrichmentError.message);
+      if (durableJob && activeJob?.id && workerId) {
+        try {
+          const failed = await updateDurableJob(activeJob.id, 'fail', workerId, { error: enrichmentError.message });
+          retryJob = failed.job?.status === 'queued' ? failed.job : null;
+          if (!retryJob) setEnrich(key, 'failed', enrichmentError.message);
+        } catch (jobError) {
+          // A claim conflict means another tab owns the scan. Show its latest
+          // state instead of incorrectly reporting this worker's error.
+          if (jobError.payload?.job) setEnrichFromJob(jobError.payload.job);
+          else setEnrich(key, 'failed', enrichmentError.message);
+        }
+      } else {
+        setEnrich(key, 'failed', enrichmentError.message);
+      }
     } finally {
       enrichClaimedRef.current.delete(key);
+      if (retryJob) queueDurableJobsRef.current([retryJob]);
     }
-  }, [setEnrich, updateProspect]);
+  }, [setEnrich, setEnrichFromJob, updateDurableJob, updateProspect]);
 
   /**
    * Drains the enrichment queue at a fixed concurrency.
@@ -719,14 +899,91 @@ export default function ProspectorManager({ currentUserProfile }) {
     while (enrichRunningRef.current < ENRICH_CONCURRENCY && enrichQueueRef.current.length) {
       const job = enrichQueueRef.current.shift();
       enrichRunningRef.current += 1;
-      runEnrichment(job.key, job.saved).finally(() => {
+      runEnrichment(job.key, job.saved, job.durableJob || null).finally(() => {
         enrichRunningRef.current -= 1;
         pumpEnrichQueue();
       });
     }
   }, [runEnrichment]);
+  useEffect(() => { pumpEnrichQueueRef.current = pumpEnrichQueue; }, [pumpEnrichQueue]);
 
-  const enqueueEnrichment = useCallback((items, saved) => {
+  const queueDurableJobs = useCallback((jobs) => {
+    for (const job of jobs || []) {
+      const key = job.prospect_id;
+      if (!key) continue;
+      setEnrichFromJob(job);
+      if (job.status !== 'queued' || enrichClaimedRef.current.has(key)) continue;
+
+      const enqueue = () => {
+        enrichTimerRefs.current.delete(job.id);
+        if (enrichClaimedRef.current.has(key)) return;
+        enrichClaimedRef.current.add(key);
+        enrichQueueRef.current.push({ key, saved: true, durableJob: job });
+        pumpEnrichQueueRef.current();
+      };
+      const waitMs = Math.max(0, new Date(job.next_attempt_at || 0).getTime() - Date.now());
+      if (waitMs > 0) {
+        const existingTimer = enrichTimerRefs.current.get(job.id);
+        if (existingTimer) clearTimeout(existingTimer);
+        enrichTimerRefs.current.set(job.id, setTimeout(enqueue, waitMs));
+      } else {
+        enqueue();
+      }
+    }
+  }, [setEnrichFromJob]);
+  useEffect(() => { queueDurableJobsRef.current = queueDurableJobs; }, [queueDurableJobs]);
+
+  const loadEnrichmentJobs = useCallback(async () => {
+    try {
+      const response = await adminFetch('/api/admin/prospects/enrichment-jobs');
+      const payload = await response.json();
+      if (!response.ok) {
+        if (payload.setupRequired) {
+          setEnrichmentJobsSetupRequired(true);
+          return;
+        }
+        throw new Error(payload.error || 'Unable to restore enrichment jobs');
+      }
+      setEnrichmentJobsSetupRequired(false);
+      for (const job of payload.jobs || []) setEnrichFromJob(job);
+      queueDurableJobs(payload.jobs || []);
+    } catch (jobError) {
+      setError(jobError.message);
+    }
+  }, [queueDurableJobs, setEnrichFromJob]);
+
+  useEffect(() => {
+    if (loading || !prospects.length) return undefined;
+    loadEnrichmentJobs();
+    const interval = setInterval(loadEnrichmentJobs, 30_000);
+    return () => clearInterval(interval);
+  }, [loading, prospects.length, loadEnrichmentJobs]);
+
+  const enqueueEnrichment = useCallback(async (items, saved) => {
+    if (saved) {
+      const prospectIds = items.map((item) => item.id).filter(Boolean);
+      if (!prospectIds.length) return;
+      try {
+        const response = await adminFetch('/api/admin/prospects/enrichment-jobs', {
+          method: 'POST',
+          body: JSON.stringify({ prospectIds }),
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          if (payload.setupRequired) setEnrichmentJobsSetupRequired(true);
+          throw new Error(payload.error || 'Unable to queue website scans');
+        }
+        setEnrichmentJobsSetupRequired(false);
+        queueDurableJobs(payload.jobs || []);
+        setNotice(payload.queued
+          ? `${payload.queued} durable website scan(s) queued. They resume after a refresh.`
+          : 'Those prospects are already queued or running.');
+      } catch (queueError) {
+        setError(queueError.message);
+      }
+      return;
+    }
+
     const jobs = [];
     for (const item of items) {
       const key = prospectKey(item);
@@ -736,6 +993,7 @@ export default function ProspectorManager({ currentUserProfile }) {
         continue;
       }
       enrichClaimedRef.current.add(key);
+      setActiveEnrichmentKeys((current) => new Set(current).add(key));
       setEnrich(key, 'queued');
       jobs.push({ key, saved });
     }
@@ -744,16 +1002,18 @@ export default function ProspectorManager({ currentUserProfile }) {
       return;
     }
     enrichQueueRef.current.push(...jobs);
-    setNotice(`${jobs.length} website scan(s) queued. You can keep working — results land on each row.`);
+    setNotice(`${jobs.length} preview scan(s) queued. Save them to the pipeline to make scans resumable.`);
     pumpEnrichQueue();
-  }, [pumpEnrichQueue, setEnrich]);
+  }, [pumpEnrichQueue, queueDurableJobs, setEnrich]);
 
   const enrichProgress = useMemo(() => {
-    const values = Object.values(enrichState);
+    const values = Object.entries(enrichState)
+      .filter(([key]) => activeEnrichmentKeys.has(key))
+      .map(([, value]) => value);
     const pending = values.filter((entry) => entry.status === 'queued' || entry.status === 'scanning').length;
     const finished = values.filter((entry) => entry.status === 'done' || entry.status === 'failed').length;
     return { pending, finished, total: pending + finished };
-  }, [enrichState]);
+  }, [activeEnrichmentKeys, enrichState]);
 
   /* ---------------------------------------------------------------- bulk */
 
@@ -865,6 +1125,45 @@ export default function ProspectorManager({ currentUserProfile }) {
       setNotice(`${updated} prospect(s) ${actionLabel.toLowerCase()}.`);
     } catch (bulkError) {
       setError(`${updated} updated before the batch stopped. ${bulkError.message}`);
+    } finally {
+      setSaving(false);
+      setBulkProgress(null);
+    }
+  };
+
+  const bulkClaim = async () => {
+    const targets = checkedProspects.map((item) => item.id).filter(Boolean);
+    const batches = chunkProspects(targets, BULK_BATCH_SIZE);
+    let claimed = 0;
+    let alreadyMine = 0;
+    let conflicts = 0;
+    setSaving(true);
+    setError('');
+    try {
+      for (const [index, ids] of batches.entries()) {
+        setBulkProgress({ label: 'Claiming', completed: index * BULK_BATCH_SIZE, total: targets.length });
+        const response = await adminFetch('/api/admin/prospects/bulk', {
+          method: 'PATCH',
+          body: JSON.stringify({ ids, action: 'claim' }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Unable to claim prospects');
+        const rows = payload.prospects || [];
+        mergeSaved(rows);
+        removeChecked(rows.map((row) => row.id));
+        claimed += Number(payload.claimed || 0);
+        alreadyMine += Number(payload.alreadyMine || 0);
+        conflicts += Number(payload.conflicts || 0);
+        setBulkProgress({ label: 'Claiming', completed: Math.min((index + 1) * BULK_BATCH_SIZE, targets.length), total: targets.length });
+      }
+      const parts = [
+        claimed ? `${claimed} claimed` : '',
+        alreadyMine ? `${alreadyMine} already yours` : '',
+        conflicts ? `${conflicts} already assigned to another agent` : '',
+      ].filter(Boolean);
+      setNotice(parts.length ? parts.join(' · ') : 'No unassigned prospects were selected.');
+    } catch (claimError) {
+      setError(`${claimed} claimed before the batch stopped. ${claimError.message}`);
     } finally {
       setSaving(false);
       setBulkProgress(null);
@@ -1002,6 +1301,9 @@ export default function ProspectorManager({ currentUserProfile }) {
   // Mirrors the server gate so a blocked send is explained before it is tried,
   // never instead of the server check.
   const outreachPermission = selected ? canContactProspect(selected, outreachChannel) : null;
+  const selectedEmailPermission = selected ? channelPermissionFor(selected, 'email') : null;
+  const selectedWhatsappPermission = selected ? channelPermissionFor(selected, 'whatsapp') : null;
+  const selectedReadiness = selected ? prospectContactReadiness(selected) : null;
   const scoreBand = PROSPECT_SCORE_BANDS.find((band) => band.tone === prospectScoreTone(selected?.fit_score || 0));
   const discoveryFilterCount = [
     Boolean(distanceChoice), discoveryContact !== 'any', discoveryMinScore !== '0',
@@ -1009,7 +1311,7 @@ export default function ProspectorManager({ currentUserProfile }) {
   ].filter(Boolean).length;
   const pipelineFilterCount = [
     savedContactFilter !== 'any', ownerFilter !== 'any', followUpFilter !== 'any',
-    permissionFilter !== 'any', pipelineMinScore !== '0', sourceFilter !== 'any',
+    readinessFilter !== 'any', pipelineMinScore !== '0', sourceFilter !== 'any',
     contactActivityFilter !== 'any',
   ].filter(Boolean).length;
 
@@ -1067,7 +1369,7 @@ export default function ProspectorManager({ currentUserProfile }) {
     setSavedContactFilter('any');
     setOwnerFilter('any');
     setFollowUpFilter('any');
-    setPermissionFilter('any');
+    setReadinessFilter('any');
     setPipelineMinScore('0');
     setSourceFilter('any');
     setContactActivityFilter('any');
@@ -1083,7 +1385,7 @@ export default function ProspectorManager({ currentUserProfile }) {
           <div><h2>Prospector</h2><p>Worldwide business discovery, public contact enrichment, qualification, and follow-up.</p></div>
         </div>
         <div className="prospector-header-actions">
-          <button type="button" className="prospector-btn" onClick={loadProspects} disabled={loading}>
+          <button type="button" className="prospector-btn" onClick={() => { loadProspects(); loadEnrichmentJobs(); }} disabled={loading}>
             <RefreshCw size={14} className={loading ? 'mkt-spin' : ''} /> Refresh
           </button>
           <button type="button" className="prospector-btn primary" onClick={() => setManualOpen(true)}>
@@ -1127,6 +1429,9 @@ export default function ProspectorManager({ currentUserProfile }) {
 
       {dbSetupRequired && (
         <div className="prospector-alert"><AlertTriangle size={18} /><div><strong>Database setup required</strong><div>Run <code>prospector-migration.sql</code> in Supabase. Discovery can still be tested, but saving is disabled.</div></div></div>
+      )}
+      {enrichmentJobsSetupRequired && !dbSetupRequired && (
+        <div className="prospector-alert"><AlertTriangle size={18} /><div><strong>Durable scan queue setup required</strong><div>Run <code>add-prospect-enrichment-jobs.sql</code> in Supabase. Preview scans still work, but saved scans cannot resume after refresh yet.</div></div></div>
       )}
       <div role="alert">
         {error && (
@@ -1244,7 +1549,7 @@ export default function ProspectorManager({ currentUserProfile }) {
             <label>Contact data
               <select className="prospector-select" value={savedContactFilter} onChange={(event) => setSavedContactFilter(event.target.value)}>
                 <option value="any">Any contact state</option>
-                <option value="reachable">Ready to contact</option>
+                <option value="reachable">Has any contact data</option>
                 <option value="phone">Has phone</option>
                 <option value="email">Has email</option>
                 <option value="whatsapp">Has WhatsApp</option>
@@ -1268,10 +1573,14 @@ export default function ProspectorManager({ currentUserProfile }) {
                 <option value="unscheduled">Unscheduled</option>
               </select>
             </label>
-            <label>Permission
-              <select className="prospector-select" value={permissionFilter} onChange={(event) => setPermissionFilter(event.target.value)}>
-                <option value="any">Any permission</option>
-                {CONTACT_PERMISSION_STATUSES.map((status) => <option key={status} value={status}>{PERMISSION_LABELS[status]}</option>)}
+            <label>Contact readiness
+              <select className="prospector-select" value={readinessFilter} onChange={(event) => setReadinessFilter(event.target.value)}>
+                <option value="any">Any readiness</option>
+                <option value="any_ready">Any channel ready</option>
+                <option value="email_ready">Email ready</option>
+                <option value="whatsapp_ready">WhatsApp ready</option>
+                <option value="needs_verification">Needs verification</option>
+                <option value="blocked">Fully blocked</option>
               </select>
             </label>
             <label>Fit score
@@ -1340,8 +1649,8 @@ export default function ProspectorManager({ currentUserProfile }) {
                     {PROSPECT_STATUSES.map((status) => <option key={status} value={status}>{PROSPECT_STATUS_LABELS[status]}</option>)}
                   </select>
                   {currentEmail && (
-                    <button type="button" className="prospector-btn small" onClick={() => bulkPatch({ owner_email: currentEmail }, 'Assigned to you')} disabled={saving}>
-                      <UserRoundCheck size={13} /> Assign to me
+                    <button type="button" className="prospector-btn small" onClick={bulkClaim} disabled={saving}>
+                      <UserRoundCheck size={13} /> Claim unassigned
                     </button>
                   )}
                   <button
@@ -1360,7 +1669,7 @@ export default function ProspectorManager({ currentUserProfile }) {
                   </button>
                 </>
               )}
-              <button type="button" className="prospector-btn small" onClick={() => enqueueEnrichment(checkedProspects, view === 'saved')} disabled={saving}>
+              <button type="button" className="prospector-btn small" onClick={() => enqueueEnrichment(checkedProspects, view === 'saved')} disabled={saving || (view === 'saved' && enrichmentJobsSetupRequired)}>
                 <Zap size={13} /> Find decision-makers
               </button>
               <button type="button" className="prospector-btn small" onClick={() => setCheckedKeys(new Set())}>
@@ -1411,6 +1720,7 @@ export default function ProspectorManager({ currentUserProfile }) {
               const queue = enrichState[key];
               const savedMatch = view === 'discover' ? savedMatchFor(prospect) : null;
               const due = view === 'saved' && isFollowUpDue(prospect);
+              const readiness = prospectContactReadiness(prospect);
               return (
                 <div
                   key={key}
@@ -1441,12 +1751,30 @@ export default function ProspectorManager({ currentUserProfile }) {
                       <small>{distanceKmBetween(searchCenter, prospect) < 10 ? distanceKmBetween(searchCenter, prospect).toFixed(1) : Math.round(distanceKmBetween(searchCenter, prospect))} km from search center</small>
                     )}
                     {view === 'saved' && (
-                      <small>
-                        {PROSPECT_STATUS_LABELS[prospect.status] || prospect.status}
-                        {due && <span style={{ color: '#fcd34d', fontWeight: 700 }}> · follow-up due</span>}
-                      </small>
+                      <>
+                        <small>
+                          {PROSPECT_STATUS_LABELS[prospect.status] || prospect.status}
+                          {due && <span style={{ color: '#fcd34d', fontWeight: 700 }}> · follow-up due</span>}
+                        </small>
+                        <small>
+                          <span
+                            className={`prospector-owner-chip ${prospectOwnerState(prospect.owner_email, currentEmail)}`}
+                            title={prospect.owner_email || 'No owner'}
+                          >
+                            {prospectOwnerLabel(prospect.owner_email, currentEmail, { compact: true })}
+                          </span>
+                        </small>
+                        <small className="prospector-readiness-line">
+                          <span className={`prospector-readiness-chip ${readiness.channels.email.status}`} title={readiness.channels.email.reason || 'Email can be used'}>
+                            Email {readiness.channels.email.label.toLowerCase()}
+                          </span>
+                          <span className={`prospector-readiness-chip ${readiness.channels.whatsapp.status}`} title={readiness.channels.whatsapp.reason || 'WhatsApp can be used'}>
+                            WhatsApp {readiness.channels.whatsapp.label.toLowerCase()}
+                          </span>
+                        </small>
+                      </>
                     )}
-                    {savedMatch && <small className="prospector-saved-flag">In pipeline · {PROSPECT_STATUS_LABELS[savedMatch.status] || savedMatch.status}</small>}
+                    {savedMatch && <small className="prospector-saved-flag">In pipeline · {PROSPECT_STATUS_LABELS[savedMatch.status] || savedMatch.status} · {prospectOwnerLabel(savedMatch.owner_email, currentEmail, { compact: true })}</small>}
                     {queue && (
                       <small>
                         <span className={`prospector-queue-chip ${queue.status}`}>
@@ -1475,6 +1803,12 @@ export default function ProspectorManager({ currentUserProfile }) {
           selectedKey={selection.key}
           keyOf={prospectKey}
           onSelect={chooseFromMap}
+          ownerLabelOf={(prospect) => {
+            const savedProspect = view === 'saved' ? prospect : savedMatchFor(prospect);
+            return savedProspect?.id
+              ? prospectOwnerLabel(savedProspect.owner_email, currentEmail, { compact: true })
+              : '';
+          }}
           onSearchArea={view === 'discover' ? (bbox) => runSearch(bbox) : null}
           searching={searching}
           toneOf={prospectScoreTone}
@@ -1500,8 +1834,25 @@ export default function ProspectorManager({ currentUserProfile }) {
               <div className="prospector-badges">
                 <span className="prospector-badge">{sourceLabel(selected.source_provider)}</span>
                 {selectedSaved && <span className="prospector-badge">{PROSPECT_STATUS_LABELS[selected.status] || selected.status}</span>}
-                <span className={`prospector-badge${selected.contact_permission_status === 'do_not_contact' ? ' danger' : selected.contact_permission_status === 'unknown' || !selected.contact_permission_status ? ' warning' : ''}`}>
-                  {PERMISSION_LABELS[selected.contact_permission_status || 'unknown']}
+                {selectedSaved && (
+                  <span
+                    className={`prospector-badge owner ${prospectOwnerState(selected.owner_email, currentEmail)}`}
+                    title={selected.owner_email || 'No owner'}
+                  >
+                    Owner: {prospectOwnerLabel(selected.owner_email, currentEmail)}
+                  </span>
+                )}
+                <span
+                  className={`prospector-badge readiness ${selectedReadiness.channels.email.status}`}
+                  title={selectedReadiness.channels.email.reason || 'Email outreach is ready'}
+                >
+                  Email: {selectedReadiness.channels.email.label}
+                </span>
+                <span
+                  className={`prospector-badge readiness ${selectedReadiness.channels.whatsapp.status}`}
+                  title={selectedReadiness.channels.whatsapp.reason || 'WhatsApp outreach is ready'}
+                >
+                  WhatsApp: {selectedReadiness.channels.whatsapp.label}
                 </span>
                 {view === 'discover' && searchCenter && distanceKmBetween(searchCenter, selected) != null && <span className="prospector-badge">{distanceKmBetween(searchCenter, selected).toFixed(1)} km away</span>}
               </div>
@@ -1519,7 +1870,6 @@ export default function ProspectorManager({ currentUserProfile }) {
                 </span></div>
               )}
               <div className={`prospector-detail-row${selected.website_url ? '' : ' muted'}`}><Globe2 size={15} />{selected.website_url ? <a href={selected.website_url} target="_blank" rel="noopener noreferrer">{selected.website_url.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a> : <span>No website found</span>}</div>
-              {selected.contact_source_url && <div className="prospector-detail-row"><ShieldCheck size={15} /><a href={selected.contact_source_url} target="_blank" rel="noopener noreferrer">Contact source</a></div>}
               <div className="prospector-detail-row"><MapPin size={15} /><span>{selected.formatted_address || locationLabel(selected)}</span></div>
               {selectedSaved && selected.last_contacted_at && (
                 <div className="prospector-detail-row"><Clock size={15} /><span>Last contacted {timeAgo(selected.last_contacted_at)}</span></div>
@@ -1527,7 +1877,7 @@ export default function ProspectorManager({ currentUserProfile }) {
 
               <div className="prospector-fit">
                 <div className="prospector-fit-title">
-                  <span><Sparkles size={13} /> Fit score</span>
+                  <span><Sparkles size={13} /> Commercial fit</span>
                   <span>
                     <span className={`prospector-fit-band ${scoreBand?.tone}`}>{scoreBand?.label}</span>
                     {' '}{selected.fit_score || 0}/100
@@ -1570,11 +1920,78 @@ export default function ProspectorManager({ currentUserProfile }) {
                       {PROSPECT_STATUSES.map((status) => <option key={status} value={status}>{PROSPECT_STATUS_LABELS[status]}</option>)}
                     </select>
                   </label>
-                  <label>Contact permission
-                    <select className="prospector-select" value={selected.contact_permission_status || 'unknown'} onChange={(event) => updateSelected({ contact_permission_status: event.target.value }, event.target.value === 'do_not_contact' ? 'Marked do not contact — the prospect was also moved out of the active pipeline' : 'Contact permission updated')} disabled={saving}>
-                      {CONTACT_PERMISSION_STATUSES.map((status) => <option key={status} value={status}>{PERMISSION_LABELS[status]}</option>)}
-                    </select>
-                  </label>
+                  <div className="prospector-permissions">
+                    <div className="prospector-people-head">
+                      <span><ShieldCheck size={14} /> Channel permission evidence</span>
+                    </div>
+                    {PROSPECT_PERMISSION_CHANNELS.map((channel) => {
+                      const draft = permissionDrafts[channel];
+                      const savedPermission = channelPermissionFor(selected, channel);
+                      const channelLabel = channel === 'email' ? 'Email' : 'WhatsApp';
+                      return (
+                        <section className="prospector-permission-card" key={channel}>
+                          <div className="prospector-permission-head">
+                            <strong>{channel === 'email' ? <Mail size={13} /> : <MessageCircle size={13} />} {channelLabel}</strong>
+                            <span className={`prospector-permission-state ${permissionStatusTone(savedPermission.status)}`}>
+                              {PERMISSION_LABELS[savedPermission.status]}
+                            </span>
+                          </div>
+                          <label>Status
+                            <select
+                              className="prospector-select"
+                              value={draft.status}
+                              onChange={(event) => setPermissionDrafts((current) => ({
+                                ...current,
+                                [channel]: { ...current[channel], status: event.target.value },
+                              }))}
+                              disabled={saving}
+                            >
+                              {CONTACT_PERMISSION_STATUSES.map((status) => <option key={status} value={status}>{PERMISSION_LABELS[status]}</option>)}
+                            </select>
+                          </label>
+                          {(draft.status === 'business_contact' || draft.status === 'consented') && (
+                            <label>Evidence URL {draft.status === 'business_contact' ? '*' : '(optional)'}
+                              <input
+                                className="prospector-input"
+                                type="text"
+                                inputMode="url"
+                                value={draft.source_url}
+                                onChange={(event) => setPermissionDrafts((current) => ({
+                                  ...current,
+                                  [channel]: { ...current[channel], source_url: event.target.value },
+                                }))}
+                                placeholder="https://business.example/contact"
+                                disabled={saving}
+                              />
+                            </label>
+                          )}
+                          {draft.status !== 'unknown' && (
+                            <label>Evidence note {draft.status === 'consented' ? '(required if no URL)' : '(optional)'}
+                              <textarea
+                                className="prospector-textarea"
+                                rows="2"
+                                value={draft.evidence}
+                                onChange={(event) => setPermissionDrafts((current) => ({
+                                  ...current,
+                                  [channel]: { ...current[channel], evidence: event.target.value },
+                                }))}
+                                placeholder={draft.status === 'consented' ? 'When and how permission was given' : 'What was verified'}
+                                disabled={saving}
+                              />
+                            </label>
+                          )}
+                          <div className="prospector-permission-meta">
+                            {savedPermission.basis && <span>Basis: {permissionBasisLabel(savedPermission.basis)}</span>}
+                            {savedPermission.verifiedAt && <span>Verified {timeAgo(savedPermission.verifiedAt)}</span>}
+                            {savedPermission.sourceUrl && <a href={savedPermission.sourceUrl} target="_blank" rel="noopener noreferrer">View evidence</a>}
+                          </div>
+                          <button type="button" className="prospector-btn small" onClick={() => saveChannelPermission(channel)} disabled={saving}>
+                            <ShieldCheck size={12} /> Save {channelLabel} evidence
+                          </button>
+                        </section>
+                      );
+                    })}
+                  </div>
                   <label>Next follow-up
                     <input className="prospector-input" type="datetime-local" value={localInputDate(selected.next_follow_up_at)} onChange={(event) => updateSelected({ next_follow_up_at: event.target.value ? new Date(event.target.value).toISOString() : null }, 'Follow-up scheduled')} disabled={saving} />
                   </label>
@@ -1595,8 +2012,8 @@ export default function ProspectorManager({ currentUserProfile }) {
                   </label>
                   <div className="prospector-detail-actions">
                     <button type="button" className="prospector-btn primary" onClick={commitNotes} disabled={saving || !notesDirty}><Save size={14} /> Save notes</button>
-                    {currentEmail && selected.owner_email !== currentEmail && <button type="button" className="prospector-btn" onClick={() => updateSelected({ owner_email: currentEmail }, 'Prospect assigned to you')} disabled={saving}><UserRoundCheck size={14} /> Assign to me</button>}
-                    <button type="button" className="prospector-btn" onClick={() => updateSelected({ status: 'contacted', last_contacted_at: new Date().toISOString() }, 'Contact logged')} disabled={saving || selected.contact_permission_status === 'do_not_contact'}><CheckCircle2 size={14} /> Mark contacted</button>
+                    {currentEmail && prospectOwnerState(selected.owner_email, currentEmail) === 'unassigned' && <button type="button" className="prospector-btn" onClick={() => claimProspect(selected)} disabled={saving}><UserRoundCheck size={14} /> Claim prospect</button>}
+                    <button type="button" className="prospector-btn" onClick={() => updateSelected({ status: 'contacted', last_contacted_at: new Date().toISOString() }, 'Contact logged')} disabled={saving || selected.status === 'do_not_contact'}><CheckCircle2 size={14} /> Mark contacted</button>
                     <button
                       type="button"
                       className="prospector-btn danger"
@@ -1731,7 +2148,7 @@ export default function ProspectorManager({ currentUserProfile }) {
                           )}
                           <div className="prospector-timeline-meta">
                             {row.sent_by_label ? `Sent by ${row.sent_by_label}` : row.sender_lookup_failed ? 'Sender unavailable' : 'Sender no longer on the team'}
-                            {row.permission_basis ? ` · basis: ${PERMISSION_LABELS[row.permission_basis] || row.permission_basis}` : ''}
+                            {row.permission_basis ? ` · basis: ${permissionBasisLabel(row.permission_basis)}` : ''}
                             {row.error ? ` · ${row.error}` : ''}
                           </div>
                         </div>
@@ -1757,10 +2174,10 @@ export default function ProspectorManager({ currentUserProfile }) {
                   type="button"
                   className="prospector-btn"
                   onClick={() => enqueueEnrichment([selected], selectedSaved)}
-                  disabled={!selected.website_url || ['queued', 'scanning'].includes(enrichState[selection.key]?.status)}
-                  title={selected.website_url ? 'Scan the public website for decision-makers and contacts' : 'This business has no website on record to scan'}
+                  disabled={!selected.website_url || (selectedSaved && enrichmentJobsSetupRequired) || ['queued', 'scanning'].includes(enrichState[selection.key]?.status)}
+                  title={selectedSaved && enrichmentJobsSetupRequired ? 'Run add-prospect-enrichment-jobs.sql to enable durable scans' : selected.website_url ? 'Scan the public website for decision-makers and contacts' : 'This business has no website on record to scan'}
                 >
-                  <Zap size={14} /> Find decision-makers
+                  <Zap size={14} /> {enrichState[selection.key]?.status === 'failed' ? 'Retry scan' : 'Find decision-makers'}
                 </button>
               </div>
               {enrichState[selection.key]?.status === 'failed' && (
@@ -1811,7 +2228,7 @@ export default function ProspectorManager({ currentUserProfile }) {
               <label className="full">Country<input className="prospector-input" value={manualForm.country} onChange={(event) => setManualForm({ ...manualForm, country: event.target.value })} placeholder="Costa Rica, Germany, Japan…" /></label>
               <label>Latitude<input className="prospector-input" type="number" min="-90" max="90" step="any" value={manualForm.latitude} onChange={(event) => setManualForm({ ...manualForm, latitude: event.target.value })} placeholder="9.9281 — optional, puts it on the map" /></label>
               <label>Longitude<input className="prospector-input" type="number" min="-180" max="180" step="any" value={manualForm.longitude} onChange={(event) => setManualForm({ ...manualForm, longitude: event.target.value })} placeholder="-84.0907" /></label>
-              <label className="full">Contact permission<select className="prospector-select" value={manualForm.contact_permission_status} onChange={(event) => setManualForm({ ...manualForm, contact_permission_status: event.target.value })}>{CONTACT_PERMISSION_STATUSES.map((status) => <option key={status} value={status}>{PERMISSION_LABELS[status]}</option>)}</select></label>
+              <div className="prospector-form-hint full">Email and WhatsApp permission are verified separately after saving, with a source or consent note for each channel.</div>
               <label className="full">Notes<textarea className="prospector-textarea" rows="4" value={manualForm.notes} onChange={(event) => setManualForm({ ...manualForm, notes: event.target.value })} /></label>
               <div className="prospector-form-actions"><button type="button" className="prospector-btn" onClick={() => setManualOpen(false)}>Cancel</button><button type="submit" className="prospector-btn primary" disabled={saving || dbSetupRequired}>{saving ? <Loader2 size={14} className="mkt-spin" /> : <Plus size={14} />} Add prospect</button></div>
             </form>

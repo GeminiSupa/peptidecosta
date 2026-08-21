@@ -28,6 +28,18 @@ CREATE TABLE IF NOT EXISTS public.sales_prospects (
   fit_reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
   contact_permission_status TEXT NOT NULL DEFAULT 'unknown',
   contact_source_url TEXT,
+  email_permission_status TEXT NOT NULL DEFAULT 'unknown',
+  email_permission_basis TEXT,
+  email_permission_source_url TEXT,
+  email_permission_evidence TEXT,
+  email_permission_verified_at TIMESTAMPTZ,
+  email_permission_verified_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  whatsapp_permission_status TEXT NOT NULL DEFAULT 'unknown',
+  whatsapp_permission_basis TEXT,
+  whatsapp_permission_source_url TEXT,
+  whatsapp_permission_evidence TEXT,
+  whatsapp_permission_verified_at TIMESTAMPTZ,
+  whatsapp_permission_verified_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   enriched_at TIMESTAMPTZ,
   people JSONB NOT NULL DEFAULT '[]'::jsonb,
   linkedin_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -44,6 +56,18 @@ CREATE TABLE IF NOT EXISTS public.sales_prospects (
   ),
   CONSTRAINT sales_prospects_permission_check CHECK (
     contact_permission_status IN ('unknown','business_contact','consented','do_not_contact')
+  ),
+  CONSTRAINT sales_prospects_email_permission_check CHECK (
+    email_permission_status IN ('unknown','business_contact','consented','do_not_contact')
+  ),
+  CONSTRAINT sales_prospects_whatsapp_permission_check CHECK (
+    whatsapp_permission_status IN ('unknown','business_contact','consented','do_not_contact')
+  ),
+  CONSTRAINT sales_prospects_email_permission_basis_check CHECK (
+    email_permission_basis IS NULL OR email_permission_basis IN ('published_business_contact','express_consent','opt_out')
+  ),
+  CONSTRAINT sales_prospects_whatsapp_permission_basis_check CHECK (
+    whatsapp_permission_basis IS NULL OR whatsapp_permission_basis IN ('published_business_contact','express_consent','opt_out')
   ),
   CONSTRAINT sales_prospects_score_check CHECK (fit_score BETWEEN 0 AND 100),
   CONSTRAINT sales_prospects_latitude_check CHECK (latitude IS NULL OR latitude BETWEEN -90 AND 90),
@@ -62,9 +86,53 @@ CREATE INDEX IF NOT EXISTS sales_prospects_owner_idx
 
 ALTER TABLE public.sales_prospects ENABLE ROW LEVEL SECURITY;
 
+CREATE TABLE IF NOT EXISTS public.prospect_enrichment_jobs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  prospect_id UUID NOT NULL UNIQUE REFERENCES public.sales_prospects(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'queued',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  result_payload JSONB,
+  last_error TEXT,
+  next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  locked_at TIMESTAMPTZ,
+  locked_by TEXT,
+  requested_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT prospect_enrichment_jobs_status_check CHECK (
+    status IN ('queued','running','succeeded','failed','cancelled')
+  ),
+  CONSTRAINT prospect_enrichment_jobs_attempts_check CHECK (
+    attempts >= 0 AND max_attempts BETWEEN 1 AND 10
+  )
+);
+
+CREATE INDEX IF NOT EXISTS prospect_enrichment_jobs_work_idx
+  ON public.prospect_enrichment_jobs (status, next_attempt_at, created_at);
+
+CREATE INDEX IF NOT EXISTS prospect_enrichment_jobs_updated_idx
+  ON public.prospect_enrichment_jobs (updated_at DESC);
+
+ALTER TABLE public.prospect_enrichment_jobs ENABLE ROW LEVEL SECURITY;
+
 -- Safe upgrades for installations that ran an earlier Prospector migration.
 ALTER TABLE public.sales_prospects
   ADD COLUMN IF NOT EXISTS contact_source_url TEXT,
+  ADD COLUMN IF NOT EXISTS email_permission_status TEXT NOT NULL DEFAULT 'unknown',
+  ADD COLUMN IF NOT EXISTS email_permission_basis TEXT,
+  ADD COLUMN IF NOT EXISTS email_permission_source_url TEXT,
+  ADD COLUMN IF NOT EXISTS email_permission_evidence TEXT,
+  ADD COLUMN IF NOT EXISTS email_permission_verified_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS email_permission_verified_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS whatsapp_permission_status TEXT NOT NULL DEFAULT 'unknown',
+  ADD COLUMN IF NOT EXISTS whatsapp_permission_basis TEXT,
+  ADD COLUMN IF NOT EXISTS whatsapp_permission_source_url TEXT,
+  ADD COLUMN IF NOT EXISTS whatsapp_permission_evidence TEXT,
+  ADD COLUMN IF NOT EXISTS whatsapp_permission_verified_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS whatsapp_permission_verified_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS enriched_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS people JSONB NOT NULL DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS linkedin_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -76,6 +144,8 @@ ALTER TABLE public.sales_prospects ALTER COLUMN country DROP NOT NULL;
 ALTER TABLE public.sales_prospects ALTER COLUMN country DROP DEFAULT;
 
 DROP POLICY IF EXISTS "Authenticated staff can read sales prospects" ON public.sales_prospects;
+DROP POLICY IF EXISTS "Authenticated staff can read prospect enrichment jobs"
+  ON public.prospect_enrichment_jobs;
 
 -- All reads and mutations go through authenticated /api/admin/prospects routes.
 -- Those routes enforce module permissions before using the service role, so no

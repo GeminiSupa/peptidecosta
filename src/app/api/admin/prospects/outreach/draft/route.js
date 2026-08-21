@@ -85,7 +85,7 @@ export async function POST(request) {
       .single();
 
     if (isProspectsTableMissing(error)) {
-      return NextResponse.json({ error: 'Run prospect-outreach-migration.sql first.', setupRequired: true }, { status: 503 });
+      return NextResponse.json({ error: 'Run add-prospect-channel-permissions.sql and prospect-outreach-migration.sql first.', setupRequired: true }, { status: 503 });
     }
     if (error || !prospect) return NextResponse.json({ error: 'Prospect not found' }, { status: 404 });
 
@@ -95,7 +95,12 @@ export async function POST(request) {
     if (!permission.allowed) return NextResponse.json({ error: permission.reason }, { status: 403 });
 
     const bookingUrl = await resolveBookingUrl(supabase, prospect);
-    const prompt = buildOutreachPrompt(prospect, { channel: outreachChannel, bookingUrl, language });
+    const prompt = buildOutreachPrompt(prospect, {
+      channel: outreachChannel,
+      bookingUrl,
+      language,
+      permission,
+    });
 
     const { text, model } = openAiKey
       ? await draftWithOpenAI(prompt, openAiKey)

@@ -35,6 +35,16 @@ test('manual prospect validation rejects hidden coordinate and date errors', () 
   assert.match(prospectInputError({ website_url: 'http://[broken' }), /website URL/);
   assert.match(prospectInputError({ next_follow_up_at: 'not-a-date' }), /follow-up date/);
   assert.equal(prospectInputError({ latitude: 9.9, longitude: -84.1, website_url: 'example.com' }), null);
+  assert.match(prospectInputError({
+    email_permission_status: 'business_contact',
+  }), /source URL is required/i);
+  assert.match(prospectInputError({
+    whatsapp_permission_status: 'consented',
+  }), /where or how WhatsApp consent was received/i);
+  assert.equal(prospectInputError({
+    email_permission_status: 'business_contact',
+    email_permission_source_url: 'https://example.test/contact',
+  }), null);
 
   const normalized = normalizeProspectInput({ organization_name: 'Out of range', latitude: 120, longitude: 300 });
   assert.equal(normalized.latitude, null);
@@ -49,7 +59,7 @@ import {
   isPublicNetworkAddress,
 } from '../src/lib/prospectWebEnrichment.mjs';
 
-test('scores useful public business signals without inventing contact permission', () => {
+test('commercial fit ignores contact details and permission', () => {
   const result = scoreProspect({
     primary_type: 'fitness_center',
     website_url: 'https://example.test',
@@ -59,16 +69,15 @@ test('scores useful public business signals without inventing contact permission
     city: 'Escazú',
   });
 
-  assert.equal(result.score, 70);
+  assert.equal(result.score, 95);
   assert.deepEqual(result.reasons, [
     'Target business category',
-    'Active business website',
-    'Public business phone',
-    'Location identified',
+    'Established web presence',
+    'Business location identified',
     'Strong public rating',
+    'Established review volume',
   ]);
-  // Nothing here establishes a lawful basis, so the permission point is absent.
-  assert.ok(!result.reasons.includes('Contact permission established'));
+  assert.ok(!result.reasons.some((reason) => /phone|email|permission/i.test(reason)));
 });
 
 test('the same business scores the same however its category is spelled', () => {
@@ -87,19 +96,25 @@ test('an unmistakable name counts when the directory left the category blank', (
   assert.ok(matchesTargetCategory({ category: '', organization_name: 'CrossFit Escazú' }));
 });
 
-test('a fully worked prospect reaches 100 without any Google ratings', () => {
-  const result = scoreProspect({
+test('adding contacts and permission does not change commercial fit', () => {
+  const business = {
     category: 'fitness centre',
     website_url: 'https://example.test',
+    city: 'Escazú',
+  };
+  const base = scoreProspect(business);
+  const withContacts = scoreProspect({
+    ...business,
     phone: '+506 2222 2222',
     email: 'info@example.test',
-    city: 'Escazú',
     people: [{ full_name: 'Ana Ruiz', job_title: 'Owner' }],
-    contact_permission_status: 'business_contact',
+    email_permission_status: 'business_contact',
+    email_permission_basis: 'published_business_contact',
+    email_permission_source_url: 'https://example.test/contact',
   });
 
-  assert.equal(result.score, 100);
-  assert.ok(result.reasons.includes('Named decision-maker on file'));
+  assert.equal(base.score, 70);
+  assert.deepEqual(withContacts, base);
 });
 
 test('score bands describe the scale the scores are actually on', () => {
@@ -175,7 +190,9 @@ test('normalizes free OpenStreetMap results with public contact tags', () => {
   assert.equal(result.source_provider, 'openstreetmap');
   assert.equal(result.source_external_id, 'node:123');
   assert.equal(result.email, 'info@centroactivo.example');
-  assert.equal(result.contact_permission_status, 'business_contact');
+  assert.equal(result.contact_permission_status, 'unknown');
+  assert.equal(result.email_permission_status, 'unknown');
+  assert.equal(result.whatsapp_permission_status, 'unknown');
   assert.match(result.google_maps_url, /openstreetmap\.org/);
 });
 
@@ -289,6 +306,29 @@ test('manual input defaults to an isolated prospect with unknown permission', ()
   assert.equal(result.latitude, 9.9);
 });
 
+test('manual input cannot supply its own fit score or reasons', () => {
+  const result = normalizeProspectInput({
+    organization_name: 'Unrelated Hardware Store',
+    category: 'hardware',
+    fit_score: 100,
+    fit_reasons: ['Browser says perfect'],
+  });
+
+  assert.equal(result.fit_score, 5);
+  assert.deepEqual(result.fit_reasons, []);
+});
+
+test('a historic global opt-out remains a global channel opt-out on save', () => {
+  const result = normalizeProspectInput({
+    organization_name: 'Opted-out business',
+    contact_permission_status: 'do_not_contact',
+  });
+  assert.equal(result.status, 'do_not_contact');
+  assert.equal(result.contact_permission_status, 'do_not_contact');
+  assert.equal(result.email_permission_status, 'do_not_contact');
+  assert.equal(result.whatsapp_permission_status, 'do_not_contact');
+});
+
 test('leaves country unknown instead of assuming the storefront home country', () => {
   assert.equal(normalizeProspectInput({ organization_name: 'Tokyo Fitness', city: 'Tokyo' }).country, null);
   assert.equal(normalizeProspectInput({ organization_name: 'Berlin Gym', country: 'Germany' }).country, 'Germany');
@@ -309,6 +349,10 @@ test('re-saving a discovered business keeps the pipeline state it earned', () =>
     email: 'owner@gimnasio.test',
     phone: '+506 2222 2222',
     contact_permission_status: 'consented',
+    email_permission_status: 'consented',
+    email_permission_basis: 'express_consent',
+    email_permission_evidence: 'Owner opted in during the July call.',
+    email_permission_verified_at: '2026-07-01T15:00:00.000Z',
     people: [{ full_name: 'Ana Rojas', job_title: 'Owner' }],
     linkedin_urls: ['https://linkedin.com/in/ana-rojas'],
     country: 'Costa Rica',
@@ -329,6 +373,8 @@ test('re-saving a discovered business keeps the pipeline state it earned', () =>
   assert.equal(merged.next_follow_up_at, '2026-09-01T15:00:00.000Z');
   assert.equal(merged.last_contacted_at, '2026-08-01T15:00:00.000Z');
   assert.equal(merged.contact_permission_status, 'consented');
+  assert.equal(merged.email_permission_status, 'consented');
+  assert.equal(merged.email_permission_evidence, 'Owner opted in during the July call.');
   assert.equal(merged.people.length, 1);
   assert.deepEqual(merged.linkedin_urls, ['https://linkedin.com/in/ana-rojas']);
   // Curated contacts survive; refreshed directory details land.
@@ -463,13 +509,15 @@ test('picks up WhatsApp and mobile tags mappers record in OpenStreetMap', () => 
   });
   assert.deepEqual(result.whatsapp_numbers, ['+50688887777']);
   assert.equal(result.phone, '+506 8888 7777');
-  assert.equal(result.contact_permission_status, 'business_contact');
+  assert.equal(result.contact_permission_status, 'unknown');
+  assert.equal(result.whatsapp_permission_status, 'unknown');
 });
 
 test('recognizes missing prospect table errors from Postgres and PostgREST', () => {
   assert.equal(isProspectsTableMissing({ code: '42P01' }), true);
   assert.equal(isProspectsTableMissing({ code: 'PGRST205' }), true);
   assert.equal(isProspectsTableMissing({ code: '42703', message: 'column contact_source_url does not exist' }), true);
+  assert.equal(isProspectsTableMissing({ code: 'PGRST204', message: "Could not find the 'email_permission_status' column" }), true);
   assert.equal(isProspectsTableMissing({ message: "Could not find sales_prospects in the schema cache" }), true);
   assert.equal(isProspectsTableMissing({ code: '23505' }), false);
 });

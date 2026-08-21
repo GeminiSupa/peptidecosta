@@ -8,8 +8,14 @@ import {
   normalizeOptionalProspectDate,
   prospectInputError,
   PROSPECT_STATUSES,
-  CONTACT_PERMISSION_STATUSES,
 } from '@/lib/prospects.mjs';
+import { normalizeProspectOwnerEmail } from '@/lib/prospectOwnership.mjs';
+import { presentProspect } from '@/lib/prospectReadiness.mjs';
+import {
+  CHANNEL_PERMISSION_BASIS,
+  PROSPECT_PERMISSION_CHANNELS,
+  channelPermissionFields,
+} from '@/lib/prospectPermissions.mjs';
 
 export const dynamic = 'force-dynamic';
 // A hundred saves is a hundred row writes plus the lookups that precede them.
@@ -23,6 +29,10 @@ const SELECT_FIELDS = [
   'latitude', 'longitude', 'google_maps_url', 'rating', 'user_rating_count',
   'business_status', 'status', 'fit_score', 'fit_reasons', 'contact_permission_status',
   'contact_source_url', 'enriched_at', 'people', 'linkedin_urls', 'whatsapp_numbers',
+  'email_permission_status', 'email_permission_basis', 'email_permission_source_url',
+  'email_permission_evidence', 'email_permission_verified_at', 'email_permission_verified_by',
+  'whatsapp_permission_status', 'whatsapp_permission_basis', 'whatsapp_permission_source_url',
+  'whatsapp_permission_evidence', 'whatsapp_permission_verified_at', 'whatsapp_permission_verified_by',
   'owner_email', 'notes', 'last_contacted_at',
   'next_follow_up_at', 'created_at', 'updated_at',
 ].join(',');
@@ -180,7 +190,7 @@ export async function POST(request) {
     }
   }
 
-  return NextResponse.json({ saved, failed, created, refreshed });
+  return NextResponse.json({ saved: saved.map(presentProspect), failed, created, refreshed });
 }
 
 /**
@@ -207,15 +217,77 @@ export async function PATCH(request) {
     return NextResponse.json({ error: `Update at most ${MAX_BATCH} prospects per batch` }, { status: 400 });
   }
 
+  const supabase = getSupabaseAdmin();
+  if (body.action === 'claim') {
+    const claimant = normalizeProspectOwnerEmail(auth.profile?.email || auth.user?.email);
+    if (!claimant) {
+      return NextResponse.json({ error: 'Your admin profile needs an email before you can claim prospects' }, { status: 400 });
+    }
+
+    const { data: newlyClaimed, error: claimError } = await supabase
+      .from('sales_prospects')
+      .update({ owner_email: claimant, updated_at: new Date().toISOString() })
+      .in('id', ids)
+      .is('owner_email', null)
+      .select('id');
+    if (isProspectsTableMissing(claimError)) return setupRequired();
+    if (claimError) {
+      console.error('[Prospects] Bulk claim failed:', claimError.message);
+      return NextResponse.json({ error: 'Unable to claim prospects' }, { status: 500 });
+    }
+
+    // Return every selected row so stale clients immediately learn who owns
+    // conflicts, while `claimedIds` identifies only rows this request won.
+    const { data: currentRows, error: currentError } = await supabase
+      .from('sales_prospects')
+      .select(SELECT_FIELDS)
+      .in('id', ids);
+    if (currentError) {
+      console.error('[Prospects] Bulk claim refresh failed:', currentError.message);
+      return NextResponse.json({ error: 'Claims were processed but ownership could not be refreshed' }, { status: 500 });
+    }
+    const claimedIds = (newlyClaimed || []).map((row) => row.id);
+    const alreadyMine = (currentRows || []).filter((row) => (
+      !claimedIds.includes(row.id)
+      && normalizeProspectOwnerEmail(row.owner_email) === claimant
+    )).length;
+    const conflicts = (currentRows || []).filter((row) => (
+      normalizeProspectOwnerEmail(row.owner_email)
+      && normalizeProspectOwnerEmail(row.owner_email) !== claimant
+    )).length;
+    return NextResponse.json({
+      prospects: (currentRows || []).map(presentProspect),
+      claimedIds,
+      claimed: claimedIds.length,
+      alreadyMine,
+      conflicts,
+    });
+  }
+
+  if ('owner_email' in body) {
+    return NextResponse.json({ error: 'Use the protected claim action to assign prospects' }, { status: 400 });
+  }
+
+  if ('contact_permission_status' in body || 'channel_permissions' in body) {
+    return NextResponse.json({ error: 'Review permission evidence on each prospect separately' }, { status: 400 });
+  }
+
   const updates = {};
   if (PROSPECT_STATUSES.includes(body.status)) updates.status = body.status;
-  if (CONTACT_PERMISSION_STATUSES.includes(body.contact_permission_status)) {
-    updates.contact_permission_status = body.contact_permission_status;
-    // Same coupling the single PATCH enforces: an opt-out is not just a
-    // permission, it removes the prospect from the working pipeline.
-    if (body.contact_permission_status === 'do_not_contact') updates.status = 'do_not_contact';
+  if (updates.status === 'do_not_contact') {
+    const verifiedAt = new Date().toISOString();
+    updates.contact_permission_status = 'do_not_contact';
+    for (const channel of PROSPECT_PERMISSION_CHANNELS) {
+      const fields = channelPermissionFields(channel);
+      Object.assign(updates, {
+        [fields.status]: 'do_not_contact',
+        [fields.basis]: CHANNEL_PERMISSION_BASIS.do_not_contact,
+        [fields.evidence]: 'Blocked from a bulk prospect status change',
+        [fields.verifiedAt]: verifiedAt,
+        [fields.verifiedBy]: auth.user.id,
+      });
+    }
   }
-  if ('owner_email' in body) updates.owner_email = String(body.owner_email || '').trim().toLowerCase() || null;
   if ('next_follow_up_at' in body) {
     const followUp = normalizeOptionalProspectDate(body.next_follow_up_at);
     if (body.next_follow_up_at && !followUp) {
@@ -229,7 +301,7 @@ export async function PATCH(request) {
   }
   updates.updated_at = new Date().toISOString();
 
-  const { data, error } = await getSupabaseAdmin()
+  const { data, error } = await supabase
     .from('sales_prospects')
     .update(updates)
     .in('id', ids)
@@ -240,7 +312,7 @@ export async function PATCH(request) {
     console.error('[Prospects] Bulk update failed:', error.message);
     return NextResponse.json({ error: 'Unable to update prospects' }, { status: 500 });
   }
-  return NextResponse.json({ prospects: data || [] });
+  return NextResponse.json({ prospects: (data || []).map(presentProspect) });
 }
 
 export async function DELETE(request) {

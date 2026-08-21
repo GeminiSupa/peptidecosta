@@ -8,6 +8,7 @@ import { isWhatsAppSuppressed } from '@/lib/whatsappCompliance';
 import {
   canContactProspect,
   normalizeOutreachChannel,
+  outreachDisclosure,
   prospectUpdatesForSend,
   whatsappHandoffUrl,
   WHATSAPP_HANDOFF_REASON,
@@ -23,16 +24,6 @@ const escapeHtml = (value) => String(value ?? '')
   .replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;');
 
-/**
- * The disclosure line every cold email carries.
- *
- * This is 1:1 sales mail, not a campaign, so the marketing footer and its
- * subscriber unsubscribe token do not apply — a prospect has no subscriber
- * row to unsubscribe. What a cold recipient is owed is the same in substance:
- * why they were contacted, and a way to stop it that actually works.
- */
-const DISCLOSURE = 'You received this because your business contact details are published on your website. Reply "remove" and we will not contact you again.';
-
 function linkify(text) {
   return escapeHtml(text).replace(
     /(https?:\/\/[^\s<]+)/g,
@@ -40,14 +31,14 @@ function linkify(text) {
   );
 }
 
-function emailHtml(body) {
+function emailHtml(body, disclosure) {
   const paragraphs = body.split(/\n{2,}/).map((block) => (
     `<p style="margin:0 0 14px">${linkify(block).replaceAll('\n', '<br />')}</p>`
   )).join('');
 
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#0f172a">
 ${paragraphs}
-<p style="margin:22px 0 0;padding-top:14px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b">${escapeHtml(DISCLOSURE)}</p>
+<p style="margin:22px 0 0;padding-top:14px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b">${escapeHtml(disclosure)}</p>
 </div>`;
 }
 
@@ -104,7 +95,7 @@ export async function POST(request) {
       .single();
 
     if (isProspectsTableMissing(error)) {
-      return NextResponse.json({ error: 'Run prospect-outreach-migration.sql first.', setupRequired: true }, { status: 503 });
+      return NextResponse.json({ error: 'Run add-prospect-channel-permissions.sql and prospect-outreach-migration.sql first.', setupRequired: true }, { status: 503 });
     }
     if (error || !prospect) return NextResponse.json({ error: 'Prospect not found' }, { status: 404 });
 
@@ -121,6 +112,7 @@ export async function POST(request) {
     }
 
     const bookingUrl = await resolveBookingUrl(supabase, prospect).catch(() => null);
+    const disclosure = outreachDisclosure(permission, outreachChannel);
     const baseLog = {
       prospect_id: prospect.id,
       channel: outreachChannel,
@@ -136,7 +128,7 @@ export async function POST(request) {
     // prospect contacted or writing a false "sent" history row; the rep can use
     // Mark contacted after they actually press Send in WhatsApp.
     if (outreachChannel === 'whatsapp') {
-      const handoffUrl = whatsappHandoffUrl(permission.identity, messageBody);
+      const handoffUrl = whatsappHandoffUrl(permission.identity, `${messageBody}\n\n—\n${disclosure}`);
       if (!handoffUrl) return NextResponse.json({ error: 'Unable to build a WhatsApp link for this number.' }, { status: 400 });
       return NextResponse.json({
         success: true,
@@ -181,8 +173,8 @@ export async function POST(request) {
           replyTo: smtp.replyTo,
           to: permission.identity,
           subject: baseLog.subject,
-          text: `${messageBody}\n\n—\n${DISCLOSURE}`,
-          html: emailHtml(messageBody),
+          text: `${messageBody}\n\n—\n${disclosure}`,
+          html: emailHtml(messageBody, disclosure),
         });
         providerId = info?.messageId || null;
       } catch (sendError) {

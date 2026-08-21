@@ -245,6 +245,14 @@ export async function POST(request) {
     ).slice(0, 8);
     const phones = dedupePhoneDigits([...linkedPhones, ...pages.flatMap((page) => page.contacts.phones)], 8);
     const whatsappNumbers = [...new Set(pages.flatMap((page) => page.contacts.whatsappNumbers))].slice(0, 5);
+    const publishedEmails = rankEmails(linkedEmails, firstPage.url);
+    const primaryEmail = publishedEmails[0] || emails[0] || null;
+    const emailSourceUrl = primaryEmail
+      ? pages.find((page) => page.contacts.linkedEmails.includes(primaryEmail))?.url || null
+      : null;
+    const whatsappSourceUrl = whatsappNumbers.length
+      ? pages.find((page) => page.contacts.whatsappNumbers.some((number) => whatsappNumbers.includes(number)))?.url || null
+      : null;
     const socialProfiles = [...new Set(pages.flatMap((page) => page.contacts.socialProfiles))].slice(0, 8);
     const domainChecks = await verifyEmailDomains(emails);
     let peopleResult = { people: [], aiUsed: false, aiAvailable: Boolean(process.env.GEMINI_API_KEY) };
@@ -261,7 +269,7 @@ export async function POST(request) {
       console.warn('[Prospector Enrichment] Gemini people extraction skipped:', error.message);
     }
     return NextResponse.json({
-      email: emails[0] || null,
+      email: primaryEmail,
       phone: phones[0] || null,
       emails,
       phones,
@@ -274,8 +282,16 @@ export async function POST(request) {
       emailDomainChecks: domainChecks,
       // Only a mailto:/tel: the site published as a contact supports the
       // "public business contact" claim. Loose text matches stay unproven.
-      permissionStatus: linkedEmails.length || linkedPhones.length ? 'business_contact' : 'unknown',
-      contactsVerified: linkedEmails.length + linkedPhones.length,
+      // Permission evidence is channel-specific. A tel: link is not email
+      // permission, and an ordinary phone number is not WhatsApp permission.
+      emailPermissionStatus: emailSourceUrl ? 'business_contact' : 'unknown',
+      emailPermissionSourceUrl: emailSourceUrl,
+      emailPermissionEvidence: emailSourceUrl ? `Published email found during website scan: ${primaryEmail}` : null,
+      whatsappPermissionStatus: whatsappSourceUrl ? 'business_contact' : 'unknown',
+      whatsappPermissionSourceUrl: whatsappSourceUrl,
+      whatsappPermissionEvidence: whatsappSourceUrl ? 'Published WhatsApp link found during website scan' : null,
+      permissionStatus: emailSourceUrl || whatsappSourceUrl ? 'business_contact' : 'unknown',
+      contactsVerified: Number(Boolean(emailSourceUrl)) + Number(Boolean(whatsappSourceUrl)),
       sources: {
         mailto: linkedEmails.length,
         tel: linkedPhones.length - whatsappNumbers.length,

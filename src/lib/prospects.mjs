@@ -1,3 +1,11 @@
+import {
+  CHANNEL_PERMISSION_BASIS,
+  CHANNEL_PERMISSION_STATUSES,
+  PROSPECT_PERMISSION_CHANNELS,
+  channelPermissionFields,
+  summarizeChannelPermissions,
+} from './prospectPermissions.mjs';
+
 export const PROSPECT_STATUSES = [
   'discovered',
   'review',
@@ -57,6 +65,11 @@ const DISCOVERY_FIELDS = [
 
 /** Columns owned by the sales workflow, never touched by a re-discovery. */
 const PIPELINE_FIELDS = ['status', 'owner_email', 'next_follow_up_at', 'last_contacted_at'];
+
+const CHANNEL_PERMISSION_FIELD_NAMES = PROSPECT_PERMISSION_CHANNELS.flatMap((channel) => {
+  const fields = channelPermissionFields(channel);
+  return Object.values(fields);
+});
 
 const clean = (value, limit = 500) => String(value ?? '').trim().slice(0, limit);
 
@@ -201,70 +214,50 @@ export function matchesTargetCategory(prospect = {}) {
 }
 
 /**
- * Scores how much work a prospect still needs before it can be sold to.
- *
- * The weights are chosen so a fully worked prospect — right category, website,
- * phone, published work email, a named decision-maker, and an established
- * contact permission — reaches exactly 100 without any Google Places data.
- * Ratings and review counts stay in the model for the Google shape, but they
- * are worth 5 apiece instead of 10, because OpenStreetMap never supplies them
- * and the previous weighting quietly made 20 of the 100 points unreachable for
- * every prospect the app can actually discover.
+ * Scores commercial fit only. Contact details, permission, and ownership are
+ * operational readiness signals and must never change this number.
  */
 export function scoreProspect(prospect = {}) {
-  let score = 10;
+  let score = 5;
   const reasons = [];
 
   if (matchesTargetCategory(prospect)) {
-    score += 20;
+    score += 45;
     reasons.push('Target business category');
   }
   if (prospect.website_url || prospect.websiteUri) {
-    score += 15;
-    reasons.push('Active business website');
-  }
-  if (prospect.phone || prospect.internationalPhoneNumber || prospect.nationalPhoneNumber) {
     score += 10;
-    reasons.push('Public business phone');
-  }
-  if (prospect.email) {
-    score += 15;
-    reasons.push('Work email available');
-  }
-  if (Array.isArray(prospect.people) && prospect.people.length) {
-    score += 15;
-    reasons.push('Named decision-maker on file');
-  }
-  if (['business_contact', 'consented'].includes(prospect.contact_permission_status)) {
-    score += 10;
-    reasons.push('Contact permission established');
+    reasons.push('Established web presence');
   }
   if (prospect.city || prospect.region || prospect.formatted_address || prospect.formattedAddress) {
+    score += 10;
+    reasons.push('Business location identified');
+  }
+  if (['operational', 'open', 'active'].includes(clean(prospect.business_status, 80).toLowerCase())) {
     score += 5;
-    reasons.push('Location identified');
+    reasons.push('Business reported active');
   }
   if (Number(prospect.rating) >= 4.3) {
-    score += 5;
+    score += 10;
     reasons.push('Strong public rating');
   }
   if (Number(prospect.user_rating_count || prospect.userRatingCount) >= 20) {
-    score += 5;
+    score += 15;
     reasons.push('Established review volume');
   }
 
-  return { score: Math.min(100, score), reasons: reasons.slice(0, 5) };
+  return { score: Math.min(100, score), reasons: reasons.slice(0, 6) };
 }
 
 /**
  * Score bands, shared by the list chip and the legend that explains it.
  *
- * A band is only meaningful against the scale above: 70 is a prospect with a
- * verified way in, 45 is one worth enriching, below that is a directory entry.
+ * These labels describe commercial fit, never permission to contact.
  */
 export const PROSPECT_SCORE_BANDS = [
-  { tone: 'high', min: 70, label: 'Ready to contact', hint: 'Category match plus a verified contact route.' },
-  { tone: 'medium', min: 45, label: 'Worth enriching', hint: 'Right kind of business, contact details still missing.' },
-  { tone: 'low', min: 0, label: 'Thin record', hint: 'Little more than a name and a location so far.' },
+  { tone: 'high', min: 70, label: 'Strong fit', hint: 'Target category with strong public business signals.' },
+  { tone: 'medium', min: 45, label: 'Promising fit', hint: 'Likely relevant, but the business evidence is still limited.' },
+  { tone: 'low', min: 0, label: 'Weak evidence', hint: 'Not enough evidence yet to establish commercial fit.' },
 ];
 
 export function prospectScoreTone(score) {
@@ -337,7 +330,12 @@ export function normalizeOpenStreetMapPlace(place = {}) {
     user_rating_count: null,
     business_status: null,
     whatsapp_numbers: whatsapp,
-    contact_permission_status: email || phone || whatsapp.length ? 'business_contact' : 'unknown',
+    // Directory contact tags are useful discovery data, but they do not prove
+    // which outreach channel may lawfully be used. Website enrichment or a
+    // human verification records that evidence later.
+    contact_permission_status: 'unknown',
+    email_permission_status: 'unknown',
+    whatsapp_permission_status: 'unknown',
   };
   const scored = scoreProspect(normalized);
   normalized.fit_score = scored.score;
@@ -401,9 +399,7 @@ export function dedupeAndRankProspects(prospects, query, limit = 80) {
 export function normalizeProspectInput(input = {}) {
   const sourceProvider = clean(input.source_provider || 'manual', 80) || 'manual';
   const status = PROSPECT_STATUSES.includes(input.status) ? input.status : 'discovered';
-  const permission = CONTACT_PERMISSION_STATUSES.includes(input.contact_permission_status)
-    ? input.contact_permission_status
-    : 'unknown';
+  const legacyGlobalOptOut = input.contact_permission_status === 'do_not_contact' || status === 'do_not_contact';
   const latitude = input.latitude === '' || input.latitude == null ? null : Number(input.latitude);
   const longitude = input.longitude === '' || input.longitude == null ? null : Number(input.longitude);
   const rating = input.rating === '' || input.rating == null ? null : Number(input.rating);
@@ -428,8 +424,8 @@ export function normalizeProspectInput(input = {}) {
     rating: Number.isFinite(rating) ? rating : null,
     user_rating_count: Number.isFinite(reviewCount) ? Math.max(0, Math.round(reviewCount)) : null,
     business_status: clean(input.business_status, 80) || null,
-    status,
-    contact_permission_status: permission,
+    status: legacyGlobalOptOut ? 'do_not_contact' : status,
+    contact_permission_status: 'unknown',
     contact_source_url: normalizeOptionalUrl(input.contact_source_url),
     enriched_at: input.enriched_at || null,
     people: normalizeProspectPeople(input.people),
@@ -439,13 +435,30 @@ export function normalizeProspectInput(input = {}) {
     notes: clean(input.notes, 5000) || '',
     next_follow_up_at: normalizeOptionalProspectDate(input.next_follow_up_at),
   };
+  for (const channel of PROSPECT_PERMISSION_CHANNELS) {
+    const fields = channelPermissionFields(channel);
+    const channelStatus = legacyGlobalOptOut
+      ? 'do_not_contact'
+      : (CHANNEL_PERMISSION_STATUSES.includes(input[fields.status]) ? input[fields.status] : 'unknown');
+    const expectedBasis = CHANNEL_PERMISSION_BASIS[channelStatus] || null;
+    normalized[fields.status] = channelStatus;
+    normalized[fields.basis] = expectedBasis;
+    normalized[fields.sourceUrl] = normalizeOptionalUrl(input[fields.sourceUrl]);
+    normalized[fields.evidence] = clean(input[fields.evidence], 1000) || null;
+    normalized[fields.verifiedAt] = normalizeOptionalProspectDate(input[fields.verifiedAt]);
+    normalized[fields.verifiedBy] = null;
+    if (channelStatus === 'unknown') {
+      normalized[fields.sourceUrl] = null;
+      normalized[fields.evidence] = null;
+      normalized[fields.verifiedAt] = null;
+    }
+  }
+  normalized.contact_permission_status = summarizeChannelPermissions(normalized);
   const scored = scoreProspect(normalized);
-  normalized.fit_score = Number.isFinite(Number(input.fit_score))
-    ? Math.max(0, Math.min(100, Math.round(Number(input.fit_score))))
-    : scored.score;
-  normalized.fit_reasons = Array.isArray(input.fit_reasons)
-    ? input.fit_reasons.map((reason) => clean(reason, 200)).filter(Boolean).slice(0, 6)
-    : scored.reasons;
+  // Fit is derived server-side; a browser cannot promote a lead by supplying
+  // its own score or reasons.
+  normalized.fit_score = scored.score;
+  normalized.fit_reasons = scored.reasons;
   return normalized;
 }
 
@@ -473,6 +486,22 @@ export function prospectInputError(input = {}) {
 
   if (input.next_follow_up_at && !normalizeOptionalProspectDate(input.next_follow_up_at)) {
     return 'Enter a valid follow-up date';
+  }
+
+  for (const channel of PROSPECT_PERMISSION_CHANNELS) {
+    const fields = channelPermissionFields(channel);
+    const status = CHANNEL_PERMISSION_STATUSES.includes(input[fields.status])
+      ? input[fields.status]
+      : 'unknown';
+    const source = String(input[fields.sourceUrl] || '').trim();
+    const evidence = String(input[fields.evidence] || '').trim();
+    if (source && !normalizeOptionalUrl(source)) return `Enter a valid ${channel} evidence URL`;
+    if (status === 'business_contact' && !source) {
+      return `A source URL is required to verify the published ${channel} contact`;
+    }
+    if (status === 'consented' && !source && !evidence) {
+      return `Record where or how ${channel} consent was received`;
+    }
   }
   return null;
 }
@@ -516,10 +545,25 @@ export function mergeRediscoveredProspect(existing = {}, incoming = {}) {
   merged.contact_source_url = incoming.contact_source_url || existing.contact_source_url || null;
   merged.enriched_at = incoming.enriched_at || existing.enriched_at || null;
 
-  merged.contact_permission_status = upgradeContactPermission(
-    existing.contact_permission_status,
-    incoming.contact_permission_status,
-  );
+  for (const channel of PROSPECT_PERMISSION_CHANNELS) {
+    const fields = channelPermissionFields(channel);
+    const existingStatus = CHANNEL_PERMISSION_STATUSES.includes(existing[fields.status])
+      ? existing[fields.status]
+      : (existing.contact_permission_status === 'do_not_contact' || existing.status === 'do_not_contact'
+          ? 'do_not_contact'
+          : 'unknown');
+    const incomingStatus = CHANNEL_PERMISSION_STATUSES.includes(incoming[fields.status])
+      ? incoming[fields.status]
+      : 'unknown';
+    const status = upgradeContactPermission(existingStatus, incomingStatus);
+    const incomingWon = status === incomingStatus && PERMISSION_RANK[incomingStatus] > PERMISSION_RANK[existingStatus];
+    merged[fields.status] = status;
+    for (const field of [fields.basis, fields.sourceUrl, fields.evidence, fields.verifiedAt, fields.verifiedBy]) {
+      merged[field] = incomingWon ? (incoming[field] || existing[field] || null) : (existing[field] || null);
+    }
+  }
+
+  merged.contact_permission_status = summarizeChannelPermissions(merged);
   if (merged.contact_permission_status === 'do_not_contact') merged.status = 'do_not_contact';
 
   const scored = scoreProspect(merged);
@@ -607,6 +651,9 @@ export function isProspectsTableMissing(error) {
   const message = String(error?.message || '').toLowerCase();
   return code === '42P01'
     || code === 'PGRST205'
-    || (['42703', 'PGRST204'].includes(code) && ['contact_source_url', 'enriched_at', 'people', 'linkedin_urls', 'whatsapp_numbers'].some((column) => message.includes(column)))
+    || (['42703', 'PGRST204'].includes(code) && [
+      'contact_source_url', 'enriched_at', 'people', 'linkedin_urls', 'whatsapp_numbers',
+      ...CHANNEL_PERMISSION_FIELD_NAMES,
+    ].some((column) => message.includes(column)))
     || (message.includes('sales_prospects') && (message.includes('does not exist') || message.includes('schema cache')));
 }

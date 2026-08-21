@@ -4,7 +4,7 @@ Turns a discovered prospect into a booked call: the AI drafts a first-touch mess
 
 ## Setup
 
-1. Run `prospect-outreach-migration.sql` in the Supabase SQL Editor (after `prospector-migration.sql`).
+1. Run `add-prospect-channel-permissions.sql`, `add-prospect-enrichment-jobs.sql`, then `prospect-outreach-migration.sql`, in the Supabase SQL Editor (after `prospector-migration.sql`).
 2. Set the environment variables below.
 3. In Cal.com, add a webhook pointing at `POST /api/webhooks/cal` subscribed to `BOOKING_CREATED`, `BOOKING_RESCHEDULED`, and `BOOKING_CANCELLED`, using the same secret as `CAL_WEBHOOK_SECRET`.
 
@@ -23,11 +23,22 @@ Each prospect is lazily assigned an unguessable `booking_token`. The token is ap
 
 ## Sending rules
 
-- **Permission is required.** Only `business_contact` or `consented` prospects can be drafted to or sent to. `unknown` is refused — nobody has established a lawful basis yet. `do_not_contact` on either the permission or the status field blocks everything.
+- **Permission is channel-specific.** Email and WhatsApp each require their own `business_contact` source URL or `consented` evidence. A status recorded for one channel never authorizes the other. The historic global permission value remains only as a derived compatibility summary.
+- **Unknown is refused.** A channel with no verified evidence cannot be drafted to or sent to. A channel opt-out blocks that channel; a prospect-level `do_not_contact` blocks everything.
 - **The gate runs on the server on every send**, not just at draft time, and the marketing suppression list is checked before delivery.
-- **Email sends automatically.** Every message carries a disclosure line explaining why the recipient was contacted and how to stop it.
+- **Email sends automatically.** Every message carries a disclosure line derived from the evidence that actually authorized it, explaining why the recipient was contacted and how to stop it.
 - **WhatsApp does not send automatically.** Meta's Cloud API only accepts free-form messages inside a 24-hour window opened by the recipient, and cold outreach has no such window; sending anyway risks the business number. The draft opens as a prefilled `wa.me` link and a person presses send.
 - Every attempt, successful or failed, is written to `prospect_outreach` with the permission basis it relied on.
+
+## Fit versus readiness
+
+`fit_score` measures commercial relevance from public business signals such as category, web presence, location, operating status, rating, and review volume. Contact details, permission, ownership, and decision-maker records never add fit points. The API recomputes the score and reasons instead of accepting values supplied by the browser.
+
+Contact readiness is calculated separately for Email and WhatsApp through the same permission-and-identity gate used by drafting and sending. A lead may therefore be a strong fit while still needing channel evidence, or have one channel ready while the other remains blocked. Readiness is derived at request time and needs no additional SQL migration.
+
+## Durable enrichment queue
+
+Saved prospects use `prospect_enrichment_jobs` for website scans. A unique prospect constraint prevents duplicate queued/running work. Workers atomically claim a queued job, preserve the scan payload before updating the prospect, and retry transient failures up to three times with exponential backoff. Interrupted running jobs are returned to the queue after two minutes, so refreshing or reopening Prospector resumes them. Discovery previews remain local until the business is saved.
 
 ## Pipeline effects
 

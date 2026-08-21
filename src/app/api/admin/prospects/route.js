@@ -13,8 +13,16 @@ import {
   prospectInputError,
   scoreProspect,
   PROSPECT_STATUSES,
-  CONTACT_PERMISSION_STATUSES,
 } from '@/lib/prospects.mjs';
+import { normalizeProspectOwnerEmail } from '@/lib/prospectOwnership.mjs';
+import { presentProspect } from '@/lib/prospectReadiness.mjs';
+import {
+  CHANNEL_PERMISSION_BASIS,
+  CHANNEL_PERMISSION_STATUSES,
+  PROSPECT_PERMISSION_CHANNELS,
+  channelPermissionFields,
+  summarizeChannelPermissions,
+} from '@/lib/prospectPermissions.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +32,10 @@ const SELECT_FIELDS = [
   'latitude', 'longitude', 'google_maps_url', 'rating', 'user_rating_count',
   'business_status', 'status', 'fit_score', 'fit_reasons', 'contact_permission_status',
   'contact_source_url', 'enriched_at', 'people', 'linkedin_urls', 'whatsapp_numbers',
+  'email_permission_status', 'email_permission_basis', 'email_permission_source_url',
+  'email_permission_evidence', 'email_permission_verified_at', 'email_permission_verified_by',
+  'whatsapp_permission_status', 'whatsapp_permission_basis', 'whatsapp_permission_source_url',
+  'whatsapp_permission_evidence', 'whatsapp_permission_verified_at', 'whatsapp_permission_verified_by',
   'owner_email', 'notes', 'last_contacted_at',
   'next_follow_up_at', 'created_at', 'updated_at',
 ].join(',');
@@ -33,6 +45,47 @@ const missingTableResponse = () => NextResponse.json({
   setupRequired: true,
   migration: 'prospector-migration.sql',
 });
+
+function channelPermissionUpdates(channel, input, auth, verifiedAt) {
+  const fields = channelPermissionFields(channel);
+  if (!fields || !input || typeof input !== 'object') return { error: `Invalid ${channel} permission` };
+  const status = CHANNEL_PERMISSION_STATUSES.includes(input.status) ? input.status : null;
+  if (!status) return { error: `Choose a valid ${channel} permission` };
+
+  const rawSourceUrl = String(input.source_url || '').trim();
+  const sourceUrl = normalizeOptionalUrl(rawSourceUrl);
+  const evidence = String(input.evidence || '').trim().slice(0, 1000) || null;
+  if (rawSourceUrl && !sourceUrl) return { error: `Enter a valid ${channel} evidence URL` };
+  if (status === 'business_contact' && !sourceUrl) {
+    return { error: `A source URL is required to verify the published ${channel} contact` };
+  }
+  if (status === 'consented' && !sourceUrl && !evidence) {
+    return { error: `Record where or how ${channel} consent was received` };
+  }
+
+  if (status === 'unknown') {
+    return {
+      updates: {
+        [fields.status]: status,
+        [fields.basis]: null,
+        [fields.sourceUrl]: null,
+        [fields.evidence]: null,
+        [fields.verifiedAt]: null,
+        [fields.verifiedBy]: null,
+      },
+    };
+  }
+  return {
+    updates: {
+      [fields.status]: status,
+      [fields.basis]: CHANNEL_PERMISSION_BASIS[status],
+      [fields.sourceUrl]: sourceUrl,
+      [fields.evidence]: evidence,
+      [fields.verifiedAt]: verifiedAt,
+      [fields.verifiedBy]: auth.user.id,
+    },
+  };
+}
 
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
@@ -55,7 +108,7 @@ export async function GET(request) {
   }
 
   return NextResponse.json({
-    prospects: data || [],
+    prospects: (data || []).map(presentProspect),
     setupRequired: false,
     hasMore: (data || []).length === limit,
     nextOffset: offset + (data || []).length,
@@ -83,7 +136,15 @@ export async function POST(request) {
   }
 
   const supabase = getSupabaseAdmin();
-  let row = { ...input, updated_at: new Date().toISOString() };
+  const now = new Date().toISOString();
+  for (const channel of PROSPECT_PERMISSION_CHANNELS) {
+    const fields = channelPermissionFields(channel);
+    if (input[fields.status] !== 'unknown') {
+      input[fields.verifiedAt] = now;
+      input[fields.verifiedBy] = auth.user.id;
+    }
+  }
+  let row = { ...input, updated_at: now };
   let existingId = null;
   if (row.source_external_id) {
     const { data: existing, error: lookupError } = await supabase
@@ -121,7 +182,7 @@ export async function POST(request) {
     console.error('[Prospects] Save failed:', error.message);
     return NextResponse.json({ error: error.code === '23505' ? 'This prospect is already saved' : 'Unable to save prospect' }, { status: error.code === '23505' ? 409 : 500 });
   }
-  return NextResponse.json({ prospect: data }, { status: 201 });
+  return NextResponse.json({ prospect: presentProspect(data) }, { status: 201 });
 }
 
 export async function PATCH(request) {
@@ -136,13 +197,66 @@ export async function PATCH(request) {
   }
   if (!body.id) return NextResponse.json({ error: 'Prospect ID is required' }, { status: 400 });
 
+  const supabase = getSupabaseAdmin();
+  if (body.action === 'claim') {
+    // Never trust a browser-supplied owner. The authenticated profile is the
+    // claimant, and `owner_email IS NULL` makes competing claims atomic.
+    const claimant = normalizeProspectOwnerEmail(auth.profile?.email || auth.user?.email);
+    if (!claimant) {
+      return NextResponse.json({ error: 'Your admin profile needs an email before you can claim prospects' }, { status: 400 });
+    }
+
+    const claimedAt = new Date().toISOString();
+    const { data: claimed, error: claimError } = await supabase
+      .from('sales_prospects')
+      .update({ owner_email: claimant, updated_at: claimedAt })
+      .eq('id', body.id)
+      .is('owner_email', null)
+      .select(SELECT_FIELDS)
+      .maybeSingle();
+
+    if (isProspectsTableMissing(claimError)) {
+      return NextResponse.json({ error: 'Run prospector-migration.sql first.', setupRequired: true }, { status: 503 });
+    }
+    if (claimError) {
+      console.error('[Prospects] Claim failed:', claimError.message);
+      return NextResponse.json({ error: 'Unable to claim prospect' }, { status: 500 });
+    }
+    if (claimed) return NextResponse.json({ prospect: presentProspect(claimed), claimed: true });
+
+    // The conditional update affected no row: distinguish an idempotent claim,
+    // a conflict, and a deleted/missing prospect without weakening the guard.
+    const { data: current, error: currentError } = await supabase
+      .from('sales_prospects')
+      .select(SELECT_FIELDS)
+      .eq('id', body.id)
+      .maybeSingle();
+    if (currentError) {
+      console.error('[Prospects] Claim conflict lookup failed:', currentError.message);
+      return NextResponse.json({ error: 'Unable to confirm prospect ownership' }, { status: 500 });
+    }
+    if (!current) return NextResponse.json({ error: 'Prospect not found' }, { status: 404 });
+    if (normalizeProspectOwnerEmail(current.owner_email) === claimant) {
+      return NextResponse.json({ prospect: presentProspect(current), claimed: false, alreadyOwned: true });
+    }
+    return NextResponse.json({
+      error: `Already assigned to ${current.owner_email}`,
+      prospect: presentProspect(current),
+      claimed: false,
+      conflict: true,
+    }, { status: 409 });
+  }
+
+  if ('owner_email' in body) {
+    return NextResponse.json({ error: 'Use the protected claim action to assign a prospect' }, { status: 400 });
+  }
+
+  if ('contact_permission_status' in body) {
+    return NextResponse.json({ error: 'Set email and WhatsApp permission separately with evidence' }, { status: 400 });
+  }
+
   const updates = {};
   if (PROSPECT_STATUSES.includes(body.status)) updates.status = body.status;
-  if (CONTACT_PERMISSION_STATUSES.includes(body.contact_permission_status)) {
-    updates.contact_permission_status = body.contact_permission_status;
-    if (body.contact_permission_status === 'do_not_contact') updates.status = 'do_not_contact';
-  }
-  if ('owner_email' in body) updates.owner_email = String(body.owner_email || '').trim().toLowerCase() || null;
   if ('notes' in body) updates.notes = String(body.notes || '').trim().slice(0, 5000);
   if ('next_follow_up_at' in body) {
     const followUp = normalizeOptionalProspectDate(body.next_follow_up_at);
@@ -167,9 +281,15 @@ export async function PATCH(request) {
   if ('whatsapp_numbers' in body) updates.whatsapp_numbers = normalizeWhatsAppNumbers(body.whatsapp_numbers);
   updates.updated_at = new Date().toISOString();
 
-  const supabase = getSupabaseAdmin();
-  if ('email' in updates || 'phone' in updates) {
-    const { data: current, error: currentError } = await supabase
+  const requestedChannelPermissions = body.channel_permissions && typeof body.channel_permissions === 'object'
+    ? PROSPECT_PERMISSION_CHANNELS.filter((channel) => Object.hasOwn(body.channel_permissions, channel))
+    : [];
+  const needsCurrent = 'email' in updates || 'phone' in updates
+    || requestedChannelPermissions.length > 0
+    || updates.status === 'do_not_contact';
+  let current = null;
+  if (needsCurrent) {
+    const { data, error: currentError } = await supabase
       .from('sales_prospects')
       .select(SELECT_FIELDS)
       .eq('id', body.id)
@@ -180,6 +300,40 @@ export async function PATCH(request) {
       }
       return NextResponse.json({ error: 'Unable to update prospect' }, { status: 500 });
     }
+    current = data;
+  }
+
+  if (updates.status === 'do_not_contact') {
+    for (const channel of PROSPECT_PERMISSION_CHANNELS) {
+      const fields = channelPermissionFields(channel);
+      Object.assign(updates, {
+        [fields.status]: 'do_not_contact',
+        [fields.basis]: CHANNEL_PERMISSION_BASIS.do_not_contact,
+        [fields.sourceUrl]: current?.[fields.sourceUrl] || null,
+        [fields.evidence]: current?.[fields.evidence] || 'Blocked from the prospect status',
+        [fields.verifiedAt]: updates.updated_at,
+        [fields.verifiedBy]: auth.user.id,
+      });
+    }
+  }
+
+  for (const channel of requestedChannelPermissions) {
+    const prepared = channelPermissionUpdates(
+      channel,
+      body.channel_permissions[channel],
+      auth,
+      updates.updated_at,
+    );
+    if (prepared.error) return NextResponse.json({ error: prepared.error }, { status: 400 });
+    Object.assign(updates, prepared.updates);
+  }
+
+  if (requestedChannelPermissions.length || updates.status === 'do_not_contact') {
+    updates.contact_permission_status = summarizeChannelPermissions({ ...current, ...updates });
+    if (updates.contact_permission_status === 'do_not_contact') updates.status = 'do_not_contact';
+  }
+
+  if ('email' in updates || 'phone' in updates || requestedChannelPermissions.length) {
     const scored = scoreProspect({ ...current, ...updates });
     updates.fit_score = scored.score;
     updates.fit_reasons = scored.reasons;
@@ -198,7 +352,7 @@ export async function PATCH(request) {
     console.error('[Prospects] Update failed:', error.message);
     return NextResponse.json({ error: 'Unable to update prospect' }, { status: 500 });
   }
-  return NextResponse.json({ prospect: data });
+  return NextResponse.json({ prospect: presentProspect(data) });
 }
 
 export async function DELETE(request) {

@@ -9,6 +9,7 @@ import {
   generateBookingToken,
   normalizeCalBooking,
   normalizeOutreachChannel,
+  outreachDisclosure,
   parseDraftResponse,
   prospectUpdatesForBooking,
   prospectUpdatesForSend,
@@ -22,13 +23,21 @@ const contactableProspect = {
   organization_name: 'Gimnasio Escazú',
   status: 'qualified',
   contact_permission_status: 'business_contact',
+  email_permission_status: 'business_contact',
+  email_permission_basis: 'published_business_contact',
+  email_permission_source_url: 'https://gimnasioescazu.test/contact',
+  email_permission_evidence: 'Published mailto link',
+  whatsapp_permission_status: 'business_contact',
+  whatsapp_permission_basis: 'published_business_contact',
+  whatsapp_permission_source_url: 'https://gimnasioescazu.test/contact',
+  whatsapp_permission_evidence: 'Published WhatsApp link',
   email: 'Info@GimnasioEscazu.test',
   phone: '+506 2222 3333',
   whatsapp_numbers: ['+506 8888 7777'],
 };
 
-test('refuses to contact a prospect whose permission is still unknown', () => {
-  const result = canContactProspect({ ...contactableProspect, contact_permission_status: 'unknown' }, 'email');
+test('refuses to contact a prospect whose channel permission is still unknown', () => {
+  const result = canContactProspect({ ...contactableProspect, email_permission_status: 'unknown' }, 'email');
   assert.equal(result.allowed, false);
   assert.match(result.reason, /permission is still unknown/i);
   assert.equal(result.identity, null);
@@ -40,17 +49,60 @@ test('refuses do-not-contact regardless of which field carries it', () => {
   assert.equal(byPermission.allowed, false);
   assert.equal(byStatus.allowed, false);
   assert.match(byStatus.reason, /do not contact/i);
+
+  const byChannel = canContactProspect({ ...contactableProspect, email_permission_status: 'do_not_contact' }, 'email');
+  assert.equal(byChannel.allowed, false);
 });
 
 test('allows a published business contact and normalizes the identity', () => {
   const email = canContactProspect(contactableProspect, 'email');
   assert.equal(email.allowed, true);
   assert.equal(email.identity, 'info@gimnasioescazu.test');
-  assert.equal(email.basis, 'business_contact');
+  assert.equal(email.basis, 'published_business_contact');
 
   const whatsapp = canContactProspect(contactableProspect, 'whatsapp');
   assert.equal(whatsapp.allowed, true);
   assert.equal(whatsapp.identity, '50688887777');
+});
+
+test('permission for one channel never authorizes another channel', () => {
+  const emailOnly = {
+    ...contactableProspect,
+    whatsapp_permission_status: 'unknown',
+    whatsapp_permission_basis: null,
+    whatsapp_permission_source_url: null,
+  };
+  assert.equal(canContactProspect(emailOnly, 'email').allowed, true);
+  const whatsapp = canContactProspect(emailOnly, 'whatsapp');
+  assert.equal(whatsapp.allowed, false);
+  assert.match(whatsapp.reason, /WhatsApp permission is still unknown/i);
+});
+
+test('published-contact and consent permissions require their own evidence', () => {
+  const missingSource = canContactProspect({
+    ...contactableProspect,
+    email_permission_source_url: null,
+  }, 'email');
+  assert.equal(missingSource.allowed, false);
+  assert.match(missingSource.reason, /missing its source URL/i);
+
+  const missingConsentEvidence = canContactProspect({
+    ...contactableProspect,
+    email_permission_status: 'consented',
+    email_permission_basis: 'express_consent',
+    email_permission_source_url: null,
+    email_permission_evidence: null,
+  }, 'email');
+  assert.equal(missingConsentEvidence.allowed, false);
+  assert.match(missingConsentEvidence.reason, /missing evidence/i);
+});
+
+test('outreach disclosure describes the evidence that actually authorized contact', () => {
+  assert.match(outreachDisclosure({
+    basis: 'published_business_contact',
+    sourceUrl: 'https://www.gimnasioescazu.test/contact',
+  }, 'email'), /at gimnasioescazu\.test/i);
+  assert.match(outreachDisclosure({ basis: 'express_consent' }, 'email'), /gave permission for email contact/i);
 });
 
 test('blocks a channel the prospect has no address for', () => {

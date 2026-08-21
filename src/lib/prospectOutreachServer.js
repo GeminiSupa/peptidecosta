@@ -4,6 +4,10 @@ import { buildBookingUrl, generateBookingToken } from '@/lib/prospectOutreach.mj
 export const PROSPECT_OUTREACH_FIELDS = [
   'id', 'organization_name', 'category', 'website_url', 'phone', 'email',
   'city', 'region', 'country', 'status', 'contact_permission_status',
+  'email_permission_status', 'email_permission_basis', 'email_permission_source_url',
+  'email_permission_evidence', 'email_permission_verified_at', 'email_permission_verified_by',
+  'whatsapp_permission_status', 'whatsapp_permission_basis', 'whatsapp_permission_source_url',
+  'whatsapp_permission_evidence', 'whatsapp_permission_verified_at', 'whatsapp_permission_verified_by',
   'people', 'whatsapp_numbers', 'notes', 'booking_token', 'meeting_booked_at',
 ].join(',');
 
