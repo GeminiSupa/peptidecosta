@@ -272,3 +272,19 @@ test('a rejected status change is put back on screen, not left showing', () => {
   assert.match(handler, /prevOrder\?\.status/, 'the previous status must be restored');
   assert.match(handler, /alert\(data\.error/, 'the server reason must be shown');
 });
+
+test('a refund status cannot be picked from the status dropdown', () => {
+  const manager = fs.readFileSync('src/components/admin/OrdersManager.js', 'utf8');
+  const options = manager.slice(
+    manager.indexOf('const ORDER_STATUS_OPTIONS'),
+    manager.indexOf('];', manager.indexOf('const ORDER_STATUS_OPTIONS')),
+  );
+
+  // Offering these while the server refuses them gave two ways to refund an
+  // order, one of which silently did nothing.
+  assert.ok(!options.includes("'Refunded'"), 'Refunded must not be selectable');
+  assert.ok(!options.includes("'Partly Refunded'"), 'Partly Refunded must not be selectable');
+
+  // But they remain real statuses, so refunded orders still group and filter.
+  assert.match(manager, /statuses: \['Refunded', 'Partly Refunded'\]/);
+});

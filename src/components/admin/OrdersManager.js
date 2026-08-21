@@ -13,10 +13,19 @@ const ORDER_STATUS_OPTIONS = [
   'Error',
   'Processing',
   'Order Complete',
-  'Refunded',
-  'Partly Refunded',
   'Cancelled',
 ];
+
+// Refunded / Partly Refunded are deliberately NOT above.
+//
+// They were, briefly, and that was a mistake: the dropdown offered them while
+// the server refused them, because a refund has to be checked against what the
+// customer actually paid, email four people and adjust the agent's commission —
+// none of which a status change can do. Two ways in, one of them fake.
+//
+// They are real statuses and still appear in ORDER_STATUS_GROUPS below, so
+// refunded orders group and filter normally. They are simply not something a
+// person can pick: only the Refund box on the order writes them.
 
 const ORDER_STATUS_GROUPS = [
   {
