@@ -123,6 +123,7 @@ export default function OrderDetailPanel({
   agents = [],
   affiliates = [],
   isSuperadmin = false,
+  onRequestRefund,
 }) {
   const initialShipping = order ? inferShippingCosts(order) : { crc: 0, usd: 0 };
   const initialCurrency = normalizeAdminOrderCurrency(order?.currency);
@@ -161,16 +162,6 @@ export default function OrderDetailPanel({
   const [commissionOverridePct, setCommissionOverridePct] = useState(order.agent_commission_rate_override || 20);
   const [savingAttribution, setSavingAttribution] = useState(false);
   const [attributionError, setAttributionError] = useState('');
-  const [refundOpen, setRefundOpen] = useState(false);
-  const [refundAmount, setRefundAmount] = useState('');
-  const [refundReason, setRefundReason] = useState('');
-  // Ticked by default: most refunds are a returned parcel. Unticked is the
-  // goodwill refund where the customer keeps the product, and inventing stock
-  // that never came back is worse than missing stock that did.
-  const [refundRestoreStock, setRefundRestoreStock] = useState(true);
-  const [savingRefund, setSavingRefund] = useState(false);
-  const [refundError, setRefundError] = useState('');
-  const [refundNotice, setRefundNotice] = useState('');
 
   useEffect(() => {
     if (!order) return;
@@ -279,69 +270,14 @@ export default function OrderDetailPanel({
     }
   };
 
-  // Refunds are recorded here and paid by hand in Shield Hub Pay afterwards.
-  // The server re-checks every one of these numbers; this only keeps the panel
-  // from offering an amount it already knows will be refused.
+  // Only enough to decide whether to offer the button and what to say above it.
+  // The amount, the checks and the sending all live in RefundDialog and the
+  // route behind it, so there is one place that can refuse a bad number.
   const refundPaid = orderCurrency === 'CRC' ? Number(order.total_crc || 0) : Number(order.total_usd || 0);
   const refundDone = orderCurrency === 'CRC'
     ? Number(order.refunded_amount_crc || 0)
     : Number(order.refunded_amount_usd || 0);
-  const refundLeft = Math.max(0, refundPaid - refundDone);
   const canRefund = orderCanBeRefunded(order);
-
-  const submitRefund = async () => {
-    setRefundError('');
-    setRefundNotice('');
-
-    const amount = Number(refundAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setRefundError('Enter a refund amount greater than zero.');
-      return;
-    }
-    if (amount > refundLeft + 0.01) {
-      setRefundError(`Only ${formatRefundMoney(refundLeft, orderCurrency)} is left to refund on this order.`);
-      return;
-    }
-    if (!window.confirm(
-      `Record a refund of ${formatRefundMoney(amount, orderCurrency)} on ${order.order_number}?\n\n`
-      + 'This records it and emails the customer, the team, the agent and the accountant. '
-      + 'You still have to send the money back in Shield Hub Pay yourself.'
-    )) return;
-
-    setSavingRefund(true);
-    try {
-      const res = await adminFetch('/api/admin/orders/refund', {
-        method: 'POST',
-        body: JSON.stringify({
-          orderId: order.id,
-          amount,
-          reason: refundReason,
-          restoreStock: refundRestoreStock,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Could not record the refund');
-
-      const failed = Object.entries(data.emails || {})
-        .filter(([, result]) => result?.sent === false && !result?.skipped)
-        .map(([name]) => name);
-
-      setRefundNotice(
-        `${data.fullyRefunded ? 'Refunded' : 'Partly refunded'}. `
-        + (failed.length
-          ? `Warning: the ${failed.join(' and ')} email did not send.`
-          : 'Customer, team, agent and accountant have been emailed.')
-        + ' Now send the money back in Shield Hub Pay.'
-      );
-      setRefundAmount('');
-      setRefundReason('');
-      if (data.order) onUpdated(data.order);
-    } catch (err) {
-      setRefundError(err.message);
-    } finally {
-      setSavingRefund(false);
-    }
-  };
 
   const activity = Array.isArray(order.activity_log) ? order.activity_log : [];
   const cardPaymentBadge = getCardPaymentBadge(order);
@@ -915,68 +851,16 @@ export default function OrderDetailPanel({
                   <button
                     type="button"
                     className="admin-btn admin-btn-secondary"
-                    onClick={() => { setRefundOpen(!refundOpen); setRefundError(''); setRefundNotice(''); }}
+                    // Opens the same confirmation the orders list opens, rather
+                    // than a second form that would have to repeat its checks.
+                    onClick={() => onRequestRefund?.(order)}
                     style={{ fontSize: '0.78rem', padding: '6px 10px' }}
                   >
-                    {refundOpen ? 'Cancel' : 'Record a refund'}
+                    Record a refund
                   </button>
                 )}
               </div>
 
-              {refundOpen && canRefund && (
-                <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ color: '#94a3b8', fontSize: '0.76rem' }}>
-                    Up to {formatRefundMoney(refundLeft, orderCurrency)} can be refunded.
-                    Leave it at the full amount for a complete refund, or enter less for a partial one.
-                  </div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max={refundLeft}
-                    className="admin-input"
-                    placeholder={`Amount in ${orderCurrency}`}
-                    value={refundAmount}
-                    onChange={(e) => setRefundAmount(e.target.value)}
-                  />
-                  <input
-                    type="text"
-                    className="admin-input"
-                    placeholder="Reason (shown to the team and the accountant)"
-                    maxLength={200}
-                    value={refundReason}
-                    onChange={(e) => setRefundReason(e.target.value)}
-                  />
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#cbd5e1', fontSize: '0.78rem' }}>
-                    <input
-                      type="checkbox"
-                      checked={refundRestoreStock}
-                      onChange={(e) => setRefundRestoreStock(e.target.checked)}
-                    />
-                    Put the stock back (untick if the customer keeps the product)
-                  </label>
-                  <button
-                    type="button"
-                    className="admin-btn"
-                    onClick={submitRefund}
-                    disabled={savingRefund}
-                    style={{ fontSize: '0.8rem' }}
-                  >
-                    {savingRefund ? 'Recording...' : 'Record refund'}
-                  </button>
-                  <div style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
-                    This records the refund and sends the emails. You still send the money
-                    back yourself in Shield Hub Pay.
-                  </div>
-                </div>
-              )}
-
-              {refundError && (
-                <div style={{ color: '#f87171', fontSize: '0.78rem', marginTop: '8px' }}>{refundError}</div>
-              )}
-              {refundNotice && (
-                <div style={{ color: '#4ade80', fontSize: '0.78rem', marginTop: '8px' }}>{refundNotice}</div>
-              )}
             </div>
           )}
         </div>

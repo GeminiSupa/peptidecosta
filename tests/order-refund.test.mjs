@@ -17,7 +17,9 @@ import {
   isRefundStatus,
   orderCanBeRefunded,
   planRefund,
+  refundEmailMessage,
   refundableRemaining,
+  summarizeRefundEmails,
 } from '../src/lib/orderRefund.mjs';
 
 const paidOrder = (over = {}) => ({
@@ -273,18 +275,108 @@ test('a rejected status change is put back on screen, not left showing', () => {
   assert.match(handler, /alert\(data\.error/, 'the server reason must be shown');
 });
 
-test('a refund status cannot be picked from the status dropdown', () => {
+test('picking Refunded opens the confirmation instead of saving a status', () => {
   const manager = fs.readFileSync('src/components/admin/OrdersManager.js', 'utf8');
+  const page = fs.readFileSync('src/app/admin/page.js', 'utf8');
+
+  // It IS offered — the dropdown is where a person looks for it.
   const options = manager.slice(
     manager.indexOf('const ORDER_STATUS_OPTIONS'),
     manager.indexOf('];', manager.indexOf('const ORDER_STATUS_OPTIONS')),
   );
+  assert.ok(options.includes("'Refunded'"), 'Refunded should be offered in the list');
 
-  // Offering these while the server refuses them gave two ways to refund an
-  // order, one of which silently did nothing.
-  assert.ok(!options.includes("'Refunded'"), 'Refunded must not be selectable');
-  assert.ok(!options.includes("'Partly Refunded'"), 'Partly Refunded must not be selectable');
+  // But choosing it must open the dialog and return, never fall through to the
+  // PATCH — that would write the label with nothing refunded behind it.
+  const handler = page.slice(
+    page.indexOf('const handleOrderStatusUpdate'),
+    page.indexOf('const handleOrderStatusUpdate') + 1200,
+  );
+  assert.match(handler, /if \(isRefundStatus\(newStatus\)\)/);
+  assert.match(handler, /setRefundOrder\(prevOrder\)/);
 
-  // But they remain real statuses, so refunded orders still group and filter.
-  assert.match(manager, /statuses: \['Refunded', 'Partly Refunded'\]/);
+  // "Partly Refunded" is an outcome of the dialog, not something to pick.
+  assert.ok(!options.includes("'Partly Refunded'"));
+});
+
+test('both entry points open the same dialog', () => {
+  const page = fs.readFileSync('src/app/admin/page.js', 'utf8');
+  const panel = fs.readFileSync('src/components/admin/OrderDetailPanel.js', 'utf8');
+
+  assert.match(page, /<RefundDialog/, 'the dialog is rendered once, at page level');
+  assert.match(page, /onRequestRefund=\{setRefundOrder\}/, 'the panel feeds the same state');
+  assert.match(panel, /onRequestRefund\?\.\(order\)/, 'the panel button opens it rather than its own form');
+  assert.ok(!panel.includes('submitRefund'), 'the panel must not keep a second refund form');
+});
+
+// Reporting the emails
+//
+// The route reports each send as sent, failed, or skipped — and skipped covers
+// two situations that must never be worded the same way. Omer hit this the
+// other way round first: told "the customer email did not send" for an order
+// that simply never had an email address on it, and reasonably read that as the
+// refund emails being broken again.
+
+test('an order with no customer email is not reported as a failure', () => {
+  const message = refundEmailMessage({
+    customer: { sent: false, skipped: 'no recipient' },
+    team: { sent: true },
+    accountant: { sent: true },
+  });
+
+  assert.ok(!/failed|did not send/i.test(message), 'nothing broke, so nothing may say it did');
+  assert.match(message, /no customer email address/i, 'but it must still be said');
+  assert.match(message, /NOT been told/, 'because someone has to tell them by hand');
+  assert.match(message, /Emailed the team \(agent copied\) and the accountant\./);
+});
+
+test('a genuine send failure is still reported as one', () => {
+  const message = refundEmailMessage({
+    customer: { sent: false, error: 'connection refused' },
+    team: { sent: true },
+    accountant: { sent: true },
+  });
+
+  assert.match(message, /WARNING/, 'a real failure has to be loud');
+  assert.match(message, /the email to the customer failed to send/);
+});
+
+test('SMTP being down is never reported as everyone having been emailed', () => {
+  const down = { sent: false, skipped: 'no transport' };
+  const message = refundEmailMessage({ customer: down, team: down, accountant: down });
+
+  assert.match(message, /WARNING/);
+  assert.match(message, /no refund emails went out at all/);
+  assert.ok(!/^Emailed/m.test(message), 'claiming a send here would be a lie');
+});
+
+test('the ordinary case names everyone once, and the agent with the team', () => {
+  const message = refundEmailMessage({
+    customer: { sent: true },
+    team: { sent: true },
+    accountant: { sent: true },
+  });
+
+  assert.equal(message, 'Emailed the customer, the team (agent copied) and the accountant.');
+});
+
+test('the three groups are split by why, not lumped together', () => {
+  const summary = summarizeRefundEmails({
+    customer: { sent: false, skipped: 'no recipient' },
+    team: { sent: true },
+    accountant: { sent: false, error: 'boom' },
+  });
+
+  assert.deepEqual(summary.sent, ['team']);
+  assert.deepEqual(summary.failed, ['accountant']);
+  assert.deepEqual(summary.noAddress, ['customer']);
+  assert.equal(summary.mailerDown, false);
+});
+
+test('the popup asks the shared lib rather than counting failures itself', () => {
+  const dialog = fs.readFileSync('src/components/admin/RefundDialog.js', 'utf8');
+
+  assert.match(dialog, /refundEmailMessage\(data\.emails\)/);
+  // The bug was a hand-rolled filter here that had lost its skipped check.
+  assert.ok(!dialog.includes('sent === false'), 'no second, weaker copy of the rule');
 });

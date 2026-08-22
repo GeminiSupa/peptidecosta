@@ -47,6 +47,8 @@ import GlobalSearch from '@/components/admin/GlobalSearch';
 import NotificationCenter from '@/components/admin/NotificationCenter';
 import LandingLeadSettingsManager from '@/components/admin/LandingLeadSettingsManager';
 import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
+import RefundDialog from '@/components/admin/RefundDialog';
+import { isRefundStatus } from '@/lib/orderRefund.mjs';
 import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
 import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
@@ -404,6 +406,9 @@ export default function AdminPage() {
   const [expandedLeadViews, setExpandedLeadViews] = useState({});
   const [selectedLeadDetails, setSelectedLeadDetails] = useState(null);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
+  // The order the refund confirmation is open for. Set by picking "Refunded"
+  // in the orders list, or by the button on the order's own panel.
+  const [refundOrder, setRefundOrder] = useState(null);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -3133,6 +3138,16 @@ Core Rules:
   // Order status update
   const handleOrderStatusUpdate = async (orderId, newStatus) => {
     const prevOrder = orders.find((o) => o.id === orderId);
+
+    // "Refunded" in the dropdown is a request to refund, not a status to save.
+    // It opens the confirmation, which collects the amount and calls the refund
+    // route; the row is left exactly as it is until that succeeds. Saving the
+    // label here would mark an order refunded with nothing refunded on it, and
+    // the agent's pay is calculated from that.
+    if (isRefundStatus(newStatus)) {
+      if (prevOrder) setRefundOrder(prevOrder);
+      return;
+    }
     setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
     if (selectedOrderDetails?.id === orderId) {
       setSelectedOrderDetails({ ...selectedOrderDetails, status: newStatus });
@@ -7347,6 +7362,22 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           agents={agents}
           affiliates={orderAffiliates}
           isSuperadmin={!!adminProfile?.is_superadmin}
+          onRequestRefund={setRefundOrder}
+        />
+      )}
+
+      {refundOrder && (
+        <RefundDialog
+          order={refundOrder}
+          onClose={() => setRefundOrder(null)}
+          onRefunded={(data, emailMessage) => {
+            if (data.order) handleOrderUpdated(data.order);
+            alert(
+              `${data.fullyRefunded ? 'Refunded' : 'Partly refunded'} ${refundOrder.order_number}.\n\n`
+              + emailMessage
+              + '\n\nNow send the money back in Shield Hub Pay.'
+            );
+          }}
         />
       )}
 

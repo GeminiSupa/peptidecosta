@@ -18,9 +18,16 @@
  * Kept free of '@/lib' imports so tests/ can load it under `node --test`.
  */
 
-/** Commission is earned on merchandise, never on the shipping fee. */
-function commissionBase(total, shipping) {
-  return Math.max(0, Number(total || 0) - Number(shipping || 0));
+/**
+ * Commission is earned on merchandise the customer kept.
+ *
+ * Never on the shipping fee, and never on money given back. The refund was the
+ * missing half: this read the order total, so an affiliate went on earning the
+ * full commission on a partly refunded order however much was returned — and
+ * recomputing it changed nothing, because the total itself never moves.
+ */
+function commissionBase(total, shipping, refunded) {
+  return Math.max(0, Number(total || 0) - Number(shipping || 0) - Number(refunded || 0));
 }
 
 /**
@@ -45,8 +52,8 @@ export function affiliateCommissionPatch(order, affiliate) {
 
   // Stored as a fraction (0.10 = 10%), per the affiliates table default.
   const rate = Number(affiliate.commission_rate || 0);
-  const usdBase = commissionBase(order.total_usd, order.shipping_cost_usd);
-  const crcBase = commissionBase(order.total_crc, order.shipping_cost_crc);
+  const usdBase = commissionBase(order.total_usd, order.shipping_cost_usd, order.refunded_amount_usd);
+  const crcBase = commissionBase(order.total_crc, order.shipping_cost_crc, order.refunded_amount_crc);
 
   return {
     affiliate_commission_usd: Number((usdBase * rate).toFixed(2)),

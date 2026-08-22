@@ -193,6 +193,86 @@ export function formatAmount(value, currency) {
 }
 
 /**
+ * Who was emailed about a refund, and who was not — split by WHY.
+ *
+ * The route reports each of its three sends as one of three things, and the two
+ * kinds of `skipped` must not be said the same way:
+ *
+ *   - no recipient — the order carries no customer email, or no accountant is
+ *     configured. Nothing is broken. It still has to be said, because the
+ *     customer has not been told their money is coming back, so somebody now
+ *     has to tell them by hand.
+ *
+ *   - no transport — SMTP is not configured, so NOTHING went out at all. That
+ *     is a fault, and saying "everyone has been emailed" would be a lie.
+ *
+ * An earlier pass counted all three as failures, which announced "the customer
+ * email did not send" on every order that simply never had an email address.
+ */
+export function summarizeRefundEmails(emails = {}) {
+  const sent = [];
+  const failed = [];
+  const noAddress = [];
+  let mailerDown = false;
+
+  for (const [who, result] of Object.entries(emails || {})) {
+    if (result?.sent) sent.push(who);
+    else if (result?.skipped === 'no recipient') noAddress.push(who);
+    else if (result?.skipped === 'no transport') mailerDown = true;
+    else failed.push(who);
+  }
+
+  return { sent, failed, noAddress, mailerDown };
+}
+
+// The agent is copied on the team message rather than sent their own, so the
+// team label carries them — named separately they read as having been missed,
+// named with a bare "and" they collide with the "and" that joins the list.
+const REFUND_EMAIL_LABELS = {
+  customer: 'the customer',
+  team: 'the team (agent copied)',
+  accountant: 'the accountant',
+};
+
+const labelFor = (who) => REFUND_EMAIL_LABELS[who] || `the ${who}`;
+
+const joinNames = (names) => (names.length <= 1
+  ? (names[0] || '')
+  : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+
+/**
+ * The email half of the message shown once a refund is recorded.
+ *
+ * Three situations, three different sentences, because the person refunding has
+ * to tell "the mail server is broken" from "this customer never gave us an
+ * address" at a glance — the first is an outage, the second is a phone call
+ * they have to make.
+ */
+export function refundEmailMessage(emails = {}) {
+  const { sent, failed, noAddress, mailerDown } = summarizeRefundEmails(emails);
+
+  if (mailerDown) {
+    return 'WARNING: email is not working on the server, so no refund emails went out at all. '
+      + 'Tell the customer yourself.';
+  }
+
+  const lines = [];
+  if (sent.length) lines.push(`Emailed ${joinNames(sent.map(labelFor))}.`);
+  if (failed.length) lines.push(`WARNING: the email to ${joinNames(failed.map(labelFor))} failed to send.`);
+
+  if (noAddress.includes('customer')) {
+    lines.push('NOTE: this order has no customer email address, so the customer has NOT been told. '
+      + 'Contact them yourself.');
+  }
+  const others = noAddress.filter((who) => who !== 'customer');
+  if (others.length) {
+    lines.push(`NOTE: no address is set for ${joinNames(others.map(labelFor))}, so nothing was sent there.`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * The commission an agent must give back because of this refund.
  *
  * The agent earns on what the customer kept, never on what was returned. Two

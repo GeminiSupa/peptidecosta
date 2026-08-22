@@ -3,15 +3,12 @@
 import React, { useMemo } from 'react';
 import {
   ClipboardList, ShoppingCart, Target, DollarSign, Package,
-  AlertTriangle, Inbox, MessageSquare, TrendingUp, ChevronRight, Star, CheckCircle,
+  AlertTriangle, Inbox, MessageSquare, TrendingUp, TrendingDown, ChevronRight, Star, CheckCircle,
+  Undo2,
 } from 'lucide-react';
-import { COMMISSION_ELIGIBLE_ORDER_STATUSES } from '@/lib/agentOrders';
+import { orderCountsAsSale, orderNetRevenueUsd, refundedInRange } from '@/lib/orderRevenue.mjs';
 
 const FALLBACK_RATE = 454.48;
-
-// Statuses that count as recognized revenue. Mirrors the commission logic so the
-// Today dashboard and the commission report always agree on what "earned" means.
-const REVENUE_STATUSES = new Set(COMMISSION_ELIGIBLE_ORDER_STATUSES);
 
 // Matches the status_change log messages written when an order is marked
 // paid/complete (e.g. "Status changed to Order Complete").
@@ -113,13 +110,21 @@ export default function DashboardHome({
 
     const pendingOrders = orders.filter((o) => (o.status || 'Pending') === 'Pending');
 
+    // Net of refunds: a $100 order with $30 given back is $70 of revenue, not
+    // $100. The same sum backs the commission report and the analytics chart, so
+    // the three screens cannot disagree about what one order was worth.
     const revenueInRange = (start) =>
       orders
-        .filter((o) => REVENUE_STATUSES.has(o.status) && getRevenueDate(o) >= start)
-        .reduce((sum, o) => sum + Number(o.total_usd || 0), 0);
+        .filter((o) => orderCountsAsSale(o) && getRevenueDate(o) >= start)
+        .reduce((sum, o) => sum + orderNetRevenueUsd(o), 0);
 
     const revenueToday = revenueInRange(todayStart);
     const revenueWeek = revenueInRange(weekStart);
+
+    // Dated by when the money went back, not when the order was placed, so a
+    // refund on a month-old order lands on the day it actually happened.
+    const refundedToday = refundedInRange(orders, todayStart);
+    const refundedWeek = refundedInRange(orders, weekStart);
 
     const recoverableCarts = abandonedCarts.filter((c) => c.status === 'active' || !c.status);
     const recoverableValue = recoverableCarts.reduce((s, c) => s + cartValue(c), 0);
@@ -149,6 +154,8 @@ export default function DashboardHome({
       pendingOrders,
       revenueToday,
       revenueWeek,
+      refundedToday,
+      refundedWeek,
       recoverableCarts,
       recoverableValue,
       hotLeads,
@@ -289,6 +296,24 @@ export default function DashboardHome({
           <div>
             <div className="dashboard-kpi-value">${stats.revenueWeek.toLocaleString()}</div>
             <div className="dashboard-kpi-label">Revenue This Week</div>
+          </div>
+        </div>
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-icon" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171' }}>
+            <Undo2 size={20} />
+          </div>
+          <div>
+            <div className="dashboard-kpi-value">${stats.refundedToday.usd.toLocaleString()}</div>
+            <div className="dashboard-kpi-label">Refunded Today</div>
+          </div>
+        </div>
+        <div className="dashboard-kpi-card">
+          <div className="dashboard-kpi-icon" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#fca5a5' }}>
+            <TrendingDown size={20} />
+          </div>
+          <div>
+            <div className="dashboard-kpi-value">${stats.refundedWeek.usd.toLocaleString()}</div>
+            <div className="dashboard-kpi-label">Refunded This Week</div>
           </div>
         </div>
         <div className="dashboard-kpi-card">

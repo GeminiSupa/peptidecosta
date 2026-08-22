@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, CheckCheck, ChevronLeft, ChevronRight, Clock, MessageCircle, Search, Send, X, Paperclip, Loader2, Settings, Info, MoreHorizontal, Sparkles, MessagesSquare, ShoppingCart, UserRound, PhoneCall, Copy, Plus, Maximize2, Minimize2, Trash2, Smartphone, Power } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
+import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 import { renderWhatsAppTemplateBody } from '@/lib/whatsappTemplates.mjs';
 import { conversationNeedsHumanReply, WHATSAPP_WORKFLOW_LABELS } from '@/lib/whatsappWorkflow.mjs';
 
@@ -891,7 +892,7 @@ export default function WhatsAppInbox({
       .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
     const cart = abandonedCarts.find((item) => matchesPhone(item.customer_phone));
     const lead = leads.find((item) => matchesPhone(item.whatsapp_wa_id || item.customer_phone || item.phone || item.contact_value));
-    const lifetimeValue = customerOrders.reduce((sum, order) => sum + Number(order.total_usd || 0), 0);
+    const lifetimeValue = customerOrders.reduce((sum, order) => sum + orderNetRevenueUsd(order), 0);
     return { orders: customerOrders, latestOrder: customerOrders[0] || null, cart, lead, lifetimeValue };
   }, [abandonedCarts, activeChatWaId, leads, orders]);
 

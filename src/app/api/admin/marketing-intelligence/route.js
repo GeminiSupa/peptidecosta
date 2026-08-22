@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +51,7 @@ export async function GET(request) {
   try {
     const [subscribers, orders, carts, catalogLeads, productViews, clicks, opens] = await Promise.all([
       safeRows('subscribers', supabase.from('email_subscribers').select('id,email,first_name,last_name,source,created_at').limit(5000), warnings),
-      safeRows('orders', supabase.from('orders').select('customer_email,customer_phone,customer_name,total_usd,created_at,status').order('created_at', { ascending: false }).limit(5000), warnings),
+      safeRows('orders', supabase.from('orders').select('customer_email,customer_phone,customer_name,total_usd,refunded_amount_usd,created_at,status').order('created_at', { ascending: false }).limit(5000), warnings),
       safeRows('carts', supabase.from('abandoned_carts').select('customer_email,customer_phone,customer_name,status,created_at,last_updated').order('created_at', { ascending: false }).limit(2500), warnings),
       safeRows('catalog leads', supabase.from('catalog_leads').select('contact_method,contact_value,created_at').order('created_at', { ascending: false }).limit(2500), warnings),
       safeRows('product views', supabase.from('product_views').select('contact_value,product_name,created_at').not('contact_value', 'is', null).order('created_at', { ascending: false }).limit(3000), warnings),
@@ -155,7 +156,7 @@ export async function GET(request) {
       const recentLeads = contact.leads.filter(lead => (daysSince(lead.created_at, now) ?? 999) <= 30);
       const latestOrder = contact.orders[0];
       const orderAge = daysSince(latestOrder?.created_at, now);
-      const totalRevenue = contact.orders.reduce((sum, order) => sum + Number(order.total_usd || 0), 0);
+      const totalRevenue = contact.orders.reduce((sum, order) => sum + orderNetRevenueUsd(order), 0);
 
       if (activeCarts.length) { score += 35; reasons.push('Active abandoned cart'); }
       if (recentViews.length) { score += Math.min(30, recentViews.length * 8); reasons.push(`${recentViews.length} recent product view${recentViews.length === 1 ? '' : 's'}`); }

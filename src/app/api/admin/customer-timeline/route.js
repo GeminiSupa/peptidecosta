@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,7 +81,7 @@ export async function GET(request) {
     const latestOrder = orders[0];
     const profileName = latestOrder?.customer_name || carts.find(row => row.customer_name || row.name)?.customer_name || carts.find(row => row.name)?.name || [subscribers[0]?.first_name, subscribers[0]?.last_name].filter(Boolean).join(' ') || email.split('@')[0] || 'Customer';
     const products = [...new Set(views.map(row => row.product_name).filter(Boolean))].slice(0, 8);
-    const totalRevenue = orders.reduce((sum, row) => sum + Number(row.total_usd || 0), 0);
+    const totalRevenue = orders.reduce((sum, row) => sum + orderNetRevenueUsd(row), 0);
 
     return NextResponse.json({
       profile: {

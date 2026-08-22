@@ -8,8 +8,10 @@ import { agentMatchKeys } from '@/lib/agentOrders';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { taxRecordsFrom, taxRecordsRecipients } from '@/lib/taxRecordsEmail.mjs';
 import { stripOwnerAddress, ORDER_NOTIFICATION_OWNER_BCC } from '@/lib/orderEmailAddressing.mjs';
-import { restoreInventoryForOrder } from '@/lib/inventoryRestoreServer';
+import { restoreInventoryForOrder, restoreSelectedQuantities } from '@/lib/inventoryRestoreServer';
+import { planPartialRestock } from '@/lib/inventoryRestore.mjs';
 import { commissionClawback, planRefund } from '@/lib/orderRefund.mjs';
+import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
 import {
   buildAccountantRefundEmail,
   buildCustomerRefundEmail,
@@ -122,6 +124,15 @@ export async function POST(request) {
 
     const actor = auth.profile?.email || auth.user?.email || 'admin';
 
+    // Which bottles came back, for a refund of part of an order. Capped against
+    // what this order can still give back — the browser is free to ask for ten
+    // of something that was bought twice, and stock that exists only in the
+    // database ends as an order nobody can ship. A full refund ignores this and
+    // uses the whole-order restore below instead.
+    const restockLines = plan.fullyRefunded
+      ? []
+      : planPartialRestock(order, body?.restockItems);
+
     // --- commission ---------------------------------------------------------
     // Only an order the agent has ALREADY been paid for creates a debt. One that
     // has not been paid yet needs nothing: a refunded status is not commission
@@ -151,7 +162,10 @@ export async function POST(request) {
           reason: plan.reason || null,
           by: actor,
           at: new Date().toISOString(),
-          stock_restored: plan.restoreStock,
+          stock_restored: plan.fullyRefunded ? plan.restoreStock : restockLines.length > 0,
+          // Recorded per refund so a later partial refund knows what is left to
+          // give back; restockableRemaining() subtracts these.
+          restocked: restockLines,
         },
       ],
       activity_log: appendOrderActivity(order.activity_log, {
@@ -216,8 +230,25 @@ export async function POST(request) {
     }
 
     // --- stock --------------------------------------------------------------
+    //
+    // Two different jobs. A full refund reverses the order, so it uses the same
+    // whole-order restore a cancellation does — every line back, stamped so it
+    // can only ever happen once.
+    //
+    // A partial refund cannot use that: refunding one bottle of five would put
+    // all five back and leave the shelf claiming stock the customer still has,
+    // then stamp the order so the rest could never be returned. So it puts back
+    // only the bottles the admin marked as returned, and records them on the
+    // refund event so the next partial refund knows what is left.
     let stock = { restored: false, skipped: 'not requested' };
-    if (plan.restoreStock) {
+    if (!plan.fullyRefunded) {
+      // Only the named bottles, and only after they were written to the refund
+      // event above: if this write fails the shelf reads low, which is the
+      // safe direction.
+      stock = restockLines.length
+        ? await restoreSelectedQuantities(supabase, updated, restockLines, { reason: `refund by ${actor}` })
+        : { restored: false, skipped: 'no items marked as returned' };
+    } else if (plan.restoreStock) {
       try {
         // The shared restore path, so a refund returns stock exactly the way a
         // cancellation does and cannot double-count what was already returned.
@@ -227,6 +258,45 @@ export async function POST(request) {
       } catch (err) {
         console.error('[admin/orders/refund] Stock restore failed:', err.message);
         stock = { restored: false, error: err.message };
+      }
+    }
+
+    // --- the affiliate's cut ------------------------------------------------
+    // Sales agents are handled above, through the payout debt. An affiliate's
+    // commission instead sits in a column on the order, written when the order
+    // was placed and never revisited — so without this a refunded order kept
+    // paying its affiliate on money the customer no longer has.
+    let affiliateCommission = null;
+    if (updated.affiliate_id) {
+      const { data: affiliate } = await supabase
+        .from('affiliates')
+        .select('*')
+        .eq('id', updated.affiliate_id)
+        .maybeSingle();
+
+      if (affiliate) {
+        const before = {
+          usd: Number(order.affiliate_commission_usd || 0),
+          crc: Number(order.affiliate_commission_crc || 0),
+        };
+        const repriced = affiliateCommissionPatch(updated, affiliate);
+        const { error: affError } = await supabase
+          .from('orders')
+          .update(repriced)
+          .eq('id', orderId);
+
+        if (affError) {
+          console.error('[admin/orders/refund] affiliate commission NOT updated:', affError.message);
+          affiliateCommission = { updated: false, error: affError.message };
+        } else {
+          Object.assign(updated, repriced);
+          affiliateCommission = {
+            updated: true,
+            before,
+            after: { usd: repriced.affiliate_commission_usd, crc: repriced.affiliate_commission_crc },
+          };
+          console.log(`[admin/orders/refund] ${order.order_number}: affiliate cut ${before.usd} -> ${repriced.affiliate_commission_usd} USD`);
+        }
       }
     }
 
@@ -289,6 +359,7 @@ export async function POST(request) {
       totalRefundedCrc: plan.totalRefundedCrc,
       fullyRefunded: plan.fullyRefunded,
       adjustment,
+      affiliateCommission,
       stock,
       emails,
     });

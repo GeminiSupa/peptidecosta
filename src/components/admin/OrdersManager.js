@@ -13,19 +13,15 @@ const ORDER_STATUS_OPTIONS = [
   'Error',
   'Processing',
   'Order Complete',
+  // Picking this does NOT save a status. A refund has to be checked against
+  // what the customer actually paid, tell four people and move the agent's
+  // commission — so handleOrderStatusUpdate intercepts it and opens the refund
+  // confirmation instead. Listed here because the dropdown is where a person
+  // looks for it; "Partly Refunded" is not, because it is an outcome of that
+  // confirmation rather than something you choose up front.
+  'Refunded',
   'Cancelled',
 ];
-
-// Refunded / Partly Refunded are deliberately NOT above.
-//
-// They were, briefly, and that was a mistake: the dropdown offered them while
-// the server refused them, because a refund has to be checked against what the
-// customer actually paid, email four people and adjust the agent's commission —
-// none of which a status change can do. Two ways in, one of them fake.
-//
-// They are real statuses and still appear in ORDER_STATUS_GROUPS below, so
-// refunded orders group and filter normally. They are simply not something a
-// person can pick: only the Refund box on the order writes them.
 
 const ORDER_STATUS_GROUPS = [
   {
@@ -82,6 +78,30 @@ const ORDER_GROUP_BY_STATUS = ORDER_STATUS_GROUPS.reduce((map, group) => {
 
 function getOrderStatusGroup(status) {
   return ORDER_GROUP_BY_STATUS.get(String(status || 'Pending').toLowerCase()) || ORDER_STATUS_GROUPS[0];
+}
+
+/**
+ * The options for one order's status control.
+ *
+ * A controlled <select> whose value is not among its options renders EMPTY, so
+ * any status the panel can hold but not offer showed as a blank box. Several
+ * exist: "Partly Refunded" is written by the refund dialog, "Processing - Card"
+ * by the double-charge lock, "Payment Blocked" by a failed charge — and none of
+ * them belong in the pick list, because a person choosing them would skip the
+ * machinery that writes them.
+ *
+ * So the current status is added as a disabled option when it is not already
+ * there: the order reads correctly, and still cannot be set that way by hand.
+ */
+function statusOptionsFor(status) {
+  const current = String(status || '').trim();
+  if (!current || ORDER_STATUS_OPTIONS.includes(current)) {
+    return ORDER_STATUS_OPTIONS.map((value) => ({ value, disabled: false }));
+  }
+  return [
+    { value: current, disabled: true },
+    ...ORDER_STATUS_OPTIONS.map((value) => ({ value, disabled: false })),
+  ];
 }
 
 function getOrderDateLabel(order) {
@@ -355,6 +375,8 @@ export default function OrdersManager({
                 <option key={group.id} value={`group:${group.id}`}>{group.filterLabel}</option>
               ))}
               <option disabled>──────────</option>
+              {/* The filter, not a per-order control: every status is
+                  selectable here because filtering by one changes nothing. */}
               {ORDER_STATUS_OPTIONS.map(status => (
                 <option key={status} value={status}>{status}</option>
               ))}
@@ -466,8 +488,8 @@ export default function OrdersManager({
                       onChange={(e) => handleOrderStatusUpdate(order.id, e.target.value)}
                       style={getStatusSelectStyle(order.status)}
                     >
-                      {ORDER_STATUS_OPTIONS.map(status => (
-                        <option key={status} value={status}>{status}</option>
+                      {statusOptionsFor(order.status).map(opt => (
+                        <option key={opt.value} value={opt.value} disabled={opt.disabled}>{opt.value}</option>
                       ))}
                     </select>
                   </label>
@@ -669,8 +691,8 @@ export default function OrdersManager({
                             cursor: 'pointer'
                           }}
                         >
-                          {ORDER_STATUS_OPTIONS.map(status => (
-                            <option key={status} value={status}>{status}</option>
+                          {statusOptionsFor(order.status).map(opt => (
+                            <option key={opt.value} value={opt.value} disabled={opt.disabled}>{opt.value}</option>
                           ))}
                         </select>
                       </td>

@@ -11,6 +11,8 @@
 // ORDER_STATUS_OPTIONS in src/components/admin/OrdersManager.js.
 
 const NEEDS_PAYMENT = ['pending', 'payment pending', 'pending - card', 'pending - card 3ds'];
+const REFUNDED = 'refunded';
+const PARTLY_REFUNDED = 'partly refunded';
 const FAILED = ['declined', 'error'];
 const COMPLETE = ['order complete', 'completed'];
 const SETTLED = ['paid', 'processing', ...COMPLETE];
@@ -24,6 +26,11 @@ import { isGiftLine, withBacGiftLines } from './bacWater.mjs';
 export function orderPaymentState(order) {
   const status = key(order?.status);
   if (status === 'cancelled') return 'cancelled';
+  // Named before anything else, because neither word appears in the sets below:
+  // a refunded order used to fall past all of them to the catch-all and tell a
+  // customer who had just been paid back that their payment was still pending.
+  if (status === REFUNDED) return 'refunded';
+  if (status === PARTLY_REFUNDED) return 'partly_refunded';
   if (FAILED.includes(status)) return 'failed';
   if (SETTLED.includes(status)) return 'paid';
   if (NEEDS_PAYMENT.includes(status)) return 'pending';
@@ -40,6 +47,14 @@ export function orderPaymentState(order) {
 export function orderDeliveryState(order) {
   const status = key(order?.status);
   if (status === 'cancelled') return 'cancelled';
+  // A full refund reverses the order; a partial one does not — the customer
+  // kept goods, so the parcel still has a real state. The refund overwrote the
+  // status that would have said which, so the tracking number decides, and
+  // anything else is "being handled" rather than "awaiting your payment".
+  if (status === REFUNDED) return 'cancelled';
+  if (status === PARTLY_REFUNDED) {
+    return String(order?.tracking_number || '').trim() ? 'shipped' : 'preparing';
+  }
   if (COMPLETE.includes(status)) return 'delivered';
   if (String(order?.tracking_number || '').trim()) return 'shipped';
   if (status === 'processing' || status === 'paid') return 'preparing';
@@ -51,6 +66,8 @@ const PAYMENT_LABELS = {
   pending: { en: 'Payment pending', es: 'Pago pendiente' },
   failed: { en: 'Payment failed', es: 'Pago rechazado' },
   cancelled: { en: 'Cancelled', es: 'Cancelado' },
+  refunded: { en: 'Refunded', es: 'Reembolsado' },
+  partly_refunded: { en: 'Partly refunded', es: 'Reembolso parcial' },
 };
 
 const DELIVERY_LABELS = {
@@ -70,6 +87,8 @@ const BADGE_TONES = {
   awaiting_payment: 'is-pending',
   failed: 'is-cancelled',
   cancelled: 'is-cancelled',
+  refunded: 'is-cancelled',
+  partly_refunded: 'is-shipped',
 };
 
 export function paymentLabel(order, lang = 'es') {

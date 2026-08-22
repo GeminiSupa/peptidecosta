@@ -20,6 +20,7 @@ import {
   isSuccessfulAnalyticsOrder,
   revenueTrendRows,
 } from '@/lib/analyticsDashboard.mjs';
+import { orderNetRevenue } from '@/lib/orderRevenue.mjs';
 
 export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [], onNavigate }) {
   const [explainerTopic, setExplainerTopic] = useState(null);
@@ -351,8 +352,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // Successful orders (Paid, Completed, Order Complete)
   const successfulOrders = orders.filter(isSuccessfulAnalyticsOrder);
   
-  const totalRevenueUsd = successfulOrders.reduce((sum, o) => sum + (parseFloat(o.total_usd) || 0), 0);
-  const totalRevenueCrc = successfulOrders.reduce((sum, o) => sum + (parseFloat(o.total_crc) || 0), 0);
+  // Net of refunds. AOV below divides these, so it follows without change.
+  const totalRevenueUsd = successfulOrders.reduce((sum, o) => sum + orderNetRevenue(o).usd, 0);
+  const totalRevenueCrc = successfulOrders.reduce((sum, o) => sum + orderNetRevenue(o).crc, 0);
 
   // Average Order Value (AOV)
   const aovUsd = successfulOrders.length > 0 ? (totalRevenueUsd / successfulOrders.length) : 0;
@@ -635,9 +637,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       paymentBreakdown[method] = { count: 0, revenue: 0 };
     }
     paymentBreakdown[method].count += 1;
-    if (o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'order complete') {
-      paymentBreakdown[method].revenue += (parseFloat(o.total_usd) || 0);
-    }
+    // The hand-written status list here left out "Partly Refunded", so a part
+    // refund dropped the order out of this breakdown altogether.
+    paymentBreakdown[method].revenue += orderNetRevenue(o).usd;
     
     // Order attribution sources. This includes WhatsApp when it was recorded,
     // without falsely labeling every unattributed order as WhatsApp traffic.
@@ -646,9 +648,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       orderSourceBreakdown[source] = { count: 0, revenue: 0 };
     }
     orderSourceBreakdown[source].count += 1;
-    if (o.status?.toLowerCase() === 'paid' || o.status?.toLowerCase() === 'completed' || o.status?.toLowerCase() === 'order complete') {
-      orderSourceBreakdown[source].revenue += (parseFloat(o.total_usd) || 0);
-    }
+    orderSourceBreakdown[source].revenue += orderNetRevenue(o).usd;
   });
 
   const maxPaymentCount = Object.keys(paymentBreakdown).length > 0 

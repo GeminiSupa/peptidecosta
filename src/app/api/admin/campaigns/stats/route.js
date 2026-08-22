@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 import { eventTimeSelect } from '@/lib/campaignEventColumns.mjs';
 
 export const dynamic = 'force-dynamic';
@@ -126,7 +127,7 @@ export async function GET(request) {
 
     const { data: orders } = await supabase
       .from('orders')
-      .select('total_usd')
+      .select('total_usd, refunded_amount_usd, status')
       .eq('campaign_id', campaignId);
 
     return NextResponse.json({
@@ -137,7 +138,7 @@ export async function GET(request) {
       deliveryBatches: batches || [],
       revenue: {
         orders: (orders || []).length,
-        total: (orders || []).reduce((sum, order) => sum + parseFloat(order.total_usd || 0), 0),
+        total: (orders || []).reduce((sum, order) => sum + orderNetRevenueUsd(order), 0),
       },
       // The events tables are read with a cap; say so rather than letting a
       // large campaign quietly present a partial link table as the whole truth.

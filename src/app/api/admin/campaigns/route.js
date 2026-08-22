@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 import { normalizeBehaviorFilter } from '@/lib/campaignBehavior.mjs';
 import { planScheduleUpdate } from '@/lib/campaignScheduleStatus.mjs';
 
@@ -130,7 +131,7 @@ export async function GET(request) {
     if (campaignIds.length > 0) {
       const { data: orderData } = await supabaseAdmin
         .from('orders')
-        .select('campaign_id, total_usd')
+        .select('campaign_id, total_usd, refunded_amount_usd, status')
         .in('campaign_id', campaignIds);
       
       if (orderData) {
@@ -139,7 +140,7 @@ export async function GET(request) {
             revenueMap[ord.campaign_id] = { count: 0, revenue: 0 };
           }
           revenueMap[ord.campaign_id].count++;
-          revenueMap[ord.campaign_id].revenue += parseFloat(ord.total_usd || 0);
+          revenueMap[ord.campaign_id].revenue += orderNetRevenueUsd(ord);
         }
       }
 

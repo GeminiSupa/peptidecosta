@@ -31,7 +31,7 @@ export async function GET(request) {
         // orders has total_usd / total_crc only - there is no `total` column.
         // orderUsd() still falls back to `total` for callers that pass order
         // objects assembled elsewhere, but it must not be selected here.
-        .select('sales_agent, promo_code, status, total_usd, total_crc, currency, created_at')
+        .select('sales_agent, promo_code, status, total_usd, total_crc, refunded_amount_usd, refunded_amount_crc, currency, created_at')
         .gte('created_at', since)
         .limit(20000),
       getDatabaseBackedUsdToCrcRate(),

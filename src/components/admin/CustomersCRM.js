@@ -14,8 +14,8 @@ import {
   buildAgentHistory,
   buildAgentNameResolver,
   findHistoricalAgent,
-  isClosedOrder,
 } from '@/lib/agentAttribution.mjs';
+import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 import { leadContactPoints } from '@/lib/leadContact.mjs';
 import { supabase } from '@/lib/supabase';
 
@@ -296,9 +296,11 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
         });
       }
       
-      if (isClosedOrder(o)) {
-          map[id].totalSpentUsd += parseFloat(o.total_usd || 0);
-      }
+      // Net of refunds, and zero for an order that never became a sale. This
+      // figure also decides the VIP tag and the "priority customer" wording, so
+      // counting refunded money here would greet somebody as a top customer
+      // over money they no longer hold.
+      map[id].totalSpentUsd += orderNetRevenueUsd(o);
 
       map[id].orderCount += 1;
       

@@ -193,3 +193,37 @@ export async function reportStaleUnpaidOrders(supabase, { hours = STALE_ORDER_HO
     skippedBacklog: backlog,
   };
 }
+/**
+ * Put named quantities back, for a refund of part of an order. Never throws.
+ *
+ * Deliberately does NOT claim inventory_restored_at the way the whole-order
+ * restore does. That stamp means "this order has given back everything it is
+ * ever going to", and setting it after one bottle of five would block the rest
+ * from ever coming back. A partial restore is bounded instead by what the
+ * caller was allowed to ask for — planPartialRestock caps the request against
+ * the quantities earlier refunds already returned, which are recorded on the
+ * refund events themselves.
+ *
+ * The caller records the lines on the order BEFORE calling this. If the write
+ * below then fails, the order claims stock came back that did not, and the
+ * shelf reads low — which is the safe direction. Recording afterwards would
+ * fail the other way, and stock that exists only in the database ends in an
+ * order that cannot be shipped.
+ */
+export async function restoreSelectedQuantities(supabase, order, lines, { reason = 'partial refund' } = {}) {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return { restored: false, skipped: 'nothing selected' };
+  }
+
+  try {
+    const restored = await addBackStock(supabase, lines);
+    console.log(
+      `[inventory] Partial restock for ${order?.order_number} (${reason}): `
+      + (restored.map((r) => `${r.product} ${r.from}→${r.to}`).join(', ') || 'no tracked products'),
+    );
+    return { restored: restored.length > 0, lines: restored, requested: lines };
+  } catch (error) {
+    console.error('[inventory] Partial restock failed for', order?.order_number, error.message);
+    return { restored: false, error: error.message, requested: lines };
+  }
+}

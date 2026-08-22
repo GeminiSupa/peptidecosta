@@ -1,4 +1,5 @@
 import { campaignEngagement } from './campaignEngagement.mjs';
+import { orderCountsAsSale, orderNetRevenue } from './orderRevenue.mjs';
 
 const RANGE_MS = Object.freeze({
   '24h': 24 * 60 * 60 * 1000,
@@ -14,8 +15,16 @@ export function analyticsRangeStart(range, now = new Date()) {
   return duration ? new Date(now.getTime() - duration).toISOString() : null;
 }
 
+/**
+ * A sale that produced money we kept.
+ *
+ * Handed to the shared rule rather than listing statuses again. This list used
+ * to omit "Partly Refunded", so an order with a part refund vanished from the
+ * analytics revenue chart entirely while the Today tiles still counted it at
+ * full price — the two screens contradicting each other about one order.
+ */
 export function isSuccessfulAnalyticsOrder(order) {
-  return ['paid', 'completed', 'order complete'].includes(lower(order?.status));
+  return orderCountsAsSale(order);
 }
 
 export function isPendingAnalyticsOrder(order) {
@@ -108,8 +117,9 @@ export function revenueTrendRows(orders = []) {
     if (!Number.isFinite(date.getTime())) continue;
     const key = date.toISOString().slice(0, 10);
     const row = days[key] || { key, name: key, revenueUsd: 0, revenueCrc: 0, orders: 0 };
-    row.revenueUsd += Number(order.total_usd || 0);
-    row.revenueCrc += Number(order.total_crc || 0);
+    const net = orderNetRevenue(order);
+    row.revenueUsd += net.usd;
+    row.revenueCrc += net.crc;
     row.orders += 1;
     days[key] = row;
   }

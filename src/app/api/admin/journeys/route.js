@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,7 +75,7 @@ export async function GET(request) {
       supabase.from('marketing_journeys').select('*').order('created_at', { ascending: false }),
       supabase.from('marketing_journey_enrollments').select('id,journey_id,contact_key,status,enrolled_at'),
       supabase.from('journey_engagement_events').select('journey_id,event_type'),
-      supabase.from('orders').select('journey_id,customer_email,customer_phone,total_usd,created_at,status').order('created_at', { ascending: false }).limit(5000),
+      supabase.from('orders').select('journey_id,customer_email,customer_phone,total_usd,refunded_amount_usd,created_at,status').order('created_at', { ascending: false }).limit(5000),
     ]);
     if (error) throw error;
     if (enrollmentError) throw enrollmentError;
@@ -110,8 +111,11 @@ export async function GET(request) {
       enrollmentsByContact.set(enrollment.contact_key, list);
     }
     for (const order of orders || []) {
-      if (String(order.status || '').toLowerCase() === 'cancelled') continue;
-      const revenue = Number(order.total_usd || 0);
+      // Was: skip cancelled, count everything else at face value — which put
+      // pending, declined and blocked orders into a journey's earnings, and
+      // ignored refunds. The shared rule returns zero for all of them.
+      const revenue = orderNetRevenueUsd(order);
+      if (revenue <= 0) continue;
       if (order.journey_id) {
         const stats = getAnalytics(order.journey_id);
         stats.directOrders++;

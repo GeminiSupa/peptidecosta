@@ -129,3 +129,62 @@ export function planInventoryRestore(order) {
   if (lines.length === 0) return { restore: false, reason: 'nothing to restore' };
   return { restore: true, reason: `returning ${lines.length} product line(s)`, lines };
 }
+/**
+ * What is still owed back to the shelf on this order.
+ *
+ * A whole-order restore stamps inventory_restored_at and returns everything at
+ * once, which is right for a cancellation and useless for a refund of one
+ * bottle out of five. A partial refund instead names the bottles that came
+ * back, and each one is recorded on its refund event — so this is the ordered
+ * quantity minus everything earlier refunds already put back.
+ *
+ * Returns nothing once the whole order has been restored, because there is
+ * then nothing left that could come back.
+ */
+export function restockableRemaining(order) {
+  if (order?.inventory_restored_at) return [];
+
+  const left = new Map(restorableQuantities(order).map((line) => [line.product, line.qty]));
+
+  for (const event of Array.isArray(order?.refund_events) ? order.refund_events : []) {
+    for (const line of Array.isArray(event?.restocked) ? event.restocked : []) {
+      const product = String(line?.product || '').trim();
+      const qty = Math.floor(Number(line?.qty));
+      if (!product || !Number.isFinite(qty) || qty <= 0) continue;
+      if (left.has(product)) left.set(product, Math.max(0, left.get(product) - qty));
+    }
+  }
+
+  return [...left]
+    .filter(([, qty]) => qty > 0)
+    .map(([product, qty]) => ({ product, qty }));
+}
+
+/**
+ * Clamp a requested restock to what the order can actually give back.
+ *
+ * The browser sends whatever the admin typed. Putting back more bottles than
+ * were bought — or more than are left after an earlier partial refund — would
+ * invent stock, and stock that exists only in the database is the failure that
+ * ends with an order that cannot be shipped. Anything unknown or over the line
+ * is dropped rather than rejected: the refund itself is the important half and
+ * must not fail over a typo in an optional field.
+ */
+export function planPartialRestock(order, requested = []) {
+  const allowed = new Map(restockableRemaining(order).map((line) => [line.product, line.qty]));
+  const lines = [];
+
+  for (const item of Array.isArray(requested) ? requested : []) {
+    const product = String(item?.product || '').trim();
+    const qty = Math.floor(Number(item?.qty));
+    if (!product || !Number.isFinite(qty) || qty <= 0) continue;
+
+    const take = Math.min(qty, allowed.get(product) || 0);
+    if (take <= 0) continue;
+
+    lines.push({ product, qty: take });
+    allowed.set(product, (allowed.get(product) || 0) - take);
+  }
+
+  return lines;
+}

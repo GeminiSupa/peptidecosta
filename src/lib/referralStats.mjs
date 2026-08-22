@@ -7,6 +7,8 @@
  * uses, so a name that earns commission is a name that shows up here.
  */
 
+import { orderCountsAsSale } from './orderRevenue.mjs';
+
 const norm = (value) => String(value || '').trim().toLowerCase();
 
 /** Group scans by whichever referral identifier they carried. */
@@ -51,8 +53,20 @@ export function groupScans(scans = []) {
   return groups;
 }
 
-const PAID = new Set(['paid', 'completed', 'order complete', 'processing']);
-const orderIsPaid = (order) => PAID.has(norm(order?.status));
+// Handed to the shared rule so a rep's numbers and the sales figures cannot
+// disagree. The list this replaces left out "Partly Refunded", so a part
+// refund removed the whole order from the rep's totals instead of reducing it,
+// and counted "Processing" that the sales figures do not.
+const orderIsPaid = (order) => orderCountsAsSale(order);
+
+/** Order value in USD with money given back taken off. */
+function netOrderUsd(order, exchangeRate) {
+  const gross = orderUsd(order, exchangeRate);
+  const backUsd = Number(order?.refunded_amount_usd || 0);
+  const backCrc = Number(order?.refunded_amount_crc || 0);
+  const back = backUsd > 0 ? backUsd : (backCrc > 0 ? backCrc / exchangeRate : 0);
+  return Math.max(0, gross - back);
+}
 
 /** Order total in USD, tolerating the several shapes orders are stored in. */
 export function orderUsd(order, exchangeRate = 454.48) {
@@ -97,7 +111,7 @@ export function buildReferralStats(scans = [], orders = [], exchangeRate = 454.4
     const group = key && groups.get(key);
     if (!group) continue;
     group.orders += 1;
-    group.revenueUsd += orderUsd(order, exchangeRate);
+    group.revenueUsd += netOrderUsd(order, exchangeRate);
   }
 
   const topOf = (counts) => {
