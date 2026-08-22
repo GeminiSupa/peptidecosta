@@ -65,6 +65,18 @@ test('duplicate posted lines are combined before inventory is checked', () => {
   assert.match(result.error, /only 5 available/);
 });
 
+test('an in-stock product with untracked inventory remains purchasable', () => {
+  const untracked = { ...peptide, inventory_count: null };
+  const result = authoritativeCheckout({
+    postedOrder: posted([{ product: untracked.product, qty: 1, price: 100 }], 105.5),
+    products: [untracked],
+    exchangeRate: RATE,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, false);
+});
+
 test('server rejects retired BAC sizes and water-only carts below their floor', () => {
   const retired = authoritativeCheckout({
     postedOrder: posted([{ product: 'Bacteriostatic Water 2ml', qty: 5, price: 10 }]),
@@ -102,4 +114,3 @@ test('deal attribution is derived from live dates and canonical item names', () 
   assert.equal(activeDealForOrder(deals, [{ product: peptide.product, qty: 1 }], new Date('2026-08-22T00:00:00Z'))?.id, 'live');
   assert.equal(activeDealForOrder(deals, [{ product: 'Other', qty: 1 }], new Date('2026-08-22T00:00:00Z')), null);
 });
-

@@ -90,7 +90,14 @@ export function authoritativeCheckout({ postedOrder, products, promo = null, exc
     return { ok: false, error: `These products are no longer sold: ${retiredWater.map((item) => item.product).join(', ')}` };
   }
 
-  const unavailable = requested.filter((item) => item.status !== 'In Stock' || Number(item.inventoryCount) === 0);
+  // A null inventory_count means this product is not quantity-tracked. Most
+  // legacy catalog rows use that shape and rely on the explicit In Stock / Out
+  // of Stock status. Number(null) is 0, so treating the nullable column as a
+  // number rejected every untracked product as sold out.
+  const unavailable = requested.filter((item) => (
+    item.status !== 'In Stock'
+    || (item.inventoryCount !== null && Number(item.inventoryCount) <= 0)
+  ));
   if (unavailable.length > 0) {
     return { ok: false, error: `These products are out of stock: ${unavailable.map((item) => item.product).join(', ')}` };
   }
