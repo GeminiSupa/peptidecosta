@@ -3,10 +3,9 @@
 import React, { useMemo } from 'react';
 import {
   ClipboardList, ShoppingCart, Target, DollarSign, Package,
-  AlertTriangle, Inbox, MessageSquare, TrendingUp, TrendingDown, ChevronRight, Star, CheckCircle,
-  Undo2,
+  AlertTriangle, Inbox, MessageSquare, TrendingUp, ChevronRight, Star, CheckCircle,
 } from 'lucide-react';
-import { orderCountsAsSale, orderNetRevenueUsd, refundedInRange } from '@/lib/orderRevenue.mjs';
+import { orderCountsAsSale, orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 
 const FALLBACK_RATE = 454.48;
 
@@ -121,11 +120,6 @@ export default function DashboardHome({
     const revenueToday = revenueInRange(todayStart);
     const revenueWeek = revenueInRange(weekStart);
 
-    // Dated by when the money went back, not when the order was placed, so a
-    // refund on a month-old order lands on the day it actually happened.
-    const refundedToday = refundedInRange(orders, todayStart);
-    const refundedWeek = refundedInRange(orders, weekStart);
-
     const recoverableCarts = abandonedCarts.filter((c) => c.status === 'active' || !c.status);
     const recoverableValue = recoverableCarts.reduce((s, c) => s + cartValue(c), 0);
 
@@ -154,8 +148,6 @@ export default function DashboardHome({
       pendingOrders,
       revenueToday,
       revenueWeek,
-      refundedToday,
-      refundedWeek,
       recoverableCarts,
       recoverableValue,
       hotLeads,
@@ -296,24 +288,6 @@ export default function DashboardHome({
           <div>
             <div className="dashboard-kpi-value">${stats.revenueWeek.toLocaleString()}</div>
             <div className="dashboard-kpi-label">Revenue This Week</div>
-          </div>
-        </div>
-        <div className="dashboard-kpi-card">
-          <div className="dashboard-kpi-icon" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#f87171' }}>
-            <Undo2 size={20} />
-          </div>
-          <div>
-            <div className="dashboard-kpi-value">${stats.refundedToday.usd.toLocaleString()}</div>
-            <div className="dashboard-kpi-label">Refunded Today</div>
-          </div>
-        </div>
-        <div className="dashboard-kpi-card">
-          <div className="dashboard-kpi-icon" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#fca5a5' }}>
-            <TrendingDown size={20} />
-          </div>
-          <div>
-            <div className="dashboard-kpi-value">${stats.refundedWeek.usd.toLocaleString()}</div>
-            <div className="dashboard-kpi-label">Refunded This Week</div>
           </div>
         </div>
         <div className="dashboard-kpi-card">

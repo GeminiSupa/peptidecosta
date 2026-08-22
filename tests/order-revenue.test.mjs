@@ -229,11 +229,12 @@ test('the routes fetch the columns the rule needs', () => {
   }
 });
 
-test('the home dashboard shows what was refunded, not only what was earned', () => {
+test('the home dashboard carries no refund tiles', () => {
+  // Omer asked for them off the front page. refundedInRange itself stays — it
+  // is tested above and is what any future refund report would be built from.
   const home = fs.readFileSync('src/components/admin/DashboardHome.js', 'utf8');
 
-  assert.match(home, /refundedInRange\(orders, todayStart\)/);
-  assert.match(home, /refundedInRange\(orders, weekStart\)/);
-  assert.match(home, /Refunded Today/);
-  assert.match(home, /Refunded This Week/);
+  assert.ok(!home.includes('Refunded Today'));
+  assert.ok(!home.includes('Refunded This Week'));
+  assert.ok(!home.includes('refundedInRange'), 'and nothing left computing them');
 });
