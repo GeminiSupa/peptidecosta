@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
@@ -16,7 +17,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Helper for sending WhatsApp via the official graph API
-async function sendWhatsApp(to, message, templateName = null, firstName = null, languageCode = 'es', greetingVariable = false) {
+async function sendWhatsApp(to, message, templateName = null, firstName = null, languageCode = 'es', greetingVariable = false, parameterMode = null) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   if (!token || !phoneNumberId) {
@@ -52,7 +53,7 @@ async function sendWhatsApp(to, message, templateName = null, firstName = null, 
               parameters: [
                 {
                   type: 'text',
-                  text: buildTemplateParam(firstName, languageCode, greetingVariable)
+                  text: buildTemplateParam(firstName, languageCode, greetingVariable, message, parameterMode)
                 }
               ]
             }
@@ -156,6 +157,10 @@ export async function DELETE(request) {
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
     
+    await supabase
+      .from('deals')
+      .update({ announcement_status: 'cancelled', broadcast_id: null })
+      .eq('broadcast_id', id);
     const { error } = await supabase.from('scheduled_broadcasts').delete().eq('id', id);
     if (error) throw error;
     
@@ -176,7 +181,8 @@ async function collectBroadcastTargets(audience, customContacts) {
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       query = query.gte('created_at', sevenDaysAgo.toISOString());
     }
-    const { data: orders } = await query;
+    const { data: orders, error: ordersError } = await query;
+    if (ordersError) throw new Error(`Order audience lookup failed: ${ordersError.message}`);
     orders?.forEach(o => {
       const key = o.customer_phone || o.customer_email;
       if (key && !targets.has(key)) {
@@ -187,34 +193,36 @@ async function collectBroadcastTargets(audience, customContacts) {
   }
 
   if (audience === 'abandoned_carts' || audience === 'all_leads' || audience === 'leads_7_days') {
-    let query = supabase.from('abandoned_carts').select('phone, email, name').eq('status', 'active');
+    let query = supabase.from('abandoned_carts').select('customer_phone, customer_email, customer_name').eq('status', 'active');
     if (audience === 'leads_7_days') {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       query = query.gte('created_at', sevenDaysAgo.toISOString());
     }
-    const { data: carts } = await query;
+    const { data: carts, error: cartsError } = await query;
+    if (cartsError) throw new Error(`Abandoned cart audience lookup failed: ${cartsError.message}`);
     carts?.forEach(c => {
-      const key = c.phone || c.email;
+      const key = c.customer_phone || c.customer_email;
       if (key && !targets.has(key)) {
-        const fname = c.name ? c.name.split(' ')[0] : 'Customer';
-        targets.set(key, { phone: c.phone, email: c.email, name: fname });
+        const fname = c.customer_name ? c.customer_name.split(' ')[0] : 'Customer';
+        targets.set(key, { phone: c.customer_phone, email: c.customer_email, name: fname });
       }
     });
 
-    let leadsQuery = supabase.from('catalog_leads').select('contact_value, contact_method, name');
+    let leadsQuery = supabase.from('catalog_leads').select('contact_value, contact_method');
     if (audience === 'leads_7_days') {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       leadsQuery = leadsQuery.gte('created_at', sevenDaysAgo.toISOString());
     }
-    const { data: catalogLeads } = await leadsQuery;
+    const { data: catalogLeads, error: leadsError } = await leadsQuery;
+    if (leadsError) throw new Error(`Catalog lead audience lookup failed: ${leadsError.message}`);
     catalogLeads?.forEach(cl => {
       if (!targets.has(cl.contact_value)) {
         targets.set(cl.contact_value, {
           phone: cl.contact_method === 'whatsapp' ? cl.contact_value : null,
           email: cl.contact_method === 'email' ? cl.contact_value : null,
-          name: cl.name ? cl.name.split(' ')[0] : 'Customer'
+          name: 'Customer'
         });
       }
     });
@@ -271,14 +279,22 @@ export async function POST(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
   try {
-    const { audience, channels, message, testContact, customContacts, scheduledAt, enableBatching, whatsappTemplateName, whatsappTemplateLanguage } = await request.json();
+    const { audience, channels, message, testContact, customContacts, scheduledAt, enableBatching, whatsappTemplateName, whatsappTemplateLanguage, dealId } = await request.json();
 
     if (!message && !whatsappTemplateName && !(channels?.email && channels?.emailHtmlContent)) {
       return NextResponse.json({ error: 'Message, Template Name, or custom email HTML is required' }, { status: 400 });
     }
+    if (audience !== 'test' && channels?.whatsapp && !whatsappTemplateName) {
+      return NextResponse.json({
+        error: 'An approved WhatsApp marketing template is required for broadcasts outside the 24-hour customer-service window.',
+      }, { status: 400 });
+    }
+    if (channels?.whatsapp && whatsappTemplateName && channels?.whatsappTemplateParamMode === 'message' && !String(message || '').trim()) {
+      return NextResponse.json({ error: 'This WhatsApp template expects the Message Composer text in {{1}}.' }, { status: 400 });
+    }
 
     if (scheduledAt && audience !== 'test') {
-      const { error } = await supabase.from('scheduled_broadcasts').insert({
+      const payload = {
         audience,
         custom_contacts: customContacts || null,
         channels: { 
@@ -288,9 +304,21 @@ export async function POST(request) {
         },
         message: message || '',
         scheduled_at: scheduledAt,
-        status: 'pending'
-      });
+        status: 'pending',
+        deal_id: dealId || null,
+      };
+      const { data: inserted, error } = await writeDroppingMissingColumns(
+        payload,
+        ['deal_id'],
+        (row) => supabase.from('scheduled_broadcasts').insert(row).select('id').single(),
+      );
       if (error) throw error;
+      if (dealId) {
+        await supabase.from('deals').update({
+          broadcast_id: inserted.id,
+          announcement_status: 'scheduled',
+        }).eq('id', dealId);
+      }
       return NextResponse.json({ success: true, text: 'Broadcast scheduled successfully', queuedCount: 1 });
     }
 
@@ -318,7 +346,7 @@ export async function POST(request) {
         return '';
       }).filter(Boolean).join(',');
 
-      const { data: inserted, error: insertError } = await supabase.from('scheduled_broadcasts').insert({
+      const payload = {
         audience: 'custom',
         custom_contacts: allContactStrs,
         channels: { 
@@ -328,10 +356,23 @@ export async function POST(request) {
         },
         message: message || '',
         scheduled_at: new Date().toISOString(),
-        status: 'pending'
-      }).select().single();
+        status: 'pending',
+        deal_id: dealId || null,
+      };
+      const { data: inserted, error: insertError } = await writeDroppingMissingColumns(
+        payload,
+        ['deal_id'],
+        (row) => supabase.from('scheduled_broadcasts').insert(row).select().single(),
+      );
 
       if (insertError) throw insertError;
+
+      if (dealId) {
+        await supabase.from('deals').update({
+          broadcast_id: inserted.id,
+          announcement_status: 'queued',
+        }).eq('id', dealId);
+      }
 
       // Trigger the processor asynchronously
       const host = request.headers.get('host') || 'localhost:3000';
@@ -354,7 +395,15 @@ export async function POST(request) {
       let sentEmail = false;
 
       if (channels.whatsapp && contact.phone) {
-        sentWhatsapp = await sendWhatsApp(contact.phone, message, whatsappTemplateName, contact.name, whatsappTemplateLanguage, channels?.whatsappGreetingVariable);
+        sentWhatsapp = await sendWhatsApp(
+          contact.phone,
+          message,
+          whatsappTemplateName,
+          contact.name,
+          whatsappTemplateLanguage,
+          channels?.whatsappGreetingVariable,
+          channels?.whatsappTemplateParamMode,
+        );
       }
       
       if (channels.email && contact.email && (message || channels.emailHtmlContent)) {

@@ -68,7 +68,7 @@ export function getVolumeDiscountPct(vialCount) {
  * @param {number} exchangeRate
  * @returns {{ subtotal, discountPct, discountAmount, discountedTotal, shipping, total, vialCount, bacCharge }}
  */
-export function computeOrderTotals(lineItems, currency, exchangeRate = FALLBACK_EXCHANGE_RATE) {
+export function computeOrderTotals(lineItems, currency, exchangeRate = FALLBACK_EXCHANGE_RATE, options = {}) {
   const merchandise = lineItems.filter((li) => !isBacWater(li.product));
   const discountableSubtotal = merchandise.reduce((acc, li) => acc + li.unitPrice * li.qty, 0);
   // BAC water never moves the customer up a discount tier.
@@ -80,7 +80,10 @@ export function computeOrderTotals(lineItems, currency, exchangeRate = FALLBACK_
     exchangeRate,
   );
 
-  const discountPct = getVolumeDiscountPct(vialCount);
+  const configuredPct = Number(options.volumeDiscountPct);
+  const discountPct = Number.isFinite(configuredPct)
+    ? Math.max(0, configuredPct)
+    : getVolumeDiscountPct(vialCount);
   const {
     subtotal,
     discountAmount,

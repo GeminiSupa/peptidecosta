@@ -10,6 +10,12 @@ import {
   restorePayload,
   isDealLive,
   dealBannerText,
+  dealBroadcastDrafts,
+  dealCatalogUrl,
+  dealSafety,
+  canSafelyRestoreProduct,
+  canSafelyRestoreLegacyProduct,
+  stackedDiscountPercent,
   toPercent,
   DEAL_DISCOUNT_LABEL,
 } from '../src/lib/dealOfWeek.mjs';
@@ -246,4 +252,47 @@ test('custom titles override the generated copy per language', () => {
 
 test('a deal with no discount produces no banner rather than an empty one', () => {
   assert.equal(dealBannerText({ discount_pct: 0, product_names: ['GHK-Cu'] }, 'en'), '');
+});
+
+test('deal links use the real catalog host and preserve attribution', () => {
+  const deal = { id: 'deal-123', product_names: ['NAD+ 1000/500'] };
+  const url = new URL(dealCatalogUrl(deal));
+
+  assert.equal(url.origin, 'https://catalog.peptidescostarica.net');
+  assert.equal(url.pathname, '/catalog');
+  assert.equal(url.searchParams.get('deal_id'), 'deal-123');
+  assert.equal(url.searchParams.get('utm_source'), 'weekly_deal');
+  assert.equal(url.searchParams.get('utm_campaign'), 'deal_deal-123');
+  assert.equal(url.searchParams.get('product'), 'NAD+ 1000/500');
+  assert.match(dealBroadcastDrafts({ ...deal, discount_pct: 0.15 }).message, /catalog\.peptidescostarica\.net/);
+});
+
+test('stacking safety requires review at 30% and refuses dangerous totals', () => {
+  assert.equal(stackedDiscountPercent(0.15, 20), 32);
+  assert.equal(dealSafety(0.29).ok, true);
+  assert.equal(dealSafety(0.3).needsConfirmation, true);
+  assert.equal(dealSafety(0.3, { confirmedHighDiscount: true }).ok, true);
+  assert.equal(dealSafety(0.5, { confirmedHighDiscount: true }).ok, false, '50% plus 20% exceeds the combined cap');
+  assert.match(dealSafety(0.51, { confirmedHighDiscount: true }).error, /cannot exceed 50%/);
+});
+
+test('expiry restores only when the product still matches what launch applied', () => {
+  const applied = buildMarkdown(snapshotBaseline(GHK), 0.15, WINDOW, RATE);
+  assert.equal(canSafelyRestoreProduct(applied, applied), true);
+  assert.equal(canSafelyRestoreProduct({ ...applied, price_usd: '$99' }, applied), false);
+  assert.equal(canSafelyRestoreProduct({ ...applied, discount: 'Manual edit' }, applied), false);
+});
+
+test('a pre-migration live deal still detects a manual USD price edit', () => {
+  const baseline = snapshotBaseline(GHK);
+  const deal = {
+    discount_pct: 0.15,
+    starts_at: WINDOW.startsAt,
+    ends_at: WINDOW.endsAt,
+  };
+  const current = buildMarkdown(baseline, 0.15, WINDOW, RATE);
+
+  assert.equal(canSafelyRestoreLegacyProduct(current, baseline, deal), true);
+  assert.equal(canSafelyRestoreLegacyProduct({ ...current, price_usd: '$99' }, baseline, deal), false);
+  assert.equal(canSafelyRestoreLegacyProduct({ ...current, sale_end_time: null }, baseline, deal), false);
 });

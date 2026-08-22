@@ -9,6 +9,7 @@ import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
 import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
 import { buildTemplateParam } from '@/lib/broadcastTemplateParam.mjs';
+import { broadcastFailureRecovery } from '@/lib/broadcastFailureRecovery.mjs';
 
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
@@ -22,7 +23,7 @@ function escapeHtml(value) {
   return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
-async function sendWhatsApp(to, message, templateName = null, firstName = null, languageCode = 'es', greetingVariable = false) {
+async function sendWhatsApp(to, message, templateName = null, firstName = null, languageCode = 'es', greetingVariable = false, parameterMode = null) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   if (!token || !phoneNumberId) return false;
@@ -42,7 +43,7 @@ async function sendWhatsApp(to, message, templateName = null, firstName = null, 
         language: { code: languageCode || 'es' },
         components: [{
           type: 'body',
-          parameters: [{ type: 'text', text: buildTemplateParam(firstName, languageCode, greetingVariable) }],
+          parameters: [{ type: 'text', text: buildTemplateParam(firstName, languageCode, greetingVariable, message, parameterMode) }],
         }],
       },
     } : {
@@ -223,6 +224,9 @@ async function guardedSend({ broadcastId, identity, channel, send, suppressions 
 }
 
 export async function GET(request) {
+  let processingIds = [];
+  const settledBroadcastIds = new Set();
+  let activeBroadcastId = null;
   try {
     const authHeader = request.headers.get('authorization');
     if (!process.env.CRON_SECRET) {
@@ -252,13 +256,15 @@ export async function GET(request) {
     const suppressions = new Set((suppressionRows || []).map(item => `${item.identity}:${item.channel}`));
 
     // 2. Mark as processing to prevent duplicate runs
-    const ids = broadcasts.map(b => b.id);
-    await supabase.from('scheduled_broadcasts').update({ status: 'processing' }).in('id', ids);
+    processingIds = broadcasts.map(b => b.id);
+    await supabase.from('scheduled_broadcasts').update({ status: 'processing' }).in('id', processingIds);
+    await supabase.from('deals').update({ announcement_status: 'sending' }).in('broadcast_id', processingIds);
 
     // 3. Process each broadcast
     let totalSent = 0;
 
     for (const broadcast of broadcasts) {
+      activeBroadcastId = broadcast.id;
       const targets = new Map();
       const { audience, channels, message, custom_contacts } = broadcast;
 
@@ -367,7 +373,15 @@ export async function GET(request) {
               identity: normalizeMarketingIdentity(contact.phone, 'whatsapp'),
               channel: 'whatsapp',
               suppressions,
-              send: () => sendWhatsApp(contact.phone, message, channels.whatsappTemplateName, contact.name, channels.whatsappTemplateLanguage, channels.whatsappGreetingVariable),
+              send: () => sendWhatsApp(
+                contact.phone,
+                message,
+                channels.whatsappTemplateName,
+                contact.name,
+                channels.whatsappTemplateLanguage,
+                channels.whatsappGreetingVariable,
+                channels.whatsappTemplateParamMode,
+              ),
             });
             sentWhatsapp = result.sent;
             retryWhatsapp = result.retryable;
@@ -410,6 +424,9 @@ export async function GET(request) {
         .maybeSingle();
       if (latestBroadcastError) throw latestBroadcastError;
       if (latestBroadcast?.status === 'cancelled') {
+        await supabase.from('deals').update({ announcement_status: 'cancelled' }).eq('broadcast_id', broadcast.id);
+        settledBroadcastIds.add(broadcast.id);
+        activeBroadcastId = null;
         continue;
       }
 
@@ -431,6 +448,7 @@ export async function GET(request) {
             ? new Date(Date.now() + 5 * 60 * 1000).toISOString()
             : new Date().toISOString()
         }).eq('id', broadcast.id);
+        await supabase.from('deals').update({ announcement_status: 'sending' }).eq('broadcast_id', broadcast.id);
 
         // Immediately trigger the next run asynchronously
         if (remainingContacts.length > 0) {
@@ -444,12 +462,44 @@ export async function GET(request) {
 
       } else {
         await supabase.from('scheduled_broadcasts').update({ status: 'completed' }).eq('id', broadcast.id);
+        await supabase.from('deals').update({ announcement_status: 'completed' }).eq('broadcast_id', broadcast.id);
       }
+      settledBroadcastIds.add(broadcast.id);
+      activeBroadcastId = null;
     }
 
     return NextResponse.json({ success: true, processed: broadcasts.length, totalSent });
   } catch (err) {
     console.error('[CRON Process Broadcasts]', err);
+    const recovery = broadcastFailureRecovery(
+      processingIds,
+      [...settledBroadcastIds],
+      activeBroadcastId,
+    );
+    if (recovery.failedIds.length > 0) {
+      const { data: failedRows } = await supabase
+        .from('scheduled_broadcasts')
+        .update({ status: 'failed' })
+        .in('id', recovery.failedIds)
+        .eq('status', 'processing')
+        .select('id');
+      const failedIds = (failedRows || []).map((row) => row.id);
+      if (failedIds.length > 0) {
+        await supabase.from('deals').update({ announcement_status: 'failed' }).in('broadcast_id', failedIds);
+      }
+    }
+    if (recovery.requeueIds.length > 0) {
+      const { data: requeuedRows } = await supabase
+        .from('scheduled_broadcasts')
+        .update({ status: 'pending' })
+        .in('id', recovery.requeueIds)
+        .eq('status', 'processing')
+        .select('id');
+      const requeuedIds = (requeuedRows || []).map((row) => row.id);
+      if (requeuedIds.length > 0) {
+        await supabase.from('deals').update({ announcement_status: 'queued' }).in('broadcast_id', requeuedIds);
+      }
+    }
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

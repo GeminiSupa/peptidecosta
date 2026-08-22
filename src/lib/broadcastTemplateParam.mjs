@@ -15,12 +15,23 @@
  * tickbox worked on a scheduled send and did nothing on an immediate one —
  * every nameless contact got the word "Customer" mid-Spanish. One copy now.
  */
-export function buildTemplateParam(firstName, languageCode, greetingVariable) {
+export function buildTemplateParam(firstName, languageCode, greetingVariable, message = '', parameterMode = null) {
   const isEn = String(languageCode || 'es').toLowerCase().startsWith('en');
   // Meta rejects parameters containing newlines/tabs, so flatten defensively.
   const name = String(firstName || '').replace(/\s+/g, ' ').trim();
+  const mode = ['name', 'greeting', 'message'].includes(parameterMode)
+    ? parameterMode
+    : (greetingVariable ? 'greeting' : 'name');
 
-  if (greetingVariable) {
+  if (mode === 'message') {
+    const fallbackName = isEn ? 'Customer' : 'Cliente';
+    return String(message || '')
+      .replace(/\{\{\s*name\s*\}\}/gi, name || fallbackName)
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  if (mode === 'greeting') {
     if (name) return isEn ? `Hi ${name}` : `Hola ${name}`;
     return isEn ? 'Hello!' : '¡Buenas!';
   }

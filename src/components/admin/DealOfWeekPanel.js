@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Zap, Loader, AlertTriangle, CheckCircle, Megaphone, RotateCcw, Clock } from 'lucide-react';
+import { Zap, Loader, AlertTriangle, CheckCircle, Megaphone, RotateCcw, Clock, Search, X } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { formatCrInstant } from '@/lib/crTime.mjs';
 import { toPercent } from '@/lib/dealOfWeek.mjs';
@@ -17,7 +17,7 @@ import { toPercent } from '@/lib/dealOfWeek.mjs';
  * so the send still goes through the audience picker and confirmation every
  * other broadcast uses.
  */
-export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
+export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onProductsChanged }) {
   const [live, setLive] = useState(null);
   const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +33,10 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
   const [isLaunching, setIsLaunching] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
   const [launched, setLaunched] = useState(null);
+  const [productQuery, setProductQuery] = useState('');
+  const [confirmedHighDiscount, setConfirmedHighDiscount] = useState(false);
+  const [allowUntrackedStock, setAllowUntrackedStock] = useState(false);
+  const [showLaunchReview, setShowLaunchReview] = useState(false);
 
   const discountPct = useMemo(() => Number(percent) / 100, [percent]);
   const percentIsValid = Number(percent) > 0 && Number(percent) < 100;
@@ -40,9 +44,23 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
   const outOfStockSelected = useMemo(() => (
     selected.filter((name) => {
       const row = products.find((p) => p.product === name);
-      return row && row.status !== 'In Stock';
+      return row && (row.status !== 'In Stock' || Number(row.inventoryCount) === 0);
     })
   ), [selected, products]);
+  const untrackedStockSelected = useMemo(() => (
+    selected.filter((name) => {
+      const row = products.find((p) => p.product === name);
+      return row && row.inventoryCount === null;
+    })
+  ), [selected, products]);
+  const visibleProducts = useMemo(() => {
+    const query = productQuery.trim().toLowerCase();
+    if (!query) return products;
+    return products.filter((product) => (
+      String(product.product || '').toLowerCase().includes(query)
+      || String(product.category || '').toLowerCase().includes(query)
+    ));
+  }, [productQuery, products]);
 
   const load = async () => {
     try {
@@ -60,6 +78,25 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
   };
 
   useEffect(() => { load(); }, []);
+
+  // Setup survives a refresh or an accidental tab change. It is local to this
+  // browser and cleared only after a successful launch.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('weekly_deal_draft_v2') || 'null');
+      if (!saved) return;
+      if (Array.isArray(saved.selected)) setSelected(saved.selected);
+      if (saved.percent) setPercent(saved.percent);
+      if (typeof saved.titleEn === 'string') setTitleEn(saved.titleEn);
+      if (typeof saved.titleEs === 'string') setTitleEs(saved.titleEs);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('weekly_deal_draft_v2', JSON.stringify({ selected, percent, titleEn, titleEs }));
+    } catch {}
+  }, [selected, percent, titleEn, titleEs]);
 
   // The preview is the only place the resolved Sunday and the real before/after
   // prices appear, so it refreshes whenever the inputs change rather than
@@ -84,6 +121,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
             discount_pct: discountPct,
             title_en: titleEn,
             title_es: titleEs,
+            confirm_high_discount: confirmedHighDiscount,
           }),
         });
         const data = await res.json();
@@ -98,7 +136,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
     }, 350);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [selected, discountPct, titleEn, titleEs, percentIsValid]);
+  }, [selected, discountPct, titleEn, titleEs, percentIsValid, confirmedHighDiscount]);
 
   const toggleProduct = (name) => {
     setSelected((current) => (
@@ -108,15 +146,12 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
 
   const handleLaunch = async () => {
     if (!preview) return;
+    setShowLaunchReview(true);
+  };
 
-    const lines = preview.products.map((p) => `  • ${p.product}: ${p.wasUsd} → ${p.nowUsd}`);
-    const confirmed = window.confirm(
-      `Launch this deal? Prices change on the live site immediately.\n\n`
-      + `${lines.join('\n')}\n\n`
-      + `Ends ${formatCrInstant(preview.window.endsAt)}.\n\n`
-      + `Nothing is emailed or sent on WhatsApp yet — you review and send that next.`
-    );
-    if (!confirmed) return;
+  const confirmLaunch = async () => {
+    if (!preview) return;
+    setShowLaunchReview(false);
 
     try {
       setIsLaunching(true);
@@ -128,6 +163,8 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
           discount_pct: discountPct,
           title_en: titleEn,
           title_es: titleEs,
+          confirm_high_discount: confirmedHighDiscount,
+          allow_untracked_stock: allowUntrackedStock,
         }),
       });
       const data = await res.json();
@@ -138,7 +175,15 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
       setTitleEn('');
       setTitleEs('');
       setPreview(null);
+      setConfirmedHighDiscount(false);
+      setAllowUntrackedStock(false);
+      localStorage.removeItem('weekly_deal_draft_v2');
       await load();
+      try {
+        await onProductsChanged?.();
+      } catch (refreshError) {
+        console.warn('[weekly-deal] Product refresh after launch failed:', refreshError);
+      }
     } catch (err) {
       alert('Could not launch the deal: ' + err.message);
     } finally {
@@ -164,6 +209,11 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
       if (!res.ok || !data.ok) throw new Error(data.error || 'Could not end the deal');
       setLaunched(null);
       await load();
+      try {
+        await onProductsChanged?.();
+      } catch (refreshError) {
+        console.warn('[weekly-deal] Product refresh after expiry failed:', refreshError);
+      }
     } catch (err) {
       alert('Could not end the deal: ' + err.message);
     } finally {
@@ -179,6 +229,9 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
     marginBottom: '16px',
   };
   const labelStyle = { display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 };
+  const announcementDeal = launched || (live?.drafts ? { deal: live, drafts: live.drafts } : null);
+  const announcementStatus = live?.announcement?.status || live?.announcement_status || (launched ? 'not_sent' : null);
+  const announcementNeedsAction = announcementDeal && !['queued', 'scheduled', 'sending', 'completed'].includes(announcementStatus);
 
   return (
     <div className="admin-orders-tab">
@@ -229,14 +282,53 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
           <div style={{ marginTop: '12px', fontSize: '0.78rem', color: '#94a3b8' }}>
             Prices are restored automatically when the deal ends. This button is for ending it early.
           </div>
+          <div className="weekly-deal-health-grid">
+            <div className="weekly-deal-stat">
+              <span>Storefront</span>
+              <strong className={live.health?.ok ? 'is-good' : 'is-bad'}>
+                {live.health?.ok ? 'Healthy' : 'Needs attention'}
+              </strong>
+            </div>
+            <div className="weekly-deal-stat">
+              <span>Announcement</span>
+              <strong>{String(announcementStatus || 'not sent').replace(/_/g, ' ')}</strong>
+            </div>
+            <div className="weekly-deal-stat">
+              <span>Attributed orders</span>
+              <strong>{live.metrics?.orders ?? 0}</strong>
+            </div>
+            <div className="weekly-deal-stat">
+              <span>Deal units</span>
+              <strong>{live.metrics?.targetUnits ?? 0}</strong>
+            </div>
+            <div className="weekly-deal-stat">
+              <span>Net revenue</span>
+              <strong>${Number(live.metrics?.revenue?.usd || 0).toFixed(2)}</strong>
+            </div>
+            <div className="weekly-deal-stat">
+              <span>WA / email reached</span>
+              <strong>{Number(live.announcement?.delivery?.delivered || 0)}</strong>
+            </div>
+          </div>
+          {live.health && !live.health.ok && (
+            <div className="weekly-deal-inline-alert is-danger">
+              <AlertTriangle size={16} /> A product price or the live banner no longer matches this deal. End the deal only after reviewing the Products tab; safe restoration will not overwrite a manual edit.
+            </div>
+          )}
+          {live.metrics && !live.metrics.attributionReady && (
+            <div className="weekly-deal-inline-alert">
+              <AlertTriangle size={16} /> Deal attribution is waiting for the Weekly Deal process migration.
+            </div>
+          )}
         </div>
       )}
 
       {/* ---------- Drafts to send, after a launch ---------- */}
-      {launched && (
+      {announcementDeal && (
         <div style={{ ...card, borderColor: 'rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6ee7b7', fontWeight: 800, fontSize: '0.9rem' }}>
-            <CheckCircle size={15} /> DEAL IS LIVE — announcement not sent yet
+            {announcementNeedsAction ? <AlertTriangle size={15} /> : <CheckCircle size={15} />}
+            {announcementNeedsAction ? 'DEAL IS LIVE — ANNOUNCEMENT STILL NEEDS TO BE SENT' : `ANNOUNCEMENT ${String(announcementStatus || '').toUpperCase()}`}
           </div>
           <div style={{ color: '#d1fae5', fontSize: '0.84rem', margin: '10px 0 14px' }}>
             Prices are marked down and the site banner is up. Review the announcement below and
@@ -245,25 +337,28 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
 
           <label style={labelStyle}>Email subject</label>
           <div style={{ background: '#0b1220', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: '#f8fafc', fontSize: '0.85rem', marginBottom: '12px' }}>
-            {launched.drafts.emailSubject}
+            {announcementDeal.drafts.emailSubject}
           </div>
 
           <label style={labelStyle}>Message (sent on both WhatsApp and email)</label>
           <pre style={{ background: '#0b1220', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: '#cbd5e1', fontSize: '0.8rem', whiteSpace: 'pre-wrap', margin: '0 0 14px' }}>
-            {launched.drafts.message}
+            {announcementDeal.drafts.message}
           </pre>
 
-          <button
-            className="admin-btn primary"
-            onClick={() => onSendAnnouncement?.({
-              message: launched.drafts.message,
-              emailSubject: launched.drafts.emailSubject,
-              targetProducts: launched.deal?.product_names || [],
-            })}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            <Megaphone size={15} /> Review &amp; send in Announcements
-          </button>
+          {announcementNeedsAction && (
+            <button
+              className="admin-btn primary"
+              onClick={() => onSendAnnouncement?.({
+                message: announcementDeal.drafts.message,
+                emailSubject: announcementDeal.drafts.emailSubject,
+                targetProducts: announcementDeal.deal?.product_names || [],
+                sourceDealId: announcementDeal.deal?.id || null,
+              })}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <Megaphone size={15} /> Review &amp; send in Announcements
+            </button>
+          )}
         </div>
       )}
 
@@ -339,8 +434,20 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
               </button>
             </div>
           </div>
+          <div className="weekly-deal-product-search">
+            <Search size={15} />
+            <input
+              value={productQuery}
+              onChange={(event) => setProductQuery(event.target.value)}
+              placeholder="Search products or categories"
+              aria-label="Search deal products"
+            />
+            {productQuery && (
+              <button type="button" onClick={() => setProductQuery('')} aria-label="Clear product search"><X size={14} /></button>
+            )}
+          </div>
           <div className="admin-input" style={{ width: '100%', maxHeight: '190px', overflowY: 'auto', padding: '8px 12px', background: '#0b1220', border: '1px solid #334155', borderRadius: '8px', marginBottom: '14px' }}>
-            {products.map((p) => {
+            {visibleProducts.map((p) => {
               const isChecked = selected.includes(p.product);
               return (
                 <label key={p.id || p.product} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 0', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', color: '#f8fafc' }}>
@@ -361,12 +468,15 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
                       {p.status}
                     </span>
                   )}
-                  <span style={{ marginLeft: 'auto', fontSize: '0.78rem', color: '#64748b' }}>{p.priceUsd}</span>
+                  <span className="weekly-deal-product-meta">
+                    <span>{p.priceUsd}</span>
+                    <small>{p.inventoryCount === null ? 'stock untracked' : `${p.inventoryCount} available`}</small>
+                  </span>
                 </label>
               );
             })}
-            {products.length === 0 && (
-              <div style={{ color: '#94a3b8', fontSize: '0.85rem', padding: '8px' }}>No products found…</div>
+            {visibleProducts.length === 0 && (
+              <div style={{ color: '#94a3b8', fontSize: '0.85rem', padding: '8px' }}>No matching products found.</div>
             )}
           </div>
 
@@ -403,6 +513,19 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
                 stock status in the Products tab first, or leave {outOfStockSelected.length === 1 ? 'it' : 'them'} out.
               </span>
             </div>
+          )}
+
+          {untrackedStockSelected.length > 0 && (
+            <label className="weekly-deal-confirm-row">
+              <input
+                type="checkbox"
+                checked={allowUntrackedStock}
+                onChange={(event) => setAllowUntrackedStock(event.target.checked)}
+              />
+              <span>
+                <strong>Confirm stock manually.</strong> {untrackedStockSelected.join(', ')} {untrackedStockSelected.length === 1 ? 'has' : 'have'} no inventory count. I verified enough units are available for this deal.
+              </span>
+            </label>
           )}
 
           {previewError && (
@@ -447,13 +570,28 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
                 These products get the orange sale ribbon and move to the top of the catalog.
                 A customer buying 5+ vials still gets their 15% volume discount on top of this price.
               </div>
+              <div className="weekly-deal-stack-summary">
+                <div><span>Deal alone</span><strong>{preview.safety?.pct}% off</strong></div>
+                <div><span>At 5+ vials</span><strong>{preview.safety?.stackedAtFive}% off</strong></div>
+                <div><span>At 10+ vials</span><strong>{preview.safety?.stackedAtTen}% off</strong></div>
+              </div>
+              {preview.safety?.needsConfirmation && (
+                <label className="weekly-deal-confirm-row is-warning">
+                  <input
+                    type="checkbox"
+                    checked={confirmedHighDiscount}
+                    onChange={(event) => setConfirmedHighDiscount(event.target.checked)}
+                  />
+                  <span><strong>High-discount review:</strong> I understand that the 10+ vial total becomes {preview.safety.stackedAtTen}% off.</span>
+                </label>
+              )}
             </div>
           )}
 
           <button
             className="admin-btn primary"
             onClick={handleLaunch}
-            disabled={!preview || isLaunching || isPreviewing}
+            disabled={!preview || isLaunching || isPreviewing || outOfStockSelected.length > 0 || (untrackedStockSelected.length > 0 && !allowUntrackedStock) || Boolean(preview?.safety?.needsConfirmation && !confirmedHighDiscount)}
             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
             {isLaunching ? <Loader size={15} className="spin" /> : <Zap size={15} />}
@@ -480,6 +618,56 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {showLaunchReview && preview && (
+        <div className="weekly-deal-modal-backdrop" role="presentation" onMouseDown={() => setShowLaunchReview(false)}>
+          <section
+            className="weekly-deal-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="weekly-deal-review-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="weekly-deal-modal-heading">
+              <div>
+                <span>Final review</span>
+                <h4 id="weekly-deal-review-title">Launch {preview.safety?.pct}% weekly deal?</h4>
+              </div>
+              <button type="button" onClick={() => setShowLaunchReview(false)} aria-label="Close launch review">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="weekly-deal-review-summary">
+              <div><span>Products</span><strong>{preview.products.length}</strong></div>
+              <div><span>Ends</span><strong>{formatCrInstant(preview.window.endsAt)}</strong></div>
+              <div><span>Maximum stacked saving</span><strong>{preview.safety?.stackedAtTen}%</strong></div>
+            </div>
+
+            <div className="weekly-deal-review-products">
+              {preview.products.map((product) => (
+                <div key={product.product}>
+                  <span>{product.product}</span>
+                  <strong><s>{product.wasUsd}</s> → {product.nowUsd}</strong>
+                  <small>{product.inventoryCount === null ? 'Stock manually verified' : `${product.inventoryCount} available`}</small>
+                </div>
+              ))}
+            </div>
+
+            <div className="weekly-deal-inline-alert is-warning">
+              <AlertTriangle size={16} /> Launch changes the live catalog immediately. The announcement is created as a separate review step and is not sent automatically.
+            </div>
+
+            <div className="weekly-deal-modal-actions">
+              <button type="button" className="admin-btn" onClick={() => setShowLaunchReview(false)}>Go back</button>
+              <button type="button" className="admin-btn primary" onClick={confirmLaunch} disabled={isLaunching}>
+                {isLaunching ? <Loader size={15} className="spin" /> : <Zap size={15} />}
+                Confirm &amp; launch
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </div>

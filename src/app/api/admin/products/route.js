@@ -2,12 +2,24 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { crWallToIso } from '@/lib/crTime.mjs';
+import {
+  DEAL_PROTECTED_DB_FIELDS,
+  liveDealProductConflicts,
+  preserveLiveDealFields,
+} from '@/lib/dealProductProtection.mjs';
 
 export const runtime = 'nodejs';
 
 function isExistingProductId(id) {
   const value = String(id || '');
   return value && !value.startsWith('temp-') && !value.startsWith('local-');
+}
+
+function isMissingDealsTable(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return error?.code === '42P01'
+    || error?.code === 'PGRST205'
+    || (message.includes('deals') && (message.includes('does not exist') || message.includes('schema cache')));
 }
 
 function emojiForCategory(category) {
@@ -60,6 +72,45 @@ export async function PUT(request) {
     }
 
     const supabase = getSupabaseAdmin();
+    let rows = products.map(productToDbRow);
+
+    // The Products grid saves every row at once. If it was loaded before a
+    // weekly deal launched, its stale copy still contains the old shelf prices
+    // and would silently erase the live markdown while saving an unrelated
+    // product. Refuse only that stale write; refreshing the tab makes the rows
+    // match and ordinary edits remain available.
+    const { data: liveDeal, error: dealError } = await supabase
+      .from('deals')
+      .select('id,product_names')
+      .eq('status', 'live')
+      .maybeSingle();
+    // Product editing predates Weekly Deals. A database that has not installed
+    // that feature yet must keep working; once the table exists, every other
+    // query error remains real and is surfaced.
+    if (dealError && !isMissingDealsTable(dealError)) throw dealError;
+
+    if (liveDeal?.product_names?.length) {
+      const { data: currentDealProducts, error: currentError } = await supabase
+        .from('products')
+        .select(['product', ...DEAL_PROTECTED_DB_FIELDS].join(','))
+        .in('product', liveDeal.product_names);
+      if (currentError) throw currentError;
+
+      const conflicts = liveDealProductConflicts({
+        submittedRows: rows,
+        currentRows: currentDealProducts || [],
+        productNames: liveDeal.product_names,
+      });
+      if (conflicts.length > 0) {
+        return NextResponse.json({
+          error: `Products changed after this tab loaded because a Weekly Deal is live. Refresh before saving. Protected: ${conflicts.join(', ')}`,
+          errorCode: 'live_deal_product_conflict',
+          products: conflicts,
+        }, { status: 409 });
+      }
+      rows = preserveLiveDealFields(rows, currentDealProducts || [], liveDeal.product_names);
+    }
+
     const activeIds = products.map((product) => product.id).filter(isExistingProductId);
 
     let deleteQuery = supabase.from('products').delete();
@@ -72,7 +123,6 @@ export async function PUT(request) {
     const { error: deleteError } = await deleteQuery;
     if (deleteError) throw deleteError;
 
-    const rows = products.map(productToDbRow);
     const itemsToUpdate = rows.filter((row) => row.id);
     const itemsToInsert = rows.filter((row) => !row.id);
 

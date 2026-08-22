@@ -34,6 +34,18 @@ test('a missing language is treated as Spanish', () => {
   assert.equal(buildTemplateParam('', '', false), 'Cliente');
 });
 
+test('message mode puts the composed deal copy into the template variable', () => {
+  const message = 'Deal for {{name}}\n\n15% off BPC-157\thttps://catalog.example/deal';
+  assert.equal(
+    buildTemplateParam('María', 'es', false, message, 'message'),
+    'Deal for María 15% off BPC-157 https://catalog.example/deal',
+  );
+  assert.equal(
+    buildTemplateParam('', 'en_US', false, 'Offer for {{name}}', 'message'),
+    'Offer for Customer',
+  );
+});
+
 test('the value is never empty, whatever it is given', () => {
   for (const name of ['', null, undefined, '   ', '\n']) {
     for (const lang of ['es', 'en_US', '', null]) {

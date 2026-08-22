@@ -23,6 +23,10 @@ const HOUR_MS = 60 * 60 * 1000;
 
 /** Free-text label written into products.discount while a deal is live. */
 export const DEAL_DISCOUNT_LABEL = 'Deal of the Week';
+export const DEAL_CATALOG_URL = 'https://catalog.peptidescostarica.net/catalog';
+export const DEAL_REVIEW_THRESHOLD_PCT = 30;
+export const DEAL_HARD_LIMIT_PCT = 50;
+export const DEAL_MAX_STACKED_DISCOUNT_PCT = 55;
 
 /**
  * Costa Rica wall-clock parts for an instant.
@@ -134,6 +138,63 @@ export function toPercent(discountPct) {
   return Math.round(value <= 1 ? value * 100 : value);
 }
 
+/** The real saving after the shelf markdown and an automatic volume tier stack. */
+export function stackedDiscountPercent(discountPct, volumePct = 0) {
+  const deal = Math.min(1, Math.max(0, Number(discountPct) || 0));
+  const volume = Math.min(1, Math.max(0, (Number(volumePct) || 0) / 100));
+  return Math.round((1 - ((1 - deal) * (1 - volume))) * 10000) / 100;
+}
+
+/**
+ * One shared guard for the preview and launch paths. A high markdown is allowed
+ * only after an explicit review, while a commercially dangerous combined
+ * markdown is refused outright.
+ */
+export function dealSafety(discountPct, { confirmedHighDiscount = false } = {}) {
+  const pct = toPercent(discountPct);
+  const stackedAtFive = stackedDiscountPercent(discountPct, 15);
+  const stackedAtTen = stackedDiscountPercent(discountPct, 20);
+
+  if (pct <= 0 || pct >= 100) {
+    return { ok: false, error: 'The discount must be between 1% and 99%.', pct, stackedAtFive, stackedAtTen };
+  }
+  if (pct > DEAL_HARD_LIMIT_PCT) {
+    return { ok: false, error: `A weekly deal cannot exceed ${DEAL_HARD_LIMIT_PCT}% off.`, pct, stackedAtFive, stackedAtTen };
+  }
+  if (stackedAtTen > DEAL_MAX_STACKED_DISCOUNT_PCT) {
+    return {
+      ok: false,
+      error: `With the 10+ vial discount this becomes ${stackedAtTen}% off, above the ${DEAL_MAX_STACKED_DISCOUNT_PCT}% safety limit.`,
+      pct,
+      stackedAtFive,
+      stackedAtTen,
+    };
+  }
+  if (pct >= DEAL_REVIEW_THRESHOLD_PCT && !confirmedHighDiscount) {
+    return {
+      ok: false,
+      needsConfirmation: true,
+      error: `Review required: ${pct}% becomes ${stackedAtTen}% off on 10+ vials.`,
+      pct,
+      stackedAtFive,
+      stackedAtTen,
+    };
+  }
+  return { ok: true, pct, stackedAtFive, stackedAtTen };
+}
+
+/** A deal-specific catalog destination that survives channel handoffs and attributes orders. */
+export function dealCatalogUrl(deal, baseUrl = DEAL_CATALOG_URL) {
+  const url = new URL(baseUrl);
+  if (deal?.id) url.searchParams.set('deal_id', String(deal.id));
+  url.searchParams.set('utm_source', 'weekly_deal');
+  url.searchParams.set('utm_medium', 'broadcast');
+  url.searchParams.set('utm_campaign', deal?.id ? `deal_${deal.id}` : 'weekly_deal');
+  const firstProduct = (deal?.product_names || []).find(Boolean);
+  if (firstProduct) url.searchParams.set('product', firstProduct);
+  return url.toString();
+}
+
 /**
  * Everything about a product row that a launch overwrites, so it can be put
  * back exactly. `discount` is in here because that column doubles as the
@@ -201,6 +262,48 @@ export function restorePayload(baseline) {
   };
 }
 
+const DEAL_TOUCHED_PRODUCT_FIELDS = [
+  'price_usd',
+  'price_crc',
+  'original_price_usd',
+  'original_price_crc',
+  'discount',
+  'sale_start_time',
+  'sale_end_time',
+];
+
+/**
+ * A price can be restored only while it still equals what this deal wrote.
+ * This prevents expiry from erasing a deliberate Products-tab edit made while
+ * the promotion was live. Legacy deals without an applied snapshot keep their
+ * old restore behaviour so an already-running promotion can still end.
+ */
+export function canSafelyRestoreProduct(current, applied) {
+  if (!applied || Object.keys(applied).length === 0) return true;
+  return DEAL_TOUCHED_PRODUCT_FIELDS.every((field) => (
+    (current?.[field] ?? null) === (applied?.[field] ?? null)
+  ));
+}
+
+/**
+ * Older live deals have a baseline but no record of every value launch wrote.
+ * Their USD price and sale metadata are still deterministic, so compare that
+ * fingerprint before restoring. CRC is deliberately omitted because the
+ * exchange rate used at launch was not stored on those rows.
+ */
+export function canSafelyRestoreLegacyProduct(current, baseline, deal) {
+  const expected = {
+    price_usd: formatUsdPrice(markdownUsd(baseline?.price_usd, deal?.discount_pct)),
+    original_price_usd: formatUsdPrice(parsePriceNumber(baseline?.price_usd)),
+    discount: `${toPercent(deal?.discount_pct)}% ${DEAL_DISCOUNT_LABEL}`,
+    sale_start_time: deal?.starts_at ?? null,
+    sale_end_time: deal?.ends_at ?? null,
+  };
+  return Object.entries(expected).every(([field, value]) => (
+    (current?.[field] ?? null) === (value ?? null)
+  ));
+}
+
 /** A deal counts as live only while it is inside its own window. */
 export function isDealLive(deal, now = new Date()) {
   if (!deal || deal.status !== 'live') return false;
@@ -253,10 +356,11 @@ export function dealBannerText(deal, lang = 'en') {
  * picker and confirmation every other broadcast uses, rather than letting a deal
  * launch mail the whole customer list on one click.
  */
-export function dealBroadcastDrafts(deal, { catalogUrl = 'https://peptidescostarica.net/catalog' } = {}) {
+export function dealBroadcastDrafts(deal, { catalogUrl } = {}) {
   const pct = toPercent(deal?.discount_pct);
   const namesEn = joinNames(deal?.product_names || [], 'and');
   const namesEs = joinNames(deal?.product_names || [], 'y');
+  const destination = catalogUrl || dealCatalogUrl(deal);
 
   return {
     emailSubject: `⚡ Deal of the Week: ${pct}% off ${namesEn}`,
@@ -271,7 +375,7 @@ export function dealBroadcastDrafts(deal, { catalogUrl = 'https://peptidescostar
       `Se suma a los descuentos por volumen (5+ viales 15%, 10+ viales 20%).`,
       `Termina el domingo a medianoche.`,
       '',
-      catalogUrl,
+      destination,
     ].join('\n'),
   };
 }

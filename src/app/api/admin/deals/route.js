@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { getLiveDeal, listDeals, previewDeal, launchDeal, endDeal } from '@/lib/dealsEngine';
+import { getLiveDeal, listDeals, getDealOperations, previewDeal, launchDeal, endDeal } from '@/lib/dealsEngine';
 
 export const runtime = 'nodejs';
 
@@ -13,7 +13,11 @@ export async function GET(request) {
   try {
     const supabase = getSupabaseAdmin();
     const [live, recent] = await Promise.all([getLiveDeal(supabase), listDeals(supabase)]);
-    return NextResponse.json({ live, recent });
+    const operations = live ? await getDealOperations(supabase, live) : null;
+    return NextResponse.json({
+      live: live && operations ? { ...live, ...operations } : live,
+      recent,
+    });
   } catch (err) {
     console.error('[admin/deals GET]', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
@@ -39,6 +43,7 @@ export async function POST(request) {
         discountPct: body.discount_pct,
         titleEn: body.title_en,
         titleEs: body.title_es,
+        confirmedHighDiscount: body.confirm_high_discount === true,
       }));
     }
 
@@ -49,6 +54,8 @@ export async function POST(request) {
         titleEn: body.title_en,
         titleEs: body.title_es,
         createdBy: auth.user?.id || null,
+        confirmedHighDiscount: body.confirm_high_discount === true,
+        allowUntrackedStock: body.allow_untracked_stock === true,
       });
       return NextResponse.json({ ok: true, ...result });
     }

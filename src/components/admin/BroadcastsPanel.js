@@ -19,6 +19,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   const [isDrafting, setIsDrafting] = useState(false);
   const [result, setResult] = useState(null);
   const [targetProducts, setTargetProducts] = useState([]);
+  const [sourceDealId, setSourceDealId] = useState(null);
   const [audienceEstimate, setAudienceEstimate] = useState(null);
   const [isEstimateLoading, setIsEstimateLoading] = useState(false);
 
@@ -201,8 +202,14 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
     if (draft.message) setMessage(draft.message);
     if (draft.emailSubject) setEmailSubject(draft.emailSubject);
     if (Array.isArray(draft.targetProducts)) setTargetProducts(draft.targetProducts);
+    setSourceDealId(draft.sourceDealId || null);
     // A deal is worth announcing on both channels; either can still be unticked.
-    setChannels((current) => ({ ...current, whatsapp: true, email: true }));
+    setChannels((current) => ({
+      ...current,
+      whatsapp: true,
+      email: true,
+      whatsappTemplateParamMode: draft.sourceDealId ? 'message' : (current.whatsappTemplateParamMode || 'name'),
+    }));
     setEmailFormat('simple');
     onDraftApplied?.();
   }, [draft, onDraftApplied]);
@@ -294,6 +301,8 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   const handleBroadcast = async () => {
     if (!message && !channels.whatsappTemplateName && !hasEmailHtml) return alert("Please enter a message, template name, or custom email HTML first.");
     if (channels.whatsapp && !message && !channels.whatsappTemplateName) return alert("WhatsApp is ticked but has nothing to send. Untick WhatsApp or write a message.");
+    if (channels.whatsapp && !channels.whatsappTemplateName) return alert("Choose an approved WhatsApp marketing template, or untick WhatsApp and send by email only. Free-form broadcasts cannot reliably reach customers outside the 24-hour window.");
+    if (channels.whatsapp && channels.whatsappTemplateParamMode === 'message' && !message.trim()) return alert("This template expects the Message Composer text in {{1}}.");
     if (audience === 'custom' && !customContacts.trim()) return alert("Please enter custom contacts.");
     const estimateText = displayedEstimate
       ? `${displayedEstimate.totalTargets} total, ${displayedEstimate.whatsappTargets} WhatsApp candidates, ${displayedEstimate.emailTargets} email candidates`
@@ -315,13 +324,22 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
           whatsappTemplateName: channels.whatsappTemplateName || undefined,
           whatsappTemplateLanguage: channels.whatsappTemplateLanguage || 'es',
           scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
-          enableBatching: channels.whatsapp // Automatically batch whatsapp to avoid limits
+          enableBatching: channels.whatsapp, // Automatically batch whatsapp to avoid limits
+          dealId: sourceDealId || null,
         })
       });
       const data = await res.json();
       if (res.ok) {
         setResult({ success: true, text: data.text || `Broadcast initiated successfully. Queued ${data.queuedCount} messages.` });
         if (audience === 'custom') setCustomContacts('');
+        if (sourceDealId) {
+          setChannels((current) => ({
+            ...current,
+            whatsappTemplateParamMode: 'name',
+            whatsappGreetingVariable: false,
+          }));
+        }
+        setSourceDealId(null);
         setScheduledAt('');
         fetchScheduled();
       } else {
@@ -722,13 +740,13 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
 
         {channels.whatsapp && (
           <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Meta WhatsApp Template (Optional)</label>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Approved Meta WhatsApp Template</label>
             <div style={{ display: 'flex', gap: '10px' }}>
               <input 
                 type="text"
                 className="admin-input"
                 style={{ flex: 1, background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '12px 16px', borderRadius: '8px', fontSize: '0.95rem' }}
-                placeholder="e.g. nuevos_productos_lanzamiento (if blank, sends as raw text)"
+                placeholder="e.g. nuevos_productos_lanzamiento"
                 value={channels.whatsappTemplateName || ''}
                 onChange={e => setChannels({ ...channels, whatsappTemplateName: e.target.value })}
               />
@@ -744,19 +762,32 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
             </div>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Use an approved template name to bypass the 24-hour window restriction and reach all leads.</p>
             {channels.whatsappTemplateName && (
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginTop: '10px', padding: '10px 12px', background: 'rgba(52, 211, 153, 0.06)', border: '1px solid rgba(52, 211, 153, 0.2)', borderRadius: '8px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(channels.whatsappGreetingVariable)}
-                  onChange={e => setChannels({ ...channels, whatsappGreetingVariable: e.target.checked })}
-                  style={{ marginTop: '2px', flexShrink: 0, width: '16px', height: '16px', accentColor: '#34d399' }}
-                />
-                <span style={{ fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.45 }}>
-                  <strong style={{ display: 'block', color: '#e2e8f0' }}>{'{{1}} is the whole greeting'}</strong>
-                  Tick this when the template starts with the variable (e.g. <code>{'👋 {{1}} ¡Retatrutide...'}</code>). Contacts with a name get “Hola María”; contacts without one get “¡Buenas!” instead of an English fallback.
-                  Leave unticked for templates where the greeting is already written in, like <code>{'¡Hola {{1}}!'}</code>.
-                </span>
-              </label>
+              <div style={{ marginTop: '10px', padding: '10px 12px', background: 'rgba(52, 211, 153, 0.06)', border: '1px solid rgba(52, 211, 153, 0.2)', borderRadius: '8px' }}>
+                <label style={{ display: 'block', color: '#e2e8f0', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                  What does {'{{1}}'} contain?
+                </label>
+                <select
+                  className="admin-input"
+                  value={channels.whatsappTemplateParamMode || (channels.whatsappGreetingVariable ? 'greeting' : 'name')}
+                  onChange={e => setChannels({
+                    ...channels,
+                    whatsappTemplateParamMode: e.target.value,
+                    whatsappGreetingVariable: e.target.value === 'greeting',
+                  })}
+                  style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155' }}
+                >
+                  <option value="name">Customer name</option>
+                  <option value="greeting">Whole greeting</option>
+                  <option value="message">Message Composer text</option>
+                </select>
+                <p style={{ fontSize: '0.76rem', color: '#cbd5e1', lineHeight: 1.45, margin: '7px 0 0' }}>
+                  {channels.whatsappTemplateParamMode === 'message'
+                    ? `Use an approved template whose {{1}} is the offer body. The complete Message Composer text will be inserted, including the Weekly Deal link.`
+                    : channels.whatsappTemplateParamMode === 'greeting'
+                      ? `Use when {{1}} is the whole greeting, such as “Hola María”.`
+                      : `Use when the approved template already says “Hola” and {{1}} is only the customer name.`}
+                </p>
+              </div>
             )}
           </div>
         )}

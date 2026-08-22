@@ -118,6 +118,11 @@ export async function PATCH(request) {
       return NextResponse.json({ error: 'Broadcast is already finished or was not found' }, { status: 409 });
     }
 
+    await supabase
+      .from('deals')
+      .update({ announcement_status: 'cancelled' })
+      .eq('broadcast_id', id);
+
     return NextResponse.json({ ok: true, broadcast: data });
   } catch (err) {
     console.error('[admin/broadcasts/progress/cancel]', err);

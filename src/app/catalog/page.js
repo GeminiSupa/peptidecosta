@@ -2175,8 +2175,21 @@ export default function CatalogPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (data.errorCode === 'price_changed' && Array.isArray(data.pricing?.products)) {
+          const currentByName = new Map(data.pricing.products.map((product) => [product.product, product]));
+          setProducts((current) => current.map((product) => (
+            currentByName.has(product.product)
+              ? { ...product, ...currentByName.get(product.product) }
+              : product
+          )));
+          setCart((current) => current.map((item) => (
+            currentByName.has(item.product)
+              ? { ...item, ...currentByName.get(item.product) }
+              : item
+          )));
+        }
         console.error('Order save failed:', data.error || res.statusText);
-        return { ok: false, error: data.error || res.statusText };
+        return { ok: false, error: data.error || res.statusText, errorCode: data.errorCode || null };
       }
       if (data.ok && sessionId) {
         const newSid = 'session_' + Math.random().toString(36).substring(2, 15);
@@ -2409,10 +2422,14 @@ export default function CatalogPage() {
       // Nothing was charged — worth saying, because "could not save your
       // order" on a card checkout otherwise reads as "did my card go through?"
       failCheckout(
-        lang === 'en' ? 'We could not save your order' : 'No pudimos guardar su pedido',
-        lang === 'en'
-          ? 'Your card has not been charged. Please press the button again — if it keeps failing, message us on WhatsApp and we will take the order for you.'
-          : 'No se ha realizado ningún cargo a su tarjeta. Presione el botón de nuevo — si sigue fallando, escríbanos por WhatsApp y tomamos su pedido.',
+        cardSave.errorCode === 'price_changed'
+          ? (lang === 'en' ? 'Your cart prices were updated' : 'Actualizamos los precios del carrito')
+          : (lang === 'en' ? 'We could not save your order' : 'No pudimos guardar su pedido'),
+        cardSave.errorCode === 'price_changed'
+          ? cardSave.error
+          : (lang === 'en'
+            ? 'Your card has not been charged. Please press the button again — if it keeps failing, message us on WhatsApp and we will take the order for you.'
+            : 'No se ha realizado ningún cargo a su tarjeta. Presione el botón de nuevo — si sigue fallando, escríbanos por WhatsApp y tomamos su pedido.'),
       );
       return;
     }
@@ -2593,10 +2610,14 @@ export default function CatalogPage() {
     if (!saveResult.ok) {
       setOrderSubmitting(false);
       failCheckout(
-        lang === 'en' ? 'We could not save your order' : 'No pudimos guardar su pedido',
-        lang === 'en'
-          ? 'Nothing has been sent yet and your cart is untouched. Press the button again — if it keeps failing, message us on WhatsApp and we will take the order for you.'
-          : 'Todavía no se ha enviado nada y su carrito sigue igual. Presione el botón de nuevo — si sigue fallando, escríbanos por WhatsApp y tomamos su pedido.',
+        saveResult.errorCode === 'price_changed'
+          ? (lang === 'en' ? 'Your cart prices were updated' : 'Actualizamos los precios del carrito')
+          : (lang === 'en' ? 'We could not save your order' : 'No pudimos guardar su pedido'),
+        saveResult.errorCode === 'price_changed'
+          ? saveResult.error
+          : (lang === 'en'
+            ? 'Nothing has been sent yet and your cart is untouched. Press the button again — if it keeps failing, message us on WhatsApp and we will take the order for you.'
+            : 'Todavía no se ha enviado nada y su carrito sigue igual. Presione el botón de nuevo — si sigue fallando, escríbanos por WhatsApp y tomamos su pedido.'),
       );
       return;
     }

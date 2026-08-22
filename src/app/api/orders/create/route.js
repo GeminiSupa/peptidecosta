@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
+import { isGiftLine, stripGiftSuffix } from '@/lib/bacWater.mjs';
+import { authoritativeCheckout, activeDealForOrder } from '@/lib/authoritativeCheckout.mjs';
+import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
 import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
@@ -348,6 +351,7 @@ export async function POST(request) {
     order.customer_name = nameCheck.name;
 
     const supabase = getSupabaseAdmin();
+    let resolvedPromo = null;
 
     try {
       const customer = await resolveCustomerOrderOwner(
@@ -365,13 +369,14 @@ export async function POST(request) {
     if (order.promo_code) {
       const { data: promoData } = await supabase
         .from('promo_codes')
-        .select('is_active, valid_from, valid_until, usage_limit, usage_count, once_per_customer, min_units, max_units')
+        .select('is_active, valid_from, valid_until, usage_limit, usage_count, once_per_customer, min_units, max_units, discount_pct, target_product, is_flash_sale')
         .eq('code', order.promo_code.toUpperCase())
         .single();
         
       if (!promoData) {
         return NextResponse.json({ error: 'Invalid promo code' }, { status: 400 });
       }
+      resolvedPromo = promoData;
       if (!promoData.is_active) {
         return NextResponse.json({ error: 'Promo code is inactive' }, { status: 400 });
       }
@@ -392,7 +397,10 @@ export async function POST(request) {
       // The browser already blocks this, but the browser is not the authority:
       // a capped intro code ("up to 4") is worth real money on a 30-vial order,
       // so the cart size is verified once more before anything is saved.
-      const unitCheck = checkUnitLimits(promoData, countCartUnits(order.items));
+      const unitCheck = checkUnitLimits(
+        promoData,
+        countCartUnits(order.items.filter((item) => !isGiftLine(item))),
+      );
       if (!unitCheck.ok) {
         return NextResponse.json({
           error: unitLimitsMessage(promoData, unitCheck.unitCount, order.lang || 'es'),
@@ -421,6 +429,67 @@ export async function POST(request) {
         }
       }
     }
+
+    // Rebuild every public order from current product rows. A saved browser cart
+    // can straddle a deal start/end, and callers can edit posted prices; neither
+    // is allowed to decide what the customer is charged.
+    const requestedProductNames = [...new Set(order.items
+      .filter((item) => !isGiftLine(item))
+      .map((item) => stripGiftSuffix(item?.product || item?.name))
+      .filter(Boolean))];
+    const [{ data: currentProducts, error: productError }, rateResult] = await Promise.all([
+      supabase
+        .from('products')
+        .select('id,product,price_usd,price_crc,status,inventory_count')
+        .in('product', requestedProductNames),
+      getDatabaseBackedUsdToCrcRate(),
+    ]);
+    if (productError) {
+      return NextResponse.json({ error: `Could not verify current prices: ${productError.message}` }, { status: 503 });
+    }
+    const authoritative = authoritativeCheckout({
+      postedOrder: order,
+      products: currentProducts || [],
+      promo: resolvedPromo,
+      exchangeRate: rateResult.rate,
+    });
+    if (!authoritative.ok) {
+      return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });
+    }
+    if (authoritative.changed) {
+      return NextResponse.json({
+        error: orderLang === 'en'
+          ? 'A product price changed while this cart was open. We updated the cart; review the new total and submit again.'
+          : 'El precio de un producto cambió mientras el carrito estaba abierto. Actualizamos el carrito; revise el nuevo total y envíe de nuevo.',
+        errorCode: 'price_changed',
+        pricing: authoritative,
+      }, { status: 409 });
+    }
+
+    order.items = authoritative.items;
+    order.total_usd = authoritative.totalUsd;
+    order.total_crc = authoritative.totalCrc;
+    order.discount_amount_usd = order.currency === 'USD'
+      ? authoritative.promoDiscount
+      : Number((authoritative.promoDiscount / rateResult.rate).toFixed(2));
+    order.discount_amount_crc = order.currency === 'CRC'
+      ? authoritative.promoDiscount
+      : Math.round(authoritative.promoDiscount * rateResult.rate);
+    order.shipping_cost_usd = order.currency === 'USD'
+      ? authoritative.shipping
+      : Number((authoritative.shipping / rateResult.rate).toFixed(2));
+    order.shipping_cost_crc = order.currency === 'CRC'
+      ? authoritative.shipping
+      : Math.round(authoritative.shipping * rateResult.rate);
+
+    // Attribution is derived from the live deal and the products actually
+    // priced, never from a query parameter supplied by the shopper.
+    const { data: liveDeals } = await supabase
+      .from('deals')
+      .select('id,status,starts_at,ends_at,product_names')
+      .eq('status', 'live');
+    const matchedDeal = activeDealForOrder(liveDeals || [], order.items);
+    if (matchedDeal) order.deal_id = matchedDeal.id;
 
     // A marketing tag must never cost us the sale. A free-text campaign name
     // reaching a uuid column used to fail the whole insert, which broke
@@ -459,7 +528,7 @@ export async function POST(request) {
     // than its marketing tag.
     let { data, error, droppedColumns } = await writeDroppingMissingColumns(
       orderRow,
-      ['utm_campaign'],
+      ['utm_campaign', 'deal_id'],
       (row) => supabase.from('orders').insert(row).select('id, order_number').single(),
     );
     if (droppedColumns?.length) {

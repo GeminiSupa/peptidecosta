@@ -5538,6 +5538,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'deals' && (
           <DealOfWeekPanel
             products={products}
+            onProductsChanged={loadAdminData}
             onSendAnnouncement={(draft) => {
               // Launching a deal only drafts the announcement. Handing it to the
               // Announcements panel keeps the actual send behind that screen's

@@ -10,15 +10,22 @@
  * and unit-tested. This file is only the database side of it.
  */
 
+import { randomUUID } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
+import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import { orderCountsAsSale, totalNetRevenue } from '@/lib/orderRevenue.mjs';
 import {
   weekWindow,
   snapshotBaseline,
   buildMarkdown,
   restorePayload,
+  canSafelyRestoreProduct,
+  canSafelyRestoreLegacyProduct,
   dealBannerText,
   dealBroadcastDrafts,
+  dealCatalogUrl,
+  dealSafety,
   toPercent,
 } from '@/lib/dealOfWeek.mjs';
 
@@ -46,6 +53,112 @@ export async function listDeals(supabase, limit = 10) {
 
   if (error) throw new Error(`Could not list deals: ${error.message}`);
   return data || [];
+}
+
+/** Operational truth for the live-deal card: storefront health, delivery and sales. */
+export async function getDealOperations(supabase, deal) {
+  if (!deal) return null;
+
+  const [{ data: products, error: productsError }, banners] = await Promise.all([
+    supabase
+      .from('products')
+      .select('id,product,price_usd,price_crc,original_price_usd,original_price_crc,discount,sale_start_time,sale_end_time,status,inventory_count')
+      .in('product', deal.product_names || []),
+    readBanners(supabase),
+  ]);
+  if (productsError) throw new Error(`Could not verify deal products: ${productsError.message}`);
+
+  const productHealth = (products || []).map((product) => ({
+    product: product.product,
+    status: product.status,
+    inventoryCount: product.inventory_count,
+    priceUsd: product.price_usd,
+    matchesDeal: deal.applied?.[product.id]
+      ? canSafelyRestoreProduct(product, deal.applied[product.id])
+      : String(product.discount || '').includes('Deal of the Week'),
+  }));
+  const banner = banners.find((item) => item?.id === deal.banner_id || item?.dealId === deal.id) || null;
+
+  let broadcast = null;
+  let broadcastId = deal.broadcast_id || null;
+  let delivery = { delivered: 0, failed: 0, suppressed: 0, processing: 0 };
+  // Deals launched before the process migration cannot have a durable
+  // broadcast_id. Correlate only inside the deal window and only when the copy
+  // names one of its products, so the live card does not invite an accidental
+  // duplicate send after the migration is installed.
+  if (!broadcastId && deal.product_names?.[0]) {
+    const { data: legacyBroadcasts } = await supabase
+      .from('scheduled_broadcasts')
+      .select('id,status,scheduled_at,created_at,channels')
+      .gte('created_at', deal.starts_at)
+      .lte('created_at', deal.ends_at)
+      .ilike('message', `%${String(deal.product_names[0]).replace(/[%_]/g, '')}%`)
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (legacyBroadcasts?.[0]) {
+      broadcast = legacyBroadcasts[0];
+      broadcastId = broadcast.id;
+    }
+  }
+
+  if (broadcastId) {
+    const { data } = await supabase
+      .from('scheduled_broadcasts')
+      .select('id,status,scheduled_at,created_at,channels')
+      .eq('id', broadcastId)
+      .maybeSingle();
+    broadcast = data || broadcast;
+
+    const { data: events } = await supabase
+      .from('marketing_delivery_events')
+      .select('status')
+      .eq('broadcast_id', broadcastId);
+    for (const event of events || []) {
+      const status = String(event.status || '').toLowerCase();
+      if (status in delivery) delivery[status] += 1;
+    }
+  }
+
+  let orders = [];
+  let attributionReady = true;
+  const orderResult = await supabase
+    .from('orders')
+    .select('status,items,total_usd,total_crc,refunded_amount_usd,refunded_amount_crc')
+    .eq('deal_id', deal.id);
+  if (orderResult.error) attributionReady = false;
+  else orders = orderResult.data || [];
+
+  const sales = orders.filter(orderCountsAsSale);
+  const targetNames = new Set((deal.product_names || []).map((name) => String(name).toLowerCase()));
+  const units = sales.reduce((sum, order) => sum + (order.items || []).reduce((lineSum, item) => (
+    targetNames.has(String(item?.product || item?.name || '').toLowerCase())
+      ? lineSum + Number(item?.qty || item?.quantity || 0)
+      : lineSum
+  ), 0), 0);
+
+  return {
+    health: {
+      ok: Date.now() <= Date.parse(deal.ends_at)
+        && productHealth.length === (deal.product_names || []).length
+        && productHealth.every((product) => product.matchesDeal)
+        && Boolean(banner?.isActive),
+      bannerPresent: Boolean(banner),
+      bannerActive: Boolean(banner?.isActive),
+      products: productHealth,
+    },
+    announcement: {
+      status: broadcast?.status || deal.announcement_status || 'not_sent',
+      broadcast,
+      delivery,
+    },
+    metrics: {
+      attributionReady,
+      orders: sales.length,
+      targetUnits: units,
+      revenue: totalNetRevenue(sales),
+    },
+    drafts: deal.announcement_drafts || dealBroadcastDrafts(deal),
+  };
 }
 
 async function readBanners(supabase) {
@@ -88,6 +201,7 @@ async function upsertDealBanner(supabase, deal) {
     dealId: deal.id,
     textEn: dealBannerText(deal, 'en'),
     textEs: dealBannerText(deal, 'es'),
+    href: dealCatalogUrl(deal),
     isActive: true,
   };
 
@@ -118,12 +232,12 @@ async function removeDealBanner(supabase, deal) {
  * discount that was never applied, which the customer discovers at checkout.
  */
 async function resolveProducts(supabase, productNames) {
-  const wanted = (productNames || []).map((name) => String(name || '').trim()).filter(Boolean);
+  const wanted = [...new Set((productNames || []).map((name) => String(name || '').trim()).filter(Boolean))];
   if (wanted.length === 0) throw new Error('Pick at least one product for the deal.');
 
   const { data, error } = await supabase
     .from('products')
-    .select('id, product, price_usd, price_crc, original_price_usd, original_price_crc, discount, sale_start_time, sale_end_time')
+    .select('id, product, price_usd, price_crc, original_price_usd, original_price_crc, discount, sale_start_time, sale_end_time, status, inventory_count, low_stock_threshold')
     .in('product', wanted);
 
   if (error) throw new Error(`Could not read products: ${error.message}`);
@@ -153,13 +267,21 @@ async function resolveProducts(supabase, productNames) {
  * review and send through the existing Announcements panel, so launching a deal
  * can never mail the whole customer list on a single click.
  */
-export async function launchDeal({ productNames, discountPct, titleEn, titleEs, createdBy, now = new Date() }) {
+export async function launchDeal({
+  productNames,
+  discountPct,
+  titleEn,
+  titleEs,
+  createdBy,
+  confirmedHighDiscount = false,
+  allowUntrackedStock = false,
+  now = new Date(),
+}) {
   const supabase = getSupabaseAdmin();
 
   const pct = Number(discountPct);
-  if (!Number.isFinite(pct) || pct <= 0 || pct >= 1) {
-    throw new Error('The discount must be a fraction between 0 and 1 (0.15 for 15%).');
-  }
+  const safety = dealSafety(pct, { confirmedHighDiscount });
+  if (!safety.ok) throw new Error(safety.error);
 
   const alreadyLive = await getLiveDeal(supabase);
   if (alreadyLive) {
@@ -169,19 +291,42 @@ export async function launchDeal({ productNames, discountPct, titleEn, titleEs, 
   }
 
   const products = await resolveProducts(supabase, productNames);
+  const unavailable = products.filter((product) => (
+    product.status !== 'In Stock' || Number(product.inventory_count) === 0
+  ));
+  if (unavailable.length > 0) {
+    throw new Error(`These products cannot be promoted because they are not available: ${unavailable.map((p) => p.product).join(', ')}`);
+  }
+  const untracked = products.filter((product) => product.inventory_count === null);
+  if (untracked.length > 0 && !allowUntrackedStock) {
+    throw new Error(`Confirm untracked stock before launch: ${untracked.map((p) => p.product).join(', ')}`);
+  }
   const window = weekWindow(now);
   const { rate } = await getDatabaseBackedUsdToCrcRate();
 
   // Snapshot before touching anything. If the markdown loop fails partway, this
   // is the only record of what the prices were.
   const baseline = {};
+  const applied = {};
   for (const product of products) {
     baseline[product.id] = snapshotBaseline(product);
+    applied[product.id] = buildMarkdown(baseline[product.id], pct, window, rate);
   }
 
-  const { data: deal, error: insertError } = await supabase
-    .from('deals')
-    .insert([{
+  const dealId = randomUUID();
+  const draftDeal = {
+    id: dealId,
+    title_en: String(titleEn || '').trim() || null,
+    title_es: String(titleEs || '').trim() || null,
+    product_names: products.map((p) => p.product),
+    discount_pct: pct,
+    starts_at: window.startsAt,
+    ends_at: window.endsAt,
+    status: 'live',
+  };
+  const drafts = dealBroadcastDrafts(draftDeal);
+  const insertPayload = {
+      id: dealId,
       title_en: String(titleEn || '').trim() || null,
       title_es: String(titleEs || '').trim() || null,
       product_names: products.map((p) => p.product),
@@ -190,56 +335,85 @@ export async function launchDeal({ productNames, discountPct, titleEn, titleEs, 
       ends_at: window.endsAt,
       status: 'live',
       baseline,
+      applied,
+      announcement_drafts: drafts,
+      announcement_status: 'not_sent',
       created_by: createdBy || null,
-    }])
-    .select('*')
-    .single();
+  };
+  const { data: deal, error: insertError, droppedColumns } = await writeDroppingMissingColumns(
+    insertPayload,
+    ['applied', 'announcement_drafts', 'announcement_status'],
+    (row) => supabase.from('deals').insert([row]).select('*').single(),
+  );
 
   if (insertError) {
     // The unique index on live deals is the backstop for two launches racing.
     throw new Error(`Could not create the deal: ${insertError.message}`);
   }
 
-  // Mark the products down. On any failure, roll the whole thing back from the
-  // baseline we just stored so a half-discounted catalog cannot survive the
-  // request.
+  // Product updates, banner creation and the durable banner pointer are one
+  // recoverable saga. Every ordinary failure rolls prices and banners back;
+  // the `applied` snapshot stored before touching products lets the health card
+  // identify an interrupted process after a hard platform termination.
   try {
     for (const product of products) {
-      const markdown = buildMarkdown(baseline[product.id], pct, window, rate);
-      const { error } = await supabase.from('products').update(markdown).eq('id', product.id);
+      const { error } = await supabase.from('products').update(applied[product.id]).eq('id', product.id);
       if (error) throw new Error(`${product.product}: ${error.message}`);
     }
+
+    const dealWithDrafts = { ...deal, ...draftDeal, applied, announcement_drafts: drafts };
+    const bannerId = await upsertDealBanner(supabase, dealWithDrafts);
+    const bannerUpdate = await supabase.from('deals').update({ banner_id: bannerId }).eq('id', deal.id);
+    if (bannerUpdate.error) throw new Error(`Could not save the banner link: ${bannerUpdate.error.message}`);
+
+    return {
+      deal: { ...dealWithDrafts, banner_id: bannerId, schemaReady: droppedColumns.length === 0 },
+      window,
+      exchangeRate: rate,
+      safety,
+      products: products.map((p) => ({
+        product: p.product,
+        was: baseline[p.id].price_usd,
+        now: applied[p.id].price_usd,
+        inventoryCount: p.inventory_count,
+      })),
+      drafts,
+    };
   } catch (err) {
-    await restoreProducts(supabase, baseline);
+    await removeDealBanner(supabase, { ...deal, id: dealId });
+    await restoreProducts(supabase, baseline, applied, { safe: false });
     await supabase
       .from('deals')
       .update({ status: 'ended', ended_at: new Date().toISOString() })
       .eq('id', deal.id);
-    throw new Error(`Markdown failed and was rolled back — ${err.message}`);
+    throw new Error(`Deal launch failed and was rolled back — ${err.message}`);
   }
-
-  const bannerId = await upsertDealBanner(supabase, deal);
-  await supabase.from('deals').update({ banner_id: bannerId }).eq('id', deal.id);
-
-  return {
-    deal: { ...deal, banner_id: bannerId },
-    window,
-    exchangeRate: rate,
-    products: products.map((p) => ({
-      product: p.product,
-      was: baseline[p.id].price_usd,
-      now: buildMarkdown(baseline[p.id], pct, window, rate).price_usd,
-    })),
-    drafts: dealBroadcastDrafts({ ...deal, banner_id: bannerId }),
-  };
 }
 
 /** Replay every baseline entry back onto its product row. */
-async function restoreProducts(supabase, baseline) {
+async function restoreProducts(supabase, baseline, applied = {}, { safe = true, deal = null } = {}) {
   const restored = [];
   const failures = [];
 
   for (const [productId, snapshot] of Object.entries(baseline || {})) {
+    if (safe) {
+      const { data: current, error: readError } = await supabase
+        .from('products')
+        .select('price_usd,price_crc,original_price_usd,original_price_crc,discount,sale_start_time,sale_end_time')
+        .eq('id', productId)
+        .maybeSingle();
+      if (readError) {
+        failures.push(`${snapshot.product}: could not verify current price (${readError.message})`);
+        continue;
+      }
+      const matchesLaunch = applied?.[productId]
+        ? canSafelyRestoreProduct(current, applied[productId])
+        : canSafelyRestoreLegacyProduct(current, snapshot, deal);
+      if (!matchesLaunch) {
+        failures.push(`${snapshot.product}: changed manually during the deal; review it in Products`);
+        continue;
+      }
+    }
     const { error } = await supabase
       .from('products')
       .update(restorePayload(snapshot))
@@ -266,7 +440,12 @@ export async function endDeal(deal) {
   const supabase = getSupabaseAdmin();
   if (!deal) throw new Error('No deal to end.');
 
-  const { restored, failures } = await restoreProducts(supabase, deal.baseline);
+  const { restored, failures } = await restoreProducts(
+    supabase,
+    deal.baseline,
+    deal.applied,
+    { deal },
+  );
 
   // The banner comes down even if a price restore failed — an advertised
   // discount that is no longer being honoured is the worse of the two states.
@@ -320,13 +499,12 @@ export async function expireDueDeals(now = new Date()) {
  * Lets the panel show the resolved Sunday and the real before/after prices
  * before the admin commits.
  */
-export async function previewDeal({ productNames, discountPct, titleEn, titleEs, now = new Date() }) {
+export async function previewDeal({ productNames, discountPct, titleEn, titleEs, confirmedHighDiscount = false, now = new Date() }) {
   const supabase = getSupabaseAdmin();
 
   const pct = Number(discountPct);
-  if (!Number.isFinite(pct) || pct <= 0 || pct >= 1) {
-    throw new Error('The discount must be a fraction between 0 and 1 (0.15 for 15%).');
-  }
+  const safety = dealSafety(pct, { confirmedHighDiscount });
+  if (!safety.ok && !safety.needsConfirmation) throw new Error(safety.error);
 
   const products = await resolveProducts(supabase, productNames);
   const window = weekWindow(now);
@@ -343,6 +521,7 @@ export async function previewDeal({ productNames, discountPct, titleEn, titleEs,
     window,
     exchangeRate: rate,
     percent: toPercent(pct),
+    safety,
     liveDeal: await getLiveDeal(supabase),
     products: products.map((product) => {
       const baseline = snapshotBaseline(product);
@@ -353,6 +532,9 @@ export async function previewDeal({ productNames, discountPct, titleEn, titleEs,
         nowUsd: markdown.price_usd,
         wasCrc: baseline.price_crc,
         nowCrc: markdown.price_crc,
+        inventoryCount: product.inventory_count,
+        stockTracked: product.inventory_count !== null,
+        status: product.status,
       };
     }),
     banner: { en: dealBannerText(draftDeal, 'en'), es: dealBannerText(draftDeal, 'es') },
