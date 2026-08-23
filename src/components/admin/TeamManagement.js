@@ -1606,7 +1606,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   <NotificationToggle
                     icon={<Mail size={14} style={{ color: '#f59e0b' }} />}
                     title="Eligible for landing leads"
-                    hint="Include this staff member in round-robin assignment and email them their assigned lead."
+                    hint="Email this staff member the landing-page leads assigned to them."
                     checked={formNotificationsEnabled && formLeadEmails}
                     onChange={setFormLeadEmails}
                     activeColor="#f59e0b"
@@ -1614,25 +1614,33 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                   <NotificationToggle
                     icon={<MessageCircle size={14} style={{ color: '#22c55e' }} />}
                     title="WhatsApp for new orders"
-                    hint="Requires a WhatsApp number with country code."
+                    hint="Sends this member a WhatsApp for every new order. Their lead alerts do not need this on."
                     checked={formNotificationsEnabled && formOrderWhatsApp}
                     onChange={setFormOrderWhatsApp}
                     activeColor="#22c55e"
                   />
-                  <input
-                    className="admin-input"
-                    value={formWhatsAppNumber}
-                    onChange={e => setFormWhatsAppNumber(e.target.value)}
-                    disabled={!formNotificationsEnabled || !formOrderWhatsApp}
-                    placeholder="50684046973"
-                    style={{
-                      width: '100%',
-                      marginTop: '8px',
-                      background: (!formNotificationsEnabled || !formOrderWhatsApp) ? 'rgba(255,255,255,0.03)' : '#0e1626',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      color: (!formNotificationsEnabled || !formOrderWhatsApp) ? '#64748b' : '#f8fafc'
-                    }}
-                  />
+                  {/* Not gated on the order toggle above. This number is also where
+                      a lead assigned to this member is sent, so requiring the order
+                      switch to be flipped just to type it in meant the only way to
+                      reach an agent about their own lead was to also sign them up
+                      for an alert on every order in the shop. */}
+                  <label style={{ display: 'block', marginTop: 10, color: '#94a3b8', fontSize: '.72rem' }}>
+                    WhatsApp number — country code, no symbols. Used for their assigned leads, and for order alerts if switched on above.
+                    <input
+                      className="admin-input"
+                      value={formWhatsAppNumber}
+                      onChange={e => setFormWhatsAppNumber(e.target.value)}
+                      disabled={!formNotificationsEnabled}
+                      placeholder="50684046973"
+                      style={{
+                        width: '100%',
+                        marginTop: '6px',
+                        background: !formNotificationsEnabled ? 'rgba(255,255,255,0.03)' : '#0e1626',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        color: !formNotificationsEnabled ? '#64748b' : '#f8fafc'
+                      }}
+                    />
+                  </label>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>

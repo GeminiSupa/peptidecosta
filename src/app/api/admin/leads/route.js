@@ -201,7 +201,7 @@ export async function POST(request) {
             action: decision.source === 'order_history' ? 'auto_assigned' : 'claimed',
             newAgent: decision.owner,
             reason: decision.source === 'order_history'
-              ? 'Returning customer: earliest completed order owner'
+              ? 'Returning customer: already owned via orders or CRM leads'
               : 'First CRM claim',
           });
         }
@@ -282,7 +282,7 @@ export async function POST(request) {
       action: decision.source === 'order_history' ? 'auto_assigned' : 'created',
       newAgent: decision.owner || null,
       reason: decision.source === 'order_history'
-        ? 'Returning customer: earliest completed order owner'
+        ? 'Returning customer: already owned via orders or CRM leads'
         : 'Created and claimed in CRM',
     });
 
@@ -292,7 +292,7 @@ export async function POST(request) {
       owner: decision.owner || null,
       lead: created,
       message: decision.source === 'order_history'
-        ? `Lead added, but order history keeps this customer with ${decision.owner}.`
+        ? `Lead added, but this customer already belongs to ${decision.owner}.`
         : `Lead added and assigned to ${decision.owner}.`,
     }, { status: 201 });
   } catch (error) {

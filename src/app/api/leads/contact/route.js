@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
-import { resolveLeadOwner } from '@/lib/leadOwner';
+import { resolveLeadOwnerDetailed } from '@/lib/leadOwner';
+import { loadLandingLeadSettings, resolveCampaignAgent } from '@/lib/leadCampaignAgent';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { rateLimit } from '@/lib/rateLimit.mjs';
 import nodemailer from 'nodemailer';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
-import { getLeadNotificationRecipients } from '@/lib/leadNotificationRecipients';
+import { getLeadAlertAudience } from '@/lib/leadNotificationRecipients';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { enqueueAndProcessLeadNotification } from '@/lib/leadNotificationDelivery';
 import { responseDeadline } from '@/lib/leadNotifications.mjs';
-import { DEFAULT_LANDING_LEAD_SETTINGS, LANDING_LEAD_SETTINGS_ID, normalizeLandingLeadSettings } from '@/lib/landingLeadSettings.mjs';
 import {
   hasLandingQualification,
   landingQualificationNotes,
@@ -42,58 +42,6 @@ const escapeHtml = (value = '') => String(value)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
-// The single agent every landing lead goes to while assignmentMode is 'fixed'.
-// Returns null rather than throwing if that agent has since been deactivated or
-// lost the leads permission, so the caller falls back to rotation: a campaign
-// lead must never be left unowned because a setting went stale.
-async function fixedAssignmentAgent(supabase, email) {
-  const wanted = String(email || '').trim().toLowerCase();
-  if (!wanted) return null;
-  const { data: profiles, error } = await supabase.from('admin_profiles').select('*');
-  if (error) throw error;
-  const match = (profiles || []).find((profile) =>
-    String(profile.email || '').trim().toLowerCase() === wanted
-  );
-  if (!match) {
-    console.warn(`[leads/contact] Fixed assignee ${wanted} is not a team member; falling back to round-robin.`);
-    return null;
-  }
-  const eligible = (match.status || 'active') === 'active'
-    && Array.isArray(match.permissions) && match.permissions.includes('leads');
-  if (!eligible) {
-    console.warn(`[leads/contact] Fixed assignee ${wanted} is inactive or lacks the leads permission; falling back to round-robin.`);
-    return null;
-  }
-  return { agent_name: match.name || match.email, agent_email: match.email };
-}
-
-async function fallbackRoundRobinAgent(supabase) {
-  const { data: profiles, error: profileError } = await supabase.from('admin_profiles').select('*');
-  if (profileError) throw profileError;
-  const eligible = (profiles || [])
-    .filter((profile) => profile.user_id && profile.email)
-    .filter((profile) => profile.is_superadmin !== true)
-    .filter((profile) => (profile.tier || 'staff') === 'staff' && (profile.status || 'active') === 'active')
-    .filter((profile) => profile.notifications_enabled !== false && profile.lead_email_notifications !== false)
-    .filter((profile) => Array.isArray(profile.permissions) && profile.permissions.includes('leads'))
-    .sort((left, right) => String(left.name || left.email).localeCompare(String(right.name || right.email), undefined, { sensitivity: 'base' }));
-  if (!eligible.length) return null;
-
-  const { data: latest } = await supabase
-    .from('catalog_leads')
-    .select('sales_agent, notes, created_at')
-    .ilike('notes', 'Contáctenos form%')
-    .not('sales_agent', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const lastIndex = eligible.findIndex((profile) =>
-    String(profile.name || profile.email).trim().toLowerCase() === String(latest?.sales_agent || '').trim().toLowerCase()
-  );
-  const next = eligible[(lastIndex + 1) % eligible.length];
-  return { agent_name: next.name || next.email, agent_email: next.email, agent_user_id: next.user_id };
-}
-
 async function sendLandingLeadAlert({
   supabase,
   leadId,
@@ -105,7 +53,6 @@ async function sendLandingLeadAlert({
   qualification,
   campaign,
   assignedAgent,
-  assignedAgentEmail,
   dueAt,
   slaMinutes,
 }) {
@@ -126,7 +73,7 @@ async function sendLandingLeadAlert({
     return { outbox: false, emailSent: false };
   }
 
-  const recipients = await getLeadNotificationRecipients(assignedAgentEmail, { source });
+  const { emails: recipients } = await getLeadAlertAudience(supabase, { source, owner: assignedAgent });
   if (!recipients.length) return { outbox: false, emailSent: false };
 
   const details = landingQualificationNotes(qualification);
@@ -246,17 +193,7 @@ export async function POST(request) {
     }
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    let landingSettings = DEFAULT_LANDING_LEAD_SETTINGS;
-    try {
-      const { data: settingsRow } = await supabase
-        .from('site_settings')
-        .select('value')
-        .eq('id', LANDING_LEAD_SETTINGS_ID)
-        .maybeSingle();
-      landingSettings = normalizeLandingLeadSettings(settingsRow?.value);
-    } catch (settingsError) {
-      console.warn('[leads/contact] Lead settings fallback:', settingsError.message);
-    }
+    const landingSettings = await loadLandingLeadSettings(supabase);
 
     // Email is the more stable identity, so it wins as the dedupe key when the
     // visitor gives both. This matches how live chat saves its leads.
@@ -275,62 +212,32 @@ export async function POST(request) {
     // existing owner is never overwritten — an agent who already claimed this
     // lead outranks anything history says.
     const existingOwner = String(existing?.sales_agent || existing?.owner || existing?.assigned_to || '').trim();
-    let owner = await resolveLeadOwner(supabase, {
+    const resolvedOwner = await resolveLeadOwnerDetailed(supabase, {
       phone,
       email,
       existingOwner,
       label: 'leads/contact',
     });
-    const historyAgent = existingOwner ? '' : owner;
-    let assignedAgentEmail = '';
-    let assignmentSource = historyAgent ? 'order_history' : existingOwner ? 'existing_owner' : '';
+    let owner = resolvedOwner.agent;
+    let assignmentSource = resolvedOwner.source === 'existing' ? 'existing_owner' : resolvedOwner.source;
 
     // A contact an agent already owns keeps that agent: whoever is mid-conversation
     // outranks the campaign setting, so pointing AdWords at one agent never yanks
     // a lead away from the colleague already working it.
-    if (!owner && hasLandingQualification(qualification) && landingSettings.assignmentMode === 'fixed') {
-      try {
-        const agent = await fixedAssignmentAgent(supabase, landingSettings.assignedAgentEmail);
-        if (agent) {
-          owner = clean(agent.agent_name, 160);
-          assignedAgentEmail = clean(agent.agent_email, 200).toLowerCase();
-          if (owner) assignmentSource = 'fixed_agent';
-        }
-      } catch (fixedError) {
-        console.warn('[leads/contact] Fixed assignment lookup failed, falling back to round-robin:', fixedError.message);
-      }
-    }
-
+    //
+    // Nothing picks up a lead this leaves unowned. That is deliberate: rotation
+    // was removed because it had never assigned a single lead in production, and
+    // an unowned lead is visible and claimable in the Leads tab, whereas one
+    // handed to a deactivated agent looks handled and goes cold.
     if (!owner && hasLandingQualification(qualification)) {
       try {
-        const { data: assigned, error: assignError } = await supabase.rpc('assign_next_landing_lead_agent');
-        if (assignError) throw assignError;
-        const agent = Array.isArray(assigned) ? assigned[0] : assigned;
-        owner = clean(agent?.agent_name, 160);
-        assignedAgentEmail = clean(agent?.agent_email, 200).toLowerCase();
-        if (owner) assignmentSource = 'round_robin';
-      } catch (assignError) {
-        console.warn('[leads/contact] Atomic round-robin unavailable, using CRM-history fallback:', assignError.message);
-        try {
-          const agent = await fallbackRoundRobinAgent(supabase);
-          owner = clean(agent?.agent_name, 160);
-          assignedAgentEmail = clean(agent?.agent_email, 200).toLowerCase();
-          if (owner) assignmentSource = 'round_robin';
-        } catch (fallbackError) {
-          console.warn('[leads/contact] Round-robin fallback skipped:', fallbackError.message);
+        const campaignAgent = await resolveCampaignAgent(supabase, landingSettings);
+        if (campaignAgent?.name) {
+          owner = campaignAgent.name;
+          assignmentSource = 'fixed_agent';
         }
-      }
-    } else if (owner) {
-      try {
-        const { data: agentProfiles } = await supabase
-          .from('admin_profiles')
-          .select('name, email');
-        const agentProfile = (agentProfiles || []).find((profile) =>
-          [profile.name, profile.email].some((value) => String(value || '').trim().toLowerCase() === owner.toLowerCase())
-        );
-        assignedAgentEmail = clean(agentProfile?.email, 200).toLowerCase();
-      } catch (profileError) {
-        console.warn('[leads/contact] Assigned agent email lookup skipped:', profileError.message);
+      } catch (fixedError) {
+        console.warn('[leads/contact] Campaign agent lookup failed; lead saved unassigned:', fixedError.message);
       }
     }
 
@@ -348,8 +255,8 @@ export async function POST(request) {
       phone ? `Phone (WhatsApp/SMS): ${phone}` : null,
       // Mirrored into the note as well, because `sales_agent` is dropped below
       // if the live table lacks the column — the owner must stay visible.
-      historyAgent ? `Owner: ${historyAgent} (returning customer — first closed by this agent)` : null,
-      assignmentSource === 'round_robin' ? `Owner: ${owner} (automatic round-robin assignment)` : null,
+      assignmentSource === 'order_history' ? `Owner: ${owner} (returning customer — first closed by this agent)` : null,
+      assignmentSource === 'crm_lead' ? `Owner: ${owner} (already this agent's lead in the CRM — not a new prospect)` : null,
       assignmentSource === 'fixed_agent' ? `Owner: ${owner} (campaign leads are set to go to this agent)` : null,
       dueAt ? `Response due: ${dueAt}` : null,
       marketingConsent ? `Marketing consent: accepted (${consentVersion || 'version not recorded'})` : null,
@@ -425,10 +332,10 @@ export async function POST(request) {
         action: 'auto_assigned',
         previous_agent: null,
         new_agent: owner,
-        reason: assignmentSource === 'round_robin'
-          ? 'Landing-page automatic round-robin assignment'
-          : assignmentSource === 'fixed_agent'
-            ? 'Landing-page leads are configured to go to a single agent'
+        reason: assignmentSource === 'fixed_agent'
+          ? 'Landing-page leads are configured to go to a single agent'
+          : assignmentSource === 'crm_lead'
+            ? 'Already this agent\'s lead in the CRM'
             : 'Returning customer assigned to earliest completed order owner',
         actor_email: 'landing-system@peptidescostarica.net',
       });
@@ -451,7 +358,6 @@ export async function POST(request) {
           qualification,
           campaign: [utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / '),
           assignedAgent: owner,
-          assignedAgentEmail,
           dueAt,
           slaMinutes: landingSettings.responseSlaMinutes,
         });
@@ -465,7 +371,10 @@ export async function POST(request) {
       // WhatsApp outage cannot cost us the email as well.
       if (source === 'adwords_lp' && !notificationResult?.outbox) {
         try {
-          const result = await sendLandingLeadWhatsAppAlerts(supabase, { name, phone, qualification, dueAt });
+          const { whatsapp } = await getLeadAlertAudience(supabase, { source, owner });
+          const result = await sendLandingLeadWhatsAppAlerts(supabase, {
+            name, phone, qualification, dueAt, recipients: whatsapp,
+          });
           if (result.sent) console.log(`[leads/contact] WhatsApp lead alert sent to ${result.sent} recipient(s)`);
         } catch (whatsAppError) {
           console.error('[leads/contact] WhatsApp lead alert failed:', whatsAppError);

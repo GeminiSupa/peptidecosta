@@ -1,6 +1,5 @@
 import nodemailer from 'nodemailer';
-import { getLeadNotificationRecipients } from '@/lib/leadNotificationRecipients';
-import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
+import { getLeadAlertAudience } from '@/lib/leadNotificationRecipients';
 import { landingQualificationNotes } from '@/lib/landingLead.mjs';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
@@ -25,16 +24,6 @@ export function isLeadNotificationOutboxMissing(error) {
 
 const destinationKey = (channel, destination) => `${channel}:${String(destination || '').trim().toLowerCase()}`;
 const wasAccepted = (status) => ['sent', 'delivered', 'read'].includes(String(status || '').toLowerCase());
-
-async function assignedAgentEmail(supabase, owner) {
-  const wanted = String(owner || '').trim().toLowerCase();
-  if (!wanted) return '';
-  const { data, error } = await supabase.from('admin_profiles').select('name,email');
-  if (error) throw error;
-  const profile = (data || []).find((entry) => [entry.name, entry.email]
-    .some((value) => String(value || '').trim().toLowerCase() === wanted));
-  return String(profile?.email || '').trim().toLowerCase();
-}
 
 function leadDetails(lead) {
   const contactMethod = String(lead.contact_method || '').toLowerCase();
@@ -175,12 +164,17 @@ export async function deliverClaimedLeadNotificationJob(supabase, job) {
       .from('catalog_leads').select('*').eq('id', job.lead_id).single();
     if (leadError) throw leadError;
     const details = leadDetails(lead);
-    const ownerEmail = await assignedAgentEmail(supabase, details.assignedAgent);
-    const emailRecipients = await getLeadNotificationRecipients(ownerEmail, { source: details.source });
-    const whatsappResult = details.source === 'adwords_lp'
-      ? await getNotificationRecipients(supabase, { channel: 'whatsapp', type: 'adwords_lead' })
-      : { recipients: [] };
-    const whatsappRecipients = whatsappResult.recipients || [];
+    // Resolved from the lead's owner rather than carried on the job, so a retry
+    // hours later reaches the same conclusion as the original save.
+    const audience = await getLeadAlertAudience(supabase, {
+      source: details.source,
+      owner: details.assignedAgent,
+    });
+    const emailRecipients = audience.emails;
+    // Campaign leads only. The storefront form saves through the same outbox,
+    // and buzzing an agent's personal phone for every catalog enquiry is how an
+    // alert stops being read.
+    const whatsappRecipients = details.source === 'adwords_lp' ? audience.whatsapp : [];
     const intended = [
       ...emailRecipients.map((destination) => ({ channel: 'email', destination })),
       ...whatsappRecipients.map((recipient) => ({ channel: 'whatsapp', destination: recipient.destination })),

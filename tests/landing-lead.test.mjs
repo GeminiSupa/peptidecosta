@@ -13,7 +13,8 @@ import {
   DEFAULT_LANDING_LEAD_SETTINGS,
   normalizeLandingLeadSettings,
 } from '../src/lib/landingLeadSettings.mjs';
-import { mergeLeadEmailRecipients, responseDeadline } from '../src/lib/leadNotifications.mjs';
+import { responseDeadline } from '../src/lib/leadNotifications.mjs';
+import { leadAlertAudience } from '../src/lib/leadAlertAudience.mjs';
 
 test('landing payload joins the optional surname and preserves campaign attribution', () => {
   const payload = buildLandingLeadPayload({
@@ -90,10 +91,14 @@ test('structured qualification input is bounded and strips invalid rows', () => 
 });
 
 test('lead alerts dedupe the assigned agent and backup while SLA is deterministic', () => {
-  assert.deepEqual(mergeLeadEmailRecipients({
-    assignedAgentEmail: 'agent@example.com',
-    backup: ['AGENT@example.com', 'owner@example.com'],
-  }), ['agent@example.com', 'owner@example.com']);
+  assert.deepEqual(leadAlertAudience({
+    profiles: [{ name: 'Agent', email: 'agent@example.com' }],
+    owner: 'Agent',
+    rows: [
+      { channel: 'email', label: 'Duplicate of the agent', destination: 'AGENT@example.com' },
+      { channel: 'email', label: 'Ops inbox', destination: 'owner@example.com' },
+    ],
+  }).emails, ['agent@example.com', 'owner@example.com']);
   assert.equal(responseDeadline('2026-08-13T12:00:00.000Z', 15), '2026-08-13T12:15:00.000Z');
 });
 
@@ -137,7 +142,10 @@ test('CRM route stores qualification notes and sends the alert only after save',
   assert.ok(alertIndex > saveIndex);
   assert.match(route, /landingQualificationNotes\(qualification\)/);
   assert.match(route, /getTransactionalSmtpConfig\(\)/);
-  assert.match(route, /assign_next_landing_lead_agent/);
+  // The round-robin rotation was retired — it never assigned a lead in
+  // production. A new lead goes to the configured campaign agent, or to nobody.
+  assert.doesNotMatch(route, /assign_next_landing_lead_agent/);
+  assert.match(route, /resolveCampaignAgent\(supabase, landingSettings\)/);
   assert.match(route, /qualification_data/);
   assert.match(route, /response_due_at/);
 });

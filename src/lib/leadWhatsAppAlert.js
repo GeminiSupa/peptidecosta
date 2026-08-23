@@ -1,4 +1,3 @@
-import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
 import {
   buildLeadAlertParameters,
   LEAD_ALERT_TEMPLATE_LANGUAGE,
@@ -26,7 +25,7 @@ export async function sendLandingLeadWhatsAppAlerts(supabase, {
   phone,
   qualification,
   dueAt,
-  recipients: suppliedRecipients = null,
+  recipients = [],
 }) {
   const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -35,19 +34,17 @@ export async function sendLandingLeadWhatsAppAlerts(supabase, {
     return { sent: 0, failed: 0, deliveries: [], error: 'WhatsApp credentials are not configured' };
   }
 
-  let recipients = Array.isArray(suppliedRecipients) ? suppliedRecipients : [];
-  try {
-    if (!Array.isArray(suppliedRecipients)) {
-      const managed = await getNotificationRecipients(supabase, { channel: 'whatsapp', type: 'adwords_lead' });
-      recipients = managed.recipients || [];
-    }
-  } catch (error) {
-    // A missing column means add-adwords-lead-to-notification-recipients.sql has
-    // not been run. That is not a reason to fail the lead, which is already saved.
-    console.warn('[leads/contact] WhatsApp lead recipients unavailable:', error.message);
-    return { sent: 0, failed: 0, deliveries: [], error: error.message };
+  // The caller supplies the list, resolved by getLeadAlertAudience. This used
+  // to fall back to reading the adwords_lead flag directly, which is now the
+  // wrong answer: that list knows nothing about who owns the lead, so the
+  // fallback would have quietly buzzed the campaign agent about a colleague's
+  // customer — the exact thing the audience rules exist to prevent. It matters
+  // more here than in email, because the approved template has six fixed slots
+  // (name, interest, delivery, volume, phone, deadline) and no room to say who
+  // the lead belongs to.
+  if (!Array.isArray(recipients) || !recipients.length) {
+    return { sent: 0, failed: 0, deliveries: [] };
   }
-  if (!recipients.length) return { sent: 0, failed: 0, deliveries: [] };
 
   const templateName = process.env.LEAD_ALERT_WHATSAPP_TEMPLATE || LEAD_ALERT_TEMPLATE_NAME;
   const templateLanguage = process.env.LEAD_ALERT_WHATSAPP_TEMPLATE_LANGUAGE || LEAD_ALERT_TEMPLATE_LANGUAGE;

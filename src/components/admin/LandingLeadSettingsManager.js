@@ -134,8 +134,8 @@ export default function LandingLeadSettingsManager() {
               value={settings.assignmentMode}
               onChange={(event) => changeSetting('assignmentMode', event.target.value)}
             >
-              <option value="round_robin">Round-robin across all agents</option>
-              <option value="fixed">Always one agent</option>
+              <option value="fixed">Send every new lead to one agent</option>
+              <option value="unassigned">Leave new leads unassigned</option>
             </select>
           </label>
           {settings.assignmentMode === 'fixed' && (
@@ -157,7 +157,7 @@ export default function LandingLeadSettingsManager() {
         </div>
         {settings.assignmentMode === 'fixed' && !settings.assignedAgentEmail && (
           <div style={{ color: '#fbbf24', fontSize: '.74rem', marginTop: 10 }}>
-            No agent chosen yet — until one is picked, leads keep rotating across the team.
+            No agent chosen yet — until one is picked, new leads arrive unassigned for anyone to claim.
           </div>
         )}
       </div>
