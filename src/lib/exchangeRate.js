@@ -4,14 +4,21 @@ import {
   fetchLiveUsdToCrcRate,
   formatCrcPriceFromUsd,
   getUsdToCrcRate,
+  isPlausibleRate,
 } from '@/lib/pricing';
 
 export const EXCHANGE_RATE_SETTING_ID = 'exchange_rate';
 export const EXCHANGE_RATE_MAX_AGE_MS = 60 * 60 * 1000;
+// How long a stored rate may keep pricing the storefront once every provider is
+// unreachable. Past this we would rather quote a known constant than a number
+// whose age we can no longer justify to a customer.
+export const EXCHANGE_RATE_STALE_LIMIT_MS = 24 * 60 * 60 * 1000;
 
 function normalizeRate(value) {
+  // Band-checked, not merely positive: a bad quote that reached the database
+  // before this guard existed must not keep pricing the storefront.
   const rate = Number(value?.usd_crc ?? value?.rate ?? value);
-  return Number.isFinite(rate) && rate > 0 ? rate : null;
+  return isPlausibleRate(rate) ? rate : null;
 }
 
 function normalizeDate(value) {
@@ -95,13 +102,26 @@ export async function getDatabaseBackedUsdToCrcRate({ syncProducts = false } = {
       return { ...stored, productRowsSynced: 0 };
     }
 
-    const liveRate = await fetchLiveUsdToCrcRate();
-    if (!liveRate && stored) {
-      return { ...stored, source: `${stored.source}:stale`, productRowsSynced: 0 };
+    // The stored rate is the anchor a new quote has to stay near, or be
+    // corroborated against, before it is allowed to reprice the storefront.
+    const live = await fetchLiveUsdToCrcRate({ previousRate: stored?.rate ?? null });
+    if (!live && stored) {
+      // Serve the stored rate only while it is still recent enough to defend.
+      // Previously this had no limit, so one bad value could price the site
+      // indefinitely if the providers stayed unreachable.
+      if (stored.ageMs < EXCHANGE_RATE_STALE_LIMIT_MS) {
+        return { ...stored, source: `${stored.source}:stale`, productRowsSynced: 0 };
+      }
+      return {
+        rate: FALLBACK_EXCHANGE_RATE,
+        updatedAt: stored.updatedAt,
+        source: 'fallback:expired',
+        productRowsSynced: 0,
+      };
     }
 
-    const rate = normalizeRate(liveRate) || FALLBACK_EXCHANGE_RATE;
-    const payload = buildRatePayload(rate, liveRate ? 'open.er-api.com' : 'fallback');
+    const rate = live ? live.rate : FALLBACK_EXCHANGE_RATE;
+    const payload = buildRatePayload(rate, live ? live.source : 'fallback');
 
     const { error } = await supabase
       .from('site_settings')

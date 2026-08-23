@@ -103,29 +103,138 @@ export function computeOrderTotals(lineItems, currency, exchangeRate = FALLBACK_
   return { subtotal, discountPct, discountAmount, discountedTotal, shipping, total, vialCount, bacCharge: bac.charge };
 }
 
-/**
- * Fetch the live USD->CRC rate (same source the catalog uses), falling back to
- * the constant on any failure. Best-effort; never throws.
- */
-export async function fetchLiveUsdToCrcRate() {
+// Outer fence for USD -> CRC. Deliberately wide: it only catches garbage — a
+// decimal shift, a zeroed field, another currency's number — because pinning it
+// close to today's rate would break pricing outright if the colón ever moved to
+// a genuinely new level. The deviation check below does the precise work.
+export const MIN_PLAUSIBLE_RATE = 300;
+export const MAX_PLAUSIBLE_RATE = 800;
+
+// How far a new quote may move from the last known-good rate before we stop
+// taking one provider's word for it. The colón is managed and holds a narrow
+// range for months — 69 days of our own order history sit between 448 and 456 —
+// so a jump beyond this is far more often a broken feed than a market move. On
+// 22 Aug 2026 a feed quoted 484.50 against a prior 450.45 (+7.6%); it went
+// straight onto the storefront and overcharged colón buyers ~7% for five hours.
+export const MAX_RATE_DEVIATION_PCT = 5;
+
+// Two providers count as agreeing within this much of each other.
+export const PROVIDER_AGREEMENT_PCT = 2;
+
+export function isPlausibleRate(value) {
+  const rate = Number(value);
+  return Number.isFinite(rate) && rate >= MIN_PLAUSIBLE_RATE && rate <= MAX_PLAUSIBLE_RATE;
+}
+
+function pctDiff(a, b) {
+  return Math.abs((a - b) / b) * 100;
+}
+
+// Tried in order; the first plausible answer wins, so losing any one provider
+// costs us nothing. CurrencyFreaks is primary but needs a key, and is skipped
+// when unconfigured. The other two are keyless on purpose: if the paid account
+// lapses or its key is rotated badly, the storefront still prices correctly.
+export const RATE_PROVIDERS = [
+  {
+    name: 'currencyfreaks',
+    url: () => (process.env.CURRENCYFREAKS_API_KEY
+      ? `https://api.currencyfreaks.com/v2.0/rates/latest?apikey=${process.env.CURRENCYFREAKS_API_KEY}&symbols=CRC`
+      : null),
+    // CurrencyFreaks quotes rates as strings ("443.93"); isPlausibleRate coerces.
+    pick: (data) => data?.rates?.CRC,
+  },
+  {
+    name: 'open.er-api.com',
+    url: () => 'https://open.er-api.com/v6/latest/USD',
+    pick: (data) => data?.rates?.CRC,
+  },
+  {
+    name: 'currency-api',
+    url: () => 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json',
+    pick: (data) => data?.usd?.crc,
+  },
+];
+
+async function readProviderQuote(provider) {
+  let url = null;
   try {
-    const res = await fetch('https://open.er-api.com/v6/latest/USD', {
+    url = provider.url();
+  } catch {
+    return null;
+  }
+  if (!url) return null;
+
+  try {
+    const res = await fetch(url, {
       // Don't let a slow FX provider hang server-side checkout work.
       signal: AbortSignal.timeout(4000),
     });
-    if (res.ok) {
-      const data = await res.json();
-      const rate = data?.rates?.CRC;
-      if (typeof rate === 'number' && rate > 0) return rate;
+    if (!res.ok) return null;
+
+    const quoted = provider.pick(await res.json());
+    if (!isPlausibleRate(quoted)) {
+      return { rate: null, source: provider.name, quoted };
     }
+    return { rate: Number(quoted), source: provider.name, quoted };
   } catch {
-    // swallow — caller decides whether to use a stored DB value or fallback
+    // unreachable or malformed
+    return null;
+  }
+}
+
+/**
+ * Fetch the live USD->CRC rate. Providers are tried in order and the first
+ * plausible answer wins, so the happy path costs a single request. A quote that
+ * moves more than MAX_RATE_DEVIATION_PCT from `previousRate` is not trusted on
+ * its own — a second provider has to independently agree before it may reprice
+ * the storefront. Returns { rate, source }, or null when nothing is usable, in
+ * which case the caller keeps whatever it already had. Never throws.
+ *
+ * @param {{ previousRate?: number|null }} [options] last known-good rate
+ */
+export async function fetchLiveUsdToCrcRate({ previousRate = null } = {}) {
+  const quotes = [];
+  const refused = [];
+
+  for (const provider of RATE_PROVIDERS) {
+    const quote = await readProviderQuote(provider);
+    if (!quote) continue;
+    if (quote.rate === null) {
+      refused.push(`${quote.source}=${quote.quoted}`);
+      continue;
+    }
+    quotes.push(quote);
+
+    const anchored = isPlausibleRate(previousRate);
+    if (!anchored || pctDiff(quote.rate, previousRate) <= MAX_RATE_DEVIATION_PCT) {
+      return { rate: quote.rate, source: quote.source };
+    }
+
+    // Big move. Look for a second, independent provider that agrees before
+    // letting it through; a real devaluation shows up everywhere at once.
+    // `quotes` is in provider-priority order, so any match is the higher-ranked
+    // of the pair and its number is the one we publish.
+    const agrees = quotes.find(
+      (other) => other !== quote && pctDiff(other.rate, quote.rate) <= PROVIDER_AGREEMENT_PCT,
+    );
+    if (agrees) {
+      return { rate: agrees.rate, source: `${agrees.source}+${quote.source}` };
+    }
+  }
+
+  if (refused.length) {
+    console.warn(`[exchange-rate] quotes outside the plausible band refused: ${refused.join(', ')}`);
+  }
+  if (quotes.length) {
+    console.warn(
+      `[exchange-rate] no provider corroborated a >${MAX_RATE_DEVIATION_PCT}% move from ${previousRate}; `
+      + `keeping the previous rate. Quotes seen: ${quotes.map((q) => `${q.source}=${q.rate}`).join(', ')}`,
+    );
   }
   return null;
 }
 
-export async function getUsdToCrcRate() {
-  const liveRate = await fetchLiveUsdToCrcRate();
-  if (liveRate) return liveRate;
-  return FALLBACK_EXCHANGE_RATE;
+export async function getUsdToCrcRate(options) {
+  const live = await fetchLiveUsdToCrcRate(options);
+  return live ? live.rate : FALLBACK_EXCHANGE_RATE;
 }
