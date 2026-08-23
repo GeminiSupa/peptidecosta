@@ -4,6 +4,9 @@ import { createClient } from '@supabase/supabase-js';
 import { getBusinessLinks } from '@/lib/settings';
 import { getCampaignSmtpConfig, isElasticCampaignSmtp } from '@/lib/campaignSmtp';
 import { findPaidOrderMatchForCart, markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
+import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
+import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
+import { abandonedCartUnitPrice } from '@/lib/abandonedCartPricing.mjs';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -64,23 +67,8 @@ const identifySmtpProvider = (host = '') => {
   return 'SMTP';
 };
 
-const buildItemsRows = (items = [], currency, exchangeRate = 454.48) => items.map((item) => {
-  // Parse item price
-  let price = 0;
-  const usdPrice = item.priceUsd || item.price_usd;
-  const rawPrice = usdPrice || item.price;
-  if (rawPrice) {
-    price = parseFloat(String(rawPrice).replace(/[^0-9.]/g, '')) || 0;
-  }
-  
-  if (currency === 'CRC' && usdPrice) {
-    price = Math.round(price * exchangeRate);
-  } else if (currency === 'CRC' && (item.priceCrc || item.price_crc)) {
-    price = parseFloat(String(item.priceCrc || item.price_crc).replace(/[^0-9.]/g, '')) || 0;
-  } else if (currency === 'CRC') {
-    price = Math.round(price * exchangeRate);
-  }
-
+const buildItemsRows = (items = [], currency, exchangeRate = FALLBACK_EXCHANGE_RATE) => items.map((item) => {
+  const price = abandonedCartUnitPrice(item, currency, exchangeRate);
   const qty = Number(item.qty || 0);
   return `
     <tr>
@@ -98,7 +86,9 @@ const buildItemsRows = (items = [], currency, exchangeRate = 454.48) => items.ma
 }).join('');
 
 // Recovery Email Template Builder
-const buildRecoveryHtml = (customerName, cartData, checkoutUrl, currency, lang, links) => {
+// exchangeRate is required for a CRC cart: without it the email quotes prices
+// the catalog is not charging, and the customer arrives to a different number.
+const buildRecoveryHtml = (customerName, cartData, checkoutUrl, currency, lang, links, exchangeRate) => {
   const isEn = lang === 'en';
   
   // Sanitize name to prevent literal 'null', 'undefined', 'n/a', etc.
@@ -166,7 +156,7 @@ const buildRecoveryHtml = (customerName, cartData, checkoutUrl, currency, lang, 
             </tr>
           </thead>
           <tbody>
-            ${buildItemsRows(cartData, currency)}
+            ${buildItemsRows(cartData, currency, exchangeRate)}
           </tbody>
         </table>
 
@@ -277,7 +267,17 @@ export async function POST(request) {
       }
     }
 
-    const recoveryHtml = buildRecoveryHtml(cleanCustomerName, normalizedCartData, checkoutUrl, currency, lang, links);
+    // Same source the catalog prices from, so the email quotes what the
+    // customer will actually be charged when they follow the link back.
+    let recoveryRate = FALLBACK_EXCHANGE_RATE;
+    try {
+      const { rate } = await getDatabaseBackedUsdToCrcRate();
+      if (Number.isFinite(rate) && rate > 0) recoveryRate = rate;
+    } catch (rateErr) {
+      console.warn('[abandoned-cart] live rate unavailable, using fallback:', rateErr.message);
+    }
+
+    const recoveryHtml = buildRecoveryHtml(cleanCustomerName, normalizedCartData, checkoutUrl, currency, lang, links, recoveryRate);
 
     const recoveryText = [
       isEn ? 'We saved your cart for you!' : '¡Guardamos tu carrito para ti!',
