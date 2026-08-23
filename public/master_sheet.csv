@@ -1,61 +1,76 @@
-Master Inventory — Edit Here Only,,,,,,
-All edits happen on this tab. The Price List (EN) and Lista de Precios (ES) tabs update automatically.,,,,,,
-,,,,,,
-Product,Category,Price (USD),Status,Bulk Discount (EN),Bulk Discount (ES),COA URL
-Retatrutide 10mg,Weight Loss & Metabolism,$125,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1K0so0FR_Wu_dFuVFZVZuH2Osx72SOf6T/view?usp=sharing
-Retatrutide 12mg,Weight Loss & Metabolism,$135,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://verify.janoshik.com/tests/96496-Retatrutide_12mg_BACTSHBESIDZ
-Retatrutide 15mg,Weight Loss & Metabolism,$140,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1kcwayFqG0Mcpdj9wHv0wW_Bb05pLXphS/view?usp=sharing
-Retatrutide 20mg,Weight Loss & Metabolism,$150,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/195tdQyxaR-mkcNe4QA0uEjrzkuwXbWlN/view?usp=sharing
-Retatrutide 24mg,Weight Loss & Metabolism,$165,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1oUKn_Rph9Dnon5f5guzO7U-lWZf92X9d/view?usp=sharing
-Retatrutide 30mg,Weight Loss & Metabolism,$180,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1if3Z0AJuvtLFOIBmkvwUJrAW3-6ojQg9/view?usp=sharing
-Retatrutide 40mg,Weight Loss & Metabolism,$210,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://verify.janoshik.com/tests/96498-Retatrutide_40mg_MCC5VFX6GXII
-Tirzepatide 10mg,Weight Loss & Metabolism,$165,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Tirzepatide 15mg,Weight Loss & Metabolism,$200,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1PuRYPcSvxaVE91K3G2QpA5A2Q9orisRj/view?usp=sharing
-Tirzepatide 20mg,Weight Loss & Metabolism,$220,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1PuRYPcSvxaVE91K3G2QpA5A2Q9orisRj/view?usp=sharing
-Tirzepatide 30mg,Weight Loss & Metabolism,$250,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1gDgEggnHZgI-66ME6MIqGd1pb2-_Ui7_/view?usp=sharing
-Semaglutide 10mg ,Weight Loss & Metabolism,$220,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Semaglutide 20mg,Weight Loss & Metabolism,$275,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Semaglutide 30mg,Weight Loss & Metabolism,$300,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Tesamorelin 10mg,Weight Loss & Metabolism,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1GGWwXswE2KOZdjSYKYQ__LCdjKHXDCj3/view?usp=sharing
-5-amino-1mq 5mg,Weight Loss & Metabolism,$60,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-"Fat Blaster Amino Blend 10ml — Includes: L-Carnitine 300mg, Methionine 25mg, Inositol 50mg, Choline 50mg, B12 1mg, B6 50mg, NADH 50mg",Weight Loss & Metabolism,$110,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Slu-pp332 5mg,Exercise Mimetic & Metabolic Modulator,$80.00,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-BPC-157 10mg,Recovery & Healing,$90,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://verify.janoshik.com/tests/94973-BPC157_10mg_S64EVVWJIBLE
-BPC-157 + TB-500 20mg (Wolverine Stack),Recovery & Healing,$150,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento","https://drive.google.com/file/d/13QUahpzCIOYZrnFgk8xSqL4ewXbCK4tK/view?usp=sharing
-https://drive.google.com/file/d/1ZkRuudRS_jGmfWkaZDvYvFu_FJzdEBiD/view?usp=sharing"
-TB-4 10mg,Recovery & Healing,$110,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1iiFFZCQOikzHEJDs7aPSRI2HpsD3xQrf/view?usp=sharing
-KLOW 80mg,Recovery & Healing,$180,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1cAuKeeK_Ftrpi5zQ6mCpwLZ41qfDjnHy/view?usp=sharing
-"SUPER Human Amino Blend 10ml — Includes: L-Arginine 110mg, L-Ornithine 110mg, L-Citrulline 120mg, L-Lysine 70mg, L-Glutamine 40mg, L-Proline 60mg, L-Taurine 60mg, L-Carnitine 220mg, NAC 75mg",Recovery & Healing,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-KPV 10mg,Anti-Inflammatory,$90,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Sermorelin 10mg,Performance & Hormones,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-"HCG 10,000 IU",Performance & Hormones,$160,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-IGF-1LR3 1mg,Performance & Hormones,$160,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-HGH 12 IU,Performance & Hormones,$70,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-HGH 24 IU,Performance & Hormones,$120,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-HGH 50 IU (Pfizer Brand Genotropin),Performance & Hormones,$275,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Ipamorelin 10mg,Performance & Hormones,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-CJC with DAC 5mg,Performance & Hormones,$120,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1g4EbJVgt7Dn2u5tOB5h7s2bRWXY7-0Zn/view?usp=sharing
-CJC-1295 without DAC + IPA 10mg,Performance & Hormones,$120,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-SS-31 10mg,Anti-Aging & Longevity,$120,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-NAD+ 500mg,Anti-Aging & Longevity,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1JsR6-MFBvUyU3Z65ZfAPqFa2iTR7F6z_/view?usp=sharing
-Mots-C 10mg,Anti-Aging & Longevity,$90,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/17UVvQrPaP0lHWuH-X89tti-g5T6XGmDH/view?usp=sharing
-Mots-C 40mg,Anti-Aging & Longevity,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Epithalon 50mg,Anti-Aging & Longevity,$170,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Thymosin Alpha-1 10mg,Immune System Modulation,$150,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Selank 10mg,Cognitive & Mood,$90,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1F3Ns99ZPjeIfJ8Uv9hcvt00AjI-AqaE5/view?usp=sharing
-Adamax 5mg,Cognitive & Mood,$165,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Semax 10mg,Cognitive & Mood,$90,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1OO5hsgt2_0WEujkgwfEhRZTWO-l9-lxM/view?usp=sharing
-Pinealon 20mg,Cognitive & Mood,$120,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-DSIP 15mg,Sleep,$135,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-PT-141 10mg,Sexual Health,$125,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-KissPeptin-10 10mg,Sexual Health,$130,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Melanotan II,Tanning & Sexual Function,$90,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-GLOW 70mg,Skin & Hair,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1gn2djbX29q70xpRl0p-gy_voPU8llI1f/view?usp=sharing
-GLOW 50mg,Skin & Hair,$120,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-GHK-CU 50mg,Skin & Hair,$70,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://verify.janoshik.com/tests/94974-GHKCU_50mg_KHSEMSR1C4Q7
-GHK-CU 100mg,Skin & Hair,$100,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Thymalin 10mg,Immune & Antioxidant,$120,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-Glutathione 1500mg,Immune & Antioxidant,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-BAC Water 2ml,Reconstitution Supply,$3,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-BAC Water 3ml,Reconstitution Supply,$4,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",
-BAC Water 10ml,Reconstitution Supply,$20,In Stock,,,
+Master Inventory — Edit Here Only,,,,,,,
+All edits happen on this tab. The Price List (EN) and Lista de Precios (ES) tabs update automatically.,,,,,,,
+,,,,,,,
+Product,Category,Price (USD),Status,Bulk Discount (EN),Bulk Discount (ES),COA URL,Image URL
+Retatrutide 5mg,Weight Loss & Metabolism,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1786386496191-bcv9c2-c.webp
+Retatrutide 10mg,Weight Loss & Metabolism,$125,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1K0so0FR_Wu_dFuVFZVZuH2Osx72SOf6T/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687292293-ihhzto.webp
+Retatrutide 12mg,Weight Loss & Metabolism,$135,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://verify.janoshik.com/tests/96496-Retatrutide_12mg_BACTSHBESIDZ,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687326485-newtlx.webp
+Retatrutide 15mg,Weight Loss & Metabolism,$140,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1kcwayFqG0Mcpdj9wHv0wW_Bb05pLXphS/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687343946-07wxyu.webp
+Retatrutide 20mg,Weight Loss & Metabolism,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/195tdQyxaR-mkcNe4QA0uEjrzkuwXbWlN/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687358733-bjpf2c.webp
+Retatrutide 24mg,Weight Loss & Metabolism,$165,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1oUKn_Rph9Dnon5f5guzO7U-lWZf92X9d/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689230649-t1o43.webp
+Retatrutide 30mg,Weight Loss & Metabolism,$180,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1if3Z0AJuvtLFOIBmkvwUJrAW3-6ojQg9/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689259347-hug1ri.webp
+Retatrutide 40mg,Weight Loss & Metabolism,$210,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://verify.janoshik.com/tests/96498-Retatrutide_40mg_MCC5VFX6GXII,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689275510-kve5t8.webp
+Retatrutide 50mg,Weight Loss & Metabolism,$240,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1VAi5NtihACqTxH_SbC9vNuTWJdhIZmS9/view?usp=sharing,
+Retatrutide 60mg,Weight Loss & Metabolism,$270,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1783924191359-we154a.png
+Tirzepatide 10mg,Weight Loss & Metabolism,$155,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689432369-ykhit9.webp
+Tirzepatide 15mg,Weight Loss & Metabolism,$185,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1PuRYPcSvxaVE91K3G2QpA5A2Q9orisRj/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689403845-jkgju9.webp
+Tirzepatide 20mg,Weight Loss & Metabolism,$200,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1PuRYPcSvxaVE91K3G2QpA5A2Q9orisRj/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689451901-8m4brj.webp
+Tirzepatide 30mg,Weight Loss & Metabolism,$225,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1gDgEggnHZgI-66ME6MIqGd1pb2-_Ui7_/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689357547-4u2668.webp
+Tirzepatide 40mg,Weight Loss & Metabolism,$245,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1782145445016-ogzkp79.png
+Tirzepatide 60mg,Weight Loss & Metabolism,$285,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1783810536590-5koct6.png
+Semaglutide 10mg,Weight Loss & Metabolism,$220,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689340640-wd6x9m.webp
+Semaglutide 20mg,Weight Loss & Metabolism,$275,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689330593-fhy9vo.webp
+Semaglutide 30mg,Weight Loss & Metabolism,$300,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689317141-zuqdct.webp
+Tesamorelin 10mg,Weight Loss & Metabolism,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1GGWwXswE2KOZdjSYKYQ__LCdjKHXDCj3/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687384444-5lydvi.webp
+Tesamorelin 20mg,Weight Loss & Metabolism,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1784652491739-06l30c.png
+AICAR 50mg,Weight Loss & Metabolism,$95,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1782953849553-8az4s2.png
+5-amino-1mq 5mg,Weight Loss & Metabolism,$60,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687398831-8vfsnf.webp
+5-amino-1mq 50mg,Weight Loss & Metabolism,$90,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,
+Fat Blaster Amino Blend 10ml,Weight Loss & Metabolism,$110,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1782953728808-bbprfn.png
+Slu-pp332 5mg,Exercise Mimetic & Metabolic Modulator,$80,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687456289-b5y2l.webp
+BPC-157 10mg,Recovery & Healing,$90,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://verify.janoshik.com/tests/94973-BPC157_10mg_S64EVVWJIBLE,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687473173-iq4opi.webp
+BPC-157 + TB-500 20mg (Wolverine Stack),Recovery & Healing,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/13QUahpzCIOYZrnFgk8xSqL4ewXbCK4tK/view?usp=sharing https://drive.google.com/file/d/1ZkRuudRS_jGmfWkaZDvYvFu_FJzdEBiD/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687491105-dqx5xa.webp
+Cartalax 20mg,Recovery & Healing,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1783397685291-qipeb.png
+KLOW 80mg,Recovery & Healing,$180,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1cAuKeeK_Ftrpi5zQ6mCpwLZ41qfDjnHy/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687523303-y9n91w.webp
+TB-4 10mg,Recovery & Healing,$110,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1iiFFZCQOikzHEJDs7aPSRI2HpsD3xQrf/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687508091-1bg9m2.webp
+SUPER Human Amino Blend 10ml,Recovery & Healing,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780734974264-silfqo.webp
+GLOW 50mg,Skin & Beauty + Tissure Repair,$120,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780688011798-0j2rdh.webp
+GLOW 70mg,Skin & Beauty + Tissure Repair,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://verify.janoshik.com/tests/198257-GLOW_70mg_UJ8L8HAUZDYF,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687992606-b6jtq.webp
+KPV 10mg,Anti-Inflammatory,$90,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687569649-eufqo.webp
+Sermorelin 10mg,Performance & Hormones,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687590842-3m2mh6.webp
+"HCG 10,000 IU",Performance & Hormones,$160,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687629487-idgvlm.webp
+IGF-1LR3 1mg,Performance & Hormones,$160,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687616971-sutppf.webp
+HGH 50 IU (Pfizer Genotropin),Performance & Hormones,$275,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1783810751406-w5ov6q.png
+HGH 30 IU,Performance & Hormones,$125,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780734338334-nfmm9.webp
+HGH 24 IU,Performance & Hormones,$120,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689544168-0m0kcl.webp
+HGH 12 IU,Performance & Hormones,$70,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689557795-r8md2n.webp
+Ipamorelin 10mg,Performance & Hormones,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687714469-m5vfxk.webp
+CJC-1295 with DAC 5mg,Performance & Hormones,$120,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1g4EbJVgt7Dn2u5tOB5h7s2bRWXY7-0Zn/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687733507-hekyo.webp
+CJC-1295 without DAC + IPA 10mg,Performance & Hormones,$120,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687746459-dkmd3k.webp
+SS-31 10mg,Anti-Aging & Longevity,$120,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687759502-wglomt.webp
+SS-31 25mg,Anti-Aging & Longevity,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://verify.janoshik.com/tests/137787-SS31_25mg_Z1ZJLAQE8TKH,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1784828804267-up1ks.png
+NAD+ 500mg,Anti-Aging & Longevity,$67.85,In Stock,41% Deal of the Week,41% Deal of the Week,https://drive.google.com/file/d/1JsR6-MFBvUyU3Z65ZfAPqFa2iTR7F6z_/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780747454659-g8rym.webp
+NAD+ 1000mg,Anti-Aging & Longevity,$88.50,In Stock,41% Deal of the Week,41% Deal of the Week,,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1782145561058-65c7h.webp
+Mots-C 10mg,Anti-Aging & Longevity,$90,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/17UVvQrPaP0lHWuH-X89tti-g5T6XGmDH/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687836109-ui4h5.webp
+Mots-C 40mg,Anti-Aging & Longevity,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687853301-qskog.webp
+Epithalon 50mg,Anti-Aging & Longevity,$170,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687872139-exdgst.webp
+Thymosin Alpha-1 10mg,Immune System Modulation,$150,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689181862-3shtgh.webp
+Oxytocin Acetate 5mg,Mood & Social Wellness,$105,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,
+Selank 10mg,Cognitive & Mood,$90,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1F3Ns99ZPjeIfJ8Uv9hcvt00AjI-AqaE5/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687893686-0v0fjb.webp
+Adamax 5mg,Cognitive & Mood,$115,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687912223-s5357.webp
+Adamax 10mg,Cognitive & Mood,$135,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,
+Semax 10mg,Cognitive & Mood,$90,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://drive.google.com/file/d/1OO5hsgt2_0WEujkgwfEhRZTWO-l9-lxM/view?usp=sharing,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687928111-anbif.webp
+Pinealon 20mg,Cognitive & Mood,$120,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780689197741-hoyyvg.webp
+DSIP 5mg,Sleep,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1786140957739-4ryyh5-c.webp
+DSIP 10mg,Sleep,$115,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1783397817238-v845jt.png
+DSIP 15mg,Sleep,$125,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687943031-9vg7j.webp
+PT-141 10mg,Sexual Health,$125,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687958189-nltp0f.webp
+KissPeptin-10 10mg,Sexual Health,$130,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780687973212-125xec.webp
+Melanotan II,Tanning & Sexual Function,$90,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780688179602-pipgud.webp
+GHK-CU 50mg,Skin & Hair,$70,Out of Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",https://verify.janoshik.com/tests/94974-GHKCU_50mg_KHSEMSR1C4Q7,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780688143160-hezzor.webp
+GHK-CU 100mg,Skin & Hair,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780688131651-tou4yl.webp
+Thymalin 10mg,Immune & Antioxidant,$120,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780688032667-njuhp.webp
+Glutathione 1500mg,Immune & Antioxidant,$100,In Stock,"Buy 5+ vials, get 15% off","Compra 5+ viales, 15% de descuento",,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780688047084-9r2lrr.webp
+BAC Water 2ml,Reconstitution Supply,FREE with any purchase,Out of Stock,,,,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780688067599-dunc9.webp
+BAC Water 3ml,Reconstitution Supply,$10,In Stock,,,,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780688086836-6511r8.webp
+BAC Water 10ml,Reconstitution Supply,$20,In Stock,,,,https://cbanvzipzfmllexraiei.supabase.co/storage/v1/object/public/product-pics/1780688097989-5alygj.webp
