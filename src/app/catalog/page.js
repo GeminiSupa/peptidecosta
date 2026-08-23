@@ -3224,7 +3224,7 @@ export default function CatalogPage() {
                             >
                               <div className="suggested-product-img">
                                 {match.imageUrl ? (
-                                  <img src={match.imageUrl} alt={match.product} />
+                                  <img src={match.imageUrl} alt={match.product} loading="lazy" decoding="async" />
                                 ) : (
                                   getCategoryIcon(match.category, 20)
                                 )}
@@ -3550,9 +3550,14 @@ export default function CatalogPage() {
                 >
                   <div className="product-image">
                     {p.imageUrl ? (
-                      <img 
-                        src={p.imageUrl} 
-                        alt={p.product} 
+                      // Only the first row is worth fetching up front. The rest
+                      // load as they are scrolled to: the full grid is ~8.8MB of
+                      // Supabase egress and most visitors never reach the bottom.
+                      <img
+                        src={p.imageUrl}
+                        alt={p.product}
+                        loading={idx < 4 ? 'eager' : 'lazy'}
+                        decoding="async"
                       />
                     ) : getCategoryIcon(p.category)}
                     {!inStock && !comingSoon && (
@@ -3945,7 +3950,7 @@ export default function CatalogPage() {
               <div key={item.product} className="cart-item">
                 <div className="cart-item-img">
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.product} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={item.imageUrl} alt={item.product} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : getCategoryIcon(item.category, 22)}
                 </div>
                 <div className="cart-item-details">
@@ -3987,7 +3992,7 @@ export default function CatalogPage() {
                 }}>
                   <div className="suggestion-icon">
                     {sug.imageUrl ? (
-                      <img src={sug.imageUrl} alt={sug.product} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
+                      <img src={sug.imageUrl} alt={sug.product} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }} />
                     ) : getCategoryIcon(sug.category, 20)}
                   </div>
                   <div className="suggestion-info">
@@ -4679,10 +4684,11 @@ export default function CatalogPage() {
               <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}>
                 <div className="product-image" style={{ width: '120px', height: '120px', fontSize: '60px' }}>
                   {selectedProduct.imageUrl ? (
-                    <img 
-                      src={selectedProduct.imageUrl} 
-                      alt={selectedProduct.product} 
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '20px' }} 
+                    <img
+                      src={selectedProduct.imageUrl}
+                      alt={selectedProduct.product}
+                      decoding="async"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '20px' }}
                     />
                   ) : getCategoryIcon(selectedProduct.category, 56)}
                 </div>
