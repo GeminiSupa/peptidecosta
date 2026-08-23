@@ -130,10 +130,14 @@ function pctDiff(a, b) {
   return Math.abs((a - b) / b) * 100;
 }
 
-// Tried in order; the first plausible answer wins, so losing any one provider
-// costs us nothing. CurrencyFreaks is primary but needs a key, and is skipped
-// when unconfigured. The other two are keyless on purpose: if the paid account
+// Tried in order; the first plausible answer wins, so losing either one costs us
+// nothing. CurrencyFreaks is primary but needs a key and is skipped when it is
+// unconfigured, so currency-api is deliberately keyless: if the paid account
 // lapses or its key is rotated badly, the storefront still prices correctly.
+//
+// open.er-api.com was removed on 24 Aug 2026. It was the single source behind
+// the 484.50 spike, and once a second opinion existed it read consistently low
+// — 443.94 against 449.38 and 449.70 from the other two on the day it was cut.
 export const RATE_PROVIDERS = [
   {
     name: 'currencyfreaks',
@@ -141,11 +145,6 @@ export const RATE_PROVIDERS = [
       ? `https://api.currencyfreaks.com/v2.0/rates/latest?apikey=${process.env.CURRENCYFREAKS_API_KEY}&symbols=CRC`
       : null),
     // CurrencyFreaks quotes rates as strings ("443.93"); isPlausibleRate coerces.
-    pick: (data) => data?.rates?.CRC,
-  },
-  {
-    name: 'open.er-api.com',
-    url: () => 'https://open.er-api.com/v6/latest/USD',
     pick: (data) => data?.rates?.CRC,
   },
   {
