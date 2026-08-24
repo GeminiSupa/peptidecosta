@@ -10089,6 +10089,9 @@
 .kpi-breakdown-row-main span { font-size: 11px; color: rgba(255,255,255,.5); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kpi-breakdown-row-meta { display: flex; flex-direction: column; min-width: 0; font-size: 11px; color: rgba(255,255,255,.45); }
 .kpi-breakdown-reason { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The order's own date, shown only when it differs from the date it counted on
+   — quieter than the counted date, because it explains it rather than competes. */
+.kpi-breakdown-placed { font-size: 10px; color: rgba(255,255,255,.32); white-space: nowrap; }
 .kpi-breakdown-amount { font-size: 14px; font-weight: 700; text-align: right; white-space: nowrap; }
 .kpi-breakdown-amount.is-muted { color: rgba(255,255,255,.4); font-weight: 500; }
 .kpi-breakdown-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }

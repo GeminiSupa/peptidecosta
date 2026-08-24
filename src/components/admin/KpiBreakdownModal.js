@@ -185,7 +185,17 @@ export default function KpiBreakdownModal({
                     <span>{row.customer || 'Unknown customer'}</span>
                   </div>
                   <div className="kpi-breakdown-row-meta">
-                    <span>{shortDate(row.date)}</span>
+                    {/* Say which date this is. A bare "Aug 24" here read as the
+                        order's date and flatly contradicted the Orders list,
+                        which shows when it was placed — the same order was
+                        placed on the 22nd and only marked complete on the 24th,
+                        and it is the 24th that puts it in today's revenue. */}
+                    <span>{row.countedLabel} {shortDate(row.date)}</span>
+                    {row.placedAt && shortDate(row.placedAt) !== shortDate(row.date) ? (
+                      <span className="kpi-breakdown-placed">
+                        placed {shortDate(row.placedAt)}
+                      </span>
+                    ) : null}
                     <span className="kpi-breakdown-reason">{row.basis?.reason}</span>
                   </div>
                   <div className={`kpi-breakdown-amount${counts ? '' : ' is-muted'}`}>

@@ -180,7 +180,12 @@ export default function DashboardHome({
         id: order.id,
         orderNumber: order.order_number,
         customer: order.customer_name,
+        // Two different dates, so each is labelled: revenue lands on the day the
+        // order was marked paid, while the Orders list shows the day it came in.
+        // An order placed on the 22nd and settled today belongs in today.
         date: getRevenueDate(order),
+        countedLabel: orderCountsAsSale(order) ? 'Counted' : 'Would count',
+        placedAt: new Date(order.created_at),
         amountUsd: orderNetRevenueUsd(order, exchangeRate) || orderGrossUsd(order, exchangeRate),
         basis: orderRevenueBasis(order),
       }))
@@ -196,7 +201,11 @@ export default function DashboardHome({
           id: order.id,
           orderNumber: order.order_number,
           customer: order.customer_name,
+          // This tile is about orders waiting, so its date is when they came in
+          // — the same date the Orders list shows, and there is no second one.
           date: new Date(order.created_at),
+          countedLabel: 'Placed',
+          placedAt: null,
           amountUsd: orderGrossUsd(order, exchangeRate),
           basis: orderRevenueBasis(order),
         }))
