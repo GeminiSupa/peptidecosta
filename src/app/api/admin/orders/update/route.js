@@ -9,7 +9,7 @@ import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { isRefundStatus } from '@/lib/orderRefund.mjs';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { orderVisibleToAgent } from '@/lib/agentOrders';
-import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, ORDER_INVENTORY_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAffiliateOrderWhatsApp } from '@/lib/orderWhatsAppAlerts';
 import { isFirstPaidTransition, shouldSendPaidConfirmation } from '@/lib/orderStatusEmails.mjs';
 import { shouldRestoreForStatus } from '@/lib/inventoryRestore.mjs';
@@ -355,7 +355,7 @@ export async function PATCH(request) {
 
     const { data, error, droppedColumns } = await writeDroppingMissingColumns(
       patch,
-      ORDER_ATTRIBUTION_COLUMNS,
+      [...ORDER_ATTRIBUTION_COLUMNS, ...ORDER_INVENTORY_COLUMNS],
       (row) => supabase
         .from('orders')
         .update(row)
@@ -363,6 +363,12 @@ export async function PATCH(request) {
         .select('*')
         .single()
     );
+
+    if (droppedColumns?.some((column) => ORDER_INVENTORY_COLUMNS.includes(column))) {
+      // The stock still moved; only the record of what moved is missing, so a
+      // later restore falls back to the order's face quantities.
+      console.warn('[admin/orders/update] inventory columns not stored — run add-inventory-restore.sql');
+    }
 
     if (error) {
       if (inventoryReservation) await inventoryReservation.rollback().catch(() => {});

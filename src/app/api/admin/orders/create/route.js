@@ -12,6 +12,7 @@ import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { applyCustomerHistoryAttribution } from '@/lib/customerHistoryAttributionServer';
 import { notifyLowInventory, prepareInventoryReservation } from '@/lib/orderInventoryServer';
+import { ORDER_INVENTORY_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import {
   recordNewOrderNotification,
   sendAffiliateOrderWhatsApp,
@@ -214,10 +215,23 @@ export async function POST(request) {
     inventory = await prepareInventoryReservation(supabase, [], row.items);
     row.inventory_deducted = inventory.reservations;
 
-    let { data, error } = await supabase.from('orders').insert(row).select('*').single();
+    // Same defence the storefront checkout already had: a manual order must not
+    // fail outright just because add-inventory-restore.sql has not been run yet.
+    let { data, error, droppedColumns } = await writeDroppingMissingColumns(
+      row,
+      ORDER_INVENTORY_COLUMNS,
+      (attempt) => supabase.from('orders').insert(attempt).select('*').single(),
+    );
+    if (droppedColumns?.length) {
+      console.warn('[admin/orders/create] inventory columns not stored — run add-inventory-restore.sql');
+    }
     if (error && row.affiliate_id && isForeignKeyError(error)) {
       const { affiliate_id, affiliate_commission_usd, affiliate_commission_crc, ...withoutAffiliate } = row;
-      ({ data, error } = await supabase.from('orders').insert(withoutAffiliate).select('*').single());
+      ({ data, error } = await writeDroppingMissingColumns(
+        withoutAffiliate,
+        ORDER_INVENTORY_COLUMNS,
+        (attempt) => supabase.from('orders').insert(attempt).select('*').single(),
+      ));
     }
     if (error) {
       await inventory.rollback();

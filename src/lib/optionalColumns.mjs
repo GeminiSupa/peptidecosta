@@ -113,3 +113,19 @@ export const ORDER_ATTRIBUTION_COLUMNS = [
   'affiliate_whatsapp_notified_at',
   'affiliate_whatsapp_message_id',
 ];
+
+/**
+ * What add-inventory-restore.sql adds, which the storefront already writes
+ * defensively and the admin routes did not.
+ *
+ * The reservation itself is not optional — stock is deducted either way. These
+ * two columns only record what was taken, so a later restore can be exact. A
+ * deploy that arrives before the migration is pasted in should therefore lose
+ * the record, not the edit: an admin changing the items on an order for a
+ * customer who wants something else got "Could not find the 'inventory_deducted'
+ * column of 'orders' in the schema cache" and could not save at all.
+ */
+export const ORDER_INVENTORY_COLUMNS = [
+  'inventory_deducted',
+  'inventory_restored_at',
+];

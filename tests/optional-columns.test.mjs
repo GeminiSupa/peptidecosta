@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   ADMIN_PROFILE_OPTIONAL_COLUMNS,
+  ORDER_INVENTORY_COLUMNS,
   SUB_USER_PAYOUT_COLUMNS,
   writeDroppingMissingColumns,
 } from '../src/lib/optionalColumns.mjs';
@@ -219,4 +221,58 @@ test('a missing column outside the allow list is a real bug and is surfaced', as
 
   assert.notEqual(result.error, null);
   assert.deepEqual(result.droppedColumns, []);
+});
+
+// -------------------------------------------- the inventory columns, migration or not
+
+test('an order edit survives add-inventory-restore.sql not having been run', () => {
+  // The real failure: a customer asked to change what she had ordered, and the
+  // admin saving the new items got "Could not find the 'inventory_deducted'
+  // column of 'orders' in the schema cache" and could not save at all. The
+  // storefront checkout had guarded this from the start; the admin routes had
+  // not, so the edit died on a column that only records what stock moved.
+  const table = fakeTable(['inventory_deducted']);
+
+  const patch = {
+    items: [{ product: 'Retatrutide 40mg', qty: 1 }],
+    total_crc: 94717,
+    inventory_deducted: [{ product: 'Retatrutide 40mg', qty: 1 }],
+  };
+
+  return writeDroppingMissingColumns(patch, ORDER_INVENTORY_COLUMNS, table.run)
+    .then((result) => {
+      assert.equal(result.error, null, 'the edit must go through');
+      assert.deepEqual(result.droppedColumns, ['inventory_deducted']);
+      // The items and the money still landed — only the stock record was lost.
+      const written = table.attempts[table.attempts.length - 1];
+      assert.deepEqual(written.items, patch.items);
+      assert.equal(written.total_crc, 94717);
+      assert.ok(!('inventory_deducted' in written));
+    });
+});
+
+test('with the migration run, nothing is dropped', () => {
+  const table = fakeTable([]);
+  const patch = { items: [], inventory_deducted: [{ product: 'X', qty: 2 }] };
+
+  return writeDroppingMissingColumns(patch, ORDER_INVENTORY_COLUMNS, table.run)
+    .then((result) => {
+      assert.deepEqual(result.droppedColumns, []);
+      assert.deepEqual(table.attempts[0].inventory_deducted, [{ product: 'X', qty: 2 }]);
+    });
+});
+
+test('the admin order routes allow the inventory columns to be dropped', () => {
+  // Guards the actual wiring: the list passed at the call site is what decides
+  // whether the edit survives, and it silently did not include these.
+  const update = fs.readFileSync('src/app/api/admin/orders/update/route.js', 'utf8');
+  const create = fs.readFileSync('src/app/api/admin/orders/create/route.js', 'utf8');
+
+  assert.match(update, /ORDER_INVENTORY_COLUMNS/, 'the update route must allow them');
+  assert.match(create, /ORDER_INVENTORY_COLUMNS/, 'and so must manual order creation');
+  assert.ok(!/\.insert\(row\)\.select/.test(create), 'no unguarded insert left in create');
+});
+
+test('both columns the migration adds are covered, not just the one that broke', () => {
+  assert.deepEqual(ORDER_INVENTORY_COLUMNS, ['inventory_deducted', 'inventory_restored_at']);
 });
