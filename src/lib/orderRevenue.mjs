@@ -24,6 +24,42 @@ const roundCrc = (value) => Math.round(Number(value || 0));
 const lower = (value) => String(value ?? '').trim().toLowerCase();
 
 /**
+ * Rate used to read a colón-only order in dollars.
+ *
+ * The same figure the catalog, the admin panel and the pricing helper already
+ * fall back to, so an order converted here is not worth a different amount than
+ * the same order priced anywhere else. Callers holding the live rate should
+ * pass it; this is the floor, not the intended value.
+ */
+export const FALLBACK_USD_CRC_RATE = 454.48;
+
+/** The caller's rate when it is usable, the shared fallback when it is not. */
+function safeRate(rate) {
+  const parsed = Number(rate);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : FALLBACK_USD_CRC_RATE;
+}
+
+/**
+ * A dollar figure for a row that only carries colones.
+ *
+ * total_usd and total_crc are the same money written twice, so a row holding
+ * just one of them is incomplete, not cheap. The WooCommerce sync behind the
+ * main site fills total_crc and leaves total_usd empty, and because every money
+ * screen reads the dollar column, those orders counted as a real sale worth
+ * $0.00 — listed in Orders at their colón price, but absent from Revenue Today,
+ * the analytics chart and the customer's lifetime total. Four completed orders
+ * had gone missing that way before anyone noticed.
+ *
+ * Only ever fills a gap. A row that already has a dollar figure keeps it
+ * untouched, so this can never re-price an order that was charged in USD.
+ */
+function usdWithCrcFallback(usd, crc, rate) {
+  if (usd > 0) return usd;
+  if (crc > 0) return round2(crc / safeRate(rate));
+  return usd;
+}
+
+/**
  * Statuses whose money is ours to count.
  *
  * The commission list itself, not a second list that mirrors it — a status must
@@ -37,9 +73,59 @@ export const REVENUE_ORDER_STATUSES = new Set(
   COMMISSION_ELIGIBLE_ORDER_STATUSES.map(lower),
 );
 
-/** Did this order ever become money? Unpaid, declined and cancelled did not. */
+/**
+ * A per-order answer to "does this count as money?", set by hand from the
+ * Today tiles and outranking the status rules below.
+ *
+ * A test order flipped to Paid used to land in Revenue Today, the analytics
+ * chart, the customer's lifetime total and — if it carried a sales agent — a
+ * real commission payout, with no way back except deleting the row. Marking it
+ * 'exclude' here takes it out of all of them at once, because every screen
+ * that reports money comes through this file.
+ *
+ * Reversible: clearing the column returns the order to the normal rules.
+ */
+export const STATS_OVERRIDE_INCLUDE = 'include';
+export const STATS_OVERRIDE_EXCLUDE = 'exclude';
+export const STATS_OVERRIDE_VALUES = [STATS_OVERRIDE_INCLUDE, STATS_OVERRIDE_EXCLUDE];
+
+/** The override on an order, or null when it follows the status rules. */
+export function orderStatsOverride(order) {
+  const value = lower(order?.stats_override);
+  return STATS_OVERRIDE_VALUES.includes(value) ? value : null;
+}
+
+/**
+ * Did this order ever become money? Unpaid, declined and cancelled did not.
+ *
+ * A hand-set override wins: it is the whole point of the column, and it is the
+ * only way to keep a test order out of the figures without deleting it.
+ */
 export function orderCountsAsSale(order) {
+  const override = orderStatsOverride(order);
+  if (override === STATS_OVERRIDE_EXCLUDE) return false;
+  if (override === STATS_OVERRIDE_INCLUDE) return true;
   return REVENUE_ORDER_STATUSES.has(lower(order?.status));
+}
+
+/**
+ * Why this order does or does not count, for the drill-down list.
+ *
+ * @returns {{counts: boolean, override: string|null, reason: string}}
+ */
+export function orderRevenueBasis(order) {
+  const override = orderStatsOverride(order);
+  const status = String(order?.status ?? '').trim() || 'Pending';
+
+  if (override === STATS_OVERRIDE_EXCLUDE) {
+    return { counts: false, override, reason: `Excluded by hand (status is ${status})` };
+  }
+  if (override === STATS_OVERRIDE_INCLUDE) {
+    return { counts: true, override, reason: `Included by hand (status is ${status})` };
+  }
+  return REVENUE_ORDER_STATUSES.has(lower(status))
+    ? { counts: true, override: null, reason: `Counts because status is ${status}` }
+    : { counts: false, override: null, reason: `Status ${status} is not a sale` };
 }
 
 /**
@@ -47,7 +133,7 @@ export function orderCountsAsSale(order) {
  *
  * Zero for anything that never became a sale, and never negative.
  */
-export function orderNetRevenue(order) {
+export function orderNetRevenue(order, rate) {
   // Covers the fully refunded order too: it is not a sale, so it is worth zero
   // here without depending on refunded_amount having been filled in — which an
   // order marked Refunded by hand would not have.
@@ -55,23 +141,58 @@ export function orderNetRevenue(order) {
 
   const paid = orderPaidAmounts(order);
   const back = orderRefundedAmounts(order);
+  // Both sides of the subtraction get the same treatment. Converting only what
+  // was paid would let a colón-only order that was refunded in colones keep its
+  // full dollar total against a refund of zero — worse than the $0 it replaced.
+  const paidUsd = usdWithCrcFallback(paid.usd, paid.crc, rate);
+  const backUsd = usdWithCrcFallback(back.usd, back.crc, rate);
   return {
-    usd: Math.max(0, round2(paid.usd - back.usd)),
+    usd: Math.max(0, round2(paidUsd - backUsd)),
     crc: Math.max(0, roundCrc(paid.crc - back.crc)),
   };
 }
 
 /** Net revenue in USD alone — the figure most screens show. */
-export function orderNetRevenueUsd(order) {
-  return orderNetRevenue(order).usd;
+export function orderNetRevenueUsd(order, rate) {
+  return orderNetRevenue(order, rate).usd;
+}
+
+/**
+ * What was paid on an order in dollars, whether or not it counts as revenue.
+ *
+ * The tile drill-down lists the orders inside the window that are NOT counting
+ * next to the ones that are, because the point is to be able to force one in as
+ * well as hold one out — and nobody can decide that about an order showing
+ * $0.00. orderNetRevenue owes those orders zero by design, so the list asks
+ * here instead, and gets the colón fallback with it.
+ */
+export function orderGrossUsd(order, rate) {
+  const paid = orderPaidAmounts(order);
+  return usdWithCrcFallback(paid.usd, paid.crc, rate);
+}
+
+/**
+ * Drop orders held out of the figures by hand.
+ *
+ * For the commission and agent paths, which narrow by status in SQL rather than
+ * asking orderCountsAsSale — `.in('status', COMMISSION_ELIGIBLE_ORDER_STATUSES)`
+ * happily returns a test order marked Paid, and nothing downstream re-checks it,
+ * so it would be paid on. Filtering here in JS rather than in the query is
+ * deliberate: migrations are pasted in by hand, so a deploy can land before the
+ * column exists, and a query naming a missing column fails outright and takes
+ * the whole payout scan with it. A missing column simply reads as undefined
+ * here, which is no override, which is the old behaviour.
+ */
+export function withoutExcludedOrders(orders = []) {
+  return (orders || []).filter((order) => orderStatsOverride(order) !== STATS_OVERRIDE_EXCLUDE);
 }
 
 /** Net revenue across many orders. */
-export function totalNetRevenue(orders = []) {
+export function totalNetRevenue(orders = [], rate) {
   let usd = 0;
   let crc = 0;
   for (const order of orders || []) {
-    const net = orderNetRevenue(order);
+    const net = orderNetRevenue(order, rate);
     usd += net.usd;
     crc += net.crc;
   }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withoutExcludedOrders } from '@/lib/orderRevenue.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import {
@@ -133,10 +134,13 @@ async function outstandingOverrideFor(supabaseAdmin, subUser, currentParent) {
 
   const { rate: exchangeRate } = await getDatabaseBackedUsdToCrcRate();
 
-  const [{ data: orders }, { data: approved }] = await Promise.all([
+  const [{ data: rawSubUserOrders }, { data: approved }] = await Promise.all([
     supabaseAdmin
       .from('orders')
-      .select('id, sales_agent, status, currency, total, total_usd, total_crc')
+      // select('*') rather than naming stats_override: migrations are pasted
+      // in by hand, and a query naming a column that does not exist yet fails
+      // outright, which would break sub-user listings until the SQL is run.
+      .select('*')
       .in('status', COMMISSION_ELIGIBLE_ORDER_STATUSES),
     supabaseAdmin
       .from('commission_payouts')
@@ -146,6 +150,8 @@ async function outstandingOverrideFor(supabaseAdmin, subUser, currentParent) {
   ]);
 
   const paidIndex = buildPaidOrderIndex(approved || []);
+  // A test order held out of the figures must not show as unpaid commission.
+  const orders = withoutExcludedOrders(rawSubUserOrders || []);
   const unpaid = (orders || []).filter(
     (order) => orderBelongsToAgent(order, subUser)
       && !hasBeenPaid(paidIndex, currentParent.email, order.id)

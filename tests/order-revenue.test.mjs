@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import {
   REVENUE_ORDER_STATUSES,
   orderCountsAsSale,
+  orderGrossUsd,
   orderNetRevenue,
   orderNetRevenueUsd,
   orderRefundEvents,
@@ -197,7 +198,10 @@ test('revenue statuses are the commission statuses, not a second list', () => {
 
 test('every screen that reports money asks the shared rule', () => {
   const places = [
-    ['src/components/admin/DashboardHome.js', /orderNetRevenueUsd\(o\)/],
+    // The trailing [,)] lets a screen pass the live exchange rate as a second
+    // argument without dropping out of this check — what matters is that it
+    // asks the shared rule at all, not how many arguments it hands it.
+    ['src/components/admin/DashboardHome.js', /orderNetRevenueUsd\(o[,)]/],
     ['src/lib/analyticsDashboard.mjs', /orderNetRevenue\(order\)/],
     ['src/components/admin/AnalyticsDashboard.js', /orderNetRevenue\(o\)\.usd/],
     ['src/components/admin/CustomersCRM.js', /orderNetRevenueUsd\(o\)/],
@@ -237,4 +241,119 @@ test('the home dashboard carries no refund tiles', () => {
   assert.ok(!home.includes('Refunded Today'));
   assert.ok(!home.includes('Refunded This Week'));
   assert.ok(!home.includes('refundedInRange'), 'and nothing left computing them');
+});
+
+// ------------------------------------------- the colón-only order (WooCommerce)
+
+// The main site at peptidescostarica.net is still WordPress, and its orders are
+// synced into the same table from outside this repo. That sync writes total_crc
+// and leaves total_usd empty, so four completed sales sat in the Orders list at
+// their colón price while every money screen counted them as $0.00.
+
+const wooOrder = (over = {}) => ({
+  status: 'Order Complete',
+  currency: 'CRC',
+  total_crc: 67830,
+  total_usd: null,
+  source: 'woocommerce',
+  created_at: '2026-08-22T20:24:51Z',
+  ...over,
+});
+
+test('a colón-only order is worth its converted total, not zero', () => {
+  const net = orderNetRevenue(wooOrder(), 452.2);
+
+  assert.equal(net.crc, 67830);
+  assert.equal(net.usd, 150.0);
+  assert.notEqual(net.usd, 0, 'the whole bug: a real sale reading as no money');
+});
+
+test('the conversion uses the rate it is given', () => {
+  const cheap = orderNetRevenueUsd(wooOrder({ total_crc: 100000 }), 500);
+  const dear = orderNetRevenueUsd(wooOrder({ total_crc: 100000 }), 400);
+
+  assert.equal(cheap, 200);
+  assert.equal(dear, 250);
+});
+
+test('a missing or nonsense rate falls back rather than dividing by zero', () => {
+  for (const bad of [undefined, null, 0, -1, NaN, 'abc']) {
+    const usd = orderNetRevenueUsd(wooOrder({ total_crc: 45448 }), bad);
+    assert.equal(usd, 100, `rate ${String(bad)} must use the shared fallback`);
+    assert.ok(Number.isFinite(usd), 'and never produce Infinity');
+  }
+});
+
+test('an order that already has dollars is never re-priced', () => {
+  // The guard that keeps this from touching the other 595 orders: a USD figure
+  // that is present wins, whatever the colón column happens to say.
+  const usd = orderNetRevenueUsd(order({ total_usd: 100, total_crc: 999999 }), 452.2);
+
+  assert.equal(usd, 100);
+});
+
+test('a colón-only order still obeys the status rules', () => {
+  // Converting must not smuggle in money the status rules exclude — #30266 came
+  // over from WooCommerce as a failed payment and is worth nothing.
+  assert.equal(orderNetRevenueUsd(wooOrder({ status: 'Pending' }), 452.2), 0);
+  assert.equal(orderNetRevenueUsd(wooOrder({ status: 'Cancelled' }), 452.2), 0);
+  assert.equal(orderNetRevenueUsd(wooOrder({ stats_override: 'exclude' }), 452.2), 0);
+});
+
+test('a colón-only order refunded in colones nets out correctly', () => {
+  // Converting only what was paid would leave the full total standing against a
+  // refund of zero — a worse answer than the $0 this replaced.
+  const usd = orderNetRevenueUsd(wooOrder({
+    status: 'Partly Refunded',
+    total_crc: 90440,
+    refunded_amount_crc: 45220,
+    refunded_amount_usd: null,
+  }), 452.2);
+
+  assert.equal(usd, 100);
+});
+
+test('an order with no totals at all is still worth nothing', () => {
+  assert.equal(orderNetRevenueUsd(wooOrder({ total_crc: null }), 452.2), 0);
+});
+
+test('the drill-down can price an order the tiles refuse to count', () => {
+  // A pending colón-only order shows $0 as revenue but must still show what it
+  // is worth, or nobody can decide whether to force it into the figures.
+  const pending = wooOrder({ status: 'Pending', total_crc: 45220 });
+
+  assert.equal(orderNetRevenueUsd(pending, 452.2), 0, 'not revenue');
+  assert.equal(orderGrossUsd(pending, 452.2), 100, 'but not worth nothing either');
+});
+
+test('totalNetRevenue passes the rate down to every order', () => {
+  const total = totalNetRevenue([wooOrder({ total_crc: 45220 }), wooOrder({ total_crc: 45220 })], 452.2);
+
+  assert.equal(total.usd, 200);
+});
+
+test('a colón-only order forced in by hand is worth its converted total', () => {
+  // Where the override feature meets the conversion: #30266 came over from
+  // WooCommerce as a failed payment, but if the money did in fact arrive, a
+  // superadmin forcing it in must get the real figure, not $0.
+  const forcedIn = wooOrder({ status: 'Pending', stats_override: 'include', total_crc: 45220 });
+
+  assert.equal(orderCountsAsSale(forcedIn), true);
+  assert.equal(orderNetRevenueUsd(forcedIn, 452.2), 100);
+});
+
+test('the conversion matches what the commission path already pays on', () => {
+  // getOrderSalesAmounts has filled the missing currency symmetrically all
+  // along — which is why agents were paid correctly on colón-only orders while
+  // the revenue tiles showed $0 for the very same sale. Checked against the
+  // source rather than by importing it: agentOrders.js imports through the
+  // '@/lib' alias, which node --test cannot resolve.
+  const agent = fs.readFileSync('src/lib/agentOrders.js', 'utf8');
+  assert.match(agent, /usd = crc \/ exchangeRate/, 'the commission path converts colones');
+
+  const lib = fs.readFileSync('src/lib/orderRevenue.mjs', 'utf8');
+  assert.match(lib, /crc \/ safeRate\(rate\)/, 'and so does this one, the same way');
+
+  // 45,220 colones at 452.2 is $100 on either path.
+  assert.equal(orderNetRevenueUsd(wooOrder({ total_crc: 45220 }), 452.2), 100);
 });

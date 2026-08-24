@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withoutExcludedOrders } from '@/lib/orderRevenue.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
@@ -153,7 +154,7 @@ export async function GET(request) {
       .in('status', COMMISSION_ELIGIBLE_ORDER_STATUSES)
       .order('created_at', { ascending: false });
 
-    const orders = (rawOrders || []).filter(order => {
+    const orders = withoutExcludedOrders(rawOrders || []).filter(order => {
       let completedAt = new Date(order.created_at);
       if (order.activity_log && Array.isArray(order.activity_log)) {
         const completionLogs = order.activity_log.filter(log => 

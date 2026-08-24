@@ -1977,6 +1977,23 @@ Core Rules:
     navigateToTab('orders');
   };
 
+  // Hold an order out of the money figures, or force one in. Applies across the
+  // Today tiles, analytics, customer totals and agent commission, because they
+  // all read orders.stats_override through src/lib/orderRevenue.mjs.
+  const handleStatsOverride = async (changes, reason) => {
+    for (const change of changes) {
+      const res = await adminFetch('/api/admin/orders/stats-override', {
+        method: 'POST',
+        body: JSON.stringify({ orderId: change.orderId, override: change.override, reason }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Could not save that change.');
+      setOrders((prev) => prev.map((o) => (
+        o.id === change.orderId ? { ...o, stats_override: change.override } : o
+      )));
+    }
+  };
+
   const openManualOrder = (customer = null) => {
     setManualOrderCustomer(customer);
     setManualOrderOpen(true);
@@ -5111,6 +5128,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               onNavigate={navigateToTab}
               onOpenOrder={setSelectedOrderDetails}
               onCreateOrder={() => openManualOrder()}
+              isSuperadmin={Boolean(adminProfile?.is_superadmin)}
+              onOverrideStats={handleStatsOverride}
+              exchangeRate={exchangeRate}
             />
           )
         )}

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withoutExcludedOrders } from '@/lib/orderRevenue.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
@@ -103,7 +104,9 @@ export async function GET(request) {
       query = query.eq('affiliate_id', targetAffiliateId);
     }
 
-    const { data: orders, error: ordersError } = await query;
+    const { data: rawAffiliateOrders, error: ordersError } = await query;
+    // Orders held out of the figures by hand must not earn an affiliate payout.
+    const orders = withoutExcludedOrders(rawAffiliateOrders || []);
 
     if (ordersError) {
       console.error('Error fetching affiliate orders:', ordersError);

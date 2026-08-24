@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withoutExcludedOrders } from '@/lib/orderRevenue.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
@@ -97,7 +98,8 @@ export async function POST(request) {
       if (currentOrdersError) {
         console.error('[Commission Approval] Could not refresh order statuses:', currentOrdersError);
       } else {
-        eligibleOrders = currentOrders || [];
+        // A test order held out of the figures must not be paid on.
+        eligibleOrders = withoutExcludedOrders(currentOrders || []);
       }
     }
 
@@ -143,7 +145,7 @@ export async function POST(request) {
       if (overrideOrdersError) {
         console.error('[Commission Approval] Could not refresh sub-user order statuses:', overrideOrdersError);
       } else {
-        eligibleOverrideOrders = currentOverrideOrders || [];
+        eligibleOverrideOrders = withoutExcludedOrders(currentOverrideOrders || []);
       }
     }
 

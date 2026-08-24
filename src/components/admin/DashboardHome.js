@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ClipboardList, ShoppingCart, Target, DollarSign, Package,
   AlertTriangle, Inbox, MessageSquare, TrendingUp, ChevronRight, Star, CheckCircle,
 } from 'lucide-react';
-import { orderCountsAsSale, orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
+import { orderCountsAsSale, orderGrossUsd, orderNetRevenueUsd, orderRevenueBasis } from '@/lib/orderRevenue.mjs';
+import KpiBreakdownModal from './KpiBreakdownModal';
 
 const FALLBACK_RATE = 454.48;
 
@@ -101,7 +102,12 @@ export default function DashboardHome({
   onNavigate,
   onOpenOrder,
   onCreateOrder,
+  isSuperadmin = false,
+  onOverrideStats,
+  exchangeRate = FALLBACK_RATE,
 }) {
+  // Which tile's breakdown is open: 'revenueToday' | 'revenueWeek' | 'pendingOrders'.
+  const [openTile, setOpenTile] = useState(null);
   const stats = useMemo(() => {
     const now = new Date();
     const todayStart = startOfDay(now);
@@ -112,10 +118,12 @@ export default function DashboardHome({
     // Net of refunds: a $100 order with $30 given back is $70 of revenue, not
     // $100. The same sum backs the commission report and the analytics chart, so
     // the three screens cannot disagree about what one order was worth.
+    // The rate is passed because a WooCommerce order off the main site arrives
+    // with its colón total only, and is converted here rather than counting $0.
     const revenueInRange = (start) =>
       orders
         .filter((o) => orderCountsAsSale(o) && getRevenueDate(o) >= start)
-        .reduce((sum, o) => sum + orderNetRevenueUsd(o), 0);
+        .reduce((sum, o) => sum + orderNetRevenueUsd(o, exchangeRate), 0);
 
     const revenueToday = revenueInRange(todayStart);
     const revenueWeek = revenueInRange(weekStart);
@@ -155,7 +163,61 @@ export default function DashboardHome({
       recentOrders,
       trustpilotUsed,
     };
-  }, [orders, abandonedCarts, leads, products]);
+  }, [orders, abandonedCarts, leads, products, exchangeRate]);
+
+  // What actually made each tile. Deliberately wider than the tile itself: it
+  // carries the orders inside the window that are NOT counting too, since the
+  // point is to be able to force one in as well as hold one out.
+  const breakdowns = useMemo(() => {
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const weekStart = startOfWeek(now);
+
+    const inWindow = (start) => orders
+      .filter((order) => getRevenueDate(order) >= start)
+      .map((order) => ({
+        id: order.id,
+        orderNumber: order.order_number,
+        customer: order.customer_name,
+        date: getRevenueDate(order),
+        amountUsd: orderNetRevenueUsd(order, exchangeRate) || orderGrossUsd(order, exchangeRate),
+        basis: orderRevenueBasis(order),
+      }))
+      // Counting orders first, then newest, so the money is at the top.
+      .sort((a, b) => Number(b.basis.counts) - Number(a.basis.counts) || b.date - a.date);
+
+    return {
+      revenueToday: inWindow(todayStart),
+      revenueWeek: inWindow(weekStart),
+      pendingOrders: orders
+        .filter((order) => (order.status || 'Pending') === 'Pending')
+        .map((order) => ({
+          id: order.id,
+          orderNumber: order.order_number,
+          customer: order.customer_name,
+          date: new Date(order.created_at),
+          amountUsd: orderGrossUsd(order, exchangeRate),
+          basis: orderRevenueBasis(order),
+        }))
+        .sort((a, b) => b.date - a.date),
+    };
+  }, [orders, exchangeRate]);
+
+  const TILE_TITLES = {
+    revenueToday: 'Revenue Today',
+    revenueWeek: 'Revenue This Week',
+    pendingOrders: 'Pending Orders',
+  };
+  const TILE_SUBTITLES = {
+    revenueToday: 'Orders dated today by when they were marked paid or complete, not when they were created.',
+    revenueWeek: 'Orders dated this week by when they were marked paid or complete, not when they were created.',
+    pendingOrders: 'Orders still sitting at Pending. These are not counted as revenue.',
+  };
+
+  const applyOverrides = async (changes, reason) => {
+    if (!onOverrideStats) throw new Error('Changing the figures is not available here.');
+    await onOverrideStats(changes, reason);
+  };
 
   // Remaining invitations + a color that warns as the monthly quota runs low.
   const trustpilotRemaining = Math.max(0, TRUSTPILOT_MONTHLY_LIMIT - stats.trustpilotUsed);
@@ -263,7 +325,12 @@ export default function DashboardHome({
       </section>
 
       <div className="dashboard-kpi-grid">
-        <div className="dashboard-kpi-card">
+        <button
+          type="button"
+          className="dashboard-kpi-card is-clickable"
+          onClick={() => setOpenTile('pendingOrders')}
+          title="See what made this number"
+        >
           <div className="dashboard-kpi-icon" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
             <ClipboardList size={20} />
           </div>
@@ -271,8 +338,13 @@ export default function DashboardHome({
             <div className="dashboard-kpi-value">{stats.pendingOrders.length}</div>
             <div className="dashboard-kpi-label">Pending Orders</div>
           </div>
-        </div>
-        <div className="dashboard-kpi-card">
+        </button>
+        <button
+          type="button"
+          className="dashboard-kpi-card is-clickable"
+          onClick={() => setOpenTile('revenueToday')}
+          title="See what made this number"
+        >
           <div className="dashboard-kpi-icon" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80' }}>
             <DollarSign size={20} />
           </div>
@@ -280,8 +352,13 @@ export default function DashboardHome({
             <div className="dashboard-kpi-value">${stats.revenueToday.toLocaleString()}</div>
             <div className="dashboard-kpi-label">Revenue Today</div>
           </div>
-        </div>
-        <div className="dashboard-kpi-card">
+        </button>
+        <button
+          type="button"
+          className="dashboard-kpi-card is-clickable"
+          onClick={() => setOpenTile('revenueWeek')}
+          title="See what made this number"
+        >
           <div className="dashboard-kpi-icon" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
             <TrendingUp size={20} />
           </div>
@@ -289,7 +366,7 @@ export default function DashboardHome({
             <div className="dashboard-kpi-value">${stats.revenueWeek.toLocaleString()}</div>
             <div className="dashboard-kpi-label">Revenue This Week</div>
           </div>
-        </div>
+        </button>
         <div className="dashboard-kpi-card">
           <div className="dashboard-kpi-icon" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' }}>
             <ShoppingCart size={20} />
@@ -400,6 +477,16 @@ export default function DashboardHome({
           </div>
         </section>
       )}
+
+      <KpiBreakdownModal
+        open={Boolean(openTile)}
+        title={TILE_TITLES[openTile] || ''}
+        subtitle={TILE_SUBTITLES[openTile] || ''}
+        rows={openTile ? (breakdowns[openTile] || []) : []}
+        canEdit={isSuperadmin && Boolean(onOverrideStats)}
+        onClose={() => setOpenTile(null)}
+        onApply={applyOverrides}
+      />
     </div>
   );
 }

@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { missingColumnFrom } from '@/lib/optionalColumns.mjs';
+import { withoutExcludedOrders } from '@/lib/orderRevenue.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import {
@@ -21,7 +23,13 @@ import { agentAnalyticsRange, orderCompletedInRange } from '@/lib/agentDashboard
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-const ORDER_FIELDS = 'id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at, activity_log, agent_commission_rate_override, agent_commission_source';
+const ORDER_FIELDS_BASE = 'id, order_number, customer_name, status, sales_agent, total_usd, total_crc, currency, created_at, activity_log, agent_commission_rate_override, agent_commission_source';
+// stats_override arrives with add-order-stats-override.sql. Migrations are
+// pasted in by hand, so this deploy can land first; naming a column that does
+// not exist yet fails the whole query, so it is dropped on the first such
+// error and the narrow field list is kept for the paging that follows.
+const ORDER_FIELDS = `${ORDER_FIELDS_BASE}, stats_override`;
+let orderFieldsInUse = ORDER_FIELDS;
 const PAYOUT_FIELDS = 'id, start_date, end_date, usd_sales, crc_sales, usd_commission, crc_commission, weekly_salary_paid, salary_currency, total_payout_usd, total_payout_crc, status';
 const PAGE_SIZE = 1000;
 const MAX_ORDER_PAGES = 50;
@@ -30,11 +38,16 @@ async function fetchAllOrders(supabase, configure) {
   const rows = [];
   for (let page = 0; page < MAX_ORDER_PAGES; page += 1) {
     const from = page * PAGE_SIZE;
-    const query = configure(supabase.from('orders').select(ORDER_FIELDS));
-    const { data, error } = await query
+    const run = (fields) => configure(supabase.from('orders').select(fields))
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .range(from, from + PAGE_SIZE - 1);
+
+    let { data, error } = await run(orderFieldsInUse);
+    if (error && missingColumnFrom(error) === 'stats_override') {
+      orderFieldsInUse = ORDER_FIELDS_BASE;
+      ({ data, error } = await run(orderFieldsInUse));
+    }
     if (error) throw error;
     rows.push(...(data || []));
     if ((data || []).length < PAGE_SIZE) return rows;
@@ -95,6 +108,8 @@ export async function GET(request) {
 
     const { rate: exchangeRate } = await getDatabaseBackedUsdToCrcRate();
     const getAmounts = (order) => getOrderSalesAmounts(order, exchangeRate);
+    // A test order held out of the figures must not appear as agent earnings.
+    eligibleRows = withoutExcludedOrders(eligibleRows);
     const eligibleAgentOrders = eligibleRows.filter((order) => orderBelongsToAgent(order, profile));
     // Only Paid/Completed/Order Complete orders count toward pay — this is the
     // exact rule the weekly payout report uses. Pending/processing/blocked orders
