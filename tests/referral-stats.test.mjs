@@ -14,7 +14,7 @@ const scan = (over = {}) => ({
 });
 
 const order = (over = {}) => ({
-  sales_agent: 'Sean Mcully', status: 'Paid', total_usd: 200, currency: 'USD', ...over,
+  sales_agent: 'Sean Mcully', status: 'Order Complete', total_usd: 200, currency: 'USD', ...over,
 });
 
 test('classifies devices without fingerprinting', () => {

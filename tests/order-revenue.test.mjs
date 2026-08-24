@@ -23,7 +23,7 @@ import {
 import { isSuccessfulAnalyticsOrder, revenueTrendRows } from '../src/lib/analyticsDashboard.mjs';
 
 const order = (over = {}) => ({
-  status: 'Paid',
+  status: 'Order Complete',
   total_usd: 100,
   total_crc: 50000,
   created_at: '2026-08-01T12:00:00Z',
@@ -91,7 +91,8 @@ test('an order from before refunds existed still counts in full', () => {
 
 test('status is matched however it was typed', () => {
   assert.equal(orderCountsAsSale({ status: 'order complete' }), true);
-  assert.equal(orderCountsAsSale({ status: '  Paid  ' }), true);
+  assert.equal(orderCountsAsSale({ status: '  Order Complete  ' }), true);
+  assert.equal(orderCountsAsSale({ status: '  Paid  ' }), false, 'trimmed, but still not a sale');
   assert.equal(orderCountsAsSale({}), false);
   assert.equal(orderCountsAsSale(null), false);
 });
@@ -180,15 +181,20 @@ test('the Today tiles and the analytics chart agree about one order', () => {
 test('a partly refunded order is a successful sale, a fully refunded one is not', () => {
   assert.equal(isSuccessfulAnalyticsOrder({ status: 'Partly Refunded' }), true);
   assert.equal(isSuccessfulAnalyticsOrder({ status: 'Refunded' }), false);
-  assert.equal(isSuccessfulAnalyticsOrder({ status: 'Paid' }), true);
+  assert.equal(isSuccessfulAnalyticsOrder({ status: 'Order Complete' }), true);
+  // Paid means the charge cleared, not that the order was closed. See below.
+  assert.equal(isSuccessfulAnalyticsOrder({ status: 'Paid' }), false);
 });
 
 test('revenue statuses are the commission statuses, not a second list', () => {
   // Two lists drift, and a status worth a commission but not revenue would pay
   // an agent for money the business never counted.
+  assert.ok(REVENUE_ORDER_STATUSES.has('order complete'));
   assert.ok(REVENUE_ORDER_STATUSES.has('partly refunded'));
-  assert.ok(REVENUE_ORDER_STATUSES.has('paid'));
   assert.ok(!REVENUE_ORDER_STATUSES.has('refunded'));
+  // Only a closed order is a sale. The card gateway sets 'Paid' by itself when
+  // a charge clears, and orders sat in it for up to 70 days counting in full.
+  assert.ok(!REVENUE_ORDER_STATUSES.has('paid'));
 
   const lib = fs.readFileSync('src/lib/orderRevenue.mjs', 'utf8');
   assert.match(lib, /COMMISSION_ELIGIBLE_ORDER_STATUSES\.map\(lower\)/);

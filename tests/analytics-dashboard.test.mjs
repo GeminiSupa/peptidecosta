@@ -61,7 +61,7 @@ test('acquisition channels deduplicate visitors and exclude preview traffic', ()
 
 test('revenue trend keeps years separate and excludes unpaid orders', () => {
   const rows = revenueTrendRows([
-    { created_at: '2025-12-31T10:00:00.000Z', status: 'paid', total_usd: 10, total_crc: 5000 },
+    { created_at: '2025-12-31T10:00:00.000Z', status: 'completed', total_usd: 10, total_crc: 5000 },
     { created_at: '2026-01-01T10:00:00.000Z', status: 'Order Complete', total_usd: 20, total_crc: 10000 },
     { created_at: '2026-01-01T11:00:00.000Z', status: 'Cancelled', total_usd: 99, total_crc: 50000 },
   ]);

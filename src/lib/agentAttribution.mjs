@@ -32,8 +32,17 @@
  *
  * 'Refunded' is deliberately absent: nothing was kept, so there is no sale to
  * report and a zero-value line would only clutter the statement.
+ *
+ * 'Paid' was removed on 2026-08-24. Omer's rule: an order marked complete is a
+ * sale and nothing else is. The card gateway sets 'Paid' by itself the moment a
+ * charge clears, so it means the money arrived, not that the order was fulfilled
+ * — and orders were sitting in it untouched for up to seventy days while
+ * counting in full on the Today tiles. Money that has arrived on an order
+ * nobody has closed is now worth nothing until somebody closes it. The same
+ * removal reaches commission, because this is the one list both read: an agent
+ * must never earn on money the business has not counted.
  */
-export const COMMISSION_ELIGIBLE_ORDER_STATUSES = ['Paid', 'Completed', 'Order Complete', 'Partly Refunded'];
+export const COMMISSION_ELIGIBLE_ORDER_STATUSES = ['Completed', 'Order Complete', 'Partly Refunded'];
 
 const ELIGIBLE_STATUSES = new Set(
   COMMISSION_ELIGIBLE_ORDER_STATUSES.map((status) => status.toLowerCase()),

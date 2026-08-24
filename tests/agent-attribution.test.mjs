@@ -29,9 +29,9 @@ test('a placeholder email shared by many customers owns none of them', () => {
   // address korinneda@icloud.com on 13. Treating either as an identity would
   // hand every one of those people to whoever closed the earliest.
   const orders = [
-    { status: 'Paid', sales_agent: 'Dani', customer_name: 'Ana', customer_phone: '50611111111', customer_email: 'abc@abc.com', created_at: '2026-01-01' },
-    { status: 'Paid', sales_agent: 'Dani', customer_name: 'Beto', customer_phone: '50622222222', customer_email: 'abc@abc.com', created_at: '2026-02-01' },
-    { status: 'Paid', sales_agent: 'Dani', customer_name: 'Caro', customer_phone: '50633333333', customer_email: 'abc@abc.com', created_at: '2026-03-01' },
+    { status: 'Order Complete', sales_agent: 'Dani', customer_name: 'Ana', customer_phone: '50611111111', customer_email: 'abc@abc.com', created_at: '2026-01-01' },
+    { status: 'Order Complete', sales_agent: 'Dani', customer_name: 'Beto', customer_phone: '50622222222', customer_email: 'abc@abc.com', created_at: '2026-02-01' },
+    { status: 'Order Complete', sales_agent: 'Dani', customer_name: 'Caro', customer_phone: '50633333333', customer_email: 'abc@abc.com', created_at: '2026-03-01' },
   ];
   const history = buildAgentHistory(orders);
 
@@ -45,8 +45,8 @@ test('a placeholder email shared by many customers owns none of them', () => {
 test('a phone number shared by several customers owns none of them', () => {
   // 41 numbers in the order book are on more than one person.
   const orders = [
-    { status: 'Paid', sales_agent: 'Korinne', customer_name: 'Ana', customer_phone: '86639549', customer_email: 'ana@example.com', created_at: '2026-01-01' },
-    { status: 'Paid', sales_agent: 'Yese', customer_name: 'Beto', customer_phone: '86639549', customer_email: 'beto@example.com', created_at: '2026-02-01' },
+    { status: 'Order Complete', sales_agent: 'Korinne', customer_name: 'Ana', customer_phone: '86639549', customer_email: 'ana@example.com', created_at: '2026-01-01' },
+    { status: 'Order Complete', sales_agent: 'Yese', customer_name: 'Beto', customer_phone: '86639549', customer_email: 'beto@example.com', created_at: '2026-02-01' },
   ];
   const history = buildAgentHistory(orders);
 
@@ -59,8 +59,8 @@ test('one customer ordering twice is not mistaken for two people', () => {
   // The same person, once with an email and once without. Their phone must
   // still identify them rather than looking shared.
   const orders = [
-    { status: 'Paid', sales_agent: 'Pollita', customer_name: 'Ana Mora', customer_phone: '50684046973', customer_email: 'ana@example.com', created_at: '2026-01-01' },
-    { status: 'Paid', sales_agent: 'Pollita', customer_name: 'Ana Mora', customer_phone: '8404-6973', customer_email: '', created_at: '2026-03-01' },
+    { status: 'Order Complete', sales_agent: 'Pollita', customer_name: 'Ana Mora', customer_phone: '50684046973', customer_email: 'ana@example.com', created_at: '2026-01-01' },
+    { status: 'Order Complete', sales_agent: 'Pollita', customer_name: 'Ana Mora', customer_phone: '8404-6973', customer_email: '', created_at: '2026-03-01' },
   ];
   const history = buildAgentHistory(orders);
   assert.equal(findHistoricalAgent(history, { phone: '+506 8404 6973' })?.agent, 'Pollita');
@@ -68,9 +68,9 @@ test('one customer ordering twice is not mistaken for two people', () => {
 
 test('ambiguous keys are reported for both contact types', () => {
   const orders = [
-    { status: 'Paid', sales_agent: 'A', customer_name: 'One', customer_phone: '11111111', customer_email: 'shared@x.com', created_at: '2026-01-01' },
-    { status: 'Paid', sales_agent: 'B', customer_name: 'Two', customer_phone: '22222222', customer_email: 'shared@x.com', created_at: '2026-01-02' },
-    { status: 'Paid', sales_agent: 'C', customer_name: 'Three', customer_phone: '33333333', customer_email: 'solo@x.com', created_at: '2026-01-03' },
+    { status: 'Order Complete', sales_agent: 'A', customer_name: 'One', customer_phone: '11111111', customer_email: 'shared@x.com', created_at: '2026-01-01' },
+    { status: 'Order Complete', sales_agent: 'B', customer_name: 'Two', customer_phone: '22222222', customer_email: 'shared@x.com', created_at: '2026-01-02' },
+    { status: 'Order Complete', sales_agent: 'C', customer_name: 'Three', customer_phone: '33333333', customer_email: 'solo@x.com', created_at: '2026-01-03' },
   ];
   const ambiguous = findAmbiguousContactKeys(orders);
   assert.equal(ambiguous.has('shared@x.com'), true);
@@ -107,7 +107,7 @@ test('a loose phone pattern never credits the wrong customer on its own', () => 
 
   // ...but the history is keyed on the real last 8 digits, so it is not a match.
   const history = buildAgentHistory([
-    { status: 'Paid', sales_agent: 'Korinne', customer_phone: otherCustomer, created_at: '2026-01-01' },
+    { status: 'Order Complete', sales_agent: 'Korinne', customer_phone: otherCustomer, created_at: '2026-01-01' },
   ]);
   assert.equal(findHistoricalAgent(history, { phone: '8404-6973' }), null);
 });
@@ -140,7 +140,7 @@ function stubSupabase(rows, onQuery = () => {}) {
 }
 
 const closed = (over = {}) => ({
-  status: 'Paid',
+  status: 'Order Complete',
   created_at: '2026-01-01T00:00:00Z',
   sales_agent: 'Dani',
   customer_phone: '+506 8404-6973',
@@ -149,7 +149,7 @@ const closed = (over = {}) => ({
 });
 
 test('only a closed order can hand a customer to an agent', () => {
-  assert.equal(isClosedOrder({ status: 'Paid' }), true);
+  assert.equal(isClosedOrder({ status: 'Order Complete' }), true);
   assert.equal(isClosedOrder({ status: 'Completed' }), true);
   assert.equal(isClosedOrder({ status: 'order complete' }), true);
   assert.equal(isClosedOrder({ status: 'Pending' }), false);
