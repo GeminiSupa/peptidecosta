@@ -7400,6 +7400,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         products={products}
         orders={orders}
         initialCustomer={manualOrderCustomer}
+        exchangeRate={exchangeRate}
+        exchangeRateUpdatedAt={exchangeRateUpdatedAt}
         onCreated={handleManualOrderCreated}
       />
 

@@ -3,7 +3,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2, UserRoundSearch } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
-import { calculateAdminOrderTotals } from '@/lib/adminOrderTotals.mjs';
+import {
+  ADMIN_FALLBACK_EXCHANGE_RATE,
+  calculateAdminOrderTotals,
+  getAdminCurrencyPair,
+} from '@/lib/adminOrderTotals.mjs';
 import { bacGiftShortfall } from '@/lib/bacWater.mjs';
 import {
   buildManualOrderCustomerOptions,
@@ -18,13 +22,25 @@ const emptyForm = () => ({
   shipping_cost_crc: 0, shipping_cost_usd: 0, items: [{ ...EMPTY_ITEM }],
 });
 
-export default function ManualOrderModal({ open, onClose, products = [], orders = [], initialCustomer = null, onCreated }) {
+export default function ManualOrderModal({
+  open,
+  onClose,
+  products = [],
+  orders = [],
+  initialCustomer = null,
+  exchangeRate = ADMIN_FALLBACK_EXCHANGE_RATE,
+  exchangeRateUpdatedAt = null,
+  onCreated,
+}) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [customerSearch, setCustomerSearch] = useState('');
   const wasOpen = useRef(false);
   const customerOptions = useMemo(() => buildManualOrderCustomerOptions(orders), [orders]);
+  const liveExchangeRate = Number.isFinite(Number(exchangeRate)) && Number(exchangeRate) > 0
+    ? Number(exchangeRate)
+    : ADMIN_FALLBACK_EXCHANGE_RATE;
 
   const applyCustomer = (customer) => {
     if (!customer) return;
@@ -66,15 +82,37 @@ export default function ManualOrderModal({ open, onClose, products = [], orders 
     setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
   };
 
-  const pickProduct = (idx, name) => {
+  const productPrice = (name, currency) => {
     const p = products.find((x) => x.product === name);
-    if (!p) return;
-    const price = form.currency === 'USD'
-      ? parseFloat(String(p.priceUsd || '0').replace(/[^0-9.]/g, '')) || 0
-      : parseFloat(String(p.priceCrc || '0').replace(/[^0-9.]/g, '')) || 0;
+    if (!p) return 0;
+    const usd = parseFloat(String(p.priceUsd || '0').replace(/[^0-9.]/g, '')) || 0;
+    if (currency === 'USD') return usd;
+    // Match the customer catalog: CRC is always derived from the USD catalog
+    // price and the current guarded USD/CRC rate, never from an old saved CRC
+    // string or the historic 454.48 fallback.
+    if (usd > 0) return Math.round(usd * liveExchangeRate);
+    return parseFloat(String(p.priceCrc || '0').replace(/[^0-9.]/g, '')) || 0;
+  };
+
+  const pickProduct = (idx, name) => {
+    const price = productPrice(name, form.currency);
+    if (!price) return;
     const items = [...form.items];
     items[idx] = { ...items[idx], product: name, price: price };
     setForm({ ...form, items });
+  };
+
+  const changeCurrency = (currency) => {
+    setForm((current) => ({
+      ...current,
+      currency,
+      // Reprice selected catalog products when the order currency changes. A
+      // CRC amount must never survive a switch to USD (or vice versa).
+      items: current.items.map((item) => ({
+        ...item,
+        price: item.product ? productPrice(item.product, currency) : item.price,
+      })),
+    }));
   };
 
   // The free vials the route will attach on save. Shown here so an agent taking
@@ -99,8 +137,8 @@ export default function ManualOrderModal({ open, onClose, products = [], orders 
       return;
     }
 
-    const totalUsd = form.currency === 'USD' ? Number(total.toFixed(2)) : parseFloat((total / 454.48).toFixed(2));
-    const totalCrc = form.currency === 'CRC' ? total : Math.round(total * 454.48);
+    const totals = getAdminCurrencyPair(total, form.currency, liveExchangeRate);
+    const shippingCosts = getAdminCurrencyPair(shipping, form.currency, liveExchangeRate);
 
     try {
       const res = await adminFetch('/api/admin/orders/create', {
@@ -114,14 +152,14 @@ export default function ManualOrderModal({ open, onClose, products = [], orders 
             customer_id_type: form.customer_id_number.trim() ? form.customer_id_type : null,
             shipping_address: form.shipping_address.trim() || null,
             items: orderItems,
-            total_usd: totalUsd,
-            total_crc: totalCrc,
+            total_usd: totals.usd,
+            total_crc: totals.crc,
             currency: form.currency,
             payment_method: form.payment_method,
             status: form.status,
             promo_code: form.promo_code.trim() || null,
-            shipping_cost_usd: form.currency === 'USD' ? shipping : parseFloat((shipping / 454.48).toFixed(2)),
-            shipping_cost_crc: form.currency === 'CRC' ? shipping : Math.round(shipping * 454.48),
+            shipping_cost_usd: shippingCosts.usd,
+            shipping_cost_crc: shippingCosts.crc,
           },
         }),
       });
@@ -183,7 +221,7 @@ export default function ManualOrderModal({ open, onClose, products = [], orders 
           <textarea className="admin-input" placeholder="Shipping address" rows={2} value={form.shipping_address} onChange={(e) => setForm({ ...form, shipping_address: e.target.value })} />
 
           <div className="manual-order-grid">
-            <select className="admin-select" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+            <select className="admin-select" value={form.currency} onChange={(e) => changeCurrency(e.target.value)}>
               <option value="CRC">CRC (₡)</option>
               <option value="USD">USD ($)</option>
             </select>
@@ -215,6 +253,10 @@ export default function ManualOrderModal({ open, onClose, products = [], orders 
               <option value="Order Complete">Order Complete</option>
             </select>
             <input className="admin-input" placeholder="Promo code (optional)" value={form.promo_code} onChange={(e) => setForm({ ...form, promo_code: e.target.value })} />
+          </div>
+          <div style={{ color: '#7dd3fc', fontSize: '.7rem', marginTop: '-2px' }}>
+            Live checkout rate: $1 = ₡{liveExchangeRate.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+            {exchangeRateUpdatedAt ? ` · updated ${new Date(exchangeRateUpdatedAt).toLocaleString()}` : ''}
           </div>
 
           <h4 style={{ margin: '16px 0 8px', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.05em' }}>Items</h4>

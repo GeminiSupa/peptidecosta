@@ -4,6 +4,12 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { agentMatchKeys } from '@/lib/agentOrders';
 import { withBacGiftLines } from '@/lib/bacWater.mjs';
+import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
+import {
+  calculateAdminOrderTotals,
+  getAdminCurrencyPair,
+  normalizeAdminOrderCurrency,
+} from '@/lib/adminOrderTotals.mjs';
 
 export const runtime = 'nodejs';
 
@@ -37,9 +43,23 @@ export async function POST(request) {
     }
 
     const orderNum = order.order_number || `WPCR-${Date.now().toString(36).toUpperCase()}`;
+    // Use the exact guarded, database-backed rate used by customer checkout.
+    // The browser's converted totals are only a preview; recalculating here
+    // prevents a stale open admin tab from saving yesterday's conversion.
+    const { rate: liveExchangeRate, source: exchangeRateSource } = await getDatabaseBackedUsdToCrcRate();
+    const currency = normalizeAdminOrderCurrency(order.currency);
+    const primaryShipping = currency === 'USD'
+      ? Number(order.shipping_cost_usd || 0)
+      : Number(order.shipping_cost_crc || 0);
+    const calculated = calculateAdminOrderTotals(order.items, primaryShipping);
+    const primaryTotal = currency === 'USD'
+      ? Number(calculated.total.toFixed(2))
+      : Math.round(calculated.total);
+    const totals = getAdminCurrencyPair(primaryTotal, currency, liveExchangeRate);
+    const shippingCosts = getAdminCurrencyPair(primaryShipping, currency, liveExchangeRate);
     const activityLog = appendOrderActivity([], {
       type: 'manual_entry',
-      message: `Manual order created by ${auth.user.email}`,
+      message: `Manual order created by ${auth.user.email} · FX $1 = ₡${liveExchangeRate} (${exchangeRateSource})`,
       by: auth.user.email,
     });
 
@@ -48,6 +68,11 @@ export async function POST(request) {
       items: withBacGift(order.items, order.currency),
       order_number: orderNum,
       source: 'admin_manual',
+      currency,
+      total_usd: totals.usd,
+      total_crc: totals.crc,
+      shipping_cost_usd: shippingCosts.usd,
+      shipping_cost_crc: shippingCosts.crc,
       status: order.status || 'Pending',
       payment_method: order.payment_method || 'whatsapp',
       activity_log: activityLog,
@@ -108,7 +133,12 @@ export async function POST(request) {
       }
     }
 
-    return NextResponse.json({ ok: true, order: data });
+    return NextResponse.json({
+      ok: true,
+      order: data,
+      exchangeRate: liveExchangeRate,
+      exchangeRateSource,
+    });
   } catch (err) {
     console.error('[admin/orders/create]', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });

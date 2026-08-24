@@ -44,6 +44,18 @@ export function getAdminShippingCosts(amount, currency, exchangeRate = ADMIN_FAL
   };
 }
 
+/**
+ * Express one amount in both currencies using the rate that priced the order.
+ *
+ * Manual orders previously repeated this conversion in the browser with the
+ * hard-coded fallback rate. Keeping the conversion here lets the form preview
+ * and the authenticated create route use the same rounding rules with the
+ * same database-backed live rate.
+ */
+export function getAdminCurrencyPair(amount, currency, exchangeRate = ADMIN_FALLBACK_EXCHANGE_RATE) {
+  return getAdminShippingCosts(amount, currency, exchangeRate);
+}
+
 export function normalizeManualDiscountType(type) {
   return type === 'percentage' || type === 'fixed' ? type : null;
 }
