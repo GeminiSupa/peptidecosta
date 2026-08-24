@@ -85,6 +85,37 @@ export function formatCrWall(wall) {
   return `${formatted} (Costa Rica)`;
 }
 
+/**
+ * A stored instant formatted in Costa Rica time, with the caller's own fields.
+ *
+ * The list screens each want a different shape — "Aug 24, 07:50" on the orders
+ * table, "24 Aug 2026" on inquiries — but every one of them means Costa Rica.
+ * They were reading `toLocaleDateString` with no timezone, which is the
+ * reader's own clock: an admin in Pakistan sits 11 hours ahead of the business,
+ * so an order finished at 23:43 on the 23rd in Costa Rica was listed as the
+ * 24th, while Revenue Today — which has always counted the Costa Rican day —
+ * correctly left it in the 23rd. The list and the tile disagreed all evening,
+ * every evening.
+ *
+ * Passing timeZone here rather than at each call site is what stops the next
+ * screen from quietly going back to the reader's clock.
+ *
+ * The locale is pinned too, for the same reason the zone is: left as undefined
+ * it follows the reader's machine, so the same order reads "Aug 23" for one
+ * admin and "23 Aug" for another. en-US is what the commission emails and the
+ * breakdown modal already used. Pass `locale` to override it.
+ */
+export function formatCrDate(value, options = {}) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const { locale = 'en-US', ...fields } = options;
+  return new Intl.DateTimeFormat(locale, {
+    ...fields,
+    timeZone: 'America/Costa_Rica',
+  }).format(date);
+}
+
 /** A stored instant shown as Costa Rica local time, 24-hour: "25/07/2026, 23:59 (CR)". */
 export function formatCrInstant(iso) {
   if (!iso) return '';

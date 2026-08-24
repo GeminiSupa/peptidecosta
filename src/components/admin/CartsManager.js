@@ -5,6 +5,7 @@ import {
   ShoppingCart, Trash2, Upload, Brain, Sparkles, AlertCircle, 
   Clock, Mail, MessageCircle, ArrowRight, Package, CreditCard, Eye, Search, ArrowDownUp, User
 } from 'lucide-react';
+import { formatCrDate } from '@/lib/crTime.mjs';
 
 export default function CartsManager({
   abandonedCarts,
@@ -414,7 +415,7 @@ export default function CartsManager({
                   </label>
                   <button type="button" className="cart-mobile-customer" onClick={() => setSelectedCartDetails && setSelectedCartDetails(cart)}>
                     <strong>{email || cart.customer_name || 'Guest Checkout'}</strong>
-                    <span>{phone || 'No phone'} · {new Date(cart.created_at).toLocaleDateString()}</span>
+                    <span>{phone || 'No phone'} · {formatCrDate(cart.created_at)}</span>
                   </button>
                   <span className="cart-mobile-total">${total.toFixed(2)}</span>
                 </div>
@@ -512,7 +513,7 @@ export default function CartsManager({
                     </td>
                     <td data-label="Date" style={{ padding: '12px 16px' }}>
                       <div style={{ fontSize: '0.85rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
-                        <Clock size={12} /> {new Date(cart.created_at).toLocaleDateString()} {new Date(cart.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        <Clock size={12} /> {formatCrDate(cart.created_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                       </div>
                     </td>
                     <td data-label="Cart Value" style={{ padding: '12px 16px' }}>

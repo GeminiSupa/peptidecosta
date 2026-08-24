@@ -5,7 +5,7 @@ import { adminFetch } from '@/lib/adminApi';
 import QRCode from 'qrcode';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check, QrCode, Copy, Download, X } from 'lucide-react';
 import { getBadgeStyleOptions, resolvePromoBadgeText } from '@/lib/promoBadge.mjs';
-import { crWallToIso, isoToCrWall, formatCrWall, formatCrInstant } from '@/lib/crTime.mjs';
+import { crWallToIso, isoToCrWall, formatCrWall, formatCrInstant, formatCrDate } from '@/lib/crTime.mjs';
 import ReferralAnalytics from '@/components/admin/ReferralAnalytics';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import PayoutSettlementDialog from './PayoutSettlementDialog';
@@ -949,7 +949,7 @@ export default function AffiliatesManager({ products = [] }) {
                         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.affiliate_email}</div>
                       </td>
                       <td style={{ padding: '16px', color: '#cbd5e1', fontSize: '0.85rem' }}>
-                        {new Date(p.start_date).toLocaleDateString()} - {new Date(p.end_date).toLocaleDateString()}
+                        {formatCrDate(p.start_date)} - {formatCrDate(p.end_date)}
                       </td>
                       <td style={{ padding: '16px', fontWeight: 'bold', color: '#38bdf8' }}>{p.commission_rate}%</td>
                       <td style={{ padding: '16px', fontSize: '0.85rem' }}>

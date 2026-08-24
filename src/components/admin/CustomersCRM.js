@@ -18,6 +18,7 @@ import {
 import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 import { leadContactPoints } from '@/lib/leadContact.mjs';
 import { supabase } from '@/lib/supabase';
+import { formatCrDate } from '@/lib/crTime.mjs';
 
 const takeCustomerHandoffSearch = () => {
   if (typeof window === 'undefined') return '';
@@ -576,7 +577,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
           c.location,
           c.totalSpentUsd.toFixed(2),
           c.orderCount,
-          new Date(c.lastOrderDate).toLocaleDateString(),
+          formatCrDate(c.lastOrderDate),
           c.owner || 'Unassigned'
         ]);
         const filename = `peptidescr-customers-${new Date().toISOString().slice(0, 10)}`;
@@ -1686,7 +1687,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
                     <td data-label="Last Active" style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Calendar size={12} />
-                        <span>{new Date(cust.lastOrderDate).toLocaleDateString()}</span>
+                        <span>{formatCrDate(cust.lastOrderDate)}</span>
                       </div>
                     </td>
 

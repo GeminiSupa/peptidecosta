@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Check, Ban, RotateCcw, AlertTriangle } from 'lucide-react';
+import { formatCrDate } from '@/lib/crTime.mjs';
 
 /**
  * What actually made a Today tile, and the ability to correct it.
@@ -22,10 +23,12 @@ const money = (value) => `$${Number(value || 0).toLocaleString('en-US', {
   maximumFractionDigits: 2,
 })}`;
 
+// Costa Rica time: this list explains a tile that counts the Costa Rican day,
+// so a row dated in the reader's own clock would contradict the total above it.
 const shortDate = (value) => {
   const date = new Date(value);
   return Number.isFinite(date.getTime())
-    ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    ? formatCrDate(date, { month: 'short', day: 'numeric' })
     : '—';
 };
 

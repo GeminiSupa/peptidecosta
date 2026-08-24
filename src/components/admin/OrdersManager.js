@@ -2,6 +2,7 @@ import React, { useDeferredValue, useMemo, useState } from 'react';
 import { Database, Download, MessageCircle, Plus, Trash2 } from 'lucide-react';
 import { getAdminVolumeDiscountPct } from '@/lib/adminOrderTotals.mjs';
 import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
+import { formatCrDate } from '@/lib/crTime.mjs';
 
 const ORDER_STATUS_OPTIONS = [
   'Pending',
@@ -104,12 +105,15 @@ function statusOptionsFor(status) {
   ];
 }
 
+// Costa Rica time, not the reader's — so this column names the same day the
+// Revenue tiles counted the order on. See formatCrDate.
 function getOrderDateLabel(order) {
-  return new Date(order.created_at).toLocaleDateString(undefined, {
+  return formatCrDate(order.created_at, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
   });
 }
 

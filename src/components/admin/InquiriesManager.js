@@ -8,6 +8,7 @@ import {
   XCircle, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Inbox,
   ArrowLeft, User, Calendar, Sparkles, ArrowRight
 } from 'lucide-react';
+import { formatCrDate } from '@/lib/crTime.mjs';
 
 const STATUS_CONFIG = {
   'New': { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.3)', icon: Mail },
@@ -29,7 +30,7 @@ const formatDate = (dateString) => {
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return formatCrDate(date, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const extractPhone = (message) => {

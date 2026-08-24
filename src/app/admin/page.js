@@ -1,5 +1,5 @@
 "use client";
-import { isoToCrWall } from '@/lib/crTime.mjs';
+import { isoToCrWall, formatCrDate } from '@/lib/crTime.mjs';
 
 import '@/app/admin.css';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -351,7 +351,7 @@ const formatRelativeTime = (dateString) => {
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
     
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return formatCrDate(date, { month: 'short', day: 'numeric' });
   } catch (e) {
     return 'Never';
   }
@@ -5467,7 +5467,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     <div className="review-mobile-top">
                       <div>
                         <strong>{r.product_name}</strong>
-                        <span>{r.customer_name} · {new Date(r.created_at).toLocaleDateString()}</span>
+                        <span>{r.customer_name} · {formatCrDate(r.created_at)}</span>
                       </div>
                       <span className="review-status-pill">{r.status}</span>
                     </div>
@@ -5517,7 +5517,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     {visibleReviews.map(r => (
                       <tr key={r.id} style={{ opacity: r.status === 'Approved' ? 0.75 : 1 }}>
                         <td style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-                          {new Date(r.created_at).toLocaleDateString()}
+                          {formatCrDate(r.created_at)}
                         </td>
                         <td style={{ fontWeight: 'bold' }}>{r.product_name}</td>
                         <td>{r.customer_name}</td>
@@ -7228,7 +7228,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         <span style={{ color: isRecent ? '#fbbf24' : '#4ade80', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           {isRecent ? '⚠️ ' : '✅ '}{formatRelativeTime(currentLead.last_contacted_at)}
                         </span>
-                        <span style={{ fontSize: '0.65rem', color: '#64748b' }}>({contactedDate.toLocaleDateString()} {contactedDate.toLocaleTimeString(undefined, {hour: '2-digit', minute:'2-digit'})})</span>
+                        <span style={{ fontSize: '0.65rem', color: '#64748b' }}>({formatCrDate(contactedDate, { hour: '2-digit', minute: '2-digit', hour12: false })})</span>
                       </div>
                     );
                   })()}

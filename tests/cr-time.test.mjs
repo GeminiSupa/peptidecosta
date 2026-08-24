@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { crWallToIso, isoToCrWall, crEndOfDayIso, crStartOfDayIso, crHourAndDay } from '../src/lib/crTime.mjs';
+import { crWallToIso, isoToCrWall, crEndOfDayIso, crStartOfDayIso, crHourAndDay, formatCrDate } from '../src/lib/crTime.mjs';
 
 test('CR midnight Saturday stores as 05:59 UTC Sunday', () => {
   assert.equal(crEndOfDayIso('2026-07-25'), '2026-07-26T05:59:59.999Z');
@@ -83,4 +83,38 @@ test('preview line confirms the CR meaning in 24-hour clock', async () => {
   assert.match(text, /25/);
   assert.match(text, /Costa Rica/);
   assert.equal(formatCrWall(''), '');
+});
+
+// ------------------------------------------------- the list and the tile agree
+
+test('a late-evening CR order is not dated tomorrow for an admin who is ahead', () => {
+  // The real one: order WPCR-MT6T71IR was completed 2026-08-24T05:42Z, which is
+  // 23:42 on the 23rd in Costa Rica. The orders list read the browser clock, so
+  // an admin in Pakistan (UTC+5) saw "Aug 24, 10:42" while Revenue Today - which
+  // has always counted the Costa Rican day - correctly left it in the 23rd.
+  const instant = '2026-08-24T05:42:00Z';
+
+  const label = formatCrDate(instant, { month: 'short', day: 'numeric' });
+  assert.equal(label, 'Aug 23', 'the list must name the day the tile counted');
+});
+
+test('the CR date holds whatever timezone the reader is in', () => {
+  // Same instant, formatted the old way in two places, gives two answers; this
+  // one gives the same answer everywhere because the zone is fixed.
+  const instant = '2026-08-24T05:42:00Z';
+
+  assert.equal(formatCrDate(instant, { day: 'numeric' }), '23');
+  assert.equal(formatCrDate(new Date(instant), { day: 'numeric' }), '23', 'a Date works too');
+});
+
+test('an hour either side of CR midnight lands on the right day', () => {
+  // CR midnight on the 24th is 06:00Z.
+  assert.equal(formatCrDate('2026-08-24T05:59:59Z', { month: 'short', day: 'numeric' }), 'Aug 23');
+  assert.equal(formatCrDate('2026-08-24T06:00:01Z', { month: 'short', day: 'numeric' }), 'Aug 24');
+});
+
+test('a missing or unreadable date is blank, not "Invalid Date"', () => {
+  for (const bad of [null, undefined, '', 'not-a-date']) {
+    assert.equal(formatCrDate(bad), '', String(bad));
+  }
 });

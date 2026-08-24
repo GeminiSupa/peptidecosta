@@ -17,6 +17,7 @@ import {
   leadNotificationRecipientSummary,
   summarizeLeadNotificationJob,
 } from '@/lib/leadNotificationStatus.mjs';
+import { formatCrDate } from '@/lib/crTime.mjs';
 
 const isGoogleAdsLead = (lead) => {
   const source = String(lead?.lead_source || lead?.utm_source || '').toLowerCase();
@@ -492,11 +493,11 @@ export default function LeadsManager({
 
   const getLeadFollowUp = (lead) => {
     const explicit = lead.next_follow_up_at || lead.follow_up_at;
-    if (explicit) return new Date(explicit).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    if (explicit) return formatCrDate(explicit, { month: 'short', day: 'numeric' });
     if (!lead.last_contacted_at) return 'Today';
     const next = new Date(lead.last_contacted_at);
     next.setDate(next.getDate() + 2);
-    return next.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return formatCrDate(next, { month: 'short', day: 'numeric' });
   };
 
   const openCustomerFromLead = (lead) => {
@@ -1213,7 +1214,7 @@ export default function LeadsManager({
                 </td>
                 <td data-label="Date" style={{ padding: '10px 12px', fontSize: '0.85rem', color: '#cbd5e1' }}>
                   {(() => {
-                    const fmt = (value) => new Date(value).toLocaleDateString(undefined, {month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+                    const fmt = (value) => formatCrDate(value, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
                     // A returning contact's row keeps its original created_at, so
                     // showing that alone made a same-day enquiry look weeks old.
                     // Lead with the enquiry date and keep the first-seen date

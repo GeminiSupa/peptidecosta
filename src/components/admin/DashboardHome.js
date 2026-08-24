@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { orderCountsAsSale, orderGrossUsd, orderNetRevenueUsd, orderRevenueBasis } from '@/lib/orderRevenue.mjs';
 import KpiBreakdownModal from './KpiBreakdownModal';
+import { formatCrDate } from '@/lib/crTime.mjs';
 
 const FALLBACK_RATE = 454.48;
 
@@ -277,7 +278,10 @@ export default function DashboardHome({
         <div>
           <h2 className="dashboard-home-title">Today</h2>
           <p className="dashboard-home-subtitle">
-            {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+            {/* The day the tiles below are counting, which is Costa Rica's — an
+                admin 11 hours ahead would otherwise be shown tomorrow's date
+                over today's figures. */}
+            {formatCrDate(new Date(), { weekday: 'long', month: 'long', day: 'numeric' })} (Costa Rica)
           </p>
         </div>
         <button type="button" className="admin-btn admin-btn-primary dashboard-manual-order-btn" onClick={onCreateOrder}>
