@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import {
   buildManualOrderCustomerOptions,
   resolveManualOrderCustomerPrefill,
@@ -27,4 +28,16 @@ test('customer handoff fills missing ID and shipping fields from their newest or
   assert.equal(prefill.phone, '+506 8888 1111');
   assert.equal(prefill.customerIdNumber, '123');
   assert.equal(prefill.shippingAddress, 'San José');
+});
+
+test('manual customer search uses a themed combobox instead of an Apple-native datalist', async () => {
+  const modal = await readFile(new URL('../src/components/admin/ManualOrderModal.js', import.meta.url), 'utf8');
+  const combobox = await readFile(new URL('../src/components/admin/ManualCustomerCombobox.js', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../src/app/admin.css', import.meta.url), 'utf8');
+
+  assert.match(modal, /<ManualCustomerCombobox/);
+  assert.doesNotMatch(modal, /<datalist|list="manual-order-customer-options"/);
+  assert.match(combobox, /role="combobox"/);
+  assert.match(combobox, /role="listbox"/);
+  assert.match(css, /\.manual-customer-combobox-list[\s\S]*?background:\s*#0e1626[\s\S]*?color:\s*#e2e8f0/);
 });

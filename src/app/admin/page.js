@@ -7412,6 +7412,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           affiliates={orderAffiliates}
           isSuperadmin={!!adminProfile?.is_superadmin}
           onRequestRefund={setRefundOrder}
+          exchangeRate={exchangeRate}
         />
       )}
 

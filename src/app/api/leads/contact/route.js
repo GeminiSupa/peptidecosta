@@ -13,6 +13,7 @@ import { enqueueAndProcessLeadNotification } from '@/lib/leadNotificationDeliver
 import { responseDeadline } from '@/lib/leadNotifications.mjs';
 import {
   hasLandingQualification,
+  isDuplicateLandingLeadSubmission,
   landingQualificationNotes,
   normalizeLandingQualification,
   normalizeStructuredAnswers,
@@ -207,6 +208,21 @@ export async function POST(request) {
       .maybeSingle();
 
     const nowIso = new Date().toISOString();
+
+    // Bots often replay the exact form payload. The CRM already folds repeats
+    // into one lead row, but advancing last_enquiry_at would still fire the
+    // database outbox trigger and email/WhatsApp the team again. Acknowledge an
+    // exact email+phone repeat during the cooldown without touching the row, so
+    // neither the trigger nor the legacy sender can create a duplicate alert.
+    if (isDuplicateLandingLeadSubmission(existing, { email, phone }, Date.parse(nowIso))) {
+      return withCors({
+        success: true,
+        leadId: existing.id,
+        record: 'duplicate',
+        assignedAgent: existing.sales_agent || existing.owner || existing.assigned_to || null,
+        notifications: { tracked: false, status: 'duplicate_suppressed' },
+      });
+    }
 
     // A returning customer goes back to the agent who first closed them. An
     // existing owner is never overwritten — an agent who already claimed this

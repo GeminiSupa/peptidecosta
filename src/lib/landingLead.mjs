@@ -1,5 +1,62 @@
 const clean = (value, limit = 200) => String(value ?? '').trim().slice(0, limit);
 
+export const LANDING_LEAD_DUPLICATE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+const emailIdentity = (value) => clean(value, 200).toLowerCase();
+
+const phoneIdentity = (value) => {
+  let digits = clean(value, 40).replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.length === 8) digits = `506${digits}`;
+  else if (digits.length === 10) digits = `1${digits}`;
+  return digits;
+};
+
+const noteValue = (notes, labelPattern) => {
+  const match = String(notes || '').match(new RegExp(`^${labelPattern}\\s*(.+)$`, 'im'));
+  return match?.[1]?.trim() || '';
+};
+
+/**
+ * Suppress rapid repeats only when both contact channels identify the same
+ * person. Requiring both avoids hiding a legitimate enquiry where a household
+ * shares an email or somebody corrects a mistyped phone number. Older enquiries
+ * can alert again so a real customer returning later is not lost forever.
+ */
+export function isDuplicateLandingLeadSubmission(
+  existing = {},
+  incoming = {},
+  now = Date.now(),
+  windowMs = LANDING_LEAD_DUPLICATE_WINDOW_MS,
+) {
+  const incomingEmail = emailIdentity(incoming.email);
+  const incomingPhone = phoneIdentity(incoming.phone);
+  if (!incomingEmail || !incomingPhone || !existing?.id) return false;
+
+  const contactMethod = String(existing.contact_method || '').trim().toLowerCase();
+  const existingEmail = emailIdentity(
+    existing.email
+      || (contactMethod === 'email' ? existing.contact_value : '')
+      || noteValue(existing.notes, 'Email:'),
+  );
+  const existingPhone = phoneIdentity(
+    existing.phone
+      || (contactMethod !== 'email' ? existing.contact_value : '')
+      || noteValue(existing.notes, 'Phone \\(WhatsApp/SMS\\):'),
+  );
+  if (existingEmail !== incomingEmail || existingPhone !== incomingPhone) return false;
+
+  const lastSeen = Date.parse(
+    existing.last_enquiry_at || existing.updated_at || existing.created_at || '',
+  );
+  const nowMs = now instanceof Date ? now.getTime() : Number(now);
+  const elapsed = nowMs - lastSeen;
+  return Number.isFinite(lastSeen)
+    && Number.isFinite(nowMs)
+    && elapsed >= 0
+    && elapsed < windowMs;
+}
+
 export const LANDING_QUALIFICATION_FIELDS = [
   'category',
   'location',

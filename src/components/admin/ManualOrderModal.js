@@ -13,6 +13,7 @@ import {
   buildManualOrderCustomerOptions,
   resolveManualOrderCustomerPrefill,
 } from '@/lib/manualOrderCustomer.mjs';
+import ManualCustomerCombobox from './ManualCustomerCombobox';
 import ProductCombobox from './ProductCombobox';
 
 const EMPTY_ITEM = { product: '', qty: 1, price: '' };
@@ -187,23 +188,12 @@ export default function ManualOrderModal({
             <label htmlFor="manual-order-customer-search" style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#cbd5e1', fontSize: '.76rem', fontWeight: 800, marginBottom: 7 }}>
               <UserRoundSearch size={14} /> Find an existing customer
             </label>
-            <input
-              id="manual-order-customer-search"
-              className="admin-input"
-              list="manual-order-customer-options"
+            <ManualCustomerCombobox
+              customers={customerOptions}
               value={customerSearch}
-              placeholder="Type a name, email, or phone…"
-              onChange={(event) => {
-                const value = event.target.value;
-                setCustomerSearch(value);
-                const selected = customerOptions.find((customer) => customer.searchLabel === value);
-                if (selected) applyCustomer(selected);
-              }}
-              style={{ width: '100%' }}
+              onChange={setCustomerSearch}
+              onSelect={applyCustomer}
             />
-            <datalist id="manual-order-customer-options">
-              {customerOptions.map((customer) => <option key={customer.id} value={customer.searchLabel} />)}
-            </datalist>
             <div style={{ color: '#64748b', fontSize: '.68rem', marginTop: 6 }}>Selecting a customer fills their latest contact, ID, and shipping details. Everything remains editable.</div>
           </div>
           <div className="manual-order-grid">

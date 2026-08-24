@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import {
   buildLandingLeadPayload,
   hasLandingQualification,
+  isDuplicateLandingLeadSubmission,
   landingQualificationNotes,
   normalizeLandingQualification,
   normalizeStructuredAnswers,
@@ -121,6 +122,43 @@ test('qualification details are formatted for an agent-readable CRM note', () =>
   ]);
 });
 
+test('lead alerts suppress an exact email and phone repeat for 24 hours', () => {
+  const now = Date.parse('2026-08-24T12:00:00.000Z');
+  const existing = {
+    id: 'lead-1',
+    contact_method: 'email',
+    contact_value: 'ZeeRak.Khan@PowerHouse.so',
+    notes: 'Email: zeerak.khan@powerhouse.so\nPhone (WhatsApp/SMS): 9212233455678',
+    last_enquiry_at: '2026-08-24T11:45:00.000Z',
+  };
+
+  assert.equal(isDuplicateLandingLeadSubmission(existing, {
+    email: ' zeerak.khan@powerhouse.so ',
+    phone: '921-223-345-5678',
+  }, now), true);
+  assert.equal(isDuplicateLandingLeadSubmission(existing, {
+    email: 'zeerak.khan@powerhouse.so',
+    phone: '50688881111',
+  }, now), false);
+  assert.equal(isDuplicateLandingLeadSubmission(existing, {
+    email: 'zeerak.khan@powerhouse.so',
+    phone: '9212233455678',
+  }, Date.parse('2026-08-25T12:00:01.000Z')), false);
+});
+
+test('lead alert dedupe requires both email and phone to match', () => {
+  const existing = {
+    id: 'lead-2',
+    email: 'customer@example.com',
+    phone: '+506 8888 1111',
+    created_at: '2026-08-24T11:00:00.000Z',
+  };
+  assert.equal(isDuplicateLandingLeadSubmission(existing, {
+    email: 'customer@example.com',
+    phone: '',
+  }, Date.parse('2026-08-24T12:00:00.000Z')), false);
+});
+
 test('landing page is first-party lead capture with no messaging handoff', async () => {
   const page = await readFile(new URL('../src/app/landing/page.js', import.meta.url), 'utf8');
 
@@ -148,6 +186,8 @@ test('CRM route stores qualification notes and sends the alert only after save',
   assert.match(route, /resolveCampaignAgent\(supabase, landingSettings\)/);
   assert.match(route, /qualification_data/);
   assert.match(route, /response_due_at/);
+  assert.match(route, /isDuplicateLandingLeadSubmission/);
+  assert.match(route, /duplicate_suppressed/);
 });
 
 test('admin editor supports adding, removing, reordering, and publishing questions', async () => {

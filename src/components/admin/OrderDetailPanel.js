@@ -16,6 +16,7 @@ import {
 import {
   ADMIN_FALLBACK_EXCHANGE_RATE,
   calculateAdminOrderTotals,
+  getAdminCurrencyPair,
   getAdminOrderSubtotal,
   getAdminShippingCosts,
   normalizeAdminOrderCurrency,
@@ -125,6 +126,7 @@ export default function OrderDetailPanel({
   affiliates = [],
   isSuperadmin = false,
   onRequestRefund,
+  exchangeRate = ADMIN_FALLBACK_EXCHANGE_RATE,
 }) {
   const initialShipping = order ? inferShippingCosts(order) : { crc: 0, usd: 0 };
   const initialCurrency = normalizeAdminOrderCurrency(order?.currency);
@@ -290,7 +292,7 @@ export default function OrderDetailPanel({
                             !statusLower.includes('complete') && 
                             !statusLower.includes('cancel');
   const shipping = Number(shippingAmount) || 0;
-  const shippingCosts = getAdminShippingCosts(shipping, orderCurrency);
+  const shippingCosts = getAdminShippingCosts(shipping, orderCurrency, exchangeRate);
   const promoDiscount = orderCurrency === 'USD'
     ? Number(order.discount_amount_usd || 0)
     : Number(order.discount_amount_crc || 0);
@@ -306,6 +308,7 @@ export default function OrderDetailPanel({
     manualDiscountType,
     manualDiscountValue,
   });
+  const totalCosts = getAdminCurrencyPair(orderTotal, orderCurrency, exchangeRate);
 
   // Free vials the order is entitled to but does not list. Storefront orders
   // arrive with the gift already written in; orders typed in by an agent, or
@@ -447,7 +450,7 @@ export default function OrderDetailPanel({
     setSavingShipping(true);
 
     const nextShipping = Number(shippingAmount) || 0;
-    const nextShippingCosts = getAdminShippingCosts(nextShipping, orderCurrency);
+    const nextShippingCosts = getAdminShippingCosts(nextShipping, orderCurrency, exchangeRate);
 
     try {
       await patchOrder({
@@ -522,7 +525,7 @@ export default function OrderDetailPanel({
     }));
 
     const ship = Number(shippingAmount) || 0;
-    const normalizedShippingCosts = getAdminShippingCosts(ship, orderCurrency);
+    const normalizedShippingCosts = getAdminShippingCosts(ship, orderCurrency, exchangeRate);
     const total = calculateAdminOrderTotals(normalizedItems, ship, {
       promoDiscountAmount: promoDiscount,
       manualDiscountType,
@@ -1177,7 +1180,11 @@ export default function OrderDetailPanel({
             </div>
             <div className="order-detail-total-line">
               <span>Total (preview)</span>
-              <span>{orderCurrency === 'USD' ? `$${orderTotal.toFixed(2)}` : `₡${Math.round(orderTotal).toLocaleString()}`}</span>
+              <span>
+                {orderCurrency === 'USD'
+                  ? `$${totalCosts.usd.toFixed(2)} (≈ ₡${totalCosts.crc.toLocaleString()})`
+                  : `₡${totalCosts.crc.toLocaleString()} (≈ $${totalCosts.usd.toFixed(2)})`}
+              </span>
             </div>
           </div>
 
@@ -1214,8 +1221,8 @@ export default function OrderDetailPanel({
             </div>
             <div style={{ marginTop: '6px', color: '#94a3b8', fontSize: '0.75rem' }}>
               {orderCurrency === 'USD'
-                ? `CRC equivalent is calculated automatically: ₡${shippingCosts.crc.toLocaleString()}`
-                : `USD equivalent is calculated automatically: $${shippingCosts.usd.toFixed(2)}`}
+                ? `Shipping CRC equivalent: ₡${shippingCosts.crc.toLocaleString()}`
+                : `Shipping USD equivalent: $${shippingCosts.usd.toFixed(2)}`}
             </div>
           </div>
 
