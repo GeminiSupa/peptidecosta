@@ -7,6 +7,7 @@ import { COMMISSION_ELIGIBLE_ORDER_STATUSES } from '@/lib/agentAttribution.mjs';
 import { getOrderSalesAmounts } from '@/lib/agentOrders';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
+import { PAYOUT_RESERVED_STATUSES } from '@/lib/payoutSettlement.mjs';
 
 // Email Configuration from Environment variables
 // The owner is BCC'd on this mail, so they are stripped from the visible
@@ -125,7 +126,7 @@ export async function GET(request) {
     const { data: approvedPayouts } = await supabaseAdmin
       .from('affiliate_payouts')
       .select('orders_data')
-      .eq('status', 'Approved');
+      .in('status', PAYOUT_RESERVED_STATUSES);
 
     const paidOrderIds = new Set();
     if (approvedPayouts) {

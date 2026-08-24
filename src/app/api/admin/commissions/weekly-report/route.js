@@ -30,6 +30,7 @@ import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 import { sendTaxRecordsPayoutCopy } from '@/lib/taxRecordsEmail.mjs';
 import { hasPositivePayout, summarizeCommissionScan } from '@/lib/commissionScan.mjs';
+import { PAYOUT_RESERVED_STATUSES } from '@/lib/payoutSettlement.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -208,7 +209,7 @@ export async function GET(request) {
     const { data: approvedPayouts } = await supabaseAdmin
       .from('commission_payouts')
       .select('agent_email, orders_data, override_orders_data, start_date, end_date')
-      .eq('status', 'Approved');
+      .in('status', PAYOUT_RESERVED_STATUSES);
 
     // Re-running a period has to reproduce it. Orders settled by THIS period's
     // own approved payout are left out of the guard, or the second scan reports
@@ -397,7 +398,7 @@ export async function GET(request) {
         .eq('end_date', endDateStr)
         .order('created_at', { ascending: false });
 
-      const settledPayout = (existingPayouts || []).find((p) => p.status === 'Approved') || null;
+      const settledPayout = (existingPayouts || []).find((p) => PAYOUT_RESERVED_STATUSES.includes(p.status)) || null;
       const pendingPayouts = (existingPayouts || []).filter((p) => p.status === 'Pending');
       const primaryPayout = pendingPayouts[0] || null;
       const duplicateIds = pendingPayouts.slice(1).map((p) => p.id);

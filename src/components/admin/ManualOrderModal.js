@@ -270,12 +270,15 @@ export default function ManualOrderModal({
                 onSelect={(product) => pickProduct(idx, product.product)}
               />
               <input className="admin-input" type="number" min="1" placeholder="Qty" value={item.qty} onChange={(e) => updateItem(idx, 'qty', e.target.value)} style={{ width: '70px' }} />
-              <input className="admin-input" type="number" min="0" step="0.01" placeholder="Price" value={item.price} onChange={(e) => updateItem(idx, 'price', e.target.value)} style={{ width: '100px' }} />
+              <input className="admin-input" type="number" min="0" step="0.01" placeholder="Price" value={item.price} readOnly title="Price is loaded from the live product catalog" style={{ width: '100px', opacity: 0.82 }} />
               <button type="button" className="admin-btn admin-btn-danger" onClick={() => removeItem(idx)} disabled={form.items.length <= 1}>
                 <Trash2 size={14} />
               </button>
             </div>
           ))}
+          <div style={{ color: '#64748b', fontSize: '.68rem', margin: '-2px 0 10px' }}>
+            Product prices are confirmed from the live catalog when the order is saved.
+          </div>
           {giftShortfall.missing > 0 && (
             <div
               className="manual-order-item-row"

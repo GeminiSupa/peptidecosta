@@ -19,18 +19,6 @@ import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 import { leadContactPoints } from '@/lib/leadContact.mjs';
 import { supabase } from '@/lib/supabase';
 
-const CRM_REMINDERS_KEY = 'peptides_crm_follow_up_reminders_v1';
-const CRM_ACTIVITY_KEY = 'peptides_crm_staff_activity_v1';
-
-const readStoredJson = (key, fallback) => {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    return JSON.parse(window.localStorage.getItem(key) || JSON.stringify(fallback));
-  } catch {
-    return fallback;
-  }
-};
-
 const takeCustomerHandoffSearch = () => {
   if (typeof window === 'undefined') return '';
   try {
@@ -203,40 +191,45 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
   const [timelineData, setTimelineData] = useState(null);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineError, setTimelineError] = useState('');
-  const [reminders, setReminders] = useState(() => readStoredJson(CRM_REMINDERS_KEY, []));
-  const [staffActivity, setStaffActivity] = useState(() => readStoredJson(CRM_ACTIVITY_KEY, []));
+  const [reminders, setReminders] = useState([]);
+  const [staffActivity, setStaffActivity] = useState([]);
   const [newReminder, setNewReminder] = useState({ dueAt: '', note: '' });
 
-  const saveReminders = useCallback((next) => {
-    setReminders(next);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(CRM_REMINDERS_KEY, JSON.stringify(next));
-    }
+  useEffect(() => {
+    let active = true;
+    adminFetch('/api/admin/crm/workspace')
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not load CRM workspace');
+        if (active) {
+          setReminders(data.reminders || []);
+          setStaffActivity(data.activity || []);
+        }
+      })
+      .catch((error) => console.error('Could not load shared CRM workspace:', error));
+    return () => { active = false; };
   }, []);
 
-  const saveActivity = useCallback((next) => {
-    const trimmed = next.slice(0, 250);
-    setStaffActivity(trimmed);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(CRM_ACTIVITY_KEY, JSON.stringify(trimmed));
+  const recordActivity = useCallback(async (action, customer, detail = '') => {
+    if (!customer?.id) return;
+    try {
+      const response = await adminFetch('/api/admin/crm/workspace', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'activity',
+          customerId: customer.id,
+          customerName: customer.name,
+          action,
+          detail,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save activity');
+      setStaffActivity((current) => [data.activity, ...current].slice(0, 250));
+    } catch (error) {
+      console.error('Could not save CRM activity:', error);
     }
   }, []);
-
-  const recordActivity = useCallback((action, customer, detail = '') => {
-    const actor = typeof window !== 'undefined'
-      ? window.localStorage.getItem('admin_email') || 'Staff'
-      : 'Staff';
-    const entry = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      customerId: customer?.id || 'unknown',
-      customerName: customer?.name || 'Unknown customer',
-      action,
-      detail,
-      actor,
-      createdAt: new Date().toISOString(),
-    };
-    saveActivity([entry, ...staffActivity]);
-  }, [saveActivity, staffActivity]);
   // Derived customer data from order history and abandoned carts
   const customers = useMemo(() => {
     const map = {};
@@ -750,31 +743,43 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
     setNewReminder({ dueAt: '', note: '' });
   };
 
-  const handleAddReminder = () => {
+  const handleAddReminder = async () => {
     if (!selectedCustomer || !newReminder.dueAt || !newReminder.note.trim()) return;
-    const reminder = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      customerId: selectedCustomer.id,
-      customerName: selectedCustomer.name,
-      dueAt: newReminder.dueAt,
-      note: newReminder.note.trim(),
-      status: 'open',
-      createdAt: new Date().toISOString(),
-    };
-    saveReminders([reminder, ...reminders]);
-    recordActivity('Created follow-up', selectedCustomer, reminder.note);
-    setNewReminder({ dueAt: '', note: '' });
+    try {
+      const response = await adminFetch('/api/admin/crm/workspace', {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'reminder',
+          customerId: selectedCustomer.id,
+          customerName: selectedCustomer.name,
+          dueAt: newReminder.dueAt,
+          note: newReminder.note.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save reminder');
+      setReminders((current) => [data.reminder, ...current]);
+      recordActivity('Created follow-up', selectedCustomer, data.reminder.note);
+      setNewReminder({ dueAt: '', note: '' });
+    } catch (error) {
+      alert(`Could not save reminder: ${error.message}`);
+    }
   };
 
-  const handleCompleteReminder = (reminderId) => {
+  const handleCompleteReminder = async (reminderId) => {
     if (!selectedCustomer) return;
-    const next = reminders.map(reminder => (
-      reminder.id === reminderId
-        ? { ...reminder, status: 'done', completedAt: new Date().toISOString() }
-        : reminder
-    ));
-    saveReminders(next);
-    recordActivity('Completed follow-up', selectedCustomer, 'Marked reminder as done');
+    try {
+      const response = await adminFetch('/api/admin/crm/workspace', {
+        method: 'PATCH',
+        body: JSON.stringify({ reminderId, status: 'done' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not complete reminder');
+      setReminders((current) => current.map((reminder) => reminder.id === reminderId ? data.reminder : reminder));
+      recordActivity('Completed follow-up', selectedCustomer, 'Marked reminder as done');
+    } catch (error) {
+      alert(`Could not complete reminder: ${error.message}`);
+    }
   };
 
   const handleCopyScript = async () => {

@@ -184,8 +184,34 @@ export async function POST(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
+  let deliveryStateUpdater = null;
   try {
-    const order = await request.json();
+    const payload = await request.json();
+    const supabase = getSupabaseAdmin();
+    let order = payload;
+    if (payload?.id || payload?.order_number) {
+      let lookup = supabase.from('orders').select('*');
+      lookup = payload.id ? lookup.eq('id', payload.id) : lookup.eq('order_number', payload.order_number);
+      const { data: storedOrder, error: lookupError } = await lookup.maybeSingle();
+      if (lookupError) {
+        return NextResponse.json({ error: `Could not load the saved order: ${lookupError.message}` }, { status: 500 });
+      }
+      if (storedOrder) order = storedOrder;
+    }
+    const updateDeliveryState = async (status, error = null, sentAt = undefined) => {
+      if (!order?.id && !order?.order_number) return;
+      const deliveryPatch = {
+        completion_notification_status: status,
+        completion_notification_error: error ? String(error).slice(0, 2000) : null,
+        completion_notification_last_attempt_at: new Date().toISOString(),
+      };
+      if (sentAt !== undefined) deliveryPatch.completion_notification_sent_at = sentAt;
+      let update = supabase.from('orders').update(deliveryPatch);
+      update = order.id ? update.eq('id', order.id) : update.eq('order_number', order.order_number);
+      const { error: stateError } = await update;
+      if (stateError) console.error('[Order Shipped Notification] Could not save delivery state:', stateError.message);
+    };
+    deliveryStateUpdater = updateDeliveryState;
     const links = await getBusinessLinks();
 
     if (!order?.customer_name || !Array.isArray(order?.items) || order.items.length === 0) {
@@ -193,8 +219,11 @@ export async function POST(request) {
     }
 
     if (!order.customer_email || order.customer_email.trim() === '') {
+      await updateDeliveryState('skipped', 'No customer email');
       return NextResponse.json({ sent: false, skipped: true, reason: 'No customer email' });
     }
+
+    await updateDeliveryState('sending');
 
     const { smtp, from: notificationFrom } = getMailSettings();
 
@@ -204,6 +233,7 @@ export async function POST(request) {
     // admin marks the order complete and the screen says nothing is wrong.
     if (!smtp.configured) {
       console.error('[Order Shipped Notification] Transactional SMTP is not configured; completion mail NOT sent.');
+      await updateDeliveryState('failed', 'Transactional SMTP is not configured');
       return NextResponse.json({
         sent: false,
         error: 'Transactional SMTP is not configured, so the completion email and the accounting copy were not sent. Check ORDER_SMTP_* in the deployment (/api/admin/email-diagnostics).',
@@ -252,9 +282,7 @@ export async function POST(request) {
     // order (Completed -> Processing -> Completed, or resending the receipt)
     // must not burn another monthly invitation or spam the customer.
     let alreadyInvited = false;
-    let supabase = null;
     try {
-      supabase = getSupabaseAdmin();
       let query = supabase.from('orders').select('id, review_requested_at');
       query = order.id ? query.eq('id', order.id) : query.eq('order_number', order.order_number);
       const { data: existing } = await query.maybeSingle();
@@ -352,6 +380,18 @@ export async function POST(request) {
       }
     }
 
+    const deliveryStatus = customerInfo
+      ? (taxCopy?.sent === false ? 'partial' : 'sent')
+      : 'failed';
+    const deliveryError = customerInfo
+      ? (taxCopy?.sent === false ? `Accounting copy failed: ${taxCopy.error || 'unknown error'}` : null)
+      : customerError;
+    await updateDeliveryState(
+      deliveryStatus,
+      deliveryError,
+      customerInfo ? new Date().toISOString() : undefined,
+    );
+
     // Reports both sends separately, so "did accounting get it?" is answerable
     // from the response and the logs rather than by asking the accountant.
     return NextResponse.json({
@@ -362,8 +402,11 @@ export async function POST(request) {
         : { sent: false, error: customerError },
       accountingCopy: taxCopy,
       trustpilotInvited: Boolean(customerInfo) && !alreadyInvited,
+      completionNotificationStatus: deliveryStatus,
+      completionNotificationError: deliveryError,
     }, { status: customerInfo ? 200 : 502 });
   } catch (err) {
+    if (deliveryStateUpdater) await deliveryStateUpdater('failed', err.message).catch(() => {});
     console.error('[Order Shipped Notification] Unexpected handler crash:', err);
     return NextResponse.json({ error: 'Internal server error', details: err.message }, { status: 500 });
   }

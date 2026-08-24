@@ -1,6 +1,8 @@
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { toE164, isValidE164, DEFAULT_PHONE_COUNTRY } from '@/lib/phoneFormat.mjs';
 import { isSalesAgentAffiliate, SALES_AGENT_REFERRAL_RATE } from '@/lib/salesAgentAffiliate.mjs';
+import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
+import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
 
 /**
  * Order WhatsApp alerts, shared by the two routes that send them.
@@ -61,6 +63,107 @@ export async function logOrderAlert(supabase, { phone, messageId, summary, order
   } catch (err) {
     console.warn('[order-whatsapp] Could not log order alert:', err.message);
   }
+}
+
+export async function recordNewOrderNotification(supabase, order, orderNumber) {
+  const itemCount = (order.items || []).reduce((total, item) => (
+    Number(item.price || 0) > 0 ? total + Number(item.qty || 0) : total
+  ), 0);
+  const method = String(order.payment_method || 'order').toUpperCase();
+  const { error } = await supabase.from('admin_notifications').insert({
+    type: 'new_order',
+    title: `New order ${orderNumber} (${method})`,
+    body: `${order.customer_name || 'Customer'} - ${formatSalesAlertTotal(order)} - ${itemCount} ${itemCount === 1 ? 'unit' : 'units'}`.slice(0, 500),
+    link_tab: 'orders',
+    link_ref: orderNumber,
+  });
+  if (error) throw new Error(error.message);
+}
+
+async function resolveTeamOrderWhatsAppRecipients(supabase) {
+  const { available, recipients } = await getNotificationRecipients(supabase, {
+    channel: 'whatsapp',
+    type: 'new_order',
+  });
+  const { data, error } = await selectWithOptionalPreferences(
+    ['name', 'notifications_enabled', 'order_whatsapp_notifications', 'whatsapp_number'],
+    (columns) => supabase.from('admin_profiles').select(columns),
+  );
+  if (error) {
+    if (available) {
+      return mergeOrderWhatsAppDestinations({ managed: recipients, managedAvailable: true, profiles: [] });
+    }
+    throw new Error(error.message);
+  }
+  return mergeOrderWhatsAppDestinations({
+    managed: recipients,
+    managedAvailable: available,
+    profiles: data || [],
+  });
+}
+
+export async function sendTeamOrderWhatsApp(supabase, order, orderNumber, orderId = null) {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!accessToken || !phoneNumberId) return { skipped: 'missing_whatsapp_config' };
+
+  const recipients = await resolveTeamOrderWhatsAppRecipients(supabase);
+  if (recipients.length === 0) return { skipped: 'no_recipients' };
+
+  const templateName = process.env.SALES_TEAM_WHATSAPP_TEMPLATE || 'alerta_nuevo_pedido';
+  const templateLanguage = process.env.SALES_TEAM_WHATSAPP_TEMPLATE_LANGUAGE || 'es';
+  const itemCount = (order.items || []).reduce((total, item) => (
+    Number(item.price || 0) > 0 ? total + Number(item.qty || 0) : total
+  ), 0);
+  const results = await Promise.allSettled(recipients.map(async ({ phone }) => {
+    const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(WHATSAPP_TIMEOUT_MS),
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: phone,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: templateLanguage },
+          components: [{
+            type: 'body',
+            parameters: [
+              { type: 'text', text: orderNumber },
+              { type: 'text', text: `${order.customer_name} - ${order.customer_phone || 'N/A'}` },
+              { type: 'text', text: formatSalesAlertTotal(order) },
+              { type: 'text', text: `${itemCount} ${itemCount === 1 ? 'articulo' : 'articulos'}` },
+            ],
+          }],
+        },
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result?.error?.message || `Meta API returned ${response.status}`);
+    const messageId = result.messages?.[0]?.id;
+    await logOrderAlert(supabase, {
+      phone,
+      messageId,
+      summary: `New order alert ${orderNumber} - ${order.customer_name} - ${formatSalesAlertTotal(order)}`,
+      orderId,
+      raw: result,
+    });
+    return { phone, messageId };
+  }));
+
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.error('[order-whatsapp] Team alert failed:', {
+        recipient: recipients[index]?.name || recipients[index]?.phone,
+        error: result.reason?.message || String(result.reason),
+      });
+    }
+  });
+  return { sent: results.filter((result) => result.status === 'fulfilled').length, total: results.length };
 }
 
 export async function sendCustomerOrderConfirmation(supabase, order, orderNumber, orderId = null) {

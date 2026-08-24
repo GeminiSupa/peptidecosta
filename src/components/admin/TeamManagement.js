@@ -8,6 +8,7 @@ import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/co
 import { getOrderSalesAmounts, isCommissionEligibleOrder, orderBelongsToAgent } from '@/lib/agentOrders';
 import { ADMIN_MODULE_LABELS, ASSIGNABLE_ADMIN_MODULE_IDS, ASSIGNABLE_ADMIN_MODULES } from '@/lib/adminModules';
 import { payoutMatchesPeriod } from '@/lib/commissionScan.mjs';
+import PayoutSettlementDialog from './PayoutSettlementDialog';
 
 /** One labelled on/off row in the member notification panel. */
 function NotificationToggle({ icon, title, hint, checked, onChange, activeColor = '#38bdf8' }) {
@@ -224,6 +225,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [editingPayout, setEditingPayout] = useState(null);
   const [payoutForm, setPayoutForm] = useState(null);
   const [payoutSaveLoading, setPayoutSaveLoading] = useState(false);
+  const [settlementPayout, setSettlementPayout] = useState(null);
 
   // Form states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -450,9 +452,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     return payouts.filter((p) => {
       if (payoutFilterAgent !== 'all' && p.agent_email !== payoutFilterAgent) return false;
       if (!payoutMatchesPeriod(p, payoutFilterPeriod)) return false;
-      if (payoutFilterStatus === 'active' && p.status !== 'Pending' && p.status !== 'Approved') return false;
+      if (payoutFilterStatus === 'active' && !['Pending', 'Approved', 'Payment Initiated', 'Failed'].includes(p.status)) return false;
       if (payoutFilterStatus === 'pending' && p.status !== 'Pending') return false;
       if (payoutFilterStatus === 'approved' && p.status !== 'Approved') return false;
+      if (payoutFilterStatus === 'paid' && p.status !== 'Paid') return false;
       if (payoutFilterStatus === 'rejected' && p.status !== 'Rejected') return false;
       return true;
     });
@@ -1101,9 +1104,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
               style={{ minWidth: '140px', background: '#0e1626', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px 12px', fontSize: '0.85rem' }}
             >
               <option value="pending">Pending only</option>
-              <option value="active">Pending + Approved</option>
+              <option value="active">Needs action</option>
               <option value="all">All statuses</option>
               <option value="approved">Approved</option>
+              <option value="paid">Paid</option>
               <option value="rejected">Rejected</option>
             </select>
             <span style={{ fontSize: '0.8rem', color: '#64748b', alignSelf: 'center' }}>
@@ -1311,9 +1315,25 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                             {actionLoadingId === p.id ? '...' : <Check size={12} />} Approve
                           </button>
                         </>
-                      ) : p.status === 'Approved' ? (
-                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                          Approved {p.approved_at ? new Date(p.approved_at).toLocaleDateString() : ''}
+                      ) : ['Approved', 'Payment Initiated', 'Failed'].includes(p.status) ? (
+                        <>
+                          <span style={{ fontSize: '0.75rem', color: p.status === 'Failed' ? '#f87171' : '#fbbf24' }}>
+                            {p.status}{p.payment_reference ? ` · ${p.payment_reference}` : ''}
+                          </span>
+                          <button
+                            className="admin-btn admin-btn-primary"
+                            onClick={() => setSettlementPayout(p)}
+                            style={{ padding: '6px 12px', fontSize: '0.75rem', marginLeft: 'auto' }}
+                          >
+                            Record payment
+                          </button>
+                        </>
+                      ) : p.status === 'Paid' ? (
+                        <span style={{ fontSize: '0.75rem', color: '#4ade80' }}>
+                          Paid {p.paid_at ? new Date(p.paid_at).toLocaleDateString() : ''}
+                          {p.payment_method ? ` · ${p.payment_method}` : ''}
+                          {p.payment_reference ? ` · ${p.payment_reference}` : ''}
+                          {p.payment_receipt_url && <> · <a href={p.payment_receipt_url} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>receipt</a></>}
                         </span>
                       ) : (
                         <>
@@ -1654,6 +1674,13 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
           </div>
         </div>
       )}
+      <PayoutSettlementDialog
+        payout={settlementPayout}
+        endpoint="/api/admin/commissions/settle"
+        label={settlementPayout?.agent_name || settlementPayout?.agent_email || 'Team payout'}
+        onClose={() => setSettlementPayout(null)}
+        onSaved={(saved) => setPayouts((current) => current.map((payout) => payout.id === saved.id ? saved : payout))}
+      />
     </div>
   );
 }

@@ -43,17 +43,6 @@ const extractPhone = (message) => {
   return `+506${digits}`;
 };
 
-const INQUIRY_ASSIGNMENTS_KEY = 'peptides_inquiry_assignments_v1';
-
-const readInquiryAssignments = () => {
-  if (typeof window === 'undefined') return {};
-  try {
-    return JSON.parse(window.localStorage.getItem(INQUIRY_ASSIGNMENTS_KEY) || '{}');
-  } catch {
-    return {};
-  }
-};
-
 const getSlaInfo = (inquiry) => {
   if (!inquiry?.created_at) return { label: 'No age', tone: 'neutral' };
   if (inquiry.status === 'Closed' || inquiry.status === 'Replied') {
@@ -75,7 +64,6 @@ export default function InquiriesManager({ adminEmail, products = [], onOpenCust
   const [sending, setSending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [draftingReply, setDraftingReply] = useState(false);
-  const [assignmentMap, setAssignmentMap] = useState(() => readInquiryAssignments());
   const replyInputRef = React.useRef(null);
 
   useEffect(() => {
@@ -214,19 +202,23 @@ export default function InquiriesManager({ adminEmail, products = [], onOpenCust
     if (inquiry.status === 'New') handleMarkAsRead(inquiry);
   };
 
-  const saveAssignment = (inquiryId, assignee) => {
-    setAssignmentMap(prev => {
-      const next = { ...prev, [inquiryId]: assignee };
-      try {
-        localStorage.setItem(INQUIRY_ASSIGNMENTS_KEY, JSON.stringify(next));
-      } catch (err) {
-        console.warn('Could not save inquiry assignment:', err);
-      }
-      return next;
-    });
+  const saveAssignment = async (inquiryId, assignee) => {
+    try {
+      const response = await adminFetch('/api/admin/inquiries/update', {
+        method: 'PATCH',
+        body: JSON.stringify({ inquiryId, assignedTo: assignee }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save owner');
+      const saved = data.inquiry;
+      setInquiries(prev => prev.map(inquiry => inquiry.id === inquiryId ? saved : inquiry));
+      if (selectedInquiry?.id === inquiryId) setSelectedInquiry(saved);
+    } catch (error) {
+      alert(`Could not save inquiry owner: ${error.message}`);
+    }
   };
 
-  const getAssignee = (inquiry) => assignmentMap[inquiry.id] || inquiry.assigned_to || 'Unassigned';
+  const getAssignee = (inquiry) => inquiry.assigned_to || 'Unassigned';
 
   const openCustomerFromInquiry = (inquiry) => {
     onOpenCustomerProfile?.({
@@ -253,25 +245,35 @@ export default function InquiriesManager({ adminEmail, products = [], onOpenCust
     alert('WhatsApp composer is not available in this view.');
   };
 
-  const convertInquiry = (inquiry, target) => {
-    try {
-      localStorage.setItem('admin_inquiry_conversion_context', JSON.stringify({
-        target,
-        inquiryId: inquiry.id,
-        name: inquiry.customer_name,
-        email: inquiry.customer_email,
-        phone: extractPhone(inquiry.message),
-        subject: inquiry.subject,
-        message: inquiry.message
-      }));
-    } catch (err) {
-      console.warn('Could not save inquiry conversion context:', err);
-    }
+  const convertInquiry = async (inquiry, target) => {
+    const customer = {
+      name: inquiry.customer_name || '',
+      email: inquiry.customer_email || '',
+      phone: extractPhone(inquiry.message) || '',
+      inquiryId: inquiry.id,
+      subject: inquiry.subject || '',
+      message: inquiry.message || '',
+    };
     if (target === 'order') {
-      onCreateOrderFromInquiry?.(inquiry);
+      onCreateOrderFromInquiry?.(customer);
       onNavigate?.('orders');
     } else {
-      onNavigate?.('leads');
+      try {
+        const response = await adminFetch('/api/admin/leads', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            notes: `Converted from customer inquiry: ${customer.subject}\n${customer.message}`,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not create lead');
+        onNavigate?.('leads');
+      } catch (error) {
+        alert(`Could not convert inquiry to lead: ${error.message}`);
+      }
     }
   };
 

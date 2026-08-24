@@ -3135,6 +3135,42 @@ Core Rules:
     }
   };
 
+  const sendOrderCompletionNotification = async (order, { quiet = false } = {}) => {
+    if (!order?.customer_email || !String(order.customer_email).trim()) {
+      if (!quiet) alert('This order has no customer email, so no completion email can be sent.');
+      return { ok: false, skipped: true };
+    }
+    try {
+      const res = await adminFetch('/api/order-shipped-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: order.id, order_number: order.order_number }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const deliveryPatch = {
+        completion_notification_status: data.completionNotificationStatus || (data.success ? 'sent' : 'failed'),
+        completion_notification_error: data.completionNotificationError || data.error || null,
+        completion_notification_sent_at: data.success ? new Date().toISOString() : order.completion_notification_sent_at,
+        completion_notification_last_attempt_at: new Date().toISOString(),
+      };
+      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...deliveryPatch } : item));
+      setSelectedOrderDetails((current) => current?.id === order.id ? { ...current, ...deliveryPatch } : current);
+
+      if (data.success) {
+        if (!quiet) alert(`Order complete email sent to ${order.customer_email}`);
+        return { ok: true, data };
+      }
+      if (!quiet) {
+        alert(`Customer email FAILED for ${order.customer_email}.\n\nReason: ${data.details || data.error || `server returned ${res.status}`}\n\nThe order remains saved and you can retry from its detail panel.`);
+      }
+      return { ok: false, data };
+    } catch (error) {
+      console.error('Order complete email error:', error);
+      if (!quiet) alert(`Customer email FAILED for ${order.customer_email}.\n\nReason: ${error.message}\n\nThe order remains saved and you can retry from its detail panel.`);
+      return { ok: false, error };
+    }
+  };
+
   // Order status update
   const handleOrderStatusUpdate = async (orderId, newStatus) => {
     const prevOrder = orders.find((o) => o.id === orderId);
@@ -3216,29 +3252,7 @@ Core Rules:
       return;
     }
 
-    // Every failure below used to be swallowed, so "no confirmation popup" and
-    // "email never sent" looked identical from the outside. Now they don't.
-    try {
-      const res = await adminFetch('/api/order-shipped-notification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...orderForEmail, status: newStatus }),
-      });
-      const data = await res.json().catch(() => ({}));
-
-      if (data.success) {
-        alert(`Order complete email sent to ${orderForEmail.customer_email}`);
-        return;
-      }
-      if (data.skipped) {
-        alert(`Customer email NOT sent (${data.reason || 'email sending is not configured on the server'}). The status change was saved.`);
-        return;
-      }
-      alert(`Customer email FAILED for ${orderForEmail.customer_email}.\n\nReason: ${data.details || data.error || `server returned ${res.status}`}\n\nThe status change was saved.`);
-    } catch (err) {
-      console.error('Order complete email error:', err);
-      alert(`Customer email FAILED for ${orderForEmail.customer_email}.\n\nReason: ${err.message}\n\nThe status change was saved.`);
-    }
+    await sendOrderCompletionNotification(orderForEmail);
   };
 
   // Order sales agent update
@@ -3320,17 +3334,30 @@ Core Rules:
 
   // Order tracking update
   const handleOrderTrackingUpdate = async (orderId, trackingNumber) => {
-    setOrders(orders.map(o => o.id === orderId ? { ...o, tracking_number: trackingNumber } : o));
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase
-          .from('orders')
-          .update({ tracking_number: trackingNumber })
-          .eq('id', orderId);
-      } catch(err) {
-        console.error("Order tracking update error:", err);
+    const previous = orders.find((order) => order.id === orderId) || selectedOrderDetails;
+    const cleanTracking = String(trackingNumber || '').trim();
+    if (!previous || cleanTracking === String(previous.tracking_number || '').trim()) return;
+    try {
+      const response = await adminFetch('/api/admin/orders/update', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          orderId,
+          updates: { tracking_number: cleanTracking || null },
+          activity: {
+            type: 'tracking_update',
+            message: cleanTracking ? `Tracking number saved: ${cleanTracking}` : 'Tracking number removed',
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save tracking number');
+      handleOrderUpdated(data.order);
+      if (cleanTracking && ['Completed', 'Order Complete'].includes(data.order.status)) {
+        await sendOrderCompletionNotification(data.order, { quiet: false });
       }
+    } catch (error) {
+      console.error('Order tracking update error:', error);
+      alert(`Tracking number was not saved: ${error.message}`);
     }
   };
 
@@ -6727,7 +6754,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               adminEmail={loggedInEmail.current}
               products={products}
               onOpenCustomerProfile={openCustomerProfileHandoff}
-              onCreateOrderFromInquiry={() => openManualOrder()}
+              onCreateOrderFromInquiry={openManualOrder}
               onNavigate={navigateToTab}
               onWhatsAppClick={openWhatsAppComposer}
             />
@@ -7360,6 +7387,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           onUpdated={handleOrderUpdated}
           onStatusChange={handleOrderStatusUpdate}
           onTrackingChange={handleOrderTrackingUpdate}
+          onResendCompletion={sendOrderCompletionNotification}
           agents={agents}
           affiliates={orderAffiliates}
           isSuperadmin={!!adminProfile?.is_superadmin}

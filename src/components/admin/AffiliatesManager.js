@@ -8,6 +8,7 @@ import { getBadgeStyleOptions, resolvePromoBadgeText } from '@/lib/promoBadge.mj
 import { crWallToIso, isoToCrWall, formatCrWall, formatCrInstant } from '@/lib/crTime.mjs';
 import ReferralAnalytics from '@/components/admin/ReferralAnalytics';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
+import PayoutSettlementDialog from './PayoutSettlementDialog';
 
 const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://catalog.peptidescostarica.net/catalog?lang=es';
 
@@ -79,6 +80,7 @@ export default function AffiliatesManager({ products = [] }) {
   const [promoFilter, setPromoFilter] = useState('standard');
   const [qrModal, setQrModal] = useState(null);
   const [qrLoadingId, setQrLoadingId] = useState(null);
+  const [settlementPayout, setSettlementPayout] = useState(null);
 
   // Forms State
   const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
@@ -957,11 +959,17 @@ export default function AffiliatesManager({ products = [] }) {
                       <td style={{ padding: '16px' }}>
                         <span style={{ 
                           padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
-                          background: p.status === 'Pending' ? 'rgba(234, 179, 8, 0.15)' : p.status === 'Approved' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          color: p.status === 'Pending' ? '#eab308' : p.status === 'Approved' ? '#22c55e' : '#ef4444'
+                          background: p.status === 'Paid' ? 'rgba(34, 197, 94, 0.15)' : ['Approved', 'Payment Initiated'].includes(p.status) ? 'rgba(234, 179, 8, 0.15)' : p.status === 'Pending' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                          color: p.status === 'Paid' ? '#22c55e' : ['Approved', 'Payment Initiated'].includes(p.status) ? '#eab308' : p.status === 'Pending' ? '#38bdf8' : '#ef4444'
                         }}>
                           {p.status}
                         </span>
+                        {p.status === 'Paid' && (
+                          <div style={{ color: '#64748b', fontSize: '.68rem', marginTop: 6 }}>
+                            {[p.payment_method, p.payment_reference].filter(Boolean).join(' · ')}
+                            {p.payment_receipt_url && <> · <a href={p.payment_receipt_url} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>receipt</a></>}
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: '16px', textAlign: 'right' }}>
                         {p.status === 'Pending' && (
@@ -973,6 +981,14 @@ export default function AffiliatesManager({ products = [] }) {
                               Reject
                             </button>
                           </div>
+                        )}
+                        {['Approved', 'Payment Initiated', 'Failed'].includes(p.status) && (
+                          <button
+                            onClick={() => setSettlementPayout(p)}
+                            style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)', padding: '6px 12px', fontSize: '0.75rem', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer' }}
+                          >
+                            Record payment
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -1221,6 +1237,13 @@ export default function AffiliatesManager({ products = [] }) {
           </form>
         </div>
       )}
+      <PayoutSettlementDialog
+        payout={settlementPayout}
+        endpoint="/api/admin/affiliates/payouts/settle"
+        label={settlementPayout?.affiliate_name || settlementPayout?.affiliate_email || 'Affiliate payout'}
+        onClose={() => setSettlementPayout(null)}
+        onSaved={(saved) => setPayouts((current) => current.map((payout) => payout.id === saved.id ? saved : payout))}
+      />
     </div>
   );
 }

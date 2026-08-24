@@ -284,6 +284,8 @@ export async function POST(request) {
         override_sales_crc: overrideSalesCrc,
         override_orders_data: eligibleOverrideOrders,
         email_html: refreshedEmailHtml,
+        email_sent: emailSent,
+        email_error: emailError,
         approved_at: new Date().toISOString(),
         approved_by: 'Super Admin' // Can be customized if user authentication details are available
       },

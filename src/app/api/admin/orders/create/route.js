@@ -3,79 +3,196 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { agentMatchKeys } from '@/lib/agentOrders';
-import { withBacGiftLines } from '@/lib/bacWater.mjs';
+import { isGiftLine, stripGiftSuffix } from '@/lib/bacWater.mjs';
+import { authoritativeCheckout } from '@/lib/authoritativeCheckout.mjs';
+import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
+import { getAdminCurrencyPair, normalizeAdminOrderCurrency } from '@/lib/adminOrderTotals.mjs';
+import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
+import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
+import { applyCustomerHistoryAttribution } from '@/lib/customerHistoryAttributionServer';
+import { notifyLowInventory, prepareInventoryReservation } from '@/lib/orderInventoryServer';
 import {
-  calculateAdminOrderTotals,
-  getAdminCurrencyPair,
-  normalizeAdminOrderCurrency,
-} from '@/lib/adminOrderTotals.mjs';
+  recordNewOrderNotification,
+  sendAffiliateOrderWhatsApp,
+  sendCustomerOrderConfirmation,
+  sendTeamOrderWhatsApp,
+} from '@/lib/orderWhatsAppAlerts';
+import {
+  applySalesAgentReferral,
+  isEligibleSalesAgentProfile,
+  isSalesAgentAffiliate,
+} from '@/lib/salesAgentAffiliate.mjs';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
-/**
- * Write the free BAC water an order has earned onto the order itself.
- *
- * The storefront resolves the gift into an explicit line before it posts, and
- * /api/order-notification fills it in for clients that don't. An order typed in
- * by an agent goes through neither: it lands here and is written straight to
- * the table, so the record — and the packing list read off it — is short by the
- * whole allowance. That is how the vials went missing from phone orders.
- *
- * The line is priced at zero and so moves no money: BAC water is already out of
- * the volume discount tiers and out of the discountable subtotal.
- */
-function withBacGift(items, currency) {
-  const isEn = String(currency || '').trim().toUpperCase() === 'USD';
-  return withBacGiftLines(items, isEn ? 'en' : 'es');
+const SAFE_STATUSES = new Set([
+  'Pending', 'Payment Pending', 'Pending - Card', 'Pending - Card 3DS',
+  'Paid', 'Declined', 'Error', 'Processing', 'Order Complete',
+]);
+
+function isForeignKeyError(error) {
+  return error?.code === '23503' || String(error?.message || '').includes('foreign key');
+}
+
+async function resolvePromo(supabase, order) {
+  const code = String(order.promo_code || '').trim().toUpperCase();
+  if (!code) return null;
+
+  const { data: promo, error } = await supabase
+    .from('promo_codes')
+    .select('id,code,is_active,valid_from,valid_until,usage_limit,usage_count,once_per_customer,min_units,max_units,discount_pct,target_product,is_flash_sale,affiliate_id')
+    .eq('code', code)
+    .maybeSingle();
+  if (error) throw error;
+  if (!promo) throw Object.assign(new Error('Invalid promo code'), { status: 400 });
+  if (!promo.is_active) throw Object.assign(new Error('Promo code is inactive'), { status: 400 });
+
+  const now = Date.now();
+  if (promo.valid_from && now < Date.parse(promo.valid_from)) {
+    throw Object.assign(new Error('Promo code is not yet active'), { status: 400 });
+  }
+  if (promo.valid_until && now > Date.parse(promo.valid_until)) {
+    await supabase.from('promo_codes').update({ is_active: false }).eq('id', promo.id);
+    throw Object.assign(new Error('Promo code has expired'), { status: 400 });
+  }
+  if (promo.usage_limit !== null && Number(promo.usage_count || 0) >= Number(promo.usage_limit)) {
+    throw Object.assign(new Error('Promo code has reached its usage limit'), { status: 400 });
+  }
+
+  const unitCheck = checkUnitLimits(
+    promo,
+    countCartUnits(order.items.filter((item) => !isGiftLine(item))),
+  );
+  if (!unitCheck.ok) {
+    throw Object.assign(new Error(unitLimitsMessage(promo, unitCheck.unitCount, order.currency === 'USD' ? 'en' : 'es')), { status: 400 });
+  }
+
+  if (promo.once_per_customer) {
+    let used = false;
+    for (const [field, value] of [
+      ['customer_email', order.customer_email],
+      ['customer_phone', order.customer_phone],
+    ]) {
+      if (used || !value) continue;
+      const { data: prior, error: priorError } = await supabase
+        .from('orders')
+        .select('promo_code')
+        .eq(field, value)
+        .not('promo_code', 'is', null);
+      if (priorError) throw priorError;
+      used = (prior || []).some((row) => String(row.promo_code || '').trim().toUpperCase() === code);
+    }
+    if (used) {
+      throw Object.assign(new Error('This promo code can only be used once per customer.'), { status: 400 });
+    }
+  }
+
+  return promo;
+}
+
+async function applyAffiliateAttribution(supabase, row, promo) {
+  const affiliateId = promo?.affiliate_id || null;
+  if (!affiliateId) return { ...row, affiliate_id: null, ...affiliateCommissionPatch(row, null) };
+
+  const { data: affiliate, error } = await supabase
+    .from('affiliates')
+    .select('*')
+    .eq('id', affiliateId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!affiliate) return { ...row, affiliate_id: null, ...affiliateCommissionPatch(row, null) };
+
+  const attributed = { ...row, affiliate_id: affiliate.id };
+  if (!isSalesAgentAffiliate(affiliate)) {
+    return { ...attributed, ...affiliateCommissionPatch(attributed, affiliate) };
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('admin_profiles')
+    .select('*')
+    .eq('user_id', affiliate.admin_profile_user_id)
+    .maybeSingle();
+  if (profileError) throw profileError;
+  if (!isEligibleSalesAgentProfile(profile)) {
+    return { ...attributed, affiliate_commission_usd: 0, affiliate_commission_crc: 0 };
+  }
+  return applySalesAgentReferral(attributed, profile);
 }
 
 export async function POST(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
+  let inventory = null;
   try {
-    const body = await request.json();
-    const { order } = body;
-
+    const { order } = await request.json();
     if (!order?.customer_name || !order?.customer_phone || !Array.isArray(order.items) || order.items.length === 0) {
       return NextResponse.json({ error: 'customer_name, customer_phone, and items are required' }, { status: 400 });
     }
 
-    const orderNum = order.order_number || `WPCR-${Date.now().toString(36).toUpperCase()}`;
-    // Use the exact guarded, database-backed rate used by customer checkout.
-    // The browser's converted totals are only a preview; recalculating here
-    // prevents a stale open admin tab from saving yesterday's conversion.
-    const { rate: liveExchangeRate, source: exchangeRateSource } = await getDatabaseBackedUsdToCrcRate();
+    const supabase = getSupabaseAdmin();
     const currency = normalizeAdminOrderCurrency(order.currency);
-    const primaryShipping = currency === 'USD'
-      ? Number(order.shipping_cost_usd || 0)
-      : Number(order.shipping_cost_crc || 0);
-    const calculated = calculateAdminOrderTotals(order.items, primaryShipping);
-    const primaryTotal = currency === 'USD'
-      ? Number(calculated.total.toFixed(2))
-      : Math.round(calculated.total);
-    const totals = getAdminCurrencyPair(primaryTotal, currency, liveExchangeRate);
-    const shippingCosts = getAdminCurrencyPair(primaryShipping, currency, liveExchangeRate);
-    const activityLog = appendOrderActivity([], {
-      type: 'manual_entry',
-      message: `Manual order created by ${auth.user.email} · FX $1 = ₡${liveExchangeRate} (${exchangeRateSource})`,
-      by: auth.user.email,
-    });
+    const orderNum = String(order.order_number || '').trim() || `WPCR-${Date.now().toString(36).toUpperCase()}`;
+    const promo = await resolvePromo(supabase, { ...order, currency });
+    const names = [...new Set(order.items
+      .filter((item) => !isGiftLine(item))
+      .map((item) => stripGiftSuffix(item?.product || item?.name))
+      .filter(Boolean))];
+    const [{ data: products, error: productError }, rateResult] = await Promise.all([
+      supabase
+        .from('products')
+        .select('id,product,price_usd,price_crc,status,inventory_count')
+        .in('product', names),
+      getDatabaseBackedUsdToCrcRate(),
+    ]);
+    if (productError) {
+      return NextResponse.json({ error: `Could not verify current prices: ${productError.message}` }, { status: 503 });
+    }
+    const liveExchangeRate = rateResult.rate;
 
-    const row = {
-      ...order,
-      items: withBacGift(order.items, order.currency),
+    const authoritative = authoritativeCheckout({
+      postedOrder: { ...order, currency },
+      products: products || [],
+      promo,
+      exchangeRate: liveExchangeRate,
+    });
+    if (!authoritative.ok) {
+      return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });
+    }
+
+    const primaryShipping = Math.max(0, Number(
+      currency === 'USD' ? order.shipping_cost_usd : order.shipping_cost_crc,
+    ) || 0);
+    const primaryTotal = authoritative.total - authoritative.shipping + primaryShipping;
+    const totals = getAdminCurrencyPair(primaryTotal, currency, liveExchangeRate);
+    const shipping = getAdminCurrencyPair(primaryShipping, currency, liveExchangeRate);
+    const promoDiscount = getAdminCurrencyPair(authoritative.promoDiscount, currency, liveExchangeRate);
+    const paymentMethod = String(order.payment_method || 'whatsapp').trim().toLowerCase();
+    const requestedStatus = SAFE_STATUSES.has(order.status) ? order.status : 'Pending';
+
+    let row = {
       order_number: orderNum,
-      source: 'admin_manual',
+      customer_name: String(order.customer_name).trim(),
+      customer_phone: String(order.customer_phone).trim(),
+      customer_email: String(order.customer_email || '').trim() || null,
+      customer_id_number: String(order.customer_id_number || '').trim() || null,
+      customer_id_type: order.customer_id_number ? (order.customer_id_type || null) : null,
+      shipping_address: String(order.shipping_address || '').trim() || null,
+      items: authoritative.items,
       currency,
       total_usd: totals.usd,
       total_crc: totals.crc,
-      shipping_cost_usd: shippingCosts.usd,
-      shipping_cost_crc: shippingCosts.crc,
-      status: order.status || 'Pending',
-      payment_method: order.payment_method || 'whatsapp',
-      activity_log: activityLog,
+      shipping_cost_usd: shipping.usd,
+      shipping_cost_crc: shipping.crc,
+      discount_amount_usd: promoDiscount.usd,
+      discount_amount_crc: promoDiscount.crc,
+      promo_code: promo?.code || null,
+      payment_method: paymentMethod,
+      status: paymentMethod === 'card' ? 'Payment Pending' : requestedStatus,
+      source: 'admin_manual',
+      sales_agent: String(order.sales_agent || '').trim() || null,
     };
 
     if (!auth.profile.is_superadmin) {
@@ -86,61 +203,80 @@ export async function POST(request) {
       row.sales_agent = row.sales_agent || auth.profile.name || auth.profile.email || auth.user.email;
     }
 
-    const supabase = getSupabaseAdmin();
-    const { data, error } = await supabase
-      .from('orders')
-      .insert(row)
-      .select('*')
-      .single();
+    row = await applyAffiliateAttribution(supabase, row, promo);
+    row = await applyCustomerHistoryAttribution(supabase, row);
+    row.activity_log = appendOrderActivity([], {
+      type: 'manual_entry',
+      message: `Manual order created by ${auth.user.email} · catalog pricing verified · FX $1 = ₡${liveExchangeRate} (${rateResult.source})`,
+      by: auth.user.email,
+    });
 
-    if (error) {
+    inventory = await prepareInventoryReservation(supabase, [], row.items);
+    row.inventory_deducted = inventory.reservations;
+
+    let { data, error } = await supabase.from('orders').insert(row).select('*').single();
+    if (error && row.affiliate_id && isForeignKeyError(error)) {
       const { affiliate_id, affiliate_commission_usd, affiliate_commission_crc, ...withoutAffiliate } = row;
-      if (affiliate_id && error.message?.includes('foreign key')) {
-        const retry = await supabase.from('orders').insert(withoutAffiliate).select('*').single();
-        if (retry.error) {
-          return NextResponse.json({ error: retry.error.message }, { status: 500 });
-        }
-        return NextResponse.json({ ok: true, order: retry.data });
-      }
+      ({ data, error } = await supabase.from('orders').insert(withoutAffiliate).select('*').single());
+    }
+    if (error) {
+      await inventory.rollback();
+      inventory = null;
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const updatePromises = [];
-    if (row.customer_phone) {
-      const cleanPhone = row.customer_phone.replace(/\D/g, '');
-      const phoneSearch = cleanPhone.length >= 8 ? cleanPhone.slice(-8) : cleanPhone;
-      updatePromises.push(
-        supabase
-          .from('abandoned_carts')
-          .delete()
-          .ilike('customer_phone', `%${phoneSearch}%`)
-      );
-    }
-    if (row.customer_email) {
-      updatePromises.push(
-        supabase
-          .from('abandoned_carts')
-          .delete()
-          .eq('customer_email', row.customer_email)
-      );
+    const committedInventory = inventory;
+    inventory = null;
+    try {
+      await notifyLowInventory(supabase, committedInventory.changes);
+    } catch (notifyError) {
+      console.error('[admin/orders/create] low inventory alert failed:', notifyError.message);
     }
 
-    if (updatePromises.length > 0) {
-      try {
-        await Promise.all(updatePromises);
-      } catch (cartErr) {
-        console.warn('[admin/orders/create] Abandoned cart update failed:', cartErr.message);
-      }
+    const housekeeping = [];
+    if (row.customer_phone) {
+      const cleanPhone = row.customer_phone.replace(/\D/g, '');
+      housekeeping.push(supabase.from('abandoned_carts').delete().ilike('customer_phone', `%${cleanPhone.slice(-8)}%`));
     }
+    if (row.customer_email) {
+      housekeeping.push(supabase.from('abandoned_carts').delete().eq('customer_email', row.customer_email));
+    }
+    if (promo) {
+      housekeeping.push(
+        supabase.from('promo_codes').update({ usage_count: Number(promo.usage_count || 0) + 1 }).eq('id', promo.id),
+      );
+    }
+    await Promise.allSettled(housekeeping);
+
+    try {
+      await recordNewOrderNotification(supabase, data, data.order_number);
+    } catch (error) {
+      console.error('[admin/orders/create] durable notification failed:', error.message);
+    }
+
+    const baseUrl = new URL(request.url).origin;
+    const alerts = [
+      paymentMethod === 'card'
+        ? Promise.resolve({ skipped: 'card_payment_pending' })
+        : sendCustomerOrderConfirmation(supabase, data, data.order_number, data.id),
+      sendTeamOrderWhatsApp(supabase, data, data.order_number, data.id),
+      sendAffiliateOrderWhatsApp(supabase, data, data.order_number, data.id),
+      paymentMethod === 'card'
+        ? Promise.resolve({ skipped: 'card_payment_pending' })
+        : sendAdminOrderEmail(baseUrl, data, data.order_number),
+    ];
+    const alertResults = await Promise.allSettled(alerts);
 
     return NextResponse.json({
       ok: true,
       order: data,
       exchangeRate: liveExchangeRate,
-      exchangeRateSource,
+      exchangeRateSource: rateResult.source,
+      alerts: alertResults.map((result) => result.status),
     });
-  } catch (err) {
-    console.error('[admin/orders/create]', err);
-    return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
+  } catch (error) {
+    if (inventory) await inventory.rollback().catch(() => {});
+    console.error('[admin/orders/create]', error);
+    return NextResponse.json({ error: error.message || 'Internal error' }, { status: error.status || 500 });
   }
 }

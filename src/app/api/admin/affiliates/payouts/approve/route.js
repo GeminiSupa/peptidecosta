@@ -134,7 +134,9 @@ export async function POST(request) {
       .update({
         status: 'Approved',
         approved_at: new Date().toISOString(),
-        approved_by: 'Super Admin'
+        approved_by: 'Super Admin',
+        email_sent: emailSent,
+        email_error: emailError,
       })
       .eq('id', payoutId);
 

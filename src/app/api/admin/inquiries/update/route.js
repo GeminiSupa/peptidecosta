@@ -1,16 +1,13 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { verifyAdminSession } from '@/lib/adminAuth';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function PATCH(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
   try {
-    const { inquiryId, status } = await request.json();
+    const { inquiryId, status, assignedTo } = await request.json();
 
     if (!inquiryId) {
       return NextResponse.json({ error: 'Missing inquiryId' }, { status: 400 });
@@ -21,26 +18,38 @@ export async function PATCH(request) {
       return NextResponse.json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, { status: 400 });
     }
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
+    if (assignedTo !== undefined && assignedTo !== null && typeof assignedTo !== 'string') {
+      return NextResponse.json({ error: 'assignedTo must be a string or null' }, { status: 400 });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = getSupabaseAdmin();
 
     const updateData = {};
     if (status) updateData.status = status;
+    if (assignedTo !== undefined) {
+      const normalized = String(assignedTo || '').trim();
+      updateData.assigned_to = normalized && normalized !== 'Unassigned' ? normalized : null;
+      updateData.assigned_by = auth.user.email || null;
+      updateData.assigned_at = new Date().toISOString();
+    }
 
-    const { error } = await supabase
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: 'No changes supplied' }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
       .from('customer_inquiries')
       .update(updateData)
-      .eq('id', inquiryId);
+      .eq('id', inquiryId)
+      .select('*')
+      .single();
 
     if (error) {
       console.error('[Inquiry Update] Error:', error);
       return NextResponse.json({ error: 'Failed to update inquiry' }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, inquiry: data });
   } catch (err) {
     console.error('[Inquiry Update] Unexpected error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -59,11 +68,7 @@ export async function DELETE(request) {
       return NextResponse.json({ error: 'Missing inquiry id' }, { status: 400 });
     }
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = getSupabaseAdmin();
 
     const { error } = await supabase
       .from('customer_inquiries')

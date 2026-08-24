@@ -120,6 +120,7 @@ export default function OrderDetailPanel({
   onUpdated,
   onStatusChange,
   onTrackingChange,
+  onResendCompletion,
   agents = [],
   affiliates = [],
   isSuperadmin = false,
@@ -162,6 +163,7 @@ export default function OrderDetailPanel({
   const [commissionOverridePct, setCommissionOverridePct] = useState(order.agent_commission_rate_override || 20);
   const [savingAttribution, setSavingAttribution] = useState(false);
   const [attributionError, setAttributionError] = useState('');
+  const [resendingCompletion, setResendingCompletion] = useState(false);
 
   useEffect(() => {
     if (!order) return;
@@ -792,6 +794,32 @@ export default function OrderDetailPanel({
                 onBlur={(e) => onTrackingChange(order.id, e.target.value)}
               />
             </div>
+            {['Completed', 'Order Complete'].includes(order.status) && (
+              <div>
+                <label>Completion email</label>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 7, alignItems: 'flex-start' }}>
+                  <strong style={{ color: order.completion_notification_status === 'sent' ? '#4ade80' : '#fbbf24', textTransform: 'capitalize' }}>
+                    {order.completion_notification_status || 'Not recorded'}
+                  </strong>
+                  {order.completion_notification_error && (
+                    <small style={{ color: '#f87171' }}>{order.completion_notification_error}</small>
+                  )}
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-secondary"
+                    disabled={resendingCompletion || !order.customer_email}
+                    onClick={async () => {
+                      setResendingCompletion(true);
+                      await onResendCompletion?.(order);
+                      setResendingCompletion(false);
+                    }}
+                    style={{ fontSize: '.74rem', padding: '6px 9px' }}
+                  >
+                    {resendingCompletion ? 'Sending…' : 'Send / resend email'}
+                  </button>
+                </span>
+              </div>
+            )}
             {order.promo_code && (
               <div><label>Promo</label><span style={{ color: '#38bdf8' }}>{order.promo_code}</span></div>
             )}

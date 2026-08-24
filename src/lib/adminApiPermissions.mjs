@@ -15,6 +15,7 @@ const rules = [
   { pattern: /^\/api\/admin\/journeys(?:\/|$)/, permissions: ['marketing'] },
   { pattern: /^\/api\/admin\/marketing-(?:intelligence|safety|segments)(?:\/|$)/, permissions: ['marketing'] },
   { pattern: /^\/api\/admin\/prospects(?:\/|$)/, permissions: ['prospects'] },
+  { pattern: /^\/api\/admin\/crm(?:\/|$)/, permissions: ['customers'] },
   { pattern: /^\/api\/admin\/customer-timeline$/, permissions: ['customers'] },
   { pattern: /^\/api\/admin\/deals(?:\/|$)/, permissions: ['deals'] },
   { pattern: /^\/api\/admin\/inquiries(?:\/|$)/, permissions: ['inquiries'] },

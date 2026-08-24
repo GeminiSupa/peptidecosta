@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
+import { isGiftLine, stripGiftSuffix } from '@/lib/bacWater.mjs';
+import { authoritativeCheckout } from '@/lib/authoritativeCheckout.mjs';
 import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
+import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { isRefundStatus } from '@/lib/orderRefund.mjs';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { orderVisibleToAgent } from '@/lib/agentOrders';
@@ -11,10 +14,10 @@ import { sendAffiliateOrderWhatsApp } from '@/lib/orderWhatsAppAlerts';
 import { isFirstPaidTransition, shouldSendPaidConfirmation } from '@/lib/orderStatusEmails.mjs';
 import { shouldRestoreForStatus } from '@/lib/inventoryRestore.mjs';
 import { restoreInventoryForOrder } from '@/lib/inventoryRestoreServer';
+import { notifyLowInventory, prepareInventoryReservation } from '@/lib/orderInventoryServer';
 import {
-  ADMIN_FALLBACK_EXCHANGE_RATE,
   calculateAdminOrderTotals,
-  getAdminShippingCosts,
+  getAdminCurrencyPair,
   normalizeAdminOrderCurrency,
   normalizeManualDiscountType,
 } from '@/lib/adminOrderTotals.mjs';
@@ -44,6 +47,7 @@ export async function PATCH(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
 
+  let inventoryReservation = null;
   try {
     const body = await request.json();
     const { orderId, updates, activity, acknowledgePaidOrderDiscount } = body;
@@ -123,13 +127,6 @@ export async function PATCH(request) {
       !sameNullableText(currentOrder.manual_discount_reason, patch.manual_discount_reason)
     );
 
-    if (manualDiscountChanged && isSettledStatus(currentOrder.status) && acknowledgePaidOrderDiscount !== true) {
-      return NextResponse.json({
-        error: 'This order is already paid or complete. Confirm that changing its record does not issue a refund.',
-        requiresPaidOrderAcknowledgement: true,
-      }, { status: 409 });
-    }
-
     const pricingChanged = [
       'items',
       'shipping_cost_crc',
@@ -137,55 +134,113 @@ export async function PATCH(request) {
       ...MANUAL_DISCOUNT_FIELDS,
     ].some((field) => field in patch);
 
+    if (pricingChanged && isSettledStatus(currentOrder.status)) {
+      return NextResponse.json({
+        error: 'Items, shipping, and discounts are locked after payment. Create a separate adjustment instead of changing the settled order.',
+      }, { status: 409 });
+    }
+
+    let inventoryCurrentLines = null;
+    let inventoryDesiredItems = null;
+
     if (pricingChanged) {
       const items = 'items' in patch ? patch.items : currentOrder.items;
       if (!Array.isArray(items) || items.length === 0) {
         return NextResponse.json({ error: 'Order must have at least one item' }, { status: 400 });
       }
-      if (items.some((item) => !item?.product || Number(item.qty) <= 0 || Number(item.price) < 0)) {
-        return NextResponse.json({ error: 'Every order item needs a product, positive quantity, and non-negative price' }, { status: 400 });
+      if (items.some((item) => !item?.product || Number(item.qty) <= 0)) {
+        return NextResponse.json({ error: 'Every order item needs a product and positive quantity' }, { status: 400 });
       }
 
       const currency = normalizeAdminOrderCurrency(currentOrder.currency);
       const shippingCrc = Number(('shipping_cost_crc' in patch ? patch.shipping_cost_crc : currentOrder.shipping_cost_crc) || 0);
       const shippingUsd = Number(('shipping_cost_usd' in patch ? patch.shipping_cost_usd : currentOrder.shipping_cost_usd) || 0);
       const shipping = currency === 'CRC' ? shippingCrc : shippingUsd;
-      if ('shipping_cost_crc' in patch || 'shipping_cost_usd' in patch) {
-        const normalizedShipping = getAdminShippingCosts(shipping, currency);
-        patch.shipping_cost_crc = normalizedShipping.crc;
-        patch.shipping_cost_usd = normalizedShipping.usd;
+
+      const productNames = [...new Set(items
+        .filter((item) => !isGiftLine(item))
+        .map((item) => stripGiftSuffix(item?.product || item?.name))
+        .filter(Boolean))];
+      const [{ data: products, error: productsError }, rateResult] = await Promise.all([
+        supabase
+          .from('products')
+          .select('id,product,price_usd,price_crc,status,inventory_count')
+          .in('product', productNames),
+        getDatabaseBackedUsdToCrcRate(),
+      ]);
+      if (productsError) {
+        return NextResponse.json({ error: `Could not verify current prices: ${productsError.message}` }, { status: 503 });
       }
-      const promoDiscountAmount = currency === 'CRC'
-        ? Number(currentOrder.discount_amount_crc || 0)
-        : Number(currentOrder.discount_amount_usd || 0);
+
+      let promo = null;
+      if (currentOrder.promo_code) {
+        const { data: promoRow, error: promoError } = await supabase
+          .from('promo_codes')
+          .select('discount_pct,target_product,is_flash_sale')
+          .eq('code', String(currentOrder.promo_code).trim().toUpperCase())
+          .maybeSingle();
+        if (promoError) {
+          return NextResponse.json({ error: `Could not verify the order promo: ${promoError.message}` }, { status: 503 });
+        }
+        promo = promoRow;
+      }
+
+      const currentReserved = Array.isArray(currentOrder.inventory_deducted)
+        ? currentOrder.inventory_deducted
+        : currentOrder.items;
+      const reservedByProduct = new Map();
+      for (const line of currentReserved || []) {
+        const name = stripGiftSuffix(line?.product || line?.name);
+        reservedByProduct.set(name, (reservedByProduct.get(name) || 0) + Number(line?.qty || 0));
+      }
+      const productsAvailableToThisOrder = (products || []).map((product) => ({
+        ...product,
+        inventory_count: product.inventory_count === null
+          ? null
+          : Number(product.inventory_count || 0) + Number(reservedByProduct.get(product.product) || 0),
+      }));
+      const authoritative = authoritativeCheckout({
+        postedOrder: { ...currentOrder, items, currency },
+        products: productsAvailableToThisOrder,
+        promo,
+        exchangeRate: rateResult.rate,
+      });
+      if (!authoritative.ok) {
+        return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });
+      }
+
+      patch.items = authoritative.items;
+      const normalizedShipping = getAdminCurrencyPair(shipping, currency, rateResult.rate);
+      patch.shipping_cost_crc = normalizedShipping.crc;
+      patch.shipping_cost_usd = normalizedShipping.usd;
+      const promoDiscountPair = getAdminCurrencyPair(authoritative.promoDiscount, currency, rateResult.rate);
+      patch.discount_amount_crc = promoDiscountPair.crc;
+      patch.discount_amount_usd = promoDiscountPair.usd;
+
       const manualType = normalizeManualDiscountType(
         'manual_discount_type' in patch ? patch.manual_discount_type : currentOrder.manual_discount_type
       );
       const manualValue = Number(
         ('manual_discount_value' in patch ? patch.manual_discount_value : currentOrder.manual_discount_value) || 0
       );
-      const totals = calculateAdminOrderTotals(items, shipping, {
-        promoDiscountAmount,
+      const totals = calculateAdminOrderTotals(authoritative.items, shipping, {
+        promoDiscountAmount: authoritative.promoDiscount,
         manualDiscountType: manualType,
         manualDiscountValue: manualValue,
       });
       const primaryTotal = currency === 'CRC' ? Math.round(totals.total) : Number(totals.total.toFixed(2));
-
-      patch.total_usd = currency === 'USD'
-        ? primaryTotal
-        : Number((primaryTotal / ADMIN_FALLBACK_EXCHANGE_RATE).toFixed(2));
-      patch.total_crc = currency === 'CRC'
-        ? primaryTotal
-        : Math.round(primaryTotal * ADMIN_FALLBACK_EXCHANGE_RATE);
+      const totalPair = getAdminCurrencyPair(primaryTotal, currency, rateResult.rate);
+      patch.total_usd = totalPair.usd;
+      patch.total_crc = totalPair.crc;
 
       if (manualDiscountRequested || Object.hasOwn(currentOrder, 'manual_discount_amount_usd')) {
-        patch.manual_discount_amount_usd = currency === 'USD'
-          ? Number(totals.manualDiscountAmount.toFixed(2))
-          : Number((totals.manualDiscountAmount / ADMIN_FALLBACK_EXCHANGE_RATE).toFixed(2));
-        patch.manual_discount_amount_crc = currency === 'CRC'
-          ? Math.round(totals.manualDiscountAmount)
-          : Math.round(totals.manualDiscountAmount * ADMIN_FALLBACK_EXCHANGE_RATE);
+        const manualDiscountPair = getAdminCurrencyPair(totals.manualDiscountAmount, currency, rateResult.rate);
+        patch.manual_discount_amount_usd = manualDiscountPair.usd;
+        patch.manual_discount_amount_crc = manualDiscountPair.crc;
       }
+
+      inventoryCurrentLines = currentReserved;
+      inventoryDesiredItems = authoritative.items;
     }
 
     const superadminOnlyFields = [
@@ -289,6 +344,15 @@ export async function PATCH(request) {
       patch.activity_log = activityLog;
     }
 
+    if (inventoryDesiredItems) {
+      inventoryReservation = await prepareInventoryReservation(
+        supabase,
+        inventoryCurrentLines,
+        inventoryDesiredItems,
+      );
+      patch.inventory_deducted = inventoryReservation.reservations;
+    }
+
     const { data, error, droppedColumns } = await writeDroppingMissingColumns(
       patch,
       ORDER_ATTRIBUTION_COLUMNS,
@@ -301,6 +365,7 @@ export async function PATCH(request) {
     );
 
     if (error) {
+      if (inventoryReservation) await inventoryReservation.rollback().catch(() => {});
       console.error('[admin/orders/update]', error.message);
       const missingColumn = missingColumnFrom(error);
       if (manualDiscountRequested && missingColumn?.startsWith('manual_discount_')) {
@@ -309,6 +374,16 @@ export async function PATCH(request) {
         }, { status: 503 });
       }
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (inventoryReservation) {
+      const committedInventory = inventoryReservation;
+      inventoryReservation = null;
+      try {
+        await notifyLowInventory(supabase, committedInventory.changes);
+      } catch (notifyError) {
+        console.error('[admin/orders/update] low inventory alert failed:', notifyError.message);
+      }
     }
 
     if (droppedColumns?.length) {
@@ -397,6 +472,7 @@ export async function PATCH(request) {
 
     return NextResponse.json({ ok: true, order: data });
   } catch (err) {
+    if (inventoryReservation) await inventoryReservation.rollback().catch(() => {});
     console.error('[admin/orders/update]', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });
   }
