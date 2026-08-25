@@ -8,7 +8,7 @@ import { hasWhatsAppOptIn } from '@/lib/whatsappCompliance';
 import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
 import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
-import { buildTemplateParam } from '@/lib/broadcastTemplateParam.mjs';
+import { buildTemplateParameters } from '@/lib/broadcastTemplateParam.mjs';
 import { broadcastFailureRecovery } from '@/lib/broadcastFailureRecovery.mjs';
 
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
@@ -23,7 +23,7 @@ function escapeHtml(value) {
   return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
-async function sendWhatsApp(to, message, templateName = null, firstName = null, languageCode = 'es', greetingVariable = false, parameterMode = null) {
+async function sendWhatsApp(to, message, templateName = null, firstName = null, languageCode = 'es', greetingVariable = false, parameterMode = null, templateParameters = null) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   if (!token || !phoneNumberId) return false;
@@ -43,7 +43,14 @@ async function sendWhatsApp(to, message, templateName = null, firstName = null, 
         language: { code: languageCode || 'es' },
         components: [{
           type: 'body',
-          parameters: [{ type: 'text', text: buildTemplateParam(firstName, languageCode, greetingVariable, message, parameterMode) }],
+          parameters: buildTemplateParameters(
+            firstName,
+            languageCode,
+            greetingVariable,
+            message,
+            parameterMode,
+            templateParameters,
+          ).map((text) => ({ type: 'text', text })),
         }],
       },
     } : {
@@ -381,6 +388,7 @@ export async function GET(request) {
                 channels.whatsappTemplateLanguage,
                 channels.whatsappGreetingVariable,
                 channels.whatsappTemplateParamMode,
+                channels.whatsappTemplateParameters,
               ),
             });
             sentWhatsapp = result.sent;

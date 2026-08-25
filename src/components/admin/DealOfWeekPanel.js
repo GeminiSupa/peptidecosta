@@ -351,6 +351,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
               onClick={() => onSendAnnouncement?.({
                 message: announcementDeal.drafts.message,
                 emailSubject: announcementDeal.drafts.emailSubject,
+                whatsappTemplate: announcementDeal.drafts.whatsappTemplate || null,
                 targetProducts: announcementDeal.deal?.product_names || [],
                 sourceDealId: announcementDeal.deal?.id || null,
               })}

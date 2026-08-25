@@ -4,6 +4,9 @@ import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader, Calenda
 import { adminFetch } from '@/lib/adminApi';
 import BroadcastProgress from '@/components/admin/BroadcastProgress';
 
+const FLEXIBLE_OFFER_TEMPLATE = 'promo_precio_especial_v1';
+const FLEXIBLE_OFFER_FIELDS = ['Product ({{1}})', 'Offer ({{2}})', 'End date ({{3}})', 'Catalog link ({{4}})'];
+
 export default function BroadcastsPanel({ products = [], draft = null, onDraftApplied }) {
   const [audience, setAudience] = useState('all_customers');
   const [customContacts, setCustomContacts] = useState('');
@@ -203,18 +206,30 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
     if (draft.emailSubject) setEmailSubject(draft.emailSubject);
     if (Array.isArray(draft.targetProducts)) setTargetProducts(draft.targetProducts);
     setSourceDealId(draft.sourceDealId || null);
+    const approvedTemplate = draft.whatsappTemplate || null;
     // A deal is worth announcing on both channels; either can still be unticked.
     setChannels((current) => ({
       ...current,
       whatsapp: true,
       email: true,
-      whatsappTemplateParamMode: draft.sourceDealId ? 'message' : (current.whatsappTemplateParamMode || 'name'),
+      whatsappTemplateName: approvedTemplate?.name || current.whatsappTemplateName || '',
+      whatsappTemplateLanguage: approvedTemplate?.language || current.whatsappTemplateLanguage || 'es',
+      whatsappTemplateParamMode: approvedTemplate?.parameters?.length
+        ? 'custom'
+        : (draft.sourceDealId ? 'message' : (current.whatsappTemplateParamMode || 'name')),
+      whatsappTemplateParameters: approvedTemplate?.parameters || current.whatsappTemplateParameters || [],
     }));
     setEmailFormat('simple');
     onDraftApplied?.();
   }, [draft, onDraftApplied]);
 
   const hasEmailHtml = Boolean(channels.email && emailFormat === 'html' && emailHtmlContent.trim());
+  const usesCustomTemplateParameters = channels.whatsappTemplateParamMode === 'custom';
+  const hasMissingCustomTemplateParameters = usesCustomTemplateParameters && (
+    !Array.isArray(channels.whatsappTemplateParameters)
+    || channels.whatsappTemplateParameters.length === 0
+    || channels.whatsappTemplateParameters.some((value) => !String(value || '').trim())
+  );
 
   const buildChannelsPayload = () => ({
     ...channels,
@@ -268,6 +283,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
 
   const handleSendTest = async () => {
     if (!message && !channels.whatsappTemplateName && !hasEmailHtml) return alert("Please enter a message, template name, or custom email HTML first.");
+    if (channels.whatsapp && hasMissingCustomTemplateParameters) return alert('Fill every approved WhatsApp template field before sending the test.');
     const testNumber = window.prompt("Enter your test phone number (e.g., 50688888888) or email:");
     if (!testNumber) return;
     
@@ -303,6 +319,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
     if (channels.whatsapp && !message && !channels.whatsappTemplateName) return alert("WhatsApp is ticked but has nothing to send. Untick WhatsApp or write a message.");
     if (channels.whatsapp && !channels.whatsappTemplateName) return alert("Choose an approved WhatsApp marketing template, or untick WhatsApp and send by email only. Free-form broadcasts cannot reliably reach customers outside the 24-hour window.");
     if (channels.whatsapp && channels.whatsappTemplateParamMode === 'message' && !message.trim()) return alert("This template expects the Message Composer text in {{1}}.");
+    if (channels.whatsapp && hasMissingCustomTemplateParameters) return alert('Fill every approved WhatsApp template field before broadcasting.');
     if (audience === 'custom' && !customContacts.trim()) return alert("Please enter custom contacts.");
     const estimateText = displayedEstimate
       ? `${displayedEstimate.totalTargets} total, ${displayedEstimate.whatsappTargets} WhatsApp candidates, ${displayedEstimate.emailTargets} email candidates`
@@ -337,6 +354,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
             ...current,
             whatsappTemplateParamMode: 'name',
             whatsappGreetingVariable: false,
+            whatsappTemplateParameters: [],
           }));
         }
         setSourceDealId(null);
@@ -748,7 +766,18 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
                 style={{ flex: 1, background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '12px 16px', borderRadius: '8px', fontSize: '0.95rem' }}
                 placeholder="e.g. nuevos_productos_lanzamiento"
                 value={channels.whatsappTemplateName || ''}
-                onChange={e => setChannels({ ...channels, whatsappTemplateName: e.target.value })}
+                onChange={e => {
+                  const templateName = e.target.value;
+                  const isFlexibleOffer = templateName.trim() === FLEXIBLE_OFFER_TEMPLATE;
+                  setChannels({
+                    ...channels,
+                    whatsappTemplateName: templateName,
+                    whatsappTemplateParamMode: isFlexibleOffer ? 'custom' : (channels.whatsappTemplateParamMode === 'custom' ? 'name' : channels.whatsappTemplateParamMode),
+                    whatsappTemplateParameters: isFlexibleOffer
+                      ? (channels.whatsappTemplateParameters?.length === 4 ? channels.whatsappTemplateParameters : ['', '', '', ''])
+                      : [],
+                  });
+                }}
               />
               <select 
                 className="admin-input"
@@ -761,7 +790,35 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
               </select>
             </div>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Use an approved template name to bypass the 24-hour window restriction and reach all leads.</p>
-            {channels.whatsappTemplateName && (
+            {channels.whatsappTemplateName && usesCustomTemplateParameters && (
+              <div style={{ marginTop: '10px', padding: '10px 12px', background: 'rgba(52, 211, 153, 0.06)', border: '1px solid rgba(52, 211, 153, 0.2)', borderRadius: '8px' }}>
+                <strong style={{ display: 'block', color: '#e2e8f0', fontSize: '0.8rem', marginBottom: '8px' }}>
+                  Approved offer fields
+                </strong>
+                <div style={{ display: 'grid', gap: '9px' }}>
+                  {FLEXIBLE_OFFER_FIELDS.map((label, index) => (
+                    <label key={label} style={{ display: 'grid', gap: '4px', color: '#cbd5e1', fontSize: '0.74rem' }}>
+                      <span>{label}</span>
+                      <input
+                        className="admin-input"
+                        type={index === 3 ? 'url' : 'text'}
+                        value={channels.whatsappTemplateParameters?.[index] || ''}
+                        onChange={(event) => {
+                          const parameters = [...(channels.whatsappTemplateParameters || ['', '', '', ''])];
+                          parameters[index] = event.target.value;
+                          setChannels({ ...channels, whatsappTemplateParameters: parameters });
+                        }}
+                        style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155' }}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <p style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.45, margin: '8px 0 0' }}>
+                  These values are sent in Meta&apos;s approved order. Keep them in the selected template language.
+                </p>
+              </div>
+            )}
+            {channels.whatsappTemplateName && !usesCustomTemplateParameters && (
               <div style={{ marginTop: '10px', padding: '10px 12px', background: 'rgba(52, 211, 153, 0.06)', border: '1px solid rgba(52, 211, 153, 0.2)', borderRadius: '8px' }}>
                 <label style={{ display: 'block', color: '#e2e8f0', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
                   What does {'{{1}}'} contain?

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { buildTemplateParam } from '../src/lib/broadcastTemplateParam.mjs';
+import { buildTemplateParam, buildTemplateParameters } from '../src/lib/broadcastTemplateParam.mjs';
 
 test('a greeting-variable template never leaves English in a Spanish message', () => {
   // The bug this replaces: the send-now route used `firstName || 'Customer'`, so
@@ -56,6 +56,23 @@ test('the value is never empty, whatever it is given', () => {
   }
 });
 
+test('an approved multi-field template preserves every value in Meta order', () => {
+  assert.deepEqual(
+    buildTemplateParameters('', 'es', false, '', 'custom', [
+      'BPC-157 + TB-500 20mg (Wolverine Stack)',
+      'Semana de recuperación: 15% de descuento. Ahora $127.50 / ₡57.513, ya aplicado y sin código',
+      'domingo 30 de agosto a las 11:59 p. m.',
+      'https://catalog.peptidescostarica.net/catalog?deal_id=123',
+    ]),
+    [
+      'BPC-157 + TB-500 20mg (Wolverine Stack)',
+      'Semana de recuperación: 15% de descuento. Ahora $127.50 / ₡57.513, ya aplicado y sin código',
+      'domingo 30 de agosto a las 11:59 p. m.',
+      'https://catalog.peptidescostarica.net/catalog?deal_id=123',
+    ],
+  );
+});
+
 test('both broadcast routes share one implementation', () => {
   // They each had their own copy, which is how the tickbox came to work on a
   // scheduled send and do nothing on an immediate one.
@@ -67,6 +84,10 @@ test('both broadcast routes share one implementation', () => {
     assert.ok(
       source.includes("from '@/lib/broadcastTemplateParam.mjs'"),
       `${route} must import the shared helper`
+    );
+    assert.ok(
+      source.includes('buildTemplateParameters('),
+      `${route} must support approved templates with several ordered fields`
     );
     assert.ok(
       !/function buildTemplateParam/.test(source),

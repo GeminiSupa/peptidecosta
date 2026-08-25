@@ -37,3 +37,26 @@ export function buildTemplateParam(firstName, languageCode, greetingVariable, me
   }
   return name || (isEn ? 'Customer' : 'Cliente');
 }
+
+/**
+ * Body parameters in the exact order Meta approved them.
+ *
+ * Most legacy broadcast templates have one personalized field, which continues
+ * to use buildTemplateParam above. Flexible offer templates can provide an
+ * explicit ordered list instead (product, offer, end date, URL, etc.). Keeping
+ * both shapes here prevents the send-now and scheduled processors drifting.
+ */
+export function buildTemplateParameters(
+  firstName,
+  languageCode,
+  greetingVariable,
+  message = '',
+  parameterMode = null,
+  explicitParameters = null,
+) {
+  if (parameterMode === 'custom' && Array.isArray(explicitParameters)) {
+    return explicitParameters.map((value) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 900));
+  }
+
+  return [buildTemplateParam(firstName, languageCode, greetingVariable, message, parameterMode)];
+}

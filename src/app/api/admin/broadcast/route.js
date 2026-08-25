@@ -8,7 +8,7 @@ import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { createEmailUnsubscribeToken } from '@/lib/marketingTokens';
 import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
-import { buildTemplateParam } from '@/lib/broadcastTemplateParam.mjs';
+import { buildTemplateParameters } from '@/lib/broadcastTemplateParam.mjs';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
@@ -17,7 +17,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PU
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Helper for sending WhatsApp via the official graph API
-async function sendWhatsApp(to, message, templateName = null, firstName = null, languageCode = 'es', greetingVariable = false, parameterMode = null) {
+async function sendWhatsApp(to, message, templateName = null, firstName = null, languageCode = 'es', greetingVariable = false, parameterMode = null, templateParameters = null) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.PHONE_NUMBER_ID;
   if (!token || !phoneNumberId) {
@@ -50,12 +50,14 @@ async function sendWhatsApp(to, message, templateName = null, firstName = null, 
           components: [
             {
               type: 'body',
-              parameters: [
-                {
-                  type: 'text',
-                  text: buildTemplateParam(firstName, languageCode, greetingVariable, message, parameterMode)
-                }
-              ]
+              parameters: buildTemplateParameters(
+                firstName,
+                languageCode,
+                greetingVariable,
+                message,
+                parameterMode,
+                templateParameters,
+              ).map((text) => ({ type: 'text', text }))
             }
           ]
         }
@@ -292,6 +294,18 @@ export async function POST(request) {
     if (channels?.whatsapp && whatsappTemplateName && channels?.whatsappTemplateParamMode === 'message' && !String(message || '').trim()) {
       return NextResponse.json({ error: 'This WhatsApp template expects the Message Composer text in {{1}}.' }, { status: 400 });
     }
+    if (
+      channels?.whatsapp
+      && whatsappTemplateName
+      && channels?.whatsappTemplateParamMode === 'custom'
+      && (
+        !Array.isArray(channels.whatsappTemplateParameters)
+        || channels.whatsappTemplateParameters.length === 0
+        || channels.whatsappTemplateParameters.some((value) => !String(value || '').trim())
+      )
+    ) {
+      return NextResponse.json({ error: 'Fill every approved WhatsApp template field before sending.' }, { status: 400 });
+    }
 
     if (scheduledAt && audience !== 'test') {
       const payload = {
@@ -403,6 +417,7 @@ export async function POST(request) {
           whatsappTemplateLanguage,
           channels?.whatsappGreetingVariable,
           channels?.whatsappTemplateParamMode,
+          channels?.whatsappTemplateParameters,
         );
       }
       
