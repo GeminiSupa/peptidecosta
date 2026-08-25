@@ -942,7 +942,34 @@ var CONFIG = {
 
   // Google Ads conversion. Leave either value empty to skip the Ads event;
   // the GA4 generate_lead event fires regardless.
+  //
+  // These are read by thank-you.html too — it takes them from the lead handoff
+  // rather than keeping its own copy, so this stays the only place to edit.
   ads: { conversionId: "", conversionLabel: "" },
+
+  // ── Thank-you page ────────────────────────────────────────────────────
+  // With enabled:true a confirmed lead sends the visitor to a real URL, which
+  // is what a Google Ads destination goal and GA4 both need to see. The
+  // conversion then fires on that page instead of this one, so it is counted
+  // once and only once.
+  //
+  // Set enabled:false to keep the visitor here and show the in-modal
+  // confirmation instead; the conversion moves back to this page automatically.
+  //
+  // The page is public/lp/thank-you.html, so it always answers on its own
+  // exact path, /lp/thank-you.html. The tidier URL below is a rewrite in
+  // next.config.mjs, exactly like the one that puts this page at /lp. The
+  // upstream repo gets the same tidy URL from cleanUrls in vercel.json; that
+  // is deliberately not carried over, because it would apply to every route
+  // in the app rather than to this one page.
+  //
+  // The page checks this URL is actually reachable at load. If it is not, the
+  // redirect is skipped and the confirmation appears in the modal as before,
+  // so a wrong path here costs you a nicer URL, never a lead.
+  thankYou: {
+    enabled: true,
+    url: "/lp/thank-you"
+  },
 
   // Optional: also mirror the full lead into the Google Sheet from the
   // previous setup. Fire-and-forget — never affects what the visitor sees.
@@ -1590,6 +1617,11 @@ $("#qForm").addEventListener("submit", function(e){
     .then(function(){
       completed = true;
       mirrorToSheet(lead);
+
+      // When the thank-you page is in play it owns the conversion, so nothing
+      // is counted here — see redirectToThankYou.
+      if (redirectToThankYou(payload, lead)) return;
+
       fireConversionEvents(payload, lead);
       setSubmitting(false);
       success(lead);
@@ -1608,7 +1640,130 @@ $("#qForm").addEventListener("submit", function(e){
     });
 });
 
-/* ---------- thank you (no external redirect) ---------- */
+/* ---------- thank you ----------------------------------------------------
+   Two paths. The default sends the visitor to a real /thank-you URL, because a
+   genuine page load is the only thing a Google Ads destination goal can see and
+   the only thing that shows up as its own page in analytics. The in-modal panel
+   below stays as the fallback for the cases where navigating away is either
+   impossible or would silently lose the conversion.
+   ------------------------------------------------------------------------- */
+
+var HANDOFF_KEY = "pcr_lead";
+
+/**
+ * Is the thank-you page actually there?
+ *
+ * null  not known yet, or the check could not run — redirect anyway
+ * true  confirmed reachable
+ * false confirmed missing — do not send anyone there
+ *
+ * Once the browser follows a redirect there is no coming back: if the
+ * destination 404s the visitor is stranded on an error page and the conversion
+ * is gone, and no timer on the old page can rescue it. So the URL is checked
+ * once at load, well before anyone submits, and a missing page simply turns the
+ * redirect off.
+ */
+var thankYouOk = null;
+
+function probeThankYou(){
+  var ty = CONFIG.thankYou || {};
+  if (!ty.enabled || !ty.url || isLocalPreview()) return;
+  if (typeof fetch !== "function") return;
+
+  try {
+    fetch(ty.url, { method: "HEAD", cache: "no-store" })
+      .then(function(r){
+        // Only a definite "not there" disables the redirect. Anything else —
+        // a 405 from a host that dislikes HEAD, a 500, a redirect chain — is
+        // treated as inconclusive and left alone.
+        if (r.status === 404 || r.status === 410){
+          thankYouOk = false;
+          console.error(
+            "[thank-you] " + ty.url + " returned " + r.status + ", so the redirect is disabled " +
+            "and leads will see the in-page confirmation instead." +
+            "\nEither deploy thank-you.html, or point CONFIG.thankYou.url at wherever it really lives." +
+            "\nThe page is public/lp/thank-you.html in this repo; the tidy /lp/thank-you URL is a rewrite in next.config.mjs."
+          );
+        } else {
+          thankYouOk = true;
+        }
+      })
+      .catch(function(){ /* offline or blocked: inconclusive, leave as null */ });
+  } catch(e){ /* same */ }
+}
+
+/**
+ * Hands the lead to thank-you.html and navigates there.
+ * Returns true when the visitor is on their way, false to fall through to the
+ * in-modal confirmation.
+ *
+ * The lead travels in sessionStorage rather than the query string: it is
+ * same-origin and per-tab, so it survives this one navigation while keeping the
+ * name and email out of the address bar, out of the referrer header and out of
+ * anyone's server logs. Only the language rides in the URL.
+ */
+function redirectToThankYou(payload, lead){
+  var ty = CONFIG.thankYou || {};
+  if (!ty.enabled || !ty.url) return false;
+
+  // The page is not deployed. Sending the visitor there would show them a 404
+  // and lose the conversion; the in-modal confirmation is strictly better.
+  if (thankYouOk === false) return false;
+
+  // On file:// a root-relative URL cannot resolve, so redirecting would land on
+  // a browser error page and the conversion would vanish.
+  if (isLocalPreview()){
+    console.warn("[thank-you] Skipping the redirect to " + ty.url +
+      " — the page is open from disk, where that path cannot resolve. " +
+      "Serve over http(s) to exercise the real flow.");
+    return false;
+  }
+
+  var stored = false;
+  try {
+    sessionStorage.setItem(HANDOFF_KEY, JSON.stringify({
+      ts: Date.now(),
+      lang: lang,
+      lead: lead,
+      payload: payload,
+      ads: CONFIG.ads || {},
+      fired: false
+    }));
+    stored = true;
+  } catch(e){
+    // Private browsing, or storage disabled entirely.
+    console.warn("[thank-you] sessionStorage unavailable, so the conversion is being counted here instead:", e.message);
+  }
+
+  // Storage failed, so the thank-you page will find no record and fire nothing.
+  // Counting it here keeps the conversion — and still cannot double count.
+  if (!stored) fireConversionEvents(payload, lead);
+
+  track("lead_submit_success", { source: payload.source, redirect: ty.url });
+
+  var url = ty.url + (ty.url.indexOf("?") === -1 ? "?" : "&") + "lang=" + encodeURIComponent(lang);
+
+  // If the navigation does not happen — a missing page, a blocked redirect —
+  // the visitor would be left staring at a disabled button with no confirmation
+  // that anything worked. Show the in-modal panel instead.
+  var rescue = setTimeout(function(){
+    console.warn("[thank-you] " + url + " did not load. Falling back to the in-page confirmation. " +
+      "Check that thank-you.html is deployed and that CONFIG.thankYou.url matches its real path.");
+    if (stored){
+      // Consume the handoff first, so reaching the thank-you page later in this
+      // same tab cannot count the lead a second time.
+      try { sessionStorage.removeItem(HANDOFF_KEY); } catch(e){}
+      fireConversionEvents(payload, lead);
+    }
+    setSubmitting(false);
+    success(lead);
+  }, 4000);
+  window.addEventListener("pagehide", function(){ clearTimeout(rescue); }, { once:true });
+
+  location.assign(url);
+  return true;
+}
+
 function success(l){
   var dl=$("#recap"); dl.innerHTML="";
   var labels=UI[lang].recap;
@@ -1645,7 +1800,7 @@ $$("[data-cta]:not([data-open])").forEach(function(el){
 var urlLang=(new URLSearchParams(location.search)).get("lang");
 var navLang=(navigator.language||"en").toLowerCase().indexOf("es")===0?"es":"en";
 setLang(urlLang==="es"||urlLang==="en"?urlLang:navLang);
-onScroll(); updateMeta(); applyAltContact();
+onScroll(); updateMeta(); applyAltContact(); probeThankYou();
 })();
 </script>
 <script src="/analytics-tracker.js" data-endpoint="/api/analytics/track" defer></script>

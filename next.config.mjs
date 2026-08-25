@@ -72,6 +72,16 @@ const nextConfig = {
         source: '/lp',
         destination: '/lp/index.html',
       },
+      // The landing page's confirmation, the destination URL Google Ads counts
+      // a lead on. It is public/lp/thank-you.html, so it always answers on its
+      // own exact path; this is only what gives it the tidy URL the ad account
+      // is pointed at. Upstream gets the same effect from cleanUrls in
+      // vercel.json, which is not used here because it would strip .html across
+      // every route in the app rather than this one page.
+      {
+        source: '/lp/thank-you',
+        destination: '/lp/thank-you.html',
+      },
     ];
   },
 
@@ -86,6 +96,27 @@ const nextConfig = {
           { key: 'X-DNS-Prefetch-Control', value: 'on' },
           { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        ],
+      },
+      // The landing page's confirmation must never be indexed. Ranking it would
+      // send people who never submitted anything to the page that counts a
+      // conversion, and the Ads figure would climb on its own. The page carries
+      // a robots meta tag; this covers crawlers that only read the header. Both
+      // paths are listed because header rules match the URL as requested, before
+      // the rewrite above resolves it. no-store keeps a back-button visit from
+      // replaying a cached copy of someone else's confirmation.
+      {
+        source: '/lp/thank-you',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
+      {
+        source: '/lp/thank-you.html',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+          { key: 'Cache-Control', value: 'no-store' },
         ],
       },
       // Long-lived cache for static assets
