@@ -24,6 +24,7 @@ test('with no override the status rules are unchanged', () => {
   assert.equal(orderCountsAsSale(order({ status: 'Order Complete' })), true);
   assert.equal(orderCountsAsSale(order({ status: 'Completed' })), true);
   assert.equal(orderCountsAsSale(order({ status: 'Partly Refunded' })), true);
+  assert.equal(orderCountsAsSale(order({ status: 'Paid' })), true);
   assert.equal(orderCountsAsSale(order({ status: 'Pending' })), false);
   assert.equal(orderCountsAsSale(order({ status: 'Refunded' })), false);
   assert.equal(orderCountsAsSale(order({ status: 'Cancelled' })), false);

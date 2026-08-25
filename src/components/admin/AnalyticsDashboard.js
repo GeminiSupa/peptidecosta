@@ -35,7 +35,7 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
     revenue: {
       title: "💵 Total Sales (Revenue)",
       concept: "Ventas Totales (Ingresos)",
-      description: "This is your gross income from completed orders. It shows your business performance in both US Dollars ($) and Costa Rican Colones (₡). Paid orders do not enter revenue until they are marked complete, and pending or cancelled orders are excluded.",
+      description: "This is your gross income from paid or completed orders. It shows your business performance in both US Dollars ($) and Costa Rican Colones (₡). Pending, cancelled, and fully refunded orders are excluded.",
       spanish: "Este es el ingreso bruto de todos los pedidos pagados y completados con éxito. Muestra el rendimiento de tu negocio tanto en dólares ($) como en colones costarricenses (₡). No incluye pedidos pendientes o cancelados."
     },
     aov: {
@@ -349,7 +349,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // CALCULATE FINANCIAL STATISTICS
   // -------------------------------------------------------------
   
-  // Realized sales: completed orders only (plus partly refunded orders).
+  // Realized sales: paid/completed orders, net of any partial refunds.
   const successfulOrders = orders.filter(isSuccessfulAnalyticsOrder);
   
   // Net of refunds. AOV below divides these, so it follows without change.

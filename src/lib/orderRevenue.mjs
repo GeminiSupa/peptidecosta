@@ -77,11 +77,10 @@ export const REVENUE_ORDER_STATUSES = new Set(
  * A per-order answer to "does this count as money?", set by hand from the
  * Today tiles and outranking the status rules below.
  *
- * A test order flipped to Paid used to land in Revenue Today, the analytics
- * chart, the customer's lifetime total and — if it carried a sales agent — a
- * real commission payout, with no way back except deleting the row. Marking it
- * 'exclude' here takes it out of all of them at once, because every screen
- * that reports money comes through this file.
+ * A test order in any normally reportable status, including Paid, can be held
+ * out without deleting it. Marking it 'exclude' here takes it out of every
+ * revenue and commission view at once, because every money report comes
+ * through this file.
  *
  * Reversible: clearing the column returns the order to the normal rules.
  */
@@ -176,8 +175,8 @@ export function orderGrossUsd(order, rate) {
  *
  * For the commission and agent paths, which narrow by status in SQL rather than
  * asking orderCountsAsSale — `.in('status', COMMISSION_ELIGIBLE_ORDER_STATUSES)`
- * happily returns a test order marked Paid, and nothing downstream re-checks it,
- * so it would be paid on. Filtering here in JS rather than in the query is
+ * happily returns an excluded order, and nothing downstream re-checks it, so it
+ * would be paid on. Filtering here in JS rather than in the query is
  * deliberate: migrations are pasted in by hand, so a deploy can land before the
  * column exists, and a query naming a missing column fails outright and takes
  * the whole payout scan with it. A missing column simply reads as undefined

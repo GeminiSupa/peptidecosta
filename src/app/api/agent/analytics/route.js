@@ -18,7 +18,7 @@ import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { computeOverrideAmounts, overrideRateFor, payableChildrenOf } from '@/lib/subUserCommission.mjs';
 import { isSubUser } from '@/lib/subUserTier.mjs';
-import { agentAnalyticsRange, orderCompletedInRange } from '@/lib/agentDashboard.mjs';
+import { agentAnalyticsRange, orderReportableInRange } from '@/lib/agentDashboard.mjs';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -111,17 +111,15 @@ export async function GET(request) {
     // A test order held out of the figures must not appear as agent earnings.
     eligibleRows = withoutExcludedOrders(eligibleRows);
     const eligibleAgentOrders = eligibleRows.filter((order) => orderBelongsToAgent(order, profile));
-    // Only Completed/Order Complete/Partly Refunded orders count toward pay —
-    // the exact rule the weekly payout report uses. Paid, pending, processing
-    // and blocked orders
-    // still show in the lists, but must never inflate sales or commission (they
-    // are not paid yet), otherwise the agent's screen disagrees with the payout.
+    // Paid/Completed/Order Complete/Partly Refunded orders count toward pay —
+    // the exact rule the weekly payout report uses. Pending, processing and
+    // blocked orders still show in the lists but do not inflate commission.
     const eligibleOrders = eligibleAgentOrders.filter(isCommissionEligibleOrder);
     // Bucket eligible orders by completion time, so pay
     // periods match the payout report rather than being keyed off created_at.
-    const monthOrders = eligibleOrders.filter((order) => orderCompletedInRange(order, monthStartUtc, nowUtc));
-    const todayOrders = eligibleOrders.filter((order) => orderCompletedInRange(order, todayStartUtc, nowUtc));
-    const weekOrders = eligibleOrders.filter((order) => orderCompletedInRange(order, weekStartUtc, weekEndUtc));
+    const monthOrders = eligibleOrders.filter((order) => orderReportableInRange(order, monthStartUtc, nowUtc));
+    const todayOrders = eligibleOrders.filter((order) => orderReportableInRange(order, todayStartUtc, nowUtc));
+    const weekOrders = eligibleOrders.filter((order) => orderReportableInRange(order, weekStartUtc, weekEndUtc));
     // Pending orders are inherently recent; keep them keyed off created_at.
     const pendingOrders = monthPendingRows.filter((order) => orderBelongsToAgent(order, profile));
     // Orders in the viewed week that are not yet complete. Surfaced separately
@@ -149,7 +147,7 @@ export async function GET(request) {
       }
       const children = payableChildrenOf(profile, profiles || []);
       const childWeekOrders = eligibleRows.filter(
-        (order) => orderCompletedInRange(order, weekStartUtc, weekEndUtc)
+        (order) => orderReportableInRange(order, weekStartUtc, weekEndUtc)
           && children.some((child) => orderBelongsToAgent(order, child))
       );
       const childSales = sumAgentOrders(childWeekOrders, getAmounts);

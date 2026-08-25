@@ -32,7 +32,7 @@ import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 import { sendTaxRecordsPayoutCopy } from '@/lib/taxRecordsEmail.mjs';
 import { hasPositivePayout, summarizeCommissionScan } from '@/lib/commissionScan.mjs';
 import { PAYOUT_RESERVED_STATUSES } from '@/lib/payoutSettlement.mjs';
-import { orderCompletedAtMs } from '@/lib/agentDashboard.mjs';
+import { orderReportableAtMs } from '@/lib/agentDashboard.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -147,9 +147,9 @@ export async function GET(request) {
     );
     const periodDisplay = `${formatCrDate(startDateStr)} – ${formatCrDate(endDateStr, { year: 'numeric' })}`;
 
-    // 4. Fetch completed orders, then date them by the first completion event.
-    // This ensures an order created or paid earlier lands in the week it was
-    // actually closed, matching the completed-only revenue rule.
+    // 4. Fetch reportable orders, then date them by the first Paid/completion
+    // event. An order created earlier but paid this week belongs to this week;
+    // completing it later must not make it count twice or move periods.
     const { data: rawOrders, error: ordersError } = await supabaseAdmin
       .from('orders')
       .select('*')
@@ -157,10 +157,10 @@ export async function GET(request) {
       .order('created_at', { ascending: false });
 
     const orders = withoutExcludedOrders(rawOrders || []).filter(order => {
-      const completedAt = orderCompletedAtMs(order);
-      return Number.isFinite(completedAt)
-        && completedAt >= startDate.getTime()
-        && completedAt <= endDate.getTime();
+      const reportableAt = orderReportableAtMs(order);
+      return Number.isFinite(reportableAt)
+        && reportableAt >= startDate.getTime()
+        && reportableAt <= endDate.getTime();
     });
 
     if (ordersError) {

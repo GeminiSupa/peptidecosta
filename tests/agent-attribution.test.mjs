@@ -152,6 +152,7 @@ test('only a closed order can hand a customer to an agent', () => {
   assert.equal(isClosedOrder({ status: 'Order Complete' }), true);
   assert.equal(isClosedOrder({ status: 'Completed' }), true);
   assert.equal(isClosedOrder({ status: 'order complete' }), true);
+  assert.equal(isClosedOrder({ status: 'Paid' }), true);
   assert.equal(isClosedOrder({ status: 'Pending' }), false);
   assert.equal(isClosedOrder({ status: 'Declined' }), false);
   assert.equal(isClosedOrder({}), false);

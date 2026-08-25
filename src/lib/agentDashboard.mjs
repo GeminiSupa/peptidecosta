@@ -64,6 +64,34 @@ export function orderCompletedAtMs(order) {
   return completionTimes.length ? Math.min(...completionTimes) : createdAt;
 }
 
+/**
+ * First moment an order entered a status that counts in financial reporting.
+ *
+ * Paid and completion are separate operational events, but both now count as
+ * revenue and commission. Using the first one prevents a later fulfilment
+ * update from moving the same sale into a second reporting period. Legacy rows
+ * without an audit event retain the existing created-at fallback.
+ */
+export function orderReportableAtMs(order) {
+  const createdAt = finiteDate(order?.created_at)?.getTime() ?? Number.NaN;
+  const reportingTimes = (Array.isArray(order?.activity_log) ? order.activity_log : [])
+    .filter((entry) => (
+      entry?.type === 'status_change'
+      && /\b(paid|completed|order complete|partly refunded)\b/i.test(String(entry?.message || ''))
+    ))
+    .map((entry) => finiteDate(entry?.at)?.getTime())
+    .filter(Number.isFinite);
+  return reportingTimes.length ? Math.min(...reportingTimes) : createdAt;
+}
+
+export function orderReportableInRange(order, startValue, endValue) {
+  const reportableAt = orderReportableAtMs(order);
+  const start = finiteDate(startValue)?.getTime();
+  const end = finiteDate(endValue)?.getTime();
+  return Number.isFinite(reportableAt) && Number.isFinite(start) && Number.isFinite(end)
+    && reportableAt >= start && reportableAt < end;
+}
+
 export function orderCompletedInRange(order, startValue, endValue) {
   const completedAt = orderCompletedAtMs(order);
   const start = finiteDate(startValue)?.getTime();

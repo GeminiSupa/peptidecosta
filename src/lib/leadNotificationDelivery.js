@@ -3,6 +3,7 @@ import { getLeadAlertAudience } from '@/lib/leadNotificationRecipients';
 import { landingQualificationNotes } from '@/lib/landingLead.mjs';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
+import { leadNotificationEmailSubject, TIKTOK_LEAD_SOURCE } from '@/lib/tiktokLeadPosting.mjs';
 
 const RETRY_MINUTES = [1, 5, 15, 60, 240];
 
@@ -41,7 +42,7 @@ function leadDetails(lead) {
   };
 }
 
-async function sendLeadEmails({ recipients, details, slaMinutes = 15 }) {
+export async function sendLeadEmails({ recipients, details, slaMinutes = 15 }) {
   if (!recipients.length) return [];
   const smtp = getTransactionalSmtpConfig();
   if (!smtp.configured) {
@@ -51,8 +52,11 @@ async function sendLeadEmails({ recipients, details, slaMinutes = 15 }) {
     }));
   }
 
+  const emailTitle = details.source === TIKTOK_LEAD_SOURCE
+    ? 'New TikTok form lead'
+    : 'New landing-page lead';
   const lines = [
-    'New landing-page lead',
+    emailTitle,
     `Name: ${details.name}`,
     `Email: ${details.email || 'Not provided'}`,
     `Phone: ${details.phone || 'Not provided'}`,
@@ -66,8 +70,6 @@ async function sendLeadEmails({ recipients, details, slaMinutes = 15 }) {
     `Source: ${details.source}`,
     details.campaign ? `Campaign: ${details.campaign}` : null,
   ].filter(Boolean);
-  const sourceLabel = details.source === 'adwords_lp' ? 'AdWords lead' : 'Landing-page lead';
-  const slaLabel = slaMinutes ? ` (${slaMinutes} min)` : '';
   const fromEmail = readEnv('ORDER_NOTIFICATION_FROM_EMAIL')
     || readEnv('CAMPAIGN_SMTP_FROM_EMAIL')
     || smtp.user;
@@ -87,9 +89,9 @@ async function sendLeadEmails({ recipients, details, slaMinutes = 15 }) {
       from,
       to: destination,
       replyTo: details.email || undefined,
-      subject: `${sourceLabel}${slaLabel} — ${details.name}`,
+      subject: leadNotificationEmailSubject(details.source, { name: details.name, slaMinutes }),
       text: lines.join('\n'),
-      html: `<h2>New landing-page lead</h2><ul>${lines.slice(1).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
+      html: `<h2>${emailTitle}</h2><ul>${lines.slice(1).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
     });
     const rejected = (result.rejected || []).map(String).map((value) => value.toLowerCase());
     if (rejected.includes(destination.toLowerCase())) throw new Error('SMTP rejected this recipient');

@@ -6,7 +6,7 @@ import {
   AlertTriangle, Inbox, MessageSquare, TrendingUp, ChevronRight, Star, CheckCircle,
 } from 'lucide-react';
 import { orderCountsAsSale, orderGrossUsd, orderNetRevenueUsd, orderRevenueBasis } from '@/lib/orderRevenue.mjs';
-import { orderCompletedAtMs } from '@/lib/agentDashboard.mjs';
+import { orderReportableAtMs } from '@/lib/agentDashboard.mjs';
 import KpiBreakdownModal from './KpiBreakdownModal';
 import { formatCrDate } from '@/lib/crTime.mjs';
 
@@ -64,11 +64,11 @@ function startOfMonth(d = new Date()) {
   return new Date(cr.getTime() + CR_OFFSET_MS);
 }
 
-// The date revenue should be recognized on: the moment the order was marked
-// complete, not when it was paid or created. The shared helper falls back to
-// created_at for legacy completed orders with no completion event logged.
+// The date revenue should be recognized on: the first moment the order was
+// marked Paid or complete. The shared helper falls back to created_at for
+// legacy reportable orders with no status event logged.
 function getRevenueDate(order) {
-  return new Date(orderCompletedAtMs(order));
+  return new Date(orderReportableAtMs(order));
 }
 
 function cartValue(cart) {
@@ -166,8 +166,8 @@ export default function DashboardHome({
         orderNumber: order.order_number,
         customer: order.customer_name,
         // Two different dates, so each is labelled: revenue lands on the day the
-        // order was marked complete, while the Orders list shows when it came in.
-        // An order placed on the 22nd and settled today belongs in today.
+        // order first became Paid/complete, while the Orders list shows when it
+        // came in. An order placed on the 22nd and paid today belongs in today.
         date: getRevenueDate(order),
         countedLabel: orderCountsAsSale(order) ? 'Counted' : 'Would count',
         placedAt: new Date(order.created_at),
@@ -204,8 +204,8 @@ export default function DashboardHome({
     pendingOrders: 'Pending Orders',
   };
   const TILE_SUBTITLES = {
-    revenueToday: 'Orders dated today by when they were marked complete, not when they were paid or created.',
-    revenueWeek: 'Orders dated this week by when they were marked complete, not when they were paid or created.',
+    revenueToday: 'Orders dated today by when they were first marked paid or complete, not when they were created.',
+    revenueWeek: 'Orders dated this week by when they were first marked paid or complete, not when they were created.',
     pendingOrders: 'Orders still sitting at Pending. These are not counted as revenue.',
   };
 

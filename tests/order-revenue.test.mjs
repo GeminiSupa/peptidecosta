@@ -92,7 +92,7 @@ test('an order from before refunds existed still counts in full', () => {
 test('status is matched however it was typed', () => {
   assert.equal(orderCountsAsSale({ status: 'order complete' }), true);
   assert.equal(orderCountsAsSale({ status: '  Order Complete  ' }), true);
-  assert.equal(orderCountsAsSale({ status: '  Paid  ' }), false, 'trimmed, but still not a sale');
+  assert.equal(orderCountsAsSale({ status: '  Paid  ' }), true);
   assert.equal(orderCountsAsSale({}), false);
   assert.equal(orderCountsAsSale(null), false);
 });
@@ -182,8 +182,7 @@ test('a partly refunded order is a successful sale, a fully refunded one is not'
   assert.equal(isSuccessfulAnalyticsOrder({ status: 'Partly Refunded' }), true);
   assert.equal(isSuccessfulAnalyticsOrder({ status: 'Refunded' }), false);
   assert.equal(isSuccessfulAnalyticsOrder({ status: 'Order Complete' }), true);
-  // Paid means the charge cleared, not that the order was closed. See below.
-  assert.equal(isSuccessfulAnalyticsOrder({ status: 'Paid' }), false);
+  assert.equal(isSuccessfulAnalyticsOrder({ status: 'Paid' }), true);
 });
 
 test('revenue statuses are the commission statuses, not a second list', () => {
@@ -192,9 +191,7 @@ test('revenue statuses are the commission statuses, not a second list', () => {
   assert.ok(REVENUE_ORDER_STATUSES.has('order complete'));
   assert.ok(REVENUE_ORDER_STATUSES.has('partly refunded'));
   assert.ok(!REVENUE_ORDER_STATUSES.has('refunded'));
-  // Only a closed order is a sale. The card gateway sets 'Paid' by itself when
-  // a charge clears, and orders sat in it for up to 70 days counting in full.
-  assert.ok(!REVENUE_ORDER_STATUSES.has('paid'));
+  assert.ok(REVENUE_ORDER_STATUSES.has('paid'));
 
   const lib = fs.readFileSync('src/lib/orderRevenue.mjs', 'utf8');
   assert.match(lib, /COMMISSION_ELIGIBLE_ORDER_STATUSES\.map\(lower\)/);

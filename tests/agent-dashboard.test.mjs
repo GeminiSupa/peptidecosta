@@ -9,6 +9,8 @@ import {
   normalizeAgentWeekOffset,
   orderCompletedAtMs,
   orderCompletedInRange,
+  orderReportableAtMs,
+  orderReportableInRange,
   preferredAgentMoney,
 } from '../src/lib/agentDashboard.mjs';
 
@@ -66,6 +68,22 @@ test('a paid-only activity log is not treated as completion', () => {
   assert.equal(orderCompletedAtMs(order), Date.parse(order.created_at));
 });
 
+test('reporting starts at the first paid or completed transition', () => {
+  const order = {
+    created_at: '2026-08-01T10:00:00.000Z',
+    activity_log: [
+      { type: 'note', message: 'Paid by transfer', at: '2026-08-03T10:00:00.000Z' },
+      { type: 'status_change', message: 'Status changed to Unpaid', at: '2026-08-05T10:00:00.000Z' },
+      { type: 'status_change', message: 'Status changed to Paid', at: '2026-08-10T10:00:00.000Z' },
+      { type: 'status_change', message: 'Status changed to Order Complete', at: '2026-08-15T10:00:00.000Z' },
+    ],
+  };
+
+  assert.equal(orderReportableAtMs(order), Date.parse('2026-08-10T10:00:00.000Z'));
+  assert.equal(orderReportableInRange(order, '2026-08-10T00:00:00.000Z', '2026-08-11T00:00:00.000Z'), true);
+  assert.equal(orderReportableInRange(order, '2026-08-15T00:00:00.000Z', '2026-08-16T00:00:00.000Z'), false);
+});
+
 test('completion falls back to creation and excludes the upper boundary', () => {
   const order = { created_at: '2026-08-10T06:00:00.000Z', activity_log: [] };
   assert.equal(orderCompletedInRange(order, '2026-08-10T06:00:00.000Z', '2026-08-17T06:00:00.000Z'), true);
@@ -94,6 +112,7 @@ test('Today tab opts into isolated layout and reliable analytics behavior', asyn
   assert.match(component, /setAvatarError\(/);
   assert.doesNotMatch(component, /handleAvatarUpload[\s\S]*?setError\(/);
   assert.match(route, /\.range\(from, from \+ PAGE_SIZE - 1\)/);
+  assert.match(route, /orderReportableInRange/);
   assert.match(route, /currentWeekOverrideUSD/);
   assert.match(route, /\.eq\('start_date', weekStartUtc\)/);
   assert.doesNotMatch(route, /error\.message \|\|/);
