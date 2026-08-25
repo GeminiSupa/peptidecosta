@@ -4,7 +4,17 @@ import {
   DEFAULT_WHATSAPP_AI_PROMPT,
   buildWhatsAppAiPrompts,
   buildWhatsAppFallbackReply,
+  buildWhatsAppSafetyReply,
+  isWhatsAppSalesQuestion,
+  replyMatchesWhatsAppLanguage,
+  resolveWhatsAppReplyLanguage,
 } from '@/lib/whatsappRecovery';
+import {
+  buildWhatsAppCatalogFormatReply,
+  buildWhatsAppSalesReply,
+  buildWhatsAppSalesSnapshot,
+  formatWhatsAppSalesContext,
+} from '@/lib/whatsappSales.mjs';
 import { buildWhatsAppCustomerContext } from '@/lib/whatsappAiContext';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { describeWhatsAppDeliveryError, formatDeliveryFailureLog } from '@/lib/whatsappDeliveryErrors.mjs';
@@ -320,14 +330,16 @@ export async function POST(request) {
 
               // 2. Fetch Catalog Context
               let catalogContext = "";
+              let catalogProducts = [];
               if (supabase && aiAutoReply) {
                 try {
                   const { data: products } = await supabase
                     .from('products')
-                    .select('product, category, price_usd, price_crc, status, description_es');
+                    .select('product, category, price_usd, price_crc, original_price_usd, original_price_crc, discount, sale_start_time, sale_end_time, status, inventory_count, coa, description_en, description_es');
                   if (products && products.length > 0) {
+                    catalogProducts = products;
                     catalogContext = "Active Products in Catalog:\n" + products.map(p => 
-                      `- ${p.product} (Category: ${p.category}, Price: ${p.price_usd} USD / ${p.price_crc || 'N/A'} CRC, Stock Status: ${p.status}, Description: ${p.description_es || 'No description'})`
+                      `- ${p.product} (Category: ${p.category}, Price: ${p.price_usd} USD / ${p.price_crc || 'N/A'} CRC, Stock Status: ${p.inventory_count === 0 ? 'Out of Stock' : p.status}, Sale Label: ${p.discount || 'None'}, Format/Description EN: ${p.description_en || 'Not provided'}, Format/Description ES: ${p.description_es || 'No disponible'}, COA: ${p.coa || 'Not provided'})`
                     ).join('\n');
                   }
                 } catch (err) {
@@ -335,14 +347,47 @@ export async function POST(request) {
                 }
               }
 
-              // 3. Customer CRM context (orders + active abandoned carts)
+              // 3. Current offers are separate from the product catalog. Give
+              // the assistant the same weekly deal and public promo truth the
+              // storefront uses, and keep a structured snapshot for exact sale
+              // replies that do not depend on model interpretation.
+              let salesSnapshot = buildWhatsAppSalesSnapshot({ products: catalogProducts });
+              let salesContext = formatWhatsAppSalesContext(salesSnapshot);
+              if (supabase && aiAutoReply) {
+                try {
+                  const nowIso = new Date().toISOString();
+                  const [promoResult, dealResult] = await Promise.all([
+                    supabase.from('promo_codes').select('*').eq('is_active', true),
+                    supabase
+                      .from('deals')
+                      .select('id,title_en,title_es,product_names,discount_pct,starts_at,ends_at,status')
+                      .eq('status', 'live')
+                      .lte('starts_at', nowIso)
+                      .gte('ends_at', nowIso)
+                      .maybeSingle(),
+                  ]);
+                  if (promoResult.error) console.warn('[WhatsApp Webhook] Failed to load active promos:', promoResult.error.message);
+                  if (dealResult.error) console.warn('[WhatsApp Webhook] Failed to load weekly deal:', dealResult.error.message);
+                  salesSnapshot = buildWhatsAppSalesSnapshot({
+                    products: catalogProducts,
+                    promos: promoResult.data || [],
+                    liveDeal: dealResult.data || null,
+                  });
+                  salesContext = formatWhatsAppSalesContext(salesSnapshot);
+                } catch (err) {
+                  console.warn('[WhatsApp Webhook] Failed to build sales context:', err.message);
+                }
+              }
+
+              // 4. Customer CRM context (orders + active abandoned carts)
               let customerContext = '';
               if (supabase && aiAutoReply) {
                 customerContext = await buildWhatsAppCustomerContext(supabase, waId);
               }
 
-              // 4. Fetch Conversation Memory (last 8 messages, excluding current inbound)
+              // 5. Fetch Conversation Memory (last 8 messages, excluding current inbound)
               let memoryContext = '';
+              let recentConversation = [];
               if (supabase && aiAutoReply) {
                 try {
                   const { data: pastMessages } = await supabase
@@ -356,6 +401,7 @@ export async function POST(request) {
                   ).slice(0, 8);
                   if (filtered.length > 0) {
                     const chronological = [...filtered].reverse();
+                    recentConversation = chronological;
                     memoryContext = 'Recent Conversation History:\n' + chronological.map((m) =>
                       `${m.direction === 'inbound' ? 'Customer' : `Store Assistant (${m.display_name || 'AI'})`}: "${m.message_text}"`
                     ).join('\n');
@@ -365,17 +411,30 @@ export async function POST(request) {
                 }
               }
 
-              // 5. Generate AI Reply or fallback
+              // 6. Resolve language and deterministic high-risk/current-sale
+              // intents before asking a probabilistic model to draft anything.
+              const replyLanguage = resolveWhatsAppReplyLanguage(messageText, recentConversation);
               let replyText = "";
               let isAiGenerated = false;
+              const safetyReply = buildWhatsAppSafetyReply({ messageText, language: replyLanguage });
+              const catalogFormatReply = buildWhatsAppCatalogFormatReply(catalogProducts, messageText, replyLanguage);
+              if (safetyReply) {
+                replyText = safetyReply;
+              } else if (catalogFormatReply) {
+                replyText = catalogFormatReply;
+              } else if (isWhatsAppSalesQuestion(messageText)) {
+                replyText = buildWhatsAppSalesReply(salesSnapshot, replyLanguage);
+              }
 
-              if (aiAutoReply && (process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY)) {
+              if (!replyText && aiAutoReply && (process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY)) {
                 try {
                   const { systemPrompt, customerPrompt } = buildWhatsAppAiPrompts({
                     aiSystemPrompt,
                     catalogContext,
+                    salesContext,
                     customerContext,
                     memoryContext,
+                    replyLanguage,
                     displayName,
                     waId,
                     matchedOrderId,
@@ -391,6 +450,7 @@ export async function POST(request) {
                       },
                       body: JSON.stringify({
                         model: 'gpt-4o-mini',
+                        temperature: 0.2,
                         messages: [
                           { role: 'system', content: systemPrompt },
                           { role: 'user', content: customerPrompt },
@@ -402,9 +462,14 @@ export async function POST(request) {
                       const resData = await response.json();
                       const aiText = resData.choices?.[0]?.message?.content;
                       if (aiText) {
-                        replyText = aiText.trim();
-                        isAiGenerated = true;
-                        console.log('[WhatsApp Webhook] ✅ OpenAI generated response successfully!');
+                        const candidateReply = aiText.trim();
+                        if (replyMatchesWhatsAppLanguage(candidateReply, replyLanguage)) {
+                          replyText = candidateReply;
+                          isAiGenerated = true;
+                          console.log('[WhatsApp Webhook] ✅ OpenAI generated response successfully!');
+                        } else {
+                          console.warn('[WhatsApp Webhook] Rejected OpenAI reply in the wrong language.');
+                        }
                       }
                     } else {
                       const errData = await response.json();
@@ -418,6 +483,7 @@ export async function POST(request) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           system_instruction: { parts: [{ text: systemPrompt }] },
+                          generationConfig: { temperature: 0.2 },
                           contents: [
                             { role: 'user', parts: [{ text: customerPrompt }] }
                           ]
@@ -429,9 +495,14 @@ export async function POST(request) {
                       const resData = await response.json();
                       const aiText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
                       if (aiText) {
-                        replyText = aiText.trim();
-                        isAiGenerated = true;
-                        console.log('[WhatsApp Webhook] ✅ Gemini generated response successfully!');
+                        const candidateReply = aiText.trim();
+                        if (replyMatchesWhatsAppLanguage(candidateReply, replyLanguage)) {
+                          replyText = candidateReply;
+                          isAiGenerated = true;
+                          console.log('[WhatsApp Webhook] ✅ Gemini generated response successfully!');
+                        } else {
+                          console.warn('[WhatsApp Webhook] Rejected Gemini reply in the wrong language.');
+                        }
                       }
                     } else {
                       const errData = await response.json();
@@ -445,7 +516,7 @@ export async function POST(request) {
 
               // Fallback if AI reply failed or was disabled
               if (!replyText) {
-                replyText = buildWhatsAppFallbackReply({ displayName, matchedOrderId, messageText });
+                replyText = buildWhatsAppFallbackReply({ displayName, matchedOrderId, messageText, language: replyLanguage });
               }
 
               // Send the reply via WhatsApp Cloud API
