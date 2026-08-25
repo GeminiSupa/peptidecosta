@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
+import {
+  DEFAULT_WHATSAPP_AI_PROMPT,
+  buildWhatsAppAiPrompts,
+  buildWhatsAppFallbackReply,
+} from '@/lib/whatsappRecovery';
 import { buildWhatsAppCustomerContext } from '@/lib/whatsappAiContext';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
 import { describeWhatsAppDeliveryError, formatDeliveryFailureLog } from '@/lib/whatsappDeliveryErrors.mjs';
@@ -367,30 +371,16 @@ export async function POST(request) {
 
               if (aiAutoReply && (process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY)) {
                 try {
-                  const prompt = `
-System Instructions:
-${aiSystemPrompt}
-
-${catalogContext}
-
-${customerContext}
-
-${memoryContext}
-
-Customer Information:
-- Display Name: ${displayName || 'Valued Customer'}
-- WhatsApp ID/Phone: ${waId}
-${matchedOrderId ? `- Matched Order ID: ${matchedOrderId}` : ''}
-
-New Inbound Customer Message:
-"${messageText}"
-
-Reply in the same language the customer used (Spanish or English). If they have an active abandoned cart in context, you may share their recovery link when helpful. Please reply naturally, keeping the tone warm, professional, helpful, and highly scientific yet accessible. 
-
-CRITICAL INSTRUCTION: If the customer asks a question that you do not know the answer to, or if the information is not explicitly provided in the context above, do NOT guess or invent an answer. Instead, politely inform them that you are an AI assistant and tell them to contact our human support directly at +506 8404-6973.
-
-Output ONLY the response text to send back. Do not include any JSON wrapping or markdown preamble. Keep under 1000 characters if possible.
-`;
+                  const { systemPrompt, customerPrompt } = buildWhatsAppAiPrompts({
+                    aiSystemPrompt,
+                    catalogContext,
+                    customerContext,
+                    memoryContext,
+                    displayName,
+                    waId,
+                    matchedOrderId,
+                    messageText,
+                  });
 
                   if (process.env.OPENAI_API_KEY) {
                     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -401,7 +391,10 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
                       },
                       body: JSON.stringify({
                         model: 'gpt-4o-mini',
-                        messages: [{ role: 'user', content: prompt }],
+                        messages: [
+                          { role: 'system', content: systemPrompt },
+                          { role: 'user', content: customerPrompt },
+                        ],
                       }),
                     });
 
@@ -424,8 +417,9 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
+                          system_instruction: { parts: [{ text: systemPrompt }] },
                           contents: [
-                            { parts: [{ text: prompt }] }
+                            { role: 'user', parts: [{ text: customerPrompt }] }
                           ]
                         })
                       }
@@ -451,11 +445,7 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
 
               // Fallback if AI reply failed or was disabled
               if (!replyText) {
-                const greetingEs = displayName ? `¡Hola ${displayName}!` : '¡Hola!';
-                const greetingEn = displayName ? `Hi ${displayName}!` : 'Hi!';
-                replyText = matchedOrderId
-                  ? `${greetingEs} 👋 Hemos recibido tu pedido. Te contactaremos pronto para coordinar el envío. Para hablar con un agente real, contáctanos al +506 8404-6973. 🚀\n\n${greetingEn} 👋 We've received your order. We'll be in touch shortly to coordinate delivery. For a real agent, contact +506 8404-6973. 🚀`
-                  : `${greetingEs} 👋 Gracias por contactarnos. Un agente te responderá pronto. Si es urgente, puedes contactar a un agente real al +506 8404-6973.\n\n${greetingEn} 👋 Thanks for reaching out. An agent will reply shortly. For immediate assistance from a real agent, contact +506 8404-6973.`;
+                replyText = buildWhatsAppFallbackReply({ displayName, matchedOrderId, messageText });
               }
 
               // Send the reply via WhatsApp Cloud API
@@ -484,7 +474,7 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
                 const metaMessageId = metaData?.messages?.[0]?.id || null;
                 await insertWhatsAppMessage(supabase, {
                   wa_id: waId,
-                  display_name: isAiGenerated ? 'AI Copilot' : 'Peptides Costa Rica',
+                  display_name: isAiGenerated ? 'Costa Peptides Assistant' : 'Peptides Costa Rica',
                   message_text: replyText,
                   message_type: 'text',
                   direction: 'outbound',
@@ -496,7 +486,7 @@ Output ONLY the response text to send back. Do not include any JSON wrapping or 
                 });
                 await upsertWhatsAppConversation(supabase, {
                   waId,
-                  displayName: displayName || (isAiGenerated ? 'AI Copilot' : 'Peptides Costa Rica'),
+                  displayName: displayName || (isAiGenerated ? 'Costa Peptides Assistant' : 'Peptides Costa Rica'),
                   direction: 'outbound',
                   source: 'cloud_api',
                   channelId,
