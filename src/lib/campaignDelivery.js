@@ -6,6 +6,7 @@ import {
   buildBehaviorSignals, matchesBehaviorFilter, normalizeBehaviorFilter, signalsFor,
 } from '@/lib/campaignBehavior.mjs';
 import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
+import { marketingCopyHeader } from '@/lib/marketingEmailAddressing.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { clampOutlookButtonSizes, personalizeMergeTags, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
 import {
@@ -288,7 +289,7 @@ async function deliverSingleCampaignToSubscriber(supabase, campaign, subscriber,
   const providerErrors = [];
   const unsubscribeUrl = `${DOMAIN}/api/unsubscribe?t=${encodeURIComponent(createUnsubscribeToken(subscriber.id))}`;
   const mail = {
-    ...(process.env.CAMPAIGN_BCC_EMAIL ? { bcc: process.env.CAMPAIGN_BCC_EMAIL } : {}),
+    ...marketingCopyHeader('bcc', process.env.CAMPAIGN_BCC_EMAIL),
     from: smtp.from,
     to: subscriber.email,
     subject: personalize(campaign.subject_line, subscriber),
@@ -741,7 +742,7 @@ export async function deliverCampaign(campaignId, options = {}) {
         // without them, campaigns land in spam and the domain gets rate-limited.
         const unsubscribeUrl = `${DOMAIN}/api/unsubscribe?t=${encodeURIComponent(createUnsubscribeToken(subscriber.id))}`;
         const mail = {
-          ...(process.env.CAMPAIGN_BCC_EMAIL ? { bcc: process.env.CAMPAIGN_BCC_EMAIL } : {}),
+          ...marketingCopyHeader('bcc', process.env.CAMPAIGN_BCC_EMAIL),
           from: smtp.from,
           to: subscriber.email,
           subject,

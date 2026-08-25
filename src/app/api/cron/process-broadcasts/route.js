@@ -10,6 +10,7 @@ import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
 import { buildTemplateParameters } from '@/lib/broadcastTemplateParam.mjs';
 import { broadcastFailureRecovery } from '@/lib/broadcastFailureRecovery.mjs';
+import { marketingCopyHeader } from '@/lib/marketingEmailAddressing.mjs';
 
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
@@ -144,7 +145,7 @@ ${productImage ? `<div style="text-align: center; margin: 0 0 24px;"><img src="$
     });
 
     const res = await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
+      ...marketingCopyHeader('bcc', process.env.BCC_EMAIL || 'info@peptidescostarica.net'),
       from: smtp.from,
       replyTo: smtp.replyTo,
       to: to.trim(),

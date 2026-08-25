@@ -5,6 +5,7 @@ import { applyMarketingEmailFooter } from '@/lib/marketingEmailFooter';
 import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 import { clampOutlookButtonSizes, stabilizeSimpleLinkRows } from '@/lib/emailHtmlSafety';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
+import { marketingCopyHeader } from '@/lib/marketingEmailAddressing.mjs';
 
 const DOMAIN = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
@@ -41,7 +42,7 @@ export async function POST(request) {
     });
 
     await transporter.sendMail({
-      bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
+      ...marketingCopyHeader('bcc', process.env.BCC_EMAIL || 'info@peptidescostarica.net'),
       from: smtp.from,
       replyTo: smtp.replyTo,
       to: email,

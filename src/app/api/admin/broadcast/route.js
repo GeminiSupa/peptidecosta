@@ -9,6 +9,7 @@ import { createEmailUnsubscribeToken } from '@/lib/marketingTokens';
 import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
 import { buildTemplateParameters } from '@/lib/broadcastTemplateParam.mjs';
+import { marketingCopyHeader } from '@/lib/marketingEmailAddressing.mjs';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
@@ -132,7 +133,7 @@ ${productImage ? `<div style="text-align: center; margin: 0 0 24px;"><img src="$
     });
 
     const res = await globalTransporter.sendMail({
-      bcc: process.env.BCC_EMAIL || 'info@peptidescostarica.net',
+      ...marketingCopyHeader('bcc', process.env.BCC_EMAIL || 'info@peptidescostarica.net'),
       from: smtp.from,
       replyTo: smtp.replyTo,
       to: to.trim(),
