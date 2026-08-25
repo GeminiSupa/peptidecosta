@@ -35,7 +35,7 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
     revenue: {
       title: "💵 Total Sales (Revenue)",
       concept: "Ventas Totales (Ingresos)",
-      description: "This is your gross income from all successfully completed and paid orders. It shows your business performance in both US Dollars ($) and Costa Rican Colones (₡). This doesn't include pending or cancelled orders.",
+      description: "This is your gross income from completed orders. It shows your business performance in both US Dollars ($) and Costa Rican Colones (₡). Paid orders do not enter revenue until they are marked complete, and pending or cancelled orders are excluded.",
       spanish: "Este es el ingreso bruto de todos los pedidos pagados y completados con éxito. Muestra el rendimiento de tu negocio tanto en dólares ($) como en colones costarricenses (₡). No incluye pedidos pendientes o cancelados."
     },
     aov: {
@@ -170,9 +170,9 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
       const prompt = `You are the chief e-commerce financial analyst at Peptides Costa Rica.
 Analyze the following store metrics and provide a comprehensive executive e-commerce audit report:
 - Gross Revenue: $${totalRevenueUsd.toFixed(2)} (CRC ${totalRevenueCrc.toLocaleString()})
-- Total Paid Orders: ${successfulOrders.length}
+- Total Completed Orders: ${successfulOrders.length}
 - Average Order Value (AOV): $${aovUsd.toFixed(2)}
-- Conversion Rate: ${orderConversionRate.toFixed(2)}% (visitors: ${uniqueVisitorCount}, paid orders: ${successfulOrders.length})
+- Conversion Rate: ${orderConversionRate.toFixed(2)}% (visitors: ${uniqueVisitorCount}, completed orders: ${successfulOrders.length})
 - Abandoned Cart Rate: ${cartAbandonmentRate.toFixed(2)}% (active abandoned: ${activeAbandonedCarts.length})
 - Potential Recoverable Revenue from Carts: $${potentialAbandonedRevenueUsd.toFixed(2)}
 - Average Catalog Engagement: ${formatDuration(averageDurationSeconds)}
@@ -349,7 +349,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // CALCULATE FINANCIAL STATISTICS
   // -------------------------------------------------------------
   
-  // Successful orders (Paid, Completed, Order Complete)
+  // Realized sales: completed orders only (plus partly refunded orders).
   const successfulOrders = orders.filter(isSuccessfulAnalyticsOrder);
   
   // Net of refunds. AOV below divides these, so it follows without change.
@@ -697,7 +697,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     { name: 'Sessions', value: totalSessions, fill: '#38bdf8' },
     { name: 'Product interest', value: totalViews, fill: '#8b5cf6' },
     { name: 'Carts', value: totalCarts, fill: '#f59e0b' },
-    { name: 'Paid orders', value: totalCheckouts, fill: '#10b981' }
+    { name: 'Completed orders', value: totalCheckouts, fill: '#10b981' }
   ];
   const totalJourneyEvents = Number(analyticsMeta?.counts?.events ?? journeyEvents.length);
   const sampledSourceLabels = (analyticsMeta?.sampled || []).map((source) => ({
@@ -2232,7 +2232,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       {/* 2. Top Metrics */}
       <div className="metrics-grid-4">
 
-        {/* Metric 1: Gross Revenue — drill-down: top paid orders */}
+        {/* Metric 1: Gross Revenue — drill-down: top completed orders */}
         <div
           className="metric-card metric-green"
           onClick={() => setExpandedMetric(expandedMetric === 'revenue' ? null : 'revenue')}
@@ -2251,12 +2251,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             ${totalRevenueUsd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
           </div>
           <div className="metric-value-secondary">
-            ₡{totalRevenueCrc.toLocaleString('en-US')} • {successfulOrders.length} Paid orders
+            ₡{totalRevenueCrc.toLocaleString('en-US')} • {successfulOrders.length} completed orders
           </div>
           {expandedMetric === 'revenue' && (
             <div className="metric-card-detail">
               {successfulOrders.length === 0
-                ? <span style={{ fontSize: '0.875rem', color: '#64748b' }}>No paid orders yet.</span>
+                ? <span style={{ fontSize: '0.875rem', color: '#64748b' }}>No completed orders yet.</span>
                 : successfulOrders.slice(0, 5).map(o => (
                   <div className="metric-detail-row" key={o.id}>
                     <span className="metric-detail-name">{o.customer_name || 'Customer'}</span>
@@ -2383,7 +2383,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             {orderConversionRate.toFixed(1)}%
           </div>
           <div className="metric-value-secondary">
-            {successfulOrders.length} paid orders / {uniqueVisitorCount} traffic sessions
+            {successfulOrders.length} completed orders / {uniqueVisitorCount} traffic sessions
           </div>
           {expandedMetric === 'conversion' && (
             <div className="metric-card-detail">
@@ -2391,7 +2391,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 { label: 'Sessions', val: uniqueVisitorCount, color: '#38bdf8' },
                 { label: 'Product Views', val: totalViews, color: '#a78bfa' },
                 { label: 'Carts', val: totalCarts, color: '#f59e0b' },
-                { label: 'Paid Orders', val: successfulOrders.length, color: '#34d399' },
+                { label: 'Completed Orders', val: successfulOrders.length, color: '#34d399' },
               ].map(step => (
                 <div key={step.label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <div className="metric-detail-row">
@@ -2527,7 +2527,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 <div className="funnel-stage">
                   <div className="funnel-stage-progress" style={{ width: `${orderConversionRate}%` }}></div>
                   <div className="funnel-stage-content" style={{ color: '#34d399' }}>
-                    <span>4. Paid Orders</span>
+                    <span>4. Completed Orders</span>
                     <strong>{successfulOrders.length}</strong>
                   </div>
                 </div>

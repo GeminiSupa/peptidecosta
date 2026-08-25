@@ -7,9 +7,9 @@ import { formatCrDate } from '@/lib/crTime.mjs';
 /**
  * What actually made a Today tile, and the ability to correct it.
  *
- * A test order flipped to Paid lands in Revenue Today and cannot be taken back
- * out without deleting the row. This lists every order inside the tile's window
- * — the ones counting and the ones not — so one can be held out or forced in.
+ * This lists every order inside the tile's window — the ones counting and the
+ * ones not — so an exceptional order can be held out or forced in without
+ * deleting its business record.
  *
  * The change is not local: it writes orders.stats_override, which every screen
  * reporting money reads through src/lib/orderRevenue.mjs, agent commission

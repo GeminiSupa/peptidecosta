@@ -10,6 +10,7 @@ import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRe
 import { getPublicSiteUrl } from '@/lib/publicUrl';
 import { sendCustomerOrderConfirmation } from '@/lib/orderWhatsAppAlerts';
 import { parseBillingAddress } from '@/lib/billingAddress.mjs';
+import { withPaymentStatusActivity } from '@/lib/paymentStatusActivity.mjs';
 
 export const runtime = 'nodejs';
 // after() work is billed against the route's budget, and the charge round-trip
@@ -59,12 +60,15 @@ function buildPaymentPatch(status, transaction) {
   };
 }
 
-async function updateOrderStatus(orderNumber, status, transaction, orderContact = {}) {
+async function updateOrderStatus(orderNumber, status, transaction, orderContact = {}, existingOrder = {}) {
   if (!orderNumber) return;
 
   try {
     const supabase = getSupabaseAdmin();
-    const patch = buildPaymentPatch(status, transaction);
+    const patch = withPaymentStatusActivity(
+      existingOrder,
+      buildPaymentPatch(status, transaction),
+    );
     const { error } = await supabase
       .from('orders')
       .update(patch)
@@ -73,7 +77,7 @@ async function updateOrderStatus(orderNumber, status, transaction, orderContact 
     if (error) {
       const fallback = await supabase
         .from('orders')
-        .update({ status })
+        .update({ status, activity_log: patch.activity_log })
         .eq('order_number', orderNumber);
 
       if (fallback.error) throw fallback.error;
@@ -243,7 +247,13 @@ export async function POST(req) {
     }
 
     const orderStatus = statusToOrderStatus(transaction.status);
-    await updateOrderStatus(orderNumber, orderStatus, transaction, { customerEmail, customerPhone });
+    await updateOrderStatus(
+      orderNumber,
+      orderStatus,
+      transaction,
+      { customerEmail, customerPhone },
+      claim.order,
+    );
 
     // Ask the shared classifier, not `transaction.status === 'Approved'`. The
     // gateway answers "Approved" here and "approved" when a transaction is

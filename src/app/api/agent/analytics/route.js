@@ -82,7 +82,7 @@ export async function GET(request) {
       weekStartUtc, weekEndUtc, weekStartDate, weekEndDate,
     } = range;
 
-    // Paid orders are dated by completion, not creation. Read the complete
+    // Completed orders are dated by completion, not creation. Read the complete
     // eligible ledger in pages so long-running orders and Supabase's 1,000-row
     // response cap cannot silently remove earnings. Open orders only need the
     // selected week and current-month pending windows.
@@ -111,8 +111,9 @@ export async function GET(request) {
     // A test order held out of the figures must not appear as agent earnings.
     eligibleRows = withoutExcludedOrders(eligibleRows);
     const eligibleAgentOrders = eligibleRows.filter((order) => orderBelongsToAgent(order, profile));
-    // Only Paid/Completed/Order Complete orders count toward pay — this is the
-    // exact rule the weekly payout report uses. Pending/processing/blocked orders
+    // Only Completed/Order Complete/Partly Refunded orders count toward pay —
+    // the exact rule the weekly payout report uses. Paid, pending, processing
+    // and blocked orders
     // still show in the lists, but must never inflate sales or commission (they
     // are not paid yet), otherwise the agent's screen disagrees with the payout.
     const eligibleOrders = eligibleAgentOrders.filter(isCommissionEligibleOrder);
@@ -123,10 +124,10 @@ export async function GET(request) {
     const weekOrders = eligibleOrders.filter((order) => orderCompletedInRange(order, weekStartUtc, weekEndUtc));
     // Pending orders are inherently recent; keep them keyed off created_at.
     const pendingOrders = monthPendingRows.filter((order) => orderBelongsToAgent(order, profile));
-    // Orders in the viewed week that are NOT yet paid (any non-cancelled status
-    // that isn't Paid/Completed). Surfaced separately so both the agent and the
-    // owner can see the pipeline that hasn't counted toward pay yet. Keyed off
-    // created_at since a not-yet-paid order has no completion date.
+    // Orders in the viewed week that are not yet complete. Surfaced separately
+    // so both the agent and the owner can see the pipeline that has not counted
+    // toward pay yet. Keyed off created_at because an open order has no
+    // completion date.
     const weekPendingOrders = weekWindowRows.filter(
       (order) => orderBelongsToAgent(order, profile) && !isCommissionEligibleOrder(order)
     );

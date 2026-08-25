@@ -32,6 +32,7 @@ import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 import { sendTaxRecordsPayoutCopy } from '@/lib/taxRecordsEmail.mjs';
 import { hasPositivePayout, summarizeCommissionScan } from '@/lib/commissionScan.mjs';
 import { PAYOUT_RESERVED_STATUSES } from '@/lib/payoutSettlement.mjs';
+import { orderCompletedAtMs } from '@/lib/agentDashboard.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -146,8 +147,9 @@ export async function GET(request) {
     );
     const periodDisplay = `${formatCrDate(startDateStr)} – ${formatCrDate(endDateStr, { year: 'numeric' })}`;
 
-    // 4. Fetch all orders that are completed, then filter in JavaScript based on when they were marked complete.
-    // This ensures that orders created last week but paid this week show up in this week's report.
+    // 4. Fetch completed orders, then date them by the first completion event.
+    // This ensures an order created or paid earlier lands in the week it was
+    // actually closed, matching the completed-only revenue rule.
     const { data: rawOrders, error: ordersError } = await supabaseAdmin
       .from('orders')
       .select('*')
@@ -155,17 +157,10 @@ export async function GET(request) {
       .order('created_at', { ascending: false });
 
     const orders = withoutExcludedOrders(rawOrders || []).filter(order => {
-      let completedAt = new Date(order.created_at);
-      if (order.activity_log && Array.isArray(order.activity_log)) {
-        const completionLogs = order.activity_log.filter(log => 
-          log.type === 'status_change' && 
-          (log.message.includes('Paid') || log.message.includes('Complet'))
-        );
-        if (completionLogs.length > 0) {
-          completedAt = new Date(completionLogs[completionLogs.length - 1].at);
-        }
-      }
-      return completedAt >= startDate && completedAt <= endDate;
+      const completedAt = orderCompletedAtMs(order);
+      return Number.isFinite(completedAt)
+        && completedAt >= startDate.getTime()
+        && completedAt <= endDate.getTime();
     });
 
     if (ordersError) {

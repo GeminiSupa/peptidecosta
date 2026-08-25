@@ -9,28 +9,15 @@ import {
 } from '@/lib/trustpilot';
 import nodemailer from 'nodemailer';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { orderCompletedAtMs } from '@/lib/agentDashboard.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
-const COMPLETION_MESSAGE_RE = /paid|complet/i;
 const COMPLETE_STATUSES = ['Order Complete', 'Completed'];
 
 function getReviewEligibilityDate(order) {
-  let when = order?.created_at ? new Date(order.created_at) : new Date(0);
-
-  if (Array.isArray(order?.activity_log)) {
-    const completionLogs = order.activity_log.filter(
-      (log) => log?.type === 'status_change' && COMPLETION_MESSAGE_RE.test(log?.message || '')
-    );
-
-    if (completionLogs.length > 0) {
-      // activity_log is newest-first, so the last match is the first completion event.
-      const firstCompletion = completionLogs[completionLogs.length - 1];
-      if (firstCompletion?.at) when = new Date(firstCompletion.at);
-    }
-  }
-
+  const when = new Date(orderCompletedAtMs(order));
   return Number.isNaN(when.getTime()) ? new Date(0) : when;
 }
 

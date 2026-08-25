@@ -40,7 +40,7 @@ test('week navigation is normalized and capped', () => {
   assert.equal(normalizeAgentWeekOffset(999), AGENT_ANALYTICS_MAX_WEEK_OFFSET);
 });
 
-test('completion time is the first paid transition regardless of log order', () => {
+test('completion time ignores payment and uses the first completed transition', () => {
   const order = {
     created_at: '2026-08-01T10:00:00.000Z',
     activity_log: [
@@ -50,9 +50,20 @@ test('completion time is the first paid transition regardless of log order', () 
     ],
   };
 
-  assert.equal(orderCompletedAtMs(order), Date.parse('2026-08-10T10:00:00.000Z'));
-  assert.equal(orderCompletedInRange(order, '2026-08-10T10:00:00.000Z', '2026-08-11T00:00:00.000Z'), true);
-  assert.equal(orderCompletedInRange(order, '2026-08-01T00:00:00.000Z', '2026-08-10T10:00:00.000Z'), false);
+  assert.equal(orderCompletedAtMs(order), Date.parse('2026-08-15T10:00:00.000Z'));
+  assert.equal(orderCompletedInRange(order, '2026-08-15T10:00:00.000Z', '2026-08-16T00:00:00.000Z'), true);
+  assert.equal(orderCompletedInRange(order, '2026-08-01T00:00:00.000Z', '2026-08-15T10:00:00.000Z'), false);
+});
+
+test('a paid-only activity log is not treated as completion', () => {
+  const order = {
+    created_at: '2026-08-01T10:00:00.000Z',
+    activity_log: [
+      { type: 'status_change', message: 'Status changed to Paid', at: '2026-08-10T10:00:00.000Z' },
+    ],
+  };
+
+  assert.equal(orderCompletedAtMs(order), Date.parse(order.created_at));
 });
 
 test('completion falls back to creation and excludes the upper boundary', () => {

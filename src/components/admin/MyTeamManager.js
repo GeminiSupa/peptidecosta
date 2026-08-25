@@ -476,7 +476,7 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
                           }}>
                             <strong>{moveWarning.outstanding.parentName} has not been paid yet</strong>
                             <div style={{ marginTop: 5, color: '#e7edf5' }}>
-                              {person.name} has {moveWarning.outstanding.ordersCount} paid order
+                              {person.name} has {moveWarning.outstanding.ordersCount} completed order
                               {moveWarning.outstanding.ordersCount === 1 ? '' : 's'} worth{' '}
                               <strong>{money(moveWarning.outstanding.usd)}</strong> of override that no payout
                               has covered. Move them now and {moveWarning.newParentName} collects it instead.

@@ -49,11 +49,16 @@ export function agentAnalyticsRange(nowValue = new Date(), offsetValue = 0) {
   };
 }
 
-/** First valid paid/completed transition, independent of activity-log ordering. */
+/** First valid completed transition, independent of activity-log ordering. */
 export function orderCompletedAtMs(order) {
   const createdAt = finiteDate(order?.created_at)?.getTime() ?? Number.NaN;
   const completionTimes = (Array.isArray(order?.activity_log) ? order.activity_log : [])
-    .filter((entry) => entry?.type === 'status_change' && /paid|complet/i.test(String(entry?.message || '')))
+    // Payment and completion are deliberately separate business events. A card
+    // approval writes "Paid", but revenue and agent pay begin only when the
+    // order is closed. Including the earlier Paid event here would put a later
+    // completion into the payment week and make the dashboard disagree with the
+    // completed-only status rule.
+    .filter((entry) => entry?.type === 'status_change' && /complet/i.test(String(entry?.message || '')))
     .map((entry) => finiteDate(entry?.at)?.getTime())
     .filter(Number.isFinite);
   return completionTimes.length ? Math.min(...completionTimes) : createdAt;

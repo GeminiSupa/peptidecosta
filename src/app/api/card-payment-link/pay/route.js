@@ -8,6 +8,7 @@ import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, 
 import { sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
 import { parseBillingAddress } from '@/lib/billingAddress.mjs';
 import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
+import { withPaymentStatusActivity } from '@/lib/paymentStatusActivity.mjs';
 
 export const runtime = 'nodejs';
 
@@ -165,7 +166,10 @@ export async function POST(request) {
     }
 
     const orderStatus = statusToOrderStatus(transaction.status);
-    const patch = buildPaymentPatch(orderStatus, transaction, email);
+    const patch = withPaymentStatusActivity(
+      order,
+      buildPaymentPatch(orderStatus, transaction, email),
+    );
     const { error: updateError } = await supabase
       .from('orders')
       .update(patch)
@@ -174,7 +178,12 @@ export async function POST(request) {
     if (updateError) {
       const fallback = await supabase
         .from('orders')
-        .update({ status: orderStatus, payment_method: 'card', customer_email: email })
+        .update({
+          status: orderStatus,
+          payment_method: 'card',
+          customer_email: email,
+          activity_log: patch.activity_log,
+        })
         .eq('id', order.id);
       if (fallback.error) throw fallback.error;
       console.warn('[card-payment-link/pay] Payment metadata columns unavailable; updated status only:', updateError.message);

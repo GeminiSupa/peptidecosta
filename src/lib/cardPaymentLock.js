@@ -43,7 +43,7 @@ export async function claimOrderForPayment(supabase, orderNumber) {
     .not('status', 'ilike', '%paid%')
     .not('status', 'ilike', '%complete%')
     .neq('status', PROCESSING_STATUS)
-    .select('order_number, total_usd, total_crc, currency');
+    .select('order_number, total_usd, total_crc, currency, status, activity_log');
 
   if (error) return { claimed: false, error };
   const claimed = Array.isArray(data) && data.length > 0;

@@ -1269,7 +1269,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                       return (
                         <div className="commission-payout-card__orders">
                           <div className="commission-payout-card__order-row" style={{ fontWeight: 700, color: '#4ade80' }}>
-                            <span>✓ Paid · counts toward pay ({includedOrders.length})</span>
+                            <span>✓ Completed · counts toward pay ({includedOrders.length})</span>
                             <span />
                             <span>{formatMoneyUI(displayedUsdSales, 'USD')}</span>
                           </div>
@@ -1289,7 +1289,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                               </div>
                               {pendOrders.map(orderRow)}
                               <div style={{ fontSize: '0.7rem', fontStyle: 'italic', opacity: 0.65, marginTop: '4px' }}>
-                                Not part of this payout — counts once marked paid/complete.
+                                Not part of this payout — counts once marked complete.
                               </div>
                             </>
                           )}

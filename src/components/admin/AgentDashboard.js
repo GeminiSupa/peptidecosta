@@ -457,13 +457,13 @@ export default function AgentDashboard({
         <section className="dashboard-section">
           <h3 className="dashboard-section-title">My orders · {weekRange}</h3>
 
-          {/* Paid — these count toward pay */}
+          {/* Completed — these count toward pay */}
           <div className="dashboard-mini-row" style={{ cursor: 'default', color: '#4ade80', fontWeight: 700 }}>
-            <span style={{ flex: 1 }}>✓ Paid · counts toward pay ({weekOrdersList.length})</span>
+            <span style={{ flex: 1 }}>✓ Completed · counts toward pay ({weekOrdersList.length})</span>
             <span>{moneyOrEmpty(weekSalesUsd, weekSalesCrc)}</span>
           </div>
           {weekOrdersList.length === 0 ? (
-            <p className="dashboard-empty">No paid orders in this week yet.</p>
+            <p className="dashboard-empty">No completed orders in this week yet.</p>
           ) : (
             <div className="dashboard-mini-list">{weekOrdersList.map(renderOrderRow)}</div>
           )}
@@ -477,7 +477,7 @@ export default function AgentDashboard({
               </div>
               <div className="dashboard-mini-list">{weekPendingList.map(renderOrderRow)}</div>
               <p className="dashboard-mini-sub" style={{ marginTop: '6px', fontStyle: 'italic' }}>
-                These don’t count toward pay until they’re marked paid/complete.
+                These don’t count toward pay until they’re marked complete.
               </p>
             </>
           )}
@@ -532,7 +532,7 @@ export default function AgentDashboard({
 
       <p className="dashboard-mini-sub" style={{ marginTop: '8px' }}>
         {isSubUser
-          ? 'Only orders that came through your own link count toward your pay. Orders count once they are marked paid.'
+          ? 'Only orders that came through your own link count toward your pay. Orders count once they are marked complete.'
           : 'Only orders assigned to you as sales agent count toward your pay. Store-wide totals are not shown here.'}
       </p>
     </div>

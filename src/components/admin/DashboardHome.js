@@ -6,14 +6,11 @@ import {
   AlertTriangle, Inbox, MessageSquare, TrendingUp, ChevronRight, Star, CheckCircle,
 } from 'lucide-react';
 import { orderCountsAsSale, orderGrossUsd, orderNetRevenueUsd, orderRevenueBasis } from '@/lib/orderRevenue.mjs';
+import { orderCompletedAtMs } from '@/lib/agentDashboard.mjs';
 import KpiBreakdownModal from './KpiBreakdownModal';
 import { formatCrDate } from '@/lib/crTime.mjs';
 
 const FALLBACK_RATE = 454.48;
-
-// Matches the status_change log messages written when an order is marked
-// paid/complete (e.g. "Status changed to Order Complete").
-const COMPLETION_MESSAGE_RE = /paid|complet/i;
 
 // Trustpilot's FREE plan sends 50 verified review invitations per month.
 // If the account is upgraded, change this (Starter = 100, Plus = 300).
@@ -68,22 +65,10 @@ function startOfMonth(d = new Date()) {
 }
 
 // The date revenue should be recognized on: the moment the order was marked
-// paid/complete, not when it was created. Derived from the order's activity_log
-// (falling back to created_at for orders with no completion event logged).
-// Mirrors the commission weekly-report so both features agree.
+// complete, not when it was paid or created. The shared helper falls back to
+// created_at for legacy completed orders with no completion event logged.
 function getRevenueDate(order) {
-  let when = new Date(order.created_at);
-  if (Array.isArray(order.activity_log)) {
-    const completionLogs = order.activity_log.filter(
-      (log) => log?.type === 'status_change' && COMPLETION_MESSAGE_RE.test(log?.message || '')
-    );
-    if (completionLogs.length > 0) {
-      // activity_log is newest-first, so the last match is the FIRST time the
-      // order reached completion — the correct recognition date.
-      when = new Date(completionLogs[completionLogs.length - 1].at);
-    }
-  }
-  return when;
+  return new Date(orderCompletedAtMs(order));
 }
 
 function cartValue(cart) {
@@ -181,7 +166,7 @@ export default function DashboardHome({
         orderNumber: order.order_number,
         customer: order.customer_name,
         // Two different dates, so each is labelled: revenue lands on the day the
-        // order was marked paid, while the Orders list shows the day it came in.
+        // order was marked complete, while the Orders list shows when it came in.
         // An order placed on the 22nd and settled today belongs in today.
         date: getRevenueDate(order),
         countedLabel: orderCountsAsSale(order) ? 'Counted' : 'Would count',
@@ -219,8 +204,8 @@ export default function DashboardHome({
     pendingOrders: 'Pending Orders',
   };
   const TILE_SUBTITLES = {
-    revenueToday: 'Orders dated today by when they were marked paid or complete, not when they were created.',
-    revenueWeek: 'Orders dated this week by when they were marked paid or complete, not when they were created.',
+    revenueToday: 'Orders dated today by when they were marked complete, not when they were paid or created.',
+    revenueWeek: 'Orders dated this week by when they were marked complete, not when they were paid or created.',
     pendingOrders: 'Orders still sitting at Pending. These are not counted as revenue.',
   };
 

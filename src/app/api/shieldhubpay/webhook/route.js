@@ -5,6 +5,7 @@ import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRe
 import { declineReasonFrom, gatewayStatusToOrderStatus } from '@/lib/paymentOutcome.mjs';
 import { sendPaymentResultEmails, shouldSendPaymentResultEmail } from '@/lib/paymentResultEmail.mjs';
 import { getPublicSiteUrl } from '@/lib/publicUrl';
+import { withPaymentStatusActivity } from '@/lib/paymentStatusActivity.mjs';
 
 export const runtime = 'nodejs';
 
@@ -68,7 +69,7 @@ export async function POST(req) {
     const supabase = getSupabaseAdmin();
     const { data: existing, error: lookupErr } = await supabase
       .from('orders')
-      .select('id, status, customer_email, customer_phone')
+      .select('id, status, customer_email, customer_phone, activity_log')
       .eq('order_number', orderNumber)
       .maybeSingle();
 
@@ -89,15 +90,19 @@ export async function POST(req) {
     const statusChanged = existing.status !== statusText;
 
     if (statusChanged) {
+      const paymentPatch = withPaymentStatusActivity(
+        existing,
+        buildPaymentPatch(statusText, payload),
+      );
       const { error } = await supabase
         .from('orders')
-        .update(buildPaymentPatch(statusText, payload))
+        .update(paymentPatch)
         .eq('order_number', orderNumber);
 
       if (error) {
         const fallback = await supabase
           .from('orders')
-          .update({ status: statusText })
+          .update({ status: statusText, activity_log: paymentPatch.activity_log })
           .eq('order_number', orderNumber);
 
         if (fallback.error) {
