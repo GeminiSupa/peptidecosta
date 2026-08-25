@@ -59,9 +59,16 @@ function activePublicPromo(promo, now) {
   return percent(promo.discount_pct) > 0;
 }
 
-export function buildWhatsAppSalesSnapshot({ products = [], promos = [], liveDeal = null, now = new Date() } = {}) {
+export function buildWhatsAppSalesSnapshot({
+  products = [],
+  promos = [],
+  liveDeal = null,
+  excludedPromoCodes = [],
+  now = new Date(),
+} = {}) {
   const dealIsLive = liveDeal?.status === 'live' && inWindow(liveDeal, now);
   const dealNames = new Set((dealIsLive ? liveDeal.product_names : []).map((name) => String(name).toLowerCase()));
+  const excludedCodes = new Set((excludedPromoCodes || []).map((code) => String(code).trim().toUpperCase()).filter(Boolean));
   const offers = [];
 
   if (dealIsLive) {
@@ -95,7 +102,7 @@ export function buildWhatsAppSalesSnapshot({ products = [], promos = [], liveDea
   for (const promo of (promos || []).filter((item) => activePublicPromo(item, now))) {
     const pct = percent(promo.discount_pct);
     const code = String(promo.code || '').trim().toUpperCase();
-    if (!code) continue;
+    if (!code || excludedCodes.has(code)) continue;
     const target = String(promo.target_product || '').trim();
     const unitTermsEn = promo.min_units ? `; minimum ${promo.min_units} units` : '';
     const unitTermsEs = promo.min_units ? `; mínimo ${promo.min_units} unidades` : '';

@@ -306,6 +306,7 @@ export async function POST(request) {
             try {
               let aiAutoReply = !!process.env.GEMINI_API_KEY;
               let aiSystemPrompt = DEFAULT_WHATSAPP_AI_PROMPT;
+              let aiHiddenPromoCodes = [];
               
               // 1. Fetch settings from Supabase
               if (supabase) {
@@ -321,6 +322,11 @@ export async function POST(request) {
                     aiAutoReply = settingsData.value.ai_auto_reply !== false;
                     if (settingsData.value.ai_system_prompt) {
                       aiSystemPrompt = settingsData.value.ai_system_prompt;
+                    }
+                    if (Array.isArray(settingsData.value.ai_hidden_promo_codes)) {
+                      aiHiddenPromoCodes = settingsData.value.ai_hidden_promo_codes
+                        .map((code) => String(code || '').trim().toUpperCase())
+                        .filter(Boolean);
                     }
                   }
                 } catch (err) {
@@ -372,6 +378,7 @@ export async function POST(request) {
                     products: catalogProducts,
                     promos: promoResult.data || [],
                     liveDeal: dealResult.data || null,
+                    excludedPromoCodes: aiHiddenPromoCodes,
                   });
                   salesContext = formatWhatsAppSalesContext(salesSnapshot);
                 } catch (err) {

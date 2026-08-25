@@ -67,6 +67,22 @@ test('active public promo codes are included and private or expired codes are no
   assert.match(context, /15% off 5\+ vials or 20% off 10\+ vials/);
 });
 
+test('WhatsApp-specific exclusions hide codes without deactivating them', () => {
+  const snapshot = buildWhatsAppSalesSnapshot({
+    now: NOW,
+    excludedPromoCodes: ['jeanpaul', ' RAQUELDELGADO '],
+    promos: [
+      { code: 'JEANPAUL', discount_pct: 0.05, is_active: true, hidden: false },
+      { code: 'RAQUELDELGADO', discount_pct: 0.1, is_active: true, hidden: false },
+      { code: 'MUSCLE10', discount_pct: 0.1, is_active: true, hidden: false },
+    ],
+  });
+
+  const context = formatWhatsAppSalesContext(snapshot);
+  assert.doesNotMatch(context, /JEANPAUL|RAQUELDELGADO/);
+  assert.match(context, /MUSCLE10/);
+});
+
 test('no limited promotion still reports truthful automatic volume savings', () => {
   const snapshot = buildWhatsAppSalesSnapshot({ now: NOW });
   const reply = buildWhatsAppSalesReply(snapshot, 'en');
