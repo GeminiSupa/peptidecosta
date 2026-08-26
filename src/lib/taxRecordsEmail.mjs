@@ -35,6 +35,31 @@ export function taxRecordsRecipients(value = process.env.TAX_RECORDS_CC_EMAIL) {
 }
 
 /**
+ * The accountant. First address wins; everything after it is a monitor.
+ *
+ * This is the address the business actually needs to reach, and the only one
+ * whose delivery decides whether an order's accounting copy counts as sent.
+ */
+export function taxRecordsPrimary(value = process.env.TAX_RECORDS_CC_EMAIL) {
+  return taxRecordsRecipients(value)[0];
+}
+
+/**
+ * Addresses that only watch, never count.
+ *
+ * A phone-visible inbox rides along on the same message so someone can tell at
+ * a glance whether PBAG's mail is flowing. That is useful and stays — what must
+ * not happen is the watcher standing in for the accountant. The shared send was
+ * accepted for the watcher and refused for PBAG, and because nodemailer
+ * resolves as long as any recipient is accepted, every order was recorded as
+ * "sent" while the accountant received nothing. The dispatch below settles that
+ * by judging the primary address alone.
+ */
+export function taxRecordsMonitors(value = process.env.TAX_RECORDS_CC_EMAIL) {
+  return taxRecordsRecipients(value).slice(1);
+}
+
+/**
  * CC helper for internal mail only.
  *
  * Still used by the commission approval route, where the recipient is a sales
@@ -80,7 +105,8 @@ export function buildTaxRecordsCopy({ order = {}, html = '', text = '' } = {}) {
 
   return {
     // Every configured address on one message, so a blocked mailbox and a
-    // reachable one always hold the identical record.
+    // reachable one always hold the identical record. Which of them decides
+    // whether this counts as delivered is settled at dispatch, not here.
     to: taxRecordsRecipients().join(', '),
     subject: header,
     html: `<p style="font:600 14px/1.5 system-ui,sans-serif;color:#334155;margin:0 0 16px">${header}</p>${html}`,
@@ -126,11 +152,26 @@ async function dispatchTaxRecordsCopy({ transporter, from, message, logPrefix })
   }
 
   const sender = String(from || '').trim();
+  const primary = taxRecordsPrimary();
 
   try {
     const info = await transporter.sendMail({ ...message, from: sender });
-    // Names the sender as well as the recipients: the current failure is caused
-    // by the From domain, so a log line without it cannot explain a rejection.
+
+    // A server can accept the submission and still refuse an individual
+    // address; nodemailer reports that in `info.rejected`, which nothing here
+    // used to read. Because the accountant and the watcher share one message,
+    // a resolved send only ever proved that *somebody* was accepted — the
+    // watcher's Gmail — while PBAG was refused on the same call. Judge the
+    // accountant's address alone.
+    const refused = (info?.rejected || []).map((entry) => String(entry).toLowerCase());
+    if (refused.includes(String(primary).toLowerCase())) {
+      const error = `the mail server refused ${primary}`;
+      console.error(`${logPrefix} Accounting copy REFUSED for ${primary} (other recipients may have been accepted).`);
+      return { sent: false, error, to: primary, from: sender };
+    }
+
+    // Names the sender as well as the recipients: a rejection here is usually
+    // caused by the From domain, so a log line without it cannot explain one.
     console.log(`${logPrefix} Accounting copy sent from ${sender} to ${message.to}: ${info.messageId}`);
     return { sent: true, messageId: info.messageId, to: message.to, from: sender };
   } catch (error) {

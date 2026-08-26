@@ -10,6 +10,8 @@ import {
   sendTaxRecordsCopy,
   sendTaxRecordsPayoutCopy,
   taxRecordsRecipients,
+  taxRecordsPrimary,
+  taxRecordsMonitors,
   withTaxRecordsCc,
 } from '../src/lib/taxRecordsEmail.mjs';
 
@@ -272,4 +274,52 @@ test('no route freezes its mail credentials at module load', () => {
   walk('src/app/api');
 
   assert.deepEqual(offenders, []);
+});
+
+test('one message, but only the accountant decides whether it counts as sent', async () => {
+  // The watcher's inbox rides along on the same message on purpose. What must
+  // not happen is its acceptance standing in for PBAG's refusal — the server
+  // resolves the send and names the refused address in info.rejected.
+  const previous = process.env.TAX_RECORDS_CC_EMAIL;
+  process.env.TAX_RECORDS_CC_EMAIL = 'pbagcr@peptidescostarica.net, watcher@gmail.com';
+
+  try {
+    assert.equal(taxRecordsPrimary(), 'pbagcr@peptidescostarica.net');
+    assert.deepEqual(taxRecordsMonitors(), ['watcher@gmail.com']);
+
+    const sent = [];
+    const result = await sendTaxRecordsCopy({
+      transporter: {
+        sendMail: async (message) => {
+          sent.push(message);
+          return { messageId: 'envelope-accepted', rejected: ['pbagcr@peptidescostarica.net'] };
+        },
+      },
+      from: 'Records <records@mail.example.net>',
+      order: { status: 'Order Complete', order_number: 'PCR-10' },
+    });
+
+    assert.equal(sent.length, 1, 'still one message, both addresses on it');
+    assert.equal(sent[0].to, 'pbagcr@peptidescostarica.net, watcher@gmail.com');
+    assert.equal(result.sent, false, 'the accountant decides, not the watcher');
+    assert.match(result.error, /refused/);
+  } finally {
+    if (previous === undefined) delete process.env.TAX_RECORDS_CC_EMAIL;
+    else process.env.TAX_RECORDS_CC_EMAIL = previous;
+  }
+});
+
+test('an address the server refuses without throwing still counts as failed', async () => {
+  // Nodemailer resolves and reports the refusal in info.rejected. Reading only
+  // the messageId is what turned a refused PBAG address into a green tick.
+  const result = await sendTaxRecordsCopy({
+    transporter: {
+      sendMail: async (message) => ({ messageId: 'accepted-envelope', rejected: [message.to] }),
+    },
+    from: 'Records <records@mail.example.net>',
+    order: { status: 'Order Complete', order_number: 'PCR-11' },
+  });
+
+  assert.equal(result.sent, false);
+  assert.match(result.error, /refused/);
 });
