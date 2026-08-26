@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 import { getBusinessLinks } from '@/lib/settings';
 import { sendTaxRecordsCopy } from '@/lib/taxRecordsEmail.mjs';
+import { resolveTaxRecordsMailer } from '@/lib/taxRecordsSmtp.mjs';
 import { buildOrderEmailAddressing, getOrderNotificationRecipients } from '@/lib/orderNotificationRecipients';
 import { getOrderEmailLogoAttachment } from '@/lib/orderEmailBranding.mjs';
 import { withBacGiftLines } from '@/lib/bacWater.mjs';
@@ -304,9 +305,14 @@ export async function POST(request) {
       // Outside the customer try/catch on purpose — accounting's copy of a
       // completed sale must go out whether or not the customer's own receipt
       // did. Never throws, so it cannot break this route either.
+      const accountingMailer = resolveTaxRecordsMailer({
+        fallbackTransporter: transporter,
+        fallbackFrom: smtp.from,
+        fallbackUser: smtp.user,
+      });
       results.accountingCopy = await sendTaxRecordsCopy({
-        transporter,
-        from: smtp.from,
+        transporter: accountingMailer.transporter,
+        from: accountingMailer.from,
         order: {
           status: order.status,
           order_number: order.orderNumber || order.order_number,
@@ -316,6 +322,7 @@ export async function POST(request) {
         text: customerText,
         logPrefix: '[Order notification]',
       });
+      results.accountingCopy.transport = accountingMailer.source;
     }
 
     //  3. SEND CUSTOMER WHATSAPP NOTIFICATION (DISABLED)

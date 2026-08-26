@@ -30,6 +30,7 @@ import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 import { sendTaxRecordsPayoutCopy } from '@/lib/taxRecordsEmail.mjs';
+import { resolveTaxRecordsMailer } from '@/lib/taxRecordsSmtp.mjs';
 import { hasPositivePayout, summarizeCommissionScan } from '@/lib/commissionScan.mjs';
 import { PAYOUT_RESERVED_STATUSES } from '@/lib/payoutSettlement.mjs';
 import { orderReportableAtMs } from '@/lib/agentDashboard.mjs';
@@ -194,6 +195,11 @@ export async function GET(request) {
         pass: SMTP_PASS,
       }
     }) : null;
+    const accountingMailer = resolveTaxRecordsMailer({
+      fallbackTransporter: transporter,
+      fallbackFrom: NOTIFICATION_FROM,
+      fallbackUser: SMTP_USER,
+    });
 
     // 5. Calculate weekly gross sales and commissions for each agent
     // First, get all already approved payout orders so we don't double count.
@@ -503,8 +509,8 @@ export async function GET(request) {
       // the admin summary and leave PBAG with nothing.
       const accountingCopy = settledPayout
         ? await sendTaxRecordsPayoutCopy({
-          transporter,
-          from: NOTIFICATION_FROM,
+          transporter: accountingMailer.transporter,
+          from: accountingMailer.from,
           payout: {
             kind: 'comisión de equipo',
             name: agent.name || agent.email,
@@ -516,6 +522,7 @@ export async function GET(request) {
           logPrefix: `[Weekly Commissions] ${agent.email}`,
         })
         : { sent: false, skipped: 'not-approved' };
+      if (settledPayout) accountingCopy.transport = accountingMailer.source;
 
       reportResults.push({
         agentId: agent.id,

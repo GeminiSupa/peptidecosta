@@ -3152,41 +3152,62 @@ Core Rules:
     }
   };
 
-  const sendOrderCompletionNotification = async (order, { quiet = false } = {}) => {
-    if (!order?.customer_email || !String(order.customer_email).trim()) {
-      if (!quiet) alert('This order has no customer email, so no completion email can be sent.');
-      return { ok: false, skipped: true };
-    }
+  const sendOrderCompletionNotification = async (order, { quiet = false, accountingOnly = false } = {}) => {
+    const hasCustomerEmail = Boolean(String(order?.customer_email || '').trim());
     try {
       const res = await adminFetch('/api/order-shipped-notification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: order.id, order_number: order.order_number }),
+        body: JSON.stringify({
+          id: order.id,
+          order_number: order.order_number,
+          accountingOnly,
+        }),
       });
       const data = await res.json().catch(() => ({}));
-      const deliveryPatch = {
-        completion_notification_status: data.completionNotificationStatus || (data.success ? 'sent' : 'failed'),
-        completion_notification_error: data.completionNotificationError || data.error || null,
-        completion_notification_sent_at: data.success ? new Date().toISOString() : order.completion_notification_sent_at,
-        completion_notification_last_attempt_at: new Date().toISOString(),
-      };
-      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...deliveryPatch } : item));
-      setSelectedOrderDetails((current) => current?.id === order.id ? { ...current, ...deliveryPatch } : current);
+      if (!accountingOnly) {
+        const deliveryPatch = {
+          completion_notification_status: data.completionNotificationStatus || (data.success ? 'sent' : 'failed'),
+          completion_notification_error: data.completionNotificationError || data.error || null,
+          completion_notification_sent_at: data.customerReceipt?.sent
+            ? new Date().toISOString()
+            : order.completion_notification_sent_at,
+          completion_notification_last_attempt_at: new Date().toISOString(),
+        };
+        setOrders((current) => current.map((item) => item.id === order.id ? { ...item, ...deliveryPatch } : item));
+        setSelectedOrderDetails((current) => current?.id === order.id ? { ...current, ...deliveryPatch } : current);
+      }
 
       if (data.success) {
-        if (!quiet) alert(`Order complete email sent to ${order.customer_email}`);
+        if (!quiet) {
+          if (accountingOnly) {
+            alert(`Accounting copy sent for order ${order.order_number}.`);
+          } else if (hasCustomerEmail) {
+            alert(`Order complete email sent to ${order.customer_email}. Accounting received its separate copy.`);
+          } else {
+            alert(`Accounting copy sent for order ${order.order_number}. No customer receipt was sent because the order has no customer email.`);
+          }
+        }
         return { ok: true, data };
       }
       if (!quiet) {
-        alert(`Customer email FAILED for ${order.customer_email}.\n\nReason: ${data.details || data.error || `server returned ${res.status}`}\n\nThe order remains saved and you can retry from its detail panel.`);
+        const target = accountingOnly ? 'Accounting copy' : (hasCustomerEmail ? 'Completion email' : 'Accounting copy');
+        const partial = data.customerReceipt?.sent && data.accountingCopy?.sent === false;
+        alert(partial
+          ? `Customer receipt sent to ${order.customer_email}, but the accounting copy FAILED.\n\nReason: ${data.accountingCopy?.error || 'unknown accounting mail error'}\n\nUse "Resend accounting only" after checking the mail settings.`
+          : `${target} FAILED for order ${order.order_number}.\n\nReason: ${data.details || data.error || data.accountingCopy?.error || `server returned ${res.status}`}\n\nThe order remains saved and you can retry from its detail panel.`);
       }
       return { ok: false, data };
     } catch (error) {
       console.error('Order complete email error:', error);
-      if (!quiet) alert(`Customer email FAILED for ${order.customer_email}.\n\nReason: ${error.message}\n\nThe order remains saved and you can retry from its detail panel.`);
+      if (!quiet) alert(`Email FAILED for order ${order.order_number}.\n\nReason: ${error.message}\n\nThe order remains saved and you can retry from its detail panel.`);
       return { ok: false, error };
     }
   };
+
+  const resendOrderAccountingCopy = async (order) => (
+    sendOrderCompletionNotification(order, { accountingOnly: true })
+  );
 
   // Order status update
   const handleOrderStatusUpdate = async (orderId, newStatus) => {
@@ -3264,11 +3285,6 @@ Core Rules:
       alert('Status saved, but the order could not be re-read to email the customer. Reload and use "Resend" on the order.');
       return;
     }
-    if (!orderForEmail.customer_email || !String(orderForEmail.customer_email).trim()) {
-      // Phone-only order. Nothing to send, and not a fault worth alarming about.
-      return;
-    }
-
     await sendOrderCompletionNotification(orderForEmail);
   };
 
@@ -7408,6 +7424,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           onStatusChange={handleOrderStatusUpdate}
           onTrackingChange={handleOrderTrackingUpdate}
           onResendCompletion={sendOrderCompletionNotification}
+          onResendAccounting={resendOrderAccountingCopy}
           agents={agents}
           affiliates={orderAffiliates}
           isSuperadmin={!!adminProfile?.is_superadmin}

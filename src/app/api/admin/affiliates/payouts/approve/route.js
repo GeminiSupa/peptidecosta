@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { sendTaxRecordsPayoutCopy } from '@/lib/taxRecordsEmail.mjs';
+import { resolveTaxRecordsMailer } from '@/lib/taxRecordsSmtp.mjs';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
 
 // The owner is BCC'd on this mail, so they are stripped from the visible
@@ -107,9 +108,14 @@ export async function POST(request) {
         // Outside the affiliate try/catch on purpose — an approved payout is an
         // expense accounting has to record whether or not the affiliate's own
         // invoice reached them. Never throws.
+        const accountingMailer = resolveTaxRecordsMailer({
+          fallbackTransporter: transporter,
+          fallbackFrom: notificationFrom,
+          fallbackUser: smtp.user,
+        });
         accountingCopy = await sendTaxRecordsPayoutCopy({
-          transporter,
-          from: notificationFrom,
+          transporter: accountingMailer.transporter,
+          from: accountingMailer.from,
           payout: {
             kind: 'afiliado',
             name: payout.affiliate_name || payout.affiliate_email,
@@ -122,6 +128,7 @@ export async function POST(request) {
           text: invoiceText,
           logPrefix: '[Affiliate Payout Approval]',
         });
+        accountingCopy.transport = accountingMailer.source;
       } else {
         console.warn('[Affiliate Payout Approval] SMTP credentials missing. Skipping email dispatch.');
         emailError = 'SMTP configurations not set in environment.';

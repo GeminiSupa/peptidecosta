@@ -4,6 +4,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 import { getCampaignSmtpConfig } from '@/lib/campaignSmtp';
 import { buildEmailDiagnostics } from '@/lib/emailDiagnostics.mjs';
+import { getTaxRecordsSmtpConfig } from '@/lib/taxRecordsSmtp.mjs';
 
 export const runtime = 'nodejs';
 // Env is read per request, never at module scope: a warm serverless instance
@@ -51,6 +52,25 @@ export async function GET(request) {
         report.smtpLogin = { attempted: true, ok: false, error: err.message };
         report.problems.push(`SMTP login failed: ${err.message}`);
         report.healthy = false;
+      }
+    }
+
+    const accounting = getTaxRecordsSmtpConfig();
+    if (!accounting.configured) {
+      report.accountingFallbackSmtpLogin = { attempted: false, reason: 'Optional accounting fallback SMTP is not configured; Elastic remains the primary sender.' };
+    } else {
+      try {
+        const accountingTransporter = nodemailer.createTransport({
+          host: accounting.host,
+          port: accounting.port,
+          secure: accounting.secure,
+          auth: { user: accounting.user, pass: accounting.pass },
+          ...SMTP_TIMEOUTS,
+        });
+        await accountingTransporter.verify();
+        report.accountingFallbackSmtpLogin = { attempted: true, ok: true, source: accounting.source };
+      } catch (err) {
+        report.accountingFallbackSmtpLogin = { attempted: true, ok: false, source: accounting.source, error: err.message };
       }
     }
   }

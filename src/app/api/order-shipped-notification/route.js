@@ -4,6 +4,7 @@ import { getBusinessLinks } from '@/lib/settings';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { sendTaxRecordsCopy } from '@/lib/taxRecordsEmail.mjs';
+import { resolveTaxRecordsMailer } from '@/lib/taxRecordsSmtp.mjs';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 import { withBacGiftLines } from '@/lib/bacWater.mjs';
 import { CORREOS_TRACKING_URL, correosTrackingStrings, hasTrackingNumber } from '@/lib/correosTracking.mjs';
@@ -185,8 +186,11 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   let deliveryStateUpdater = null;
+  let accountingOnlyRequest = false;
   try {
     const payload = await request.json();
+    const accountingOnly = payload?.accountingOnly === true;
+    accountingOnlyRequest = accountingOnly;
     const supabase = getSupabaseAdmin();
     let order = payload;
     if (payload?.id || payload?.order_number) {
@@ -218,34 +222,22 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid order notification payload' }, { status: 400 });
     }
 
-    if (!order.customer_email || order.customer_email.trim() === '') {
-      await updateDeliveryState('skipped', 'No customer email');
-      return NextResponse.json({ sent: false, skipped: true, reason: 'No customer email' });
-    }
+    const hasCustomerEmail = Boolean(String(order.customer_email || '').trim());
+    const shouldSendCustomer = hasCustomerEmail && !accountingOnly;
 
-    await updateDeliveryState('sending');
+    // A phone-only order still belongs in the accounting record. The old early
+    // return skipped both recipients merely because there was no customer
+    // address. Accounting-only replays also deliberately skip the customer.
+    if (!accountingOnly) await updateDeliveryState('sending');
 
     const { smtp, from: notificationFrom } = getMailSettings();
-
-    // A completion mail that cannot be sent is not a skip. It is the customer's
-    // receipt and the accountant's only tax copy going missing, and returning
-    // 200 here is what let that happen for days without anyone noticing — the
-    // admin marks the order complete and the screen says nothing is wrong.
-    if (!smtp.configured) {
-      console.error('[Order Shipped Notification] Transactional SMTP is not configured; completion mail NOT sent.');
-      await updateDeliveryState('failed', 'Transactional SMTP is not configured');
-      return NextResponse.json({
-        sent: false,
-        error: 'Transactional SMTP is not configured, so the completion email and the accounting copy were not sent. Check ORDER_SMTP_* in the deployment (/api/admin/email-diagnostics).',
-      }, { status: 500 });
-    }
 
     const orderLang = order.lang || (order.currency === 'CRC' ? 'es' : 'en');
     const totalPrimary = formatMoney(order.total_crc || order.total_usd, order.currency);
     const totalUsd = order.total_usd ? formatMoney(order.total_usd, 'USD') : null;
     const totalCrc = order.total_crc ? formatMoney(order.total_crc, 'CRC') : null;
 
-    const transporter = nodemailer.createTransport({
+    const transporter = smtp.configured ? nodemailer.createTransport({
       host: smtp.host,
       port: smtp.port,
       secure: smtp.secure,
@@ -253,6 +245,11 @@ export async function POST(request) {
         user: smtp.user,
         pass: smtp.pass,
       }
+    }) : null;
+    const accountingMailer = resolveTaxRecordsMailer({
+      fallbackTransporter: transporter,
+      fallbackFrom: notificationFrom,
+      fallbackUser: smtp.user,
     });
 
     const customerSubject = orderLang === 'en'
@@ -282,14 +279,16 @@ export async function POST(request) {
     // order (Completed -> Processing -> Completed, or resending the receipt)
     // must not burn another monthly invitation or spam the customer.
     let alreadyInvited = false;
-    try {
-      let query = supabase.from('orders').select('id, review_requested_at');
-      query = order.id ? query.eq('id', order.id) : query.eq('order_number', order.order_number);
-      const { data: existing } = await query.maybeSingle();
-      alreadyInvited = Boolean(existing?.review_requested_at);
-    } catch (err) {
-      // If the lookup fails we fall back to sending the invitation (previous behavior).
-      console.error('[Order Shipped Notification] review_requested_at lookup failed:', err.message);
+    if (hasCustomerEmail && !accountingOnly) {
+      try {
+        let query = supabase.from('orders').select('id, review_requested_at');
+        query = order.id ? query.eq('id', order.id) : query.eq('order_number', order.order_number);
+        const { data: existing } = await query.maybeSingle();
+        alreadyInvited = Boolean(existing?.review_requested_at);
+      } catch (err) {
+        // If the lookup fails we fall back to sending the invitation (previous behavior).
+        console.error('[Order Shipped Notification] review_requested_at lookup failed:', err.message);
+      }
     }
 
     // Trustpilot AFS structured data (read by Trustpilot from the BCC'd copy).
@@ -297,13 +296,15 @@ export async function POST(request) {
     const trustpilotSnippet = `
 <script type="application/json+trustpilot">
 {
-  "recipientEmail": ${JSON.stringify(order.customer_email.trim())},
+  "recipientEmail": ${JSON.stringify(String(order.customer_email || '').trim())},
   "recipientName": ${JSON.stringify(order.customer_name || 'Cliente')},
   "referenceId": ${JSON.stringify(normalizedOrder.orderNumber || '')},
   "locale": ${JSON.stringify(orderLang === 'en' ? 'en-US' : 'es-ES')}
 }
 </script>`;
-    const customerHtmlWithTrustpilot = alreadyInvited ? customerHtml : customerHtml + trustpilotSnippet;
+    const customerHtmlWithTrustpilot = shouldSendCustomer && !alreadyInvited
+      ? customerHtml + trustpilotSnippet
+      : customerHtml;
 
     const customerText = [
       orderLang === 'en' ? 'Your order is on the way!' : '¡Su pedido está en camino!',
@@ -339,31 +340,43 @@ export async function POST(request) {
     // accounting now gets its own message below rather than a header on this one.
     let customerInfo = null;
     let customerError = null;
-    try {
-      customerInfo = await transporter.sendMail({
-        bcc: bccList,
-        from: notificationFrom,
-        to: order.customer_email.trim(),
-        subject: customerSubject,
-        html: customerHtmlWithTrustpilot,
-        text: customerText,
-      });
-      console.log(`[Order Shipped Notification] Customer receipt dispatched: ${customerInfo.messageId} to ${order.customer_email}`);
-    } catch (custErr) {
-      // Caught rather than thrown so a bad customer address cannot also cost
-      // accounting its copy of the sale — the exact failure mode the CC had.
-      customerError = custErr.message;
-      console.error('[Order Shipped Notification] Customer receipt failed to send:', custErr);
+    if (shouldSendCustomer) {
+      if (!transporter) {
+        customerError = 'Transactional SMTP is not configured';
+        console.error('[Order Shipped Notification] Transactional SMTP is not configured; customer receipt NOT sent.');
+      } else {
+        try {
+          customerInfo = await transporter.sendMail({
+            bcc: bccList,
+            from: notificationFrom,
+            to: order.customer_email.trim(),
+            subject: customerSubject,
+            html: customerHtmlWithTrustpilot,
+            text: customerText,
+          });
+          console.log(`[Order Shipped Notification] Customer receipt dispatched: ${customerInfo.messageId} to ${order.customer_email}`);
+        } catch (custErr) {
+          // Caught rather than thrown so a bad customer address cannot also cost
+          // accounting its copy of the sale — the exact failure mode the CC had.
+          customerError = custErr.message;
+          console.error('[Order Shipped Notification] Customer receipt failed to send:', custErr);
+        }
+      }
     }
 
+    // PBAG is a Rackspace mailbox, but Elastic stays the primary sender. The
+    // resolver presents Elastic's external authenticated identity in From so
+    // Rackspace does not see a same-domain impersonation; a Rackspace mailbox,
+    // when configured, is retry-only.
     const taxCopy = await sendTaxRecordsCopy({
-      transporter,
-      from: notificationFrom,
+      transporter: accountingMailer.transporter,
+      from: accountingMailer.from,
       order,
       html: customerHtmlWithTrustpilot,
       text: customerText,
       logPrefix: '[Order Shipped Notification]',
     });
+    taxCopy.transport = accountingMailer.source;
 
     // Record that the Trustpilot invitation went out so later resends (and the
     // review-requests cron, which checks the same column) never duplicate it.
@@ -382,31 +395,48 @@ export async function POST(request) {
 
     const deliveryStatus = customerInfo
       ? (taxCopy?.sent === false ? 'partial' : 'sent')
-      : 'failed';
+      : (!hasCustomerEmail && taxCopy?.sent ? 'skipped' : 'failed');
     const deliveryError = customerInfo
       ? (taxCopy?.sent === false ? `Accounting copy failed: ${taxCopy.error || 'unknown error'}` : null)
-      : customerError;
-    await updateDeliveryState(
-      deliveryStatus,
-      deliveryError,
-      customerInfo ? new Date().toISOString() : undefined,
-    );
+      : (!hasCustomerEmail
+        ? `No customer email; accounting copy ${taxCopy?.sent ? 'sent' : `failed: ${taxCopy?.error || 'unknown error'}`}`
+        : customerError);
+    if (!accountingOnly) {
+      await updateDeliveryState(
+        deliveryStatus,
+        deliveryError,
+        customerInfo ? new Date().toISOString() : undefined,
+      );
+    }
+
+    const requestSucceeded = accountingOnly
+      ? Boolean(taxCopy?.sent)
+      : (shouldSendCustomer
+        ? Boolean(customerInfo) && Boolean(taxCopy?.sent)
+        : Boolean(taxCopy?.sent));
 
     // Reports both sends separately, so "did accounting get it?" is answerable
     // from the response and the logs rather than by asking the accountant.
     return NextResponse.json({
-      success: Boolean(customerInfo),
+      success: requestSucceeded,
       messageId: customerInfo?.messageId || null,
       customerReceipt: customerInfo
         ? { sent: true, messageId: customerInfo.messageId }
-        : { sent: false, error: customerError },
+        : {
+            sent: false,
+            skipped: accountingOnly ? 'accounting-only' : (!hasCustomerEmail ? 'no-customer-email' : undefined),
+            error: customerError,
+          },
       accountingCopy: taxCopy,
       trustpilotInvited: Boolean(customerInfo) && !alreadyInvited,
-      completionNotificationStatus: deliveryStatus,
-      completionNotificationError: deliveryError,
-    }, { status: customerInfo ? 200 : 502 });
+      completionNotificationStatus: accountingOnly ? undefined : deliveryStatus,
+      completionNotificationError: accountingOnly ? undefined : deliveryError,
+      accountingOnly,
+    }, { status: requestSucceeded ? 200 : 502 });
   } catch (err) {
-    if (deliveryStateUpdater) await deliveryStateUpdater('failed', err.message).catch(() => {});
+    if (deliveryStateUpdater && !accountingOnlyRequest) {
+      await deliveryStateUpdater('failed', err.message).catch(() => {});
+    }
     console.error('[Order Shipped Notification] Unexpected handler crash:', err);
     return NextResponse.json({ error: 'Internal server error', details: err.message }, { status: 500 });
   }

@@ -122,6 +122,7 @@ export default function OrderDetailPanel({
   onStatusChange,
   onTrackingChange,
   onResendCompletion,
+  onResendAccounting,
   agents = [],
   affiliates = [],
   isSuperadmin = false,
@@ -166,6 +167,7 @@ export default function OrderDetailPanel({
   const [savingAttribution, setSavingAttribution] = useState(false);
   const [attributionError, setAttributionError] = useState('');
   const [resendingCompletion, setResendingCompletion] = useState(false);
+  const [resendingAccounting, setResendingAccounting] = useState(false);
 
   useEffect(() => {
     if (!order) return;
@@ -819,6 +821,19 @@ export default function OrderDetailPanel({
                     style={{ fontSize: '.74rem', padding: '6px 9px' }}
                   >
                     {resendingCompletion ? 'Sending…' : 'Send / resend email'}
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-secondary"
+                    disabled={resendingAccounting}
+                    onClick={async () => {
+                      setResendingAccounting(true);
+                      await onResendAccounting?.(order);
+                      setResendingAccounting(false);
+                    }}
+                    style={{ fontSize: '.74rem', padding: '6px 9px' }}
+                  >
+                    {resendingAccounting ? 'Sending accounting…' : 'Resend accounting only'}
                   </button>
                 </span>
               </div>

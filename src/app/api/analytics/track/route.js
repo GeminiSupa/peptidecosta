@@ -3,16 +3,9 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { rateLimit } from '@/lib/rateLimit.mjs';
+import { allowedAnalyticsCorsOrigin, isAllowedAnalyticsOrigin } from '@/lib/analyticsOrigins.mjs';
 
 export const runtime = 'nodejs';
-
-const ALLOWED_ORIGINS = new Set([
-  'https://peptidescostarica.net',
-  'https://www.peptidescostarica.net',
-  'https://catalog.peptidescostarica.net',
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-]);
 
 const clean = (value, limit = 300) => String(value ?? '').trim().slice(0, limit);
 const cleanPath = (value) => {
@@ -23,7 +16,7 @@ const cleanEmail = (value) => clean(value, 200).toLowerCase();
 const cleanPhone = (value) => clean(value, 40).replace(/\D/g, '');
 
 function corsHeaders(origin) {
-  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : '';
+  const allowed = allowedAnalyticsCorsOrigin(origin);
   return {
     ...(allowed ? { 'Access-Control-Allow-Origin': allowed } : {}),
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -72,7 +65,7 @@ export function OPTIONS(request) {
 export async function POST(request) {
   const origin = request.headers.get('origin') || '';
   const headers = corsHeaders(origin);
-  if (origin && !ALLOWED_ORIGINS.has(origin)) {
+  if (origin && !isAllowedAnalyticsOrigin(origin)) {
     return NextResponse.json({ error: 'origin_not_allowed' }, { status: 403, headers });
   }
 
@@ -181,7 +174,7 @@ export async function POST(request) {
       }
     }
 
-    return NextResponse.json({ ok: true, knownCustomer }, { headers });
+    return NextResponse.json({ ok: true }, { headers });
   } catch (error) {
     console.error('[analytics/track]', error.message);
     return NextResponse.json({ error: 'analytics_write_failed' }, { status: 500, headers });

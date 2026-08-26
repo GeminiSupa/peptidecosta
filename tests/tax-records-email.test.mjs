@@ -44,6 +44,18 @@ test('the customer receipt never carries the accountant in CC', () => {
   assert.match(shippedRoute, /sendTaxRecordsCopy\(/);
 });
 
+test('completed orders have an accounting-only replay that does not require a customer email', () => {
+  const shippedRoute = fs.readFileSync('src/app/api/order-shipped-notification/route.js', 'utf8');
+  const adminPage = fs.readFileSync('src/app/admin/page.js', 'utf8');
+  const detailPanel = fs.readFileSync('src/components/admin/OrderDetailPanel.js', 'utf8');
+
+  assert.match(shippedRoute, /payload\?\.accountingOnly === true/);
+  assert.match(shippedRoute, /resolveTaxRecordsMailer\(/);
+  assert.doesNotMatch(shippedRoute, /if \(!order\.customer_email[\s\S]{0,200}return NextResponse/);
+  assert.match(adminPage, /accountingOnly: true/);
+  assert.match(detailPanel, /Resend accounting only/);
+});
+
 test('the accountant copy survives a failed customer send', async () => {
   // The failure the CC could not survive: a bad customer address took
   // accounting's copy of the sale with it.

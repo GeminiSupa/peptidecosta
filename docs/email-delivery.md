@@ -17,8 +17,47 @@ ORDER_SMTP_USER=<dedicated transactional SMTP user>
 ORDER_SMTP_PASS=<dedicated transactional SMTP key>
 ```
 
-The application refuses Rackspace, generic `SMTP_*`, campaign credentials, and
-an `ORDER_SMTP_USER` that matches `CAMPAIGN_SMTP_USER`.
+The application refuses Rackspace and generic `SMTP_*` for customer-facing
+transactional mail. A shared campaign identity is reported as unhealthy but is
+still used rather than silently dropping critical mail.
+
+## Accounting copies
+
+The PBAG mailbox is hosted by Rackspace. A message submitted through Elastic
+with `From: info@peptidescostarica.net` can be accepted by Elastic and then
+rejected by Rackspace as an external sender impersonating its local domain.
+
+Accounting copies stay on `ORDER_SMTP_*`; Elastic is always the primary sender.
+For this private copy, the application presents Elastic's external
+authenticated login in `From` rather than `info@peptidescostarica.net`. This
+keeps the proven Elastic delivery path while avoiding Rackspace's same-domain
+spoof rule. `TAX_RECORDS_FROM` can override that identity, but it must be a
+sender already verified for the Elastic transactional account.
+
+An optional Rackspace mailbox can be configured only as a retry path if Elastic
+rejects the submission. The existing Rackspace `SMTP_*` mailbox is also
+detected when `SMTP_HOST` ends in `emailsrvr.com`, but it never outranks Elastic.
+
+Optional fallback settings:
+
+```text
+TAX_RECORDS_SMTP_HOST=secure.emailsrvr.com
+TAX_RECORDS_SMTP_PORT=465
+TAX_RECORDS_SMTP_SECURE=true
+TAX_RECORDS_SMTP_USER=<authenticated Rackspace mailbox>
+TAX_RECORDS_SMTP_PASS=<Rackspace mailbox password>
+TAX_RECORDS_SMTP_FROM=Peptides Costa Rica Records <authenticated Rackspace mailbox>
+TAX_RECORDS_CC_EMAIL=pbagcr@peptidescostarica.net
+```
+
+`TAX_RECORDS_CC_EMAIL` may contain a comma-separated backup address. The live
+configuration is reported, with credentials masked, by
+`/api/admin/email-diagnostics?verify=1`.
+
+The order detail panel has two different recovery actions. **Send / resend
+email** sends the customer receipt and a new accounting copy. **Resend
+accounting only** sends only PBAG's private copy, so backfills never duplicate a
+customer receipt or a Trustpilot invitation.
 
 ## Marketing campaign pacing
 

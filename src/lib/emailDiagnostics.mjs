@@ -8,6 +8,8 @@
 // Nothing here returns a secret. Passwords are reported as a boolean, logins are
 // masked, and every other value shown is already visible in a mail header.
 
+import { getTaxRecordsSmtpConfig, taxRecordsFallbackFrom } from './taxRecordsSmtp.mjs';
+
 const status = (raw) => {
   if (raw === undefined || raw === null) return 'unset';
   return String(raw).trim() === '' ? 'EMPTY' : 'set';
@@ -79,17 +81,27 @@ const CAMPAIGN_KEYS = [
   'CAMPAIGN_SMTP_HOST', 'CAMPAIGN_SMTP_PORT', 'CAMPAIGN_SMTP_SECURE',
   'CAMPAIGN_SMTP_USER', 'CAMPAIGN_SMTP_PASS', 'CAMPAIGN_SMTP_FROM_EMAIL', 'CAMPAIGN_FROM',
 ];
+const ACCOUNTING_KEYS = [
+  'TAX_RECORDS_SMTP_HOST', 'TAX_RECORDS_SMTP_PORT', 'TAX_RECORDS_SMTP_SECURE',
+  'TAX_RECORDS_SMTP_USER', 'TAX_RECORDS_SMTP_PASS', 'TAX_RECORDS_SMTP_FROM',
+];
 const ADDRESSING_KEYS = [
   'ORDER_NOTIFICATION_FROM', 'ORDER_NOTIFICATION_FROM_EMAIL', 'ORDER_NOTIFICATION_TO',
-  'ORDER_NOTIFICATION_REPLY_TO', 'TAX_RECORDS_CC_EMAIL', 'LEAD_NOTIFICATION_TO',
+  'ORDER_NOTIFICATION_REPLY_TO', 'TAX_RECORDS_CC_EMAIL', 'TAX_RECORDS_FROM', 'LEAD_NOTIFICATION_TO',
 ];
 
 export function buildEmailDiagnostics({ env = process.env, transactional, campaign } = {}) {
   const user = transactional?.user || '';
   const from = resolveFromHeaders(env, user);
+  const accounting = getTaxRecordsSmtpConfig(env);
+  const accountingPrimaryFrom = taxRecordsFallbackFrom({
+    env,
+    fallbackFrom: from.orderCompleteReceipt,
+    fallbackUser: user,
+  });
 
   const envReport = {};
-  for (const key of [...TRANSACTIONAL_KEYS, ...CAMPAIGN_KEYS, ...ADDRESSING_KEYS]) {
+  for (const key of [...TRANSACTIONAL_KEYS, ...CAMPAIGN_KEYS, ...ACCOUNTING_KEYS, ...ADDRESSING_KEYS]) {
     envReport[key] = status(env[key]);
   }
 
@@ -106,7 +118,10 @@ export function buildEmailDiagnostics({ env = process.env, transactional, campai
   if (fromLeaksLogin(from.leadAlert, user)) {
     problems.push('Lead alerts are sent FROM the SMTP login, not info@ — set ORDER_NOTIFICATION_FROM.');
   }
-  const dirty = whitespaceWarning(env, [...TRANSACTIONAL_KEYS, ...CAMPAIGN_KEYS, ...ADDRESSING_KEYS]);
+  if (/@peptidescostarica\.net/i.test(accountingPrimaryFrom)) {
+    problems.push('Accounting uses Elastic Email but still presents a peptidescostarica.net From address to Rackspace. Set TAX_RECORDS_FROM to a verified external Elastic identity.');
+  }
+  const dirty = whitespaceWarning(env, [...TRANSACTIONAL_KEYS, ...CAMPAIGN_KEYS, ...ACCOUNTING_KEYS, ...ADDRESSING_KEYS]);
   if (dirty.length) {
     problems.push(`Value has leading/trailing whitespace: ${dirty.join(', ')}`);
   }
@@ -130,6 +145,20 @@ export function buildEmailDiagnostics({ env = process.env, transactional, campai
       port: campaign?.port ?? null,
       login: maskLogin(campaign?.user),
       passwordPresent: Boolean(campaign?.pass),
+    },
+    accounting: {
+      primaryProvider: transactional?.provider || 'Elastic Email',
+      primaryConfigured: Boolean(transactional?.configured),
+      primaryFrom: accountingPrimaryFrom || '(unset)',
+      fallbackConfigured: accounting.configured,
+      fallbackSource: accounting.source,
+      fallbackProvider: accounting.provider,
+      fallbackHost: accounting.host || '(unset)',
+      fallbackPort: accounting.port,
+      fallbackImplicitTls: accounting.secure,
+      fallbackLogin: maskLogin(accounting.user),
+      fallbackPasswordPresent: Boolean(accounting.pass),
+      fallbackFrom: accounting.from || '(unset)',
     },
     fromHeaders: from,
     accountingCc: read(env, 'TAX_RECORDS_CC_EMAIL') || 'pbagcr@peptidescostarica.net (default)',
