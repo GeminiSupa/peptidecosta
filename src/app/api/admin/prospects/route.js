@@ -23,6 +23,11 @@ import {
   channelPermissionFields,
   summarizeChannelPermissions,
 } from '@/lib/prospectPermissions.mjs';
+import {
+  CLOSED_PROSPECT_STATUSES,
+  applyProspectPipelineFilters,
+  parseProspectPipelineParams,
+} from '@/lib/prospectPipeline.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,9 +47,36 @@ const SELECT_FIELDS = [
 
 const missingTableResponse = () => NextResponse.json({
   prospects: [],
+  total: 0,
+  stats: { saved: 0, qualified: 0, due: 0, ready: 0, unassignedStrong: 0, needsVerification: 0 },
   setupRequired: true,
   migration: 'prospector-migration.sql',
 });
+
+async function loadPipelineStats(supabase, nowIso) {
+  const count = (mode = 'exact') => supabase.from('sales_prospects').select('id', { count: mode, head: true });
+  const active = (query) => query.not('status', 'in', `(${CLOSED_PROSPECT_STATUSES.join(',')})`);
+  const [saved, qualified, due, ready, unassignedStrong, needsVerification] = await Promise.all([
+    count(),
+    count().eq('status', 'qualified'),
+    active(count()).lte('next_follow_up_at', nowIso),
+    active(count('planned')).or('and(email.not.is.null,email_permission_status.in.(business_contact,consented)),and(phone.not.is.null,whatsapp_permission_status.in.(business_contact,consented)),and(whatsapp_numbers.neq.[],whatsapp_permission_status.in.(business_contact,consented))'),
+    active(count()).is('owner_email', null).gte('fit_score', 70),
+    active(count('planned')).or('and(email.not.is.null,email_permission_status.eq.unknown),and(phone.not.is.null,whatsapp_permission_status.eq.unknown),and(whatsapp_numbers.neq.[],whatsapp_permission_status.eq.unknown)'),
+  ]);
+  const named = { saved, qualified, due, ready, unassignedStrong, needsVerification };
+  for (const [name, result] of Object.entries(named)) {
+    if (result.error) console.error(`[Prospects] ${name} count failed:`, result.error.message);
+  }
+  return {
+    saved: saved.error ? null : saved.count || 0,
+    qualified: qualified.error ? null : qualified.count || 0,
+    due: due.error ? null : due.count || 0,
+    ready: ready.error ? null : ready.count || 0,
+    unassignedStrong: unassignedStrong.error ? null : unassignedStrong.count || 0,
+    needsVerification: needsVerification.error ? null : needsVerification.count || 0,
+  };
+}
 
 function channelPermissionUpdates(channel, input, auth, verifiedAt) {
   const fields = channelPermissionFields(channel);
@@ -92,14 +124,22 @@ export async function GET(request) {
   if (auth.error) return auth.error;
 
   const params = new URL(request.url).searchParams;
-  const offset = Math.max(0, Math.floor(Number(params.get('offset')) || 0));
-  const limit = Math.max(1, Math.min(1000, Math.floor(Number(params.get('limit')) || 1000)));
+  const filters = parseProspectPipelineParams(params);
+  const currentEmail = normalizeProspectOwnerEmail(auth.profile?.email || auth.user?.email);
+  const nowIso = new Date().toISOString();
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
+  const baseQuery = supabase
     .from('sales_prospects')
-    .select(SELECT_FIELDS)
-    .order('updated_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+    .select(SELECT_FIELDS, { count: 'exact' });
+  const listQuery = applyProspectPipelineFilters(baseQuery, filters, currentEmail, nowIso)
+    .range(filters.offset, filters.offset + filters.limit - 1);
+  const [{ data, error, count }, statsResult] = await Promise.all([
+    listQuery,
+    loadPipelineStats(supabase, nowIso).catch((statsError) => {
+      console.error('[Prospects] Stats failed:', statsError.message);
+      return null;
+    }),
+  ]);
 
   if (isProspectsTableMissing(error)) return missingTableResponse();
   if (error) {
@@ -109,9 +149,11 @@ export async function GET(request) {
 
   return NextResponse.json({
     prospects: (data || []).map(presentProspect),
+    total: count || 0,
+    stats: statsResult ? { ...statsResult, saved: statsResult.saved ?? count ?? 0 } : { saved: count || 0 },
     setupRequired: false,
-    hasMore: (data || []).length === limit,
-    nextOffset: offset + (data || []).length,
+    hasMore: filters.offset + (data || []).length < (count || 0),
+    nextOffset: filters.offset + (data || []).length,
   });
 }
 

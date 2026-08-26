@@ -25,5 +25,6 @@ test('Prospector panes and touch gestures retain independent scrolling', () => {
   assert.match(styles, /\.pmap \{[^}]*touch-action:pan-y pinch-zoom;/);
   assert.match(styles, /@media\(max-width:760px\)[\s\S]*\.prospector-result-list \{ max-height:46dvh; \}/);
   assert.match(styles, /\.prospector-tabs \{[^}]*overflow-x:auto;/);
-  assert.match(styles, /@media\(max-width:760px\)[\s\S]*\.prospector-stats \{ grid-template-columns:repeat\(3,minmax\(0,1fr\)\);/);
+  assert.match(styles, /@media\(max-width:760px\)[\s\S]*\.prospector-stats \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\);/);
+  assert.match(styles, /@media\(max-width:760px\)[\s\S]*\.prospector-pipeline-columns \{ display:none; \}/);
 });
