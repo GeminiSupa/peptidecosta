@@ -246,11 +246,7 @@ export async function POST(request) {
         pass: smtp.pass,
       }
     }) : null;
-    const accountingMailer = resolveTaxRecordsMailer({
-      fallbackTransporter: transporter,
-      fallbackFrom: notificationFrom,
-      fallbackUser: smtp.user,
-    });
+    const accountingMailer = resolveTaxRecordsMailer();
 
     const customerSubject = orderLang === 'en'
       ? `Your Order ${order.order_number || ''} has Shipped! - Peptides Costa Rica`
@@ -364,10 +360,9 @@ export async function POST(request) {
       }
     }
 
-    // PBAG is a Rackspace mailbox, but Elastic stays the primary sender. The
-    // resolver presents Elastic's external authenticated identity in From so
-    // Rackspace does not see a same-domain impersonation; a Rackspace mailbox,
-    // when configured, is retry-only.
+    // PBAG is a Rackspace mailbox, so its configured accounting/Rackspace SMTP
+    // is primary. Elastic acceptance does not prove final delivery to PBAG and
+    // must not hide an accounting-mailbox failure.
     const taxCopy = await sendTaxRecordsCopy({
       transporter: accountingMailer.transporter,
       from: accountingMailer.from,

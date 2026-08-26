@@ -8,7 +8,7 @@
 // Nothing here returns a secret. Passwords are reported as a boolean, logins are
 // masked, and every other value shown is already visible in a mail header.
 
-import { getTaxRecordsSmtpConfig, taxRecordsFallbackFrom } from './taxRecordsSmtp.mjs';
+import { getTaxRecordsSmtpConfig } from './taxRecordsSmtp.mjs';
 
 const status = (raw) => {
   if (raw === undefined || raw === null) return 'unset';
@@ -87,18 +87,13 @@ const ACCOUNTING_KEYS = [
 ];
 const ADDRESSING_KEYS = [
   'ORDER_NOTIFICATION_FROM', 'ORDER_NOTIFICATION_FROM_EMAIL', 'ORDER_NOTIFICATION_TO',
-  'ORDER_NOTIFICATION_REPLY_TO', 'TAX_RECORDS_CC_EMAIL', 'TAX_RECORDS_FROM', 'LEAD_NOTIFICATION_TO',
+  'ORDER_NOTIFICATION_REPLY_TO', 'TAX_RECORDS_CC_EMAIL', 'LEAD_NOTIFICATION_TO',
 ];
 
 export function buildEmailDiagnostics({ env = process.env, transactional, campaign } = {}) {
   const user = transactional?.user || '';
   const from = resolveFromHeaders(env, user);
   const accounting = getTaxRecordsSmtpConfig(env);
-  const accountingPrimaryFrom = taxRecordsFallbackFrom({
-    env,
-    fallbackFrom: from.orderCompleteReceipt,
-    fallbackUser: user,
-  });
 
   const envReport = {};
   for (const key of [...TRANSACTIONAL_KEYS, ...CAMPAIGN_KEYS, ...ACCOUNTING_KEYS, ...ADDRESSING_KEYS]) {
@@ -118,8 +113,8 @@ export function buildEmailDiagnostics({ env = process.env, transactional, campai
   if (fromLeaksLogin(from.leadAlert, user)) {
     problems.push('Lead alerts are sent FROM the SMTP login, not info@ — set ORDER_NOTIFICATION_FROM.');
   }
-  if (/@peptidescostarica\.net/i.test(accountingPrimaryFrom)) {
-    problems.push('Accounting uses Elastic Email but still presents a peptidescostarica.net From address to Rackspace. Set TAX_RECORDS_FROM to a verified external Elastic identity.');
+  if (!accounting.configured) {
+    problems.push('Accounting SMTP is NOT configured — PBAG copies are skipped instead of being falsely reported as delivered through Elastic.');
   }
   const dirty = whitespaceWarning(env, [...TRANSACTIONAL_KEYS, ...CAMPAIGN_KEYS, ...ACCOUNTING_KEYS, ...ADDRESSING_KEYS]);
   if (dirty.length) {
@@ -147,18 +142,15 @@ export function buildEmailDiagnostics({ env = process.env, transactional, campai
       passwordPresent: Boolean(campaign?.pass),
     },
     accounting: {
-      primaryProvider: transactional?.provider || 'Elastic Email',
-      primaryConfigured: Boolean(transactional?.configured),
-      primaryFrom: accountingPrimaryFrom || '(unset)',
-      fallbackConfigured: accounting.configured,
-      fallbackSource: accounting.source,
-      fallbackProvider: accounting.provider,
-      fallbackHost: accounting.host || '(unset)',
-      fallbackPort: accounting.port,
-      fallbackImplicitTls: accounting.secure,
-      fallbackLogin: maskLogin(accounting.user),
-      fallbackPasswordPresent: Boolean(accounting.pass),
-      fallbackFrom: accounting.from || '(unset)',
+      primaryConfigured: accounting.configured,
+      primarySource: accounting.source,
+      primaryProvider: accounting.provider,
+      primaryHost: accounting.host || '(unset)',
+      primaryPort: accounting.port,
+      primaryImplicitTls: accounting.secure,
+      primaryLogin: maskLogin(accounting.user),
+      primaryPasswordPresent: Boolean(accounting.pass),
+      primaryFrom: accounting.from || '(unset)',
     },
     fromHeaders: from,
     accountingCc: read(env, 'TAX_RECORDS_CC_EMAIL') || 'pbagcr@peptidescostarica.net (default)',

@@ -21,18 +21,9 @@ export const TAX_RECORDS_CC_EMAIL =
 /**
  * Every address that should receive the accounting copy.
  *
- * TAX_RECORDS_CC_EMAIL accepts a comma-separated list, because pbagcr@ is
- * currently unreachable: mail leaves through Elastic carrying
- * From: info@peptidescostarica.net, and Rackspace refuses its own domain from
- * an external sender. Nothing lands in Spam — it is rejected at the door, and
- * the last copy that arrived was 11 Aug, the day before sending moved off
- * Rackspace.
- *
- * That block can only be lifted by Rackspace. Until it is, adding a second
- * address on a provider that does accept the mail (a Gmail was proven to arrive
- * from the same send) means the tax records keep flowing instead of piling up
- * undelivered. Both addresses get the same message, so nothing has to be
- * re-sent once pbagcr@ is unblocked.
+ * TAX_RECORDS_CC_EMAIL accepts a comma-separated list when the business needs
+ * more than one private accounting recipient. Accounting mail is sent through
+ * its own SMTP transport, independently from the customer's receipt.
  */
 export function taxRecordsRecipients(value = process.env.TAX_RECORDS_CC_EMAIL) {
   const configured = String(value || '')
@@ -41,19 +32,6 @@ export function taxRecordsRecipients(value = process.env.TAX_RECORDS_CC_EMAIL) {
     .filter(Boolean);
 
   return configured.length > 0 ? configured : ['pbagcr@peptidescostarica.net'];
-}
-
-/**
- * From address for the accounting copy only.
- *
- * Separate from the customer receipt's sender on purpose. The rejection is
- * triggered by the From domain, so pointing just this message at a sender
- * Rackspace treats as ordinary external mail can get it delivered without
- * touching what customers see. Defaults to the caller's usual From, so setting
- * nothing changes nothing.
- */
-export function taxRecordsFrom(fallbackFrom) {
-  return String(process.env.TAX_RECORDS_FROM || '').trim() || fallbackFrom;
 }
 
 /**
@@ -147,7 +125,7 @@ async function dispatchTaxRecordsCopy({ transporter, from, message, logPrefix })
     return { sent: false, error: 'no transporter' };
   }
 
-  const sender = taxRecordsFrom(from);
+  const sender = String(from || '').trim();
 
   try {
     const info = await transporter.sendMail({ ...message, from: sender });

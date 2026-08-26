@@ -9,7 +9,6 @@ import {
   isCompletedOrderStatus,
   sendTaxRecordsCopy,
   sendTaxRecordsPayoutCopy,
-  taxRecordsFrom,
   taxRecordsRecipients,
   withTaxRecordsCc,
 } from '../src/lib/taxRecordsEmail.mjs';
@@ -170,29 +169,14 @@ test('the accounting copy can reach more than one mailbox', async () => {
   }
 });
 
-test('the accounting copy can be sent from a different address than the receipt', async () => {
-  // The rejection is triggered by the From domain, so this message can be
-  // pointed at a sender Rackspace treats as ordinary external mail without
-  // changing anything a customer sees.
-  const previous = process.env.TAX_RECORDS_FROM;
-
-  try {
-    assert.equal(taxRecordsFrom('Shop <info@peptidescostarica.net>'), 'Shop <info@peptidescostarica.net>');
-
-    process.env.TAX_RECORDS_FROM = 'Records <records@mail.example.net>';
-    assert.equal(taxRecordsFrom('Shop <info@peptidescostarica.net>'), 'Records <records@mail.example.net>');
-
-    const sent = [];
-    await sendTaxRecordsCopy({
-      transporter: { sendMail: async (m) => { sent.push(m); return { messageId: 'x' }; } },
-      from: 'Shop <info@peptidescostarica.net>',
-      order: { status: 'Order Complete', order_number: 'PCR-5' },
-    });
-    assert.equal(sent[0].from, 'Records <records@mail.example.net>');
-  } finally {
-    if (previous === undefined) delete process.env.TAX_RECORDS_FROM;
-    else process.env.TAX_RECORDS_FROM = previous;
-  }
+test('the accounting copy uses the sender selected by its SMTP resolver', async () => {
+  const sent = [];
+  await sendTaxRecordsCopy({
+    transporter: { sendMail: async (m) => { sent.push(m); return { messageId: 'x' }; } },
+    from: 'Records <records@mail.example.net>',
+    order: { status: 'Order Complete', order_number: 'PCR-5' },
+  });
+  assert.equal(sent[0].from, 'Records <records@mail.example.net>');
 });
 
 test('an approved payout copy names the payee and the period', () => {

@@ -305,11 +305,7 @@ export async function POST(request) {
       // Outside the customer try/catch on purpose — accounting's copy of a
       // completed sale must go out whether or not the customer's own receipt
       // did. Never throws, so it cannot break this route either.
-      const accountingMailer = resolveTaxRecordsMailer({
-        fallbackTransporter: transporter,
-        fallbackFrom: smtp.from,
-        fallbackUser: smtp.user,
-      });
+      const accountingMailer = resolveTaxRecordsMailer();
       results.accountingCopy = await sendTaxRecordsCopy({
         transporter: accountingMailer.transporter,
         from: accountingMailer.from,

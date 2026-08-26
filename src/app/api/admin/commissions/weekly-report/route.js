@@ -195,11 +195,7 @@ export async function GET(request) {
         pass: SMTP_PASS,
       }
     }) : null;
-    const accountingMailer = resolveTaxRecordsMailer({
-      fallbackTransporter: transporter,
-      fallbackFrom: NOTIFICATION_FROM,
-      fallbackUser: SMTP_USER,
-    });
+    const accountingMailer = resolveTaxRecordsMailer();
 
     // 5. Calculate weekly gross sales and commissions for each agent
     // First, get all already approved payout orders so we don't double count.

@@ -27,18 +27,16 @@ The PBAG mailbox is hosted by Rackspace. A message submitted through Elastic
 with `From: info@peptidescostarica.net` can be accepted by Elastic and then
 rejected by Rackspace as an external sender impersonating its local domain.
 
-Accounting copies stay on `ORDER_SMTP_*`; Elastic is always the primary sender.
-For this private copy, the application presents Elastic's external
-authenticated login in `From` rather than `info@peptidescostarica.net`. This
-keeps the proven Elastic delivery path while avoiding Rackspace's same-domain
-spoof rule. `TAX_RECORDS_FROM` can override that identity, but it must be a
-sender already verified for the Elastic transactional account.
+Accounting copies use a dedicated Rackspace/accounting SMTP mailbox as their
+primary transport. Elastic acceptance is not treated as proof that Rackspace
+delivered the message. If the accounting mailbox rejects a send, the failure is
+reported and is not hidden by retrying through Elastic. If accounting SMTP is
+missing, PBAG copies are skipped and reported as failed rather than submitted
+to the known-unreliable path.
 
-An optional Rackspace mailbox can be configured only as a retry path if Elastic
-rejects the submission. The existing Rackspace `SMTP_*` mailbox is also
-detected when `SMTP_HOST` ends in `emailsrvr.com`, but it never outranks Elastic.
-
-Optional fallback settings:
+The existing Rackspace `SMTP_*` mailbox is detected when `SMTP_HOST` ends in
+`emailsrvr.com`. Prefer the dedicated settings below so accounting mail is
+isolated from other application mail:
 
 ```text
 TAX_RECORDS_SMTP_HOST=secure.emailsrvr.com

@@ -108,11 +108,7 @@ export async function POST(request) {
         // Outside the affiliate try/catch on purpose — an approved payout is an
         // expense accounting has to record whether or not the affiliate's own
         // invoice reached them. Never throws.
-        const accountingMailer = resolveTaxRecordsMailer({
-          fallbackTransporter: transporter,
-          fallbackFrom: notificationFrom,
-          fallbackUser: smtp.user,
-        });
+        const accountingMailer = resolveTaxRecordsMailer();
         accountingCopy = await sendTaxRecordsPayoutCopy({
           transporter: accountingMailer.transporter,
           from: accountingMailer.from,

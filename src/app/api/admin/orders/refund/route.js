@@ -6,7 +6,8 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { agentMatchKeys } from '@/lib/agentOrders';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
-import { taxRecordsFrom, taxRecordsRecipients } from '@/lib/taxRecordsEmail.mjs';
+import { taxRecordsRecipients } from '@/lib/taxRecordsEmail.mjs';
+import { resolveTaxRecordsMailer } from '@/lib/taxRecordsSmtp.mjs';
 import { stripOwnerAddress, ORDER_NOTIFICATION_OWNER_BCC } from '@/lib/orderEmailAddressing.mjs';
 import { restoreInventoryForOrder, restoreSelectedQuantities } from '@/lib/inventoryRestoreServer';
 import { planPartialRestock } from '@/lib/inventoryRestore.mjs';
@@ -341,11 +342,13 @@ export async function POST(request) {
 
     // 3. The accountant, on their own message.
     const accountantMail = buildAccountantRefundEmail({ order: updated, plan });
-    await send(transporter, {
-      from: taxRecordsFrom(from),
+    const accountingMailer = resolveTaxRecordsMailer();
+    await send(accountingMailer.transporter, {
+      from: accountingMailer.from,
       to: taxRecordsRecipients().join(', '),
       ...accountantMail,
     }, 'accountant', emails);
+    emails.accountant.transport = accountingMailer.source;
 
     console.log(`[admin/orders/refund] ${order.order_number}: ${plan.status} ${plan.refundUsd} USD by ${actor}`);
 

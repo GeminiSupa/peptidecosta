@@ -57,7 +57,7 @@ export async function GET(request) {
 
     const accounting = getTaxRecordsSmtpConfig();
     if (!accounting.configured) {
-      report.accountingFallbackSmtpLogin = { attempted: false, reason: 'Optional accounting fallback SMTP is not configured; Elastic remains the primary sender.' };
+      report.accountingSmtpLogin = { attempted: false, reason: 'Accounting SMTP is not configured; PBAG copies are disabled.' };
     } else {
       try {
         const accountingTransporter = nodemailer.createTransport({
@@ -68,9 +68,11 @@ export async function GET(request) {
           ...SMTP_TIMEOUTS,
         });
         await accountingTransporter.verify();
-        report.accountingFallbackSmtpLogin = { attempted: true, ok: true, source: accounting.source };
+        report.accountingSmtpLogin = { attempted: true, ok: true, source: accounting.source };
       } catch (err) {
-        report.accountingFallbackSmtpLogin = { attempted: true, ok: false, source: accounting.source, error: err.message };
+        report.accountingSmtpLogin = { attempted: true, ok: false, source: accounting.source, error: err.message };
+        report.problems.push(`Accounting SMTP login failed: ${err.message}`);
+        report.healthy = false;
       }
     }
   }

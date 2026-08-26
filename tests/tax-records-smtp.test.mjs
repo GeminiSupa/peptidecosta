@@ -5,7 +5,6 @@ import {
   getTaxRecordsSmtpConfig,
   isRackspaceMailHost,
   resolveTaxRecordsMailer,
-  taxRecordsFallbackFrom,
 } from '../src/lib/taxRecordsSmtp.mjs';
 
 test('recognises Rackspace hosts without accepting lookalike domains', () => {
@@ -65,8 +64,14 @@ test('an explicit accounting transport wins over the legacy mailbox', () => {
   assert.equal(config.from, 'Records Desk <records@example.net>');
 });
 
-test('Elastic remains primary while Rackspace is prepared only as fallback', async () => {
-  const fallbackTransporter = { sendMail: async () => ({ messageId: 'elastic' }) };
+test('Rackspace is primary whenever an accounting mailbox is configured', async () => {
+  let elasticCalls = 0;
+  const fallbackTransporter = {
+    sendMail: async () => {
+      elasticCalls += 1;
+      return { messageId: 'elastic' };
+    },
+  };
   const created = [];
   const rackspace = resolveTaxRecordsMailer({
     fallbackTransporter,
@@ -83,58 +88,37 @@ test('Elastic remains primary while Rackspace is prepared only as fallback', asy
     },
   });
 
-  assert.equal((await rackspace.transporter.sendMail({})).messageId, 'elastic');
-  assert.equal(rackspace.source, 'transactional-external-identity-with-rackspace-local-mailbox-fallback');
+  assert.equal((await rackspace.transporter.sendMail({})).messageId, 'rackspace');
+  assert.equal(elasticCalls, 0);
+  assert.equal(rackspace.from, 'Peptides Costa Rica Records <info@peptidescostarica.net>');
+  assert.equal(rackspace.source, 'rackspace-local-mailbox');
   assert.equal(created.length, 1);
   assert.deepEqual(created[0].auth, {
     user: 'info@peptidescostarica.net',
     pass: 'secret',
   });
 
-  const fallback = resolveTaxRecordsMailer({
+  const unconfigured = resolveTaxRecordsMailer({
     fallbackTransporter,
     fallbackFrom: 'Shop <info@peptidescostarica.net>',
     env: {},
     createTransport: () => assert.fail('must not create an unconfigured transport'),
   });
 
-  assert.equal(fallback.transporter, fallbackTransporter);
-  assert.equal(fallback.from, 'Shop <info@peptidescostarica.net>');
-  assert.equal(fallback.source, 'transactional-fallback');
+  assert.equal(unconfigured.transporter, null);
+  assert.equal(unconfigured.from, '');
+  assert.equal(unconfigured.source, 'unconfigured');
+  assert.equal(unconfigured.configured, false);
 });
 
-test('Elastic fallback uses its external authenticated identity, never a spoofed Gmail address', () => {
-  assert.equal(
-    taxRecordsFallbackFrom({
-      env: {},
-      fallbackFrom: 'Shop <info@peptidescostarica.net>',
-      fallbackUser: 'transactional@managedcloudhostingemail.com',
-    }),
-    'Peptides Costa Rica Records <transactional@managedcloudhostingemail.com>',
-  );
-  assert.equal(
-    taxRecordsFallbackFrom({
-      env: {},
-      fallbackFrom: 'Shop <info@peptidescostarica.net>',
-      fallbackUser: 'info@peptidescostarica.net',
-    }),
-    'Shop <info@peptidescostarica.net>',
-  );
-  assert.equal(
-    taxRecordsFallbackFrom({
-      env: { TAX_RECORDS_FROM: 'Records <verified@another-business-domain.test>' },
-      fallbackFrom: 'Shop <info@peptidescostarica.net>',
-      fallbackUser: 'transactional@managedcloudhostingemail.com',
-    }),
-    'Records <verified@another-business-domain.test>',
-  );
-});
-
-test('an Elastic submission failure retries once through Rackspace', async () => {
-  const rackspaceMessages = [];
+test('an accounting SMTP failure is surfaced and never hidden by Elastic', async () => {
+  let elasticCalls = 0;
   const resolved = resolveTaxRecordsMailer({
     fallbackTransporter: {
-      sendMail: async () => { throw new Error('421 Elastic temporarily unavailable'); },
+      sendMail: async () => {
+        elasticCalls += 1;
+        return { messageId: 'elastic-accepted' };
+      },
     },
     fallbackFrom: 'Shop <info@peptidescostarica.net>',
     fallbackUser: 'transactional@managedcloudhostingemail.com',
@@ -145,22 +129,16 @@ test('an Elastic submission failure retries once through Rackspace', async () =>
       SMTP_PASS: 'stale-secret',
     },
     createTransport: () => ({
-      sendMail: async (message) => {
-        rackspaceMessages.push(message);
-        return { messageId: 'rackspace-retry' };
-      },
+      sendMail: async () => { throw new Error('535 Rackspace authentication failed'); },
     }),
   });
 
-  const result = await resolved.transporter.sendMail({
-    from: resolved.from,
-    to: 'pbagcr@peptidescostarica.net',
-  });
-
-  assert.equal(result.messageId, 'rackspace-retry');
-  assert.equal(rackspaceMessages.length, 1);
-  assert.equal(
-    rackspaceMessages[0].from,
-    'Peptides Costa Rica Records <info@peptidescostarica.net>',
+  await assert.rejects(
+    resolved.transporter.sendMail({
+      from: resolved.from,
+      to: 'pbagcr@peptidescostarica.net',
+    }),
+    /Rackspace authentication failed/,
   );
+  assert.equal(elasticCalls, 0);
 });
