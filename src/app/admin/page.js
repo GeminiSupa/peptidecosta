@@ -390,6 +390,8 @@ export default function AdminPage() {
   const [cartFilterValue, setCartFilterValue] = useState('all');
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [refreshingOrders, setRefreshingOrders] = useState(false);
+  const [ordersRefreshError, setOrdersRefreshError] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [highlightedProductId, setHighlightedProductId] = useState(null);
   const [loadingAbandonedCarts, setLoadingAbandonedCarts] = useState(true);
@@ -1968,6 +1970,45 @@ Core Rules:
     setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
     // Only refresh the open detail panel — don't auto-open it on list status changes
     setSelectedOrderDetails((prev) => (prev?.id === updated.id ? updated : prev));
+  };
+
+  // Re-read just the orders table.
+  //
+  // The full page loader also pulls products, carts, agents and WhatsApp, so
+  // reloading the browser tab to see a colleague's new order costs several
+  // seconds and loses scroll position and filters. This refetches orders alone
+  // and leaves the rest of the screen untouched.
+  const refreshOrders = async () => {
+    if (!isSupabaseConfigured || !supabase || refreshingOrders) return;
+    setRefreshingOrders(true);
+    try {
+      // Same paging as the initial load: Supabase caps a select at 1000 rows,
+      // and the ledger is already past that.
+      const step = 1000;
+      let rows = [];
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(from, from + step - 1);
+        if (error) throw new Error(error.message);
+        if (!data || data.length === 0) break;
+        rows = rows.concat(data);
+        if (data.length < step) break;
+        from += step;
+      }
+      setOrders(rows);
+      // Keep an open detail panel showing the row that was just re-read.
+      setSelectedOrderDetails((prev) => (prev ? rows.find((o) => o.id === prev.id) || prev : prev));
+    } catch (err) {
+      console.error('Could not refresh orders:', err);
+      setOrdersRefreshError('Orders could not be refreshed. Check your connection and try again.');
+      setTimeout(() => setOrdersRefreshError(''), 6000);
+    } finally {
+      setRefreshingOrders(false);
+    }
   };
 
   const handleManualOrderCreated = (order) => {
@@ -5189,6 +5230,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             orders={orders}
             setExportModalType={setExportModalType}
             loadingOrders={loadingOrders}
+            onRefreshOrders={refreshOrders}
+            refreshingOrders={refreshingOrders}
+            ordersRefreshError={ordersRefreshError}
             handleOrderStatusUpdate={handleOrderStatusUpdate}
             handleOrderSalesAgentUpdate={handleOrderSalesAgentUpdate}
             setSelectedOrderDetails={setSelectedOrderDetails}

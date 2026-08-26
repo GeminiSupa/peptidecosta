@@ -1,5 +1,5 @@
 import React, { useDeferredValue, useMemo, useState } from 'react';
-import { Database, Download, MessageCircle, Plus, Trash2 } from 'lucide-react';
+import { Database, Download, MessageCircle, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { getAdminVolumeDiscountPct } from '@/lib/adminOrderTotals.mjs';
 import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
 import { formatCrDate } from '@/lib/crTime.mjs';
@@ -230,7 +230,10 @@ export default function OrdersManager({
   agents,
   formatCustomerIdType,
   loggedInEmailRef,
-  currentAgentName
+  currentAgentName,
+  onRefreshOrders,
+  refreshingOrders = false,
+  ordersRefreshError = ''
 }) {
   // These four only ever drove this table. Holding them in the 7,900-line admin
   // page meant every keystroke re-rendered the whole dashboard; owning them here
@@ -388,6 +391,24 @@ export default function OrdersManager({
           </div>
         </div>
         <div className="admin-toolbar-actions">
+          {/* Reloads this table only. Reloading the browser tab pulls products,
+              carts, agents and WhatsApp too, and loses the current search. */}
+          {onRefreshOrders && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary"
+              onClick={onRefreshOrders}
+              disabled={refreshingOrders}
+              title="Reload the orders list without reloading the page"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <RefreshCw
+                size={14}
+                style={refreshingOrders ? { animation: 'spin 0.8s linear infinite' } : undefined}
+              />
+              {refreshingOrders ? 'Refreshing…' : 'Refresh'}
+            </button>
+          )}
           <button
             type="button"
             className="admin-btn admin-btn-secondary"
@@ -409,6 +430,19 @@ export default function OrdersManager({
           )}
         </div>
       </div>
+
+      {ordersRefreshError && (
+        <div
+          role="status"
+          style={{
+            margin: '0 0 12px 0', padding: '10px 14px', borderRadius: '8px',
+            background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)',
+            color: '#fca5a5', fontSize: '0.82rem', fontWeight: 600,
+          }}
+        >
+          {ordersRefreshError}
+        </div>
+      )}
 
       {loadingOrders ? (
         <div className="loader">

@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Copy, Phone, Plus, Trash2, BadgePercent } from 'lucide-react';
 import { formatActivityType } from '@/lib/orderActivity';
+import { formatCrInstant } from '@/lib/crTime.mjs';
 import { adminFetch } from '@/lib/adminApi';
 import ProductCombobox from './ProductCombobox';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
@@ -21,6 +22,23 @@ import {
   getAdminShippingCosts,
   normalizeAdminOrderCurrency,
 } from '@/lib/adminOrderTotals.mjs';
+
+/**
+ * When the order was marked complete, or null if it never was.
+ *
+ * Deliberately does not fall back to created_at the way the dashboard's
+ * orderCompletedAtMs does: this feeds a label the team reads next to the placed
+ * date, and showing the two as identical would claim a completion that never
+ * happened. The earliest event wins, so a re-completion cannot move the date.
+ */
+function orderCompletedAt(order) {
+  const completions = (Array.isArray(order?.activity_log) ? order.activity_log : [])
+    .filter((entry) => entry?.type === 'status_change' && /complet/i.test(String(entry?.message || '')))
+    .map((entry) => entry?.at)
+    .filter(Boolean)
+    .sort();
+  return completions[0] || null;
+}
 
 const ORDER_STATUS_OPTIONS = [
   'Pending',
@@ -660,7 +678,15 @@ export default function OrderDetailPanel({
                   : '—'}
               </span>
             </div>
-            <div><label>Ordered</label><span>{new Date(order.created_at).toLocaleString()}</span></div>
+            {/* Both dates, in Costa Rica time. The team is spread across
+                timezones, and the accounting copy goes out on the completed
+                date, not the placed one — reading the reader's own clock here
+                is what made an order look a day out from the mailbox. */}
+            <div><label>Placed</label><span>{formatCrInstant(order.created_at)}</span></div>
+            <div>
+              <label>Completed</label>
+              <span>{orderCompletedAt(order) ? formatCrInstant(orderCompletedAt(order)) : '—'}</span>
+            </div>
           </div>
           <div style={{ marginTop: '10px' }}>
             <label>Address</label>
