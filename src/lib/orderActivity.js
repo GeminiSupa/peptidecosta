@@ -22,6 +22,7 @@ export function formatActivityType(type) {
     manual_discount_applied: 'Order discount applied',
     manual_discount_removed: 'Order discount removed',
     payment_method_change: 'Payment method changed',
+    email: 'Email',
   };
   return labels[type] || type;
 }

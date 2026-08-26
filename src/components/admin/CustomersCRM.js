@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
+import { formatCrInstant } from '@/lib/crTime.mjs';
 import { adminFetch } from '@/lib/adminApi';
 import {
   buildAgentHistory,
@@ -121,9 +122,7 @@ const getCustomerTags = (cust) => {
 
 const formatTimelineDate = (value) => {
   if (!value) return 'No date';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'No date';
-  return date.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  return formatCrInstant(value) || 'No date';
 };
 
 // Contacts we have no name for carry a placeholder label so the table has
@@ -2088,7 +2087,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
                     <div key={`${item.type}-${item.date}-${index}`} className="crm-timeline-row" style={{ display: 'flex', gap: '10px' }}>
                       <span className="crm-timeline-dot" />
                       <div>
-                        <div style={{ color: '#e2e8f0', fontWeight: 800, fontSize: '0.82rem' }}>{item.title}</div>
+                        <div style={{ color: item.metadata?.ok === false ? '#f87171' : '#e2e8f0', fontWeight: 800, fontSize: '0.82rem' }}>{item.title}</div>
                         <div style={{ color: '#94a3b8', fontSize: '0.76rem', marginTop: '3px' }}>{formatTimelineDate(item.date)} | {item.type}</div>
                         {item.description && (
                           <div style={{ color: '#64748b', fontSize: '0.77rem', marginTop: '4px', lineHeight: 1.45 }}>{item.description}</div>

@@ -6,6 +6,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { sendTaxRecordsCopy } from '@/lib/taxRecordsEmail.mjs';
 import { resolveTaxRecordsMailer } from '@/lib/taxRecordsSmtp.mjs';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
+import { orderEmailActivity, recordOrderEmails } from '@/lib/orderEmailLog.mjs';
 import { withBacGiftLines } from '@/lib/bacWater.mjs';
 import { CORREOS_TRACKING_URL, correosTrackingStrings, hasTrackingNumber } from '@/lib/correosTracking.mjs';
 
@@ -403,6 +404,30 @@ export async function POST(request) {
         customerInfo ? new Date().toISOString() : undefined,
       );
     }
+
+    // An accounting-only resend leaves completion_notification_* alone, because
+    // that field describes the customer's receipt and this send never touched
+    // it. That is why those resends used to vanish without trace. They are
+    // recorded here instead, on the order's own activity log.
+    await recordOrderEmails(
+      supabase,
+      { id: order.id, order_number: order.order_number },
+      [
+        shouldSendCustomer ? orderEmailActivity({
+          kind: 'completion-receipt',
+          to: order.customer_email,
+          sent: Boolean(customerInfo),
+          error: customerError,
+        }) : null,
+        taxCopy?.skipped ? null : orderEmailActivity({
+          kind: 'accounting-copy',
+          to: taxCopy?.to,
+          sent: Boolean(taxCopy?.sent),
+          error: taxCopy?.error,
+        }),
+      ],
+      '[Order Shipped Notification]',
+    );
 
     const requestSucceeded = accountingOnly
       ? Boolean(taxCopy?.sent)

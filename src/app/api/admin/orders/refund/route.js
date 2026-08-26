@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
+import { orderEmailActivity, recordOrderEmails } from '@/lib/orderEmailLog.mjs';
 import { agentMatchKeys } from '@/lib/agentOrders';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { taxRecordsRecipients } from '@/lib/taxRecordsEmail.mjs';
@@ -349,6 +350,28 @@ export async function POST(request) {
       ...accountantMail,
     }, 'accountant', emails);
     emails.accountant.transport = accountingMailer.source;
+
+    // Recorded after the sends, in one write, so the refund's own emails show up
+    // on the order and in the customer's timeline like every other send.
+    await recordOrderEmails(
+      supabase,
+      { id: updated.id, order_number: updated.order_number },
+      [
+        emails.customer?.skipped ? null : orderEmailActivity({
+          kind: 'refund-notice',
+          to: updated.customer_email,
+          sent: Boolean(emails.customer?.sent),
+          error: emails.customer?.error,
+        }),
+        emails.accountant?.skipped ? null : orderEmailActivity({
+          kind: 'accounting-copy',
+          to: emails.accountant?.to,
+          sent: Boolean(emails.accountant?.sent),
+          error: emails.accountant?.error,
+        }),
+      ],
+      '[admin/orders/refund]',
+    );
 
     console.log(`[admin/orders/refund] ${order.order_number}: ${plan.status} ${plan.refundUsd} USD by ${actor}`);
 

@@ -39,7 +39,7 @@ export async function GET(request) {
   const supabase = getSupabaseAdmin();
   const warnings = [];
   try {
-    const [subscribers, ordersRaw, cartsRaw, leadsRaw, viewsRaw, enrollmentsRaw, deliveriesRaw, suppressionsRaw] = await Promise.all([
+    const [subscribers, ordersRaw, cartsRaw, leadsRaw, viewsRaw, enrollmentsRaw, deliveriesRaw, suppressionsRaw, inquiriesRaw] = await Promise.all([
       email ? safeRows('subscribers', supabase.from('email_subscribers').select('*').eq('email', email).limit(10), warnings) : [],
       safeRows('orders', supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(5000), warnings),
       safeRows('carts', supabase.from('abandoned_carts').select('*').order('created_at', { ascending: false }).limit(3000), warnings),
@@ -48,6 +48,7 @@ export async function GET(request) {
       safeRows('journeys', supabase.from('marketing_journey_enrollments').select('*,marketing_journeys(name,status)').order('enrolled_at', { ascending: false }).limit(3000), warnings),
       safeRows('deliveries', supabase.from('marketing_delivery_events').select('*').order('last_attempt_at', { ascending: false }).limit(5000), warnings),
       safeRows('suppressions', supabase.from('marketing_suppressions').select('*').eq('active', true).limit(3000), warnings),
+      safeRows('inquiries', supabase.from('customer_inquiries').select('*').order('created_at', { ascending: false }).limit(2000), warnings),
     ]);
 
     const orders = ordersRaw.filter(row => matchesContact(row, email, phone));
@@ -58,6 +59,23 @@ export async function GET(request) {
     const enrollments = enrollmentsRaw.filter(row => contactKeys.has(String(row.contact_key || '').replace(/^(email:|phone:)/, '')));
     const deliveries = deliveriesRaw.filter(row => contactKeys.has(String(row.contact_key || '')));
     const suppressions = suppressionsRaw.filter(row => contactKeys.has(row.channel === 'email' ? lower(row.identity) : digits(row.identity)));
+    const inquiries = inquiriesRaw.filter(row => matchesContact(row, email, phone));
+
+    // Transactional email is recorded on the order that sent it, in
+    // activity_log, because that column already exists on every row and needed
+    // no migration. Lift those entries back out so the contact's history shows
+    // receipts and accounting copies next to the marketing deliveries below —
+    // until now only marketing mail appeared here, and a customer receipt left
+    // no trace anywhere at all.
+    const emailEvents = orders.flatMap(order => (Array.isArray(order.activity_log) ? order.activity_log : [])
+      .filter(entry => entry?.type === 'email' && entry?.at)
+      .map(entry => event(
+        'email',
+        entry.at,
+        entry.message || 'Email',
+        order.order_number ? `Order ${order.order_number}` : '',
+        { ok: entry.ok, kind: entry.kind, orderNumber: order.order_number },
+      )));
 
     const subscriberIds = subscribers.map(row => row.id);
     const [clicks, opens] = await Promise.all([
@@ -76,6 +94,9 @@ export async function GET(request) {
       ...deliveries.map(row => event('delivery', row.last_attempt_at, `${row.channel} ${row.status}`, row.error || `Attempt ${row.attempt_count}`, { status: row.status, channel: row.channel })),
       ...suppressions.map(row => event('suppression', row.updated_at || row.created_at, `${row.channel} marketing blocked`, row.reason.replaceAll('_', ' '), { reason: row.reason })),
       ...subscribers.map(row => event('subscriber', row.created_at, 'Joined email audience', row.source || 'subscriber')),
+      ...emailEvents,
+      ...inquiries.map(row => event('inquiry', row.created_at, 'Inquiry received', row.subject || 'Customer inquiry', { id: row.id })),
+      ...inquiries.filter(row => row.replied_at).map(row => event('email', row.replied_at, 'Inquiry reply sent', row.subject || 'Customer inquiry', { ok: true, kind: 'inquiry-reply' })),
     ].filter(item => item.date).sort((a, b) => new Date(b.date) - new Date(a.date));
 
     const latestOrder = orders[0];

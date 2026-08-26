@@ -8,6 +8,7 @@ import { getOrderEmailLogoAttachment } from '@/lib/orderEmailBranding.mjs';
 import { withBacGiftLines } from '@/lib/bacWater.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
+import { orderEmailActivity, recordOrderEmails } from '@/lib/orderEmailLog.mjs';
 import { classifyPaymentOutcome } from '@/lib/paymentOutcome.mjs';
 import {
   buildAdminHtml,
@@ -326,6 +327,33 @@ export async function POST(request) {
     // messages (outside the 24h customer window). Sending a free-form 'text' message will be 
     // blocked by Meta with error 131047. The frontend catalog already opens a
     // WhatsApp window for the user to initiate the chat, which is the correct approach.
+
+    // One write for every email this handler sent, so the order carries its own
+    // delivery history and the customer timeline can show it. Never throws.
+    await recordOrderEmails(
+      isSupabaseConfigured ? supabase : null,
+      { order_number: order.orderNumber || order.order_number },
+      [
+        skipAdmin ? null : orderEmailActivity({
+          kind: order.notificationKind === 'payment-result' ? 'payment-result' : 'admin-alert',
+          sent: results.adminNotification.sent,
+          error: results.adminNotification.error,
+        }),
+        results.customerReceipt.skipped ? null : orderEmailActivity({
+          kind: 'customer-receipt',
+          to: order.customerEmail,
+          sent: results.customerReceipt.sent,
+          error: results.customerReceipt.error,
+        }),
+        results.accountingCopy && !results.accountingCopy.skipped ? orderEmailActivity({
+          kind: 'accounting-copy',
+          to: results.accountingCopy.to,
+          sent: results.accountingCopy.sent,
+          error: results.accountingCopy.error,
+        }) : null,
+      ],
+      '[Order notification]',
+    );
 
     const responseBody = {
       success: results.adminNotification.sent || results.customerReceipt.sent,

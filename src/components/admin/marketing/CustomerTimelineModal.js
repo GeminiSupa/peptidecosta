@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Ban, Eye, Mail, MousePointerClick, Package, RefreshCw, ShoppingCart, UserPlus, X, Zap } from 'lucide-react';
+import { AlertTriangle, Ban, Eye, Mail, MessageCircle, MousePointerClick, Package, RefreshCw, ShoppingCart, UserPlus, X, Zap } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
+import { formatCrInstant } from '@/lib/crTime.mjs';
 
 const ICONS = {
   order: Package, cart: ShoppingCart, view: Eye, lead: UserPlus,
   click: MousePointerClick, open: Mail, journey: Zap, delivery: Mail,
-  suppression: Ban, subscriber: UserPlus,
+  suppression: Ban, subscriber: UserPlus, email: Mail, inquiry: MessageCircle,
 };
 
 const money = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value || 0);
@@ -60,8 +61,8 @@ export default function CustomerTimelineModal({ contact, onClose }) {
           <div className="mkt-timeline-heading"><h4>Activity timeline</h4><span>{data.timeline.length} events</span></div>
           <div className="mkt-timeline">
             {data.timeline.length === 0 ? <div className="mkt-empty-compact"><Eye size={24} /><span>No recorded activity</span></div> : data.timeline.map((item, index) => {
-              const Icon = ICONS[item.type] || Zap;
-              return <div className={`mkt-timeline-event type-${item.type}`} key={`${item.type}-${item.date}-${index}`}><div className="mkt-timeline-icon"><Icon size={14} /></div><div><div className="mkt-timeline-title"><strong>{item.title}</strong><time>{new Date(item.date).toLocaleString()}</time></div><p>{item.description}</p></div></div>;
+              const Icon = item.metadata?.ok === false ? AlertTriangle : (ICONS[item.type] || Zap);
+              return <div className={`mkt-timeline-event type-${item.type}`} key={`${item.type}-${item.date}-${index}`}><div className="mkt-timeline-icon"><Icon size={14} /></div><div><div className="mkt-timeline-title"><strong>{item.title}</strong><time>{formatCrInstant(item.date)}</time></div><p>{item.description}</p></div></div>;
             })}
           </div>
         </>}
