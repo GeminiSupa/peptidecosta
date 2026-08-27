@@ -6,9 +6,12 @@ import {
   acquisitionChannelRows,
   analyticsRangeStart,
   campaignPerformanceRows,
+  domainTrafficRows,
   isPendingAnalyticsOrder,
   isSuccessfulAnalyticsOrder,
+  pageTrafficRows,
   revenueTrendRows,
+  uniquePageVisitorCount,
 } from '../src/lib/analyticsDashboard.mjs';
 
 test('analytics ranges produce stable ISO boundaries', () => {
@@ -59,6 +62,26 @@ test('acquisition channels deduplicate visitors and exclude preview traffic', ()
   ]);
 });
 
+test('domain and page analytics aggregate production page views without splitting UTM URLs', () => {
+  const events = [
+    { id: '1', event_type: 'page_view', visitor_id: 'visitor-a', hostname: 'catalog.peptidescostarica.net', path: '/lp?utm_source=google', gclid: 'click-1' },
+    { id: '2', event_type: 'page_view', visitor_id: 'visitor-a', hostname: 'catalog.peptidescostarica.net', path: '/lp?utm_source=email' },
+    { id: '3', event_type: 'page_view', visitor_id: 'visitor-b', hostname: 'peptidescostarica.net', path: '/catalog' },
+    { id: '4', event_type: 'heartbeat', visitor_id: 'visitor-a', hostname: 'catalog.peptidescostarica.net', path: '/lp' },
+    { id: '5', event_type: 'page_view', visitor_id: 'preview', hostname: 'branch.vercel.app', path: '/lp' },
+  ];
+
+  assert.deepEqual(domainTrafficRows(events), [
+    { key: 'catalog.peptidescostarica.net', hostname: 'catalog.peptidescostarica.net', pageViews: 2, visitors: 1, paidVisitors: 1 },
+    { key: 'peptidescostarica.net', hostname: 'peptidescostarica.net', pageViews: 1, visitors: 1, paidVisitors: 0 },
+  ]);
+  assert.deepEqual(pageTrafficRows(events), [
+    { key: 'catalog.peptidescostarica.net/lp', hostname: 'catalog.peptidescostarica.net', path: '/lp', pageViews: 2, visitors: 1, paidVisitors: 1 },
+    { key: 'peptidescostarica.net/catalog', hostname: 'peptidescostarica.net', path: '/catalog', pageViews: 1, visitors: 1, paidVisitors: 0 },
+  ]);
+  assert.equal(uniquePageVisitorCount(events, '/lp'), 1);
+});
+
 test('revenue trend keeps years separate and excludes unpaid orders', () => {
   const rows = revenueTrendRows([
     { created_at: '2025-12-31T10:00:00.000Z', status: 'completed', total_usd: 10, total_crc: 5000 },
@@ -82,4 +105,7 @@ test('dashboard data is loaded through authenticated admin routes', async () => 
   assert.match(route, /getSupabaseAdmin\(\)/);
   assert.match(route, /from\('email_campaigns'\)/);
   assert.match(route, /from\('campaign_engagement_stats'\)/);
+  assert.match(route, /event_type, hostname, path, page_title/);
+  assert.match(route, /utm_campaign, gclid, fbclid/);
+  assert.match(component, /Domain & page analytics/);
 });

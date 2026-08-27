@@ -12,7 +12,7 @@ const SOURCES = [
   {
     key: 'sessions',
     table: 'visitor_sessions',
-    select: 'id, session_id, visitor_id, last_active, catalog_duration, city, device_info, created_at, hostname, current_path, known_customer, last_touch_source, utm_source',
+    select: 'id, session_id, visitor_id, last_active, catalog_duration, city, device_info, created_at, hostname, current_path, page_title, known_customer, cart_items, first_touch_source, last_touch_source, utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer',
     timeColumn: 'last_active',
   },
   {
@@ -41,7 +41,7 @@ const SOURCES = [
   {
     key: 'events',
     table: 'analytics_events',
-    select: 'id, event_type, hostname, session_id, visitor_id, utm_source, utm_medium, utm_campaign, referrer, created_at',
+    select: 'id, event_type, hostname, path, page_title, session_id, visitor_id, utm_source, utm_medium, utm_campaign, gclid, fbclid, known_customer, referrer, created_at',
   },
 ];
 

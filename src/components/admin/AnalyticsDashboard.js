@@ -16,9 +16,12 @@ import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
 import {
   acquisitionChannelRows,
   campaignPerformanceRows,
+  domainTrafficRows,
   isPendingAnalyticsOrder,
   isSuccessfulAnalyticsOrder,
+  pageTrafficRows,
   revenueTrendRows,
+  uniquePageVisitorCount,
 } from '@/lib/analyticsDashboard.mjs';
 import { orderNetRevenue } from '@/lib/orderRevenue.mjs';
 
@@ -344,6 +347,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     if (timeRange === '30d') return age <= 30 * 24 * 3600000;
     return true;
   });
+  const historicalDomainRows = domainTrafficRows(journeyEvents);
+  const historicalPageRows = pageTrafficRows(journeyEvents);
+  const landingVisitorCount = uniquePageVisitorCount(journeyEvents, '/lp');
 
   // -------------------------------------------------------------
   // CALCULATE FINANCIAL STATISTICS
@@ -2227,6 +2233,63 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             {liveSourceCounts.map(([source, count]) => <div key={source} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, color: '#94a3b8', fontSize: '.72rem', marginTop: 7 }}><span>{source}</span><b style={{ color: '#34d399' }}>{count}</b></div>)}
           </div>
         </div>
+      </section>
+
+      {/* Historical traffic by first-party domain and page */}
+      <section style={{ background: '#0e1626', border: '1px solid rgba(139,92,246,.22)', borderRadius: 14, padding: 18, marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div>
+            <div style={{ color: '#a78bfa', fontSize: '.7rem', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase' }}>Domain & page analytics</div>
+            <h3 style={{ margin: '4px 0', fontSize: '1rem', color: '#f8fafc' }}>Historical traffic across tracked websites</h3>
+            <p style={{ margin: 0, color: '#94a3b8', fontSize: '.78rem' }}>Unique visitors, page views, and paid-ad visitors for the selected date range. Query strings are combined into their base page.</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ background: '#172237', borderRadius: 9, padding: '8px 11px', minWidth: 90 }}>
+              <div style={{ color: '#f8fafc', fontWeight: 900, fontSize: '1rem' }}>{historicalDomainRows.length}</div>
+              <div style={{ color: '#64748b', fontSize: '.66rem' }}>Tracked domains</div>
+            </div>
+            <div style={{ background: '#172237', borderRadius: 9, padding: '8px 11px', minWidth: 90 }}>
+              <div style={{ color: '#f8fafc', fontWeight: 900, fontSize: '1rem' }}>{landingVisitorCount}</div>
+              <div style={{ color: '#64748b', fontSize: '.66rem' }}>Landing visitors</div>
+            </div>
+          </div>
+        </div>
+
+        {historicalDomainRows.length === 0 ? (
+          <div style={{ color: '#64748b', fontSize: '.8rem', padding: '18px 0' }}>No historical page-view events in this range yet. New `/lp` visits will appear after deployment.</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 12 }}>
+            <div style={{ background: '#172237', borderRadius: 10, padding: 12, overflowX: 'auto' }}>
+              <strong style={{ color: '#f8fafc', fontSize: '.8rem' }}>Traffic by domain</strong>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.72rem', marginTop: 8 }}>
+                <thead><tr style={{ color: '#64748b', textAlign: 'left' }}><th style={{ padding: '6px 4px' }}>Domain</th><th style={{ padding: '6px 4px' }}>Visitors</th><th style={{ padding: '6px 4px' }}>Views</th><th style={{ padding: '6px 4px' }}>Paid</th></tr></thead>
+                <tbody>{historicalDomainRows.slice(0, 10).map((row) => (
+                  <tr key={row.hostname} style={{ borderTop: '1px solid rgba(255,255,255,.05)' }}>
+                    <td style={{ padding: '7px 4px', color: '#f8fafc' }}>{row.hostname}</td>
+                    <td style={{ padding: '7px 4px', color: '#a78bfa', fontWeight: 800 }}>{row.visitors}</td>
+                    <td style={{ padding: '7px 4px', color: '#cbd5e1' }}>{row.pageViews}</td>
+                    <td style={{ padding: '7px 4px', color: '#fbbf24' }}>{row.paidVisitors}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+
+            <div style={{ background: '#172237', borderRadius: 10, padding: 12, overflowX: 'auto' }}>
+              <strong style={{ color: '#f8fafc', fontSize: '.8rem' }}>Top pages</strong>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.72rem', marginTop: 8 }}>
+                <thead><tr style={{ color: '#64748b', textAlign: 'left' }}><th style={{ padding: '6px 4px' }}>Page</th><th style={{ padding: '6px 4px' }}>Visitors</th><th style={{ padding: '6px 4px' }}>Views</th><th style={{ padding: '6px 4px' }}>Paid</th></tr></thead>
+                <tbody>{historicalPageRows.slice(0, 12).map((row) => (
+                  <tr key={`${row.hostname}${row.path}`} style={{ borderTop: '1px solid rgba(255,255,255,.05)' }}>
+                    <td title={`${row.hostname}${row.path}`} style={{ padding: '7px 4px', color: row.path.startsWith('/lp') ? '#86efac' : '#f8fafc', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.hostname}{row.path}</td>
+                    <td style={{ padding: '7px 4px', color: '#a78bfa', fontWeight: 800 }}>{row.visitors}</td>
+                    <td style={{ padding: '7px 4px', color: '#cbd5e1' }}>{row.pageViews}</td>
+                    <td style={{ padding: '7px 4px', color: '#fbbf24' }}>{row.paidVisitors}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* 2. Top Metrics */}

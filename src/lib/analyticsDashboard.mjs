@@ -81,6 +81,77 @@ function isProductionEvent(event) {
   return hostname !== 'localhost' && !hostname.endsWith('.vercel.app');
 }
 
+function analyticsIdentity(event) {
+  return clean(event?.visitor_id || event?.session_id || event?.id);
+}
+
+function analyticsPath(value) {
+  const path = clean(value).split(/[?#]/, 1)[0] || '/';
+  return path.startsWith('/') ? path : '/';
+}
+
+function historicalTrafficRows(events, groupForEvent) {
+  const groups = new Map();
+
+  for (const event of events || []) {
+    if (!isProductionEvent(event) || lower(event?.event_type) !== 'page_view') continue;
+    const group = groupForEvent(event);
+    if (!group?.key) continue;
+    const row = groups.get(group.key) || {
+      ...group,
+      pageViews: 0,
+      visitorIds: new Set(),
+      paidVisitorIds: new Set(),
+    };
+    const identity = analyticsIdentity(event);
+    row.pageViews += 1;
+    if (identity) row.visitorIds.add(identity);
+    if (identity && (clean(event.gclid) || clean(event.fbclid))) row.paidVisitorIds.add(identity);
+    groups.set(group.key, row);
+  }
+
+  return [...groups.values()]
+    .map(({ visitorIds, paidVisitorIds, ...row }) => ({
+      ...row,
+      visitors: visitorIds.size,
+      paidVisitors: paidVisitorIds.size,
+    }))
+    .sort((left, right) => right.visitors - left.visitors || right.pageViews - left.pageViews);
+}
+
+export function domainTrafficRows(events = []) {
+  return historicalTrafficRows(events, (event) => {
+    const hostname = lower(event?.hostname);
+    return hostname ? { key: hostname, hostname } : null;
+  });
+}
+
+export function pageTrafficRows(events = []) {
+  return historicalTrafficRows(events, (event) => {
+    const hostname = lower(event?.hostname);
+    const path = analyticsPath(event?.path);
+    return hostname ? { key: `${hostname}${path}`, hostname, path } : null;
+  });
+}
+
+export function uniquePageVisitorCount(events = [], pathPrefix = '/') {
+  const prefix = analyticsPath(pathPrefix).replace(/\/$/, '') || '/';
+  const identities = new Set();
+  let anonymous = 0;
+
+  for (const event of events || []) {
+    if (!isProductionEvent(event) || lower(event?.event_type) !== 'page_view') continue;
+    const path = analyticsPath(event?.path);
+    const matches = prefix === '/' ? true : path === prefix || path.startsWith(`${prefix}/`);
+    if (!matches) continue;
+    const identity = analyticsIdentity(event);
+    if (identity) identities.add(identity);
+    else anonymous += 1;
+  }
+
+  return identities.size + anonymous;
+}
+
 export function acquisitionChannelRows(events = []) {
   const visitors = new Map();
 

@@ -180,6 +180,7 @@ test('Google Tag Manager covers the complete standalone ad landing funnel', asyn
   for (const page of pages) {
     assert.match(page, /googletagmanager\.com\/gtm\.js\?id=/);
     assert.match(page, /googletagmanager\.com\/ns\.html\?id=GTM-M2GVDQ44/);
+    assert.match(page, /<script defer src="\/analytics-tracker\.js"><\/script>/);
     assert.equal(page.match(/GTM-M2GVDQ44/g)?.length, 2);
     assert.ok(page.indexOf('googletagmanager.com/gtm.js') < page.indexOf('<meta charset='));
     assert.ok(page.indexOf('googletagmanager.com/ns.html') > page.indexOf('<body>'));
