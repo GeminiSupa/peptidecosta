@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  ANY_READY_FILTER,
   PIPELINE_PAGE_SIZE,
   applyProspectPipelineFilters,
   parseProspectPipelineParams,
+  reconcileSavedDirectoryMatches,
   safeProspectSearchTerm,
 } from '../src/lib/prospectPipeline.mjs';
 
@@ -61,4 +63,26 @@ test('digits-only searches match formatted phone numbers on the server', () => {
   applyProspectPipelineFilters(query, filters, '', '2026-08-26T00:00:00.000Z');
   const searchCall = calls.find(([method]) => method === 'or');
   assert.ok(searchCall[1].includes('phone.ilike.*5*0*6*8*4*0*4*6*9*7*3*'));
+});
+
+test('ready queues require the same permission evidence used by the send gate', () => {
+  assert.match(ANY_READY_FILTER, /contact_permission_status\.neq\.do_not_contact/);
+  assert.match(ANY_READY_FILTER, /email_permission_basis\.eq\.published_business_contact/);
+  assert.match(ANY_READY_FILTER, /email_permission_source_url\.not\.is\.null/);
+  assert.match(ANY_READY_FILTER, /whatsapp_permission_basis\.eq\.express_consent/);
+  assert.match(ANY_READY_FILTER, /whatsapp_permission_evidence\.not\.is\.null/);
+});
+
+test('saved lookup reconciliation removes identities the server no longer returns', () => {
+  const stale = { id: 'deleted', source_provider: 'openstreetmap', source_external_id: 'node:1' };
+  const untouched = { id: 'other', source_provider: 'openstreetmap', source_external_id: 'node:2' };
+  const current = new Map([
+    ['openstreetmap:node:1', stale],
+    ['openstreetmap:node:2', untouched],
+  ]);
+  const next = reconcileSavedDirectoryMatches(current, [
+    { provider: 'openstreetmap', externalId: 'node:1' },
+  ], []);
+  assert.equal(next.has('openstreetmap:node:1'), false);
+  assert.equal(next.get('openstreetmap:node:2'), untouched);
 });

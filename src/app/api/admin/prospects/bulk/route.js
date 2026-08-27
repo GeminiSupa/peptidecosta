@@ -15,6 +15,7 @@ import {
   CHANNEL_PERMISSION_BASIS,
   PROSPECT_PERMISSION_CHANNELS,
   channelPermissionFields,
+  prospectHasGlobalOptOut,
 } from '@/lib/prospectPermissions.mjs';
 
 export const dynamic = 'force-dynamic';
@@ -286,6 +287,24 @@ export async function PATCH(request) {
         [fields.verifiedAt]: verifiedAt,
         [fields.verifiedBy]: auth.user.id,
       });
+    }
+  }
+  if (updates.status && updates.status !== 'do_not_contact') {
+    const { data: currentRows, error: currentError } = await supabase
+      .from('sales_prospects')
+      .select('id,contact_permission_status,email_permission_status,whatsapp_permission_status')
+      .in('id', ids);
+    if (isProspectsTableMissing(currentError)) return setupRequired();
+    if (currentError) {
+      console.error('[Prospects] Bulk status safety check failed:', currentError.message);
+      return NextResponse.json({ error: 'Unable to verify prospect contact restrictions' }, { status: 500 });
+    }
+    const blockedIds = (currentRows || []).filter(prospectHasGlobalOptOut).map((row) => row.id);
+    if (blockedIds.length) {
+      return NextResponse.json({
+        error: `Clear channel opt-outs before returning ${blockedIds.length} prospect(s) to the active pipeline`,
+        blockedIds,
+      }, { status: 409 });
     }
   }
   if ('next_follow_up_at' in body) {

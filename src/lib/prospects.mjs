@@ -167,6 +167,13 @@ export function normalizeWhatsAppNumbers(values) {
     .map((digits) => `+${digits}`)))].slice(0, 5);
 }
 
+export function hasUsableProspectWhatsAppIdentity(prospect = {}) {
+  return normalizeWhatsAppNumbers([
+    ...(Array.isArray(prospect.whatsapp_numbers) ? prospect.whatsapp_numbers : []),
+    prospect.phone,
+  ]).length > 0;
+}
+
 export function normalizeLinkedInProfileUrls(urls) {
   if (!Array.isArray(urls)) return [];
   return [...new Set(urls.map(normalizeOptionalUrl).filter((value) => {
@@ -431,7 +438,10 @@ export function normalizeProspectInput(input = {}) {
     people: normalizeProspectPeople(input.people),
     linkedin_urls: normalizeLinkedInProfileUrls(input.linkedin_urls),
     whatsapp_numbers: normalizeWhatsAppNumbers(input.whatsapp_numbers || []),
-    owner_email: clean(input.owner_email, 240).toLowerCase() || null,
+    // Ownership is assigned only through the atomic claim action. Accepting an
+    // owner from create/rediscovery input bypasses that invariant and lets a
+    // caller assign work to an arbitrary teammate.
+    owner_email: null,
     notes: clean(input.notes, 5000) || '',
     next_follow_up_at: normalizeOptionalProspectDate(input.next_follow_up_at),
   };
@@ -501,6 +511,14 @@ export function prospectInputError(input = {}) {
     }
     if (status === 'consented' && !source && !evidence) {
       return `Record where or how ${channel} consent was received`;
+    }
+    if (['business_contact', 'consented'].includes(status)) {
+      if (channel === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(input.email, 240))) {
+        return 'Add a valid work email before verifying email permission';
+      }
+      if (channel === 'whatsapp' && !hasUsableProspectWhatsAppIdentity(input)) {
+        return 'Add a usable WhatsApp number before verifying WhatsApp permission';
+      }
     }
   }
   return null;

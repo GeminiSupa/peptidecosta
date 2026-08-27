@@ -27,7 +27,8 @@ import { canContactProspect } from '@/lib/prospectOutreach.mjs';
 import {
   prospectContactReadiness,
 } from '@/lib/prospectReadiness.mjs';
-import { enrichmentJobUiState } from '@/lib/prospectEnrichmentJobs.mjs';
+import { enrichmentJobUiState, prospectForEnrichmentJob } from '@/lib/prospectEnrichmentJobs.mjs';
+import { reconcileSavedDirectoryMatches } from '@/lib/prospectPipeline.mjs';
 import {
   normalizeProspectOwnerEmail,
   prospectOwnerLabel,
@@ -515,13 +516,13 @@ export default function ProspectorManager({ currentUserProfile }) {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Unable to check saved prospects');
-      setSavedDirectoryMatches((current) => {
-        const next = new Map(current);
-        for (const prospect of payload.prospects || []) {
-          next.set(`${prospect.source_provider}:${prospect.source_external_id}`, prospect);
-        }
-        return next;
-      });
+      // A successful lookup is authoritative for every identity requested.
+      // Reconciliation removes stale hits when another tab deleted a row.
+      setSavedDirectoryMatches((current) => reconcileSavedDirectoryMatches(
+        current,
+        identities,
+        payload.prospects || [],
+      ));
     } catch (lookupError) {
       console.warn('[Prospector] Saved-state lookup failed:', lookupError.message);
     }
@@ -661,7 +662,7 @@ export default function ProspectorManager({ currentUserProfile }) {
    *   write must not grey out every button on the screen or overwrite an error
    *   the operator is reading — the row's own chip reports how it went.
    */
-  const updateProspect = useCallback(async (id, updates, successMessage, { silent = false } = {}) => {
+  const updateProspect = useCallback(async (id, updates, successMessage, { silent = false, merge = true } = {}) => {
     if (!id) return null;
     if (!silent) {
       setSaving(true);
@@ -674,7 +675,7 @@ export default function ProspectorManager({ currentUserProfile }) {
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'Unable to update prospect');
-      mergeSaved([payload.prospect]);
+      if (merge) mergeSaved([payload.prospect]);
       if (successMessage) setNotice(successMessage);
       if (!silent && view === 'saved') await loadProspects();
       return payload.prospect;
@@ -785,7 +786,13 @@ export default function ProspectorManager({ currentUserProfile }) {
 
   const runEnrichment = useCallback(async (key, saved, durableJob = null) => {
     const pool = saved ? prospectsRef.current : searchResultsRef.current;
-    const target = pool.find((item) => prospectKey(item) === key);
+    const visibleTarget = pool.find((item) => prospectKey(item) === key);
+    // Restored jobs are global, while the saved pipeline is paged. The route
+    // embeds the prospect needed by the worker so jobs do not depend on the
+    // operator currently viewing the same 50-row page.
+    const target = durableJob
+      ? prospectForEnrichmentJob(durableJob, pool)
+      : visibleTarget;
     const workerId = durableJob ? crypto.randomUUID() : null;
     let activeJob = durableJob;
     let retryJob = null;
@@ -835,7 +842,10 @@ export default function ProspectorManager({ currentUserProfile }) {
           enriched_at: new Date().toISOString(),
         };
         if (saved && target.id) {
-          const updated = await updateProspect(target.id, scanOnlyUpdates, null, { silent: true });
+          const updated = await updateProspect(target.id, scanOnlyUpdates, null, {
+            silent: true,
+            merge: Boolean(visibleTarget),
+          });
           if (!updated) throw new Error('Scan succeeded but the prospect save failed');
         } else {
           setSearchResults((current) => current.map((item) => (
@@ -896,7 +906,10 @@ export default function ProspectorManager({ currentUserProfile }) {
       const unverified = payload.contactsVerified ? '' : ' — unverified, from page text';
 
       if (saved && target.id) {
-        const updated = await updateProspect(target.id, updates, null, { silent: true });
+        const updated = await updateProspect(target.id, updates, null, {
+          silent: true,
+          merge: Boolean(visibleTarget),
+        });
         if (!updated) {
           throw new Error('Scan succeeded but the prospect save failed');
         }
@@ -999,11 +1012,11 @@ export default function ProspectorManager({ currentUserProfile }) {
   }, [queueDurableJobs, setEnrichFromJob]);
 
   useEffect(() => {
-    if (loading || !prospects.length) return undefined;
+    if (loading) return undefined;
     loadEnrichmentJobs();
     const interval = setInterval(loadEnrichmentJobs, 30_000);
     return () => clearInterval(interval);
-  }, [loading, prospects.length, loadEnrichmentJobs]);
+  }, [loading, loadEnrichmentJobs]);
 
   const enqueueEnrichment = useCallback(async (items, saved) => {
     if (saved) {

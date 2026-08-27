@@ -3,6 +3,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
   isProspectsTableMissing,
+  hasUsableProspectWhatsAppIdentity,
   mergeRediscoveredProspect,
   normalizeProspectInput,
   normalizeOptionalUrl,
@@ -21,9 +22,11 @@ import {
   CHANNEL_PERMISSION_STATUSES,
   PROSPECT_PERMISSION_CHANNELS,
   channelPermissionFields,
+  prospectHasGlobalOptOut,
   summarizeChannelPermissions,
 } from '@/lib/prospectPermissions.mjs';
 import {
+  ANY_READY_FILTER,
   CLOSED_PROSPECT_STATUSES,
   applyProspectPipelineFilters,
   parseProspectPipelineParams,
@@ -60,7 +63,7 @@ async function loadPipelineStats(supabase, nowIso) {
     count(),
     count().eq('status', 'qualified'),
     active(count()).lte('next_follow_up_at', nowIso),
-    active(count('planned')).or('and(email.not.is.null,email_permission_status.in.(business_contact,consented)),and(phone.not.is.null,whatsapp_permission_status.in.(business_contact,consented)),and(whatsapp_numbers.neq.[],whatsapp_permission_status.in.(business_contact,consented))'),
+    active(count('planned')).or(ANY_READY_FILTER),
     active(count()).is('owner_email', null).gte('fit_score', 70),
     active(count('planned')).or('and(email.not.is.null,email_permission_status.eq.unknown),and(phone.not.is.null,whatsapp_permission_status.eq.unknown),and(whatsapp_numbers.neq.[],whatsapp_permission_status.eq.unknown)'),
   ]);
@@ -328,7 +331,7 @@ export async function PATCH(request) {
     : [];
   const needsCurrent = 'email' in updates || 'phone' in updates
     || requestedChannelPermissions.length > 0
-    || updates.status === 'do_not_contact';
+    || Boolean(updates.status);
   let current = null;
   if (needsCurrent) {
     const { data, error: currentError } = await supabase
@@ -343,6 +346,12 @@ export async function PATCH(request) {
       return NextResponse.json({ error: 'Unable to update prospect' }, { status: 500 });
     }
     current = data;
+  }
+
+  if (updates.status && updates.status !== 'do_not_contact' && prospectHasGlobalOptOut(current)) {
+    return NextResponse.json({
+      error: 'Clear at least one channel opt-out with new permission evidence before returning this prospect to the active pipeline',
+    }, { status: 409 });
   }
 
   if (updates.status === 'do_not_contact') {
@@ -367,6 +376,16 @@ export async function PATCH(request) {
       updates.updated_at,
     );
     if (prepared.error) return NextResponse.json({ error: prepared.error }, { status: 400 });
+    const nextStatus = prepared.updates[channelPermissionFields(channel).status];
+    const candidate = { ...current, ...updates, ...prepared.updates };
+    if (['business_contact', 'consented'].includes(nextStatus)) {
+      if (channel === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(candidate.email || ''))) {
+        return NextResponse.json({ error: 'Add a valid work email before verifying email permission' }, { status: 400 });
+      }
+      if (channel === 'whatsapp' && !hasUsableProspectWhatsAppIdentity(candidate)) {
+        return NextResponse.json({ error: 'Add a usable WhatsApp number before verifying WhatsApp permission' }, { status: 400 });
+      }
+    }
     Object.assign(updates, prepared.updates);
   }
 

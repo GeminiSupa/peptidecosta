@@ -7,6 +7,7 @@ import {
   channelPermissionFor,
   normalizePermissionChannel,
   permissionBasisLabel,
+  prospectHasGlobalOptOut,
   summarizeChannelPermissions,
 } from '../src/lib/prospectPermissions.mjs';
 
@@ -43,6 +44,23 @@ test('permission summary represents the safest useful cross-channel state', () =
     email_permission_status: 'do_not_contact',
     whatsapp_permission_status: 'do_not_contact',
   }), 'do_not_contact');
+  assert.equal(prospectHasGlobalOptOut({
+    contact_permission_status: 'do_not_contact',
+    email_permission_status: 'unknown',
+    whatsapp_permission_status: 'unknown',
+  }), true);
+  assert.equal(prospectHasGlobalOptOut({
+    contact_permission_status: 'business_contact',
+    email_permission_status: 'business_contact',
+    whatsapp_permission_status: 'do_not_contact',
+  }), false);
+});
+
+test('status routes refuse to reactivate a global opt-out without new evidence', async () => {
+  const bulkRoute = await readFile(new URL('../src/app/api/admin/prospects/bulk/route.js', import.meta.url), 'utf8');
+  assert.match(prospectRoute, /prospectHasGlobalOptOut\(current\)/);
+  assert.match(prospectRoute, /Clear at least one channel opt-out/);
+  assert.match(bulkRoute, /filter\(prospectHasGlobalOptOut\)/);
 });
 
 test('channel field names and labels are deterministic', () => {
@@ -60,6 +78,7 @@ test('migration only backfills historic global opt-outs, not ambiguous permissio
 test('API accepts structured channel evidence and enrichment reports exact channels', () => {
   assert.match(prospectRoute, /body\.channel_permissions\[channel\]/);
   assert.match(prospectRoute, /A source URL is required to verify the published/);
+  assert.match(prospectRoute, /hasUsableProspectWhatsAppIdentity\(candidate\)/);
   assert.match(enrichRoute, /emailPermissionSourceUrl/);
   assert.match(enrichRoute, /whatsappPermissionSourceUrl/);
 });

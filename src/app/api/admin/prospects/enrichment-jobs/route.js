@@ -16,6 +16,17 @@ const JOB_FIELDS = [
   'last_error', 'next_attempt_at', 'locked_at', 'locked_by', 'requested_by',
   'started_at', 'completed_at', 'created_at', 'updated_at',
 ].join(',');
+const JOB_PROSPECT_FIELDS = [
+  'id', 'organization_name', 'website_url', 'email', 'phone', 'contact_source_url',
+  'enriched_at', 'people', 'linkedin_urls', 'whatsapp_numbers',
+  'contact_permission_status',
+  'email_permission_status', 'email_permission_basis', 'email_permission_source_url',
+  'email_permission_evidence',
+  'whatsapp_permission_status', 'whatsapp_permission_basis', 'whatsapp_permission_source_url',
+  'whatsapp_permission_evidence',
+].join(',');
+const ACTIVE_JOB_FIELDS = `${JOB_FIELDS},prospect:sales_prospects(${JOB_PROSPECT_FIELDS})`;
+const ACTIVE_JOB_LIMIT = 100;
 
 const setupRequired = () => NextResponse.json({
   error: 'Run add-prospect-enrichment-jobs.sql first.',
@@ -63,9 +74,14 @@ export async function GET(request) {
     await recoverInterruptedJobs(supabase);
     const { data, error } = await supabase
       .from('prospect_enrichment_jobs')
-      .select(JOB_FIELDS)
-      .order('updated_at', { ascending: false })
-      .limit(500);
+      // The browser worker only needs work that can still run. Returning every
+      // completed job repeatedly let terminal rows crowd queued work out of the
+      // old 500-row window and retransmitted their checkpoint payloads forever.
+      .select(ACTIVE_JOB_FIELDS)
+      .in('status', ['queued', 'running'])
+      .order('next_attempt_at', { ascending: true })
+      .order('created_at', { ascending: true })
+      .limit(ACTIVE_JOB_LIMIT);
     if (error) throw error;
     return NextResponse.json({ jobs: data || [], setupRequired: false });
   } catch (error) {

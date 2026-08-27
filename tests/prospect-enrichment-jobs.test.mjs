@@ -8,10 +8,12 @@ import {
   enrichmentRetryDelayMs,
   isProspectEnrichmentJobsTableMissing,
   isStaleEnrichmentJob,
+  prospectForEnrichmentJob,
 } from '../src/lib/prospectEnrichmentJobs.mjs';
 
 const migration = readFileSync(new URL('../add-prospect-enrichment-jobs.sql', import.meta.url), 'utf8');
 const route = readFileSync(new URL('../src/app/api/admin/prospects/enrichment-jobs/route.js', import.meta.url), 'utf8');
+const manager = readFileSync(new URL('../src/components/admin/ProspectorManager.js', import.meta.url), 'utf8');
 
 test('interrupted running jobs become stale only after the lease window', () => {
   const now = Date.parse('2026-08-21T12:05:00.000Z');
@@ -64,4 +66,19 @@ test('missing queue table produces a migration-specific setup response', () => {
   assert.equal(isProspectEnrichmentJobsTableMissing({ code: 'PGRST205' }), true);
   assert.equal(isProspectEnrichmentJobsTableMissing({ message: "Could not find prospect_enrichment_jobs in the schema cache" }), true);
   assert.equal(isProspectEnrichmentJobsTableMissing({ message: 'network timeout' }), false);
+});
+
+test('durable jobs carry their prospect and do not depend on the visible page', () => {
+  const embedded = { id: 'off-page', website_url: 'https://example.test' };
+  assert.equal(prospectForEnrichmentJob({ prospect_id: 'off-page', prospect: embedded }, []), embedded);
+  const visible = { id: 'off-page', website_url: 'https://fresh.example.test' };
+  assert.equal(prospectForEnrichmentJob({ prospect_id: 'off-page', prospect: embedded }, [visible]), visible);
+  assert.match(route, /prospect:sales_prospects/);
+  assert.match(manager, /prospectForEnrichmentJob\(durableJob, pool\)/);
+});
+
+test('queue restoration excludes terminal jobs before applying its limit', () => {
+  assert.match(route, /\.in\('status', \['queued', 'running'\]\)/);
+  assert.match(route, /\.order\('next_attempt_at', \{ ascending: true \}\)/);
+  assert.doesNotMatch(route, /\.order\('updated_at', \{ ascending: false \}\)\s*\.limit\(500\)/);
 });

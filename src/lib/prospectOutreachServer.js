@@ -26,13 +26,28 @@ export async function ensureBookingToken(supabase, prospect) {
   if (prospect.booking_token) return prospect.booking_token;
 
   const token = generateBookingToken(randomUUID);
-  const { error } = await supabase
+  const { data: claimed, error } = await supabase
     .from('sales_prospects')
     .update({ booking_token: token, updated_at: new Date().toISOString() })
-    .eq('id', prospect.id);
+    .eq('id', prospect.id)
+    .is('booking_token', null)
+    .select('booking_token')
+    .maybeSingle();
 
   if (error) throw error;
-  return token;
+  if (claimed?.booking_token) return claimed.booking_token;
+
+  // Another request minted the token after this request read the prospect.
+  // Return the winner stored in the database rather than a losing URL that can
+  // never be attributed by the Cal.com webhook.
+  const { data: current, error: readError } = await supabase
+    .from('sales_prospects')
+    .select('booking_token')
+    .eq('id', prospect.id)
+    .maybeSingle();
+  if (readError) throw readError;
+  if (!current?.booking_token) throw new Error('Unable to assign a booking token to this prospect');
+  return current.booking_token;
 }
 
 export async function resolveBookingUrl(supabase, prospect) {

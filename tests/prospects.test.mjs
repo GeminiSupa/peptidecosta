@@ -5,6 +5,7 @@ import {
   buildProspectSearchQuery,
   dedupeAndRankProspects,
   expandAnchoredTagPattern,
+  hasUsableProspectWhatsAppIdentity,
   isProspectsTableMissing,
   isRetryableOverpassStatus,
   matchesTargetCategory,
@@ -44,7 +45,14 @@ test('manual prospect validation rejects hidden coordinate and date errors', () 
   assert.equal(prospectInputError({
     email_permission_status: 'business_contact',
     email_permission_source_url: 'https://example.test/contact',
+    email: 'team@example.test',
   }), null);
+  assert.match(prospectInputError({
+    whatsapp_permission_status: 'business_contact',
+    whatsapp_permission_source_url: 'https://example.test/contact',
+    phone: '123',
+  }), /usable WhatsApp number/i);
+  assert.equal(hasUsableProspectWhatsAppIdentity({ phone: '+506 8888 7777' }), true);
 
   const normalized = normalizeProspectInput({ organization_name: 'Out of range', latitude: 120, longitude: 300 });
   assert.equal(normalized.latitude, null);
@@ -316,6 +324,14 @@ test('manual input cannot supply its own fit score or reasons', () => {
 
   assert.equal(result.fit_score, 5);
   assert.deepEqual(result.fit_reasons, []);
+});
+
+test('create input cannot assign an arbitrary pipeline owner', () => {
+  const result = normalizeProspectInput({
+    organization_name: 'Ownership bypass attempt',
+    owner_email: 'someone-else@example.test',
+  });
+  assert.equal(result.owner_email, null);
 });
 
 test('a historic global opt-out remains a global channel opt-out on save', () => {

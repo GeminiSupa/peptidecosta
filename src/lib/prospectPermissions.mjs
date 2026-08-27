@@ -59,6 +59,12 @@ export function summarizeChannelPermissions(prospect = {}) {
   return 'unknown';
 }
 
+/** A prospect-level opt-out must be cleared channel by channel before restaging. */
+export function prospectHasGlobalOptOut(prospect = {}) {
+  return prospect.contact_permission_status === 'do_not_contact'
+    || summarizeChannelPermissions(prospect) === 'do_not_contact';
+}
+
 export function permissionStatusTone(status) {
   if (status === 'do_not_contact') return 'danger';
   if (status === 'business_contact' || status === 'consented') return 'ready';

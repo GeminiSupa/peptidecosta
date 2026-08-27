@@ -3,6 +3,15 @@ import { PROSPECT_STATUSES } from './prospects.mjs';
 export const PIPELINE_PAGE_SIZE = 50;
 export const CLOSED_PROSPECT_STATUSES = ['won', 'lost', 'do_not_contact'];
 
+// Keep the database work queues aligned with the evidence checks enforced by
+// canContactProspect. A permission label by itself is not enough: published
+// contacts need their source URL, and consent needs either a source or a note.
+// Identity shape is validated by every write route; these predicates prevent
+// incomplete legacy permission rows from being advertised as outreach-ready.
+export const EMAIL_READY_FILTER = 'and(contact_permission_status.neq.do_not_contact,email.not.is.null,or(and(email_permission_status.eq.business_contact,email_permission_basis.eq.published_business_contact,email_permission_source_url.not.is.null),and(email_permission_status.eq.consented,email_permission_basis.eq.express_consent,or(email_permission_source_url.not.is.null,email_permission_evidence.not.is.null))))';
+export const WHATSAPP_READY_FILTER = 'and(contact_permission_status.neq.do_not_contact,or(phone.not.is.null,whatsapp_numbers.neq.[]),or(and(whatsapp_permission_status.eq.business_contact,whatsapp_permission_basis.eq.published_business_contact,whatsapp_permission_source_url.not.is.null),and(whatsapp_permission_status.eq.consented,whatsapp_permission_basis.eq.express_consent,or(whatsapp_permission_source_url.not.is.null,whatsapp_permission_evidence.not.is.null))))';
+export const ANY_READY_FILTER = `${EMAIL_READY_FILTER},${WHATSAPP_READY_FILTER}`;
+
 const CONTACT_FILTERS = new Set([
   'any', 'reachable', 'phone', 'email', 'whatsapp', 'website',
   'missing_phone', 'missing_email', 'no_website', 'not_enriched',
@@ -20,6 +29,22 @@ const choice = (params, name, values, fallback) => {
   const value = String(params.get(name) || '').trim();
   return values.has(value) ? value : fallback;
 };
+
+/** Replace cached lookup results for exactly the identities the server checked. */
+export function reconcileSavedDirectoryMatches(current, identities, matches) {
+  const next = new Map(current || []);
+  for (const identity of identities || []) {
+    const provider = String(identity?.provider || '').trim();
+    const externalId = String(identity?.externalId || '').trim();
+    if (provider && externalId) next.delete(`${provider}:${externalId}`);
+  }
+  for (const prospect of matches || []) {
+    if (prospect?.source_provider && prospect?.source_external_id) {
+      next.set(`${prospect.source_provider}:${prospect.source_external_id}`, prospect);
+    }
+  }
+  return next;
+}
 
 /** Parse the public GET query into a small, bounded pipeline query contract. */
 export function parseProspectPipelineParams(params) {
@@ -84,12 +109,11 @@ export function applyProspectPipelineFilters(query, filters, currentEmail, nowIs
   if (contactFilters[filters.contact]) next = contactFilters[filters.contact](next);
 
   if (filters.readiness === 'email_ready') {
-    next = next.not('email', 'is', null).in('email_permission_status', ['business_contact', 'consented']);
+    next = next.or(EMAIL_READY_FILTER);
   } else if (filters.readiness === 'whatsapp_ready') {
-    next = next.in('whatsapp_permission_status', ['business_contact', 'consented'])
-      .or('phone.not.is.null,whatsapp_numbers.neq.[]');
+    next = next.or(WHATSAPP_READY_FILTER);
   } else if (filters.readiness === 'any_ready') {
-    next = next.or('and(email.not.is.null,email_permission_status.in.(business_contact,consented)),and(phone.not.is.null,whatsapp_permission_status.in.(business_contact,consented)),and(whatsapp_numbers.neq.[],whatsapp_permission_status.in.(business_contact,consented))');
+    next = next.or(ANY_READY_FILTER);
   } else if (filters.readiness === 'needs_verification') {
     next = next.or('and(email.not.is.null,email_permission_status.eq.unknown),and(phone.not.is.null,whatsapp_permission_status.eq.unknown),and(whatsapp_numbers.neq.[],whatsapp_permission_status.eq.unknown)');
   } else if (filters.readiness === 'blocked') {

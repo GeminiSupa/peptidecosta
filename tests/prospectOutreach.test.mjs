@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 import {
@@ -18,6 +19,11 @@ import {
   whatsappHandoffUrl,
 } from '../src/lib/prospectOutreach.mjs';
 
+const outreachServer = await readFile(
+  new URL('../src/lib/prospectOutreachServer.js', import.meta.url),
+  'utf8',
+);
+
 const contactableProspect = {
   id: 'p1',
   organization_name: 'Gimnasio Escazú',
@@ -35,6 +41,13 @@ const contactableProspect = {
   phone: '+506 2222 3333',
   whatsapp_numbers: ['+506 8888 7777'],
 };
+
+test('booking token creation uses an atomic claim and rereads the winner', () => {
+  assert.match(outreachServer, /\.is\('booking_token', null\)/);
+  assert.match(outreachServer, /\.select\('booking_token'\)/);
+  assert.match(outreachServer, /if \(claimed\?\.booking_token\) return claimed\.booking_token/);
+  assert.match(outreachServer, /if \(!current\?\.booking_token\)/);
+});
 
 test('refuses to contact a prospect whose channel permission is still unknown', () => {
   const result = canContactProspect({ ...contactableProspect, email_permission_status: 'unknown' }, 'email');

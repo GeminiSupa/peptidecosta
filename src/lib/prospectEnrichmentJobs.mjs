@@ -9,6 +9,13 @@ export const PROSPECT_ENRICHMENT_JOB_STATUSES = [
 export const PROSPECT_ENRICHMENT_MAX_ATTEMPTS = 3;
 export const PROSPECT_ENRICHMENT_STALE_MS = 2 * 60 * 1000;
 
+/** Resolve a global durable job independently from the visible pipeline page. */
+export function prospectForEnrichmentJob(job = {}, visibleProspects = []) {
+  return (visibleProspects || []).find((prospect) => prospect?.id === job.prospect_id)
+    || job.prospect
+    || null;
+}
+
 export function isStaleEnrichmentJob(job = {}, now = Date.now()) {
   if (job.status !== 'running' || !job.locked_at) return false;
   const lockedAt = new Date(job.locked_at).getTime();
