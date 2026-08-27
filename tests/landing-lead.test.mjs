@@ -171,6 +171,21 @@ test('landing page is first-party lead capture with no messaging handoff', async
   assert.doesNotMatch(page, /wa\.me|buildWhatsAppLink|messagingChannel/);
 });
 
+test('Google Tag Manager covers the complete standalone ad landing funnel', async () => {
+  const pages = await Promise.all([
+    readFile(new URL('../public/lp/index.html', import.meta.url), 'utf8'),
+    readFile(new URL('../public/lp/thank-you.html', import.meta.url), 'utf8'),
+  ]);
+
+  for (const page of pages) {
+    assert.match(page, /googletagmanager\.com\/gtm\.js\?id=/);
+    assert.match(page, /googletagmanager\.com\/ns\.html\?id=GTM-M2GVDQ44/);
+    assert.equal(page.match(/GTM-M2GVDQ44/g)?.length, 2);
+    assert.ok(page.indexOf('googletagmanager.com/gtm.js') < page.indexOf('<meta charset='));
+    assert.ok(page.indexOf('googletagmanager.com/ns.html') > page.indexOf('<body>'));
+  }
+});
+
 test('CRM route stores qualification notes and sends the alert only after save', async () => {
   const route = await readFile(new URL('../src/app/api/leads/contact/route.js', import.meta.url), 'utf8');
   const saveIndex = route.indexOf('if (error) throw error;');
