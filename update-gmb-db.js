@@ -15,8 +15,8 @@ async function run() {
   if (current && current.value) {
     const newVal = {
       ...current.value,
-      googleMapsUrl: 'https://maps.app.goo.gl/jJCMHBM8aPXx67G3A',
-      googleReviewUrl: 'https://maps.app.goo.gl/jJCMHBM8aPXx67G3A',
+      googleMapsUrl: 'https://maps.app.goo.gl/b9YaeUXyuvBuj8vo8',
+      googleReviewUrl: 'https://maps.app.goo.gl/b9YaeUXyuvBuj8vo8',
       trustpilotUrl: 'https://www.trustpilot.com/review/peptidescostarica.net',
       trustpilotUrlEn: 'https://www.trustpilot.com/review/peptidescostarica.net',
       trustpilotUrlEs: 'https://es.trustpilot.com/review/peptidescostarica.net'
