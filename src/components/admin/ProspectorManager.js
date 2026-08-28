@@ -317,6 +317,7 @@ export default function ProspectorManager({ currentUserProfile }) {
       const total = Number(payload.total || 0);
       if (pipelineOffset > 0 && pipelineOffset >= total) {
         setPipelineOffset(Math.max(0, Math.floor(Math.max(0, total - 1) / PIPELINE_PAGE_SIZE) * PIPELINE_PAGE_SIZE));
+        setPipelineTotal(total);
         if (payload.stats) setPipelineStats((current) => ({ ...current, ...payload.stats }));
         return;
       }
@@ -454,6 +455,23 @@ export default function ProspectorManager({ currentUserProfile }) {
     ? savedByExternalId.get(`${prospect.source_provider}:${prospect.source_external_id}`) || null
     : null), [savedByExternalId]);
 
+  // OpenStreetMap is the only wired search provider and it carries no review
+  // data, so a rating or review-count filter can only ever empty the list. The
+  // controls stay for a provider that does supply ratings, but they are held
+  // shut — and reset — while nothing on screen has a rating to compare.
+  const hasRatingData = useMemo(
+    () => searchResults.some((prospect) => Number.isFinite(Number(prospect.rating))
+      || Number.isFinite(Number(prospect.user_rating_count))),
+    [searchResults],
+  );
+
+  useEffect(() => {
+    if (hasRatingData) return;
+    setDiscoveryMinRating('0');
+    setDiscoveryMinReviews('0');
+    setDiscoverySort((current) => (current === 'rating' ? 'relevance' : current));
+  }, [hasRatingData]);
+
   const distanceLimit = resolvedDistanceLimit(distanceChoice, customDistance);
   const filteredDiscovery = useMemo(() => filterDiscoveryProspects(searchResults, {
     center: searchCenter,
@@ -549,6 +567,7 @@ export default function ProspectorManager({ currentUserProfile }) {
       }
       if (event.type === 'partial') {
         applySearchResults(event.prospects || []);
+        void syncSavedMatches(event.prospects || []);
         setNotice(`${(event.prospects || []).length} named matches so far${stillScanning ? ' — still scanning categories…' : ''}`);
         return;
       }
@@ -579,6 +598,7 @@ export default function ProspectorManager({ currentUserProfile }) {
     setSearching(true);
     setError('');
     setNotice('');
+    applySearchResults([]);
     if (!bbox) setSearchCenter(null);
     if (view !== 'discover') setView('discover');
     try {
@@ -600,7 +620,7 @@ export default function ProspectorManager({ currentUserProfile }) {
         setSearching(false);
       }
     }
-  }, [query, location, view, consumeSearchStream]);
+  }, [query, location, view, consumeSearchStream, applySearchResults]);
 
   const onSearchSubmit = (event) => {
     event.preventDefault();
@@ -1604,7 +1624,7 @@ export default function ProspectorManager({ currentUserProfile }) {
               </select>
             </label>
             <label>Rating
-              <select className="prospector-select" value={discoveryMinRating} onChange={(event) => setDiscoveryMinRating(event.target.value)}>
+              <select className="prospector-select" value={discoveryMinRating} disabled={!hasRatingData} onChange={(event) => setDiscoveryMinRating(event.target.value)}>
                 <option value="0">Any rating</option>
                 <option value="4">4.0+</option>
                 <option value="4.3">4.3+</option>
@@ -1612,7 +1632,7 @@ export default function ProspectorManager({ currentUserProfile }) {
               </select>
             </label>
             <label>Review count
-              <select className="prospector-select" value={discoveryMinReviews} onChange={(event) => setDiscoveryMinReviews(event.target.value)}>
+              <select className="prospector-select" value={discoveryMinReviews} disabled={!hasRatingData} onChange={(event) => setDiscoveryMinReviews(event.target.value)}>
                 <option value="0">Any reviews</option>
                 <option value="10">10+ reviews</option>
                 <option value="20">20+ reviews</option>
@@ -1624,13 +1644,14 @@ export default function ProspectorManager({ currentUserProfile }) {
                 <option value="relevance">Best match</option>
                 <option value="distance">Nearest first</option>
                 <option value="score">Best fit first</option>
-                <option value="rating">Highest rating</option>
+                <option value="rating" disabled={!hasRatingData}>Highest rating</option>
               </select>
             </label>
             <label className="prospector-filter-check">
               <input type="checkbox" checked={excludeSaved} onChange={(event) => setExcludeSaved(event.target.checked)} /> Exclude saved
             </label>
             <button type="button" className="prospector-btn small" onClick={clearDiscoveryFilters}>Clear filters</button>
+            {!hasRatingData && <small className="prospector-filter-hint">OpenStreetMap does not publish ratings or review counts, so those filters stay off for these results.</small>}
             {distanceChoice && !searchCenter && <small className="prospector-filter-hint">Add a location and search, or search the visible map area, to apply distance.</small>}
             {distanceChoice === 'custom' && searchCenter && !distanceLimit && <small className="prospector-filter-hint">Enter a custom distance greater than 0 km.</small>}
           </div>}
