@@ -3509,18 +3509,13 @@ Core Rules:
   const handleSendRecoveryEmail = async (acart) => {
     setSendingRecoveryEmail(prev => ({ ...prev, [acart.session_id]: true }));
     try {
-      const response = await fetch('/api/abandoned-cart-notification', {
+      const response = await adminFetch('/api/abandoned-cart-notification', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           session_id: acart.session_id,
-          customer_name: acart.customer_name,
-          customer_email: acart.customer_email,
-          cart_data: acart.cart_data,
-          lang: acart.lang || 'es',
-          currency: acart.currency || 'CRC',
         }),
       });
 
@@ -3632,16 +3627,11 @@ Core Rules:
       const acart = cartsToProcess[i];
       setBulkProgressText(`Sending email ${i + 1}/${cartsToProcess.length} to ${acart.customer_name || 'Customer'}...`);
       try {
-        const response = await fetch('/api/abandoned-cart-notification', {
+        const response = await adminFetch('/api/abandoned-cart-notification', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             session_id: acart.session_id,
-            customer_name: acart.customer_name,
-            customer_email: acart.customer_email,
-            cart_data: acart.cart_data,
-            lang: acart.lang || 'es',
-            currency: acart.currency || 'CRC',
           }),
         });
         const result = await response.json().catch(() => ({}));

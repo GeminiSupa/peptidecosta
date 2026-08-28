@@ -11,6 +11,16 @@ import { getPublicSiteUrl } from '@/lib/publicUrl';
 import { sendCustomerOrderConfirmation } from '@/lib/orderWhatsAppAlerts';
 import { parseBillingAddress } from '@/lib/billingAddress.mjs';
 import { withPaymentStatusActivity } from '@/lib/paymentStatusActivity.mjs';
+import { notifyLowInventory, prepareInventoryReservation } from '@/lib/orderInventoryServer';
+import { verifyCardCheckoutToken } from '@/lib/cardPaymentLink';
+import {
+  consumeDurableRateLimit,
+  getRequestIp,
+  isTrustedStorefrontRequest,
+  rateLimitHeaders,
+  readLimitedJson,
+  RequestBodyError,
+} from '@/lib/publicApiSecurity.mjs';
 
 export const runtime = 'nodejs';
 // after() work is billed against the route's budget, and the charge round-trip
@@ -113,6 +123,45 @@ function statusToOrderStatus(status) {
   });
 }
 
+async function reserveInventoryAfterApprovedPayment(supabase, order) {
+  // New public orders explicitly start with an empty reservation. Legacy rows
+  // without the column were already deducted by the old create route and must
+  // never be deducted a second time.
+  if (!Array.isArray(order?.inventory_deducted) || order.inventory_deducted.length > 0) return;
+
+  let reservation = null;
+  try {
+    reservation = await prepareInventoryReservation(supabase, [], order.items || []);
+    const { error } = await supabase
+      .from('orders')
+      .update({ inventory_deducted: reservation.reservations })
+      .eq('id', order.id);
+    if (error) {
+      await reservation.rollback().catch(() => {});
+      reservation = null;
+      throw error;
+    }
+    try {
+      await notifyLowInventory(supabase, reservation.changes);
+    } catch (notifyError) {
+      console.error('[Shield Hub Pay] Low inventory notification failed:', notifyError.message);
+    }
+  } catch (error) {
+    console.error(`[Shield Hub Pay] Paid-order inventory reservation failed for ${order?.order_number}:`, error.message);
+    try {
+      await supabase.from('admin_notifications').insert({
+        type: 'inventory_reservation_failed',
+        title: `Inventory review required: ${order?.order_number}`,
+        body: `Payment was approved but stock could not be reserved: ${error.message}`.slice(0, 500),
+        link_tab: 'orders',
+        link_ref: order?.order_number,
+      });
+    } catch {
+      // Payment result still has to be returned even if the dashboard alert fails.
+    }
+  }
+}
+
 /**
  * Stop the checkout with something the customer can read.
  *
@@ -131,7 +180,11 @@ export async function POST(req) {
   let customerLang = 'es';
 
   try {
-    const body = await req.json();
+    if (!isTrustedStorefrontRequest(req)) {
+      return NextResponse.json({ error: 'Request origin is not allowed' }, { status: 403 });
+    }
+
+    const { body } = await readLimitedJson(req, 16 * 1024);
     failedOrderNumber = body?.orderNumber || null;
     customerLang = body?.lang === 'en' ? 'en' : 'es';
 
@@ -146,16 +199,12 @@ export async function POST(req) {
       amount,
       currency = 'USD',
       orderNumber,
-      customerName,
-      customerPhone,
-      customerEmail,
-      shippingAddress,
-      customerIp,
+      paymentToken,
       card,
       lang = 'es',
     } = body;
 
-    if (!amount || !orderNumber || !customerName || !customerPhone || !customerEmail || !shippingAddress) {
+    if (!amount || !orderNumber || !paymentToken || !card) {
       return stopCheckout('missing_details', lang, 400,
         `Missing required billing fields for ${orderNumber || 'unknown order'}`);
     }
@@ -165,16 +214,33 @@ export async function POST(req) {
         `Card payment attempted in ${currency}; only USD is configured`);
     }
 
-    const normalizedCard = normalizeCard(card, customerName);
-    if (!normalizedCard.holder || normalizedCard.number.length < 12 || normalizedCard.cvv.length < 3 || !normalizedCard.expiry_month || !normalizedCard.expiry_year) {
-      return stopCheckout('card_details', lang, 400, `Invalid card details for ${orderNumber}`);
+    const tokenClaims = verifyCardCheckoutToken(paymentToken, orderNumber);
+    if (!tokenClaims) {
+      return stopCheckout('unavailable', lang, 403, `Invalid or expired checkout authorization for ${orderNumber}`);
+    }
+
+    const supabase = getSupabaseAdmin();
+    const requestIp = getRequestIp(req);
+    const [ipLimit, orderLimit] = await Promise.all([
+      consumeDurableRateLimit(supabase, {
+        bucket: 'card-attempt-ip', key: requestIp, limit: 8, windowSeconds: 60 * 60,
+      }),
+      consumeDurableRateLimit(supabase, {
+        bucket: 'card-attempt-order', key: orderNumber, limit: 3, windowSeconds: 60 * 60,
+      }),
+    ]);
+    const deniedLimit = !ipLimit.allowed ? ipLimit : !orderLimit.allowed ? orderLimit : null;
+    if (deniedLimit) {
+      return NextResponse.json(
+        { error: deniedLimit.unavailable ? 'Payment protection is temporarily unavailable' : 'Too many card attempts. Please wait before trying again.', errorCode: 'rate_limited', retryable: true },
+        { status: deniedLimit.unavailable ? 503 : 429, headers: rateLimitHeaders(deniedLimit) },
+      );
     }
 
     // Atomically claim the order so two concurrent requests can't both charge it
     // (a double-click, two tabs, or a resend). The winner charges; a loser — the
     // order already paid, or already being processed — is rejected before the
     // gateway is touched a second time.
-    const supabase = getSupabaseAdmin();
     const claim = await claimOrderForPayment(supabase, orderNumber);
     if (!claim.claimed) {
       const state = await describeOrderPaymentState(supabase, orderNumber);
@@ -185,6 +251,29 @@ export async function POST(req) {
         return stopCheckout('already_paid', lang, 409, `Order ${orderNumber} is already settled`);
       }
       return stopCheckout('in_progress', lang, 409, `Order ${orderNumber} is already being charged`);
+    }
+
+    if (String(claim.order?.id) !== tokenClaims.orderId
+        || String(claim.order?.payment_method || '').toLowerCase() !== 'card') {
+      await releaseOrderClaim(supabase, orderNumber);
+      return stopCheckout('unavailable', lang, 403, `Checkout authorization does not match card order ${orderNumber}`);
+    }
+
+    const customerName = String(claim.order.customer_name || '').trim();
+    const customerPhone = String(claim.order.customer_phone || '').trim();
+    const customerEmail = String(claim.order.customer_email || '').trim();
+    const shippingAddress = String(claim.order.shipping_address || '').trim();
+    if (!customerName || !customerPhone || !customerEmail || !shippingAddress) {
+      await releaseOrderClaim(supabase, orderNumber);
+      return stopCheckout('missing_details', lang, 400, `Stored order ${orderNumber} has incomplete customer details`);
+    }
+
+    const normalizedCard = normalizeCard(card, customerName);
+    if (!normalizedCard.holder || normalizedCard.number.length < 12 || normalizedCard.number.length > 19
+        || normalizedCard.cvv.length < 3 || normalizedCard.cvv.length > 4
+        || !normalizedCard.expiry_month || !normalizedCard.expiry_year) {
+      await releaseOrderClaim(supabase, orderNumber);
+      return stopCheckout('card_details', lang, 400, `Invalid card details for ${orderNumber}`);
     }
 
     const name = splitName(customerName);
@@ -234,7 +323,7 @@ export async function POST(req) {
           last: name.last,
           email: customerEmail,
           phone: customerPhone,
-          ip: customerIp || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
+          ip: requestIp === 'unknown' ? '127.0.0.1' : requestIp,
         },
         billing: parseBillingAddress(shippingAddress),
         card: normalizedCard,
@@ -261,6 +350,10 @@ export async function POST(req) {
     // settled payment down the declined branch.
     const outcome = classifyPaymentOutcome(orderStatus);
     const declineReason = outcome === 'paid' ? null : declineReasonFrom(transaction);
+
+    if (outcome === 'paid') {
+      await reserveInventoryAfterApprovedPayment(supabase, claim.order);
+    }
 
     // Tell the customer how it ended, from here.
     //
@@ -349,6 +442,10 @@ export async function POST(req) {
     }, { status: 402 });
   } catch (error) {
     console.error('[Shield Hub Pay] Card processing failed:', error);
+
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
 
     // The order row exists but the charge never produced an answer, so no
     // result mail is coming. /api/orders/create held its team alert for this

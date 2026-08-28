@@ -6,6 +6,8 @@ import {
   sendAdminOrderEmail,
 } from '../src/lib/adminOrderEmail.mjs';
 
+process.env.INTERNAL_API_SECRET = 'test-internal-request-secret';
+
 const ORDER = {
   order_number: 'TEST-1',
   customer_name: 'Omer',
@@ -39,7 +41,7 @@ test('the admin email is posted to the notification route', async () => {
   assert.equal(calls[0].options.method, 'POST');
 });
 
-test('the customer is not mailed twice — the browser already sent their receipt', async () => {
+test('the default helper remains admin-only for callers that need only a team alert', async () => {
   const { fetchImpl, calls } = makeFetch();
 
   await sendAdminOrderEmail('https://example.test', ORDER, 'TEST-1', { fetchImpl });

@@ -10,6 +10,8 @@ import {
 } from '../src/lib/paymentResultEmail.mjs';
 import { buildOrderNotificationPayload } from '../src/lib/adminOrderEmail.mjs';
 
+process.env.INTERNAL_API_SECRET = 'test-internal-request-secret';
+
 const ORDER = {
   order_number: 'CARD-TEST1',
   customer_name: 'Diego',
@@ -147,5 +149,7 @@ test('the order-creation route holds the team alert only for card orders', () =>
   // A card order's alert waits for the charge result.
   assert.match(route, /admin email \(deferred to payment result\)/);
   // A non-card order has no charge step, so its alert must still go at once.
-  assert.match(route, /\['admin email', sendAdminOrderEmail\(/);
+  assert.match(route, /\['order emails', sendAdminOrderEmail\(/);
+  assert.match(route, /adminNotificationOnly: false/);
+  assert.match(route, /customerReceiptOnly: false/);
 });

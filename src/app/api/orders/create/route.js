@@ -20,6 +20,15 @@ import { agentMatchKeys } from '@/lib/agentOrders';
 import { CUSTOMER_HISTORY_SOURCE, buildAgentNameResolver, lookupHistoricalAgent } from '@/lib/agentAttribution.mjs';
 import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
 import { identityMessage, validateCustomerName } from '@/lib/checkoutIdentity.mjs';
+import { createCardCheckoutToken } from '@/lib/cardPaymentLink';
+import {
+  consumeDurableRateLimit,
+  getRequestIp,
+  isTrustedStorefrontRequest,
+  rateLimitHeaders,
+  readLimitedJson,
+  RequestBodyError,
+} from '@/lib/publicApiSecurity.mjs';
 import {
   applySalesAgentReferral,
   isEligibleSalesAgentProfile,
@@ -312,7 +321,11 @@ async function sendAgentOrderWhatsApp(supabase, order, orderNumber, orderId = nu
 
 export async function POST(request) {
   try {
-    const body = await request.json();
+    if (!isTrustedStorefrontRequest(request)) {
+      return NextResponse.json({ error: 'Request origin is not allowed' }, { status: 403 });
+    }
+
+    const { body } = await readLimitedJson(request, 96 * 1024);
     let order = body?.order;
 
     if (!order || typeof order !== 'object') {
@@ -327,6 +340,48 @@ export async function POST(request) {
 
     if (!Array.isArray(order.items) || order.items.length === 0) {
       return NextResponse.json({ error: 'Order must include at least one item' }, { status: 400 });
+    }
+    if (order.items.length > 50
+        || order.items.some((item) => !Number.isInteger(Number(item?.qty))
+          || Number(item.qty) < 1
+          || Number(item.qty) > 100)) {
+      return NextResponse.json({ error: 'Order item limits exceeded' }, { status: 400 });
+    }
+    if (!/^[A-Za-z0-9-]{6,64}$/.test(String(order.order_number || ''))
+        || String(order.customer_phone || '').length > 40
+        || String(order.customer_email || '').length > 254
+        || String(order.shipping_address || '').length > 2000
+        || !['card', 'whatsapp'].includes(String(order.payment_method || '').toLowerCase())) {
+      return NextResponse.json({ error: 'Invalid order details' }, { status: 400 });
+    }
+
+    const supabase = getSupabaseAdmin();
+    const ip = getRequestIp(request);
+    const ipLimit = await consumeDurableRateLimit(supabase, {
+      bucket: 'order-create-ip',
+      key: ip,
+      limit: 6,
+      windowSeconds: 60 * 60,
+    });
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        { error: ipLimit.unavailable ? 'Checkout protection is temporarily unavailable' : 'Too many order attempts. Please try again later.' },
+        { status: ipLimit.unavailable ? 503 : 429, headers: rateLimitHeaders(ipLimit) },
+      );
+    }
+
+    const contactKey = `${String(order.customer_email || '').trim().toLowerCase()}|${String(order.customer_phone || '').replace(/\D/g, '')}`;
+    const contactLimit = await consumeDurableRateLimit(supabase, {
+      bucket: 'order-create-contact',
+      key: contactKey,
+      limit: 5,
+      windowSeconds: 24 * 60 * 60,
+    });
+    if (!contactLimit.allowed) {
+      return NextResponse.json(
+        { error: contactLimit.unavailable ? 'Checkout protection is temporarily unavailable' : 'Too many orders for these contact details today.' },
+        { status: contactLimit.unavailable ? 503 : 429, headers: rateLimitHeaders(contactLimit) },
+      );
     }
 
     // The opening status is ours, not the caller's. This route is public and
@@ -350,7 +405,6 @@ export async function POST(request) {
     }
     order.customer_name = nameCheck.name;
 
-    const supabase = getSupabaseAdmin();
     let resolvedPromo = null;
 
     try {
@@ -501,6 +555,10 @@ export async function POST(request) {
     // fills a gap: an order that already has an agent (a referral link) is left
     // exactly as it is, so nobody is paid twice for the same sale.
     const orderRow = await applyCustomerHistoryAttribution(supabase, referredOrder);
+    // A public request may create an unpaid order, but it may not mutate stock.
+    // The empty reservation is explicit so authenticated settlement/card approval
+    // can distinguish this order from legacy rows whose stock was already taken.
+    orderRow.inventory_deducted = [];
     let savedOrderForAlerts = orderRow;
     if (droppedAttribution.length) {
       console.warn(
@@ -528,7 +586,7 @@ export async function POST(request) {
     // than its marketing tag.
     let { data, error, droppedColumns } = await writeDroppingMissingColumns(
       orderRow,
-      ['utm_campaign', 'deal_id'],
+      ['utm_campaign', 'deal_id', 'inventory_deducted'],
       (row) => supabase.from('orders').insert(row).select('id, order_number').single(),
     );
     if (droppedColumns?.length) {
@@ -569,73 +627,6 @@ export async function POST(request) {
     } catch (notifyErr) {
       console.error('[orders/create] New order notification insert failed:', notifyErr.message);
     }
-
-    // --- NEW: Deduct Inventory & Check Low Stock Threshold ---
-    // What this actually removes is written back onto the order, so a later
-    // cancellation returns exactly that and not the order's face quantities.
-    const deductedLines = [];
-    try {
-      for (const item of order.items) {
-        if (!item.product || !item.qty) continue;
-
-        // Fetch current inventory and threshold
-        const { data: prodData, error: prodErr } = await supabase
-          .from('products')
-          .select('inventory_count, low_stock_threshold')
-          .eq('product', item.product)
-          .single();
-
-        if (prodErr || !prodData || prodData.inventory_count === null) {
-          continue; // Not tracking inventory for this product
-        }
-
-        const currentInventory = prodData.inventory_count;
-        const threshold = prodData.low_stock_threshold !== null ? prodData.low_stock_threshold : 5;
-        const newInventory = Math.max(0, currentInventory - item.qty);
-
-        // Update the inventory count
-        await supabase
-          .from('products')
-          .update({ inventory_count: newInventory })
-          .eq('product', item.product);
-
-        // Record what was ACTUALLY taken, which the clamp above can make less
-        // than item.qty. Restoring from the order's quantities instead would
-        // invent stock that was never reserved.
-        const takenQty = currentInventory - newInventory;
-        if (takenQty > 0) deductedLines.push({ product: item.product, qty: takenQty });
-
-        // Check if we just crossed the threshold, or hit zero
-        const crossedThreshold = currentInventory > threshold && newInventory <= threshold;
-        const hitZero = currentInventory > 0 && newInventory === 0;
-
-        if (crossedThreshold || hitZero) {
-          await supabase.from('admin_notifications').insert({
-            type: 'low_inventory',
-            title: hitZero ? `Out of Stock: ${item.product}` : `Low Stock Alert: ${item.product}`,
-            body: `Inventory has dropped to ${newInventory} unit(s).`,
-            link_tab: 'spreadsheet',
-          });
-        }
-      }
-    } catch (invErr) {
-      console.error('[orders/create] Inventory deduction failed:', invErr);
-      // We don't fail the order if inventory deduction fails
-    }
-
-    // Optional column: a database without add-inventory-restore.sql simply does
-    // not keep the record, and restores fall back to the order's quantities.
-    if (deductedLines.length > 0 && data?.id) {
-      const { droppedColumns } = await writeDroppingMissingColumns(
-        { inventory_deducted: deductedLines },
-        ['inventory_deducted'],
-        (row) => supabase.from('orders').update(row).eq('id', data.id),
-      );
-      if (droppedColumns?.length) {
-        console.warn('[orders/create] inventory_deducted not stored — run add-inventory-restore.sql');
-      }
-    }
-    // --------------------------------------------------------
 
     const updatePromises = [];
     if (body.sessionId) {
@@ -715,7 +706,12 @@ export async function POST(request) {
       // Sent by /api/shieldhubpay/process-card, or by the webhook for 3DS.
       order.payment_method === 'card'
         ? ['admin email (deferred to payment result)', Promise.resolve()]
-        : ['admin email', sendAdminOrderEmail(baseUrl, savedOrderForAlerts, data.order_number)],
+        : ['order emails', sendAdminOrderEmail(baseUrl, savedOrderForAlerts, data.order_number, {
+          notificationOptions: {
+            adminNotificationOnly: false,
+            customerReceiptOnly: false,
+          },
+        })],
     ];
     const alertResults = await Promise.allSettled(alerts.map(([, promise]) => promise));
     alertResults.forEach((result, index) => {
@@ -727,9 +723,20 @@ export async function POST(request) {
       }
     });
 
-    return NextResponse.json({ ok: true, id: data.id, orderNumber: data.order_number });
+    const paymentToken = order.payment_method === 'card'
+      ? createCardCheckoutToken(data.order_number, data.id)
+      : null;
+    return NextResponse.json({
+      ok: true,
+      id: data.id,
+      orderNumber: data.order_number,
+      ...(paymentToken ? { paymentToken } : {}),
+    });
   } catch (err) {
     console.error('[orders/create] Unexpected error:', err);
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 });
+    if (err instanceof RequestBodyError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
