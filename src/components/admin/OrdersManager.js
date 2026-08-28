@@ -3,6 +3,12 @@ import { Database, Download, MessageCircle, Plus, RefreshCw, Trash2 } from 'luci
 import { getAdminVolumeDiscountPct } from '@/lib/adminOrderTotals.mjs';
 import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
 import { formatCrDate } from '@/lib/crTime.mjs';
+import {
+  ALL_ORDER_AGENTS,
+  UNASSIGNED_ORDER_AGENT,
+  orderAgentFilterOptions,
+  orderMatchesAgentFilter,
+} from '@/lib/orderAgentFilter.mjs';
 
 const ORDER_STATUS_OPTIONS = [
   'Pending',
@@ -240,6 +246,7 @@ export default function OrdersManager({
   // keeps a search to this component.
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
+  const [orderAgentFilter, setOrderAgentFilter] = useState(ALL_ORDER_AGENTS);
   const [ordersCurrentPage, setOrdersCurrentPage] = useState(1);
   const [ordersPerPage, setOrdersPerPage] = useState(25);
 
@@ -252,7 +259,15 @@ export default function OrdersManager({
   const deferredOrderSearch = useDeferredValue(orderSearch);
 
   const scopedOrders = visibleOrders;
-  const filteredOrders = useMemo(() => scopedOrders.filter(o => {
+  const agentOptions = useMemo(
+    () => orderAgentFilterOptions(agents, scopedOrders, currentAgentName),
+    [agents, scopedOrders, currentAgentName],
+  );
+  const agentScopedOrders = useMemo(
+    () => scopedOrders.filter((order) => orderMatchesAgentFilter(order, orderAgentFilter)),
+    [scopedOrders, orderAgentFilter],
+  );
+  const filteredOrders = useMemo(() => agentScopedOrders.filter(o => {
     if (orderStatusFilter !== 'All') {
       if (String(orderStatusFilter).startsWith('group:')) {
         const groupId = orderStatusFilter.replace('group:', '');
@@ -274,7 +289,7 @@ export default function OrdersManager({
       );
     }
     return true;
-  }), [scopedOrders, orderStatusFilter, deferredOrderSearch]);
+  }), [agentScopedOrders, orderStatusFilter, deferredOrderSearch]);
 
   const totalOrdersPages = Math.ceil(filteredOrders.length / ordersPerPage);
   const paginatedOrders = useMemo(
@@ -283,9 +298,9 @@ export default function OrdersManager({
   );
   // Independent of the search box, so typing must not recount all the tabs.
   const groupCounts = useMemo(() => ORDER_STATUS_GROUPS.reduce((acc, group) => {
-    acc[group.id] = scopedOrders.filter((order) => getOrderStatusGroup(order.status).id === group.id).length;
+    acc[group.id] = agentScopedOrders.filter((order) => getOrderStatusGroup(order.status).id === group.id).length;
     return acc;
-  }, {}), [scopedOrders]);
+  }, {}), [agentScopedOrders]);
   const setGroupFilter = (groupId) => {
     setOrderStatusFilter(`group:${groupId}`);
     setOrdersCurrentPage(1);
@@ -371,6 +386,7 @@ export default function OrdersManager({
             />
             <select
               className="admin-select"
+              aria-label="Filter orders by status"
               value={orderStatusFilter}
               onChange={(e) => {
                 setOrderStatusFilter(e.target.value);
@@ -386,6 +402,21 @@ export default function OrdersManager({
                   selectable here because filtering by one changes nothing. */}
               {ORDER_STATUS_OPTIONS.map(status => (
                 <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+            <select
+              className="admin-select"
+              aria-label="Filter orders by agent"
+              value={orderAgentFilter}
+              onChange={(e) => {
+                setOrderAgentFilter(e.target.value);
+                setOrdersCurrentPage(1);
+              }}
+            >
+              <option value={ALL_ORDER_AGENTS}>All Agents</option>
+              <option value={UNASSIGNED_ORDER_AGENT}>Unassigned</option>
+              {agentOptions.map((agent) => (
+                <option key={agent.value} value={agent.value}>{agent.label}</option>
               ))}
             </select>
           </div>
