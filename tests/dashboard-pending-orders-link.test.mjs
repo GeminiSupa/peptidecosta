@@ -9,6 +9,7 @@ import {
 const home = fs.readFileSync(new URL('../src/components/admin/DashboardHome.js', import.meta.url), 'utf8');
 const page = fs.readFileSync(new URL('../src/app/admin/page.js', import.meta.url), 'utf8');
 const orders = fs.readFileSync(new URL('../src/components/admin/OrdersManager.js', import.meta.url), 'utf8');
+const css = fs.readFileSync(new URL('../src/app/admin.css', import.meta.url), 'utf8');
 
 test('every state that is waiting on money counts as awaiting payment', () => {
   for (const status of AWAITING_PAYMENT_STATUSES) assert.equal(isAwaitingPayment(status), true);
@@ -29,8 +30,8 @@ test('a settled or refused order is not waiting for anything', () => {
 
 test('the dashboard, the nav badge and the orders filter share one list', () => {
   assert.match(home, /import \{ isAwaitingPayment \} from '@\/lib\/orderAwaitingPayment\.mjs';/);
-  assert.match(home, /const pendingOrders = orders\.filter\(\(o\) => isAwaitingPayment\(o\.status\)\)/);
-  assert.match(home, /\.filter\(\(order\) => isAwaitingPayment\(order\.status\)\)/);
+  assert.match(home, /isAwaitingPayment\(o\.status\) && inRange\(new Date\(o\.created_at\)\)/);
+  assert.match(home, /isAwaitingPayment\(order\.status\) && inRange\(new Date\(order\.created_at\)\)/);
   assert.match(page, /const pendingOrderCount = visibleOrders\.filter\(\(o\) => isAwaitingPayment\(o\.status\)\)\.length;/);
   assert.match(orders, /statuses: AWAITING_PAYMENT_STATUSES,/);
   // Nobody may re-hardcode the narrow test the tile used to run.
@@ -38,13 +39,68 @@ test('the dashboard, the nav badge and the orders filter share one list', () => 
   assert.doesNotMatch(page, /\(o\.status \|\| 'Pending'\) === 'Pending'/);
 });
 
+test('one dropdown drives the whole KPI row, defaulting to this week', () => {
+  assert.match(home, /const \[kpiRange, setKpiRange\] = useState\('week'\);/);
+  assert.match(home, /\{ id: 'week', label: 'This week', start: \(now\) => startOfWeek\(now\) \}/);
+  for (const id of ["'today'", "'30d'", "'all'"]) assert.ok(home.includes(`{ id: ${id},`), id);
+  // One control above the grid, not one per tile.
+  assert.equal((home.match(/className="dashboard-kpi-range"/g) || []).length, 1);
+  assert.match(home, /aria-label="Date range for the figures below"/);
+  assert.match(css, /\.dashboard-kpi-rangebar \{/);
+});
+
+test('every figure in the row reads the same window', () => {
+  // 'All time' has no start, so an absent start must mean "everything".
+  assert.match(home, /const inRange = \(date\) => !kpiRangeStart \|\| date >= kpiRangeStart;/);
+  assert.match(home, /orderCountsAsSale\(o\) && inRange\(getRevenueDate\(o\)\)/);
+  assert.match(home, /\(c\.status === 'active' \|\| !c\.status\) && inRange\(new Date\(c\.created_at\)\)/);
+  // Both memos have to recompute when the window moves, or a tile goes stale.
+  assert.match(home, /\}, \[orders, abandonedCarts, leads, products, exchangeRate, kpiRangeStart\]\);/);
+  assert.match(home, /\}, \[orders, exchangeRate, kpiRangeStart\]\);/);
+});
+
+test('the split Today and This Week revenue tiles are gone', () => {
+  // They contradict a shared window: two fixed periods in a row that claims one.
+  assert.doesNotMatch(home, /revenueToday/);
+  assert.doesNotMatch(home, /revenueWeek/);
+  assert.match(home, /<div className="dashboard-kpi-label">Revenue<\/div>/);
+});
+
+test('no tile carries its own dropdown or a total in small print', () => {
+  assert.doesNotMatch(home, /dashboard-kpi-sub/);
+  assert.doesNotMatch(home, /dashboard-kpi-rangerow/);
+  assert.doesNotMatch(home, /waiting in total/);
+  assert.doesNotMatch(css, /\.dashboard-kpi-sub \{/);
+  // A select nested in a button is invalid markup and swallows the click, so
+  // the row's control must sit outside every card.
+  const gridAt = home.indexOf('<div className="dashboard-kpi-grid">');
+  assert.ok(gridAt > home.indexOf('className="dashboard-kpi-range"'), 'the control belongs above the grid');
+});
+
+test('the Trustpilot quota keeps its own month', () => {
+  // A monthly allowance shown over a week would misread as five times the room.
+  assert.match(home, /const monthStart = startOfMonth\(now\);/);
+  assert.doesNotMatch(home, /INVITE_TRIGGER_STATUSES\.has\(o\.status\) && o\.customer_email && inRange/);
+});
+
+test('hovering says which days, and whose', () => {
+  assert.match(home, /Costa Rica time\./);
+  assert.match(home, /const kpiRangeHint = kpiRangeTooltip\(activeKpiRange, kpiRangeStart, new Date\(\)\);/);
+  assert.match(home, /'Everything on record, with no date limit\.'/);
+  // On the dropdown and on each tile, so it is found from either.
+  assert.ok((home.match(/title=\{kpiRangeHint\}/g) || []).length >= 4);
+});
+
+test('a breakdown names the window it was opened in', () => {
+  assert.match(home, /revenue: `Revenue, \$\{activeKpiRange\.label\.toLowerCase\(\)\}`/);
+  assert.match(home, /pendingOrders: `Pending Orders, \$\{activeKpiRange\.label\.toLowerCase\(\)\}`/);
+});
+
 // The card used to open the unfiltered queue, so a "5 pending orders" prompt
 // landed the reader on every order including the completed ones.
 test('the pending-orders card opens the queue filtered to what it counted', () => {
   assert.match(home, /navOptions: \{ orderStatus: 'group:needs_payment' \}/);
   assert.match(home, /onNavigate\(item\.tab, null, item\.navOptions\)/);
-  // The group it asks for has to be the one built from the shared list, or the
-  // number and the rows behind it drift apart again.
   assert.match(orders, /id: 'needs_payment',[\s\S]*?statuses: AWAITING_PAYMENT_STATUSES,/);
 });
 
@@ -60,47 +116,4 @@ test('the orders table applies the requested status and resets to page one', () 
   assert.match(orders, /setOrdersCurrentPage\(1\)/);
   // A timestamp on the request is what lets the same card work a second time.
   assert.match(orders, /\}, \[statusFilterRequest\]\);/);
-});
-
-test('the tile defaults to this week and offers the other windows', () => {
-  assert.match(home, /useState\('week'\)/);
-  assert.match(home, /\{ id: 'week', label: 'This week', start: \(now\) => startOfWeek\(now\) \}/);
-  for (const id of ["'today'", "'30d'", "'all'"]) assert.ok(home.includes(`{ id: ${id},`), id);
-  assert.match(home, /<div className="dashboard-kpi-value">\{pendingInRange\}<\/div>/);
-  // The label stays put; the dropdown beside it is what names the window, so
-  // the tile does not re-word itself every time the range changes.
-  assert.match(home, /<div className="dashboard-kpi-label">Pending Orders<\/div>/);
-});
-
-test('the older pending orders stay on the tile whatever the range', () => {
-  // The whole point of the second line: narrowing the window must not put the
-  // backlog out of sight the way the literal-'Pending' count once did.
-  assert.match(home, /stats\.pendingOrders\.length > pendingInRange &&/);
-  assert.match(home, /\{stats\.pendingOrders\.length\} total/);
-});
-
-test('hovering the tile says whose week it is', () => {
-  assert.match(home, /Costa Rica time\./);
-  assert.match(home, /const pendingTooltip = pendingRangeTooltip\(activePendingRange, pendingRangeStart, new Date\(\)\);/);
-  // On the number and on the dropdown, so it is found from either.
-  assert.match(home, /title=\{pendingTooltip\}[\s\S]*?title=\{pendingTooltip\}/);
-  assert.match(home, /'Every order still waiting to be paid, with no date limit\.'/);
-});
-
-test('the range dropdown sits beside the button, never inside it', () => {
-  // A <select> inside a <button> is invalid, and the click goes to the wrong one.
-  // Read the tile's own button body rather than regex across the whole file,
-  // which happily spans a closing tag and calls a sibling a child.
-  const openedAt = home.indexOf("onClick={() => setOpenTile('pendingOrders')}");
-  assert.ok(openedAt > 0, 'pending tile button not found');
-  const buttonBody = home.slice(openedAt, home.indexOf('</button>', openedAt));
-  assert.ok(!buttonBody.includes('<select'), 'the range select is nested inside the tile button');
-  assert.match(home, /<\/button>[\s\S]{0,400}?<select\s+className="dashboard-kpi-range"/);
-  const css = fs.readFileSync(new URL('../src/app/admin.css', import.meta.url), 'utf8');
-  assert.match(css, /\.dashboard-kpi-sub \{/);
-  assert.match(css, /\.dashboard-kpi-range \{/);
-  // The dropdown sits on its own row under the label rather than overlapping
-  // the figure, which is what squeezed the text onto three lines.
-  assert.match(css, /\.dashboard-kpi-rangerow \{/);
-  assert.match(css, /\.dashboard-kpi-open \{/);
 });

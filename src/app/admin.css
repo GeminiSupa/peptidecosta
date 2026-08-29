@@ -3985,56 +3985,32 @@
     margin-top: 2px;
 }
 
-/* Second line on a KPI tile, for a total the headline figure does not cover. */
-.dashboard-kpi-sub {
-    font-size: 0.68rem;
-    color: #94a3b8;
-    font-weight: 600;
-    margin-top: 3px;
-}
-
-/* The pending tile is the one KPI whose window the reader chooses. It holds a
-   dropdown, so the card itself is not a button and only the figure is. */
-.dashboard-kpi-ranged { min-width: 0; }
-
-.dashboard-kpi-ranged-body {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.dashboard-kpi-open {
-    background: none;
-    border: 0;
-    margin: 0;
-    padding: 0;
-    font: inherit;
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-    border-radius: 6px;
-}
-
-.dashboard-kpi-open:hover .dashboard-kpi-value { color: #bfdbfe; }
-.dashboard-kpi-open:focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
-
-.dashboard-kpi-rangerow {
+/* One window over the whole KPI row, so the figures cannot disagree about which
+   days they cover. */
+.dashboard-kpi-rangebar {
     display: flex;
     align-items: center;
-    gap: 7px;
-    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.dashboard-kpi-rangebar-label {
+    font-size: 0.65rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 700;
 }
 
 .dashboard-kpi-range {
     background: rgba(15, 23, 42, 0.75);
     border: 1px solid rgba(255, 255, 255, 0.09);
-    border-radius: 6px;
+    border-radius: 7px;
     color: #cbd5e1;
     font-family: inherit;
-    font-size: 0.64rem;
+    font-size: 0.72rem;
     font-weight: 600;
-    padding: 3px 5px;
+    padding: 4px 7px;
     cursor: pointer;
     max-width: 100%;
 }
@@ -4048,6 +4024,7 @@
     outline: 2px solid #60a5fa;
     outline-offset: 1px;
 }
+
 
 
 .dashboard-section { margin-bottom: 20px; }

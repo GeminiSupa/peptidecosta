@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   ClipboardList, ShoppingCart, Target, DollarSign, Package,
-  AlertTriangle, Inbox, MessageSquare, TrendingUp, ChevronRight, Star, CheckCircle,
+  AlertTriangle, Inbox, MessageSquare, ChevronRight, Star, CheckCircle,
 } from 'lucide-react';
 import { orderCountsAsSale, orderGrossUsd, orderNetRevenueUsd, orderRevenueBasis } from '@/lib/orderRevenue.mjs';
 import { orderReportableAtMs } from '@/lib/agentDashboard.mjs';
@@ -80,22 +80,21 @@ function cartValue(cart) {
   }, 0);
 }
 
-// The pending tile is the only one whose window the reader picks, so its options
-// live here rather than in a shared filter. Every start is a Costa Rica instant,
-// because the business day belongs to Costa Rica and not to whoever is reading.
-// The week runs Monday to Sunday, matching the Revenue This Week tile beside it.
-const PENDING_RANGES = [
+// One window for the whole KPI row. Every start is a Costa Rica instant,
+// because the business day belongs to Costa Rica and not to whoever is reading,
+// and the week runs Monday to Sunday.
+const KPI_RANGES = [
   { id: 'week', label: 'This week', start: (now) => startOfWeek(now) },
   { id: 'today', label: 'Today', start: (now) => startOfDay(now) },
   { id: '30d', label: 'Last 30 days', start: (now) => new Date(startOfDay(now).getTime() - 29 * 86400000) },
   { id: 'all', label: 'All time', start: () => null },
 ];
 
-const PENDING_RANGE_BY_ID = new Map(PENDING_RANGES.map((range) => [range.id, range]));
+const KPI_RANGE_BY_ID = new Map(KPI_RANGES.map((range) => [range.id, range]));
 
 /** Spelled out on hover, because "this week" alone does not say whose week. */
-function pendingRangeTooltip(range, start, now) {
-  if (!start) return 'Every order still waiting to be paid, with no date limit.';
+function kpiRangeTooltip(range, start, now) {
+  if (!start) return 'Everything on record, with no date limit.';
   const day = { weekday: 'short', day: 'numeric', month: 'short' };
   return `${range.label}: ${formatCrDate(start, day)} to ${formatCrDate(now, day)}, Costa Rica time.`;
 }
@@ -113,35 +112,41 @@ export default function DashboardHome({
   onOverrideStats,
   exchangeRate = FALLBACK_RATE,
 }) {
-  // Which tile's breakdown is open: 'revenueToday' | 'revenueWeek' | 'pendingOrders'.
+  // Which tile's breakdown is open: 'revenue' | 'pendingOrders'.
   const [openTile, setOpenTile] = useState(null);
-  // Defaults to the week so the number reads as this week's workload rather than
-  // an all-time backlog. Everything older stays one line below and one click away.
-  const [pendingRange, setPendingRange] = useState('week');
+  // One window over the whole row. The week is the default because the screen is
+  // a day's work, and an all-time figure reads as a backlog rather than a job.
+  const [kpiRange, setKpiRange] = useState('week');
+
+  const activeKpiRange = KPI_RANGE_BY_ID.get(kpiRange) || KPI_RANGES[0];
+  const kpiRangeStart = useMemo(() => activeKpiRange.start(new Date()), [activeKpiRange]);
+  const kpiRangeHint = kpiRangeTooltip(activeKpiRange, kpiRangeStart, new Date());
+
   const stats = useMemo(() => {
     const now = new Date();
-    const todayStart = startOfDay(now);
-    const weekStart = startOfWeek(now);
+    // 'All time' has no start, so an absent start means everything qualifies.
+    const inRange = (date) => !kpiRangeStart || date >= kpiRangeStart;
 
     // Every state that is waiting on money, not just the literal 'Pending'.
-    const pendingOrders = orders.filter((o) => isAwaitingPayment(o.status));
+    const pendingOrders = orders.filter(
+      (o) => isAwaitingPayment(o.status) && inRange(new Date(o.created_at))
+    );
 
     // Net of refunds: a $100 order with $30 given back is $70 of revenue, not
     // $100. The same sum backs the commission report and the analytics chart, so
     // the three screens cannot disagree about what one order was worth.
     // The rate is passed because a WooCommerce order off the main site arrives
     // with its colón total only, and is converted here rather than counting $0.
-    const revenueInRange = (start) =>
-      orders
-        .filter((o) => orderCountsAsSale(o) && getRevenueDate(o) >= start)
-        .reduce((sum, o) => sum + orderNetRevenueUsd(o, exchangeRate), 0);
+    const revenue = orders
+      .filter((o) => orderCountsAsSale(o) && inRange(getRevenueDate(o)))
+      .reduce((sum, o) => sum + orderNetRevenueUsd(o, exchangeRate), 0);
 
-    const revenueToday = revenueInRange(todayStart);
-    const revenueWeek = revenueInRange(weekStart);
-
-    const recoverableCarts = abandonedCarts.filter((c) => c.status === 'active' || !c.status);
+    const recoverableCarts = abandonedCarts.filter(
+      (c) => (c.status === 'active' || !c.status) && inRange(new Date(c.created_at))
+    );
     const recoverableValue = recoverableCarts.reduce((s, c) => s + cartValue(c), 0);
 
+    // The lists below are not KPI tiles and keep their own windows on purpose.
     const hotLeads = leads
       .filter((l) => (l.status || 'New') === 'New' || !l.contacted)
       .slice(0, 5);
@@ -155,6 +160,8 @@ export default function DashboardHome({
     // Trustpilot invitations used this month (estimate): every order marked
     // complete with a customer email triggers one verified invitation via the
     // order-complete email BCC. Dated by completion (CR time), like revenue.
+    // Deliberately outside the row's window: it is a monthly quota, so showing
+    // a week of it against a limit of 50 would misread as five times the room.
     const monthStart = startOfMonth(now);
     // Count from the later of "start of month" and "integration go-live" so the
     // first month isn't inflated by completions that predate the Trustpilot BCC.
@@ -165,8 +172,7 @@ export default function DashboardHome({
 
     return {
       pendingOrders,
-      revenueToday,
-      revenueWeek,
+      revenue,
       recoverableCarts,
       recoverableValue,
       hotLeads,
@@ -174,52 +180,40 @@ export default function DashboardHome({
       recentOrders,
       trustpilotUsed,
     };
-  }, [orders, abandonedCarts, leads, products, exchangeRate]);
-
-  const activePendingRange = PENDING_RANGE_BY_ID.get(pendingRange) || PENDING_RANGES[0];
-  const pendingRangeStart = useMemo(() => activePendingRange.start(new Date()), [activePendingRange]);
-  const pendingInRange = useMemo(() => (pendingRangeStart
-    ? stats.pendingOrders.filter((o) => new Date(o.created_at) >= pendingRangeStart).length
-    : stats.pendingOrders.length), [stats.pendingOrders, pendingRangeStart]);
-  const pendingTooltip = pendingRangeTooltip(activePendingRange, pendingRangeStart, new Date());
+  }, [orders, abandonedCarts, leads, products, exchangeRate, kpiRangeStart]);
 
   // What actually made each tile. Deliberately wider than the tile itself: it
   // carries the orders inside the window that are NOT counting too, since the
   // point is to be able to force one in as well as hold one out.
   const breakdowns = useMemo(() => {
-    const now = new Date();
-    const todayStart = startOfDay(now);
-    const weekStart = startOfWeek(now);
-
-    const inWindow = (start) => orders
-      .filter((order) => getRevenueDate(order) >= start)
-      .map((order) => ({
-        id: order.id,
-        orderNumber: order.order_number,
-        customer: order.customer_name,
-        // Two different dates, so each is labelled: revenue lands on the day the
-        // order first became Paid/complete, while the Orders list shows when it
-        // came in. An order placed on the 22nd and paid today belongs in today.
-        date: getRevenueDate(order),
-        countedLabel: orderCountsAsSale(order) ? 'Counted' : 'Would count',
-        placedAt: new Date(order.created_at),
-        amountUsd: orderNetRevenueUsd(order, exchangeRate) || orderGrossUsd(order, exchangeRate),
-        basis: orderRevenueBasis(order),
-      }))
-      // Counting orders first, then newest, so the money is at the top.
-      .sort((a, b) => Number(b.basis.counts) - Number(a.basis.counts) || b.date - a.date);
+    const inRange = (date) => !kpiRangeStart || date >= kpiRangeStart;
 
     return {
-      revenueToday: inWindow(todayStart),
-      revenueWeek: inWindow(weekStart),
-      pendingOrders: orders
-        .filter((order) => isAwaitingPayment(order.status))
+      revenue: orders
+        .filter((order) => inRange(getRevenueDate(order)))
         .map((order) => ({
           id: order.id,
           orderNumber: order.order_number,
           customer: order.customer_name,
-          // This tile is about orders waiting, so its date is when they came in
-          // — the same date the Orders list shows, and there is no second one.
+          // Two different dates, so each is labelled: revenue lands on the day the
+          // order first became Paid/complete, while the Orders list shows when it
+          // came in. An order placed on the 22nd and paid today belongs in today.
+          date: getRevenueDate(order),
+          countedLabel: orderCountsAsSale(order) ? 'Counted' : 'Would count',
+          placedAt: new Date(order.created_at),
+          amountUsd: orderNetRevenueUsd(order, exchangeRate) || orderGrossUsd(order, exchangeRate),
+          basis: orderRevenueBasis(order),
+        }))
+        // Counting orders first, then newest, so the money is at the top.
+        .sort((a, b) => Number(b.basis.counts) - Number(a.basis.counts) || b.date - a.date),
+      pendingOrders: orders
+        .filter((order) => isAwaitingPayment(order.status) && inRange(new Date(order.created_at)))
+        .map((order) => ({
+          id: order.id,
+          orderNumber: order.order_number,
+          customer: order.customer_name,
+          // This tile is about orders waiting, so its date is when they came in,
+          // the same date the Orders list shows, and there is no second one.
           date: new Date(order.created_at),
           countedLabel: 'Placed',
           placedAt: null,
@@ -228,17 +222,17 @@ export default function DashboardHome({
         }))
         .sort((a, b) => b.date - a.date),
     };
-  }, [orders, exchangeRate]);
+  }, [orders, exchangeRate, kpiRangeStart]);
 
+  // The window is named in the heading so a breakdown opened from a tile cannot
+  // be read as the whole picture.
   const TILE_TITLES = {
-    revenueToday: 'Revenue Today',
-    revenueWeek: 'Revenue This Week',
-    pendingOrders: 'Pending Orders',
+    revenue: `Revenue, ${activeKpiRange.label.toLowerCase()}`,
+    pendingOrders: `Pending Orders, ${activeKpiRange.label.toLowerCase()}`,
   };
   const TILE_SUBTITLES = {
-    revenueToday: 'Orders dated today by when they were first marked paid or complete, not when they were created.',
-    revenueWeek: 'Orders dated this week by when they were first marked paid or complete, not when they were created.',
-    pendingOrders: 'Everything still waiting to be paid, newest first. The tile leads with this week; older ones are listed here too. None of these count as revenue.',
+    revenue: 'Orders dated by when they were first marked paid or complete, not when they were created.',
+    pendingOrders: 'Orders still waiting to be paid, newest first, dated by when they came in. None of these count as revenue.',
   };
 
   const applyOverrides = async (changes, reason) => {
@@ -357,74 +351,53 @@ export default function DashboardHome({
         )}
       </section>
 
+      {/* One window over every tile below it. Hovering the dropdown spells the
+          dates out, because "this week" alone does not say whose week. */}
+      <div className="dashboard-kpi-rangebar">
+        <span className="dashboard-kpi-rangebar-label">Showing</span>
+        <select
+          className="dashboard-kpi-range"
+          aria-label="Date range for the figures below"
+          title={kpiRangeHint}
+          value={kpiRange}
+          onChange={(event) => setKpiRange(event.target.value)}
+        >
+          {KPI_RANGES.map((range) => (
+            <option key={range.id} value={range.id}>{range.label}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="dashboard-kpi-grid">
-        {/* The card is a div, not a button, because it holds a dropdown: a
-            select nested in a button is invalid markup, and the browsers that
-            tolerate it hand the button the click meant for the dropdown. Only
-            the figure opens the breakdown. */}
-        <div className="dashboard-kpi-card dashboard-kpi-ranged">
-          <div className="dashboard-kpi-icon" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
-            <ClipboardList size={20} />
-          </div>
-          <div className="dashboard-kpi-ranged-body">
-            <button
-              type="button"
-              className="dashboard-kpi-open"
-              onClick={() => setOpenTile('pendingOrders')}
-              title={pendingTooltip}
-            >
-              <div className="dashboard-kpi-value">{pendingInRange}</div>
-              <div className="dashboard-kpi-label">Pending Orders</div>
-            </button>
-            <div className="dashboard-kpi-rangerow">
-              <select
-                className="dashboard-kpi-range"
-                aria-label="Date range for pending orders"
-                title={pendingTooltip}
-                value={pendingRange}
-                onChange={(event) => setPendingRange(event.target.value)}
-              >
-                {PENDING_RANGES.map((range) => (
-                  <option key={range.id} value={range.id}>{range.label}</option>
-                ))}
-              </select>
-              {stats.pendingOrders.length > pendingInRange && (
-                <span className="dashboard-kpi-sub" title={`${stats.pendingOrders.length} orders are waiting to be paid in total, including older ones.`}>
-                  {stats.pendingOrders.length} total
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
         <button
           type="button"
           className="dashboard-kpi-card is-clickable"
-          onClick={() => setOpenTile('revenueToday')}
-          title="See what made this number"
+          onClick={() => setOpenTile('pendingOrders')}
+          title={kpiRangeHint}
+        >
+          <div className="dashboard-kpi-icon" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
+            <ClipboardList size={20} />
+          </div>
+          <div>
+            <div className="dashboard-kpi-value">{stats.pendingOrders.length}</div>
+            <div className="dashboard-kpi-label">Pending Orders</div>
+          </div>
+        </button>
+        <button
+          type="button"
+          className="dashboard-kpi-card is-clickable"
+          onClick={() => setOpenTile('revenue')}
+          title={kpiRangeHint}
         >
           <div className="dashboard-kpi-icon" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#4ade80' }}>
             <DollarSign size={20} />
           </div>
           <div>
-            <div className="dashboard-kpi-value">${stats.revenueToday.toLocaleString()}</div>
-            <div className="dashboard-kpi-label">Revenue Today</div>
+            <div className="dashboard-kpi-value">${stats.revenue.toLocaleString()}</div>
+            <div className="dashboard-kpi-label">Revenue</div>
           </div>
         </button>
-        <button
-          type="button"
-          className="dashboard-kpi-card is-clickable"
-          onClick={() => setOpenTile('revenueWeek')}
-          title="See what made this number"
-        >
-          <div className="dashboard-kpi-icon" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
-            <TrendingUp size={20} />
-          </div>
-          <div>
-            <div className="dashboard-kpi-value">${stats.revenueWeek.toLocaleString()}</div>
-            <div className="dashboard-kpi-label">Revenue This Week</div>
-          </div>
-        </button>
-        <div className="dashboard-kpi-card">
+        <div className="dashboard-kpi-card" title={kpiRangeHint}>
           <div className="dashboard-kpi-icon" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' }}>
             <ShoppingCart size={20} />
           </div>
