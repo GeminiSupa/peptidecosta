@@ -2,6 +2,7 @@ import React, { useDeferredValue, useMemo, useState } from 'react';
 import { Database, Download, MessageCircle, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { getAdminVolumeDiscountPct } from '@/lib/adminOrderTotals.mjs';
 import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
+import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 import { formatCrDate } from '@/lib/crTime.mjs';
 import {
   ALL_ORDER_AGENTS,
@@ -217,7 +218,8 @@ function hasConfirmedPayment(order, group, cardBadge) {
 function getOrderAgentSourceLabel(order) {
   if (!order?.sales_agent) return 'Unassigned';
   if (order.agent_commission_source === CUSTOMER_HISTORY_SOURCE) return 'Auto: customer history';
-  if (order.agent_commission_source) return `Source: ${order.agent_commission_source}`;
+  // This printed the raw column value at the admin: "Source: agent_referral".
+  if (order.agent_commission_source) return commissionSourceLabel(order.agent_commission_source);
   return 'Assigned owner';
 }
 

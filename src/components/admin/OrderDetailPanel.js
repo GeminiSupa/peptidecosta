@@ -6,7 +6,7 @@ import { formatActivityType } from '@/lib/orderActivity';
 import { formatCrInstant } from '@/lib/crTime.mjs';
 import { adminFetch } from '@/lib/adminApi';
 import ProductCombobox from './ProductCombobox';
-import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
+import { isAgentReferralSource, isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import { bacGiftShortfall } from '@/lib/bacWater.mjs';
 import { formatAmount as formatRefundMoney, orderCanBeRefunded } from '@/lib/orderRefund.mjs';
 import {
@@ -209,11 +209,9 @@ export default function OrderDetailPanel({
     setCreditedAgent(order.sales_agent || '');
     setAttributionAffiliateId(order.affiliate_id || '');
     setCommissionMode(
-      order.agent_commission_source === 'agent_referral'
+      isAgentReferralSource(order.agent_commission_source)
         ? 'agent_referral'
-        : (Number(order.agent_commission_rate_override || 0) === 20 && order.agent_commission_source === 'self_generated'
-          ? 'self_generated'
-          : (order.agent_commission_rate_override ? 'custom' : 'default'))
+        : (order.agent_commission_rate_override ? 'custom' : 'default')
     );
     setCommissionOverridePct(order.agent_commission_rate_override || 20);
     setAttributionError('');
@@ -416,7 +414,7 @@ export default function OrderDetailPanel({
   const selectedAffiliateIsAgent = isSalesAgentAffiliate(selectedAffiliate);
   const currentAgentOverride = Number(order.agent_commission_rate_override || 0);
   const currentCommissionLabel = currentAgentOverride > 0
-    ? `${currentAgentOverride}%${order.agent_commission_source === 'agent_referral' ? ' agent referral' : (order.agent_commission_source === 'self_generated' ? ' self-generated' : ' override')}`
+    ? `${currentAgentOverride}%${isAgentReferralSource(order.agent_commission_source) ? ' agent referral' : ' override'}`
     : 'Profile rate';
 
   const saveAttribution = async () => {
@@ -431,9 +429,7 @@ export default function OrderDetailPanel({
       const overrideRate = commissionMode === 'default' ? null : Math.max(0, Number(commissionOverridePct) || 0);
       const source = commissionMode === 'default'
         ? null
-        : (commissionMode === 'agent_referral'
-          ? 'agent_referral'
-          : (commissionMode === 'self_generated' ? 'self_generated' : 'custom_override'));
+        : (commissionMode === 'agent_referral' ? 'agent_referral' : 'custom_override');
 
       await patchOrder(
         {
@@ -966,13 +962,12 @@ export default function OrderDetailPanel({
                   value={commissionMode}
                   onChange={(e) => {
                     setCommissionMode(e.target.value);
-                    if (e.target.value === 'self_generated' || e.target.value === 'agent_referral') setCommissionOverridePct(20);
+                    if (e.target.value === 'agent_referral') setCommissionOverridePct(20);
                   }}
                   style={{ width: '100%', marginTop: '4px' }}
                 >
                   <option value="default">Profile rate</option>
                   <option value="agent_referral">Agent referral - combined 20%</option>
-                  <option value="self_generated">Self-generated sale - 20%</option>
                   <option value="custom">Custom override</option>
                 </select>
               ) : (

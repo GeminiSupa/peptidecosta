@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { getOrderSalesAmounts } from '@/lib/agentOrders';
+import { isAgentReferralSource } from '@/lib/salesAgentAffiliate.mjs';
 import {
   AGENT_ANALYTICS_MAX_WEEK_OFFSET,
   formatAgentDate,
@@ -154,7 +155,7 @@ export default function AgentDashboard({
           <div className="dashboard-mini-title">#{o.order_number || String(o.id || '').slice(0, 8)}</div>
           <div className="dashboard-mini-sub">{o.customer_name || 'Customer'}</div>
           {o.commission_source_label && (
-            <div className="dashboard-mini-sub" style={{ color: o.agent_commission_source === 'agent_referral' ? '#5eead4' : undefined }}>
+            <div className="dashboard-mini-sub" style={{ color: isAgentReferralSource(o.agent_commission_source) ? '#5eead4' : undefined }}>
               {o.commission_source_label} · {Number(o.commission_rate_applied || 0)}% commission
             </div>
           )}

@@ -14,7 +14,7 @@ import {
   decorateCommissionOrder,
   summarizeOrderCommissions,
 } from '@/lib/orderCommission.mjs';
-import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
+import { commissionSourceLabel, isAgentReferralSource } from '@/lib/salesAgentAffiliate.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { computeOverrideAmounts, overrideRateFor, payableChildrenOf } from '@/lib/subUserCommission.mjs';
 import { isSubUser } from '@/lib/subUserTier.mjs';
@@ -248,7 +248,7 @@ export async function GET(request) {
         commissionRate: rate,
         currentWeekCommissionRateLabel: commissionRateLabel(weekCommissionSummary.rates, rate),
         currentWeekAgentReferralCount: reportedWeekOrders.filter(
-          (order) => order.agent_commission_source === 'agent_referral'
+          (order) => isAgentReferralSource(order.agent_commission_source)
         ).length,
         commissionStructure: profile.commission_structure || '',
         currentMonthOrdersCount: monthSales.count,

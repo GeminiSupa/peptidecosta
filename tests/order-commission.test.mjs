@@ -10,6 +10,7 @@ import {
 import {
   applySalesAgentReferral,
   commissionSourceLabel,
+  isAgentReferralSource,
   isEligibleSalesAgentProfile,
   isSalesAgentAffiliate,
 } from '../src/lib/salesAgentAffiliate.mjs';
@@ -25,16 +26,16 @@ test('an order without an override uses the agent profile commission rate', () =
   assert.equal(commission.crcCommission, 0);
 });
 
-test('a self-generated sale can pay 20% without changing the agent profile rate', () => {
+test('an agent referral can pay 20% without changing the agent profile rate', () => {
   const order = {
     total_usd: 500,
     agent_commission_rate_override: 20,
-    agent_commission_source: 'self_generated',
+    agent_commission_source: 'agent_referral',
   };
 
   const commission = computeOrderCommissionAmounts(order, 10, amounts);
   assert.equal(commission.rate, 20);
-  assert.equal(commission.source, 'self_generated');
+  assert.equal(commission.source, 'agent_referral');
   assert.equal(commission.usdCommission, 100);
 });
 
@@ -93,4 +94,17 @@ test('decorated report orders identify the referral rate and earnings', () => {
   assert.equal(row.commission_source_label, 'Agent referral');
   assert.equal(row.commission_rate_applied, 20);
   assert.equal(row.commission_earned_usd, 60);
+});
+
+test('only agent_referral earns the combined-20% treatment in the reports', () => {
+  // The retired `self_generated` was backfilled away on 2026-08-29. Anything that
+  // is not a referral must stay out, or a custom override starts claiming the
+  // "paid at 20%, no additional 10%" line on an agent's pay email.
+  assert.equal(isAgentReferralSource('agent_referral'), true);
+  assert.equal(commissionSourceLabel('agent_referral'), 'Agent referral');
+
+  assert.equal(isAgentReferralSource('custom_override'), false);
+  assert.equal(isAgentReferralSource('self_generated'), false);
+  assert.equal(isAgentReferralSource(null), false);
+  assert.equal(isAgentReferralSource(''), false);
 });
