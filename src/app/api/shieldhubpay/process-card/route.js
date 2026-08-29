@@ -168,10 +168,10 @@ async function reserveInventoryAfterApprovedPayment(supabase, order) {
  * The internal reason is logged, never returned: a buyer has no use for
  * "credentials are not configured" and no business being told it.
  */
-function stopCheckout(key, lang, httpStatus, internalReason) {
+function stopCheckout(key, lang, httpStatus, internalReason, headers) {
   const { message, retryable, code } = cardCheckoutMessage(key, lang);
   if (internalReason) console.error(`[Shield Hub Pay] ${code}: ${internalReason}`);
-  return NextResponse.json({ error: message, errorCode: code, retryable }, { status: httpStatus });
+  return NextResponse.json({ error: message, errorCode: code, retryable }, { status: httpStatus, headers });
 }
 
 export async function POST(req) {
@@ -231,10 +231,17 @@ export async function POST(req) {
     ]);
     const deniedLimit = !ipLimit.allowed ? ipLimit : !orderLimit.allowed ? orderLimit : null;
     if (deniedLimit) {
-      return NextResponse.json(
-        { error: deniedLimit.unavailable ? 'Payment protection is temporarily unavailable' : 'Too many card attempts. Please wait before trying again.', errorCode: 'rate_limited', retryable: true },
-        { status: deniedLimit.unavailable ? 503 : 429, headers: rateLimitHeaders(deniedLimit) },
-      );
+      // The limiter fails closed, so a denial does not always mean the customer
+      // did anything: `unavailable` is our own check being down. Either way the
+      // gateway is untouched, which is why both stops still invite a retry.
+      const deniedBucket = !ipLimit.allowed ? 'IP' : 'order';
+      return deniedLimit.unavailable
+        ? stopCheckout('protection_unavailable', lang, 503,
+          `Rate limiter unavailable on the ${deniedBucket} bucket for ${orderNumber}`,
+          rateLimitHeaders(deniedLimit))
+        : stopCheckout('rate_limited', lang, 429,
+          `Card attempt limit reached on the ${deniedBucket} bucket for ${orderNumber}`,
+          rateLimitHeaders(deniedLimit));
     }
 
     // Atomically claim the order so two concurrent requests can't both charge it
@@ -443,8 +450,12 @@ export async function POST(req) {
   } catch (error) {
     console.error('[Shield Hub Pay] Card processing failed:', error);
 
+    // Thrown by readLimitedJson before the gateway is ever reached, so nothing
+    // was charged and a retry is safe. Its own wording ("Invalid JSON body") is
+    // for us, not for a buyer, and it is not translated.
     if (error instanceof RequestBodyError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return stopCheckout('missing_details', customerLang, error.status || 400,
+        `Card request body rejected for ${failedOrderNumber || 'unknown order'}: ${error.message}`);
     }
 
     // The order row exists but the charge never produced an answer, so no
