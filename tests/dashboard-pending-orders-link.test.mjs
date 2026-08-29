@@ -39,8 +39,10 @@ test('the dashboard, the nav badge and the orders filter share one list', () => 
   assert.doesNotMatch(page, /\(o\.status \|\| 'Pending'\) === 'Pending'/);
 });
 
-test('one dropdown drives the whole KPI row, defaulting to this week', () => {
-  assert.match(home, /const \[kpiRange, setKpiRange\] = useState\('week'\);/);
+test('one dropdown drives the whole KPI row, defaulting to today', () => {
+  assert.match(home, /const \[kpiRange, setKpiRange\] = useState\('today'\);/);
+  // Whatever the default, it has to be one of the offered windows.
+  assert.match(home, /\{ id: 'today', label: 'Today', start: \(now\) => startOfDay\(now\) \}/);
   assert.match(home, /\{ id: 'week', label: 'This week', start: \(now\) => startOfWeek\(now\) \}/);
   for (const id of ["'today'", "'30d'", "'all'"]) assert.ok(home.includes(`{ id: ${id},`), id);
   // One control above the grid, not one per tile.

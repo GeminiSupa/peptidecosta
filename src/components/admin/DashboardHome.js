@@ -114,9 +114,11 @@ export default function DashboardHome({
 }) {
   // Which tile's breakdown is open: 'revenue' | 'pendingOrders'.
   const [openTile, setOpenTile] = useState(null);
-  // One window over the whole row. The week is the default because the screen is
-  // a day's work, and an all-time figure reads as a backlog rather than a job.
-  const [kpiRange, setKpiRange] = useState('week');
+  // One window over the whole row, opening on today because this screen is the
+  // day's work. Early in the Costa Rica morning that is legitimately zero, and
+  // the row says so on hover rather than looking broken; the week is one click
+  // away in the dropdown.
+  const [kpiRange, setKpiRange] = useState('today');
 
   const activeKpiRange = KPI_RANGE_BY_ID.get(kpiRange) || KPI_RANGES[0];
   const kpiRangeStart = useMemo(() => activeKpiRange.start(new Date()), [activeKpiRange]);
