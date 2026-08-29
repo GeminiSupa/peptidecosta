@@ -1585,6 +1585,11 @@ Core Rules:
     return resolveTabAccess(targetTab, adminProfile);
   }, [adminProfile, profileLoading]);
 
+  // A dashboard card that names a status opens the queue already filtered to it.
+  // Carries a timestamp so clicking the same card twice re-applies the filter
+  // after the user has changed it by hand.
+  const [ordersStatusRequest, setOrdersStatusRequest] = useState(null);
+
   const navigateToTab = useCallback((tabId, linkRef = null, options = {}) => {
     if (!ADMIN_TAB_IDS.has(tabId)) return;
     let targetTab = tabId;
@@ -1603,6 +1608,9 @@ Core Rules:
       setFocusedFacebookNotificationId(String(linkRef));
     }
     if (targetTab === 'messenger' && nextFbView) setFbView(nextFbView);
+    if (tabId === 'orders' && options.orderStatus) {
+      setOrdersStatusRequest({ status: options.orderStatus, at: Date.now() });
+    }
     setActiveTab(targetTab);
     setMobileMoreOpen(false);
     const query = new URLSearchParams({ tab: targetTab });
@@ -5233,6 +5241,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             loggedInEmailRef={loggedInEmail}
             currentAgentName={adminProfile?.name || ''}
             currentAgentEmail={adminProfile?.email || ''}
+            statusFilterRequest={ordersStatusRequest}
           />
           </ErrorBoundary>
         )}

@@ -1,4 +1,4 @@
-import React, { useDeferredValue, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Database, Download, MessageCircle, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { getAdminVolumeDiscountPct } from '@/lib/adminOrderTotals.mjs';
 import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
@@ -241,7 +241,8 @@ export default function OrdersManager({
   currentAgentName,
   onRefreshOrders,
   refreshingOrders = false,
-  ordersRefreshError = ''
+  ordersRefreshError = '',
+  statusFilterRequest = null
 }) {
   // These four only ever drove this table. Holding them in the 7,900-line admin
   // page meant every keystroke re-rendered the whole dashboard; owning them here
@@ -251,6 +252,15 @@ export default function OrdersManager({
   const [orderAgentFilter, setOrderAgentFilter] = useState(ALL_ORDER_AGENTS);
   const [ordersCurrentPage, setOrdersCurrentPage] = useState(1);
   const [ordersPerPage, setOrdersPerPage] = useState(25);
+
+  // A dashboard card can hand this table the status it just counted, so the rows
+  // shown match the number that was clicked. Keyed on the whole request object,
+  // which carries a timestamp, so the same card works twice in a row.
+  useEffect(() => {
+    if (!statusFilterRequest?.status) return;
+    setOrderStatusFilter(statusFilterRequest.status);
+    setOrdersCurrentPage(1);
+  }, [statusFilterRequest]);
 
   // Every order renders twice below (a mobile card and a desktop row, one hidden
   // by CSS), each carrying two <select>s — so a page rebuilds ~750 elements.

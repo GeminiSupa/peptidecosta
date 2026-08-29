@@ -226,6 +226,9 @@ export default function DashboardHome({
       title: `${stats.pendingOrders.length} pending order${stats.pendingOrders.length > 1 ? 's' : ''}`,
       sub: 'Need confirmation or payment',
       action: 'Open orders',
+      // The card counts strictly Pending, so the queue it opens is filtered to
+      // match. Landing on the unfiltered list made the number look wrong.
+      navOptions: { orderStatus: 'Pending' },
       tab: 'orders',
     },
     stats.recoverableCarts.length > 0 && {
@@ -295,7 +298,7 @@ export default function DashboardHome({
                 key={item.key}
                 type="button"
                 className="dashboard-attention-item"
-                onClick={() => onNavigate(item.tab)}
+                onClick={() => onNavigate(item.tab, null, item.navOptions)}
               >
                 <span className="dashboard-attention-icon" style={{ background: `${item.color}1f`, color: item.color }}>
                   <item.icon size={20} />
