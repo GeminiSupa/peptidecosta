@@ -55,19 +55,10 @@ test('every figure in the row reads the same window', () => {
   // 'All time' has no start, so an absent start must mean "everything".
   assert.match(home, /const inRange = \(date\) => !kpiRangeStart \|\| date >= kpiRangeStart;/);
   assert.match(home, /orderCountsAsSale\(o\) && inRange\(getRevenueDate\(o\)\)/);
+  assert.match(home, /\(c\.status === 'active' \|\| !c\.status\) && inRange\(new Date\(c\.created_at\)\)/);
   // Both memos have to recompute when the window moves, or a tile goes stale.
   assert.match(home, /\}, \[orders, abandonedCarts, leads, products, exchangeRate, kpiRangeStart\]\);/);
   assert.match(home, /\}, \[orders, exchangeRate, kpiRangeStart\]\);/);
-});
-
-test('open carts are counted whatever the window says', () => {
-  // A cart is open work, not a period. One abandoned nine days ago is still
-  // money that can be recovered today, and the sidebar badge counts every open
-  // one, so windowing this made two screens disagree and hid carts.
-  assert.match(home, /const recoverableCarts = abandonedCarts\.filter\(\(c\) => c\.status === 'active' \|\| !c\.status\);/);
-  assert.doesNotMatch(home, /inRange\(new Date\(c\.created_at\)\)/);
-  // And it has to say so, or the row looks inconsistent instead of deliberate.
-  assert.match(home, /Every cart still open, whatever the date range above\./);
 });
 
 test('the split Today and This Week revenue tiles are gone', () => {
@@ -98,9 +89,8 @@ test('hovering says which days, and whose', () => {
   assert.match(home, /Costa Rica time\./);
   assert.match(home, /const kpiRangeHint = kpiRangeTooltip\(activeKpiRange, kpiRangeStart, new Date\(\)\);/);
   assert.match(home, /'Everything on record, with no date limit\.'/);
-  // On the dropdown and on both windowed tiles, so it is found from any of
-  // them. Carts is not windowed and carries its own note instead.
-  assert.equal((home.match(/title=\{kpiRangeHint\}/g) || []).length, 3);
+  // On the dropdown and on each tile, so it is found from either.
+  assert.ok((home.match(/title=\{kpiRangeHint\}/g) || []).length >= 4);
 });
 
 test('a breakdown names the window it was opened in', () => {

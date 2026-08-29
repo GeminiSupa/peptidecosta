@@ -143,12 +143,9 @@ export default function DashboardHome({
       .filter((o) => orderCountsAsSale(o) && inRange(getRevenueDate(o)))
       .reduce((sum, o) => sum + orderNetRevenueUsd(o, exchangeRate), 0);
 
-    // Deliberately outside the row's window. A cart is open work, not a period:
-    // one abandoned nine days ago is still money that can be gone after today,
-    // and the sidebar badge counts every open one. Narrowing this to the week
-    // made the two screens disagree and hid recoverable carts, which is the
-    // fault the pending tile was just fixed for.
-    const recoverableCarts = abandonedCarts.filter((c) => c.status === 'active' || !c.status);
+    const recoverableCarts = abandonedCarts.filter(
+      (c) => (c.status === 'active' || !c.status) && inRange(new Date(c.created_at))
+    );
     const recoverableValue = recoverableCarts.reduce((s, c) => s + cartValue(c), 0);
 
     // The lists below are not KPI tiles and keep their own windows on purpose.
@@ -402,7 +399,7 @@ export default function DashboardHome({
             <div className="dashboard-kpi-label">Revenue</div>
           </div>
         </button>
-        <div className="dashboard-kpi-card" title="Every cart still open, whatever the date range above. An older cart is still recoverable.">
+        <div className="dashboard-kpi-card" title={kpiRangeHint}>
           <div className="dashboard-kpi-icon" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' }}>
             <ShoppingCart size={20} />
           </div>
