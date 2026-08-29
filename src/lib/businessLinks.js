@@ -1,4 +1,4 @@
-export const GOOGLE_LOCAL_LISTING_URL = 'https://maps.app.goo.gl/jJCMHBM8aPXx67G3A';
+export const GOOGLE_LOCAL_LISTING_URL = 'https://maps.app.goo.gl/b9YaeUXyuvBuj8vo8';
 
 export const TRUSTPILOT_REVIEW_URLS = {
   en: 'https://www.trustpilot.com/review/peptidescostarica.net',
@@ -10,10 +10,14 @@ export const TRUSTPILOT_REVIEW_URLS = {
 export const TRUSTPILOT_RATING = '4.4';
 export const TRUSTPILOT_REVIEW_COUNT = 11;
 
+// Retired listings. A stored value that matches one of these loses to
+// GOOGLE_LOCAL_LISTING_URL in normalizeBusinessLinks, so add the outgoing URL
+// here whenever the profile changes or the saved row keeps winning.
 const LEGACY_GOOGLE_LISTING_URLS = new Set([
   'https://maps.app.goo.gl/i52poGFKvSdytYnK6',
   'https://maps.app.goo.gl/G4MqFLWW7y9FXvKi9?g_st=ic',
   'https://maps.app.goo.gl/AgpzEd8NNRKYNbJj9',
+  'https://maps.app.goo.gl/jJCMHBM8aPXx67G3A',
 ]);
 
 export const DEFAULT_BUSINESS_LINKS = {

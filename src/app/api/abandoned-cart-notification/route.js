@@ -1,20 +1,15 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
-import { createClient } from '@supabase/supabase-js';
 import { getBusinessLinks } from '@/lib/settings';
 import { getCampaignSmtpConfig, isElasticCampaignSmtp } from '@/lib/campaignSmtp';
 import { findPaidOrderMatchForCart, markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
 import { abandonedCartUnitPrice } from '@/lib/abandonedCartPricing.mjs';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-const supabase = supabaseUrl && (supabaseServiceKey || supabaseAnonKey)
-  ? createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey)
-  : null;
+import { verifyAdminSession } from '@/lib/adminAuth';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { getPublicSiteUrl } from '@/lib/publicUrl';
+import { readLimitedJson, RequestBodyError } from '@/lib/publicApiSecurity.mjs';
 
 const escapeHtml = (value = '') => String(value)
   .replace(/&/g, '&amp;')
@@ -51,14 +46,6 @@ const normalizeCartData = (cartData) => {
   }
 
   return Array.isArray(cartData) ? cartData.map(normalizeCartItem) : [];
-};
-
-const normalizeOrigin = (request) => {
-  const rawOrigin = request.headers.get('origin')
-    || process.env.NEXT_PUBLIC_BASE_URL
-    || 'https://catalog.peptidescostarica.net';
-
-  return rawOrigin.replace(/\/$/, '');
 };
 
 const identifySmtpProvider = (host = '') => {
@@ -180,63 +167,62 @@ const buildRecoveryHtml = (customerName, cartData, checkoutUrl, currency, lang, 
 };
 
 export async function POST(request) {
-  try {
-    const payload = await request.json();
+  const auth = await verifyAdminSession(request, {
+    requirePermission: 'carts',
+    skipPathPermission: true,
+  });
+  if (auth.error) return auth.error;
 
-    const {
-      session_id,
-      customer_name,
-      customer_email,
-      cart_data,
-      lang = 'es',
-      currency = 'CRC'
-    } = payload;
-    const normalizedCartData = normalizeCartData(cart_data);
+  try {
+    const { body: payload } = await readLimitedJson(request, 8 * 1024);
+    const session_id = String(payload?.session_id || '').trim().slice(0, 200);
+    if (!session_id) {
+      return NextResponse.json({ error: 'session_id is required' }, { status: 400 });
+    }
+
+    const supabase = getSupabaseAdmin();
+    const { data: storedCart, error: cartLookupError } = await supabase
+      .from('abandoned_carts')
+      .select('*')
+      .eq('session_id', session_id)
+      .maybeSingle();
+
+    if (cartLookupError) {
+      console.error('[Abandoned Cart Notification] Could not load cart row:', cartLookupError.message);
+      return NextResponse.json({ error: 'Could not load the saved cart' }, { status: 500 });
+    }
+    if (!storedCart) {
+      return NextResponse.json({ error: 'Saved cart not found' }, { status: 404 });
+    }
+
+    // Recipient and content come only from the stored cart. An authenticated
+    // operator may choose a cart to recover, but cannot turn this endpoint into
+    // a branded arbitrary-address mail relay by changing the POST body.
+    const customer_name = storedCart.customer_name;
+    const customer_email = String(storedCart.customer_email || '').trim();
+    const normalizedCartData = normalizeCartData(storedCart.cart_data);
+    const lang = storedCart.lang === 'en' ? 'en' : 'es';
+    const currency = storedCart.currency === 'USD' ? 'USD' : 'CRC';
+    if (!customer_email || normalizedCartData.length === 0) {
+      return NextResponse.json({ error: 'Saved cart has no email or items' }, { status: 400 });
+    }
+
+    const { match, error: paidMatchError } = await findPaidOrderMatchForCart(supabase, storedCart);
+    if (paidMatchError) {
+      console.error('[Abandoned Cart Notification] Failed to verify paid-order match:', paidMatchError);
+      return NextResponse.json({ error: 'Could not verify whether this cart already converted' }, { status: 500 });
+    }
+    if (match) {
+      await markAbandonedCartsConverted(supabase, [session_id]);
+      return NextResponse.json({
+        success: false,
+        skipped: true,
+        reason: 'paid_order_exists',
+        error: `Skipped recovery email because this customer already has a paid order${match.order_number ? ` (${match.order_number})` : ''}.`,
+      }, { status: 409 });
+    }
 
     const links = await getBusinessLinks();
-
-    if (!customer_email || !session_id || normalizedCartData.length === 0) {
-      return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
-    }
-
-    if (supabase) {
-      let cart = {
-        session_id,
-        customer_name,
-        customer_email,
-        cart_data: normalizedCartData,
-      };
-      const { data: storedCart, error: cartLookupError } = await supabase
-        .from('abandoned_carts')
-        .select('session_id, created_at, last_updated, customer_email, customer_phone')
-        .eq('session_id', session_id)
-        .maybeSingle();
-
-      if (cartLookupError) {
-        console.warn('[Abandoned Cart Notification] Could not load cart row for paid-order guard:', cartLookupError.message);
-      } else if (storedCart) {
-        cart = {
-          ...cart,
-          ...storedCart,
-          customer_email: storedCart.customer_email || customer_email,
-        };
-      }
-
-      const { match, error: paidMatchError } = await findPaidOrderMatchForCart(supabase, cart);
-      if (paidMatchError) {
-        console.error('[Abandoned Cart Notification] Failed to verify paid-order match:', paidMatchError);
-        return NextResponse.json({ error: 'Could not verify whether this cart already converted' }, { status: 500 });
-      }
-      if (match) {
-        await markAbandonedCartsConverted(supabase, [session_id]);
-        return NextResponse.json({
-          success: false,
-          skipped: true,
-          reason: 'paid_order_exists',
-          error: `Skipped recovery email because this customer already has a paid order${match.order_number ? ` (${match.order_number})` : ''}.`,
-        }, { status: 409 });
-      }
-    }
 
     const smtp = getCampaignSmtpConfig();
     if (!smtp.configured) {
@@ -254,7 +240,7 @@ export async function POST(request) {
       : `¿Olvidaste algo? 🧪 ¡Tu carrito de Péptidos Costa Rica te espera!`;
 
     // Dynamic checkout URL
-    const origin = normalizeOrigin(request);
+    const origin = getPublicSiteUrl(request.url);
     const checkoutUrl = `${origin}/catalog?recover_session=${encodeURIComponent(session_id)}`;
 
     // Sanitize customer name to prevent literal 'null', 'undefined', 'n/a', etc.
@@ -341,24 +327,22 @@ export async function POST(request) {
     console.log(`[Abandoned Cart Notification] Recovery email sent to ${customer_email} via ${mailProvider}: ${mailInfo.messageId}`);
 
     // Update database row
-    if (supabase) {
-      try {
-        const { error: dbErr } = await supabase
-          .from('abandoned_carts')
-          .update({
-            recovery_email_sent: true,
-            recovery_email_sent_at: new Date().toISOString()
-          })
-          .eq('session_id', session_id);
+    try {
+      const { error: dbErr } = await supabase
+        .from('abandoned_carts')
+        .update({
+          recovery_email_sent: true,
+          recovery_email_sent_at: new Date().toISOString()
+        })
+        .eq('session_id', session_id);
 
-        if (dbErr) {
-          console.error('[Abandoned Cart Notification] Failed to update recovery status in DB:', dbErr);
-        } else {
-          console.log(`[Abandoned Cart Notification] DB updated for session ${session_id}`);
-        }
-      } catch (dbCrash) {
-        console.error('[Abandoned Cart Notification] Crash updating DB status:', dbCrash);
+      if (dbErr) {
+        console.error('[Abandoned Cart Notification] Failed to update recovery status in DB:', dbErr);
+      } else {
+        console.log(`[Abandoned Cart Notification] DB updated for session ${session_id}`);
       }
+    } catch (dbCrash) {
+      console.error('[Abandoned Cart Notification] Crash updating DB status:', dbCrash);
     }
 
     return NextResponse.json({
@@ -367,6 +351,9 @@ export async function POST(request) {
     });
   } catch (err) {
     console.error('[Abandoned Cart Notification] Unexpected handler crash:', err);
-    return NextResponse.json({ error: 'Internal server error', details: err.message }, { status: 500 });
+    if (err instanceof RequestBodyError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

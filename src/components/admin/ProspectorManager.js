@@ -43,6 +43,7 @@ import {
 } from '@/lib/prospectPermissions.mjs';
 import { readNdjsonStream } from '@/lib/ndjsonStream.mjs';
 import ProspectMap from '@/components/admin/prospector/ProspectMap';
+import LocationCombobox from '@/components/admin/prospector/LocationCombobox';
 import prospectorStyles from '@/components/admin/prospector/prospectorStyles';
 
 const EMPTY_FORM = {
@@ -1582,7 +1583,7 @@ export default function ProspectorManager({ currentUserProfile }) {
           <form className="prospector-searchbar" onSubmit={onSearchSubmit}>
             <input className="prospector-input" list="prospector-category-suggestions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Business type or keyword" aria-label="Business type or keyword" />
             <datalist id="prospector-category-suggestions">{CATEGORY_SUGGESTIONS.map((item) => <option key={item} value={item} />)}</datalist>
-            <input className="prospector-input" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="City, region, or country (optional)" aria-label="City, region, or country" />
+            <LocationCombobox value={location} onChange={setLocation} />
             <button className="prospector-btn primary" type="submit" disabled={searching || query.trim().length < 2}>
               {searching ? <Loader2 size={15} className="mkt-spin" /> : <Search size={15} />} Search businesses
             </button>

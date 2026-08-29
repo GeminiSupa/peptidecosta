@@ -21,6 +21,7 @@
  */
 
 import { buildOrderNotificationPayload } from './adminOrderEmail.mjs';
+import { internalJsonHeaders } from './internalRequestAuth.mjs';
 import { classifyPaymentOutcome } from './paymentOutcome.mjs';
 
 // Same budget as the team's new-order alert: it must outlive the mail route's
@@ -52,6 +53,7 @@ export async function sendPaymentResultEmails(baseUrl, order, orderNumber, {
   fetchImpl = fetch,
   timeoutMs = PAYMENT_RESULT_EMAIL_TIMEOUT_MS,
   logPrefix = '[Payment result email]',
+  internalSecret = undefined,
 } = {}) {
   const status = order?.status;
 
@@ -71,10 +73,11 @@ export async function sendPaymentResultEmails(baseUrl, order, orderNumber, {
   });
 
   try {
+    const body = JSON.stringify(payload);
     const response = await fetchImpl(`${baseUrl}/api/order-notification`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      headers: internalJsonHeaders(body, '/api/order-notification', { secret: internalSecret }),
+      body,
       signal: AbortSignal.timeout(timeoutMs),
     });
 
@@ -123,6 +126,7 @@ export async function sendCardHandoffReceipt(baseUrl, order, orderNumber, {
   fetchImpl = fetch,
   timeoutMs = PAYMENT_RESULT_EMAIL_TIMEOUT_MS,
   logPrefix = '[Card 3DS receipt]',
+  internalSecret = undefined,
 } = {}) {
   const payload = buildOrderNotificationPayload(order, orderNumber, {
     adminNotificationOnly: false,
@@ -131,10 +135,11 @@ export async function sendCardHandoffReceipt(baseUrl, order, orderNumber, {
   });
 
   try {
+    const body = JSON.stringify(payload);
     const response = await fetchImpl(`${baseUrl}/api/order-notification`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      headers: internalJsonHeaders(body, '/api/order-notification', { secret: internalSecret }),
+      body,
       signal: AbortSignal.timeout(timeoutMs),
     });
     const result = await response.json().catch(() => ({}));

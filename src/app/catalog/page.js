@@ -2196,27 +2196,10 @@ export default function CatalogPage() {
         localStorage.setItem('cart_session_id', newSid);
         setSessionId(newSid);
       }
-      return { ok: true, id: data.id };
+      return { ok: true, id: data.id, paymentToken: data.paymentToken || null };
     } catch (err) {
       console.error('Order save request failed:', err);
       return { ok: false, error: err.message || 'Network error' };
-    }
-  };
-
-  const sendOrderNotification = async (orderPayload) => {
-    try {
-      const res = await fetch('/api/order-notification', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderPayload),
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        console.error('Order notification failed:', data.error || res.statusText);
-      }
-    } catch (err) {
-      console.error('Order notification request failed:', err);
     }
   };
 
@@ -2442,6 +2425,7 @@ export default function CatalogPage() {
           amount: cardAmount,
           currency: cardCurrency,
           orderNumber: orderNum,
+          paymentToken: cardSave.paymentToken,
           customerName: cleanName,
           customerPhone,
           customerEmail,
@@ -2621,29 +2605,6 @@ export default function CatalogPage() {
       );
       return;
     }
-
-    await sendOrderNotification({
-      orderNumber: orderNum,
-      customerName: cleanName,
-      customerPhone,
-      customerEmail,
-      shippingAddress,
-      customerIdType,
-      customerIdNumber,
-      items: orderItems,
-      total: totalVal,
-      totalUsd,
-      totalCrc,
-      subtotal: getCartTotal(),
-      volumeDiscount: getCartTotal() - getDiscountedTotal(),
-      promoDiscount: getPromoDiscountAmount(),
-      shipping: getShippingFee(),
-      currency,
-      paymentMethod,
-      status: 'Pending',
-      customerReceiptOnly: true,
-      lang,
-    });
 
     // 2. Open WhatsApp Receipt
     const receiptHeader = lang === 'en' 

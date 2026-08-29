@@ -10,6 +10,9 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
 import { orderEmailActivity, recordOrderEmails } from '@/lib/orderEmailLog.mjs';
 import { classifyPaymentOutcome } from '@/lib/paymentOutcome.mjs';
+import { verifyAdminSession } from '@/lib/adminAuth';
+import { verifyInternalRequest } from '@/lib/internalRequestAuth.mjs';
+import { readLimitedJson, RequestBodyError } from '@/lib/publicApiSecurity.mjs';
 import {
   buildAdminHtml,
   buildCustomerHtml,
@@ -55,14 +58,26 @@ function getOrderSmtpConfig() {
 }
 
 export async function POST(request) {
-  // Read env vars inside the handler to prevent Next.js caching issues
-  const smtp = getOrderSmtpConfig();
-
   try {
-    const order = await request.json();
+    const { rawBody, body: order } = await readLimitedJson(request, 96 * 1024);
+    const internal = verifyInternalRequest(request, rawBody, '/api/order-notification');
+    if (!internal) {
+      const auth = await verifyAdminSession(request, {
+        requirePermission: 'orders',
+        skipPathPermission: true,
+      });
+      if (auth.error) return auth.error;
+    }
+
+    // Read env vars inside the handler to prevent Next.js caching issues.
+    const smtp = getOrderSmtpConfig();
     const links = await getBusinessLinks();
 
-    if (!order?.customerName || !Array.isArray(order?.items) || order.items.length === 0) {
+    if (!order?.customerName
+        || String(order.customerName).length > 200
+        || !Array.isArray(order?.items)
+        || order.items.length === 0
+        || order.items.length > 100) {
       return NextResponse.json({ error: 'Invalid order notification payload' }, { status: 400 });
     }
 
@@ -369,6 +384,9 @@ export async function POST(request) {
     return NextResponse.json(responseBody);
   } catch (err) {
     console.error('[Order notification] Unexpected handler crash:', err);
-    return NextResponse.json({ error: 'Internal server error', details: err.message }, { status: 500 });
+    if (err instanceof RequestBodyError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

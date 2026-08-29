@@ -39,9 +39,16 @@ export function applySalesAgentReferral(order, profile, { keepAffiliate = true }
   return next;
 }
 
+// `self_generated` used to mean this too, at the identical 20%, but none of the
+// reports counted it — an agent's own 20% orders went unexplained on their pay
+// email. Merged into agent_referral and backfilled on 2026-08-29, orders and
+// payout snapshots both.
+export function isAgentReferralSource(source) {
+  return String(source || '').trim() === SALES_AGENT_REFERRAL_SOURCE;
+}
+
 export function commissionSourceLabel(source) {
-  if (source === SALES_AGENT_REFERRAL_SOURCE) return 'Agent referral';
-  if (source === 'self_generated') return 'Self-generated sale';
-  if (source === 'custom_override') return 'Custom override';
+  if (isAgentReferralSource(source)) return 'Agent referral';
+  if (source === 'custom_override') return 'Custom Percentage';
   return 'Standard sale';
 }

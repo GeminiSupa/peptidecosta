@@ -35,11 +35,11 @@ import {
 } from '@/lib/landingLeadSettings.mjs';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
-  GOOGLE_LOCAL_LISTING_URL,
+  getTrustpilotReviewUrl,
   TRUSTPILOT_RATING,
   TRUSTPILOT_REVIEW_COUNT,
-  TRUSTPILOT_REVIEW_URLS,
 } from '@/lib/businessLinks';
+import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import './landing.css';
 
 const SESSION_KEY = 'pcr_landing_enquiry_seen';
@@ -419,6 +419,7 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted, settings }) 
 
 export default function LeadGenerationLandingPage() {
   const [lang, setLang] = useState('es');
+  const { links } = useBusinessLinks();
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTrigger, setModalTrigger] = useState('');
   const [source, setSource] = useState('adwords_lp');
@@ -515,10 +516,10 @@ export default function LeadGenerationLandingPage() {
   };
 
   const ratingCards = useMemo(() => [
-    { name: 'Google', rating: '5.0', color: '#f4b400', href: GOOGLE_LOCAL_LISTING_URL, detail: lang === 'en' ? 'Customer rating' : 'Calificación de clientes' },
-    { name: 'Trustpilot', rating: TRUSTPILOT_RATING, color: '#00b67a', href: TRUSTPILOT_REVIEW_URLS[lang], detail: `${TRUSTPILOT_REVIEW_COUNT} ${c.reviews}` },
-    { name: 'Facebook', rating: '5.0', color: '#1877f2', href: 'https://www.facebook.com/Peptidescostaricaresearch/reviews', detail: lang === 'en' ? 'Community rating' : 'Calificación de la comunidad' },
-  ], [c.reviews, lang]);
+    { name: 'Google', rating: '5.0', color: '#f4b400', href: links.googleReviewUrl || links.googleMapsUrl, detail: lang === 'en' ? 'Customer rating' : 'Calificación de clientes' },
+    { name: 'Trustpilot', rating: TRUSTPILOT_RATING, color: '#00b67a', href: getTrustpilotReviewUrl(lang, links), detail: `${TRUSTPILOT_REVIEW_COUNT} ${c.reviews}` },
+    { name: 'Facebook', rating: '5.0', color: '#1877f2', href: links.facebookReviewUrl || links.facebookUrl || 'https://www.facebook.com/Peptidescostaricaresearch/reviews', detail: lang === 'en' ? 'Community rating' : 'Calificación de la comunidad' },
+  ], [c.reviews, lang, links]);
 
   return (
     <div className="lead-lp">

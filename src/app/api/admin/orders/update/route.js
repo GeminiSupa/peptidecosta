@@ -15,6 +15,7 @@ import { isFirstPaidTransition, shouldSendPaidConfirmation } from '@/lib/orderSt
 import { shouldRestoreForStatus } from '@/lib/inventoryRestore.mjs';
 import { restoreInventoryForOrder } from '@/lib/inventoryRestoreServer';
 import { notifyLowInventory, prepareInventoryReservation } from '@/lib/orderInventoryServer';
+import { internalJsonHeaders } from '@/lib/internalRequestAuth.mjs';
 import {
   calculateAdminOrderTotals,
   getAdminCurrencyPair,
@@ -187,7 +188,7 @@ export async function PATCH(request) {
 
       const currentReserved = Array.isArray(currentOrder.inventory_deducted)
         ? currentOrder.inventory_deducted
-        : currentOrder.items;
+        : (currentOrder.items || []);
       const reservedByProduct = new Map();
       for (const line of currentReserved || []) {
         const name = stripGiftSuffix(line?.product || line?.name);
@@ -241,6 +242,20 @@ export async function PATCH(request) {
 
       inventoryCurrentLines = currentReserved;
       inventoryDesiredItems = authoritative.items;
+    }
+
+    // Public checkout no longer reserves stock. A manual/WhatsApp order earns
+    // that mutation only when an authenticated operator settles it. New rows
+    // carry inventory_deducted: []; legacy rows with no array are treated as
+    // already reserved so an old order is never deducted twice.
+    if (!inventoryDesiredItems && isFirstPaidTransition(currentOrder.status, patch.status)) {
+      const currentReserved = Array.isArray(currentOrder.inventory_deducted)
+        ? currentOrder.inventory_deducted
+        : currentOrder.items;
+      if (currentReserved.length === 0) {
+        inventoryCurrentLines = [];
+        inventoryDesiredItems = currentOrder.items || [];
+      }
     }
 
     const superadminOnlyFields = [
@@ -441,34 +456,35 @@ export async function PATCH(request) {
           if (volumeDiscount < 0.01) volumeDiscount = 0; // handle floating point errors
 
           const baseUrl = new URL(request.url).origin;
+          const notificationBody = JSON.stringify({
+             orderNumber: data.order_number,
+             customerName: data.customer_name,
+             customerPhone: data.customer_phone,
+             customerEmail: data.customer_email,
+             shippingAddress: data.shipping_address,
+             customerIdType: data.customer_id_type,
+             customerIdNumber: data.customer_id_number,
+             items: data.items || [],
+             total: total,
+             totalUsd: data.total_usd,
+             totalCrc: data.total_crc,
+             subtotal: itemsAmount,
+             volumeDiscount: volumeDiscount,
+             promoDiscount: promoDiscount,
+             manualDiscount: manualDiscount,
+             manualDiscountReason: data.manual_discount_reason || null,
+             shipping: shippingCost,
+             currency: dataCurrency,
+             paymentMethod: data.payment_method,
+             status: data.status,
+             customerReceiptOnly: true,
+             forceCustomerReceipt: true,
+             lang: dataCurrency === 'CRC' ? 'es' : 'en',
+          });
           await fetch(`${baseUrl}/api/order-notification`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-               orderNumber: data.order_number,
-               customerName: data.customer_name,
-               customerPhone: data.customer_phone,
-               customerEmail: data.customer_email,
-               shippingAddress: data.shipping_address,
-               customerIdType: data.customer_id_type,
-               customerIdNumber: data.customer_id_number,
-               items: data.items || [],
-               total: total,
-               totalUsd: data.total_usd,
-               totalCrc: data.total_crc,
-               subtotal: itemsAmount,
-               volumeDiscount: volumeDiscount,
-               promoDiscount: promoDiscount,
-               manualDiscount: manualDiscount,
-               manualDiscountReason: data.manual_discount_reason || null,
-               shipping: shippingCost,
-               currency: dataCurrency,
-               paymentMethod: data.payment_method,
-               status: data.status,
-               customerReceiptOnly: true,
-               forceCustomerReceipt: true,
-               lang: dataCurrency === 'CRC' ? 'es' : 'en',
-            })
+            headers: internalJsonHeaders(notificationBody, '/api/order-notification'),
+            body: notificationBody,
           });
         } catch (e) {
           console.error('[admin/orders/update] Failed to send customer confirmation:', e);

@@ -1,5 +1,14 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession, PUBLIC_AI_MODES } from '@/lib/adminAuth';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import {
+  consumeDurableRateLimit,
+  getRequestIp,
+  isTrustedStorefrontRequest,
+  rateLimitHeaders,
+  readLimitedJson,
+  RequestBodyError,
+} from '@/lib/publicApiSecurity.mjs';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -18,15 +27,31 @@ const AI_MODE_PERMISSIONS = {
 
 export async function POST(request) {
   try {
+    const { body } = await readLimitedJson(request, 64 * 1024);
+    const { mode, prompt, text, sourceLang = 'en', targetLang = 'es', context = {} } = body;
+
     if (!GEMINI_API_KEY) {
       console.error('[AI API] GEMINI_API_KEY is not configured on the server.');
       return NextResponse.json({ error: 'Gemini API Key is not configured on the server.' }, { status: 500 });
     }
 
-    const body = await request.json();
-    const { mode, prompt, text, sourceLang = 'en', targetLang = 'es', context = {} } = body;
-
-    if (!PUBLIC_AI_MODES.has(mode)) {
+    if (PUBLIC_AI_MODES.has(mode)) {
+      if (!isTrustedStorefrontRequest(request)) {
+        return NextResponse.json({ error: 'Request origin is not allowed' }, { status: 403 });
+      }
+      const limit = await consumeDurableRateLimit(getSupabaseAdmin(), {
+        bucket: 'customer-ai-ip',
+        key: getRequestIp(request),
+        limit: 20,
+        windowSeconds: 10 * 60,
+      });
+      if (!limit.allowed) {
+        return NextResponse.json(
+          { error: limit.unavailable ? 'Chat protection is temporarily unavailable' : 'Too many chat requests. Please wait a few minutes.' },
+          { status: limit.unavailable ? 503 : 429, headers: rateLimitHeaders(limit) },
+        );
+      }
+    } else {
       const auth = await verifyAdminSession(request, {
         requireAnyPermission: AI_MODE_PERMISSIONS[mode] || ['home'],
         skipPathPermission: true,
@@ -97,16 +122,32 @@ Guidelines:
 Administrator Query:
 ${prompt}`;
     } else if (mode === 'customer_chat') {
-      if (!prompt) {
+      const customerPrompt = String(prompt || '').trim().slice(0, 1200);
+      if (!customerPrompt) {
         return NextResponse.json({ error: 'Missing prompt parameter for customer chat' }, { status: 400 });
       }
 
-      const productsContext = context.products 
-        ? `Active Catalog:\n${context.products.map(p => `- ${p.product} (Category: ${p.category}, Price: ${p.priceUsd || p.priceCrc}, Status: ${p.status})`).join('\n')}`
+      const safeProducts = Array.isArray(context.products)
+        ? context.products.slice(0, 100).map((product) => ({
+          product: String(product?.product || '').slice(0, 120),
+          category: String(product?.category || '').slice(0, 80),
+          price: String(product?.priceUsd || product?.priceCrc || '').slice(0, 40),
+          status: String(product?.status || '').slice(0, 40),
+        }))
+        : [];
+      const safeHistory = Array.isArray(context.history)
+        ? context.history.slice(-8).map((message) => ({
+          role: message?.role === 'user' ? 'user' : 'assistant',
+          text: String(message?.text || '').slice(0, 600),
+        }))
+        : [];
+
+      const productsContext = safeProducts.length
+        ? `Active Catalog:\n${safeProducts.map(p => `- ${p.product} (Category: ${p.category}, Price: ${p.price}, Status: ${p.status})`).join('\n')}`
         : '';
         
-      const memoryContext = context.history
-        ? `\nRecent Conversation History:\n${context.history.map(m => `${m.role === 'user' ? 'Customer' : 'Assistant'}: ${m.text}`).join('\n')}`
+      const memoryContext = safeHistory.length
+        ? `\nRecent Conversation History:\n${safeHistory.map(m => `${m.role === 'user' ? 'Customer' : 'Assistant'}: ${m.text}`).join('\n')}`
         : '';
 
       finalPrompt = `You are "Peptides Costa Rica Assistant", a warm, professional customer support agent for Peptides Costa Rica.
@@ -130,7 +171,7 @@ Guidelines:
 - Do not output raw JSON or internal code.
 
 Customer Query:
-${prompt}`;
+${customerPrompt}`;
     } else if (mode === 'cross_sell') {
       const { customerName = 'Investigador', purchasedProducts = [], recommendation = '' } = context;
       const purchasedStr = purchasedProducts.length > 0 
@@ -352,6 +393,9 @@ Rules:
     return NextResponse.json({ success: true, text: responseText });
   } catch (error) {
     console.error('[AI API] Unexpected server error:', error);
-    return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });
+    if (error instanceof RequestBodyError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

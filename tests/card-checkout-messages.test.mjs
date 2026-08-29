@@ -70,3 +70,29 @@ test('an unknown key falls back to a safe message rather than throwing', () => {
 test('the browser-side network failure stops promising nothing was charged', () => {
   assert.doesNotMatch(catalog, /Nothing has been charged\. Check your internet connection/);
 });
+
+test('the rate-limit stops go through the catalog like every other stop', () => {
+  // These two were correct English shown to Spanish buyers — the last customer
+  // messages still written inline in the route instead of the catalog.
+  for (const inlineMessage of [
+    'Payment protection is temporarily unavailable',
+    'Too many card attempts',
+  ]) {
+    assert.ok(
+      !route.includes(inlineMessage),
+      `"${inlineMessage}" is still hard-coded in the route`,
+    );
+  }
+  assert.match(route, /stopCheckout\('rate_limited'/);
+  assert.match(route, /stopCheckout\('protection_unavailable'/);
+  // Retry-After has to survive the move into stopCheckout.
+  assert.match(route, /rateLimitHeaders\(deniedLimit\)/);
+});
+
+test('a rate-limited attempt never locks the button', () => {
+  // Both stops happen before the gateway is touched, so the card was not used
+  // and there is nothing for the customer to do but wait and press again.
+  for (const key of ['rate_limited', 'protection_unavailable']) {
+    assert.equal(cardCheckoutMessage(key, 'en').retryable, true, key);
+  }
+});

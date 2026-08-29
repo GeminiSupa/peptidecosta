@@ -7,7 +7,9 @@
  * configured", "Card payments are currently configured for USD only", "Order
  * not found", or — on a timeout — the raw exception text. None of that means
  * anything to them, and the first one names our payment vendor and our own
- * misconfiguration to the public.
+ * misconfiguration to the public. The two rate-limit stops were the last
+ * holdouts: correct wording for a customer, but English only, so every Spanish
+ * buyer who hit one got it in a language they had not asked for.
  *
  * A decline is NOT in here: the gateway's own reason ("insufficient funds",
  * "Card brand not allowed") is genuinely useful and is passed through as-is.
@@ -58,6 +60,22 @@ const MESSAGES = {
     retryable: false,
     en: 'This order has already been paid — there is nothing more to do. Your receipt is on its way by email.',
     es: 'Este pedido ya fue pagado — no hay nada más que hacer. Su comprobante va en camino por correo.',
+  },
+
+  // Both rate-limit stops happen before the gateway is touched, so the card was
+  // never used and a later retry is safe. The limiter fails closed: when the
+  // check itself is down the customer is turned away too, and being told
+  // "too many attempts" for our outage would simply be untrue.
+  rate_limited: {
+    retryable: true,
+    en: 'Too many card attempts on this order. Please wait a few minutes before trying again, or message us on WhatsApp and we will finish it for you.',
+    es: 'Demasiados intentos de pago con tarjeta para este pedido. Espere unos minutos antes de intentar de nuevo, o escríbanos por WhatsApp y lo completamos por usted.',
+  },
+
+  protection_unavailable: {
+    retryable: true,
+    en: 'We could not run our payment security check just now, so this attempt was stopped before your card was used. Please try again in a minute, or message us on WhatsApp.',
+    es: 'No pudimos ejecutar nuestra verificación de seguridad en este momento, así que el intento se detuvo antes de usar su tarjeta. Intente de nuevo en un minuto, o escríbanos por WhatsApp.',
   },
 
   in_progress: {

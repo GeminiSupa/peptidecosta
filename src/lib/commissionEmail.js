@@ -1,3 +1,5 @@
+import { isAgentReferralSource } from '@/lib/salesAgentAffiliate.mjs';
+
 const formatMoney = (value, currency) => {
   const amount = Number(value || 0);
   if (currency === 'USD') {
@@ -47,7 +49,7 @@ export function buildAgentCommissionEmail({
   const overrideList = Array.isArray(overrideBreakdown) ? overrideBreakdown : [];
   const hasOverride = overrideList.length > 0 && (Number(overrideUsd) > 0 || Number(overrideCrc) > 0);
   const agentReferralCount = sortedOrders.filter(
-    (order) => order.agent_commission_source === 'agent_referral'
+    (order) => isAgentReferralSource(order.agent_commission_source)
   ).length;
   const commissionRateLabel = typeof commissionRate === 'string'
     ? commissionRate

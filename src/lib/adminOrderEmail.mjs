@@ -6,6 +6,8 @@
  * argument precisely so a test can watch what would have been sent.
  */
 
+import { internalJsonHeaders } from './internalRequestAuth.mjs';
+
 /**
  * How long we wait for /api/order-notification to finish sending.
  *
@@ -101,11 +103,14 @@ export function buildOrderNotificationPayload(order, orderNumber, {
 export async function sendAdminOrderEmail(baseUrl, order, orderNumber, {
   fetchImpl = fetch,
   timeoutMs = ADMIN_EMAIL_TIMEOUT_MS,
+  notificationOptions = undefined,
+  internalSecret = undefined,
 } = {}) {
+  const body = JSON.stringify(buildOrderNotificationPayload(order, orderNumber, notificationOptions));
   const response = await fetchImpl(`${baseUrl}/api/order-notification`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildOrderNotificationPayload(order, orderNumber)),
+    headers: internalJsonHeaders(body, '/api/order-notification', { secret: internalSecret }),
+    body,
     signal: AbortSignal.timeout(timeoutMs),
   });
 

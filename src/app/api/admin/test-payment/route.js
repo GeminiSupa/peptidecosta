@@ -6,6 +6,7 @@ import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } fr
 import { getPublicSiteUrl } from '@/lib/publicUrl';
 import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus } from '@/lib/paymentOutcome.mjs';
 import { buildOrderNotificationPayload } from '@/lib/adminOrderEmail.mjs';
+import { internalJsonHeaders } from '@/lib/internalRequestAuth.mjs';
 
 export const runtime = 'nodejs';
 
@@ -77,10 +78,11 @@ async function sendSandboxReceipt({ order, orderNumber, outcome, declineReason, 
     // read the Spanish one, so the panel chooses.
     payload.lang = lang;
 
+    const notificationBody = JSON.stringify(payload);
     const response = await fetch(`${APP_URL.replace(/\/$/, '')}/api/order-notification`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      headers: internalJsonHeaders(notificationBody, '/api/order-notification'),
+      body: notificationBody,
       signal: AbortSignal.timeout(30000),
     });
     const result = await response.json().catch(() => ({}));
