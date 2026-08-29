@@ -49,6 +49,6 @@ export function isAgentReferralSource(source) {
 
 export function commissionSourceLabel(source) {
   if (isAgentReferralSource(source)) return 'Agent referral';
-  if (source === 'custom_override') return 'Custom override';
+  if (source === 'custom_override') return 'Custom Percentage';
   return 'Standard sale';
 }

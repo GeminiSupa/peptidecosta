@@ -968,7 +968,7 @@ export default function OrderDetailPanel({
                 >
                   <option value="default">Profile rate</option>
                   <option value="agent_referral">Agent referral - combined 20%</option>
-                  <option value="custom">Custom override</option>
+                  <option value="custom">Custom Percentage</option>
                 </select>
               ) : (
                 <span>{currentCommissionLabel}</span>
