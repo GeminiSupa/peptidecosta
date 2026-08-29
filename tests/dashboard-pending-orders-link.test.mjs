@@ -61,3 +61,46 @@ test('the orders table applies the requested status and resets to page one', () 
   // A timestamp on the request is what lets the same card work a second time.
   assert.match(orders, /\}, \[statusFilterRequest\]\);/);
 });
+
+test('the tile defaults to this week and offers the other windows', () => {
+  assert.match(home, /useState\('week'\)/);
+  assert.match(home, /\{ id: 'week', label: 'This week', start: \(now\) => startOfWeek\(now\) \}/);
+  for (const id of ["'today'", "'30d'", "'all'"]) assert.ok(home.includes(`{ id: ${id},`), id);
+  assert.match(home, /<div className="dashboard-kpi-value">\{pendingInRange\}<\/div>/);
+  // The label stays put; the dropdown beside it is what names the window, so
+  // the tile does not re-word itself every time the range changes.
+  assert.match(home, /<div className="dashboard-kpi-label">Pending Orders<\/div>/);
+});
+
+test('the older pending orders stay on the tile whatever the range', () => {
+  // The whole point of the second line: narrowing the window must not put the
+  // backlog out of sight the way the literal-'Pending' count once did.
+  assert.match(home, /stats\.pendingOrders\.length > pendingInRange &&/);
+  assert.match(home, /\{stats\.pendingOrders\.length\} total/);
+});
+
+test('hovering the tile says whose week it is', () => {
+  assert.match(home, /Costa Rica time\./);
+  assert.match(home, /const pendingTooltip = pendingRangeTooltip\(activePendingRange, pendingRangeStart, new Date\(\)\);/);
+  // On the number and on the dropdown, so it is found from either.
+  assert.match(home, /title=\{pendingTooltip\}[\s\S]*?title=\{pendingTooltip\}/);
+  assert.match(home, /'Every order still waiting to be paid, with no date limit\.'/);
+});
+
+test('the range dropdown sits beside the button, never inside it', () => {
+  // A <select> inside a <button> is invalid, and the click goes to the wrong one.
+  // Read the tile's own button body rather than regex across the whole file,
+  // which happily spans a closing tag and calls a sibling a child.
+  const openedAt = home.indexOf("onClick={() => setOpenTile('pendingOrders')}");
+  assert.ok(openedAt > 0, 'pending tile button not found');
+  const buttonBody = home.slice(openedAt, home.indexOf('</button>', openedAt));
+  assert.ok(!buttonBody.includes('<select'), 'the range select is nested inside the tile button');
+  assert.match(home, /<\/button>[\s\S]{0,400}?<select\s+className="dashboard-kpi-range"/);
+  const css = fs.readFileSync(new URL('../src/app/admin.css', import.meta.url), 'utf8');
+  assert.match(css, /\.dashboard-kpi-sub \{/);
+  assert.match(css, /\.dashboard-kpi-range \{/);
+  // The dropdown sits on its own row under the label rather than overlapping
+  // the figure, which is what squeezed the text onto three lines.
+  assert.match(css, /\.dashboard-kpi-rangerow \{/);
+  assert.match(css, /\.dashboard-kpi-open \{/);
+});

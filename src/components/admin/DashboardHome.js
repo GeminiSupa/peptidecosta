@@ -80,6 +80,26 @@ function cartValue(cart) {
   }, 0);
 }
 
+// The pending tile is the only one whose window the reader picks, so its options
+// live here rather than in a shared filter. Every start is a Costa Rica instant,
+// because the business day belongs to Costa Rica and not to whoever is reading.
+// The week runs Monday to Sunday, matching the Revenue This Week tile beside it.
+const PENDING_RANGES = [
+  { id: 'week', label: 'This week', start: (now) => startOfWeek(now) },
+  { id: 'today', label: 'Today', start: (now) => startOfDay(now) },
+  { id: '30d', label: 'Last 30 days', start: (now) => new Date(startOfDay(now).getTime() - 29 * 86400000) },
+  { id: 'all', label: 'All time', start: () => null },
+];
+
+const PENDING_RANGE_BY_ID = new Map(PENDING_RANGES.map((range) => [range.id, range]));
+
+/** Spelled out on hover, because "this week" alone does not say whose week. */
+function pendingRangeTooltip(range, start, now) {
+  if (!start) return 'Every order still waiting to be paid, with no date limit.';
+  const day = { weekday: 'short', day: 'numeric', month: 'short' };
+  return `${range.label}: ${formatCrDate(start, day)} to ${formatCrDate(now, day)}, Costa Rica time.`;
+}
+
 export default function DashboardHome({
   orders = [],
   abandonedCarts = [],
@@ -95,6 +115,9 @@ export default function DashboardHome({
 }) {
   // Which tile's breakdown is open: 'revenueToday' | 'revenueWeek' | 'pendingOrders'.
   const [openTile, setOpenTile] = useState(null);
+  // Defaults to the week so the number reads as this week's workload rather than
+  // an all-time backlog. Everything older stays one line below and one click away.
+  const [pendingRange, setPendingRange] = useState('week');
   const stats = useMemo(() => {
     const now = new Date();
     const todayStart = startOfDay(now);
@@ -153,6 +176,13 @@ export default function DashboardHome({
     };
   }, [orders, abandonedCarts, leads, products, exchangeRate]);
 
+  const activePendingRange = PENDING_RANGE_BY_ID.get(pendingRange) || PENDING_RANGES[0];
+  const pendingRangeStart = useMemo(() => activePendingRange.start(new Date()), [activePendingRange]);
+  const pendingInRange = useMemo(() => (pendingRangeStart
+    ? stats.pendingOrders.filter((o) => new Date(o.created_at) >= pendingRangeStart).length
+    : stats.pendingOrders.length), [stats.pendingOrders, pendingRangeStart]);
+  const pendingTooltip = pendingRangeTooltip(activePendingRange, pendingRangeStart, new Date());
+
   // What actually made each tile. Deliberately wider than the tile itself: it
   // carries the orders inside the window that are NOT counting too, since the
   // point is to be able to force one in as well as hold one out.
@@ -208,7 +238,7 @@ export default function DashboardHome({
   const TILE_SUBTITLES = {
     revenueToday: 'Orders dated today by when they were first marked paid or complete, not when they were created.',
     revenueWeek: 'Orders dated this week by when they were first marked paid or complete, not when they were created.',
-    pendingOrders: 'Orders still waiting to be paid, including the ones part-way through a card payment. These are not counted as revenue.',
+    pendingOrders: 'Everything still waiting to be paid, newest first. The tile leads with this week; older ones are listed here too. None of these count as revenue.',
   };
 
   const applyOverrides = async (changes, reason) => {
@@ -328,20 +358,44 @@ export default function DashboardHome({
       </section>
 
       <div className="dashboard-kpi-grid">
-        <button
-          type="button"
-          className="dashboard-kpi-card is-clickable"
-          onClick={() => setOpenTile('pendingOrders')}
-          title="See what made this number"
-        >
+        {/* The card is a div, not a button, because it holds a dropdown: a
+            select nested in a button is invalid markup, and the browsers that
+            tolerate it hand the button the click meant for the dropdown. Only
+            the figure opens the breakdown. */}
+        <div className="dashboard-kpi-card dashboard-kpi-ranged">
           <div className="dashboard-kpi-icon" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
             <ClipboardList size={20} />
           </div>
-          <div>
-            <div className="dashboard-kpi-value">{stats.pendingOrders.length}</div>
-            <div className="dashboard-kpi-label">Pending Orders</div>
+          <div className="dashboard-kpi-ranged-body">
+            <button
+              type="button"
+              className="dashboard-kpi-open"
+              onClick={() => setOpenTile('pendingOrders')}
+              title={pendingTooltip}
+            >
+              <div className="dashboard-kpi-value">{pendingInRange}</div>
+              <div className="dashboard-kpi-label">Pending Orders</div>
+            </button>
+            <div className="dashboard-kpi-rangerow">
+              <select
+                className="dashboard-kpi-range"
+                aria-label="Date range for pending orders"
+                title={pendingTooltip}
+                value={pendingRange}
+                onChange={(event) => setPendingRange(event.target.value)}
+              >
+                {PENDING_RANGES.map((range) => (
+                  <option key={range.id} value={range.id}>{range.label}</option>
+                ))}
+              </select>
+              {stats.pendingOrders.length > pendingInRange && (
+                <span className="dashboard-kpi-sub" title={`${stats.pendingOrders.length} orders are waiting to be paid in total, including older ones.`}>
+                  {stats.pendingOrders.length} total
+                </span>
+              )}
+            </div>
           </div>
-        </button>
+        </div>
         <button
           type="button"
           className="dashboard-kpi-card is-clickable"
