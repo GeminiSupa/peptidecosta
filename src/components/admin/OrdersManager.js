@@ -10,6 +10,7 @@ import {
   orderAgentFilterOptions,
   orderMatchesAgentFilter,
 } from '@/lib/orderAgentFilter.mjs';
+import { AWAITING_PAYMENT_STATUSES } from '@/lib/orderAwaitingPayment.mjs';
 
 const ORDER_STATUS_OPTIONS = [
   'Pending',
@@ -36,7 +37,7 @@ const ORDER_STATUS_GROUPS = [
     id: 'needs_payment',
     label: 'Needs Payment',
     filterLabel: 'Needs payment',
-    statuses: ['Pending', 'Payment Pending', 'Pending - Card', 'Pending - Card 3DS'],
+    statuses: AWAITING_PAYMENT_STATUSES,
     nextStatus: 'Payment Pending',
   },
   {

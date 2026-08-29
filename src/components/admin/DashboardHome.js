@@ -9,6 +9,7 @@ import { orderCountsAsSale, orderGrossUsd, orderNetRevenueUsd, orderRevenueBasis
 import { orderReportableAtMs } from '@/lib/agentDashboard.mjs';
 import KpiBreakdownModal from './KpiBreakdownModal';
 import { formatCrDate } from '@/lib/crTime.mjs';
+import { isAwaitingPayment } from '@/lib/orderAwaitingPayment.mjs';
 
 const FALLBACK_RATE = 454.48;
 
@@ -99,7 +100,8 @@ export default function DashboardHome({
     const todayStart = startOfDay(now);
     const weekStart = startOfWeek(now);
 
-    const pendingOrders = orders.filter((o) => (o.status || 'Pending') === 'Pending');
+    // Every state that is waiting on money, not just the literal 'Pending'.
+    const pendingOrders = orders.filter((o) => isAwaitingPayment(o.status));
 
     // Net of refunds: a $100 order with $30 given back is $70 of revenue, not
     // $100. The same sum backs the commission report and the analytics chart, so
@@ -181,7 +183,7 @@ export default function DashboardHome({
       revenueToday: inWindow(todayStart),
       revenueWeek: inWindow(weekStart),
       pendingOrders: orders
-        .filter((order) => (order.status || 'Pending') === 'Pending')
+        .filter((order) => isAwaitingPayment(order.status))
         .map((order) => ({
           id: order.id,
           orderNumber: order.order_number,
@@ -206,7 +208,7 @@ export default function DashboardHome({
   const TILE_SUBTITLES = {
     revenueToday: 'Orders dated today by when they were first marked paid or complete, not when they were created.',
     revenueWeek: 'Orders dated this week by when they were first marked paid or complete, not when they were created.',
-    pendingOrders: 'Orders still sitting at Pending. These are not counted as revenue.',
+    pendingOrders: 'Orders still waiting to be paid, including the ones part-way through a card payment. These are not counted as revenue.',
   };
 
   const applyOverrides = async (changes, reason) => {
@@ -228,7 +230,7 @@ export default function DashboardHome({
       action: 'Open orders',
       // The card counts strictly Pending, so the queue it opens is filtered to
       // match. Landing on the unfiltered list made the number look wrong.
-      navOptions: { orderStatus: 'Pending' },
+      navOptions: { orderStatus: 'group:needs_payment' },
       tab: 'orders',
     },
     stats.recoverableCarts.length > 0 && {

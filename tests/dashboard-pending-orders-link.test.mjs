@@ -1,23 +1,51 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {
+  AWAITING_PAYMENT_STATUSES,
+  isAwaitingPayment,
+} from '../src/lib/orderAwaitingPayment.mjs';
 
 const home = fs.readFileSync(new URL('../src/components/admin/DashboardHome.js', import.meta.url), 'utf8');
 const page = fs.readFileSync(new URL('../src/app/admin/page.js', import.meta.url), 'utf8');
 const orders = fs.readFileSync(new URL('../src/components/admin/OrdersManager.js', import.meta.url), 'utf8');
 
-// The card used to open the unfiltered queue, so a "5 pending orders" prompt
-// landed the reader on every order including the completed ones.
-test('the pending-orders card asks for the status it counted', () => {
-  assert.match(home, /navOptions: \{ orderStatus: 'Pending' \}/);
-  assert.match(home, /onNavigate\(item\.tab, null, item\.navOptions\)/);
+test('every state that is waiting on money counts as awaiting payment', () => {
+  for (const status of AWAITING_PAYMENT_STATUSES) assert.equal(isAwaitingPayment(status), true);
+  // An order written before the column had a default reads as Pending.
+  assert.equal(isAwaitingPayment(''), true);
+  assert.equal(isAwaitingPayment(null), true);
+  assert.equal(isAwaitingPayment('  payment pending  '), true);
 });
 
-test('the card and the filter it opens count the same orders', () => {
-  // The tile counts strictly 'Pending'; asking for a wider group would show
-  // more rows than the number that was clicked.
-  assert.match(home, /pendingOrders = orders\.filter\(\(o\) => \(o\.status \|\| 'Pending'\) === 'Pending'\)/);
-  assert.match(home, /navOptions: \{ orderStatus: 'Pending' \}/);
+test('a settled or refused order is not waiting for anything', () => {
+  for (const status of ['Order Complete', 'Completed', 'Paid', 'Processing', 'Refunded', 'Cancelled', 'Declined']) {
+    assert.equal(isAwaitingPayment(status), false);
+  }
+  // Reads like a pending state and is not one: paymentOutcome.mjs normalises it
+  // as a refusal, and a refused card is not waiting to be paid.
+  assert.equal(isAwaitingPayment('Payment Blocked'), false);
+});
+
+test('the dashboard, the nav badge and the orders filter share one list', () => {
+  assert.match(home, /import \{ isAwaitingPayment \} from '@\/lib\/orderAwaitingPayment\.mjs';/);
+  assert.match(home, /const pendingOrders = orders\.filter\(\(o\) => isAwaitingPayment\(o\.status\)\)/);
+  assert.match(home, /\.filter\(\(order\) => isAwaitingPayment\(order\.status\)\)/);
+  assert.match(page, /const pendingOrderCount = visibleOrders\.filter\(\(o\) => isAwaitingPayment\(o\.status\)\)\.length;/);
+  assert.match(orders, /statuses: AWAITING_PAYMENT_STATUSES,/);
+  // Nobody may re-hardcode the narrow test the tile used to run.
+  assert.doesNotMatch(home, /\(o\.status \|\| 'Pending'\) === 'Pending'/);
+  assert.doesNotMatch(page, /\(o\.status \|\| 'Pending'\) === 'Pending'/);
+});
+
+// The card used to open the unfiltered queue, so a "5 pending orders" prompt
+// landed the reader on every order including the completed ones.
+test('the pending-orders card opens the queue filtered to what it counted', () => {
+  assert.match(home, /navOptions: \{ orderStatus: 'group:needs_payment' \}/);
+  assert.match(home, /onNavigate\(item\.tab, null, item\.navOptions\)/);
+  // The group it asks for has to be the one built from the shared list, or the
+  // number and the rows behind it drift apart again.
+  assert.match(orders, /id: 'needs_payment',[\s\S]*?statuses: AWAITING_PAYMENT_STATUSES,/);
 });
 
 test('the admin page carries the requested status through to the orders table', () => {

@@ -49,6 +49,7 @@ import LandingLeadSettingsManager from '@/components/admin/LandingLeadSettingsMa
 import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
 import RefundDialog from '@/components/admin/RefundDialog';
 import { isRefundStatus } from '@/lib/orderRefund.mjs';
+import { isAwaitingPayment } from '@/lib/orderAwaitingPayment.mjs';
 import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
 import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
@@ -164,7 +165,7 @@ const formatCustomerIdType = (idType) => {
 };
 
 function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, isStaffAgent = false }) {
-  const pendingOrders = orders.filter((o) => (o.status || 'Pending') === 'Pending').length;
+  const pendingOrders = orders.filter((o) => isAwaitingPayment(o.status)).length;
   const pendingReviews = reviews.filter((r) => r.status === 'Pending').length;
   const newLeads = leads.filter((l) => (l.status || 'New') === 'New').length;
 
@@ -1619,7 +1620,9 @@ Core Rules:
     router.replace(`/admin?${query.toString()}`, { scroll: false });
   }, [canNavigateToTab, router]);
 
-  const pendingOrderCount = visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length;
+  // Matches the Home tile and the "Needs payment" filter: every state waiting
+  // on money, not just the literal 'Pending'.
+  const pendingOrderCount = visibleOrders.filter((o) => isAwaitingPayment(o.status)).length;
   const pendingReviewCount = reviews.filter((r) => r.status === 'Pending').length;
   const unreadFacebookCount = facebookNotifications.filter((n) => n.status === 'unread').length;
   const makeAdminTabMeta = (iconSize = 14) => ({
@@ -8141,8 +8144,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                           onClick={() => navigateToTab(tabId)}
                         >
                           {ADMIN_TAB_TITLES[tabId] || tabId}
-                          {tabId === 'orders' && visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length > 0 && (
-                            <span className="admin-more-tab-badge">{visibleOrders.filter((o) => (o.status || 'Pending') === 'Pending').length}</span>
+                          {tabId === 'orders' && visibleOrders.filter((o) => isAwaitingPayment(o.status)).length > 0 && (
+                            <span className="admin-more-tab-badge">{visibleOrders.filter((o) => isAwaitingPayment(o.status)).length}</span>
                           )}
                           {tabId === 'carts' && abandonedCarts.length > 0 && (
                             <span className="admin-more-tab-badge warning">{abandonedCarts.length}</span>
