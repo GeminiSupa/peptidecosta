@@ -38,6 +38,16 @@ import {
   uniquePageVisitorCount,
 } from '@/lib/analyticsDashboard.mjs';
 import { ANALYTICS_COLORS, chartColor } from '@/lib/analyticsTheme.mjs';
+import {
+  LAST_VIEW_KEY,
+  VIEWS_KEY,
+  normaliseFilters,
+  parseViews,
+  readStored,
+  removeView,
+  upsertView,
+  writeStored,
+} from '@/lib/analyticsViews.mjs';
 import { parseAiSummary } from '@/lib/aiSummaryMarkdown.mjs';
 import { formatPrice } from '@/lib/money.mjs';
 import { orderNetRevenue } from '@/lib/orderRevenue.mjs';
@@ -247,6 +257,13 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   const [customEnd, setCustomEnd] = useState('');
   const [compareMode, setCompareMode] = useState('previous');
   const [activeSection, setActiveSection] = useState(ANALYTICS_SECTIONS[0].id);
+  const [savedViews, setSavedViews] = useState([]);
+  const [newViewName, setNewViewName] = useState('');
+  const [viewsWritable, setViewsWritable] = useState(true);
+  // One explanation per card, kept after it arrives so reopening the card does
+  // not spend another request on the same question.
+  const [metricExplanations, setMetricExplanations] = useState({});
+  const [explainingMetric, setExplainingMetric] = useState(null);
 
   // Four fixed buttons cannot answer "how did launch week go", so the range can
   // also be two dates. Both are needed before anything is refetched — a half
@@ -267,6 +284,14 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
     ? (customWindow ? `between ${customStart} and ${customEnd}` : 'in this range')
     : (RANGE_LABELS[timeRange] || 'in this range');
   const PREVIOUS_RANGE_LABELS = { '24h': 'the day before', '7d': 'the 7 days before', '30d': 'the 30 days before' };
+  // "No data available" tells a reader nothing they can act on. Every empty
+  // state on this page ends in the same next step instead.
+  const widerRangeHint = timeRange === 'all'
+    ? ''
+    : timeRange === '30d'
+      ? ' Try All time.'
+      : ' Try a wider range.';
+
   const previousRangeLabel = compareMode === 'year'
     ? 'the same period last year'
     : (PREVIOUS_RANGE_LABELS[timeRange] || 'the previous period');
@@ -347,6 +372,55 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     } finally {
       setGeneratingAiInsights(false);
     }
+  };
+
+  /**
+   * Explain one card, with only that card's numbers in the prompt.
+   *
+   * The tab's other AI button audits the whole store in two languages and
+   * returns a report nobody finishes. A question about one metric, scoped to
+   * that metric, answers in a sentence — which is the version anyone reads.
+   */
+  const explainMetric = async (id, label, figures) => {
+    setExplainingMetric(id);
+    setMetricExplanations((current) => ({ ...current, [id]: null }));
+    try {
+      const res = await adminFetch('/api/ai', {
+        method: 'POST',
+        body: JSON.stringify({ mode: 'explain_metric', context: { metric: label, figures } }),
+      });
+      const data = await res.json();
+      setMetricExplanations((current) => ({
+        ...current,
+        [id]: res.ok && data.success
+          ? { text: data.text }
+          : { error: data.error || 'The model did not return an answer.' },
+      }));
+    } catch (err) {
+      setMetricExplanations((current) => ({ ...current, [id]: { error: err.message } }));
+    } finally {
+      setExplainingMetric(null);
+    }
+  };
+
+  /** The "Explain this" control and whatever it has come back with. */
+  const renderMetricExplainer = (id, label, figures) => {
+    const result = metricExplanations[id];
+    const busy = explainingMetric === id;
+    return (
+      <div className="metric-explainer" onClick={(event) => event.stopPropagation()}>
+        <button
+          type="button"
+          className="metric-explainer-btn"
+          disabled={busy}
+          onClick={() => explainMetric(id, label, figures)}
+        >
+          <Sparkles size={12} /> {busy ? 'Reading the numbers…' : result ? 'Ask again' : 'Explain this'}
+        </button>
+        {result?.error && <p className="metric-explainer-error" role="alert">{result.error}</p>}
+        {result?.text && <div className="metric-explainer-text">{renderAiSummary(result.text)}</div>}
+      </div>
+    );
   };
 
   // Database analytics state
@@ -443,6 +517,53 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     fetchDbAnalytics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, windowKey, compareMode]);
+
+  // The filters a reader set were gone on reload, so a question worth asking
+  // twice had to be re-picked every time. Restored once, on mount, before
+  // anything is fetched with the defaults.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setSavedViews(parseViews(readStored(window.localStorage, VIEWS_KEY, '[]')));
+    const last = readStored(window.localStorage, LAST_VIEW_KEY, null);
+    if (!last) return;
+    let parsed = null;
+    try { parsed = JSON.parse(last); } catch { parsed = null; }
+    if (!parsed) return;
+    const filters = normaliseFilters(parsed);
+    setTimeRange(filters.range);
+    setCustomStart(filters.start);
+    setCustomEnd(filters.end);
+    setCompareMode(filters.compare);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    writeStored(window.localStorage, LAST_VIEW_KEY, JSON.stringify({
+      range: timeRange, start: customStart, end: customEnd, compare: compareMode,
+    }));
+  }, [timeRange, customStart, customEnd, compareMode]);
+
+  const applyView = (view) => {
+    const filters = normaliseFilters(view?.filters);
+    setTimeRange(filters.range);
+    setCustomStart(filters.start);
+    setCustomEnd(filters.end);
+    setCompareMode(filters.compare);
+  };
+
+  const persistViews = (views) => {
+    setSavedViews(views);
+    setViewsWritable(writeStored(window.localStorage, VIEWS_KEY, JSON.stringify(views)));
+  };
+
+  const saveCurrentView = () => {
+    const name = newViewName.trim();
+    if (!name) return;
+    persistViews(upsertView(savedViews, name, {
+      range: timeRange, start: customStart, end: customEnd, compare: compareMode,
+    }));
+    setNewViewName('');
+  };
 
   // Which section the reader is in, so the sub-nav says where they are rather
   // than only where they could go. The top band is ignored so a heading that
@@ -2390,6 +2511,43 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           </div>
         )}
 
+        <div className="analytics-views-row">
+          {savedViews.length > 0 && (
+            <div className="analytics-views-list">
+              {savedViews.map((view) => (
+                <span key={view.name} className="analytics-view-chip">
+                  <button type="button" onClick={() => applyView(view)}>{view.name}</button>
+                  <button
+                    type="button"
+                    className="analytics-view-remove"
+                    aria-label={`Delete the "${view.name}" view`}
+                    onClick={() => persistViews(removeView(savedViews, view.name))}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <label>
+            <span>Save this view as</span>
+            <input
+              type="text"
+              value={newViewName}
+              maxLength={40}
+              placeholder="Launch week"
+              onChange={(e) => setNewViewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveCurrentView(); } }}
+            />
+          </label>
+          <button type="button" className="analytics-view-save" onClick={saveCurrentView} disabled={!newViewName.trim()}>
+            Save
+          </button>
+          {!viewsWritable && (
+            <span className="analytics-custom-hint">This browser is not storing the view — a private window will forget it.</span>
+          )}
+        </div>
+
         <div className="analytics-compare-row">
           <label>
             <span>Compare with</span>
@@ -2430,7 +2588,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             {activeLiveUsers} across tracked sites now
           </span>
           <span>·</span>
-          <span>{loading ? 'Refreshing…' : analyticsErrors.length > 0 ? 'Partial data' : isLive ? 'Live data' : 'No tracked data in this range'}</span>
+          <span>{loading ? 'Refreshing…' : analyticsErrors.length > 0 ? 'Partial data' : isLive ? 'Live data' : `Nothing tracked ${rangeLabel}`}</span>
         </div>
       </div>
 
@@ -2608,7 +2766,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           {expandedMetric === 'revenue' && (
             <div className="metric-card-detail">
               {successfulOrders.length === 0
-                ? <span style={{ fontSize: '0.875rem', color: 'var(--an-ink-faint)' }}>No completed orders yet.</span>
+                ? <span style={{ fontSize: '0.875rem', color: 'var(--an-ink-faint)' }}>No completed orders {rangeLabel}.{widerRangeHint}</span>
                 : successfulOrders.slice(0, 5).map(o => (
                   <div className="metric-detail-row" key={o.id}>
                     <span className="metric-detail-name">{o.customer_name || 'Customer'}</span>
@@ -2619,6 +2777,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               {successfulOrders.length > 5 && (
                 <span style={{ fontSize: '0.75rem', color: 'var(--an-ink-dim)' }}>+{successfulOrders.length - 5} more orders</span>
               )}
+              {renderMetricExplainer('revenue', 'Gross revenue (realized, net of refunds)', [
+                `Range: ${rangeLabel}`,
+                `Revenue: $${totalRevenueUsd.toFixed(2)} across ${successfulOrders.length} completed orders`,
+                `Average order value: $${aovUsd.toFixed(2)}`,
+                hasComparison ? `Previous period (${previousRangeLabel}): $${previousRevenueUsd.toFixed(2)} across ${previousSuccessfulOrders.length} orders` : 'No comparison period is selected.',
+              ].join('\n'))}
             </div>
           )}
         </div>
@@ -2670,6 +2834,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                       );
                     })
               }
+              {renderMetricExplainer('aov', 'Average order value', [
+                `Range: ${rangeLabel}`,
+                `Average order value: $${aovUsd.toFixed(2)} across ${successfulOrders.length} completed orders`,
+                `Total revenue in the range: $${totalRevenueUsd.toFixed(2)}`,
+                hasComparison ? `Previous period (${previousRangeLabel}): $${previousAovUsd.toFixed(2)} across ${previousSuccessfulOrders.length} orders` : 'No comparison period is selected.',
+              ].join('\n'))}
             </div>
           )}
         </div>
@@ -2713,6 +2883,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               {activeAbandonedCarts.length > 5 && (
                 <span style={{ fontSize: '0.75rem', color: 'var(--an-ink-dim)' }}>+{activeAbandonedCarts.length - 5} more carts</span>
               )}
+              {renderMetricExplainer('carts', 'Value sitting in abandoned carts', [
+                `Range: ${rangeLabel}`,
+                `Open abandoned carts: ${activeAbandonedCarts.length}, worth $${potentialAbandonedRevenueUsd.toFixed(2)}`,
+                `Recovered carts in the same range: ${convertedCarts.length}`,
+                `Cart abandonment rate: ${cartAbandonmentRate.toFixed(1)}%`,
+              ].join('\n'))}
             </div>
           )}
         </div>
@@ -2760,6 +2936,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   </div>
                 </div>
               ))}
+              {renderMetricExplainer('conversion', 'Visitor conversion rate', [
+                `Range: ${rangeLabel}`,
+                `Conversion rate: ${orderConversionRate.toFixed(2)}% — ${successfulOrders.length} completed orders from ${uniqueVisitorCount} sessions`,
+                `Product views: ${totalViews}. Carts started: ${totalCarts}.`,
+                hasComparison ? `Previous period (${previousRangeLabel}): ${previousConversionRate.toFixed(2)}% from ${previousVisitorCount} sessions` : 'No comparison period is selected.',
+              ].join('\n'))}
             </div>
           )}
         </div>
@@ -3013,7 +3195,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 {campaignError
                   ? `Could not load campaign analytics: ${campaignError}`
                   : dbCampaigns.length > 0
-                    ? 'No sent campaigns in the selected date range.'
+                    ? `No campaign was sent ${rangeLabel}.${widerRangeHint}`
                     : 'No email campaigns have been created yet.'}
               </div>
             )}
@@ -3149,7 +3331,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                    </PieChart>
                  </ResponsiveContainer>
                ) : (
-                 <div style={{ width: '100%', textAlign: 'center', color: 'var(--an-ink-faint)', fontSize: '0.85rem' }}>No tracked UTM or referral visitors in this range.</div>
+                 <div style={{ width: '100%', textAlign: 'center', color: 'var(--an-ink-faint)', fontSize: '0.85rem' }}>No visitor {rangeLabel} arrived with a tracked source.{widerRangeHint}</div>
                )}
             </div>
           </div>
@@ -3260,7 +3442,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               </ResponsiveContainer>
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--an-ink-faint)' }}>
-                <p>Not enough daily data</p>
+                <p>No completed orders {rangeLabel} to plot.{widerRangeHint}</p>
               </div>
             )}
           </div>
@@ -3312,7 +3494,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               </ResponsiveContainer>
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--an-ink-faint)' }}>
-                <p>No sales data available</p>
+                <p>Nothing has sold {rangeLabel}.{widerRangeHint}</p>
               </div>
             )}
           </div>

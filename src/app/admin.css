@@ -10434,6 +10434,7 @@
    Custom range and compare-to
    -------------------------------------------------------------------------- */
 .analytics-custom-range,
+.analytics-views-row,
 .analytics-compare-row {
   display: flex;
   flex-wrap: wrap;
@@ -10445,6 +10446,7 @@
 }
 
 .analytics-custom-range label,
+.analytics-views-row label,
 .analytics-compare-row label {
   display: inline-flex;
   align-items: center;
@@ -10452,6 +10454,7 @@
 }
 
 .analytics-custom-range input,
+.analytics-views-row input,
 .analytics-compare-row select {
   background: rgba(15, 23, 42, .6);
   border: 1px solid rgba(255, 255, 255, .1);
@@ -10465,15 +10468,65 @@
 }
 
 .analytics-custom-range input:focus-visible,
+.analytics-views-row input:focus-visible,
 .analytics-compare-row select:focus-visible {
   outline: 2px solid rgba(56, 189, 248, .6);
   outline-offset: 1px;
 }
 
 .analytics-custom-hint {
-  color: #64748b;
+  color: var(--an-ink-faint);
   font-size: .72rem;
 }
+
+/* Saved views: the filters a reader set used to be gone on reload. */
+.analytics-views-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.analytics-view-chip {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(15, 23, 42, .6);
+}
+
+.analytics-view-chip button {
+  background: none;
+  border: 0;
+  color: var(--an-ink-soft);
+  font: inherit;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.analytics-view-chip button:hover { color: var(--an-ink); }
+
+.analytics-view-remove {
+  border-left: 1px solid rgba(255, 255, 255, .1);
+  color: var(--an-ink-faint);
+  padding: 4px 8px;
+  line-height: 1;
+}
+
+.analytics-view-remove:hover { color: var(--an-negative); }
+
+.analytics-view-save {
+  border: 1px solid rgba(56, 189, 248, .28);
+  background: rgba(56, 189, 248, .08);
+  color: var(--an-accent);
+  border-radius: 8px;
+  padding: 5px 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.analytics-view-save:disabled { opacity: .45; cursor: default; }
 
 /* --------------------------------------------------------------------------
    Analytics tokens
@@ -10565,6 +10618,46 @@
   top: -64px;
   height: 0;
   visibility: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Per-card explanations
+   --------------------------------------------------------------------------
+   Scoped to one metric, so the answer is a sentence rather than a two-language
+   executive report about the whole store. */
+.metric-explainer {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, .06);
+}
+
+.metric-explainer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, .28);
+  background: rgba(56, 189, 248, .08);
+  color: var(--an-accent);
+  font-size: .7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.metric-explainer-btn:disabled { opacity: .6; cursor: default; }
+
+.metric-explainer-text {
+  margin-top: 8px;
+  color: var(--an-ink-soft);
+  font-size: .78rem;
+  line-height: 1.55;
+}
+
+.metric-explainer-error {
+  margin: 8px 0 0;
+  color: #fecaca;
+  font-size: .72rem;
 }
 
 /* --------------------------------------------------------------------------

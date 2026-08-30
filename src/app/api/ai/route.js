@@ -23,6 +23,7 @@ const AI_MODE_PERMISSIONS = {
   generate_email_template: ['marketing'],
   draft_broadcast: ['broadcasts'],
   generate_journey: ['marketing'],
+  explain_metric: ['analytics', 'home'],
 };
 
 export async function POST(request) {
@@ -317,6 +318,32 @@ Rules:
 - Do not make medical, therapeutic, diagnostic, treatment, dosage, or human-use claims.
 - Do not invent discounts, prices, inventory, certifications, or test results.
 - Do not wrap JSON in markdown or include commentary outside the JSON.`;
+    } else if (mode === 'explain_metric') {
+      // One card, one question. The tab's other AI button audits the whole
+      // store in two languages and produces a report nobody finishes; this
+      // answers "what does this number mean" about the number in front of you,
+      // with only that number's data in the prompt.
+      const metric = String(context.metric || '').trim().slice(0, 80);
+      const figures = String(context.figures || '').trim().slice(0, 1200);
+      if (!metric || !figures) {
+        return NextResponse.json({ error: 'Missing metric context' }, { status: 400 });
+      }
+      finalPrompt = `You are an e-commerce analyst reading one figure on a dashboard for Peptides Costa Rica, a research-peptide store.
+
+The card is: ${metric}
+Its current numbers:
+${figures}
+
+Answer in at most three short sentences, in English:
+1. What this figure is saying right now.
+2. Whether that is good, bad, or unremarkable for a store of this kind — say plainly if there is not enough data to tell.
+3. The single most useful thing to do about it, or "nothing to do" if that is the honest answer.
+
+Rules:
+- Use only the numbers above. Do not estimate, extrapolate, or invent figures, benchmarks, or industry averages.
+- If a figure is zero because nothing has been recorded yet, say so rather than treating it as a bad result.
+- No preamble, no headings, no bullet points. Plain sentences.
+- Do not make medical, therapeutic, or human-use claims.`;
     } else {
       // Default fallback
       finalPrompt = prompt || text;
