@@ -10326,3 +10326,47 @@
 @media (max-width: 640px) {
   .cms-search-box { min-width: 0; width: 100%; }
 }
+
+/* --------------------------------------------------------------------------
+   CMS collapsible sections
+   --------------------------------------------------------------------------
+   Search answers "where is that field". This answers the other half: the tab
+   is a 500-line scroll when you are just looking around. Folding a card hides
+   everything except its header row — which for the blog card carries the New
+   Post button, so the whole row is what stays rather than the heading alone.
+   -------------------------------------------------------------------------- */
+.cms-section.is-collapsed > *:not(.cms-section-head) { display: none; }
+.cms-section.is-collapsed .cms-section-head { margin-bottom: 0; }
+
+.cms-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cms-section-toggle:hover { color: #38bdf8; }
+.cms-section-toggle:focus-visible { outline: 2px solid #38bdf8; outline-offset: 4px; border-radius: 4px; }
+
+.cms-section-chevron {
+  margin-left: auto;
+  color: #64748b;
+  flex: 0 0 auto;
+  transition: transform .18s ease;
+}
+
+.cms-section-toggle[aria-expanded="false"] .cms-section-chevron { transform: rotate(-90deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cms-section-chevron { transition: none; }
+}
+
+/* A folded card is still a search target: filtering forces every section open
+   (see cmsSectionProps), so a match can never hide inside one. */

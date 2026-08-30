@@ -1,6 +1,7 @@
 "use client";
 import { isoToCrWall, formatCrDate } from '@/lib/crTime.mjs';
 import { cmsFieldMatches, cmsSearchStyle, cmsSearchText } from '@/lib/cmsSearch.mjs';
+import { safeLocalStorage } from '@/lib/storage';
 
 import '@/app/admin.css';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -29,7 +30,7 @@ import {
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send, QrCode,
   Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft, Megaphone,
-  PanelLeftClose, PanelLeftOpen, Wallet, MapPinned
+  PanelLeftClose, PanelLeftOpen, Wallet, MapPinned, ChevronDown
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
@@ -359,6 +360,10 @@ const formatRelativeTime = (dateString) => {
   }
 };
 
+
+/** Which CMS section cards the operator has folded away. */
+const CMS_COLLAPSED_KEY = 'cms_collapsed_sections';
+
 export default function AdminPage() {
   const router = useRouter();
   
@@ -465,6 +470,55 @@ export default function AdminPage() {
   const [siteSettings, setSiteSettings] = useState(null);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [cmsSearch, setCmsSearch] = useState('');
+  // Which section cards are folded away. Remembered across visits: an operator
+  // who only ever edits contact details should not have to re-collapse the
+  // other four hundred fields every time they open the tab.
+  const [collapsedCmsSections, setCollapsedCmsSections] = useState([]);
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(safeLocalStorage.getItem(CMS_COLLAPSED_KEY) || '[]');
+      if (Array.isArray(stored)) setCollapsedCmsSections(stored.filter((id) => typeof id === 'string'));
+    } catch {
+      // A corrupt preference is not worth a broken tab; everything opens.
+    }
+  }, []);
+
+  const toggleCmsSection = (id) => {
+    setCollapsedCmsSections((current) => {
+      const next = current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id];
+      try {
+        safeLocalStorage.setItem(CMS_COLLAPSED_KEY, JSON.stringify(next));
+      } catch {
+        // Storage full or blocked; the fold still works for this visit.
+      }
+      return next;
+    });
+  };
+
+  /**
+   * A section card is only collapsed while nothing is being searched.
+   *
+   * A search that leaves its match inside a folded section finds nothing as far
+   * as the operator can see, which is worse than no search at all.
+   */
+  const cmsSectionProps = (id) => {
+    const collapsed = !cmsSearch.trim() && collapsedCmsSections.includes(id);
+    return { 'data-cms-section': id, className: `cms-section${collapsed ? ' is-collapsed' : ''}` };
+  };
+
+  const cmsSectionHeading = (id, icon, title) => (
+    <button
+      type="button"
+      className="cms-section-toggle"
+      onClick={() => toggleCmsSection(id)}
+      aria-expanded={!collapsedCmsSections.includes(id)}
+    >
+      {icon}
+      <span>{title}</span>
+      <ChevronDown size={16} className="cms-section-chevron" />
+    </button>
+  );
   const [cmsMatchCount, setCmsMatchCount] = useState(0);
 
   const [cmsSaveStatus, setCmsSaveStatus] = useState('');
@@ -6169,9 +6223,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
               
               {/* Landing Page Settings */}
-              <div className="cms-section" style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Zap size={18} color="#f59e0b" /> Landing Page Controls
+              <div {...cmsSectionProps('landing')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 className="cms-section-head" style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px' }}>
+                  {cmsSectionHeading('landing', <Zap size={18} color="#f59e0b" />, 'Landing Page Controls')}
                 </h3>
                 
                 {loadingSettings ? (
@@ -6312,9 +6366,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
 
               {/* Public Page Settings */}
-              <div className="cms-section" style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
-                <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <FileText size={18} color="#38bdf8" /> Phase 3 Public Pages
+              <div {...cmsSectionProps('pages')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
+                <h3 className="cms-section-head" style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px' }}>
+                  {cmsSectionHeading('pages', <FileText size={18} color="#38bdf8" />, 'Phase 3 Public Pages')}
                 </h3>
 
                 {loadingSettings ? (
@@ -6544,9 +6598,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
 
               {/* Business Links Settings */}
-              <div className="cms-section" style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Link2 size={18} color="#3b82f6" /> Global Business Links
+              <div {...cmsSectionProps('links')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 className="cms-section-head" style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px' }}>
+                  {cmsSectionHeading('links', <Link2 size={18} color="#3b82f6" />, 'Global Business Links')}
                 </h3>
                 
                 {loadingSettings ? (
@@ -6618,10 +6672,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
 
               {/* Blog Manager */}
-              <div className="cms-section" style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <LayoutDashboard size={18} color="#10b981" /> Blog Post Manager
+              <div {...cmsSectionProps('blog')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
+                <div className="cms-section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', margin: 0 }}>
+                    {cmsSectionHeading('blog', <LayoutDashboard size={18} color="#10b981" />, 'Blog Post Manager')}
                   </h3>
                   <button className="admin-btn admin-btn-accent" onClick={() => setEditingBlog({ slug: '', title_en: '', title_es: '', excerpt_en: '', excerpt_es: '', content_en: '', content_es: '', image_url: '', published: false })}>
                     <Plus size={16} /> New Post
