@@ -17,6 +17,7 @@
  */
 
 import { crWallToIso, CR_UTC_OFFSET_HOURS } from './crTime.mjs';
+import { dealFieldsMatch } from './dealProductProtection.mjs';
 
 const CR_OFFSET_MS = CR_UTC_OFFSET_HOURS * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -262,15 +263,6 @@ export function restorePayload(baseline) {
   };
 }
 
-const DEAL_TOUCHED_PRODUCT_FIELDS = [
-  'price_usd',
-  'price_crc',
-  'original_price_usd',
-  'original_price_crc',
-  'discount',
-  'sale_start_time',
-  'sale_end_time',
-];
 
 /**
  * A price can be restored only while it still equals what this deal wrote.
@@ -280,9 +272,7 @@ const DEAL_TOUCHED_PRODUCT_FIELDS = [
  */
 export function canSafelyRestoreProduct(current, applied) {
   if (!applied || Object.keys(applied).length === 0) return true;
-  return DEAL_TOUCHED_PRODUCT_FIELDS.every((field) => (
-    (current?.[field] ?? null) === (applied?.[field] ?? null)
-  ));
+  return dealFieldsMatch(current, applied);
 }
 
 /**
@@ -299,9 +289,10 @@ export function canSafelyRestoreLegacyProduct(current, baseline, deal) {
     sale_start_time: deal?.starts_at ?? null,
     sale_end_time: deal?.ends_at ?? null,
   };
-  return Object.entries(expected).every(([field, value]) => (
-    (current?.[field] ?? null) === (value ?? null)
-  ));
+  // Through the same comparison as the snapshot path: these two timestamps come
+  // straight off the deal row, so they carry Postgres's +00:00 while the
+  // product's own columns may not.
+  return dealFieldsMatch(current, expected, Object.keys(expected));
 }
 
 /** A deal counts as live only while it is inside its own window. */

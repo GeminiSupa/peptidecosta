@@ -12,13 +12,13 @@ export const DEAL_PROTECTED_DB_FIELDS = Object.freeze([
 // The Products UI re-derives CRC from the latest exchange rate on every bulk
 // save. That is not evidence of a stale tab, so CRC is preserved server-side
 // instead of participating in the conflict decision.
-const DEAL_CONFLICT_FIELDS = DEAL_PROTECTED_DB_FIELDS.filter((field) => (
+export const DEAL_CONFLICT_FIELDS = DEAL_PROTECTED_DB_FIELDS.filter((field) => (
   field !== 'price_crc' && field !== 'original_price_crc'
 ));
 
 const normalize = (value) => String(value || '').trim().toLowerCase();
 
-function comparable(field, value) {
+export function comparable(field, value) {
   if (value === null || value === undefined || value === '') return null;
   if (field === 'sale_start_time' || field === 'sale_end_time') {
     const timestamp = Date.parse(value);
@@ -28,6 +28,27 @@ function comparable(field, value) {
     return Number.isFinite(timestamp) ? Math.floor(timestamp / 60000) : String(value);
   }
   return String(value);
+}
+
+/**
+ * Has a deal-controlled field actually been changed by a person?
+ *
+ * The one definition, because there were two and they disagreed. This module
+ * knew that a moved exchange rate and a minute-precision datetime input are not
+ * manual edits; canSafelyRestoreProduct compared the same fields as raw
+ * strings, so it answered "yes, edited" for two things nobody had touched:
+ *
+ *   price_crc        "₡57,198" vs "₡57,513"   — the exchange rate moved
+ *   sale_end_time    "…999+00:00" vs "…999Z"  — the same instant, two formats
+ *
+ * The second one is not a drift that builds up over a week: Postgres returns
+ * +00:00 and JSON.stringify of a Date writes Z, so it was true the moment the
+ * snapshot was written, for every deal ever launched.
+ */
+export function dealFieldsMatch(current, expected, fields = DEAL_CONFLICT_FIELDS) {
+  return fields.every((field) => (
+    comparable(field, current?.[field]) === comparable(field, expected?.[field])
+  ));
 }
 
 /**

@@ -17,6 +17,39 @@ import { toPercent } from '@/lib/dealOfWeek.mjs';
  * so the send still goes through the audience picker and confirmation every
  * other broadcast uses.
  */
+/**
+ * Which of the health checks actually failed.
+ *
+ * The card had all of this — bannerPresent, bannerActive, and a per-product
+ * matchesDeal — and collapsed it into one sentence naming "a product price or
+ * the live banner", leaving the reader to work out which, on which product.
+ */
+function dealHealthProblems(live) {
+  const health = live?.health;
+  if (!health || health.ok) return [];
+  const problems = [];
+
+  if (Date.now() > Date.parse(live.ends_at)) {
+    problems.push('This deal is past its end time but still marked live.');
+  }
+
+  const named = (live.product_names || []).length;
+  const found = (health.products || []).length;
+  if (found < named) {
+    problems.push(`${named - found} of the ${named} products in this deal could not be found — they may have been renamed or removed.`);
+  }
+
+  const drifted = (health.products || []).filter((product) => !product.matchesDeal);
+  if (drifted.length > 0) {
+    problems.push(`Priced differently from what launch wrote: ${drifted.map((product) => product.product).join(', ')}.`);
+  }
+
+  if (!health.bannerPresent) problems.push('The storefront banner for this deal is missing.');
+  else if (!health.bannerActive) problems.push('The storefront banner for this deal is switched off, so nobody is being told about it.');
+
+  return problems.length > 0 ? problems : ['Something about this deal no longer matches the storefront.'];
+}
+
 export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onProductsChanged }) {
   const [live, setLive] = useState(null);
   const [recent, setRecent] = useState([]);
@@ -312,7 +345,13 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
           </div>
           {live.health && !live.health.ok && (
             <div className="weekly-deal-inline-alert is-danger">
-              <AlertTriangle size={16} /> A product price or the live banner no longer matches this deal. End the deal only after reviewing the Products tab; safe restoration will not overwrite a manual edit.
+              <AlertTriangle size={16} />
+              <span>
+                {dealHealthProblems(live).map((problem) => <span key={problem} style={{ display: 'block' }}>{problem}</span>)}
+                <span style={{ display: 'block', marginTop: '6px', opacity: 0.85 }}>
+                  Ending the deal restores prices only where they still match what launch wrote, so a deliberate edit is never overwritten.
+                </span>
+              </span>
             </div>
           )}
           {live.metrics && !live.metrics.attributionReady && (
