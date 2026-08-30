@@ -16,6 +16,7 @@ import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
 import {
   acquisitionChannelRows,
   campaignPerformanceRows,
+  campaignRevenueIndex,
   domainTrafficRows,
   isPendingAnalyticsOrder,
   isSuccessfulAnalyticsOrder,
@@ -23,7 +24,11 @@ import {
   revenueTrendRows,
   uniquePageVisitorCount,
 } from '@/lib/analyticsDashboard.mjs';
+import { formatPrice } from '@/lib/money.mjs';
 import { orderNetRevenue } from '@/lib/orderRevenue.mjs';
+
+/** Money, formatted the way every other screen formats it. */
+const formatUsd = (value) => formatPrice(value, 'USD');
 
 export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [], onNavigate }) {
   const [explainerTopic, setExplainerTopic] = useState(null);
@@ -686,7 +691,11 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   // --- NEW MARKETING ANALYTICS ---
   // 1. Email Campaign Performance
-  const campaignChartData = campaignPerformanceRows(dbCampaigns, timeRange);
+  // One pass over the orders rather than a rescan per render; the campaign list
+  // is short, the order list is not.
+  const campaignRevenue = campaignRevenueIndex(successfulOrders);
+  const campaignChartData = campaignPerformanceRows(dbCampaigns, timeRange, new Date(), campaignRevenue);
+  const campaignRevenueTotalUsd = campaignChartData.reduce((total, row) => total + row.revenueUsd, 0);
 
   // 2. UTM Source/Traffic Channels
   const trafficChartData = acquisitionChannelRows(journeyEvents).map((entry, index) => ({
@@ -1697,6 +1706,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           border-radius: 14px;
           padding: 16px;
           backdrop-filter: blur(10px);
+          /* Grid items default to min-width:auto, so a card refuses to shrink
+             below its widest child. A wide table inside one therefore widens
+             the whole page instead of scrolling in its own box, and the
+             analytics tab drags sideways on a phone. Letting the card shrink is
+             what lets the inner overflow-x actually clip. */
+          min-width: 0;
         }
 
         @media (min-width: 640px) {
@@ -2726,13 +2741,48 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             )}
           </div>
           {campaignChartData.length > 0 && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,.06)', paddingTop: 10 }}>
-              {campaignChartData.map((campaign) => (
-                <span key={campaign.id} title={campaign.name} style={{ color: '#94a3b8', fontSize: '.7rem' }}>
-                  <strong style={{ color: '#e2e8f0' }}>{campaign.name}</strong>: {campaign.sends.toLocaleString()} sent · {campaign.uniqueOpens.toLocaleString()} unique opens · {campaign.uniqueClicks.toLocaleString()} unique clicks{campaign.exact ? '' : ' (estimated)'}
-                </span>
-              ))}
-            </div>
+            <>
+              <div className="campaign-perf-scroll">
+                <table className="campaign-perf-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Campaign</th>
+                      <th scope="col">Sent</th>
+                      <th scope="col">Opens</th>
+                      <th scope="col">Clicks</th>
+                      <th scope="col">Orders</th>
+                      <th scope="col">Revenue</th>
+                      <th scope="col">Per recipient</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {campaignChartData.map((campaign) => (
+                      <tr key={campaign.id}>
+                        <td>
+                          <span className="campaign-perf-name">{campaign.name}</span>
+                          {!campaign.exact && <span className="campaign-perf-estimated"> · estimated</span>}
+                        </td>
+                        <td>{campaign.sends.toLocaleString()}</td>
+                        <td>{campaign.uniqueOpens.toLocaleString()}</td>
+                        <td>{campaign.uniqueClicks.toLocaleString()}</td>
+                        <td>{campaign.orders.toLocaleString()}</td>
+                        <td className={`campaign-perf-money${campaign.revenueUsd > 0 ? '' : ' zero'}`}>
+                          {formatUsd(campaign.revenueUsd)}
+                        </td>
+                        <td className={`campaign-perf-money${campaign.revenueUsd > 0 ? '' : ' zero'}`}>
+                          {formatUsd(campaign.revenuePerRecipient)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="campaign-perf-note">
+                {campaignRevenueTotalUsd > 0
+                  ? `${formatUsd(campaignRevenueTotalUsd)} attributed to these campaigns from orders that carry a campaign tag. Refunds are already taken off.`
+                  : 'No orders in this range carry a campaign tag yet, so revenue reads zero. Orders record one when a customer arrives from a campaign link.'}
+              </p>
+            </>
           )}
         </div>
 

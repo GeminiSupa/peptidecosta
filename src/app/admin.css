@@ -10178,3 +10178,78 @@
   .kpi-breakdown-row { grid-template-columns: minmax(0,1fr) auto; }
   .kpi-breakdown-row-meta { grid-column: 1 / -1; }
 }
+
+/* --------------------------------------------------------------------------
+   Campaign performance table
+   --------------------------------------------------------------------------
+   Replaces a flex row of run-on text spans that wrapped into an unreadable
+   block as soon as a campaign had a long name. A campaign now reads as a row:
+   who it reached, who engaged, and what it earned — the last of which the tab
+   could not report at all until orders.campaign_id was finally joined in.
+   -------------------------------------------------------------------------- */
+/* Deliberately not its own scroll container. The card already scrolls
+   horizontally for the chart's 400px minimum, and a second scroller nested
+   inside it gives the same card two scrollbars that fight over one drag. */
+.campaign-perf-scroll {
+  border-top: 1px solid rgba(255, 255, 255, .06);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.campaign-perf-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: .74rem;
+}
+
+.campaign-perf-table th,
+.campaign-perf-table td {
+  padding: 7px 10px 7px 0;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(255, 255, 255, .05);
+}
+
+.campaign-perf-table th:first-child,
+.campaign-perf-table td:first-child {
+  text-align: left;
+  white-space: normal;
+  min-width: 140px;
+}
+
+.campaign-perf-table thead th {
+  color: #64748b;
+  font-weight: 600;
+  font-size: .66rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border-bottom-color: rgba(255, 255, 255, .12);
+}
+
+.campaign-perf-table tbody td {
+  color: #94a3b8;
+  /* Figures sit in columns, so they line up rather than jitter per row. */
+  font-variant-numeric: tabular-nums;
+}
+
+.campaign-perf-table tbody tr:last-child td { border-bottom: none; }
+
+.campaign-perf-name { color: #e2e8f0; font-weight: 600; }
+
+.campaign-perf-estimated {
+  color: #64748b;
+  font-weight: 400;
+  font-size: .92em;
+}
+
+/* Money is the column the table exists for, so it is the one that reads first. */
+.campaign-perf-money { color: #34d399; font-weight: 700; }
+.campaign-perf-money.zero { color: #64748b; font-weight: 400; }
+
+.campaign-perf-note {
+  color: #64748b;
+  font-size: .7rem;
+  margin-top: 10px;
+  line-height: 1.5;
+}

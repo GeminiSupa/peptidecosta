@@ -39,7 +39,39 @@ function withinRange(value, range, now) {
   return Number.isFinite(timestamp) && timestamp >= new Date(start).getTime();
 }
 
-export function campaignPerformanceRows(campaigns = [], range = 'all', now = new Date()) {
+const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;
+
+/**
+ * What each campaign earned, keyed by campaign id.
+ *
+ * `orders.campaign_id` has been travelling in the analytics payload since this
+ * screen was built, and was read for exactly one thing: filing an order under a
+ * generic "Marketing Studio campaigns" label. So the tab could report that a
+ * subject line was opened and never that it was worth sending.
+ *
+ * Only orders that count as a sale contribute, and refunds come off, because
+ * this figure sits beside Revenue elsewhere on the page and two revenue numbers
+ * that disagree are worse than one.
+ *
+ * Kept separate from campaignPerformanceRows so the caller can memoise one pass
+ * over the orders rather than rescanning them on every render.
+ */
+export function campaignRevenueIndex(orders = [], rate) {
+  const index = new Map();
+  for (const order of orders || []) {
+    const campaignId = clean(order?.campaign_id);
+    if (!campaignId || !isSuccessfulAnalyticsOrder(order)) continue;
+    const row = index.get(campaignId) || { orders: 0, revenueUsd: 0, revenueCrc: 0 };
+    const net = orderNetRevenue(order, rate);
+    row.orders += 1;
+    row.revenueUsd += net.usd;
+    row.revenueCrc += net.crc;
+    index.set(campaignId, row);
+  }
+  return index;
+}
+
+export function campaignPerformanceRows(campaigns = [], range = 'all', now = new Date(), revenueIndex = new Map()) {
   return (campaigns || [])
     .map((campaign) => ({
       campaign,
@@ -52,17 +84,27 @@ export function campaignPerformanceRows(campaigns = [], range = 'all', now = new
     ))
     .sort((left, right) => new Date(right.at || 0) - new Date(left.at || 0))
     .slice(0, 5)
-    .map(({ campaign, engagement, at }) => ({
-      id: campaign.id,
-      name: clean(campaign.title || campaign.subject_line || 'Campaign').slice(0, 28),
-      sentAt: at,
-      sends: engagement.sends,
-      uniqueOpens: engagement.uniqueOpens,
-      uniqueClicks: engagement.uniqueClicks,
-      openRate: engagement.openRate,
-      clickRate: engagement.clickRate,
-      exact: engagement.exact,
-    }));
+    .map(({ campaign, engagement, at }) => {
+      const revenue = revenueIndex?.get?.(campaign.id) || { orders: 0, revenueUsd: 0, revenueCrc: 0 };
+      return {
+        id: campaign.id,
+        name: clean(campaign.title || campaign.subject_line || 'Campaign').slice(0, 28),
+        sentAt: at,
+        sends: engagement.sends,
+        uniqueOpens: engagement.uniqueOpens,
+        uniqueClicks: engagement.uniqueClicks,
+        openRate: engagement.openRate,
+        clickRate: engagement.clickRate,
+        exact: engagement.exact,
+        orders: revenue.orders,
+        revenueUsd: round2(revenue.revenueUsd),
+        revenueCrc: Math.round(revenue.revenueCrc),
+        // What one recipient was worth. This is the number that decides whether
+        // to send it again: a 40% open rate on a list of 500 that earned
+        // nothing is not a win, and the open rate alone cannot say so.
+        revenuePerRecipient: engagement.sends > 0 ? round2(revenue.revenueUsd / engagement.sends) : 0,
+      };
+    });
 }
 
 function canonicalSource(value) {

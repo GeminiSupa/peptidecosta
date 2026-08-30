@@ -6,6 +6,7 @@ import {
   acquisitionChannelRows,
   analyticsRangeStart,
   campaignPerformanceRows,
+  campaignRevenueIndex,
   domainTrafficRows,
   isPendingAnalyticsOrder,
   isSuccessfulAnalyticsOrder,
@@ -108,4 +109,79 @@ test('dashboard data is loaded through authenticated admin routes', async () => 
   assert.match(route, /event_type, hostname, path, page_title/);
   assert.match(route, /utm_campaign, gclid, fbclid/);
   assert.match(component, /Domain & page analytics/);
+});
+
+test('campaign revenue is attributed from orders.campaign_id', () => {
+  const index = campaignRevenueIndex([
+    { campaign_id: 'c1', status: 'Order Complete', total_usd: 120 },
+    { campaign_id: 'c1', status: 'Order Complete', total_usd: 80 },
+    { campaign_id: 'c2', status: 'Order Complete', total_usd: 50 },
+    // Not a sale, so it buys the campaign nothing.
+    { campaign_id: 'c1', status: 'Cancelled', total_usd: 999 },
+    // No tag: it belongs to no campaign rather than to the first one.
+    { campaign_id: null, status: 'Order Complete', total_usd: 999 },
+  ]);
+
+  assert.equal(index.get('c1').revenueUsd, 200);
+  assert.equal(index.get('c1').orders, 2);
+  assert.equal(index.get('c2').revenueUsd, 50);
+  assert.equal(index.has('c3'), false);
+});
+
+test('a refunded order reduces what its campaign earned', () => {
+  // The figure sits beside Revenue elsewhere on the page, so it has to subtract
+  // the same way that one does.
+  const index = campaignRevenueIndex([
+    { campaign_id: 'c1', status: 'Partly Refunded', total_usd: 100, refunded_amount_usd: 30 },
+  ]);
+  assert.equal(index.get('c1').revenueUsd, 70);
+});
+
+test('campaign rows carry revenue, orders, and revenue per recipient', () => {
+  const now = new Date('2026-08-20T12:00:00.000Z');
+  const rows = campaignPerformanceRows(
+    [{
+      id: 'c1',
+      title: 'August newsletter',
+      status: 'sent',
+      sent_at: '2026-08-19T00:00:00.000Z',
+      engagement: { sends: 200, unique_opens: 80, unique_clicks: 20, total_opens: 90, total_clicks: 24 },
+    }],
+    'all',
+    now,
+    campaignRevenueIndex([
+      { campaign_id: 'c1', status: 'Order Complete', total_usd: 300 },
+      { campaign_id: 'c1', status: 'Order Complete', total_usd: 100 },
+    ]),
+  );
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].revenueUsd, 400);
+  assert.equal(rows[0].orders, 2);
+  assert.equal(rows[0].revenuePerRecipient, 2);
+  // Engagement is untouched by the join.
+  assert.equal(rows[0].openRate, 40);
+});
+
+test('a campaign nothing was bought from reads zero, not blank', () => {
+  const rows = campaignPerformanceRows(
+    [{ id: 'c9', title: 'Quiet one', status: 'sent', sent_at: '2026-08-19T00:00:00.000Z', engagement: { sends: 500 } }],
+    'all',
+    new Date('2026-08-20T12:00:00.000Z'),
+    campaignRevenueIndex([]),
+  );
+  assert.equal(rows[0].revenueUsd, 0);
+  assert.equal(rows[0].orders, 0);
+  assert.equal(rows[0].revenuePerRecipient, 0);
+});
+
+test('rows still work when no revenue index is supplied', () => {
+  // The signature grew a fourth argument; existing callers must not break.
+  const rows = campaignPerformanceRows(
+    [{ id: 'c1', title: 'Old caller', status: 'sent', sent_at: '2026-08-19T00:00:00.000Z', engagement: { sends: 10 } }],
+    'all',
+    new Date('2026-08-20T12:00:00.000Z'),
+  );
+  assert.equal(rows[0].revenueUsd, 0);
+  assert.equal(rows[0].sends, 10);
 });
