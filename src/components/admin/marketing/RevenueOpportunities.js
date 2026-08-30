@@ -127,6 +127,11 @@ export default function RevenueOpportunities() {
       {data.warnings.length > 0 && (
         <div className="mkt-warning-strip"><AlertTriangle size={15} /> Some signals are unavailable: {data.warnings.join(', ')}.</div>
       )}
+      {data.truncated && (
+        <div className="mkt-warning-strip">
+          <AlertTriangle size={15} /> There is more campaign engagement than this scores on, so a few contacts may rank lower than they should.
+        </div>
+      )}
 
       <div className="mkt-toolbar" style={{ marginTop: 16 }}>
         <div className="mkt-search-wrap">

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { eventTimeColumn, eventTimeSelect } from '@/lib/campaignEventColumns.mjs';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
@@ -6,6 +7,9 @@ import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 export const dynamic = 'force-dynamic';
 
 const DAY = 24 * 60 * 60 * 1000;
+// Matches the campaign stats route, and comfortably above the current tables so
+// nothing is dropped at today's volume. Truncation is reported, not silent.
+const EVENT_ROW_CAP = 5000;
 
 function emailKey(value) {
   const email = String(value || '').trim().toLowerCase();
@@ -28,7 +32,9 @@ function daysSince(value, now) {
 }
 
 function engagementDate(row) {
-  return row?.created_at || row?.clicked_at || row?.opened_at || row?.event_at || row?.timestamp || null;
+  // `at` first: eventTimeSelect aliases each table's own timestamp to it, so
+  // opens and clicks arrive the same shape whichever table produced them.
+  return row?.at || row?.created_at || row?.clicked_at || row?.opened_at || row?.event_at || row?.timestamp || null;
 }
 
 async function safeRows(label, query, warnings) {
@@ -55,10 +61,20 @@ export async function GET(request) {
       safeRows('carts', supabase.from('abandoned_carts').select('customer_email,customer_phone,customer_name,status,created_at,last_updated').order('created_at', { ascending: false }).limit(2500), warnings),
       safeRows('catalog leads', supabase.from('catalog_leads').select('contact_method,contact_value,created_at').order('created_at', { ascending: false }).limit(2500), warnings),
       safeRows('product views', supabase.from('product_views').select('contact_value,product_name,created_at').not('contact_value', 'is', null).order('created_at', { ascending: false }).limit(3000), warnings),
-      // These legacy tables do not consistently expose `created_at`. Avoid an
-      // invalid order clause and normalize whichever provider timestamp exists.
-      safeRows('campaign clicks', supabase.from('campaign_clicks').select('*').limit(1000), warnings),
-      safeRows('campaign opens', supabase.from('campaign_opens').select('*').limit(1000), warnings),
+      // Newest first, and not by `created_at`: these tables name their
+      // timestamp after their own verb. Unordered, the cap took an arbitrary
+      // 1,000 rows — measured against the live table that dropped 300 of the
+      // 1,294 opens from the last 30 days, and the dropped ones were the most
+      // recent. The 30-day engagement score below is built on exactly those, so
+      // the freshest signal was the first thing discarded.
+      safeRows('campaign clicks', supabase.from('campaign_clicks')
+        .select(eventTimeSelect('campaign_clicks', ['subscriber_id', 'target_url']))
+        .order(eventTimeColumn('campaign_clicks'), { ascending: false })
+        .limit(EVENT_ROW_CAP), warnings),
+      safeRows('campaign opens', supabase.from('campaign_opens')
+        .select(eventTimeSelect('campaign_opens', ['subscriber_id']))
+        .order(eventTimeColumn('campaign_opens'), { ascending: false })
+        .limit(EVENT_ROW_CAP), warnings),
     ]);
 
     const contacts = new Map();
@@ -215,6 +231,9 @@ export async function GET(request) {
       },
       segments: segmentDefinitions,
       leads: leads.slice(0, 500),
+      // A silently truncated read is how the 30-day engagement score came to be
+      // built on an arbitrary subset in the first place.
+      truncated: [clicks, opens].some(rows => rows.length >= EVENT_ROW_CAP),
       warnings: [...new Set(warnings)],
     });
   } catch (error) {
