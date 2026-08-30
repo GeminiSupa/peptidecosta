@@ -1,5 +1,6 @@
 "use client";
 import { isoToCrWall, formatCrDate } from '@/lib/crTime.mjs';
+import { cmsFieldMatches, cmsSearchStyle, cmsSearchText } from '@/lib/cmsSearch.mjs';
 
 import '@/app/admin.css';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -463,12 +464,38 @@ export default function AdminPage() {
   const [loadingBlogs, setLoadingBlogs] = useState(true);
   const [siteSettings, setSiteSettings] = useState(null);
   const [loadingSettings, setLoadingSettings] = useState(true);
+  const [cmsSearch, setCmsSearch] = useState('');
+  const [cmsMatchCount, setCmsMatchCount] = useState(0);
+
   const [cmsSaveStatus, setCmsSaveStatus] = useState('');
   const [cmsSaveLoading, setCmsSaveLoading] = useState(false);
   const [cmsChangeHistory, setCmsChangeHistory] = useState([]);
   const [editingBlog, setEditingBlog] = useState(null);
   const [businessLinks, setBusinessLinks] = useState(null);  
   const [publicPageSettings, setPublicPageSettings] = useState(() => mergeAllPublicPageSettings());
+  /**
+   * How many settings survived the filter.
+   *
+   * Counted off the rendered fields rather than from a list of them, because
+   * the CMS has no such list — the fields come from two rendering paths and a
+   * hand-maintained registry would drift the first time one was added. Reading
+   * what is actually on the page cannot drift, and the count is what tells the
+   * operator "nothing matches" instead of leaving them looking at a blank tab.
+   */
+  useEffect(() => {
+    if (activeTab !== 'cms') return;
+    const term = cmsSearch.trim();
+    if (!term) {
+      setCmsMatchCount(0);
+      return;
+    }
+    const fields = document.querySelectorAll('[data-cms-search]');
+    let matches = 0;
+    for (const field of fields) {
+      if (cmsFieldMatches(field.getAttribute('data-cms-search'), term)) matches += 1;
+    }
+    setCmsMatchCount(matches);
+  }, [cmsSearch, activeTab, siteSettings, publicPageSettings]);
   // CSV Import States
   const [csvDragActive, setCsvDragActive] = useState(false);
   const [csvStatus, setCsvStatus] = useState('');
@@ -4834,7 +4861,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       <div key={`${listKey}-${index}`} style={{ borderTop: index === 0 ? 0 : '1px solid rgba(255,255,255,0.08)', paddingTop: index === 0 ? 0 : '12px', marginTop: index === 0 ? 0 : '12px' }}>
         <div style={{ color: '#38bdf8', fontSize: '0.72rem', fontWeight: 900, marginBottom: '8px', textTransform: 'uppercase' }}>Item {index + 1}</div>
         {Object.entries(labels).map(([fieldKey, label]) => (
-          <label key={fieldKey} style={{ display: 'block' }}>
+          <label key={fieldKey} data-cms-search={cmsSearchText('landing', `${listKey} ${label}`, fieldKey)} style={{ display: 'block' }}>
             <span style={cmsLabelStyle}>{label}</span>
             {['text', 'a', 'content', 'excerpt'].some((prefix) => fieldKey.toLowerCase().startsWith(prefix)) ? (
               <textarea
@@ -4857,7 +4884,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   };
 
   const publicField = (pageId, label, key, placeholder = label) => (
-    <label style={{ display: 'block' }}>
+    <label data-cms-search={cmsSearchText(pageId, label, key)} style={{ display: 'block' }}>
       <span style={cmsLabelStyle}>{label}</span>
       <input
         type="text"
@@ -4870,7 +4897,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   );
 
   const publicTextArea = (pageId, label, key, placeholder = label, minHeight = 70) => (
-    <label style={{ display: 'block' }}>
+    <label data-cms-search={cmsSearchText(pageId, label, key)} style={{ display: 'block' }}>
       <span style={cmsLabelStyle}>{label}</span>
       <textarea
         placeholder={placeholder}
@@ -4887,7 +4914,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       <div key={`${pageId}-${listKey}-${index}`} style={{ borderTop: index === 0 ? 0 : '1px solid rgba(255,255,255,0.08)', paddingTop: index === 0 ? 0 : '12px', marginTop: index === 0 ? 0 : '12px' }}>
         <div style={{ color: '#38bdf8', fontSize: '0.72rem', fontWeight: 900, marginBottom: '8px', textTransform: 'uppercase' }}>Item {index + 1}</div>
         {Object.entries(labels).map(([fieldKey, label]) => (
-          <label key={fieldKey} style={{ display: 'block' }}>
+          <label key={fieldKey} data-cms-search={cmsSearchText(pageId, `${listKey} ${label}`, fieldKey)} style={{ display: 'block' }}>
             <span style={cmsLabelStyle}>{label}</span>
             {['text', 'a', 'content', 'excerpt'].some((prefix) => fieldKey.toLowerCase().startsWith(prefix)) ? (
               <textarea
@@ -6064,15 +6091,41 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {/* TAB: CMS */}
         {activeTab === 'cms' && (
-          <div className="admin-orders-tab">
+          <div className={`admin-orders-tab${cmsSearch.trim() ? ' cms-filtering' : ''}`}>
+            {/* Generated rather than static: the rule has to carry the term the
+                operator typed. Empty while nothing is being searched. */}
+            <style>{cmsSearchStyle(cmsSearch)}</style>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
               <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0 }}><FileText size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-bottom', color: '#38bdf8' }} /> Content Management System</h2>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="cms-search-box">
+                  <Search size={15} />
+                  <input
+                    type="search"
+                    value={cmsSearch}
+                    onChange={(event) => setCmsSearch(event.target.value)}
+                    placeholder="Search settings — try &quot;whatsapp&quot;, &quot;affiliate&quot;, &quot;hero&quot;"
+                    aria-label="Search CMS settings"
+                  />
+                  {cmsSearch.trim() && (
+                    <button type="button" onClick={() => setCmsSearch('')} aria-label="Clear search">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
                 <button className="admin-btn" onClick={loadAdminData} style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}>
                   Refresh
                 </button>
               </div>
             </div>
+
+            {cmsSearch.trim() && (
+              <div className="cms-search-status" role="status">
+                {cmsMatchCount === 0
+                  ? `Nothing matches “${cmsSearch.trim()}”. Try a page name like “affiliate”, or a field name like “hero title”.`
+                  : `${cmsMatchCount} setting${cmsMatchCount === 1 ? '' : 's'} match “${cmsSearch.trim()}”. Everything else is hidden.`}
+              </div>
+            )}
 
             {cmsSaveStatus && (
               <div style={{ 
@@ -6116,7 +6169,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
               
               {/* Landing Page Settings */}
-              <div style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div className="cms-section" style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Zap size={18} color="#f59e0b" /> Landing Page Controls
                 </h3>
@@ -6128,7 +6181,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     
 
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 8px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Running Promo Ticker</h4>
                       <p style={{ margin: '0 0 12px 0', color: '#94a3b8', fontSize: '0.76rem', lineHeight: 1.45 }}>
                         Shows as the moving blue banner on the landing page and catalog. Use plain text or a Markdown link; the storefront cleans it automatically.
@@ -6146,7 +6199,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {cmsField('Banner link URL', 'catalogBannerUrl', '/catalog')}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Hero</h4>
                       {cmsField('Hero kicker EN', 'heroKickerEn')}
                       {cmsField('Hero kicker ES', 'heroKickerEs')}
@@ -6168,7 +6221,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {cmsField('WhatsApp CTA ES', 'secondaryCtaEs')}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Press Band</h4>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#cbd5e1', fontSize: '0.82rem', marginBottom: '12px' }}>
                         <input
@@ -6194,7 +6247,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       }))}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Difference Section</h4>
                       {cmsField('Section title EN', 'differenceTitleEn')}
                       {cmsField('Section title ES', 'differenceTitleEs')}
@@ -6203,7 +6256,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {(siteSettings.differenceCards || []).slice(0, 4).map((_, index) => cmsCardFields('differenceCards', index))}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Offer Cards</h4>
                       {cmsField('Offer title EN', 'offerTitleEn')}
                       {cmsField('Offer title ES', 'offerTitleEs')}
@@ -6212,7 +6265,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {(siteSettings.offerCards || []).slice(0, 6).map((_, index) => cmsCardFields('offerCards', index))}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Audience, Proof & Quality</h4>
                       {cmsField('Audience title EN', 'audienceTitleEn')}
                       {cmsField('Audience title ES', 'audienceTitleEs')}
@@ -6230,7 +6283,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {cmsTextArea('Quality text ES', 'qualityTextEs')}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>FAQ, Bulk CTA & Footer</h4>
                       {cmsField('FAQ title EN', 'faqTitleEn')}
                       {cmsField('FAQ title ES', 'faqTitleEs')}
@@ -6259,7 +6312,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
 
               {/* Public Page Settings */}
-              <div style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
+              <div className="cms-section" style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
                 <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <FileText size={18} color="#38bdf8" /> Phase 3 Public Pages
                 </h3>
@@ -6268,7 +6321,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                   <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Loading page settings...</div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Info Center</h4>
                       {publicField('page_info_center', 'Hero title EN', 'heroTitleEn')}
                       {publicField('page_info_center', 'Hero title ES', 'heroTitleEs')}
@@ -6293,7 +6346,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {publicTextArea('page_info_center', 'CTA text ES', 'ctaTextEs')}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Affiliate Program</h4>
                       {publicField('page_affiliate_program', 'Hero title EN', 'heroTitleEn')}
                       {publicField('page_affiliate_program', 'Hero title ES', 'heroTitleEs')}
@@ -6319,7 +6372,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {publicTextArea('page_affiliate_program', 'Talk text ES', 'talkTextEs')}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Blog Page & Placeholder Posts</h4>
                       {publicField('page_blog', 'Hero kicker EN', 'heroKickerEn')}
                       {publicField('page_blog', 'Hero kicker ES', 'heroKickerEs')}
@@ -6346,7 +6399,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       }))}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>About Us</h4>
                       {publicField('page_about', 'Hero kicker EN', 'heroKickerEn')}
                       {publicField('page_about', 'Hero kicker ES', 'heroKickerEs')}
@@ -6392,7 +6445,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {publicField('page_about', 'WhatsApp button ES', 'contactButtonEs')}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>FAQ</h4>
                       {publicField('page_faq', 'Hero title EN', 'heroTitleEn')}
                       {publicField('page_faq', 'Hero title ES', 'heroTitleEs')}
@@ -6408,7 +6461,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {publicField('page_faq', 'CTA button ES', 'ctaButtonEs')}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Bulk Discounts</h4>
                       {publicField('page_bulk_discounts', 'Hero title EN', 'heroTitleEn')}
                       {publicField('page_bulk_discounts', 'Hero title ES', 'heroTitleEs')}
@@ -6424,7 +6477,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {publicField('page_bulk_discounts', 'CTA button ES', 'ctaButtonEs')}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>COA Database</h4>
                       {publicField('page_coa_database', 'Hero title EN', 'heroTitleEn')}
                       {publicField('page_coa_database', 'Hero title ES', 'heroTitleEs')}
@@ -6437,7 +6490,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {publicField('page_coa_database', 'CTA button ES', 'ctaButtonEs')}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Service Locations</h4>
                       {publicField('page_service_locations', 'Hero title EN', 'heroTitleEn')}
                       {publicField('page_service_locations', 'Hero title ES', 'heroTitleEs')}
@@ -6453,7 +6506,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                       {publicField('page_service_locations', 'CTA button ES', 'ctaButtonEs')}
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Contact</h4>
                       {publicField('page_contact', 'Hero kicker EN', 'heroKickerEn')}
                       {publicField('page_contact', 'Hero kicker ES', 'heroKickerEs')}
@@ -6491,7 +6544,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
 
               {/* Business Links Settings */}
-              <div style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div className="cms-section" style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Link2 size={18} color="#3b82f6" /> Global Business Links
                 </h3>
@@ -6501,57 +6554,57 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 ) : businessLinks ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Contact Settings</h4>
-                      <div style={{ marginBottom: '8px' }}>
+                      <div className="cms-field" data-cms-search="WhatsApp Number (Numbers Only e.g. 50684046973)" style={{ marginBottom: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>WhatsApp Number (Numbers Only e.g. 50684046973)</label>
                         <input type="text" value={businessLinks.whatsappNumber} onChange={e => setBusinessLinks({...businessLinks, whatsappNumber: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
-                      <div style={{ marginBottom: '8px' }}>
+                      <div className="cms-field" data-cms-search="WhatsApp Display Text (e.g. +506 8404-6973)" style={{ marginBottom: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>WhatsApp Display Text (e.g. +506 8404-6973)</label>
                         <input type="text" value={businessLinks.whatsappDisplay} onChange={e => setBusinessLinks({...businessLinks, whatsappDisplay: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
-                      <div style={{ marginBottom: '8px' }}>
+                      <div className="cms-field" data-cms-search="US WhatsApp / Phone Number (Numbers Only)" style={{ marginBottom: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>US WhatsApp / Phone Number (Numbers Only)</label>
                         <input type="text" value={businessLinks.apiWhatsAppNumber || ''} onChange={e => setBusinessLinks({...businessLinks, apiWhatsAppNumber: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
-                      <div style={{ marginBottom: '8px' }}>
+                      <div className="cms-field" data-cms-search="US Display Text" style={{ marginBottom: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>US Display Text</label>
                         <input type="text" value={businessLinks.apiWhatsAppDisplay || ''} onChange={e => setBusinessLinks({...businessLinks, apiWhatsAppDisplay: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
-                      <div style={{ marginBottom: '8px' }}>
+                      <div className="cms-field" data-cms-search="Support Email" style={{ marginBottom: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Support Email</label>
                         <input type="text" value={businessLinks.supportEmail} onChange={e => setBusinessLinks({...businessLinks, supportEmail: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
                     </div>
 
-                    <div style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
+                    <div className="cms-group" style={{ background: '#172237', padding: '16px', borderRadius: '8px' }}>
                       <h4 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '0.95rem' }}>Social & Map URLs</h4>
-                      <div style={{ marginBottom: '8px' }}>
+                      <div className="cms-field" data-cms-search="Google Maps URL" style={{ marginBottom: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Google Maps URL</label>
                         <input type="text" value={businessLinks.googleMapsUrl} onChange={e => setBusinessLinks({...businessLinks, googleMapsUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
-                      <div style={{ marginBottom: '8px' }}>
+                      <div className="cms-field" data-cms-search="Facebook URL (Optional)" style={{ marginBottom: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Facebook URL (Optional)</label>
                         <input type="text" value={businessLinks.facebookUrl} onChange={e => setBusinessLinks({...businessLinks, facebookUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
-                      <div>
+                      <div className="cms-field" data-cms-search="Instagram URL (Optional)">
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Instagram URL (Optional)</label>
                         <input type="text" value={businessLinks.instagramUrl} onChange={e => setBusinessLinks({...businessLinks, instagramUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
-                      <div style={{ marginTop: '8px' }}>
+                      <div className="cms-field" data-cms-search="Trustpilot Review URL - English" style={{ marginTop: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Trustpilot Review URL - English</label>
                         <input type="text" value={businessLinks.trustpilotUrlEn || businessLinks.trustpilotUrl || ''} onChange={e => setBusinessLinks({...businessLinks, trustpilotUrl: e.target.value, trustpilotUrlEn: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
-                      <div style={{ marginTop: '8px' }}>
+                      <div className="cms-field" data-cms-search="Trustpilot Review URL - Spanish" style={{ marginTop: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Trustpilot Review URL - Spanish</label>
                         <input type="text" value={businessLinks.trustpilotUrlEs || ''} onChange={e => setBusinessLinks({...businessLinks, trustpilotUrlEs: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
-                      <div style={{ marginTop: '8px' }}>
+                      <div className="cms-field" data-cms-search="Google Review URL (Optional)" style={{ marginTop: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Google Review URL (Optional)</label>
                         <input type="text" value={businessLinks.googleReviewUrl || ''} onChange={e => setBusinessLinks({...businessLinks, googleReviewUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
-                      <div style={{ marginTop: '8px' }}>
+                      <div className="cms-field" data-cms-search="Facebook Review URL (Optional)" style={{ marginTop: '8px' }}>
                         <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>Facebook Review URL (Optional)</label>
                         <input type="text" value={businessLinks.facebookReviewUrl || ''} onChange={e => setBusinessLinks({...businessLinks, facebookReviewUrl: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)', background: '#0e1626', color: '#f8fafc', fontSize: '0.85rem' }} />
                       </div>
@@ -6565,7 +6618,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
 
               {/* Blog Manager */}
-              <div style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
+              <div className="cms-section" style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                   <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <LayoutDashboard size={18} color="#10b981" /> Blog Post Manager
