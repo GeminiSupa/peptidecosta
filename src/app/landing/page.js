@@ -35,6 +35,7 @@ import {
 } from '@/lib/landingLeadSettings.mjs';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
+  getFacebookReviewUrl,
   getTrustpilotReviewUrl,
   TRUSTPILOT_RATING,
   TRUSTPILOT_REVIEW_COUNT,
@@ -518,7 +519,7 @@ export default function LeadGenerationLandingPage() {
   const ratingCards = useMemo(() => [
     { name: 'Google', rating: '5.0', color: '#f4b400', href: links.googleReviewUrl || links.googleMapsUrl, detail: lang === 'en' ? 'Customer rating' : 'Calificación de clientes' },
     { name: 'Trustpilot', rating: TRUSTPILOT_RATING, color: '#00b67a', href: getTrustpilotReviewUrl(lang, links), detail: `${TRUSTPILOT_REVIEW_COUNT} ${c.reviews}` },
-    { name: 'Facebook', rating: '5.0', color: '#1877f2', href: links.facebookReviewUrl || links.facebookUrl || 'https://www.facebook.com/Peptidescostaricaresearch/reviews', detail: lang === 'en' ? 'Community rating' : 'Calificación de la comunidad' },
+    { name: 'Facebook', rating: '5.0', color: '#1877f2', href: getFacebookReviewUrl(links), detail: lang === 'en' ? 'Community rating' : 'Calificación de la comunidad' },
   ], [c.reviews, lang, links]);
 
   return (

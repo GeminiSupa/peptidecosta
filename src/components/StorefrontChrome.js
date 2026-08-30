@@ -6,7 +6,7 @@ import { ChevronDown, Globe, Menu, Search, ShoppingBag, X } from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import { getTrustpilotReviewUrl, isExternalHttpUrl, TRUSTPILOT_RATING } from '@/lib/businessLinks';
+import { getFacebookReviewUrl, getTrustpilotReviewUrl, isExternalHttpUrl, TRUSTPILOT_RATING } from '@/lib/businessLinks';
 import { DEFAULT_LANDING_PAGE_SETTINGS } from '@/lib/landingContent';
 import { normalizeBannerCopy, replaceUsdPlaceholders, sanitizeBannerHref } from '@/lib/bannerText';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -333,7 +333,7 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
   const reviewLinks = [
     { id: 'trustpilot', label: 'Trustpilot', score: TRUSTPILOT_RATING, logo: '★', href: getTrustpilotReviewUrl(lang, links) },
     { id: 'google', label: 'Google', score: '5.0', logo: 'G', href: links.googleReviewUrl || links.googleMapsUrl },
-    { id: 'facebook', label: 'Facebook', score: '5.0', logo: 'f', href: links.facebookReviewUrl || links.facebookUrl || 'https://www.facebook.com/Peptidescostaricaresearch/reviews' },
+    { id: 'facebook', label: 'Facebook', score: '5.0', logo: 'f', href: getFacebookReviewUrl(links) },
   ];
 
   const openWhatsApp = () => {
