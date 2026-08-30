@@ -15,11 +15,14 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
 import {
   acquisitionChannelRows,
+  campaignLinkRows,
   campaignPerformanceRows,
   campaignRevenueIndex,
   domainTrafficRows,
   isPendingAnalyticsOrder,
   isSuccessfulAnalyticsOrder,
+  listHealthSummary,
+  listHealthTrend,
   pageTrafficRows,
   revenueTrendRows,
   uniquePageVisitorCount,
@@ -192,6 +195,10 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   };
 
   const [timeRange, setTimeRange] = useState('all');
+  // Reads inside a sentence, so tiles can say "Joined in the last 7 days"
+  // rather than repeating the button label back at you.
+  const RANGE_LABELS = { '24h': 'in the last 24 hours', '7d': 'in the last 7 days', '30d': 'in the last 30 days', all: 'all time' };
+  const rangeLabel = RANGE_LABELS[timeRange] || 'in this range';
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState(null);
@@ -277,11 +284,15 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [dbOrders, setDbOrders] = useState([]);
   const [dbCarts, setDbCarts] = useState([]);
   const [dbCampaigns, setDbCampaigns] = useState([]);
+  const [dbCampaignLinks, setDbCampaignLinks] = useState([]);
+  const [dbListHealth, setDbListHealth] = useState(null);
+  const [expandedCampaignId, setExpandedCampaignId] = useState(null);
   const [dbClickEvents, setDbClickEvents] = useState([]);
   const [dbAnalyticsEvents, setDbAnalyticsEvents] = useState([]);
   const [analyticsMeta, setAnalyticsMeta] = useState(null);
   const [analyticsErrors, setAnalyticsErrors] = useState([]);
   const [campaignError, setCampaignError] = useState('');
+  const [campaignLinksError, setCampaignLinksError] = useState('');
 
   // Heatmap UI States
   const heatmapViewMode = 'live';
@@ -314,6 +325,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         setDbClickEvents(data.clicks || []);
         setDbAnalyticsEvents(data.events || []);
         setDbCampaigns(data.campaigns || []);
+        setDbCampaignLinks(data.campaignLinks || []);
+        setDbListHealth(payload.listHealth || null);
         setAnalyticsMeta({
           counts: payload.counts || {},
           sampled: payload.sampled || [],
@@ -323,12 +336,15 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         const sourceErrors = payload.errors || [];
         setAnalyticsErrors(sourceErrors.filter((error) => error.source !== 'campaigns'));
         setCampaignError(sourceErrors.find((error) => error.source === 'campaigns')?.message || '');
+        setCampaignLinksError(sourceErrors.find((error) => error.source === 'campaign links')?.message || '');
         liveConnected = Object.values(payload.counts || {}).some((count) => Number(count || 0) > 0);
       } catch (err) {
         console.error('Database analytics fetch failed:', err);
         setAnalyticsMeta(null);
         setAnalyticsErrors([{ source: 'dashboard', message: err.message }]);
         setDbCampaigns([]);
+        setDbCampaignLinks([]);
+        setDbListHealth(null);
         setCampaignError(err.message);
       }
 
@@ -744,6 +760,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const campaignRevenue = campaignRevenueIndex(successfulOrders);
   const campaignChartData = campaignPerformanceRows(dbCampaigns, timeRange, new Date(), campaignRevenue);
   const campaignRevenueTotalUsd = campaignChartData.reduce((total, row) => total + row.revenueUsd, 0);
+  const campaignLinksFor = (campaignId) => campaignLinkRows(dbCampaignLinks, campaignId);
+  const hasCampaignLinks = dbCampaignLinks.length > 0;
+
+  // 1b. List health — exact counts from the database, so this panel is outside
+  // the sampling caveat the row-based panels carry.
+  const listHealth = listHealthSummary(dbListHealth);
+  const listHealthChartData = listHealthTrend(dbListHealth?.addedAt, dbListHealth?.optedOutAt);
 
   // 2. UTM Source/Traffic Channels
   const trafficChartData = acquisitionChannelRows(journeyEvents).map((entry, index) => ({
@@ -2804,24 +2827,65 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                     </tr>
                   </thead>
                   <tbody>
-                    {campaignChartData.map((campaign) => (
-                      <tr key={campaign.id}>
-                        <td>
-                          <span className="campaign-perf-name">{campaign.name}</span>
-                          {!campaign.exact && <span className="campaign-perf-estimated"> · estimated</span>}
-                        </td>
-                        <td>{campaign.sends.toLocaleString()}</td>
-                        <td>{campaign.uniqueOpens.toLocaleString()}</td>
-                        <td>{campaign.uniqueClicks.toLocaleString()}</td>
-                        <td>{campaign.orders.toLocaleString()}</td>
-                        <td className={`campaign-perf-money${campaign.revenueUsd > 0 ? '' : ' zero'}`}>
-                          {formatUsd(campaign.revenueUsd)}
-                        </td>
-                        <td className={`campaign-perf-money${campaign.revenueUsd > 0 ? '' : ' zero'}`}>
-                          {formatUsd(campaign.revenuePerRecipient)}
-                        </td>
-                      </tr>
-                    ))}
+                    {campaignChartData.map((campaign) => {
+                      const links = campaignLinksFor(campaign.id);
+                      const expanded = expandedCampaignId === campaign.id;
+                      return (
+                        <React.Fragment key={campaign.id}>
+                          <tr className={expanded ? 'campaign-perf-row expanded' : 'campaign-perf-row'}>
+                            <td>
+                              <button
+                                type="button"
+                                className="campaign-perf-toggle"
+                                aria-expanded={expanded}
+                                onClick={() => setExpandedCampaignId(expanded ? null : campaign.id)}
+                              >
+                                <ChevronRight size={12} className={expanded ? 'campaign-perf-chevron open' : 'campaign-perf-chevron'} />
+                                <span className="campaign-perf-name">{campaign.name}</span>
+                              </button>
+                              {!campaign.exact && <span className="campaign-perf-estimated"> · estimated</span>}
+                            </td>
+                            <td>{campaign.sends.toLocaleString()}</td>
+                            <td>{campaign.uniqueOpens.toLocaleString()}</td>
+                            <td>{campaign.uniqueClicks.toLocaleString()}</td>
+                            <td>{campaign.orders.toLocaleString()}</td>
+                            <td className={`campaign-perf-money${campaign.revenueUsd > 0 ? '' : ' zero'}`}>
+                              {formatUsd(campaign.revenueUsd)}
+                            </td>
+                            <td className={`campaign-perf-money${campaign.revenueUsd > 0 ? '' : ' zero'}`}>
+                              {formatUsd(campaign.revenuePerRecipient)}
+                            </td>
+                          </tr>
+                          {expanded && (
+                            <tr className="campaign-perf-links-row">
+                              <td colSpan={7}>
+                                {links.length > 0 ? (
+                                  <ul className="campaign-perf-links">
+                                    {links.map((link) => (
+                                      <li key={link.url}>
+                                        <span className="campaign-perf-link-label" title={link.url}>{link.label}</span>
+                                        <span className="campaign-perf-link-bar" aria-hidden="true">
+                                          <span style={{ width: `${link.share}%` }} />
+                                        </span>
+                                        <span className="campaign-perf-link-count">
+                                          {link.clicks.toLocaleString()} clicks · {link.uniqueClicks.toLocaleString()} people · {link.share}%
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="campaign-perf-links-empty">
+                                    {campaignLinksError
+                                      ? `Link tracking is unavailable: ${campaignLinksError}`
+                                      : 'No tracked link in this campaign has been clicked yet.'}
+                                  </p>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -2829,6 +2893,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 {campaignRevenueTotalUsd > 0
                   ? `${formatUsd(campaignRevenueTotalUsd)} attributed to these campaigns from orders that carry a campaign tag. Refunds are already taken off.`
                   : 'No orders in this range carry a campaign tag yet, so revenue reads zero. Orders record one when a customer arrives from a campaign link.'}
+                {hasCampaignLinks && ' Select a campaign to see which of its links the clicks went to.'}
               </p>
             </>
           )}
@@ -2883,6 +2948,82 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           </div>
 
         </div>
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* LIST HEALTH */}
+      {/* ------------------------------------------------------------- */}
+      <div className="dashboard-section-card" style={{ marginTop: '20px' }}>
+        <div className="section-card-title">
+          <Users size={16} style={{ color: '#34d399' }} />
+          <span>List Health</span>
+        </div>
+        {dbListHealth ? (
+          <>
+            <div className="list-health-grid">
+              <div className="list-health-tile">
+                <span className="list-health-label">Subscribed now</span>
+                <span className="list-health-value">{listHealth.subscribed.toLocaleString()}</span>
+                <span className="list-health-hint">{listHealth.unsubscribed.toLocaleString()} have opted out in total</span>
+              </div>
+              <div className="list-health-tile">
+                <span className="list-health-label">Joined {rangeLabel}</span>
+                <span className="list-health-value positive">+{listHealth.added.toLocaleString()}</span>
+                <span className="list-health-hint">New subscriber records</span>
+              </div>
+              <div className="list-health-tile">
+                <span className="list-health-label">Left {rangeLabel}</span>
+                <span className="list-health-value negative">−{listHealth.optedOut.toLocaleString()}</span>
+                <span className="list-health-hint">Unsubscribes, complaints and hard bounces</span>
+              </div>
+              <div className="list-health-tile">
+                <span className="list-health-label">Net change</span>
+                <span className={`list-health-value${listHealth.net > 0 ? ' positive' : listHealth.net < 0 ? ' negative' : ''}`}>
+                  {listHealth.net > 0 ? '+' : ''}{listHealth.net.toLocaleString()}
+                </span>
+                <span className="list-health-hint">What the list actually gained</span>
+              </div>
+              <div className="list-health-tile">
+                <span className="list-health-label">Opt-out rate</span>
+                <span className="list-health-value">{listHealth.churnRate}%</span>
+                <span className="list-health-hint">Of everyone who has ever been on the list</span>
+              </div>
+              <div className="list-health-tile">
+                <span className="list-health-label">Failed sends</span>
+                <span className={`list-health-value${listHealth.bounced > 0 ? ' negative' : ''}`}>{listHealth.bounced.toLocaleString()}</span>
+                <span className="list-health-hint">Email the provider could not deliver</span>
+              </div>
+            </div>
+            <div style={{ width: '100%', height: '200px', marginTop: '16px' }}>
+              {listHealthChartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={listHealthChartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }} stackOffset="sign">
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} dy={8} minTickGap={24} />
+                    <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <RechartsTooltip
+                      cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                      contentStyle={{ borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
+                    />
+                    <Legend verticalAlign="top" wrapperStyle={{ fontSize: '11px', color: '#94a3b8' }} />
+                    <Bar dataKey="added" name="Joined" fill="#34d399" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="optedOut" name="Left" fill="#f87171" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: '0.85rem' }}>
+                  Nobody joined or left the list {rangeLabel}.
+                </div>
+              )}
+            </div>
+            <p className="campaign-perf-note">
+              These totals are counted in the database, not from a sample, so they are exact whatever the range.
+              {listHealth.capped && ' The chart above covers the most recent activity only — the totals still cover all of it.'}
+            </p>
+          </>
+        ) : (
+          <p className="campaign-perf-note">List health could not be loaded. Refresh to try again.</p>
+        )}
       </div>
 
       {/* ------------------------------------------------------------- */}

@@ -238,3 +238,118 @@ export function revenueTrendRows(orders = []) {
   }
   return Object.values(days).sort((left, right) => left.key.localeCompare(right.key));
 }
+
+/**
+ * What people clicked, per campaign.
+ *
+ * `campaign_link_clicks` is already grouped in Postgres, so this only sorts,
+ * labels and works out each link's share of the campaign's clicks. The share is
+ * the point: a campaign with one link earning every click is a different
+ * problem from one where the clicks spread evenly across five.
+ */
+export function campaignLinkRows(links = [], campaignId, limit = 5) {
+  const rows = (links || []).filter((link) => clean(link?.campaign_id) === clean(campaignId));
+  const total = rows.reduce((sum, link) => sum + Number(link.clicks || 0), 0);
+
+  return rows
+    .map((link) => ({
+      url: clean(link.target_url),
+      label: linkLabel(link.target_url),
+      clicks: Number(link.clicks || 0),
+      uniqueClicks: Number(link.unique_clicks || 0),
+      lastClickedAt: link.last_clicked_at || null,
+      share: total > 0 ? Math.round((Number(link.clicks || 0) / total) * 1000) / 10 : 0,
+    }))
+    .sort((left, right) => right.clicks - left.clicks || left.label.localeCompare(right.label))
+    .slice(0, limit);
+}
+
+/**
+ * A link, short enough to read in a table cell.
+ *
+ * The host stays because a campaign linking off-site is worth noticing at a
+ * glance; the scheme and the tracking query string do not survive.
+ */
+export function linkLabel(url) {
+  const raw = clean(url);
+  if (!raw) return '—';
+  try {
+    const parsed = new URL(raw);
+    const path = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/$/, '');
+    const label = `${parsed.host}${path}`;
+    return label.length > 46 ? `${label.slice(0, 45)}…` : label;
+  } catch {
+    return raw.length > 46 ? `${raw.slice(0, 45)}…` : raw;
+  }
+}
+
+const dayKey = (value) => {
+  const date = new Date(value || 0);
+  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : null;
+};
+
+const MAX_TREND_DAYS = 180;
+
+/**
+ * Sign-ups against opt-outs, by day.
+ *
+ * Gaps are filled rather than skipped: a churn chart that silently omits the
+ * days nobody left draws a flat line through them, which reads as steady
+ * bleeding instead of as quiet.
+ */
+export function listHealthTrend(addedAt = [], optedOutAt = []) {
+  const days = new Map();
+  const bump = (value, field) => {
+    const key = dayKey(value);
+    if (!key) return;
+    const row = days.get(key) || { key, name: key, added: 0, optedOut: 0 };
+    row[field] += 1;
+    days.set(key, row);
+  };
+
+  for (const value of addedAt || []) bump(value, 'added');
+  for (const value of optedOutAt || []) bump(value, 'optedOut');
+  if (days.size === 0) return [];
+
+  const keys = [...days.keys()].sort();
+  const first = new Date(`${keys[0]}T00:00:00.000Z`);
+  const last = new Date(`${keys[keys.length - 1]}T00:00:00.000Z`);
+  const span = Math.round((last - first) / 86400000) + 1;
+  if (span > MAX_TREND_DAYS) {
+    return keys.map((key) => days.get(key));
+  }
+
+  const filled = [];
+  for (let offset = 0; offset < span; offset += 1) {
+    const key = new Date(first.getTime() + offset * 86400000).toISOString().slice(0, 10);
+    filled.push(days.get(key) || { key, name: key, added: 0, optedOut: 0 });
+  }
+  return filled;
+}
+
+/**
+ * The list's health as four figures and the one rate that matters.
+ *
+ * Net growth is what a "subscribers" total alone cannot tell you: a list that
+ * added 200 and lost 190 is not a list that grew.
+ */
+export function listHealthSummary(health) {
+  const added = Number(health?.added || 0);
+  const optedOut = Number(health?.optedOut || 0);
+  const bounced = Number(health?.bounced || 0);
+  const subscribed = Number(health?.subscribed || 0);
+
+  return {
+    subscribed,
+    unsubscribed: Number(health?.unsubscribed || 0),
+    added,
+    optedOut,
+    bounced,
+    net: added - optedOut,
+    // Against the list they left, not against the people who joined — an
+    // opt-out rate that moves when you run a signup campaign is not an opt-out
+    // rate.
+    churnRate: subscribed + optedOut > 0 ? round2((optedOut / (subscribed + optedOut)) * 100) : 0,
+    capped: Boolean(health?.capped),
+  };
+}

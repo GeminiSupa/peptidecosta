@@ -10255,6 +10255,156 @@
 }
 
 /* --------------------------------------------------------------------------
+   Per-link click breakdown
+   --------------------------------------------------------------------------
+   A click rate says a campaign worked. It cannot say which link earned it, so
+   a campaign row opens onto the links behind its clicks. The bar is the share
+   of that campaign's clicks: one link taking everything is a different result
+   from five splitting it evenly, and the percentage alone reads slowly. */
+.campaign-perf-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.campaign-perf-toggle:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, .6);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.campaign-perf-chevron {
+  flex: none;
+  color: #64748b;
+  transition: transform .15s ease;
+}
+
+.campaign-perf-chevron.open { transform: rotate(90deg); }
+
+.campaign-perf-row.expanded .campaign-perf-name { color: #38bdf8; }
+
+.campaign-perf-links-row td {
+  padding: 4px 0 12px 16px;
+  white-space: normal;
+}
+
+/* Indented and ruled, because a full-width row directly under the table reads
+   as the next campaign rather than as this one's detail. */
+.campaign-perf-links {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid rgba(139, 92, 246, .35);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.campaign-perf-links li {
+  display: grid;
+  /* The label truncates and the bar flexes; the count never wraps, because a
+     figure that drops to its own line stops lining up with the one above it. */
+  grid-template-columns: minmax(90px, 1.4fr) minmax(40px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.campaign-perf-link-label {
+  color: #cbd5e1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaign-perf-link-bar {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, .06);
+  overflow: hidden;
+}
+
+.campaign-perf-link-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: #8b5cf6;
+}
+
+.campaign-perf-link-count {
+  color: #64748b;
+  font-size: .68rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.campaign-perf-links-empty {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid rgba(139, 92, 246, .35);
+  color: #64748b;
+  font-size: .7rem;
+}
+
+/* --------------------------------------------------------------------------
+   List health
+   --------------------------------------------------------------------------
+   A subscriber total on its own hides the churn under it: a list that added
+   200 and lost 190 reads as a healthy list. These tiles put the two halves
+   beside each other and name the net. Counted in Postgres, so unlike most of
+   this tab they are exact at any range. */
+.list-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.list-health-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid rgba(255, 255, 255, .05);
+}
+
+.list-health-label {
+  color: #64748b;
+  font-size: .66rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.list-health-value {
+  color: #f8fafc;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Direction is carried by the sign in the markup as well as by the colour,
+   because roughly one man in twelve will not separate this red from this
+   green. */
+.list-health-value.positive { color: #34d399; }
+.list-health-value.negative { color: #f87171; }
+
+.list-health-hint {
+  color: #64748b;
+  font-size: .68rem;
+  line-height: 1.4;
+}
+
+/* --------------------------------------------------------------------------
    CMS search
    --------------------------------------------------------------------------
    The CMS renders every setting the site has, expanded, on one page. Changing
