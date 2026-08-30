@@ -28,9 +28,12 @@ import {
   overviewDomainRows,
   overviewPageRows,
   overviewProductViewCounts,
+  analyticsWindow,
+  customWindowFromDates,
   overviewSessionStats,
   pageTrafficRows,
   periodDelta,
+  withinWindow,
   revenueTrendRows,
   uniquePageVisitorCount,
 } from '@/lib/analyticsDashboard.mjs';
@@ -229,12 +232,32 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   };
 
   const [timeRange, setTimeRange] = useState('all');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [compareMode, setCompareMode] = useState('previous');
+
+  // Four fixed buttons cannot answer "how did launch week go", so the range can
+  // also be two dates. Both are needed before anything is refetched — a half
+  // -filled custom range would otherwise silently reload the whole store.
+  const customWindow = customWindowFromDates(customStart, customEnd);
+  const activeWindow = analyticsWindow(timeRange, new Date(), customWindow);
+  const customIncomplete = timeRange === 'custom' && !customWindow;
+  // A stable key, so the fetch effect does not re-run on every render just
+  // because the window object is rebuilt.
+  const windowKey = timeRange === 'custom'
+    ? `custom:${customWindow?.start || ''}:${customWindow?.end || ''}`
+    : timeRange;
+
   // Reads inside a sentence, so tiles can say "Joined in the last 7 days"
   // rather than repeating the button label back at you.
   const RANGE_LABELS = { '24h': 'in the last 24 hours', '7d': 'in the last 7 days', '30d': 'in the last 30 days', all: 'all time' };
-  const rangeLabel = RANGE_LABELS[timeRange] || 'in this range';
+  const rangeLabel = timeRange === 'custom'
+    ? (customWindow ? `between ${customStart} and ${customEnd}` : 'in this range')
+    : (RANGE_LABELS[timeRange] || 'in this range');
   const PREVIOUS_RANGE_LABELS = { '24h': 'the day before', '7d': 'the 7 days before', '30d': 'the 30 days before' };
-  const previousRangeLabel = PREVIOUS_RANGE_LABELS[timeRange] || 'the previous period';
+  const previousRangeLabel = compareMode === 'year'
+    ? 'the same period last year'
+    : (PREVIOUS_RANGE_LABELS[timeRange] || 'the previous period');
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState(null);
@@ -351,7 +374,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       let liveConnected = false;
 
       try {
-        const response = await adminFetch(`/api/admin/analytics-dashboard?range=${encodeURIComponent(timeRange)}`);
+        const query = new URLSearchParams({ range: timeRange, compare: compareMode });
+        if (customWindow) {
+          query.set('start', customWindow.start);
+          query.set('end', customWindow.end);
+        }
+        const response = await adminFetch(`/api/admin/analytics-dashboard?${query}`);
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Analytics data request failed.');
 
@@ -394,8 +422,15 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       setLoading(false);
     };
 
+    // One date picked is not a range yet; refetching on it would quietly reload
+    // the store as "all time" between the two clicks.
+    if (customIncomplete) {
+      setLoading(false);
+      return;
+    }
     fetchDbAnalytics();
-  }, [refreshKey, timeRange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey, windowKey, compareMode]);
 
   const getProcessedData = () => {
     const rawOrders = analyticsMeta ? dbOrders : (parentOrders.length > 0 ? parentOrders : dbOrders);
@@ -404,19 +439,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     const rawViews = dbProductViews;
     const rawClicks = dbClickEvents;
 
-    // Filter by Time Range
-    const now = new Date();
-    const filterByTime = (item) => {
-      const timestamp = item.last_active || item.created_at;
-      if (!timestamp) return true;
-      const date = new Date(timestamp);
-      const diffMs = now - date;
-
-      if (timeRange === '24h') return diffMs <= 24 * 3600000;
-      if (timeRange === '7d') return diffMs <= 7 * 24 * 3600000;
-      if (timeRange === '30d') return diffMs <= 30 * 24 * 3600000;
-      return true; // all time
-    };
+    // Filter by the active window — one definition of "in range", shared with
+    // the endpoint's queries and the campaign table, so a custom range narrows
+    // all three rather than only the fetch.
+    const filterByTime = (item) => withinWindow(item.last_active || item.created_at, activeWindow);
 
     return {
       orders: rawOrders.filter(filterByTime),
@@ -450,14 +476,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     return counts;
   }, {})).sort((left, right) => right[1] - left[1]).slice(0, 6);
 
-  const journeyEvents = dbAnalyticsEvents.filter((event) => {
-    if (!event.created_at) return true;
-    const age = Date.now() - new Date(event.created_at).getTime();
-    if (timeRange === '24h') return age <= 24 * 3600000;
-    if (timeRange === '7d') return age <= 7 * 24 * 3600000;
-    if (timeRange === '30d') return age <= 30 * 24 * 3600000;
-    return true;
-  });
+  const journeyEvents = dbAnalyticsEvents.filter((event) => (
+    event.created_at ? withinWindow(event.created_at, activeWindow) : true
+  ));
   // Exact when Postgres has grouped it, the newest 1,000 events when it has
   // not. Everything below follows the same rule: prefer the aggregate, keep the
   // row path as the fallback so the tab still works before the migration runs.
@@ -844,7 +865,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // One pass over the orders rather than a rescan per render; the campaign list
   // is short, the order list is not.
   const campaignRevenue = campaignRevenueIndex(successfulOrders);
-  const campaignChartData = campaignPerformanceRows(dbCampaigns, timeRange, new Date(), campaignRevenue);
+  const campaignChartData = campaignPerformanceRows(dbCampaigns, activeWindow, new Date(), campaignRevenue);
   const campaignRevenueTotalUsd = campaignChartData.reduce((total, row) => total + row.revenueUsd, 0);
   const campaignLinksFor = (campaignId) => campaignLinkRows(dbCampaignLinks, campaignId);
   const hasCampaignLinks = dbCampaignLinks.length > 0;
@@ -2309,8 +2330,46 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               >
                 All time
               </button>
+              <button
+                type="button"
+                className={`time-filter-btn ${timeRange === 'custom' ? 'active' : ''}`}
+                onClick={() => setTimeRange('custom')}
+              >
+                Custom
+              </button>
             </div>
           </div>
+        </div>
+
+        {/* Four fixed buttons cannot answer "how did launch week go". */}
+        {timeRange === 'custom' && (
+          <div className="analytics-custom-range">
+            <label>
+              <span>From</span>
+              <input type="date" value={customStart} max={customEnd || undefined} onChange={(e) => setCustomStart(e.target.value)} />
+            </label>
+            <label>
+              <span>To</span>
+              <input type="date" value={customEnd} min={customStart || undefined} onChange={(e) => setCustomEnd(e.target.value)} />
+            </label>
+            {customIncomplete && <span className="analytics-custom-hint">Pick both dates to load this range.</span>}
+          </div>
+        )}
+
+        <div className="analytics-compare-row">
+          <label>
+            <span>Compare with</span>
+            <select value={compareMode} onChange={(e) => setCompareMode(e.target.value)}>
+              <option value="previous">The period before</option>
+              <option value="year">The same period last year</option>
+              <option value="off">Nothing</option>
+            </select>
+          </label>
+          <span className="analytics-custom-hint">
+            {timeRange === 'all' && compareMode !== 'off'
+              ? 'All time has no period before it, so the headline figures show no change.'
+              : 'Revenue, average order value and conversion rate carry the change against it.'}
+          </span>
         </div>
 
         <div className="analytics-drilldown-grid">

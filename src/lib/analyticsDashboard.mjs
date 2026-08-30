@@ -16,6 +16,57 @@ export function analyticsRangeStart(range, now = new Date()) {
 }
 
 /**
+ * A custom range, from two dates a person picked.
+ *
+ * The dates come from `<input type="date">`, which yields YYYY-MM-DD with no
+ * timezone. They are read as local dates and the end date is inclusive of its
+ * whole day, because someone choosing 1–7 August means through the end of the
+ * 7th, not through midnight at its start. Reversed dates are swapped rather
+ * than rejected — picking the end first is a normal way to use two date fields.
+ */
+export function customWindowFromDates(startDate, endDate) {
+  const parse = (value) => {
+    const text = clean(value);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+    const date = new Date(`${text}T00:00:00`);
+    return Number.isFinite(date.getTime()) ? date : null;
+  };
+
+  let from = parse(startDate);
+  let to = parse(endDate);
+  if (!from || !to) return null;
+  if (from > to) [from, to] = [to, from];
+
+  const end = new Date(to.getTime());
+  end.setDate(end.getDate() + 1);
+  return { start: from.toISOString(), end: end.toISOString() };
+}
+
+/**
+ * The window a range describes, as explicit bounds.
+ *
+ * Every filter downstream — the endpoint's queries, the client-side range
+ * filter, the campaign table — used to re-derive "the last 7 days" from the
+ * preset key on its own. A custom range has no key to re-derive, so the bounds
+ * became the thing that travels instead.
+ */
+export function analyticsWindow(range, now = new Date(), custom = null) {
+  if (range === 'custom') return custom || null;
+  const start = analyticsRangeStart(range, now);
+  return start ? { start, end: null } : null;
+}
+
+/** Is this timestamp inside the window? A null window is "all time". */
+export function withinWindow(value, window) {
+  if (!window) return true;
+  const timestamp = new Date(value || 0).getTime();
+  if (!Number.isFinite(timestamp)) return false;
+  if (window.start && timestamp < new Date(window.start).getTime()) return false;
+  if (window.end && timestamp >= new Date(window.end).getTime()) return false;
+  return true;
+}
+
+/**
  * The equal window immediately before this one.
  *
  * A revenue total for the last thirty days is unreadable on its own. Beside the
@@ -25,11 +76,34 @@ export function analyticsRangeStart(range, now = new Date()) {
  * back before the store had traffic — would produce enormous meaningless
  * percentages. It returns null instead, and the tiles show no delta.
  */
-export function previousRangeWindow(range, now = new Date()) {
-  const duration = RANGE_MS[range];
-  if (!duration) return null;
-  const end = new Date(now.getTime() - duration);
-  return { start: new Date(end.getTime() - duration).toISOString(), end: end.toISOString() };
+export function previousRangeWindow(range, now = new Date(), options = {}) {
+  const { mode = 'previous', custom = null } = options;
+  if (mode === 'off') return null;
+
+  const window = range === 'custom' ? custom : (() => {
+    const duration = RANGE_MS[range];
+    return duration ? { start: analyticsRangeStart(range, now), end: now.toISOString() } : null;
+  })();
+  if (!window?.start) return null;
+
+  const start = new Date(window.start);
+  const end = new Date(window.end || now);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) return null;
+
+  if (mode === 'year') {
+    // The same calendar window a year earlier, which is what a seasonal
+    // business wants to compare against — not the span immediately before it.
+    const shift = (date) => {
+      const shifted = new Date(date.getTime());
+      shifted.setFullYear(shifted.getFullYear() - 1);
+      return shifted.toISOString();
+    };
+    return { start: shift(start), end: shift(end) };
+  }
+
+  const span = end.getTime() - start.getTime();
+  if (span <= 0) return null;
+  return { start: new Date(start.getTime() - span).toISOString(), end: start.toISOString() };
 }
 
 /**
@@ -76,11 +150,11 @@ export function isPendingAnalyticsOrder(order) {
   return status.startsWith('pending') || status === 'payment pending' || status === 'processing';
 }
 
+// Accepts either a preset key or an explicit window, so a custom range filters
+// the campaign table the same way it filters everything else.
 function withinRange(value, range, now) {
-  const start = analyticsRangeStart(range, now);
-  if (!start) return true;
-  const timestamp = new Date(value || 0).getTime();
-  return Number.isFinite(timestamp) && timestamp >= new Date(start).getTime();
+  const window = range && typeof range === 'object' ? range : analyticsWindow(range, now);
+  return withinWindow(value, window);
 }
 
 const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;

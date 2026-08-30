@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises';
 import {
   acquisitionChannelRows,
   analyticsRangeStart,
+  analyticsWindow,
+  customWindowFromDates,
   campaignPerformanceRows,
   campaignRevenueIndex,
   domainTrafficRows,
@@ -21,6 +23,7 @@ import {
   previousRangeWindow,
   revenueTrendRows,
   uniquePageVisitorCount,
+  withinWindow,
 } from '../src/lib/analyticsDashboard.mjs';
 
 test('analytics ranges produce stable ISO boundaries', () => {
@@ -108,7 +111,10 @@ test('dashboard data is loaded through authenticated admin routes', async () => 
   const component = await readFile(new URL('../src/components/admin/AnalyticsDashboard.js', import.meta.url), 'utf8');
   const route = await readFile(new URL('../src/app/api/admin/analytics-dashboard/route.js', import.meta.url), 'utf8');
 
-  assert.match(component, /adminFetch\(`\/api\/admin\/analytics-dashboard\?range=/);
+  // The range now travels with a compare mode and optional custom bounds, so
+  // the query is built rather than concatenated — the route is what matters.
+  assert.match(component, /adminFetch\(`\/api\/admin\/analytics-dashboard\?\$\{query\}`\)/);
+  assert.match(component, /new URLSearchParams\(\{ range: timeRange, compare: compareMode \}\)/);
   assert.doesNotMatch(component, /\/api\/admin\/campaigns/);
   assert.match(route, /verifyAdminSession\(request, \{ requirePermission: 'analytics' \}\)/);
   assert.match(route, /getSupabaseAdmin\(\)/);
@@ -286,4 +292,62 @@ test('two quiet periods are flat, not a total collapse', () => {
 test('a delta of nonsense is no delta rather than a rendered NaN', () => {
   assert.equal(periodDelta(Number.NaN, 10), null);
   assert.equal(periodDelta(10, Number.NaN), null);
+});
+
+test('two picked dates become a window that includes the whole end day', () => {
+  const window = customWindowFromDates('2026-08-01', '2026-08-07');
+  // Local midnight on the 1st through local midnight on the 8th, so an order
+  // placed on the evening of the 7th is inside the range the reader picked.
+  assert.equal(new Date(window.start).getTime() < new Date('2026-08-02T00:00:00Z').getTime(), true);
+  assert.equal(withinWindow('2026-08-07T18:00:00', window), true);
+  assert.equal(withinWindow('2026-08-08T12:00:00', window), false);
+  assert.equal(withinWindow('2026-07-31T12:00:00', window), false);
+});
+
+test('dates picked in the wrong order are swapped, not rejected', () => {
+  assert.deepEqual(
+    customWindowFromDates('2026-08-07', '2026-08-01'),
+    customWindowFromDates('2026-08-01', '2026-08-07'),
+  );
+});
+
+test('a half-picked custom range is not a window', () => {
+  assert.equal(customWindowFromDates('2026-08-01', ''), null);
+  assert.equal(customWindowFromDates('', '2026-08-07'), null);
+  assert.equal(customWindowFromDates('yesterday', 'today'), null);
+});
+
+test('a preset range resolves to the same window every filter uses', () => {
+  const now = new Date('2026-08-30T12:00:00.000Z');
+  assert.deepEqual(analyticsWindow('7d', now), { start: '2026-08-23T12:00:00.000Z', end: null });
+  assert.equal(analyticsWindow('all', now), null);
+  assert.equal(withinWindow('2020-01-01T00:00:00.000Z', null), true);
+});
+
+test('a custom range gets the equal span before it as its comparison', () => {
+  const custom = { start: '2026-08-08T00:00:00.000Z', end: '2026-08-15T00:00:00.000Z' };
+  assert.deepEqual(previousRangeWindow('custom', new Date(), { custom }), {
+    start: '2026-08-01T00:00:00.000Z',
+    end: '2026-08-08T00:00:00.000Z',
+  });
+});
+
+test('comparing to last year shifts the window rather than sliding it back', () => {
+  const now = new Date('2026-08-30T12:00:00.000Z');
+  const window = previousRangeWindow('7d', now, { mode: 'year' });
+  assert.equal(window.start, '2025-08-23T12:00:00.000Z');
+  assert.equal(window.end, '2025-08-30T12:00:00.000Z');
+});
+
+test('comparison can be turned off entirely', () => {
+  assert.equal(previousRangeWindow('7d', new Date(), { mode: 'off' }), null);
+});
+
+test('the campaign table narrows to a custom window too', () => {
+  const campaigns = [
+    { id: 'inside', title: 'Inside', status: 'sent', sent_at: '2026-08-10T00:00:00.000Z', engagement: { sends: 10, unique_opens: 5, unique_clicks: 1 } },
+    { id: 'outside', title: 'Outside', status: 'sent', sent_at: '2026-07-01T00:00:00.000Z', engagement: { sends: 10, unique_opens: 5, unique_clicks: 1 } },
+  ];
+  const rows = campaignPerformanceRows(campaigns, { start: '2026-08-08T00:00:00.000Z', end: '2026-08-15T00:00:00.000Z' });
+  assert.deepEqual(rows.map((row) => row.id), ['inside']);
 });

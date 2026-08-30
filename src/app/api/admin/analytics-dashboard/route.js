@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { analyticsRangeStart, previousRangeWindow } from '@/lib/analyticsDashboard.mjs';
+import { analyticsWindow, previousRangeWindow } from '@/lib/analyticsDashboard.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +50,7 @@ const SOURCES = [
   },
 ];
 
-async function fetchSource(supabase, source, start) {
+async function fetchSource(supabase, source, window) {
   const rows = [];
   const rowLimit = source.complete ? COMPLETE_LIMIT : SAMPLE_LIMIT;
   const timeColumn = source.timeColumn || 'created_at';
@@ -63,7 +63,8 @@ async function fetchSource(supabase, source, start) {
       .select(source.select, { count: 'exact' })
       .order(timeColumn, { ascending: false })
       .range(from, Math.min(from + SAMPLE_LIMIT - 1, rowLimit - 1));
-    if (start) query = query.gte(timeColumn, start);
+    if (window?.start) query = query.gte(timeColumn, window.start);
+    if (window?.end) query = query.lt(timeColumn, window.end);
     if (source.mobileOnly) query = query.eq('is_mobile', true);
 
     const result = await query;
@@ -166,7 +167,7 @@ async function exactCount(query) {
  * hundred kilobytes rather than tens of megabytes, and the cap is reported so
  * the chart can say when it is showing a window rather than everything.
  */
-async function fetchTimestamps(supabase, table, column, start, filter) {
+async function fetchTimestamps(supabase, table, column, window, filter) {
   const rows = [];
   for (let from = 0; from < TIMESTAMP_LIMIT; from += SAMPLE_LIMIT) {
     let query = supabase
@@ -174,7 +175,8 @@ async function fetchTimestamps(supabase, table, column, start, filter) {
       .select(column)
       .order(column, { ascending: false })
       .range(from, Math.min(from + SAMPLE_LIMIT - 1, TIMESTAMP_LIMIT - 1));
-    if (start) query = query.gte(column, start);
+    if (window?.start) query = query.gte(column, window.start);
+    if (window?.end) query = query.lt(column, window.end);
     if (filter) query = filter(query);
 
     const { data, error } = await query;
@@ -197,10 +199,10 @@ async function fetchTimestamps(supabase, table, column, start, filter) {
  * A null result is not an error: it means the migration has not been run yet,
  * and the caller falls back to the row-derived values it has always used.
  */
-async function fetchOverview(supabase, start, end) {
+async function fetchOverview(supabase, window) {
   const { data, error } = await supabase.rpc('analytics_overview', {
-    range_start: start,
-    range_end: end || null,
+    range_start: window?.start || null,
+    range_end: window?.end || null,
   });
   if (error) {
     // Not surfaced to the reader: the fallback path has its own honest banner
@@ -217,7 +219,7 @@ async function fetchOverview(supabase, start, end) {
  * Totals come back as exact counts rather than as rows to be counted, so this
  * panel is never subject to the sampling caveat the rest of the tab carries.
  */
-async function fetchListHealth(supabase, start) {
+async function fetchListHealth(supabase, window) {
   // A fresh builder per query on purpose: postgrest-js mutates the URL held by
   // the query builder and hands the same object to every filter builder it
   // makes, so reusing one would leak each query's filters into the next.
@@ -227,7 +229,12 @@ async function fetchListHealth(supabase, start) {
   const emailChannels = ['email', 'all'];
   const optOutReasons = ['unsubscribe', 'complaint', 'bounce'];
   const countOf = (table) => from(table).select('id', { count: 'exact', head: true });
-  const since = (query, column) => (start ? query.gte(column, start) : query);
+  const since = (query, column) => {
+    let scoped = query;
+    if (window?.start) scoped = scoped.gte(column, window.start);
+    if (window?.end) scoped = scoped.lt(column, window.end);
+    return scoped;
+  };
 
   const [
     subscribed,
@@ -246,12 +253,12 @@ async function fetchListHealth(supabase, start) {
       'created_at',
     )),
     exactCount(since(countOf('marketing_delivery_events').eq('status', 'failed').eq('channel', 'email'), 'last_attempt_at')),
-    fetchTimestamps(supabase, 'email_subscribers', 'created_at', start),
+    fetchTimestamps(supabase, 'email_subscribers', 'created_at', window),
     fetchTimestamps(
       supabase,
       'marketing_suppressions',
       'created_at',
-      start,
+      window,
       (query) => query.in('channel', emailChannels).in('reason', optOutReasons),
     ),
   ]);
@@ -278,7 +285,7 @@ async function fetchListHealth(supabase, start) {
  * sits directly beside the current-period one.
  */
 async function fetchPreviousOrders(supabase, window) {
-  if (!window) return { rows: [], error: null };
+  if (!window?.start || !window?.end) return { rows: [], error: null };
   const { data, error } = await supabase
     .from('orders')
     .select('id, status, total_usd, total_crc, created_at, items, campaign_id')
@@ -294,20 +301,31 @@ export async function GET(request) {
   const auth = await verifyAdminSession(request, { requirePermission: 'analytics' });
   if (auth.error) return auth.error;
 
-  const range = new URL(request.url).searchParams.get('range') || 'all';
-  const start = analyticsRangeStart(range);
+  const params = new URL(request.url).searchParams;
+  const range = params.get('range') || 'all';
+  // A custom range arrives as explicit ISO bounds. The client converts the two
+  // picked dates, so the server never has to guess which timezone a bare
+  // YYYY-MM-DD was meant in.
+  const custom = range === 'custom' && params.get('start')
+    ? { start: params.get('start'), end: params.get('end') || null }
+    : null;
+  const window = analyticsWindow(range, new Date(), custom);
+  const start = window?.start || null;
   // "All time" has no previous period, so it gets no comparison rather than a
   // fabricated one.
-  const previousWindow = previousRangeWindow(range);
+  const previousWindow = previousRangeWindow(range, new Date(), {
+    mode: params.get('compare') || 'previous',
+    custom,
+  });
   const supabase = getSupabaseAdmin();
 
   try {
     const [listHealth, overviewResult, previousOverview, previousOrders, ...results] = await Promise.all([
-      fetchListHealth(supabase, start),
-      fetchOverview(supabase, start),
-      previousWindow ? fetchOverview(supabase, previousWindow.start, previousWindow.end) : Promise.resolve({ overview: null }),
+      fetchListHealth(supabase, window),
+      fetchOverview(supabase, window),
+      previousWindow ? fetchOverview(supabase, previousWindow) : Promise.resolve({ overview: null }),
       fetchPreviousOrders(supabase, previousWindow),
-      ...SOURCES.map((source) => fetchSource(supabase, source, start)),
+      ...SOURCES.map((source) => fetchSource(supabase, source, window)),
       fetchCampaigns(supabase),
     ]);
     const data = {};
@@ -336,6 +354,7 @@ export async function GET(request) {
       success: errors.length < SOURCES.length,
       range,
       start,
+      end: window?.end || null,
       sampleLimit: SAMPLE_LIMIT,
       data,
       counts,
