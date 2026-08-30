@@ -16,6 +16,50 @@ export function analyticsRangeStart(range, now = new Date()) {
 }
 
 /**
+ * The equal window immediately before this one.
+ *
+ * A revenue total for the last thirty days is unreadable on its own. Beside the
+ * thirty days before it, the same figure becomes a decision.
+ *
+ * "All time" has no previous period, and inventing one — the same span again,
+ * back before the store had traffic — would produce enormous meaningless
+ * percentages. It returns null instead, and the tiles show no delta.
+ */
+export function previousRangeWindow(range, now = new Date()) {
+  const duration = RANGE_MS[range];
+  if (!duration) return null;
+  const end = new Date(now.getTime() - duration);
+  return { start: new Date(end.getTime() - duration).toISOString(), end: end.toISOString() };
+}
+
+/**
+ * A change, expressed the way a reader can act on.
+ *
+ * Growth from zero is not "infinite percent" — it is new, and saying so is more
+ * useful than a number nobody can scale. Two zeroes are flat, not a 100% drop.
+ */
+export function periodDelta(current, previous) {
+  // `Number(NaN || 0)` is 0, so the obvious guard silently turns a broken
+  // figure into a 100% drop. Missing is zero; unusable is no comparison.
+  const finite = (value) => {
+    if (value === null || value === undefined || value === '') return 0;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  };
+  const now = finite(current);
+  const before = finite(previous);
+  if (now === null || before === null) return null;
+  if (before === 0) return { direction: now > 0 ? 'up' : 'flat', percent: null, absolute: now, isNew: now > 0 };
+  const change = ((now - before) / before) * 100;
+  return {
+    direction: change > 0.05 ? 'up' : change < -0.05 ? 'down' : 'flat',
+    percent: Math.round(change * 10) / 10,
+    absolute: round2(now - before),
+    isNew: false,
+  };
+}
+
+/**
  * A sale that produced money we kept.
  *
  * Handed to the shared rule rather than listing statuses again. This list used
@@ -351,5 +395,101 @@ export function listHealthSummary(health) {
     // rate.
     churnRate: subscribed + optedOut > 0 ? round2((optedOut / (subscribed + optedOut)) * 100) : 0,
     capped: Boolean(health?.capped),
+  };
+}
+
+/**
+ * The exact figures, when Postgres has done the grouping.
+ *
+ * Everything below reshapes `analytics_overview` into what the dashboard was
+ * already rendering, so a tab reading exact aggregates and a tab reading a
+ * 1,000-row sample draw the same components. Each returns null when the
+ * overview is absent, which is the caller's signal to fall back to the rows.
+ */
+const toNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
+export function overviewProductViewCounts(overview) {
+  if (!overview?.productViews) return null;
+  const counts = {};
+  for (const row of overview.productViews) {
+    const name = clean(row?.name);
+    if (name) counts[name] = toNumber(row.views);
+  }
+  return counts;
+}
+
+export function overviewDomainRows(overview) {
+  if (!overview?.domains) return null;
+  return overview.domains.map((row) => ({
+    key: clean(row.hostname),
+    hostname: clean(row.hostname),
+    pageViews: toNumber(row.pageViews),
+    visitors: toNumber(row.visitors),
+    paidVisitors: toNumber(row.paidVisitors),
+  }));
+}
+
+export function overviewPageRows(overview) {
+  if (!overview?.pages) return null;
+  return overview.pages.map((row) => ({
+    key: `${clean(row.hostname)}${clean(row.path)}`,
+    hostname: clean(row.hostname),
+    path: clean(row.path) || '/',
+    pageViews: toNumber(row.pageViews),
+    visitors: toNumber(row.visitors),
+    paidVisitors: toNumber(row.paidVisitors),
+  }));
+}
+
+/**
+ * Channel names stay in one place.
+ *
+ * The grouping happens in SQL on the raw `utm_source`; the folding of "fb",
+ * "facebook" and "ig" into "Meta" happens here, where it always has. Two copies
+ * of that mapping would drift, and the drift would look like a traffic shift.
+ */
+export function overviewChannelRows(overview) {
+  if (!overview?.channels) return null;
+  const counts = {};
+  for (const row of overview.channels) {
+    const name = canonicalSource(row?.utmSource);
+    counts[name] = (counts[name] || 0) + toNumber(row.visitors);
+  }
+  return Object.entries(counts)
+    .map(([name, value]) => ({ name, value }))
+    .sort((left, right) => right.value - left.value);
+}
+
+export function overviewCityRows(overview, limit = 5) {
+  if (!overview?.cities) return null;
+  return overview.cities
+    .map((row) => [clean(row.city), toNumber(row.sessions)])
+    .filter(([city]) => city)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, limit);
+}
+
+/**
+ * Session shape: how long people stayed, and on what.
+ *
+ * The device split was a filter over the sampled session rows, so on a store
+ * with 127,000 sessions it described the most recent 1,000 of them.
+ */
+export function overviewSessionStats(overview) {
+  const stats = overview?.sessions;
+  if (!stats) return null;
+  const total = toNumber(stats.total);
+  const mobile = Math.min(toNumber(stats.mobile), total);
+  return {
+    total,
+    mobile,
+    desktop: Math.max(total - mobile, 0),
+    mobilePct: total > 0 ? (mobile / total) * 100 : 0,
+    desktopPct: total > 0 ? ((total - mobile) / total) * 100 : 0,
+    avgCatalogSeconds: toNumber(stats.avgCatalogSeconds),
+    withDuration: toNumber(stats.withDuration),
   };
 }

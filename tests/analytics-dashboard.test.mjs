@@ -10,7 +10,15 @@ import {
   domainTrafficRows,
   isPendingAnalyticsOrder,
   isSuccessfulAnalyticsOrder,
+  overviewChannelRows,
+  overviewCityRows,
+  overviewDomainRows,
+  overviewPageRows,
+  overviewProductViewCounts,
+  overviewSessionStats,
   pageTrafficRows,
+  periodDelta,
+  previousRangeWindow,
   revenueTrendRows,
   uniquePageVisitorCount,
 } from '../src/lib/analyticsDashboard.mjs';
@@ -184,4 +192,98 @@ test('rows still work when no revenue index is supplied', () => {
   );
   assert.equal(rows[0].revenueUsd, 0);
   assert.equal(rows[0].sends, 10);
+});
+
+test('the overview is used when Postgres has grouped it, and ignored when it has not', () => {
+  const overview = {
+    sessions: { total: 127199, mobile: 80000, withDuration: 900, avgCatalogSeconds: 74.5 },
+    cities: [{ city: 'Heredia', sessions: 120 }, { city: 'San José', sessions: 400 }],
+    productViews: [{ name: 'BPC-157 5mg', views: 900, viewers: 600 }],
+    domains: [{ hostname: 'costapeptides.com', pageViews: 5, visitors: 3, paidVisitors: 1 }],
+    pages: [{ hostname: 'costapeptides.com', path: '/lp', pageViews: 5, visitors: 3, paidVisitors: 1 }],
+    channels: [{ utmSource: 'fb', visitors: 10 }, { utmSource: 'facebook', visitors: 5 }, { utmSource: '', visitors: 7 }],
+    landingVisitors: 3,
+  };
+
+  assert.deepEqual(overviewProductViewCounts(overview), { 'BPC-157 5mg': 900 });
+  assert.deepEqual(overviewCityRows(overview), [['San José', 400], ['Heredia', 120]]);
+  assert.equal(overviewDomainRows(overview)[0].visitors, 3);
+  assert.equal(overviewPageRows(overview)[0].path, '/lp');
+
+  // Every caller falls back to the row path on null rather than rendering blank.
+  for (const read of [overviewProductViewCounts, overviewCityRows, overviewDomainRows, overviewPageRows, overviewChannelRows, overviewSessionStats]) {
+    assert.equal(read(null), null);
+    assert.equal(read({}), null);
+  }
+});
+
+test('channel names are folded in one place, not twice', () => {
+  // SQL groups the raw utm_source; the "fb" / "facebook" / "ig" → Meta mapping
+  // stays here, where the row path also applies it.
+  const rows = overviewChannelRows({ channels: [
+    { utmSource: 'fb', visitors: 10 },
+    { utmSource: 'facebook', visitors: 5 },
+    { utmSource: 'instagram', visitors: 2 },
+    { utmSource: '', visitors: 7 },
+  ] });
+  assert.deepEqual(rows, [{ name: 'Meta', value: 17 }, { name: 'Direct / unknown', value: 7 }]);
+});
+
+test('the device split never reports more mobile sessions than sessions', () => {
+  const stats = overviewSessionStats({ sessions: { total: 10, mobile: 99 } });
+  assert.equal(stats.mobile, 10);
+  assert.equal(stats.desktop, 0);
+  assert.equal(stats.mobilePct, 100);
+});
+
+test('an empty range produces zero percentages rather than NaN', () => {
+  const stats = overviewSessionStats({ sessions: { total: 0, mobile: 0 } });
+  assert.equal(stats.mobilePct, 0);
+  assert.equal(stats.desktopPct, 0);
+});
+
+test('a comparison window is the equal span immediately before this one', () => {
+  const now = new Date('2026-08-30T12:00:00.000Z');
+  assert.deepEqual(previousRangeWindow('7d', now), {
+    start: '2026-08-16T12:00:00.000Z',
+    end: '2026-08-23T12:00:00.000Z',
+  });
+  assert.deepEqual(previousRangeWindow('24h', now), {
+    start: '2026-08-28T12:00:00.000Z',
+    end: '2026-08-29T12:00:00.000Z',
+  });
+});
+
+test('all time has no previous period rather than an invented one', () => {
+  assert.equal(previousRangeWindow('all', new Date()), null);
+  assert.equal(previousRangeWindow(undefined, new Date()), null);
+});
+
+test('the comparison window ends exactly where the current one starts', () => {
+  const now = new Date('2026-08-30T12:00:00.000Z');
+  assert.equal(previousRangeWindow('30d', now).end, analyticsRangeStart('30d', now));
+});
+
+test('a delta reads as a direction and a percentage', () => {
+  assert.deepEqual(periodDelta(120, 100), { direction: 'up', percent: 20, absolute: 20, isNew: false });
+  assert.deepEqual(periodDelta(80, 100), { direction: 'down', percent: -20, absolute: -20, isNew: false });
+  assert.equal(periodDelta(100, 100).direction, 'flat');
+});
+
+test('growth from nothing is new, not infinite percent', () => {
+  const delta = periodDelta(5, 0);
+  assert.equal(delta.isNew, true);
+  assert.equal(delta.percent, null);
+  assert.equal(delta.direction, 'up');
+});
+
+test('two quiet periods are flat, not a total collapse', () => {
+  const delta = periodDelta(0, 0);
+  assert.equal(delta.direction, 'flat');
+  assert.equal(delta.isNew, false);
+});
+
+test('a delta of nonsense is no delta rather than a rendered NaN', () => {
+  assert.equal(periodDelta(Number.NaN, 10), null);
+  assert.equal(periodDelta(10, Number.NaN), null);
 });

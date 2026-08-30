@@ -10405,6 +10405,32 @@
 }
 
 /* --------------------------------------------------------------------------
+   Period-on-period delta
+   --------------------------------------------------------------------------
+   A KPI on its own is a point. The chip is what turns it into a direction, so
+   it sits with the figure rather than in a legend somewhere. */
+.metric-delta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-left: 8px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.metric-delta-vs {
+  color: #64748b;
+  font-weight: 400;
+}
+
+/* On a phone the secondary line is already tight, so the comparison drops the
+   "vs the 7 days before" tail and keeps the arrow and the number. */
+@media (max-width: 560px) {
+  .metric-delta-vs { display: none; }
+}
+
+/* --------------------------------------------------------------------------
    CMS search
    --------------------------------------------------------------------------
    The CMS renders every setting the site has, expanded, on one page. Changing

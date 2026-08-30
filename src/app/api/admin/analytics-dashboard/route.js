@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { analyticsRangeStart } from '@/lib/analyticsDashboard.mjs';
+import { analyticsRangeStart, previousRangeWindow } from '@/lib/analyticsDashboard.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -186,6 +186,32 @@ async function fetchTimestamps(supabase, table, column, start, filter) {
 }
 
 /**
+ * The grouped result, instead of the rows behind it.
+ *
+ * visitor_sessions, analytics_events, product_views and click_events are all
+ * far past this endpoint's row ceiling, so everything derived from them in the
+ * browser was derived from the latest 1,000 rows. `analytics_overview` groups
+ * them in Postgres and hands back about a hundred rows, which is what lets the
+ * tab stop caveating its own figures.
+ *
+ * A null result is not an error: it means the migration has not been run yet,
+ * and the caller falls back to the row-derived values it has always used.
+ */
+async function fetchOverview(supabase, start, end) {
+  const { data, error } = await supabase.rpc('analytics_overview', {
+    range_start: start,
+    range_end: end || null,
+  });
+  if (error) {
+    // Not surfaced to the reader: the fallback path has its own honest banner
+    // saying the figures are a sample, which is the more useful message.
+    console.warn('[Analytics Dashboard] analytics_overview unavailable:', error.message);
+    return { overview: null, error: error.message };
+  }
+  return { overview: data || null, error: null };
+}
+
+/**
  * List health: how the audience grew, and how much of it walked away.
  *
  * Totals come back as exact counts rather than as rows to be counted, so this
@@ -243,17 +269,44 @@ async function fetchListHealth(supabase, start) {
   };
 }
 
+/**
+ * The orders from the window before this one.
+ *
+ * Fetched rather than derived in SQL so that revenue keeps going through
+ * orderNetRevenue, the same rule every other screen uses. A second copy of the
+ * refund logic in Postgres would eventually disagree with it, and this figure
+ * sits directly beside the current-period one.
+ */
+async function fetchPreviousOrders(supabase, window) {
+  if (!window) return { rows: [], error: null };
+  const { data, error } = await supabase
+    .from('orders')
+    .select('id, status, total_usd, total_crc, created_at, items, campaign_id')
+    .gte('created_at', window.start)
+    .lt('created_at', window.end)
+    .order('created_at', { ascending: false })
+    .limit(COMPLETE_LIMIT);
+  if (error) return { rows: [], error: error.message };
+  return { rows: data || [], error: null };
+}
+
 export async function GET(request) {
   const auth = await verifyAdminSession(request, { requirePermission: 'analytics' });
   if (auth.error) return auth.error;
 
   const range = new URL(request.url).searchParams.get('range') || 'all';
   const start = analyticsRangeStart(range);
+  // "All time" has no previous period, so it gets no comparison rather than a
+  // fabricated one.
+  const previousWindow = previousRangeWindow(range);
   const supabase = getSupabaseAdmin();
 
   try {
-    const [listHealth, ...results] = await Promise.all([
+    const [listHealth, overviewResult, previousOverview, previousOrders, ...results] = await Promise.all([
       fetchListHealth(supabase, start),
+      fetchOverview(supabase, start),
+      previousWindow ? fetchOverview(supabase, previousWindow.start, previousWindow.end) : Promise.resolve({ overview: null }),
+      fetchPreviousOrders(supabase, previousWindow),
       ...SOURCES.map((source) => fetchSource(supabase, source, start)),
       fetchCampaigns(supabase),
     ]);
@@ -272,6 +325,13 @@ export async function GET(request) {
     }
     if (listHealth.error) errors.push({ source: 'list health', message: listHealth.error });
 
+    // Which sources the browser still has to count for itself. Anything the
+    // overview covers is exact whatever the row ceiling did, so it drops out of
+    // the sampling caveat rather than being described as a slice.
+    const aggregated = overviewResult.overview
+      ? ['sessions', 'productViews', 'events']
+      : [];
+
     return NextResponse.json({
       success: errors.length < SOURCES.length,
       range,
@@ -279,8 +339,12 @@ export async function GET(request) {
       sampleLimit: SAMPLE_LIMIT,
       data,
       counts,
-      sampled,
+      sampled: sampled.filter((source) => !aggregated.includes(source)),
       listHealth,
+      overview: overviewResult.overview,
+      previous: previousWindow
+        ? { window: previousWindow, overview: previousOverview.overview, orders: previousOrders.rows }
+        : null,
       errors,
     });
   } catch (error) {

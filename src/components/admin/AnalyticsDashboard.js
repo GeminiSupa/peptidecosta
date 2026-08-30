@@ -23,7 +23,14 @@ import {
   isSuccessfulAnalyticsOrder,
   listHealthSummary,
   listHealthTrend,
+  overviewChannelRows,
+  overviewCityRows,
+  overviewDomainRows,
+  overviewPageRows,
+  overviewProductViewCounts,
+  overviewSessionStats,
   pageTrafficRows,
+  periodDelta,
   revenueTrendRows,
   uniquePageVisitorCount,
 } from '@/lib/analyticsDashboard.mjs';
@@ -33,6 +40,33 @@ import { orderNetRevenue } from '@/lib/orderRevenue.mjs';
 
 /** Money, formatted the way every other screen formats it. */
 const formatUsd = (value) => formatPrice(value, 'USD');
+
+/**
+ * A period-on-period change, as a chip.
+ *
+ * The arrow and the sign carry the direction as well as the colour does,
+ * because roughly one man in twelve will not separate this red from this green.
+ * `goodWhenDown` flips only which way counts as good, never which way the arrow
+ * points.
+ */
+function renderPeriodDelta(delta, previousLabel, { goodWhenDown = false } = {}) {
+  if (!delta) return null;
+  const good = delta.direction === 'flat' ? null : (delta.direction === 'up') !== goodWhenDown;
+  const colour = good === null ? '#64748b' : good ? '#34d399' : '#f87171';
+  const arrow = delta.direction === 'up' ? '▲' : delta.direction === 'down' ? '▼' : '■';
+  const text = delta.isNew
+    ? 'new'
+    : delta.percent === null
+      ? 'no change'
+      : `${delta.percent > 0 ? '+' : ''}${delta.percent}%`;
+
+  return (
+    <span className="metric-delta" style={{ color: colour }} title={`Compared with ${previousLabel}`}>
+      <span aria-hidden="true">{arrow}</span> {text}
+      <span className="metric-delta-vs">vs {previousLabel}</span>
+    </span>
+  );
+}
 
 /**
  * The AI summary, rendered as elements.
@@ -199,6 +233,8 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   // rather than repeating the button label back at you.
   const RANGE_LABELS = { '24h': 'in the last 24 hours', '7d': 'in the last 7 days', '30d': 'in the last 30 days', all: 'all time' };
   const rangeLabel = RANGE_LABELS[timeRange] || 'in this range';
+  const PREVIOUS_RANGE_LABELS = { '24h': 'the day before', '7d': 'the 7 days before', '30d': 'the 30 days before' };
+  const previousRangeLabel = PREVIOUS_RANGE_LABELS[timeRange] || 'the previous period';
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState(null);
@@ -286,6 +322,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [dbCampaigns, setDbCampaigns] = useState([]);
   const [dbCampaignLinks, setDbCampaignLinks] = useState([]);
   const [dbListHealth, setDbListHealth] = useState(null);
+  const [dbOverview, setDbOverview] = useState(null);
+  const [dbPrevious, setDbPrevious] = useState(null);
   const [expandedCampaignId, setExpandedCampaignId] = useState(null);
   const [dbClickEvents, setDbClickEvents] = useState([]);
   const [dbAnalyticsEvents, setDbAnalyticsEvents] = useState([]);
@@ -327,6 +365,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         setDbCampaigns(data.campaigns || []);
         setDbCampaignLinks(data.campaignLinks || []);
         setDbListHealth(payload.listHealth || null);
+        setDbOverview(payload.overview || null);
+        setDbPrevious(payload.previous || null);
         setAnalyticsMeta({
           counts: payload.counts || {},
           sampled: payload.sampled || [],
@@ -345,6 +385,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         setDbCampaigns([]);
         setDbCampaignLinks([]);
         setDbListHealth(null);
+        setDbOverview(null);
+        setDbPrevious(null);
         setCampaignError(err.message);
       }
 
@@ -416,9 +458,15 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     if (timeRange === '30d') return age <= 30 * 24 * 3600000;
     return true;
   });
-  const historicalDomainRows = domainTrafficRows(journeyEvents);
-  const historicalPageRows = pageTrafficRows(journeyEvents);
-  const landingVisitorCount = uniquePageVisitorCount(journeyEvents, '/lp');
+  // Exact when Postgres has grouped it, the newest 1,000 events when it has
+  // not. Everything below follows the same rule: prefer the aggregate, keep the
+  // row path as the fallback so the tab still works before the migration runs.
+  const overviewSessions = overviewSessionStats(dbOverview);
+  const historicalDomainRows = overviewDomainRows(dbOverview) ?? domainTrafficRows(journeyEvents);
+  const historicalPageRows = overviewPageRows(dbOverview) ?? pageTrafficRows(journeyEvents);
+  const landingVisitorCount = Number.isFinite(Number(dbOverview?.landingVisitors))
+    ? Number(dbOverview.landingVisitors)
+    : uniquePageVisitorCount(journeyEvents, '/lp');
 
   // -------------------------------------------------------------
   // CALCULATE FINANCIAL STATISTICS
@@ -450,6 +498,32 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     ? Math.min((successfulOrders.length / uniqueVisitorCount) * 100, 100)
     : 0;
 
+  // -------------------------------------------------------------
+  // THE SAME FIGURES, ONE PERIOD EARLIER
+  // -------------------------------------------------------------
+  // A thirty-day revenue total is unreadable on its own; beside the thirty days
+  // before it, it becomes a decision. The previous window's orders come from
+  // the endpoint as rows so revenue still goes through orderNetRevenue — the
+  // rule every other screen uses — rather than through a second copy of the
+  // refund logic that would eventually disagree with it.
+  const previousSuccessfulOrders = (dbPrevious?.orders || []).filter(isSuccessfulAnalyticsOrder);
+  const previousRevenueUsd = previousSuccessfulOrders.reduce((sum, o) => sum + orderNetRevenue(o).usd, 0);
+  const previousAovUsd = previousSuccessfulOrders.length > 0
+    ? previousRevenueUsd / previousSuccessfulOrders.length
+    : 0;
+  const previousVisitorCount = Number(dbPrevious?.overview?.sessions?.total || 0);
+  const previousConversionRate = previousVisitorCount > 0
+    ? Math.min((previousSuccessfulOrders.length / previousVisitorCount) * 100, 100)
+    : 0;
+  // Null for "All time", which has no period before it.
+  const hasComparison = Boolean(dbPrevious);
+  const revenueDelta = hasComparison ? periodDelta(totalRevenueUsd, previousRevenueUsd) : null;
+  const aovDelta = hasComparison ? periodDelta(aovUsd, previousAovUsd) : null;
+  const conversionDelta = hasComparison ? periodDelta(orderConversionRate, previousConversionRate) : null;
+  // Abandoned carts deliberately have no comparison: "open" is a status that
+  // changes after the fact, so last month's open carts is not a figure that
+  // stayed still to be compared against.
+
   // Abandoned Carts stats
   const activeAbandonedCarts = carts.filter(c => c.status === 'active');
   const convertedCarts = carts.filter(c => c.status === 'converted');
@@ -472,9 +546,11 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   // Average Catalog duration (Page Open time)
   const durationSessions = sessions.filter(s => s.catalog_duration > 0);
-  const averageDurationSeconds = durationSessions.length > 0
-    ? (durationSessions.reduce((sum, s) => sum + s.catalog_duration, 0) / durationSessions.length)
-    : 0;
+  const averageDurationSeconds = overviewSessions
+    ? overviewSessions.avgCatalogSeconds
+    : durationSessions.length > 0
+      ? (durationSessions.reduce((sum, s) => sum + s.catalog_duration, 0) / durationSessions.length)
+      : 0;
 
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -483,13 +559,20 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   };
 
   // Device Breakdown (Mobile vs Desktop)
-  const mobileCount = sessions.filter(s => {
+  const sampledMobileCount = sessions.filter(s => {
     const ua = (s.device_info || '').toLowerCase();
     return ua.includes('mobi') || ua.includes('android') || ua.includes('iphone');
   }).length;
-  const desktopCount = Math.max(sessions.length - mobileCount, 0);
-  const mobilePct = sessions.length > 0 ? (mobileCount / sessions.length) * 100 : 0;
-  const desktopPct = sessions.length > 0 ? (desktopCount / sessions.length) * 100 : 0;
+  const mobileCount = overviewSessions ? overviewSessions.mobile : sampledMobileCount;
+  const desktopCount = overviewSessions
+    ? overviewSessions.desktop
+    : Math.max(sessions.length - sampledMobileCount, 0);
+  const mobilePct = overviewSessions
+    ? overviewSessions.mobilePct
+    : (sessions.length > 0 ? (sampledMobileCount / sessions.length) * 100 : 0);
+  const desktopPct = overviewSessions
+    ? overviewSessions.desktopPct
+    : (sessions.length > 0 ? (Math.max(sessions.length - sampledMobileCount, 0) / sessions.length) * 100 : 0);
 
   // -------------------------------------------------------------
   // CUSTOMER GEOGRAPHIC INSIGHTS (CITIES)
@@ -504,7 +587,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     }
   });
 
-  const sortedVisitorCities = Object.entries(visitorCityCounts)
+  const sortedVisitorCities = overviewCityRows(dbOverview) ?? Object.entries(visitorCityCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
 
@@ -553,11 +636,14 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // -------------------------------------------------------------
   // PRODUCT VIEW METRICS & VIEW-TO-PURCHASE CONVERSIONS
   // -------------------------------------------------------------
-  const productViewCounts = {};
+  const sampledProductViewCounts = {};
   productViews.forEach(v => {
     const pName = v.product_name || 'Unknown';
-    productViewCounts[pName] = (productViewCounts[pName] || 0) + 1;
+    sampledProductViewCounts[pName] = (sampledProductViewCounts[pName] || 0) + 1;
   });
+  // 14,000 product views were being counted from the latest 1,000 of them, so
+  // every per-product conversion rate on this page described a slice.
+  const productViewCounts = overviewProductViewCounts(dbOverview) ?? sampledProductViewCounts;
 
   // Calculate product purchases (how many times they were bought)
   const productPurchaseCounts = {};
@@ -769,7 +855,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const listHealthChartData = listHealthTrend(dbListHealth?.addedAt, dbListHealth?.optedOutAt);
 
   // 2. UTM Source/Traffic Channels
-  const trafficChartData = acquisitionChannelRows(journeyEvents).map((entry, index) => ({
+  const trafficChartData = (overviewChannelRows(dbOverview) ?? acquisitionChannelRows(journeyEvents)).map((entry, index) => ({
     ...entry,
     color: COLORS[index % COLORS.length]
   }));
@@ -2262,7 +2348,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       )}
       {sampledSourceLabels.length > 0 && (
         <div style={{ background: 'rgba(56,189,248,.07)', border: '1px solid rgba(56,189,248,.2)', borderRadius: 10, color: '#bae6fd', padding: '10px 13px', marginBottom: 12, fontSize: '.78rem' }}>
-          Database row totals are exact. Detailed breakdowns use the latest available records for {sampledSourceLabels.join(', ')}.
+          {/* Named rather than blanket: the banner used to cover every chart on
+              the page, so a reader had no way to tell which figure was a slice.
+              Anything Postgres now groups is exact and is not listed here. */}
+          Every figure on this page is exact except {sampledSourceLabels.join(', ')}, which {sampledSourceLabels.length === 1 ? 'is' : 'are'} read from the most recent records.
         </div>
       )}
 
@@ -2401,6 +2490,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           </div>
           <div className="metric-value-secondary">
             ₡{totalRevenueCrc.toLocaleString('en-US')} • {successfulOrders.length} completed orders
+            {renderPeriodDelta(revenueDelta, previousRangeLabel)}
           </div>
           {expandedMetric === 'revenue' && (
             <div className="metric-card-detail">
@@ -2440,6 +2530,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           </div>
           <div className="metric-value-secondary">
             ₡{Math.round(aovCrc).toLocaleString('en-US')} average spend
+            {renderPeriodDelta(aovDelta, previousRangeLabel)}
           </div>
           {expandedMetric === 'aov' && (
             <div className="metric-card-detail">
@@ -2533,6 +2624,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           </div>
           <div className="metric-value-secondary">
             {successfulOrders.length} completed orders / {uniqueVisitorCount} traffic sessions
+            {renderPeriodDelta(conversionDelta, previousRangeLabel)}
           </div>
           {expandedMetric === 'conversion' && (
             <div className="metric-card-detail">
