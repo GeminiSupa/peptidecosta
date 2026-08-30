@@ -293,7 +293,8 @@ a.rating:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(
 /* ---------------- Sticky / FAB ---------------- */
 .fab{position:fixed;right:24px;bottom:24px;z-index:85;display:flex;flex-direction:column;gap:12px;align-items:flex-end}
 .fab__b{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;text-decoration:none;border:0;cursor:pointer;position:relative;transition:transform .25s var(--ease),box-shadow .25s}
-.fab__b--wa{background:var(--wa-dk);color:#fff;box-shadow:0 14px 32px -12px rgba(18,140,126,.9)}
+.fab__b--wa{background:var(--wa);color:#fff;box-shadow:0 14px 32px -12px rgba(37,211,102,.9)}
+.fab__b--wa:hover{background:#1EBE5A}
 .fab__b--q{background:linear-gradient(135deg,var(--o600),var(--o500));color:#fff;box-shadow:0 14px 32px -12px rgba(166,63,6,.9)}
 .fab__b:hover{transform:scale(1.08)}
 .fab__b--q::before{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--o400);opacity:0}
@@ -403,7 +404,7 @@ a.rating:hover{transform:translateY(-3px);box-shadow:var(--sh);border-color:var(
   border-radius:5px;padding:2px 6px;vertical-align:middle}
 .fld__help{margin:6px 0 0;font-size:.74rem;color:var(--ink3);line-height:1.5}
 
-/* Alternate contact buttons (email / phone; swap target via CONFIG.messagingChannel) */
+/* Alternate contact buttons (WhatsApp; swap target via CONFIG.messagingChannel) */
 .fab__b--alt{background:var(--b800);color:#fff;box-shadow:0 14px 32px -12px rgba(10,52,104,.9)}
 
 /* Thank-you "what happens next" */
@@ -751,9 +752,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
 <!-- ============================ FLOATING ACTION (desktop) ============================ -->
 <div class="fab">
-  <a class="fab__b fab__b--alt" href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=info@peptidescostarica.net" target="_blank" rel="noopener" data-cta="fab-email" data-alt-contact aria-label="Email us">
-    <span class="fab__lbl" data-i18n="fab.email">Email us</span>
-    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3" stroke="currentColor" stroke-width="1.9"/><path d="m3.5 7 8.5 6 8.5-6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+  <a class="fab__b fab__b--wa" href="https://wa.me/50684046973" target="_blank" rel="noopener" data-cta="fab-whatsapp" data-alt-contact aria-label="WhatsApp us">
+    <span class="fab__lbl" data-i18n="fab.wa">WhatsApp us</span>
+    <svg width="27" height="27" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2.01c-5.46 0-9.91 4.44-9.91 9.9 0 1.75.46 3.45 1.33 4.96L2 22.02l5.28-1.38a9.9 9.9 0 0 0 4.75 1.21h.01c5.46 0 9.91-4.44 9.91-9.9a9.84 9.84 0 0 0-2.9-7.01 9.82 9.82 0 0 0-7.01-2.93Zm0 18.14h-.01a8.23 8.23 0 0 1-4.19-1.15l-.3-.18-3.11.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.53 3.7-8.22 8.25-8.22a8.2 8.2 0 0 1 5.82 2.42 8.16 8.16 0 0 1 2.41 5.81c0 4.54-3.7 8.23-8.24 8.23Zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.8-.79.97-.14.16-.29.18-.54.06-.25-.12-1.05-.38-1.99-1.23-.73-.65-1.23-1.46-1.38-1.71-.14-.25-.01-.38.11-.51.11-.11.25-.29.37-.44.12-.15.16-.25.25-.42.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.84-.2-.48-.4-.42-.55-.43l-.47-.01c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.04s.88 2.36 1 2.52c.12.16 1.72 2.62 4.16 3.67.58.25 1.03.4 1.39.52.58.18 1.11.16 1.53.1.47-.07 1.46-.6 1.67-1.18.2-.58.2-1.07.14-1.18-.06-.11-.22-.17-.47-.29Z"/></svg>
   </a>
   <button class="fab__b fab__b--q" data-open data-cta="fab-form" type="button" aria-label="Request information">
     <span class="fab__lbl" data-i18n="fab.q">Request information — 45 seconds</span>
@@ -919,11 +920,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 /* ============================================================
    CONFIG
    ------------------------------------------------------------
-   messagingChannel is the future-proofing hook. WhatsApp has been
-   removed as a conversion path, but the plumbing is still here:
-   set enabled:true, fill in the platform details, and every element
-   marked [data-alt-contact] switches from email/phone to that
-   platform automatically. Nothing else needs editing.
+   messagingChannel is the chat channel every element marked
+   [data-alt-contact] points at -- currently WhatsApp on the Costa
+   Rica number. Set enabled:false to fall back to the email/phone
+   defaults left in the markup, or swap the platform details to move
+   to another platform. Nothing else needs editing.
    ============================================================ */
 var CONFIG = {
   email: "info@peptidescostarica.net",
@@ -992,11 +993,11 @@ var CONFIG = {
   exitIntentEnabled: true,    // backup: open when the cursor leaves the window
 
   messagingChannel: {
-    enabled: false,                                    // <- flip to true to re-enable a chat channel
+    enabled: true,                                     // <- flip to false to fall back to email/phone
     type: "whatsapp",                                  // whatsapp | telegram | sms | messenger | ...
     handle: "50684046973",                             // number or username, no symbols
     urlTemplate: "https://wa.me/{handle}?text={text}", // {handle} and {text} are substituted
-    label: { en: "Message us", es: "Escríbenos" }
+    label: { en: "WhatsApp us", es: "Escríbenos por WhatsApp" }
   }
 };
 
@@ -1058,7 +1059,7 @@ var ES = {
 "fin.h2":"Recibe orientación personalizada y precios actuales",
 "fin.sub":"Dinos qué buscas y dónde estás. Un especialista revisa tu solicitud y te responde directamente con la disponibilidad, el precio por vial, tu descuento por volumen si aplica y el COA si quieres verlo primero.",
 "fin.micro":"Sin cuenta · Sin compromiso · Solo para investigación",
-"fab.email":"Escríbenos por correo","fab.q":"Solicitar información — 45 segundos",
+"fab.email":"Escríbenos por correo","fab.wa":"Escríbenos por WhatsApp","fab.q":"Solicitar información — 45 segundos",
 "mod.kick":"Gratis · Sin compromiso","mod.title":"Orientación personalizada","mod.sub":"Cuatro preguntas rápidas y tus datos. Unos 45 segundos.","mod.back":"Atrás",
 "s1.q":"¿Qué categoría te interesa?","s1.h":"Esto nos dice qué parte del catálogo revisar.",
 "s1.o1":"Pérdida de peso","s1.o2":"Crecimiento muscular","s1.o3":"Sanación y recuperación","s1.o4":"Antienvejecimiento y longevidad","s1.o5":"Cognitivo, piel, sueño u otro",
