@@ -6,6 +6,7 @@ import { CheckCircle2, ArrowLeft, ShieldAlert, Sparkles, Send, Calendar } from '
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { useAccountAccess } from '@/hooks/useAccountAccess';
+import GoogleCustomerReviews from '@/components/GoogleCustomerReviews';
 
 function ThankYouContent() {
   const { links } = useBusinessLinks();
@@ -422,6 +423,10 @@ export default function ThankYouPage() {
       </div>
     }>
       <ThankYouContent />
+      {/* Google's survey opt-in. Renders nothing unless checkout left a
+          complete order record behind, so it stays out of the way of anyone
+          who reaches this page without having just bought something. */}
+      <GoogleCustomerReviews />
     </Suspense>
   );
 }

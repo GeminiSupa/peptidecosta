@@ -1,6 +1,6 @@
 "use client";
 
-import { safeLocalStorage as localStorage } from '@/lib/storage';
+import { safeLocalStorage as localStorage, safeSessionStorage } from '@/lib/storage';
 import costaricaData from '@/lib/costarica.json';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -37,6 +37,7 @@ import {
 import { shouldScheduleWaReprompt, WA_REPROMPT_DELAY_MS } from '@/lib/waReprompt.mjs';
 import { shouldScheduleAccessGate, CATALOG_GATE_DELAY_MS } from '@/lib/catalogGate.mjs';
 import { formatPrice as formatPriceVal, roundToCents } from '@/lib/money.mjs';
+import { GCR_STORAGE_KEY, buildReviewOptInRecord } from '@/lib/googleCustomerReviews.mjs';
 import {
   identityMessage,
   normalizeCustomerName,
@@ -485,6 +486,28 @@ export default function CatalogPage() {
   }, []);
 
   const phoneLooksValid = !customerPhone || isValidE164(customerPhone, customerPhoneCountry);
+
+  /**
+   * Hand the confirmation page what Google Customer Reviews needs to ask for a
+   * review: order number, email, and a delivery estimate.
+   *
+   * Written here rather than read off the URL on arrival, because this is the
+   * only moment all of it exists together. Two of the three ways a customer
+   * reaches /thank-you carry no order number, and the WhatsApp flow clears the
+   * saved email before it redirects. Session storage rather than a query string
+   * so an email address never enters a URL, and rather than localStorage so it
+   * expires with the tab.
+   */
+  const stashReviewOptIn = (orderNumber) => {
+    try {
+      safeSessionStorage.setItem(GCR_STORAGE_KEY, JSON.stringify(buildReviewOptInRecord({
+        orderId: orderNumber,
+        email: customerEmail,
+      })));
+    } catch {
+      // A missing review prompt is not a reason to interrupt a paid order.
+    }
+  };
 
   // Let new visitors see the populated catalog before asking for contact info.
   //
@@ -2472,6 +2495,10 @@ export default function CatalogPage() {
       // to the order — and /api/shieldhubpay/webhook sends it for the 3DS
       // answers that arrive after this page is gone.
       if (data.paymentUrl) {
+        // Stashed before leaving for the bank: the customer comes back to
+        // /thank-you with no order number in the URL, and session storage
+        // survives the round trip in this tab.
+        stashReviewOptIn(orderNum);
         window.location.href = data.paymentUrl;
         return;
       }
@@ -2480,6 +2507,7 @@ export default function CatalogPage() {
         if (sessionId) localStorage.setItem('checkout_completed_session_id', sessionId);
         setCart([]);
         localStorage.removeItem('cart');
+        stashReviewOptIn(orderNum);
         window.location.href = `/thank-you?lang=${lang}&order=${encodeURIComponent(orderNum)}`;
         return;
       }
@@ -2699,6 +2727,7 @@ export default function CatalogPage() {
     }
 
     // Redirect to the thank-you conversion page
+    stashReviewOptIn(orderNum);
     router.push(`/thank-you?lang=${lang}`);
   };
 
