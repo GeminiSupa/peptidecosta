@@ -35,6 +35,7 @@ import {
   getBacWaterSizeMl,
 } from '@/lib/bacWater.mjs';
 import { shouldScheduleWaReprompt, WA_REPROMPT_DELAY_MS } from '@/lib/waReprompt.mjs';
+import { shouldScheduleAccessGate, CATALOG_GATE_DELAY_MS } from '@/lib/catalogGate.mjs';
 import { formatPrice as formatPriceVal, roundToCents } from '@/lib/money.mjs';
 import {
   identityMessage,
@@ -486,17 +487,29 @@ export default function CatalogPage() {
   const phoneLooksValid = !customerPhone || isValidE164(customerPhone, customerPhoneCountry);
 
   // Let new visitors see the populated catalog before asking for contact info.
+  //
+  // Never over an open cart. The gate is a lead ask; someone in the drawer is
+  // a customer trying to pay, and the overlay sits on top of it (z-index 9999
+  // against the drawer's 1101), burying the total and the checkout button.
+  // Opening the cart takes the gate down and stops the clock; closing it
+  // starts the wait over, so the ask is deferred rather than spent.
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
-      setGateAccessGranted(hasAccess);
-      setGateLoading(false);
-      if (!hasAccess && !loading) {
-        const timer = setTimeout(() => setGateVisible(true), 15000);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [loading]);
+    if (typeof window === 'undefined') return;
+
+    const hasAccess = localStorage.getItem('catalog_access_granted') === 'true';
+    setGateAccessGranted(hasAccess);
+    setGateLoading(false);
+
+    // The other order of events: the cart is opened while the gate is already
+    // up — the reorder, stock-limit and recovered-cart flows all open the
+    // drawer without a click.
+    if (isCartOpen) setGateVisible(false);
+
+    if (!shouldScheduleAccessGate({ hasAccess, catalogLoading: loading, isCartOpen })) return;
+
+    const timer = setTimeout(() => setGateVisible(true), CATALOG_GATE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [loading, isCartOpen]);
 
   // Second-chance WhatsApp opt-in re-prompt: for visitors who unlocked the
   // catalog but never opted in. Fires once (after 15s), at most once / 3 days,
