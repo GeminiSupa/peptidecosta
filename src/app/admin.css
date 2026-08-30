@@ -10476,6 +10476,98 @@
 }
 
 /* --------------------------------------------------------------------------
+   Analytics tokens
+   --------------------------------------------------------------------------
+   The analytics tab picked its colours at the point of use — 314 inline style
+   blocks against 8 shared rules — so it could not be restyled and had grown
+   three greens, three ambers and three blues doing the same job. These are the
+   central place a change can land.
+
+   src/lib/analyticsTheme.mjs holds the same values for the charts, because
+   Recharts writes its colours as SVG presentation attributes where var() does
+   not resolve. analytics-theme.test.mjs asserts the two agree. */
+:root {
+  --an-ink: #f8fafc;
+  --an-ink-soft: #cbd5e1;
+  --an-ink-muted: #94a3b8;
+  --an-ink-faint: #64748b;
+  --an-ink-dim: #475569;
+  --an-surface: #0f172a;
+  --an-surface-raised: #172237;
+  --an-rule: #334155;
+  --an-accent: #38bdf8;
+  --an-accent-alt: #a78bfa;
+  --an-positive: #34d399;
+  --an-negative: #f87171;
+  --an-warning: #fbbf24;
+
+  --an-chart-1: #38bdf8;
+  --an-chart-2: #a78bfa;
+  --an-chart-3: #34d399;
+  --an-chart-4: #fbbf24;
+  --an-chart-5: #f87171;
+  --an-chart-6: #ec4899;
+}
+
+/* Figures sit in columns everywhere on this tab, so they line up rather than
+   jitter row to row. */
+.metric-value-primary,
+.metric-value-secondary,
+.analytics-figure {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   Analytics sub-nav
+   --------------------------------------------------------------------------
+   One continuous page with no internal navigation meant finding a number
+   required remembering where it lived. */
+.analytics-subnav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 0 14px;
+  padding: 7px 2px;
+  background: rgba(9, 13, 22, .92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+
+.analytics-subnav::-webkit-scrollbar { display: none; }
+
+.analytics-subnav-link {
+  flex: none;
+  padding: 5px 12px;
+  border-radius: 999px;
+  color: var(--an-ink-faint);
+  font-size: .76rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color .15s ease, background .15s ease;
+}
+
+.analytics-subnav-link:hover { color: var(--an-ink-soft); }
+
+.analytics-subnav-link.active {
+  color: var(--an-ink);
+  background: rgba(56, 189, 248, .14);
+}
+
+/* The anchor is a zero-height marker, offset so a jump does not land the
+   heading underneath the sticky bar that sent it there. */
+.analytics-section-anchor {
+  position: relative;
+  top: -64px;
+  height: 0;
+  visibility: hidden;
+}
+
+/* --------------------------------------------------------------------------
    CMS search
    --------------------------------------------------------------------------
    The CMS renders every setting the site has, expanded, on one page. Changing
