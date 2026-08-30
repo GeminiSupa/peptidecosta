@@ -563,7 +563,12 @@ export function overviewSessionStats(overview) {
     desktop: Math.max(total - mobile, 0),
     mobilePct: total > 0 ? (mobile / total) * 100 : 0,
     desktopPct: total > 0 ? ((total - mobile) / total) * 100 : 0,
-    avgCatalogSeconds: toNumber(stats.avgCatalogSeconds),
+    // A median, not a mean. catalog_duration counts from when a session_id was
+    // first seen, and the identifier outlives the visit, so the distribution
+    // has a tail measured in weeks — the mean of it read as 74 hours of
+    // "catalog engagement" while the typical visit was one minute.
+    medianCatalogSeconds: toNumber(stats.medianCatalogSeconds),
     withDuration: toNumber(stats.withDuration),
+    staleDuration: toNumber(stats.staleDuration),
   };
 }

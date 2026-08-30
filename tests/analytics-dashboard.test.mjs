@@ -235,6 +235,17 @@ test('channel names are folded in one place, not twice', () => {
   assert.deepEqual(rows, [{ name: 'Meta', value: 17 }, { name: 'Direct / unknown', value: 7 }]);
 });
 
+test('catalog time is a median, because the mean of that column is unusable', () => {
+  // catalog_duration counts from when a session_id was first seen, and the
+  // identifier outlives the visit. On the live table 23% of sessions exceed a
+  // day and the longest is 96 days, which pulled the mean to 74 hours while the
+  // typical visit was one minute.
+  const stats = overviewSessionStats({ sessions: { total: 100, mobile: 60, medianCatalogSeconds: 63, withDuration: 70, staleDuration: 23 } });
+  assert.equal(stats.medianCatalogSeconds, 63);
+  assert.equal(stats.staleDuration, 23);
+  assert.equal(stats.avgCatalogSeconds, undefined);
+});
+
 test('the device split never reports more mobile sessions than sessions', () => {
   const stats = overviewSessionStats({ sessions: { total: 10, mobile: 99 } });
   assert.equal(stats.mobile, 10);

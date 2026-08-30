@@ -31,18 +31,41 @@ session_stats AS (
     count(*) FILTER (
       WHERE coalesce(device_info, '') ~* '(mobi|android|iphone)'
     )::bigint AS mobile,
-    count(*) FILTER (WHERE coalesce(catalog_duration, 0) > 0)::bigint AS with_duration,
-    COALESCE(
-      avg(catalog_duration) FILTER (WHERE coalesce(catalog_duration, 0) > 0),
-      0
-    )::numeric AS avg_catalog_seconds
+    -- catalog_duration is "seconds since this session_id was first seen", not
+    -- time spent in one visit: the identifier outlives the visit, so a
+    -- returning visitor's figure keeps growing. Measured on the live table,
+    -- 23% of sessions exceed a day and the longest is 96 days, which dragged
+    -- the mean to 74 hours while the median was one minute.
+    --
+    -- So: a median, over visits that could plausibly be visits. The mean of a
+    -- distribution with a 96-day tail is not a number anyone can use.
+    count(*) FILTER (WHERE catalog_duration BETWEEN 1 AND 86400)::bigint AS with_duration,
+    COALESCE(percentile_cont(0.5) WITHIN GROUP (
+      ORDER BY catalog_duration
+    ) FILTER (WHERE catalog_duration BETWEEN 1 AND 86400), 0)::numeric AS median_catalog_seconds,
+    count(*) FILTER (WHERE catalog_duration > 86400)::bigint AS stale_duration
   FROM session_rows
 ),
-city_stats AS (
-  SELECT city, count(*)::bigint AS sessions
+-- The geo provider returns both "San José" and "San Jose", so the top cities
+-- list showed one place twice and ranked each below its real position: on the
+-- live table those two spellings hold 4,098 and 2,909 sessions, which is 7,007
+-- in one city. Grouped on an unaccented key, labelled with whichever spelling
+-- is commonest.
+city_spellings AS (
+  SELECT
+    city,
+    translate(lower(city), 'áàâäéèêëíìîïóòôöúùûüñç', 'aaaaeeeeiiiioooouuuunc') AS city_key,
+    count(*)::bigint AS sessions
   FROM session_rows
   WHERE city IS NOT NULL AND btrim(city) <> '' AND city <> 'Unknown'
   GROUP BY city
+),
+city_stats AS (
+  SELECT
+    (array_agg(city ORDER BY sessions DESC))[1] AS city,
+    sum(sessions)::bigint AS sessions
+  FROM city_spellings
+  GROUP BY city_key
   ORDER BY 2 DESC
   LIMIT 10
 ),
@@ -141,7 +164,8 @@ SELECT jsonb_build_object(
     'total', (SELECT sessions FROM session_stats),
     'mobile', (SELECT mobile FROM session_stats),
     'withDuration', (SELECT with_duration FROM session_stats),
-    'avgCatalogSeconds', round((SELECT avg_catalog_seconds FROM session_stats), 2)
+    'staleDuration', (SELECT stale_duration FROM session_stats),
+    'medianCatalogSeconds', round((SELECT median_catalog_seconds FROM session_stats), 2)
   ),
   'cities', COALESCE((
     SELECT jsonb_agg(jsonb_build_object('city', city, 'sessions', sessions))

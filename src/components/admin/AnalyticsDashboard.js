@@ -182,10 +182,10 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
       spanish: "El valor monetario total de todos los artículos que se encuentran actualmente dentro de los carritos de compras abandonados activos. Esto representa dinero 'casi capturado'. ¡Enviar mensajes de recuperación a estos clientes te ayuda a capturar estas ventas y reclamar estos ingresos!"
     },
     open_time: {
-      title: "⏱️ Average Catalog View Time",
-      concept: "Tiempo Promedio de Vista del Catálogo",
-      description: "The average duration (in minutes and seconds) a visitor spends reading through your peptide products list. A higher view time (e.g. over 2 minutes) means customers are highly engaged, reading the clinical descriptions, and actively considering a purchase!",
-      spanish: "La duración promedio (en minutos y segundos) que pasa un visitante leyendo tu lista de productos de péptidos. ¡Un mayor tiempo de visualización (por ejemplo, más de 2 minutos) significa que los clientes están muy interesados, leyendo las descripciones clínicas y considerando activamente una compra!"
+      title: "⏱️ Typical Catalog View Time",
+      concept: "Tiempo Típico de Vista del Catálogo",
+      description: "How long a typical visitor spends reading through your peptide products list — the median, not the average. This is measured from when we first saw the visitor's session, and a session identifier can outlive the visit that created it, so a handful of them stretch to weeks. One very long session would drag an average badly; the median ignores them. Sessions running longer than a day are left out of this figure entirely.",
+      spanish: "Cuánto tiempo pasa un visitante típico leyendo tu lista de productos de péptidos — la mediana, no el promedio. Se mide desde que vimos por primera vez la sesión del visitante, y un identificador de sesión puede durar más que la visita que lo creó, así que algunas se extienden por semanas. Una sesión muy larga arrastraría mucho un promedio; la mediana las ignora. Las sesiones de más de un día quedan fuera de esta cifra."
     },
     device_breakdown: {
       title: "📱 Device Usage (Mobile vs. Desktop)",
@@ -332,7 +332,7 @@ Analyze the following store metrics and provide a comprehensive executive e-comm
 - Conversion Rate: ${orderConversionRate.toFixed(2)}% (visitors: ${uniqueVisitorCount}, completed orders: ${successfulOrders.length})
 - Abandoned Cart Rate: ${cartAbandonmentRate.toFixed(2)}% (active abandoned: ${activeAbandonedCarts.length})
 - Potential Recoverable Revenue from Carts: $${potentialAbandonedRevenueUsd.toFixed(2)}
-- Average Catalog Engagement: ${formatDuration(averageDurationSeconds)}
+- Typical Catalog Engagement (median visit): ${formatDuration(averageDurationSeconds)}
 - Top Selling Products: ${productMetrics.slice(0, 3).map(p => `${p.name} (${p.purchases} sales, ${p.views} views, ${p.conversion.toFixed(1)}% conv)`).join(', ')}
 - Zero Click / Cold Products: ${coldPeptides.map(p => `${p.name} (${p.views} views)`).join(', ')}
 
@@ -723,7 +723,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // Average Catalog duration (Page Open time)
   const durationSessions = sessions.filter(s => s.catalog_duration > 0);
   const averageDurationSeconds = overviewSessions
-    ? overviewSessions.avgCatalogSeconds
+    ? overviewSessions.medianCatalogSeconds
     : durationSessions.length > 0
       ? (durationSessions.reduce((sum, s) => sum + s.catalog_duration, 0) / durationSessions.length)
       : 0;
@@ -3582,7 +3582,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               <div className="behavior-box-value" style={{ color: 'var(--an-accent-alt)' }}>
                 {formatDuration(averageDurationSeconds)}
               </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--an-ink-faint)', marginTop: '4px' }}>Average browsing time</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--an-ink-faint)', marginTop: '4px' }}>
+                {overviewSessions ? 'Typical visit (median)' : 'Average browsing time'}
+              </div>
             </div>
 
             <div className="behavior-box">
