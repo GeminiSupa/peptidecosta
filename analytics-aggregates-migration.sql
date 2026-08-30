@@ -1,26 +1,5 @@
--- Analytics aggregation: do the arithmetic in Postgres.
--- Run this in the Supabase SQL editor. It is idempotent.
---
--- WHY
--- ---
--- The analytics dashboard reads seven tables and derives every figure in the
--- browser. Three of those tables are far past the endpoint's row ceiling —
--- visitor_sessions (127k), click_events (101k), analytics_events (76k), and
--- product_views (14k) — so the page fetches the most recent 1,000 rows and
--- computes product views, traffic, acquisition channels, cities and device
--- split from that slice. The tab admits it in a banner: "Detailed breakdowns
--- use the latest available records." A conversion rate that comes with a
--- disclaimer is not a conversion rate.
---
--- This function returns the grouped result instead of the rows behind it —
--- roughly a hundred rows however large the tables get. The endpoint calls it
--- once per window, so a previous-period comparison is the same call with a
--- shifted window rather than a second download of everything.
---
--- The order and cart figures are deliberately NOT here. Refund handling lives
--- in orderRevenue.mjs and is shared with every other screen; a second copy in
--- SQL would eventually disagree with it, and two revenue numbers that disagree
--- are worse than one. Those tables are inside the row ceiling anyway.
+-- Analytics aggregation. Paste the whole file into the Supabase SQL editor.
+-- Idempotent. Rationale: docs/analytics-aggregates.md
 
 CREATE OR REPLACE FUNCTION public.analytics_overview(
   range_start timestamptz DEFAULT NULL,
@@ -31,14 +10,18 @@ LANGUAGE sql
 STABLE
 AS $$
 WITH bounds AS (
-  SELECT range_start AS lo, COALESCE(range_end, now()) AS hi
+  -- Resolved to real timestamps rather than left as "or NULL": a
+  -- `(range_start IS NULL OR col >= range_start)` predicate is not sargable, so
+  -- Postgres ignored every index below and scanned the whole table each call.
+  SELECT COALESCE(range_start, '-infinity'::timestamptz) AS lo,
+         COALESCE(range_end, now()) AS hi
 ),
 
 -- Sessions -----------------------------------------------------------------
 session_rows AS (
   SELECT s.city, s.device_info, s.catalog_duration
   FROM public.visitor_sessions s, bounds b
-  WHERE (b.lo IS NULL OR s.last_active >= b.lo)
+  WHERE s.last_active >= b.lo
     AND s.last_active <= b.hi
 ),
 session_stats AS (
@@ -46,7 +29,7 @@ session_stats AS (
     count(*)::bigint AS sessions,
     -- Same test the dashboard applied to the user agent, moved server-side.
     count(*) FILTER (
-      WHERE lower(coalesce(device_info, '')) ~ '(mobi|android|iphone)'
+      WHERE coalesce(device_info, '') ~* '(mobi|android|iphone)'
     )::bigint AS mobile,
     count(*) FILTER (WHERE coalesce(catalog_duration, 0) > 0)::bigint AS with_duration,
     COALESCE(
@@ -71,7 +54,7 @@ product_stats AS (
     count(*)::bigint AS views,
     count(DISTINCT v.session_id)::bigint AS viewers
   FROM public.product_views v, bounds b
-  WHERE (b.lo IS NULL OR v.created_at >= b.lo)
+  WHERE v.created_at >= b.lo
     AND v.created_at <= b.hi
     AND v.product_name IS NOT NULL
     AND v.product_name <> 'Unknown'
@@ -102,7 +85,7 @@ prod_events AS (
     (NULLIF(btrim(coalesce(e.gclid, '')), '') IS NOT NULL
      OR NULLIF(btrim(coalesce(e.fbclid, '')), '') IS NOT NULL) AS paid
   FROM public.analytics_events e, bounds b
-  WHERE (b.lo IS NULL OR e.created_at >= b.lo)
+  WHERE e.created_at >= b.lo
     AND e.created_at <= b.hi
     AND lower(coalesce(e.hostname, '')) <> 'localhost'
     AND lower(coalesce(e.hostname, '')) NOT LIKE '%.vercel.app'
@@ -197,6 +180,18 @@ CREATE INDEX IF NOT EXISTS analytics_events_created_at_idx
   ON public.analytics_events (created_at DESC);
 CREATE INDEX IF NOT EXISTS analytics_events_hostname_created_idx
   ON public.analytics_events (hostname, created_at DESC);
+-- The page-view aggregates filter on event_type before grouping, and the
+-- product aggregate groups by name inside a date range.
+CREATE INDEX IF NOT EXISTS analytics_events_type_created_idx
+  ON public.analytics_events (event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS product_views_name_created_idx
+  ON public.product_views (product_name, created_at DESC);
+
+-- "All time" has no range to narrow on, so it reads every row by definition.
+-- The default statement timeout would cancel it and cost the tab its exact
+-- figures; this bounds it generously instead of leaving it to chance.
+ALTER FUNCTION public.analytics_overview(timestamptz, timestamptz)
+  SET statement_timeout = '55s';
 
 REVOKE ALL ON FUNCTION public.analytics_overview(timestamptz, timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.analytics_overview(timestamptz, timestamptz) TO service_role;
