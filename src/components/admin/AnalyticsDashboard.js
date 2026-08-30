@@ -24,11 +24,55 @@ import {
   revenueTrendRows,
   uniquePageVisitorCount,
 } from '@/lib/analyticsDashboard.mjs';
+import { parseAiSummary } from '@/lib/aiSummaryMarkdown.mjs';
 import { formatPrice } from '@/lib/money.mjs';
 import { orderNetRevenue } from '@/lib/orderRevenue.mjs';
 
 /** Money, formatted the way every other screen formats it. */
 const formatUsd = (value) => formatPrice(value, 'USD');
+
+/**
+ * The AI summary, rendered as elements.
+ *
+ * This used to be `dangerouslySetInnerHTML` over a two-rule regex, so any
+ * markup the model returned ran in the admin session. Everything here is a
+ * React child, which means model output is text by construction rather than by
+ * remembering to escape it.
+ */
+function renderAiSummarySpans(spans) {
+  return spans.map((span, index) => (
+    span.bold
+      ? <strong key={index} style={{ color: '#38bdf8' }}>{span.text}</strong>
+      : <React.Fragment key={index}>{span.text}</React.Fragment>
+  ));
+}
+
+function renderAiSummary(text) {
+  return parseAiSummary(text).map((block, index) => {
+    if (block.type === 'list') {
+      return (
+        <ul key={index} style={{ margin: '0 0 10px', paddingLeft: '20px', listStyleType: 'square' }}>
+          {block.items.map((item, itemIndex) => (
+            <li key={itemIndex} style={{ marginBottom: '6px' }}>{renderAiSummarySpans(item)}</li>
+          ))}
+        </ul>
+      );
+    }
+    if (block.type === 'heading') {
+      return (
+        <div
+          key={index}
+          role="heading"
+          aria-level={block.level}
+          style={{ margin: '14px 0 6px', fontWeight: 700, color: '#f8fafc', fontSize: block.level <= 2 ? '1rem' : '0.9rem' }}
+        >
+          {renderAiSummarySpans(block.spans)}
+        </div>
+      );
+    }
+    return <p key={index} style={{ margin: '0 0 8px' }}>{renderAiSummarySpans(block.spans)}</p>;
+  });
+}
 
 export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [], onNavigate }) {
   const [explainerTopic, setExplainerTopic] = useState(null);
@@ -165,6 +209,7 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   
   // AI Insights States
   const [aiInsightText, setAiInsightText] = useState('');
+  const [aiInsightError, setAiInsightError] = useState('');
   const [generatingAiInsights, setGeneratingAiInsights] = useState(false);
 
   useEffect(() => {
@@ -174,6 +219,7 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   const generateAiInsights = async () => {
     setGeneratingAiInsights(true);
     setAiInsightText('');
+    setAiInsightError('');
     try {
       const prompt = `You are the chief e-commerce financial analyst at Peptides Costa Rica.
 Analyze the following store metrics and provide a comprehensive executive e-commerce audit report:
@@ -213,11 +259,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
       if (res.ok && data.success) {
         setAiInsightText(data.text);
       } else {
-        alert('Failed to generate insights: ' + (data.error || 'Unknown error'));
+        // A browser dialog here was the one thing on this page that stopped it
+        // dead and looked nothing like the rest of the dashboard.
+        setAiInsightError(data.error || 'The model did not return a summary.');
       }
     } catch (err) {
       console.error(err);
-      alert('Failed to generate insights: ' + err.message);
+      setAiInsightError(err.message);
     } finally {
       setGeneratingAiInsights(false);
     }
@@ -3552,22 +3600,22 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                       Clear
                     </button>
                   </div>
-                  <div
-                    style={{ fontSize: '0.9rem', color: '#cbd5e1', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}
-                    dangerouslySetInnerHTML={{
-                      __html: aiInsightText
-                        .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #38bdf8">$1</strong>')
-                        .replace(/^- (.*)$/gm, '<li style="margin-left: 12px; margin-bottom: 6px; list-style-type: square">$1</li>')
-                    }}
-                  />
+                  <div style={{ fontSize: '0.9rem', color: '#cbd5e1', lineHeight: '1.6' }}>
+                    {renderAiSummary(aiInsightText)}
+                  </div>
                 </div>
               ) : (
                 <div style={{ paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {aiInsightError && (
+                    <div role="alert" style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.28)', borderRadius: 10, color: '#fecaca', padding: '10px 13px', fontSize: '.78rem' }}>
+                      Could not generate insights: {aiInsightError}
+                    </div>
+                  )}
                   <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>
                     Get an executive summary of sales performance, bottlenecks, and recommended actions.
                   </p>
                   <button type="button" className="admin-btn admin-btn-primary" onClick={generateAiInsights} style={{ alignSelf: 'flex-start' }}>
-                    <Sparkles size={14} /> Analyze
+                    <Sparkles size={14} /> {aiInsightError ? 'Try again' : 'Analyze'}
                   </button>
                 </div>
               )}
