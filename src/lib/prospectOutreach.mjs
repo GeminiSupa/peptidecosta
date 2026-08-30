@@ -7,6 +7,7 @@
  */
 
 import { channelPermissionFor } from './prospectPermissions.mjs';
+import { whatsappDialableNumber } from './prospectPhone.mjs';
 
 export const OUTREACH_CHANNELS = ['email', 'whatsapp'];
 
@@ -32,11 +33,19 @@ export function normalizeOutreachChannel(value) {
   return OUTREACH_CHANNELS.includes(channel) ? channel : null;
 }
 
+/**
+ * The number to open WhatsApp with, in the form wa.me reads.
+ *
+ * The prospect's country completes a number the business published in national
+ * form; see whatsappDialableNumber. A candidate that cannot be dialed
+ * internationally is skipped rather than handed over half-formed, because the
+ * link would open a chat with a country code nobody owns.
+ */
 export function prospectWhatsAppNumber(prospect = {}) {
   const candidates = [...(prospect.whatsapp_numbers || []), prospect.phone];
   for (const candidate of candidates) {
-    const digits = String(candidate || '').replace(/\D/g, '');
-    if (digits.length >= 8 && digits.length <= 15) return digits;
+    const dialable = whatsappDialableNumber(candidate, prospect.country);
+    if (dialable) return dialable;
   }
   return null;
 }
@@ -103,7 +112,12 @@ export function canContactProspect(prospect, channel) {
 
   const number = prospectWhatsAppNumber(prospect);
   if (!number) {
-    return { allowed: false, reason: 'No usable WhatsApp number saved for this prospect.', identity: null, basis: null };
+    return {
+      allowed: false,
+      reason: 'No dialable WhatsApp number saved for this prospect. Add the country code, or the country, so the number can be dialed internationally.',
+      identity: null,
+      basis: null,
+    };
   }
   return {
     allowed: true,
@@ -133,6 +147,8 @@ export function outreachDisclosure(permission = {}, channel = 'email') {
   return `You received this based on recorded ${channelLabel} permission. Reply "remove" and we will not contact you again.`;
 }
 
+export const WHATSAPP_MESSAGE_LIMIT = 1500;
+
 /**
  * WhatsApp's first touch is a human hand-off, not an automated send.
  *
@@ -141,11 +157,20 @@ export function outreachDisclosure(permission = {}, channel = 'email') {
  * a rejected call at best and a flagged business number at worst. So the draft
  * is handed to the rep as a prefilled wa.me link: same words, same logging,
  * but a person presses send and the number stays healthy.
+ *
+ * The disclosure is passed separately rather than pre-joined by the caller, so
+ * that a long body is what gives way when the link has to be trimmed.
  */
-export function whatsappHandoffUrl(number, message) {
+export function whatsappHandoffUrl(number, body, disclosure = '') {
   const digits = String(number || '').replace(/\D/g, '');
   if (!digits) return null;
-  return `https://wa.me/${digits}?text=${encodeURIComponent(clean(message, 1500))}`;
+  // The disclosure carries the opt-out, so it is the part that must survive.
+  // Appending it and clamping the whole string cut it off whenever the rep
+  // edited the draft past ~1350 characters — the send route allows 4000 — and
+  // the message went out with no way to unsubscribe from it.
+  const tail = disclosure ? `\n\n\u2014\n${clean(disclosure, WHATSAPP_MESSAGE_LIMIT)}` : '';
+  const room = Math.max(0, WHATSAPP_MESSAGE_LIMIT - tail.length);
+  return `https://wa.me/${digits}?text=${encodeURIComponent(`${clean(body, room)}${tail}`)}`;
 }
 
 export function generateBookingToken(randomUUID) {

@@ -128,7 +128,7 @@ export async function POST(request) {
     // prospect contacted or writing a false "sent" history row; the rep can use
     // Mark contacted after they actually press Send in WhatsApp.
     if (outreachChannel === 'whatsapp') {
-      const handoffUrl = whatsappHandoffUrl(permission.identity, `${messageBody}\n\n—\n${disclosure}`);
+      const handoffUrl = whatsappHandoffUrl(permission.identity, messageBody, disclosure);
       if (!handoffUrl) return NextResponse.json({ error: 'Unable to build a WhatsApp link for this number.' }, { status: 400 });
       return NextResponse.json({
         success: true,

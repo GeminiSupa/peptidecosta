@@ -1065,9 +1065,14 @@ export default function ProspectorManager({ currentUserProfile }) {
     }
 
     const jobs = [];
+    let alreadyRunning = 0;
     for (const item of items) {
       const key = prospectKey(item);
-      if (!key || enrichClaimedRef.current.has(key)) continue;
+      if (!key) continue;
+      if (enrichClaimedRef.current.has(key)) {
+        alreadyRunning += 1;
+        continue;
+      }
       if (!item.website_url) {
         setEnrich(key, 'skipped', 'No website to scan');
         continue;
@@ -1078,7 +1083,11 @@ export default function ProspectorManager({ currentUserProfile }) {
       jobs.push({ key, saved });
     }
     if (!jobs.length) {
-      setNotice('None of those have a website to scan.');
+      // Two very different reasons to queue nothing. Reporting the wrong one
+      // sent the operator hunting for websites that were already being scanned.
+      setNotice(alreadyRunning
+        ? `${alreadyRunning} of those are already being scanned.`
+        : 'None of those have a website to scan.');
       return;
     }
     enrichQueueRef.current.push(...jobs);

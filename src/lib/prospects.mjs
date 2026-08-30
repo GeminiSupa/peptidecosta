@@ -5,6 +5,7 @@ import {
   channelPermissionFields,
   summarizeChannelPermissions,
 } from './prospectPermissions.mjs';
+import { whatsappDialableNumber } from './prospectPhone.mjs';
 
 export const PROSPECT_STATUSES = [
   'discovered',
@@ -167,11 +168,17 @@ export function normalizeWhatsAppNumbers(values) {
     .map((digits) => `+${digits}`)))].slice(0, 5);
 }
 
+/**
+ * Whether a WhatsApp permission can be verified against a number we could
+ * actually dial. It asks the same question the send gate asks, so evidence
+ * cannot be recorded for a number outreach would then refuse.
+ */
 export function hasUsableProspectWhatsAppIdentity(prospect = {}) {
-  return normalizeWhatsAppNumbers([
+  const candidates = [
     ...(Array.isArray(prospect.whatsapp_numbers) ? prospect.whatsapp_numbers : []),
     prospect.phone,
-  ]).length > 0;
+  ];
+  return candidates.some((candidate) => whatsappDialableNumber(candidate, prospect.country));
 }
 
 export function normalizeLinkedInProfileUrls(urls) {
