@@ -41,6 +41,8 @@ import {
   TRUSTPILOT_REVIEW_COUNT,
 } from '@/lib/businessLinks';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
+import LeadFormTrap, { useLeadFormTrap } from '@/components/LeadFormTrap';
+import { isDiallablePhone } from '@/lib/leadContact.mjs';
 import './landing.css';
 
 const SESSION_KEY = 'pcr_landing_enquiry_seen';
@@ -246,6 +248,9 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted, settings }) 
   const closeRef = useRef(null);
   const previousFocus = useRef(null);
   const sendingRef = useRef(false);
+  // Keyed on `open`: this modal auto-opens on a timer or a scroll depth, so
+  // the time that matters is from the moment it appeared, not from page load.
+  const { trapRef, trapFields } = useLeadFormTrap(open);
 
   useEffect(() => { sendingRef.current = sending; }, [sending]);
 
@@ -257,7 +262,9 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted, settings }) 
     const onKey = (event) => {
       if (event.key === 'Escape' && !sendingRef.current) onClose();
       if (event.key !== 'Tab' || !dialogRef.current) return;
-      const items = [...dialogRef.current.querySelectorAll('button:not([disabled]), input:not([disabled])')];
+      // :not([tabindex="-1"]) keeps the honeypot out of the cycle — it is the
+      // one input in here a visitor must never land on.
+      const items = [...dialogRef.current.querySelectorAll('button:not([disabled]), input:not([disabled]):not([tabindex="-1"])')];
       if (!items.length) return;
       const first = items[0];
       const last = items[items.length - 1];
@@ -296,14 +303,15 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted, settings }) 
     event.preventDefault();
     if (sending) return;
     const email = form.email.trim();
-    const phoneDigits = form.phone.replace(/\D/g, '');
     if (!form.firstName.trim() || !email || !form.phone.trim() || !form.consent) {
       setError(c.required); fireEvent('enquiry_validation_error', { reason: 'required' }); return;
     }
     if (!EMAIL_RE.test(email)) {
       setError(c.emailError); fireEvent('enquiry_validation_error', { reason: 'email' }); return;
     }
-    if (phoneDigits.length < 8) {
+    // Was its own `phoneDigits.length < 8`; the shared rule so the three lead
+    // forms and the route cannot drift to different ideas of a real number.
+    if (!isDiallablePhone(form.phone)) {
       setError(c.phoneError); fireEvent('enquiry_validation_error', { reason: 'phone' }); return;
     }
 
@@ -320,7 +328,7 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted, settings }) 
       consentVersion: settings.consentVersion,
     });
     try {
-      await postWithRetry(payload);
+      await postWithRetry({ ...payload, ...trapFields() });
       setSent(true);
       onSubmitted();
       fireEvent('generate_lead', {
@@ -393,6 +401,7 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted, settings }) 
               </div>
             ) : (
               <form className="lead-contact-form" onSubmit={submit} noValidate>
+                <LeadFormTrap inputRef={trapRef} />
                 <div className="lead-form-row">
                   <label><span>{c.firstName} *</span><input value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} autoComplete="given-name" /></label>
                   <label><span>{c.lastName}</span><input value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} autoComplete="family-name" /></label>

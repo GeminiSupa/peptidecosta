@@ -32,6 +32,21 @@ function asPhone(value) {
   return digits.length >= MIN_PHONE_DIGITS ? digits : '';
 }
 
+/**
+ * Whether a value is a number somebody could actually be rung back on.
+ *
+ * The same MIN_PHONE_DIGITS rule `asPhone` reads rows with, exported so the
+ * forms and /api/leads/contact can apply it when a lead is written instead of
+ * only when one is read. They disagreed: `cleanPhoneNumber` returns whatever
+ * digits it is given, so a phone of "5" was truthy, satisfied "email or phone
+ * required", and became a lead's entire contact_value — a row nobody can act
+ * on, which still alerted the team. Read back through `leadPhone` that same
+ * row reports no phone at all, which is how the disagreement stayed invisible.
+ */
+export function isDiallablePhone(value) {
+  return Boolean(asPhone(value));
+}
+
 export function leadName(lead) {
   const direct = String(lead?.name || '').trim();
   if (direct) return direct;

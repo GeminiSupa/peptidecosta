@@ -3,7 +3,7 @@ import { getLeadAlertAudience } from '@/lib/leadNotificationRecipients';
 import { landingQualificationNotes } from '@/lib/landingLead.mjs';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
-import { leadNotificationEmailSubject, TIKTOK_LEAD_SOURCE } from '@/lib/tiktokLeadPosting.mjs';
+import { leadNotificationEmailSubject, leadNotificationTitle } from '@/lib/tiktokLeadPosting.mjs';
 
 const RETRY_MINUTES = [1, 5, 15, 60, 240];
 
@@ -52,9 +52,7 @@ export async function sendLeadEmails({ recipients, details, slaMinutes = 15 }) {
     }));
   }
 
-  const emailTitle = details.source === TIKTOK_LEAD_SOURCE
-    ? 'New TikTok form lead'
-    : 'New landing-page lead';
+  const emailTitle = leadNotificationTitle(details.source);
   const lines = [
     emailTitle,
     `Name: ${details.name}`,
@@ -89,7 +87,14 @@ export async function sendLeadEmails({ recipients, details, slaMinutes = 15 }) {
       from,
       to: destination,
       replyTo: details.email || undefined,
-      subject: leadNotificationEmailSubject(details.source, { name: details.name, slaMinutes }),
+      subject: leadNotificationEmailSubject(details.source, {
+        name: details.name,
+        slaMinutes,
+        // The clock comes off the lead's own deadline, not off the setting. The
+        // route sets one only for a qualified campaign lead, which is exactly
+        // the set of alerts entitled to say (15 min).
+        hasDeadline: Boolean(details.dueAt),
+      }),
       text: lines.join('\n'),
       html: `<h2>${emailTitle}</h2><ul>${lines.slice(1).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
     });

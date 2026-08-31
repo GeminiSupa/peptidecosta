@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import { Check, Loader2 } from 'lucide-react';
+import LeadFormTrap, { useLeadFormTrap } from '@/components/LeadFormTrap';
+import { isDiallablePhone } from '@/lib/leadContact.mjs';
 
 const COPY = {
   es: {
@@ -17,6 +19,7 @@ const COPY = {
     errName: 'Por favor escriba su nombre.',
     errContact: 'Escriba un correo o un teléfono para poder responderle.',
     errEmail: 'Ese correo no parece válido. Revise que tenga un solo @ y un dominio.',
+    errPhone: 'Ese teléfono no parece válido. Escriba el número completo, con al menos 8 dígitos.',
     errSave: 'No pudimos enviar sus datos. Intente de nuevo.',
   },
   en: {
@@ -32,6 +35,7 @@ const COPY = {
     errName: 'Please enter your name.',
     errContact: 'Add an email or a phone number so we can reply.',
     errEmail: 'That email does not look right. Check for a single @ and a domain.',
+    errPhone: 'That phone number does not look right. Enter the full number, at least 8 digits.',
     errSave: 'We could not send your details. Please try again.',
   },
 };
@@ -48,6 +52,9 @@ export default function AdWordsLeadForm({
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  // This form is embedded in a page rather than opened, so the clock starts
+  // when it mounts and there is nothing to reset it on.
+  const { trapRef, trapFields } = useLeadFormTrap();
 
   const update = (key) => (event) => {
     setForm((prev) => ({ ...prev, [key]: event.target.value }));
@@ -65,13 +72,14 @@ export default function AdWordsLeadForm({
     if (!name) { setError(copy.errName); return; }
     if (!email && !phone) { setError(copy.errContact); return; }
     if (email && !EMAIL_RE.test(email)) { setError(copy.errEmail); return; }
+    if (phone && !isDiallablePhone(phone)) { setError(copy.errPhone); return; }
 
     setSending(true);
     try {
       const response = await fetch('/api/leads/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, phone, language: lang, source }),
+        body: JSON.stringify({ name, email, phone, language: lang, source, ...trapFields() }),
       });
       if (!response.ok) throw new Error('save_failed');
       setSent(true);
@@ -97,6 +105,7 @@ export default function AdWordsLeadForm({
   return (
     <div className={`adwords-lead-form ${className}`} style={{ padding: '2rem', background: '#ffffff', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
       <form onSubmit={submit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <LeadFormTrap inputRef={trapRef} />
         <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', margin: 0 }}>{copy.title}</h2>
         <p style={{ color: '#4b5563', margin: '0 0 1rem 0' }}>{copy.intro}</p>
 

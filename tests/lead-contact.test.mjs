@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  isDiallablePhone,
   leadContactPoints,
   leadEmail,
   leadName,
@@ -65,4 +66,36 @@ test('survives a lead with nothing on it', () => {
   assert.deepEqual(leadContactPoints(null), {
     name: '', email: '', phone: '', emailIsPrimary: false, phoneIsPrimary: false,
   });
+});
+
+// The write side of a lead, not the read side: these are the same digits rule
+// applied when a form is submitted. It was only ever applied on the way out,
+// so a lead could be saved on a contact point `leadPhone` then refused to
+// report — which is exactly how "Phone: 5" reached the team's inbox.
+test('refuses a number too short to ring back', () => {
+  for (const value of ['5', '55', '1234', '', null, undefined, '   ']) {
+    assert.equal(isDiallablePhone(value), false, JSON.stringify(value));
+  }
+});
+
+test('accepts the numbers this shop actually gets', () => {
+  for (const value of ['+506 8404 6973', '84046973', '506 7019 5752', '+1 (831) 471-5559']) {
+    assert.equal(isDiallablePhone(value), true, value);
+  }
+});
+
+test('an email is never mistaken for a phone number', () => {
+  assert.equal(isDiallablePhone('user123456789@example.com'), false);
+});
+
+test('agrees with what leadPhone will report back', () => {
+  // The bug was these two disagreeing. A value one accepts, the other must be
+  // able to read off the saved row, and vice versa.
+  for (const value of ['5', '1234', '84046973', '+506 8404 6973', 'ana@example.com']) {
+    assert.equal(
+      isDiallablePhone(value),
+      Boolean(leadPhone({ contact_method: 'whatsapp', contact_value: value })),
+      value,
+    );
+  }
 });

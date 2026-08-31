@@ -1,16 +1,19 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
+import { isDiallablePhone } from '@/lib/leadContact.mjs';
 import { resolveLeadOwnerDetailed } from '@/lib/leadOwner';
 import { loadLandingLeadSettings, resolveCampaignAgent } from '@/lib/leadCampaignAgent';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { rateLimit } from '@/lib/rateLimit.mjs';
+import { classifyLeadSubmission, HONEYPOT_FIELD } from '@/lib/leadSpam.mjs';
 import nodemailer from 'nodemailer';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
 import { getLeadAlertAudience } from '@/lib/leadNotificationRecipients';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { enqueueAndProcessLeadNotification } from '@/lib/leadNotificationDelivery';
 import { responseDeadline } from '@/lib/leadNotifications.mjs';
+import { leadNotificationEmailSubject, leadNotificationTitle } from '@/lib/tiktokLeadPosting.mjs';
 import {
   hasLandingQualification,
   isDuplicateLandingLeadSubmission,
@@ -78,8 +81,9 @@ async function sendLandingLeadAlert({
   if (!recipients.length) return { outbox: false, emailSent: false };
 
   const details = landingQualificationNotes(qualification);
+  const emailTitle = leadNotificationTitle(source);
   const lines = [
-    'New landing-page lead',
+    emailTitle,
     `Name: ${name}`,
     `Email: ${email || 'Not provided'}`,
     `Phone: ${phone || 'Not provided'}`,
@@ -104,25 +108,21 @@ async function sendLandingLeadAlert({
     socketTimeout: 20000,
   });
 
-  // These land in a shared info@ inbox alongside everything else, so the subject
-  // has to answer "where from, who, how urgent" before anyone opens it. "New lead
-  // assigned to X" said none of that — it read the same whether it came from paid
-  // ad traffic on a response clock or the ordinary storefront form.
+  // Built from the shared helper rather than assembled here. This sender and
+  // the outbox worker each had their own copy of the wording, which is how the
+  // two came to disagree about what a lead from the storefront is called.
   //
   // The assigned agent is deliberately kept out of the subject and left in the
   // body: who owns a lead can change, and whether it is auto-assigned at all is
   // still undecided, so the subject should not depend on it.
-  const sourceLabel = source === 'adwords_lp' ? 'AdWords lead' : 'Landing-page lead';
-  const slaLabel = slaMinutes ? ` (${slaMinutes} min)` : '';
-
   await transporter.sendMail({
     from,
     to: fromEmail,
     bcc: recipients.join(', '),
     replyTo: email || undefined,
-    subject: `${sourceLabel}${slaLabel} — ${name}`,
+    subject: leadNotificationEmailSubject(source, { name, slaMinutes, hasDeadline: Boolean(dueAt) }),
     text: lines.join('\n'),
-    html: `<h2>New landing-page lead</h2><ul>${lines.slice(1).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
+    html: `<h2>${emailTitle}</h2><ul>${lines.slice(1).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
   });
   return { outbox: false, emailSent: true };
 }
@@ -130,7 +130,8 @@ async function sendLandingLeadAlert({
 // This is posted to from standalone ad landing pages, which are not served
 // from this domain, so the browser needs CORS to let the request through.
 // It is not a security control — anything can POST here with curl regardless —
-// so the actual abuse protection is the per-IP rate limit below.
+// so the actual abuse protection is the per-IP rate limit and the bot checks
+// in src/lib/leadSpam.mjs, both applied below.
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -146,10 +147,17 @@ export async function OPTIONS() {
 
 export async function POST(request) {
   try {
-    // 20 leads per 10 minutes per IP. A real landing page sends one; this only
-    // ever bites a script.
+    // 10 leads per 10 minutes per IP. A real landing page sends one, and the
+    // headroom is for a shared carrier NAT rather than for a busy visitor. It
+    // was 20; the scripts hitting this rotate addresses, so the ceiling was
+    // only ever costing us on the one thing it does catch — a single noisy
+    // source — and half of it is still far above any honest traffic.
+    //
+    // This is the crude half of the defence, and it is per serverless instance
+    // rather than global. The half that actually discriminates is
+    // classifyLeadSubmission below.
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    if (!rateLimit(`lead-contact:${ip}`, 20)) {
+    if (!rateLimit(`lead-contact:${ip}`, 10)) {
       return withCors({ error: 'rate_limited' }, 429);
     }
 
@@ -174,6 +182,30 @@ export async function POST(request) {
     const utmCampaign = clean(body.utm_campaign ?? body.utmCampaign, 120);
     const referrer = clean(body.referrer, 500) || request.headers.get('referer') || '';
 
+    // Before anything is written, queued or emailed. A submission that fails
+    // here is answered with the same success body a real one gets: a script
+    // told plainly that it was blocked adapts, and the point of the honeypot
+    // and the timer is that they are invisible until someone goes looking.
+    //
+    // Nothing is saved, so there is no spam bucket to sweep later — but that
+    // also means a false positive is a real enquiry lost, which is why the
+    // rules require either something a visitor cannot do by accident or two
+    // separate oddities, and why every drop is logged with its reasons. If a
+    // customer ever reports sending a form that never arrived, the reason is
+    // in this line.
+    const verdict = classifyLeadSubmission({
+      name,
+      email,
+      phone: phoneRaw,
+      honeypot: body[HONEYPOT_FIELD],
+      elapsedMs: body.form_ms,
+      hasBrowserOrigin: Boolean(request.headers.get('origin')),
+    });
+    if (verdict.spam) {
+      console.warn(`[leads/contact] dropped a suspected bot submission from ${ip} (${verdict.reasons.join(', ')}) source=${source}`);
+      return withCors({ success: true, leadId: null, record: 'ignored' });
+    }
+
     if (!name) {
       return withCors({ error: 'name_required' }, 400);
     }
@@ -181,7 +213,14 @@ export async function POST(request) {
       return withCors({ error: 'email_invalid' }, 400);
     }
     // Either channel is enough to follow up, but with neither there is no lead.
-    const phone = phoneRaw ? cleanPhoneNumber(phoneRaw) : '';
+    //
+    // A number too short to dial is dropped rather than rejected: someone who
+    // gave a good email and fumbled the phone is still a lead worth having, and
+    // the forms catch the typo before it gets here anyway. What is refused is a
+    // submission where that unusable number was the only way to reach them —
+    // "Phone: 5" is not a contact point, and a lead saved on one is a row an
+    // agent can only close as unreachable after it has already alerted them.
+    const phone = isDiallablePhone(phoneRaw) ? cleanPhoneNumber(phoneRaw) : '';
     if (!email && !phone) {
       return withCors({ error: 'contact_required' }, 400);
     }

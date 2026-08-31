@@ -84,13 +84,52 @@ export function isAuthorizedTikTokLeadPost(authorization, configuredSecret) {
     && crypto.timingSafeEqual(suppliedBuffer, expectedBuffer);
 }
 
-export function leadNotificationEmailSubject(source, { name = '', slaMinutes = 15 } = {}) {
+/**
+ * What the lead actually is, from the source the form stamped on it.
+ *
+ * Everything that was not TikTok used to be called a landing-page lead, which
+ * was true of the ad funnel and of nothing else: the storefront Contáctenos
+ * dialog posts to the same route from the home page hero, the catalog, the FAQ
+ * and the affiliate pages, and every one of those arrived in the shared inbox
+ * announcing itself as a landing-page lead. Someone triaging could not tell an
+ * enquiry off the website from a lead the company had paid for.
+ *
+ * Matched on the `adwords` prefix rather than the exact `adwords_lp`, so the
+ * standalone AdWordsLeadForm's own `adwords_landing` is recognised too. A
+ * bought-traffic page posting some other source of its own is labelled an
+ * enquiry — the wrong way round, but it still alerts, and its answers are in
+ * the body either way.
+ */
+export function leadNotificationTitle(source) {
+  const value = String(source || '').trim().toLowerCase();
+  if (value === TIKTOK_LEAD_SOURCE) return 'New TikTok form lead';
+  if (value.startsWith('adwords')) return 'New AdWords lead';
+  return 'New website enquiry';
+}
+
+/**
+ * The subject line, which has to answer "where from, who, how urgent" before
+ * anyone opens it.
+ *
+ * `hasDeadline` is what the clock is allowed to depend on. It read
+ * `slaMinutes ? ...` before, and slaMinutes is a setting rather than a fact
+ * about this lead, so every alert claimed a 15-minute response clock —
+ * including the ones the route deliberately never set a deadline on. An
+ * enquiry with no deadline that says (15 min) is not urgent, it is wrong, and
+ * a subject that cries wolf on the unqualified ones is how the qualified ones
+ * stop being read.
+ */
+export function leadNotificationEmailSubject(
+  source,
+  { name = '', slaMinutes = 15, hasDeadline = false } = {},
+) {
   if (String(source || '').trim().toLowerCase() === TIKTOK_LEAD_SOURCE) {
     return TIKTOK_LEAD_EMAIL_SUBJECT;
   }
-  const sourceLabel = source === 'adwords_lp' ? 'AdWords lead' : 'Landing-page lead';
-  const slaLabel = slaMinutes ? ` (${slaMinutes} min)` : '';
-  return `${sourceLabel}${slaLabel} — ${String(name || 'New lead').trim()}`;
+  const sourceLabel = leadNotificationTitle(source).replace(/^New /, '');
+  const label = sourceLabel.charAt(0).toUpperCase() + sourceLabel.slice(1);
+  const slaLabel = hasDeadline && slaMinutes ? ` (${slaMinutes} min)` : '';
+  return `${label}${slaLabel} — ${String(name || 'New lead').trim()}`;
 }
 
 export function tikTokSubmissionRef(externalLeadId) {

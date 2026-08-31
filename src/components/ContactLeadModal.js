@@ -2,6 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, Loader2, X } from 'lucide-react';
+import LeadFormTrap, { useLeadFormTrap } from '@/components/LeadFormTrap';
+import { isDiallablePhone } from '@/lib/leadContact.mjs';
 
 // The storefront "Contáctenos" dialog. It replaced the WhatsApp CTAs, so this
 // is the path for a visitor who wants a person rather than a checkout. It
@@ -23,6 +25,7 @@ const COPY = {
     errName: 'Por favor escriba su nombre.',
     errContact: 'Escriba un correo o un teléfono para poder responderle.',
     errEmail: 'Ese correo no parece válido. Revise que tenga un solo @ y un dominio.',
+    errPhone: 'Ese teléfono no parece válido. Escriba el número completo, con al menos 8 dígitos.',
     errSave: 'No pudimos enviar sus datos. Intente de nuevo.',
   },
   en: {
@@ -40,6 +43,7 @@ const COPY = {
     errName: 'Please enter your name.',
     errContact: 'Add an email or a phone number so we can reply.',
     errEmail: 'That email does not look right. Check for a single @ and a domain.',
+    errPhone: 'That phone number does not look right. Enter the full number, at least 8 digits.',
     errSave: 'We could not send your details. Please try again.',
   },
 };
@@ -54,6 +58,10 @@ export default function ContactLeadModal({ open, onClose, lang = 'es', source = 
   const [sent, setSent] = useState(false);
   const nameRef = useRef(null);
   const dialogRef = useRef(null);
+  // Reset on `open` for the same reason the fields below are: the dialog is
+  // mounted for the whole session, so the clock has to start when the visitor
+  // opens it rather than when the page loaded.
+  const { trapRef, trapFields } = useLeadFormTrap(open);
 
   // Reset on each fresh open so a previous success screen never greets the
   // next visitor who clicks the button.
@@ -115,13 +123,16 @@ export default function ContactLeadModal({ open, onClose, lang = 'es', source = 
     if (!name) { setError(copy.errName); nameRef.current?.focus(); return; }
     if (!email && !phone) { setError(copy.errContact); return; }
     if (email && !EMAIL_RE.test(email)) { setError(copy.errEmail); return; }
+    // Catches the typo while the visitor is still here to fix it, and stops a
+    // number nobody can ring from becoming a lead's only contact point.
+    if (phone && !isDiallablePhone(phone)) { setError(copy.errPhone); return; }
 
     setSending(true);
     try {
       const response = await fetch('/api/leads/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, phone, language: lang, source }),
+        body: JSON.stringify({ name, email, phone, language: lang, source, ...trapFields() }),
       });
       if (!response.ok) throw new Error('save_failed');
       setSent(true);
@@ -161,6 +172,7 @@ export default function ContactLeadModal({ open, onClose, lang = 'es', source = 
           </div>
         ) : (
           <form onSubmit={submit} noValidate>
+            <LeadFormTrap inputRef={trapRef} />
             <h2 id="clone-lead-title">{copy.title}</h2>
             <p className="clone-lead-intro">{copy.intro}</p>
 

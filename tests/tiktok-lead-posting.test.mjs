@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   isAuthorizedTikTokLeadPost,
   leadNotificationEmailSubject,
+  leadNotificationTitle,
   normalizeTikTokLeadPost,
   TIKTOK_ASSIGNEE_EMAIL,
   TIKTOK_LEAD_EMAIL_SUBJECT,
@@ -118,4 +119,50 @@ test('posting instructions name the endpoint, authentication and retry contract'
   assert.match(docs, /New Lead From TikTok Forms/);
   assert.match(docs, /assigned to Yese/i);
   assert.match(docs, /Reuse the same value on retries/i);
+});
+
+test('a storefront enquiry is not dressed up as a paid lead', () => {
+  // The alert in the screenshot: the home page hero Contáctenos button, no
+  // qualification answers, no response deadline — announced as a
+  // "Landing-page lead (15 min)". Both halves of that were untrue.
+  assert.equal(leadNotificationTitle('hero'), 'New website enquiry');
+  assert.equal(
+    leadNotificationEmailSubject('hero', { name: 'Gf', slaMinutes: 15, hasDeadline: false }),
+    'Website enquiry — Gf',
+  );
+});
+
+test('every storefront entry point reads the same', () => {
+  for (const source of ['hero', 'mobile_sticky', 'contact_page', 'about_cta', 'bulk_cta', 'contact_form']) {
+    assert.equal(leadNotificationTitle(source), 'New website enquiry', source);
+  }
+});
+
+test('a paid lead keeps its label and its clock', () => {
+  // Including the standalone AdWordsLeadForm's own source, which is not the
+  // exact 'adwords_lp' the old ternary matched on.
+  for (const source of ['adwords_lp', 'adwords_landing']) {
+    assert.equal(leadNotificationTitle(source), 'New AdWords lead', source);
+    assert.equal(
+      leadNotificationEmailSubject(source, { name: 'Maria', slaMinutes: 15, hasDeadline: true }),
+      'AdWords lead (15 min) — Maria',
+      source,
+    );
+  }
+});
+
+test('the clock follows the lead deadline, not the configured SLA', () => {
+  // slaMinutes is a setting; whether this lead has a deadline is a fact.
+  assert.equal(
+    leadNotificationEmailSubject('adwords_lp', { name: 'Maria', slaMinutes: 15, hasDeadline: false }),
+    'AdWords lead — Maria',
+  );
+});
+
+test('TikTok keeps the subject its own funnel expects', () => {
+  assert.equal(leadNotificationTitle(TIKTOK_LEAD_SOURCE), 'New TikTok form lead');
+  assert.equal(
+    leadNotificationEmailSubject(TIKTOK_LEAD_SOURCE, { name: 'Maria', hasDeadline: false }),
+    TIKTOK_LEAD_EMAIL_SUBJECT,
+  );
 });
