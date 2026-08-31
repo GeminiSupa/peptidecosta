@@ -238,9 +238,32 @@ test('the resend route sends only an approved payout, and only to accounting', (
   // No second transport: the agent cannot be mailed from here.
   assert.doesNotMatch(route, /nodemailer/);
 
-  // A refused address is an error, not a success. That inversion is the whole
-  // reason this route had to be written.
-  assert.match(route, /if \(!accountingCopy\.sent\)/);
+  // A refused address is reported per agent, never folded into a success. That
+  // inversion is the whole reason this route had to be written.
+  assert.match(route, /sent: result\.sent/);
+  assert.match(route, /failedCount/);
+});
+
+test('a whole week can be resent in one call, and one refusal does not sink the rest', () => {
+  const route = fs.readFileSync('src/app/api/admin/commissions/resend-accounting/route.js', 'utf8');
+
+  // The caller names the slips. A date range would let a filter that moved
+  // after the click widen what actually goes out.
+  assert.match(route, /body\?\.payoutIds/);
+  assert.match(route, /\.in\('id', ids\)/);
+
+  // Sequential, because the accounting mailbox is one Rackspace login and a
+  // burst of parallel sends is what gets a mailbox rate limited.
+  assert.match(route, /for \(const payout of payouts\) \{/);
+
+  // resendOne returns a result instead of throwing, so a refusal for one agent
+  // cannot cancel the agents queued behind them.
+  assert.match(route, /async function resendOne\(/);
+  assert.doesNotMatch(route, /Promise\.all/);
+
+  // Every agent comes back named, sent or not.
+  assert.match(route, /results\.push\(await resendOne\(/);
+  assert.match(route, /agent: label/);
 });
 
 test('the payout copy goes to accounting even when the payee send fails', async () => {
