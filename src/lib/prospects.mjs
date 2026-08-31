@@ -81,13 +81,31 @@ const clean = (value, limit = 500) => String(value ?? '').trim().slice(0, limit)
 
 export function prospectSearchTerm(value) {
   const query = clean(value, 180);
-  const lower = query.toLowerCase();
-  if (/(gym|fitness|personal train)/.test(lower)) return 'gym';
-  if (/(wellness|spa)/.test(lower)) return 'wellness';
+  const lower = query
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  // Pharmacies and veterinary practices come first: they are the categories
+  // most worth selling to and, until this list grew, the only way to search for
+  // one was a raw name match with no tag filter behind it — which on OSM finds
+  // almost nothing. Both are among the best-mapped tags there is.
+  if (/(pharmac|farmacia|drogueria|botica)/.test(lower)) return 'pharmacy';
+  if (/(veterinar|animal hospital|mascota)/.test(lower)) return 'veterinary';
+  if (/(distribuidora|distributor|importadora|importer|mayorista|wholesale)/.test(lower)) return 'distributor';
+  if (/(supplement|suplemento|nutraceutic)/.test(lower)) return 'supplements';
+  if (/(dermatolog|plastic surgery|cirugia plastica)/.test(lower)) return 'dermatology';
+  if (/(laborator|research lab)/.test(lower)) return 'laboratory';
   if (/(nutrition|diet)/.test(lower)) return 'nutritionist';
   if (/(recovery|sports medicine|sports clinic)/.test(lower)) return 'sports clinic';
-  if (/(aesthetic|est[eé]tica)/.test(lower)) return 'aesthetic clinic';
-  if (/(laborator|research lab)/.test(lower)) return 'laboratory';
+  if (/(aesthetic|estetica|cosmetic|beauty|belleza)/.test(lower)) return 'aesthetic clinic';
+  if (/(gym|fitness|personal train|gimnasio|crossfit)/.test(lower)) return 'gym';
+  if (/(wellness|spa|bienestar)/.test(lower)) return 'wellness';
+  if (/(hospital|medical cent|centro medico)/.test(lower)) return 'medical center';
+  // Last of the medical profiles on purpose. It is the broadest — a great many
+  // Costa Rican businesses are simply "Clínica <name>" — so anything more
+  // specific has to get its answer before this line is reached. "laboratorio
+  // clínico" and "sports clinic" both contain "clinic" and are not clinics.
+  if (/(clinic|clinica|doctor|medico)/.test(lower)) return 'clinic';
   return query;
 }
 
@@ -126,6 +144,53 @@ export function prospectSearchProfile(value) {
     term,
     namePattern: 'laboratory|laboratorio|research lab',
     tagFilters: [['amenity', '^laboratory$'], ['healthcare', '^laboratory$'], ['office', '^research$']],
+  };
+  // amenity=pharmacy is one of the most consistently mapped tags in OSM, so
+  // this profile finds real coverage rather than whatever happens to have the
+  // word in its name. shop=chemist catches the drugstore that sells without a
+  // dispensary; shop=medical_supply catches the supplier beside it.
+  if (lower === 'pharmacy') return {
+    term,
+    namePattern: 'farmacia|pharmac|drogueria|droguería|botica',
+    tagFilters: [
+      ['amenity', '^pharmacy$'],
+      ['healthcare', '^pharmacy$'],
+      ['shop', '^(chemist|medical_supply)$'],
+    ],
+  };
+  if (lower === 'veterinary') return {
+    term,
+    namePattern: 'veterinar|mascota|animal',
+    tagFilters: [['amenity', '^veterinary$'], ['healthcare', '^veterinary$'], ['shop', '^pet$']],
+  };
+  // Wholesalers and importers are mapped as trade or wholesale rather than
+  // retail, and are the businesses that buy by the case.
+  if (lower === 'distributor') return {
+    term,
+    namePattern: 'distribuidora|distributor|importadora|mayorista|wholesale',
+    tagFilters: [['shop', '^(wholesale|trade)$'], ['office', '^(company|wholesale)$']],
+  };
+  if (lower === 'supplements') return {
+    term,
+    namePattern: 'suplemento|supplement|nutraceutic|vitamina',
+    tagFilters: [['shop', '^(nutrition_supplements|health_food|herbalist)$']],
+  };
+  if (lower === 'dermatology') return {
+    term,
+    namePattern: 'dermatolog|cirugia plastica|cirugía plástica|plastic surgery',
+    tagFilters: [['healthcare', '^(dermatology|plastic_surgery)$'], ['healthcare:speciality', 'dermatology']],
+  };
+  if (lower === 'medical center') return {
+    term,
+    namePattern: 'hospital|centro medico|centro médico|medical cent',
+    tagFilters: [['amenity', '^hospital$'], ['healthcare', '^(hospital|centre)$']],
+  };
+  // The broadest of the medical profiles, so it sits last among them: a great
+  // many Costa Rican businesses are simply "Clínica <name>".
+  if (lower === 'clinic') return {
+    term,
+    namePattern: 'clinica|clínica|clinic|consultorio',
+    tagFilters: [['amenity', '^(clinic|doctors)$'], ['healthcare', '^(clinic|doctor|centre)$']],
   };
   return { term, namePattern: term, tagFilters: [] };
 }
