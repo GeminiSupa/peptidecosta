@@ -4,6 +4,7 @@ import "./globals.css";
 import UTMTracker from "@/components/UTMTracker";
 import GlobalContactForm from "@/components/GlobalContactForm";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
+import GoogleReviewsBadge from "@/components/GoogleReviewsBadge";
 import { LIVE_SITE_URL } from "@/lib/publicUrl";
 import { getTikTokPixelBootstrapScript } from "@/lib/tiktokPixel.mjs";
 
@@ -228,6 +229,9 @@ export default async function RootLayout({ children }) {
         <AnalyticsTracker />
         <UTMTracker />
         <GlobalContactForm />
+        {/* Google's seller-rating badge. Hides itself on /admin and /embed,
+            and renders nothing at all when NEXT_PUBLIC_GCR_BADGE=off. */}
+        <GoogleReviewsBadge />
         {/* Google Tag Manager */}
         <Script id="gtm" strategy="lazyOnload">
           {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':

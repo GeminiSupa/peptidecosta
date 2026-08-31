@@ -2,12 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  GCR_BADGE_POSITION,
   GCR_DEFAULT_COUNTRY,
   GCR_MERCHANT_ID,
   addBusinessDays,
+  badgeLanguage,
   buildReviewOptInRecord,
   crToday,
   estimatedDeliveryDate,
+  reviewBadgeConfig,
   reviewOptInPayload,
 } from '../src/lib/googleCustomerReviews.mjs';
 
@@ -80,4 +83,47 @@ test('an incomplete order is not asked at all', () => {
 
 test('the estimate is always a real future-shaped date', () => {
   assert.match(estimatedDeliveryDate(new Date('2026-09-03T15:00:00.000Z')), /^\d{4}-\d{2}-\d{2}$/);
+});
+
+/* The seller-rating badge. */
+
+test('the badge stays out of the corner the cart button owns', () => {
+  // Google's wrapper sits at z-index 2147483647, so the corner it takes it
+  // takes outright. Bottom-right is the catalog's cart button.
+  assert.equal(GCR_BADGE_POSITION, 'LEFT_BOTTOM');
+  assert.equal(reviewBadgeConfig().position, 'LEFT_BOTTOM');
+});
+
+test('the badge asks for the rating of the country this shop ships to', () => {
+  // Seller ratings are held per country. Left to its own locale guessing
+  // Google can land on one with no rating and draw "no rating available" over
+  // a rating that exists.
+  assert.equal(reviewBadgeConfig().region, GCR_DEFAULT_COUNTRY);
+  assert.equal(reviewBadgeConfig().merchant_id, GCR_MERCHANT_ID);
+});
+
+test('a region Google could not read is dropped, not forwarded', () => {
+  // Better Google's own fallback than a value it has to reject.
+  assert.equal('region' in reviewBadgeConfig({ region: 'Costa Rica' }), false);
+  assert.equal('region' in reviewBadgeConfig({ region: '' }), false);
+  assert.equal(reviewBadgeConfig({ region: 'us' }).region, 'US');
+});
+
+test('the badge speaks the page language, and Spanish when unsure', () => {
+  assert.equal(badgeLanguage('en'), 'en');
+  assert.equal(badgeLanguage('es'), 'es');
+  // The storefront is written in two languages; anything else — a stale stored
+  // value, a stray ?lang — reads as the site default rather than as English.
+  assert.equal(badgeLanguage('fr'), 'es');
+  assert.equal(badgeLanguage(null), 'es');
+  assert.equal(reviewBadgeConfig({ language: 'en' }).language, 'en');
+  assert.equal(reviewBadgeConfig({}).language, 'es');
+});
+
+test('the badge can be switched off without a code change', () => {
+  // It renders "no rating available" until enough surveys come back, which is
+  // a worse trust signal than showing nothing. Null keeps Google's script off
+  // the page entirely rather than loading it and hiding the result.
+  assert.equal(reviewBadgeConfig({ enabled: false }), null);
+  assert.equal(reviewBadgeConfig({ merchantId: 0 }), null);
 });

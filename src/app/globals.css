@@ -6812,6 +6812,82 @@ body:has(.cart-drawer.active) .lcw-prompt {
   display: none;
 }
 
+/* ---------------------------------------------------------------------------
+   Google's seller-rating badge (src/components/GoogleReviewsBadge.js)
+
+   Everything here contends with one fact: merchantwidget.js fixes its wrapper
+   at z-index 2147483647 using inline styles, so it outranks every overlay this
+   site draws and nothing short of !important moves it.
+
+   Each rule targets #google-merchantwidget-iframe-wrapper, the id Google gives
+   that wrapper. If Google ever renames it, these rules stop matching rather
+   than break: the badge falls back to its own default placement, which is
+   untidy in a couple of places but never broken.
+   --------------------------------------------------------------------------- */
+
+/* Off the admin dashboard and out of the /embed iframe. A class rather than
+   unmounting, because the wrapper is Google's element and it stays behind in
+   <body> after our <Script> has gone. */
+body.hide-reviews-badge #google-merchantwidget-iframe-wrapper {
+    display: none !important;
+}
+
+/* The same overlays that used to swallow the chat launcher, and a worse
+   mismatch: the badge outranks the access gate (9999) and the cart drawer
+   (1101) by nine digits. On a phone, where the drawer is full width, it lands
+   squarely on the checkout button.
+
+   Hiding rather than nudging — a customer part-way through paying does not
+   need a review badge, and Google's "don't obscure the widget" rule is about
+   covering it with our content, which is exactly what the alternative does.
+
+   :has() needs Safari 15.4+ / Chrome 105+; older browsers drop the rule and
+   get the badge over the drawer, the same trade the launcher rules above make. */
+body:has([aria-modal="true"]) #google-merchantwidget-iframe-wrapper,
+body:has(.cart-drawer.active) #google-merchantwidget-iframe-wrapper {
+    display: none !important;
+}
+
+/* Clear of the marketing pages' sticky Catálogo / Contáctenos bar — the same
+   lift .lcw-launcher takes above, off the same class MobileActionBar puts on
+   <body>. A class and not :has(), so it holds on older browsers too.
+
+   Moved with transform rather than by raising `bottom`, which does not work
+   here and looks like it should: Google writes `bottom` into the wrapper's
+   inline style with !important on it, and an inline !important outranks an
+   !important in a stylesheet. It is the one declaration on this element that
+   cannot be overridden from CSS. Nothing sets `transform`, so a plain
+   transform wins, and the badge drops back to Google's own resting offset on
+   every page without the bar.
+
+   That offset is 30px here, not the 20px Google uses on a desktop: the widget
+   switches to its mobile margins below 480px. The bar is 62px tall on
+   max(12px, safe-area), so lifting by 50px plus the inset puts the badge's
+   bottom edge 18px above the top of the bar. The same max() is repeated rather
+   than a bare env(): on a phone with a home indicator the bar rises, and a
+   badge that only added the inset would overlap it again.
+
+   Capped at 768px, the width above which the bar is display:none. That is
+   deliberately wider than merchantwidget's own 480px desktop/mobile split, so
+   the 481-768px band — where Google still thinks it is drawing a desktop badge
+   but our bar is on screen — is covered too.
+
+   No transition on it, though one would suit the bar's own .2s fade. Google
+   sizes the wrapper 0x0 and lets the iframe inside overflow it, and Chrome
+   does not tick transitions on a box with no area: the property stays pinned
+   at its start value and the badge never moves at all. Measured, not guessed —
+   with the transition the computed transform stayed at translateY(0). */
+@media (max-width: 768px) {
+    body.has-mobile-action-bar #google-merchantwidget-iframe-wrapper {
+        /* Plain value first, calc() second: a browser too old for max() drops
+           the calc() as invalid and keeps the flat -62px, which clears the bar
+           on a phone with no home indicator. */
+        transform: translateY(-62px);
+        transform: translateY(calc(-50px - max(12px, env(safe-area-inset-bottom, 0px))));
+    }
+}
+
+
 @media (max-width: 768px) {
   .catalog-page-shell > .promo-banner-global,
   .catalog-page-shell > .promo-banner-global .promo-banner-ticker,

@@ -135,3 +135,82 @@ export function reviewOptInPayload(record = {}, merchantId = GCR_MERCHANT_ID) {
     estimated_delivery_date: deliveryDate,
   };
 }
+
+/* -------------------------------------------------------------------------
+ * The seller-rating badge
+ *
+ * A different Google widget from the opt-in above, and a different decision.
+ * The opt-in is transactional: it appears once, to a customer who has just
+ * bought something. The badge is marketing — a small floating panel on every
+ * public page, showing the seller rating those surveys eventually earn.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Bottom-left, and not as a matter of taste.
+ *
+ * Google fixes its wrapper at z-index 2147483647, above everything this site
+ * draws, so whichever corner it takes it takes outright. The bottom-right
+ * corner is already spoken for on every page that matters: the catalog's cart
+ * button (right 24px), the landing page's floating CTA (right 22px) and the
+ * toast stack (right 24px). A badge there would cover the one control a
+ * customer needs in order to pay.
+ *
+ * Bottom-left is free. The live-chat launcher is written for that corner but
+ * is not mounted anywhere; if it is ever mounted, the two need separating, and
+ * this is the comment that says why.
+ */
+export const GCR_BADGE_POSITION = 'LEFT_BOTTOM';
+
+/**
+ * An off switch, because the badge can say the wrong thing.
+ *
+ * Until enough surveys come back, Google draws "no rating available" rather
+ * than drawing nothing — a standing "this shop has no reviews" notice in the
+ * corner of every page, which is worse than no badge at all. Setting
+ * NEXT_PUBLIC_GCR_BADGE=off takes it down without a deploy of new code.
+ */
+export const GCR_BADGE_ENABLED =
+  String(process.env.NEXT_PUBLIC_GCR_BADGE ?? '').trim().toLowerCase() !== 'off';
+
+/** The two languages the storefront is written in. */
+const BADGE_LANGUAGES = new Set(['es', 'en']);
+
+/**
+ * The badge speaks whatever language the rest of the page is speaking.
+ *
+ * Spanish is the fallback rather than English: it is the document default
+ * (`<html lang="es">`) and the language of the one market this shop ships to.
+ */
+export function badgeLanguage(value) {
+  const code = String(value ?? '').trim().toLowerCase().slice(0, 2);
+  return BADGE_LANGUAGES.has(code) ? code : 'es';
+}
+
+/**
+ * What `merchantwidget.start` expects, or null when the badge should not run.
+ *
+ * The region is pinned rather than left to Google's own locale guessing.
+ * Seller ratings are held per country, this shop ships to exactly one, and a
+ * guess that lands on the wrong country renders "no rating available" over a
+ * rating that exists.
+ */
+export function reviewBadgeConfig({
+  merchantId = GCR_MERCHANT_ID,
+  enabled = GCR_BADGE_ENABLED,
+  language,
+  region = GCR_DEFAULT_COUNTRY,
+} = {}) {
+  if (!enabled) return null;
+  if (!merchantId) return null;
+
+  const country = normalizeCountry(region);
+
+  return {
+    merchant_id: merchantId,
+    position: GCR_BADGE_POSITION,
+    language: badgeLanguage(language),
+    // An unreadable region code is dropped rather than forwarded: Google then
+    // falls back to its own logic, which beats handing it something invalid.
+    ...(/^[A-Z]{2}$/.test(country) ? { region: country } : {}),
+  };
+}
