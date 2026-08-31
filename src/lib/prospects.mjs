@@ -6,6 +6,11 @@ import {
   summarizeChannelPermissions,
 } from './prospectPermissions.mjs';
 import { whatsappDialableNumber } from './prospectPhone.mjs';
+import {
+  CATEGORY_TIER_POINTS,
+  PROSPECT_CATEGORY_TIERS,
+  categoryTier,
+} from './prospectCategories.mjs';
 
 export const PROSPECT_STATUSES = [
   'discovered',
@@ -211,11 +216,34 @@ const TARGET_CATEGORY_STEMS = [
   'clinic', 'clinica', 'doctor', 'medical', 'health centre', 'health center', 'health consultant',
   'aesthetic', 'esthetic', 'cosmetic', 'beauty',
   'laboratory', 'laboratorio', 'research',
+  // The businesses that actually resell, which this list was missing entirely.
+  // A directory calls them "pharmacy" and a Costa Rican shopfront calls itself
+  // "Farmacia La Bomba" or "Droguería Intermed", and neither contained any
+  // fragment above, so the best prospects in the country scored 5 out of 100.
+  'pharmacy', 'farmacia', 'pharmaceutic', 'farmaceutic', 'drogueria', 'apothecary',
+  'distributor', 'distribuidora', 'importer', 'importadora', 'wholesale',
+  'veterinar', 'animal hospital', 'pet clinic',
+  'biotech', 'biomedic', 'nutraceutical', 'supplement', 'suplemento',
+  'dermatolog', 'surgery', 'cirugia', 'medicine', 'medicina', 'longevity', 'hormone',
+  'skincare', 'skin care',
 ];
 
-/** Flattens `Fitness_Centre` and `fitness centre` onto the same string. */
+/**
+ * Flattens `Fitness_Centre` and `fitness centre` onto the same string.
+ *
+ * Accents are folded first, which they were not before. Stripping non-letters
+ * from "Cl\u00ednica Est\u00e9tica" turned the \u00ed and \u00e9 into spaces and left
+ * "cl nica est tica", so the 'clinica' fragment below never matched a clinic
+ * that spelled its own name correctly — in a market where nearly all of them
+ * do. Same for "Drogu\u00eder\u00eda" and "Farmac\u00e9utica".
+ */
 function flattenCategory(value) {
-  return clean(value, 240).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return clean(value, 240)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 }
 
 export function matchesTargetCategory(prospect = {}) {
@@ -235,7 +263,16 @@ export function scoreProspect(prospect = {}) {
   let score = 5;
   const reasons = [];
 
-  if (matchesTargetCategory(prospect)) {
+  // A row carrying a controlled key is scored by what it actually is. Tier 5 is
+  // worth the 45 that every target category used to score, so gyms and clinics
+  // keep exactly the number they had and only the tiers above them move — a
+  // rescore can lift a prospect, never demote one.
+  const tier = categoryTier(prospect.category);
+  if (tier) {
+    score += CATEGORY_TIER_POINTS[tier];
+    reasons.push(`${PROSPECT_CATEGORY_TIERS[tier].label} (tier ${tier})`);
+  } else if (matchesTargetCategory(prospect)) {
+    // Everything discovered from a directory, which never carries a key.
     score += 45;
     reasons.push('Target business category');
   }
