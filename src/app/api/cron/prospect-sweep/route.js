@@ -7,7 +7,12 @@ import {
   normalizeOverpassElement,
   overpassEndpoints,
 } from '@/lib/prospects.mjs';
-import { nextSweepBatch, sweepOverpassQuery, SWEEP_TASK_COUNT } from '@/lib/prospectSweep.mjs';
+import {
+  nextSweepBatch,
+  sweepOverpassQuery,
+  SWEEP_RESULT_LIMIT,
+  SWEEP_TASK_COUNT,
+} from '@/lib/prospectSweep.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -86,6 +91,10 @@ export async function GET(request) {
     let saved = 0;
     let skipped = 0;
     const errors = [];
+    // A cell that comes back exactly full was truncated, and the businesses
+    // past the limit are invisible rather than missing-looking. Reported so the
+    // grid can be split before anyone trusts the sweep as complete.
+    const saturated = [];
 
     for (const task of tasks) {
       const query = sweepOverpassQuery(task.term, task.cell);
@@ -99,7 +108,12 @@ export async function GET(request) {
         continue;
       }
 
-      const candidates = (payload.elements || [])
+      const elements = payload.elements || [];
+      if (elements.length >= SWEEP_RESULT_LIMIT) {
+        saturated.push(`${task.term} @ ${task.cell.row},${task.cell.col}`);
+      }
+
+      const candidates = elements
         .map((element) => normalizeOverpassElement(element))
         .filter((row) => row && row.organization_name && row.fit_score >= MIN_FIT_SCORE);
       found += candidates.length;
@@ -155,6 +169,7 @@ export async function GET(request) {
       alreadyTracked: skipped,
       progress: `${nextCursor}/${SWEEP_TASK_COUNT}`,
       passCompleted: wrapped,
+      ...(saturated.length ? { saturated } : {}),
       ...(errors.length ? { errors } : {}),
     });
   } catch (err) {

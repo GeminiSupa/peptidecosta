@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { MAX_SEARCH_AREA_DEGREES } from '../src/lib/prospectMap.mjs';
 import {
   COSTA_RICA_BBOX,
+  SWEEP_RESULT_LIMIT,
   SWEEP_TASK_COUNT,
   SWEEP_TERMS,
   nextSweepBatch,
@@ -98,5 +99,13 @@ test('the pharmacy query asks for the tag, the name, and the cell', () => {
   assert.match(query, /\["amenity"="pharmacy"\]/);
   assert.match(query, /farmacia/);
   assert.match(query, new RegExp(`\\(${cell.south},${cell.west},${cell.north},${cell.east}\\)`));
-  assert.match(query, /out tags center 80;$/);
+  assert.match(query, new RegExp(`out tags center ${SWEEP_RESULT_LIMIT};$`));
+});
+
+test('one query can return far more than the interactive search shows', () => {
+  // The 80 the admin search asks for is right for a person reading a list. It
+  // was copied here by mistake: the San José cell holds 514 pharmacies, so 80
+  // discarded 84% of them while the sweep looked like it had covered the
+  // country.
+  assert.ok(SWEEP_RESULT_LIMIT >= 600, 'measured worst case in one cell was 514');
 });

@@ -30,20 +30,30 @@ import { expandAnchoredTagPattern, prospectSearchProfile } from './prospects.mjs
 export const COSTA_RICA_BBOX = { south: 8.02, west: -85.96, north: 11.22, east: -82.55 };
 
 /**
- * The grid is for result volume, not for the area limit.
+ * The grid keeps every cell under the area limit, above which name matching is
+ * switched off — and name matching is what finds "Farmacia La Bomba" when the
+ * mapper never tagged it as a pharmacy.
  *
- * The whole country is about 11 square degrees, just inside the 12 the search
- * accepts — but Overpass is asked for `out ... 80`, so one query returns at
- * most 80 businesses however large the box. A single country-wide sweep for
- * pharmacies would quietly return 80 of them and look complete.
- *
- * Sixteen cells of roughly 0.8 x 0.85 degrees each raise that ceiling to 1,280
- * per business type, and keep every cell far enough under the area limit that
- * name matching stays switched on — it is disabled for large boxes, and name
- * matching is what finds "Farmacia La Bomba" when the mapper never tagged it.
+ * It is not there to work around the result cap. See SWEEP_RESULT_LIMIT.
  */
 export const SWEEP_ROWS = 4;
 export const SWEEP_COLS = 4;
+
+/**
+ * How many businesses one query may return.
+ *
+ * The interactive search asks for 80, which is right for a person reading a
+ * list and waiting on it. Copying that number into a background job was a
+ * mistake worth writing down: the San José cell holds 514 pharmacies, so 80
+ * silently discarded 84% of them and the sweep would have looked like it had
+ * covered the country.
+ *
+ * 800 is set against a measured worst case of 514 in the densest cell for the
+ * densest category, and costs about 100KB of response. A cell that ever comes
+ * back with exactly this many is reported as saturated by the cron rather than
+ * quietly truncated, because that is the signal the grid needs splitting.
+ */
+export const SWEEP_RESULT_LIMIT = 800;
 
 /**
  * What to sweep for, hardest-to-find first.
@@ -150,5 +160,5 @@ export function sweepOverpassQuery(term, cell) {
   // The same generous declared timeout the interactive search uses: Overpass
   // schedules on the number it is given, so asking for too little is refused
   // rather than served quickly.
-  return `[out:json][timeout:40];(${clauses.join('')});out tags center 80;`;
+  return `[out:json][timeout:40];(${clauses.join('')});out tags center ${SWEEP_RESULT_LIMIT};`;
 }

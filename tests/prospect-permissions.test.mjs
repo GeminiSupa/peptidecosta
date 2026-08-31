@@ -23,6 +23,10 @@ const enrichRoute = await readFile(
   new URL('../src/app/api/admin/prospects/enrich/route.js', import.meta.url),
   'utf8',
 );
+const enrichRunner = await readFile(
+  new URL('../src/lib/prospectEnrichmentRunner.mjs', import.meta.url),
+  'utf8',
+);
 
 test('channel fields never fall back to the historic global permission', () => {
   const legacy = { contact_permission_status: 'business_contact' };
@@ -79,6 +83,9 @@ test('API accepts structured channel evidence and enrichment reports exact chann
   assert.match(prospectRoute, /body\.channel_permissions\[channel\]/);
   assert.match(prospectRoute, /A source URL is required to verify the published/);
   assert.match(prospectRoute, /hasUsableProspectWhatsAppIdentity\(candidate\)/);
-  assert.match(enrichRoute, /emailPermissionSourceUrl/);
-  assert.match(enrichRoute, /whatsappPermissionSourceUrl/);
+  // The scan itself moved to src/lib/prospectEnrichmentRunner.mjs so the
+  // background worker could run it too; the route is now a thin wrapper.
+  assert.match(enrichRunner, /emailPermissionSourceUrl/);
+  assert.match(enrichRunner, /whatsappPermissionSourceUrl/);
+  assert.match(enrichRoute, /enrichFromWebsite/);
 });

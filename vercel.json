@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/prospect-sweep",
       "schedule": "15,45 * * * *"
+    },
+    {
+      "path": "/api/cron/prospect-enrich",
+      "schedule": "0,30 * * * *"
     }
   ]
 }
