@@ -516,6 +516,11 @@ export default function CatalogPage() {
   // against the drawer's 1101), burying the total and the checkout button.
   // Opening the cart takes the gate down and stops the clock; closing it
   // starts the wait over, so the ask is deferred rather than spent.
+  //
+  // And never over anyone holding a cart at all, drawer open or not. Deferring
+  // only while the drawer was open meant a visitor who added a vial and closed
+  // it to keep shopping was gated fifteen seconds later anyway — which was the
+  // whole point of the exemption, missed by a click.
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -523,16 +528,18 @@ export default function CatalogPage() {
     setGateAccessGranted(hasAccess);
     setGateLoading(false);
 
-    // The other order of events: the cart is opened while the gate is already
-    // up — the reorder, stock-limit and recovered-cart flows all open the
-    // drawer without a click.
-    if (isCartOpen) setGateVisible(false);
+    // The other order of events: the cart fills while the gate is already up.
+    // The reorder, stock-limit and recovered-cart flows all open the drawer
+    // without a click, and a returning visitor's saved cart is read out of
+    // localStorage a moment after mount — after this effect has already run
+    // once on an empty one.
+    if (isCartOpen || cartItemCount > 0) setGateVisible(false);
 
-    if (!shouldScheduleAccessGate({ hasAccess, catalogLoading: loading, isCartOpen })) return;
+    if (!shouldScheduleAccessGate({ hasAccess, catalogLoading: loading, isCartOpen, cartItemCount })) return;
 
     const timer = setTimeout(() => setGateVisible(true), CATALOG_GATE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [loading, isCartOpen]);
+  }, [loading, isCartOpen, cartItemCount]);
 
   // Second-chance WhatsApp opt-in re-prompt: for visitors who unlocked the
   // catalog but never opted in. Fires once (after 15s), at most once / 3 days,
