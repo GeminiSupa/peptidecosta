@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Zap, Loader, AlertTriangle, CheckCircle, Megaphone, RotateCcw, Clock, Search, X } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { formatCrInstant } from '@/lib/crTime.mjs';
-import { toPercent } from '@/lib/dealOfWeek.mjs';
+import { toPercent, hasUntrackedStock, isUnavailableForDeal } from '@/lib/dealOfWeek.mjs';
 
 /**
  * Deal of the Week — one promotion a week, ending Sunday midnight Costa Rica.
@@ -77,13 +77,13 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
   const outOfStockSelected = useMemo(() => (
     selected.filter((name) => {
       const row = products.find((p) => p.product === name);
-      return row && (row.status !== 'In Stock' || Number(row.inventoryCount) === 0);
+      return row && isUnavailableForDeal(row);
     })
   ), [selected, products]);
   const untrackedStockSelected = useMemo(() => (
     selected.filter((name) => {
       const row = products.find((p) => p.product === name);
-      return row && row.inventoryCount === null;
+      return row && hasUntrackedStock(row);
     })
   ), [selected, products]);
   const visibleProducts = useMemo(() => {

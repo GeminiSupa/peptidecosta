@@ -27,6 +27,8 @@ import {
   dealCatalogUrl,
   dealSafety,
   toPercent,
+  hasUntrackedStock,
+  isUnavailableForDeal,
 } from '@/lib/dealOfWeek.mjs';
 
 const BANNERS_SETTING_ID = 'announcement_banners';
@@ -291,13 +293,11 @@ export async function launchDeal({
   }
 
   const products = await resolveProducts(supabase, productNames);
-  const unavailable = products.filter((product) => (
-    product.status !== 'In Stock' || Number(product.inventory_count) === 0
-  ));
+  const unavailable = products.filter(isUnavailableForDeal);
   if (unavailable.length > 0) {
     throw new Error(`These products cannot be promoted because they are not available: ${unavailable.map((p) => p.product).join(', ')}`);
   }
-  const untracked = products.filter((product) => product.inventory_count === null);
+  const untracked = products.filter(hasUntrackedStock);
   if (untracked.length > 0 && !allowUntrackedStock) {
     throw new Error(`Confirm untracked stock before launch: ${untracked.map((p) => p.product).join(', ')}`);
   }
