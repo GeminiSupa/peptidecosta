@@ -6887,6 +6887,45 @@ body:has(.cart-drawer.active) #google-merchantwidget-iframe-wrapper {
     }
 }
 
+/* And clear the catalog's own bottom bar, which is a separate element on a
+   page the rule above never matches: /catalog renders no MobileActionBar, so
+   <body> never gets the class and the badge sat at its resting 30px, straight
+   on top of the bar.
+
+   Keyed on the wrapper existing rather than on `.has-items`, which is how the
+   .lcw-launcher rules further up read it. That class only tells us *which*
+   control the bar is holding, not whether it is holding one: with items it is
+   the checkout button, and with an empty cart it is "Ordenar por WhatsApp" —
+   the one thing a browsing customer is being asked to press, and the one the
+   badge was covering. The wrapper is empty only while the cart drawer is open,
+   and the rule above already hides the badge outright for that.
+
+   Lifted by transform for the same reason as the bar above: Google writes
+   `bottom` into the wrapper's inline style with !important, which no
+   stylesheet can outrank.
+
+   76px is measured off the bar rather than guessed. It is `position: fixed;
+   bottom: 0` with `padding-bottom: calc(16px + safe-area)`, so its button's
+   top edge sits 16px + the inset + the button's own height above the viewport
+   floor — 80px + inset for the 64px WhatsApp button, a few more for the taller
+   two-line checkout button. Google's resting offset is 30px below 480px wide
+   and 20px above it, so a 76px lift clears the taller of the two buttons in
+   either band and still leaves a visible gap.
+
+   Capped at 899px to match the launcher rules and the bar's own breakpoint:
+   from 900px up the bar centres a 560px-wide button and moves to bottom: 24px,
+   well clear of a badge pinned to the left edge.
+
+   :has() again, as in the launcher's cart rule right above — there is no body
+   class to key off here, and where :has() is missing the rule is dropped in
+   silence and the overlap comes back, which is the same trade that one makes. */
+@media (max-width: 899px) {
+    body:has(.cart-container-wrapper) #google-merchantwidget-iframe-wrapper {
+        transform: translateY(-76px);
+        transform: translateY(calc(-76px - env(safe-area-inset-bottom, 0px)));
+    }
+}
+
 
 @media (max-width: 768px) {
   .catalog-page-shell > .promo-banner-global,
