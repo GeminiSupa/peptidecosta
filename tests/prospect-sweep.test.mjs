@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { MAX_SEARCH_AREA_DEGREES } from '../src/lib/prospectMap.mjs';
 import {
+  CENTRAL_VALLEY,
   COSTA_RICA_BBOX,
   SWEEP_RESULT_LIMIT,
   SWEEP_TASK_COUNT,
@@ -108,4 +109,32 @@ test('one query can return far more than the interactive search shows', () => {
   // discarded 84% of them while the sweep looked like it had covered the
   // country.
   assert.ok(SWEEP_RESULT_LIMIT >= 600, 'measured worst case in one cell was 514');
+});
+
+test('the sweep starts where the businesses are, not in the Pacific', () => {
+  // Row-major order put two cells of open ocean first — verified as holding
+  // zero pharmacies — and did not reach the Central Valley until the ninth.
+  // At two cells a run that was two and a half hours of a working job looking
+  // broken.
+  const cells = sweepCells();
+  const centre = (cell) => ({ lat: (cell.south + cell.north) / 2, lon: (cell.west + cell.east) / 2 });
+
+  const first = centre(cells[0]);
+  assert.ok(Math.abs(first.lat - CENTRAL_VALLEY.lat) < 0.5, 'first cell should be Central Valley latitude');
+  assert.ok(Math.abs(first.lon - CENTRAL_VALLEY.lon) < 0.6, 'first cell should be Central Valley longitude');
+
+  // San José itself has to fall inside the very first cell swept.
+  const sanJose = { lat: 9.93, lon: -84.08 };
+  assert.ok(
+    sanJose.lat >= cells[0].south && sanJose.lat <= cells[0].north
+    && sanJose.lon >= cells[0].west && sanJose.lon <= cells[0].east,
+    'San José must be in the first cell',
+  );
+
+  // Distances rise monotonically, so the emptiest corners sort to the back.
+  const distances = cells.map((cell) => {
+    const c = centre(cell);
+    return Math.hypot(c.lat - CENTRAL_VALLEY.lat, c.lon - CENTRAL_VALLEY.lon);
+  });
+  assert.deepEqual(distances, [...distances].sort((a, b) => a - b));
 });

@@ -79,7 +79,27 @@ export const SWEEP_TERMS = [
   'gym',
 ];
 
-/** The map cells, left to right and top to bottom. */
+/**
+ * Roughly the middle of the Central Valley.
+ *
+ * San José, Heredia, Alajuela and Cartago sit within about 30km of here, and
+ * with them the large majority of every business this sells to.
+ */
+export const CENTRAL_VALLEY = { lat: 9.95, lon: -84.10 };
+
+/**
+ * The map cells, nearest the Central Valley first.
+ *
+ * Row-major order looked tidy and started the sweep in the Pacific: the first
+ * two cells are open ocean off the Nicoya coast, verified as holding zero
+ * pharmacies, and the Central Valley did not come up until the ninth. Two
+ * cells a run, half an hour apart, meant two and a half hours of a job that
+ * was working correctly and looked broken.
+ *
+ * Distance from one point is enough. It needs no population data, stays
+ * deterministic so the cursor means the same thing on every deploy, and it
+ * sorts the ocean to the back on its own — the empty cells are the far ones.
+ */
 export function sweepCells(bbox = COSTA_RICA_BBOX, rows = SWEEP_ROWS, cols = SWEEP_COLS) {
   const latStep = (bbox.north - bbox.south) / rows;
   const lonStep = (bbox.east - bbox.west) / cols;
@@ -96,7 +116,16 @@ export function sweepCells(bbox = COSTA_RICA_BBOX, rows = SWEEP_ROWS, cols = SWE
       });
     }
   }
-  return cells;
+  // Straight-line distance on the raw degrees. Costa Rica spans three degrees
+  // of latitude, so the error from not correcting for longitude convergence is
+  // far smaller than the cell size this is ordering.
+  return cells.sort((a, b) => distanceFromCentre(a) - distanceFromCentre(b));
+}
+
+function distanceFromCentre(cell) {
+  const lat = (cell.south + cell.north) / 2 - CENTRAL_VALLEY.lat;
+  const lon = (cell.west + cell.east) / 2 - CENTRAL_VALLEY.lon;
+  return Math.hypot(lat, lon);
 }
 
 /**
