@@ -45,12 +45,20 @@ import { readNdjsonStream } from '@/lib/ndjsonStream.mjs';
 import ProspectMap from '@/components/admin/prospector/ProspectMap';
 import LocationCombobox from '@/components/admin/prospector/LocationCombobox';
 import prospectorStyles from '@/components/admin/prospector/prospectorStyles';
+import { categoriesByTier } from '@/lib/prospectCategories.mjs';
+
+/** Static, so the picker is not regrouped on every keystroke in the form. */
+const CATEGORY_GROUPS = categoriesByTier();
 
 const EMPTY_FORM = {
   organization_name: '',
   category: '',
   phone: '',
   email: '',
+  // Where the address was published. Without it the prospect saves fine and
+  // then refuses to send, with nothing on the form to say why — so it is asked
+  // for here, beside the address it justifies, rather than discovered later.
+  email_permission_source_url: '',
   website_url: '',
   formatted_address: '',
   city: '',
@@ -745,7 +753,18 @@ export default function ProspectorManager({ currentUserProfile }) {
 
   const saveManualProspect = async (event) => {
     event.preventDefault();
-    const saved = await saveProspect({ ...manualForm, source_provider: 'manual' });
+    // A source URL is the evidence the send gate asks for. Supplying it here
+    // marks the address as a published business contact in the same write, so a
+    // prospect added by hand can be contacted immediately instead of being
+    // saved and then blocked.
+    const sourceUrl = manualForm.email_permission_source_url.trim();
+    const saved = await saveProspect({
+      ...manualForm,
+      source_provider: 'manual',
+      ...(manualForm.email.trim() && sourceUrl
+        ? { email_permission_status: 'business_contact', email_permission_source_url: sourceUrl }
+        : {}),
+    });
     if (saved) {
       setManualForm(EMPTY_FORM);
       setManualOpen(false);
@@ -2428,9 +2447,23 @@ export default function ProspectorManager({ currentUserProfile }) {
             <div className="prospector-modal-head"><h3 id="prospector-manual-title">Add prospect manually</h3><button type="button" className="prospector-modal-close" onClick={() => setManualOpen(false)} aria-label="Close"><X size={20} /></button></div>
             <form className="prospector-form" onSubmit={saveManualProspect}>
               <label>Organization name *<input className="prospector-input" value={manualForm.organization_name} onChange={(event) => setManualForm({ ...manualForm, organization_name: event.target.value })} required autoFocus /></label>
-              <label>Business category<input className="prospector-input" value={manualForm.category} onChange={(event) => setManualForm({ ...manualForm, category: event.target.value })} /></label>
+              <label>Business category
+                <select className="prospector-input" value={manualForm.category} onChange={(event) => setManualForm({ ...manualForm, category: event.target.value })}>
+                  <option value="">Not sure yet</option>
+                  {CATEGORY_GROUPS.map((group) => (
+                    <optgroup key={group.tier} label={`Tier ${group.tier} — ${group.label}`}>
+                      {group.categories.map((entry) => (
+                        <option key={entry.key} value={entry.key}>{entry.label} · {entry.es}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
               <label>Public business phone<input className="prospector-input" type="tel" value={manualForm.phone} onChange={(event) => setManualForm({ ...manualForm, phone: event.target.value })} /></label>
               <label>Work email<input className="prospector-input" type="email" value={manualForm.email} onChange={(event) => setManualForm({ ...manualForm, email: event.target.value })} /></label>
+              <label className="full">Where this email is published
+                <input className="prospector-input" type="text" inputMode="url" value={manualForm.email_permission_source_url} onChange={(event) => setManualForm({ ...manualForm, email_permission_source_url: event.target.value })} placeholder="https://example.cr/contacto — the page it appears on" />
+              </label>
               <label className="full">Website<input className="prospector-input" type="text" inputMode="url" value={manualForm.website_url} onChange={(event) => setManualForm({ ...manualForm, website_url: event.target.value })} placeholder="example.com" /></label>
               <label className="full">Address<input className="prospector-input" value={manualForm.formatted_address} onChange={(event) => setManualForm({ ...manualForm, formatted_address: event.target.value })} /></label>
               <label>City or canton<input className="prospector-input" value={manualForm.city} onChange={(event) => setManualForm({ ...manualForm, city: event.target.value })} /></label>
