@@ -130,12 +130,23 @@ test('the copy is labelled so an accountant can file it without reading it', () 
   assert.match(buildTaxRecordsCopy({}).subject, /sin número/);
 });
 
-test('internal commission mail keeps its CC, and unapproved reports still have none', () => {
+test('an approved commission reaches accounting on its own transport, not as a CC', () => {
   const weeklyRoute = fs.readFileSync('src/app/api/admin/commissions/weekly-report/route.js', 'utf8');
   const approvalRoute = fs.readFileSync('src/app/api/admin/commissions/approve/route.js', 'utf8');
 
-  // That recipient is a sales agent on an already-internal CC list, not a customer.
-  assert.match(approvalRoute, /cc: withTaxRecordsCc\(ADMIN_CC_EMAILS\)/);
+  // The CC rode out on the agent's message, which leaves via Elastic carrying
+  // the .net domain in From — the exact send Rackspace refuses for its own
+  // mailboxes. Every approved payout was therefore recorded as sent while PBAG
+  // received none of them, the same failure the order copy already fixed.
+  assert.doesNotMatch(approvalRoute, /withTaxRecordsCc/);
+  assert.match(approvalRoute, /cc: ADMIN_CC_EMAILS/);
+
+  // Accounting gets its own message on the accounting mailbox instead.
+  assert.match(approvalRoute, /resolveTaxRecordsMailer\(\)/);
+  assert.match(approvalRoute, /sendTaxRecordsPayoutCopy\(/);
+  // Reported, so a refusal cannot show as a green tick again.
+  assert.match(approvalRoute, /accountingCopy,/);
+
   assert.doesNotMatch(weeklyRoute, /withTaxRecordsCc|sendTaxRecordsCopy/);
 });
 
@@ -194,6 +205,65 @@ test('an approved payout copy names the payee and the period', () => {
   assert.match(message.subject, /Dani/);
   assert.match(message.subject, /2026-08-04/);
   assert.match(message.html, /invoice/);
+});
+
+test('a resent copy says so in the subject and changes nothing else', () => {
+  const payout = { kind: 'comision', name: 'Korinne', period: '2026-08-24 to 2026-08-30' };
+  const original = buildTaxRecordsPayoutCopy({ payout, html: '<p>invoice</p>', text: 'invoice' });
+  const resent = buildTaxRecordsPayoutCopy({ payout, html: '<p>invoice</p>', text: 'invoice', resent: true });
+
+  assert.equal(resent.subject, `[Resent] ${original.subject}`);
+
+  // Everything accounting actually files has to be byte-for-byte the first
+  // copy, or the two cannot be reconciled as one payment.
+  assert.equal(resent.html, original.html);
+  assert.equal(resent.text, original.text);
+  assert.equal(resent.to, original.to);
+});
+
+test('the resend route sends only an approved payout, and only to accounting', () => {
+  const route = fs.readFileSync('src/app/api/admin/commissions/resend-accounting/route.js', 'utf8');
+
+  // Guards, in order: only a superadmin, only a slip that was approved, and
+  // only a report that was genuinely sent once already.
+  assert.match(route, /requireSuperadmin: true/);
+  assert.match(route, /APPROVED_STATUSES/);
+  assert.match(route, /payout\.email_html/);
+  assert.match(route, /resent: true/);
+
+  // It resends; it never pays, re-approves, or writes to the payout.
+  assert.doesNotMatch(route, /\.update\(/);
+  assert.doesNotMatch(route, /status: 'Approved'/);
+
+  // No second transport: the agent cannot be mailed from here.
+  assert.doesNotMatch(route, /nodemailer/);
+
+  // A refused address is reported per agent, never folded into a success. That
+  // inversion is the whole reason this route had to be written.
+  assert.match(route, /sent: result\.sent/);
+  assert.match(route, /failedCount/);
+});
+
+test('a whole week can be resent in one call, and one refusal does not sink the rest', () => {
+  const route = fs.readFileSync('src/app/api/admin/commissions/resend-accounting/route.js', 'utf8');
+
+  // The caller names the slips. A date range would let a filter that moved
+  // after the click widen what actually goes out.
+  assert.match(route, /body\?\.payoutIds/);
+  assert.match(route, /\.in\('id', ids\)/);
+
+  // Sequential, because the accounting mailbox is one Rackspace login and a
+  // burst of parallel sends is what gets a mailbox rate limited.
+  assert.match(route, /for \(const payout of payouts\) \{/);
+
+  // resendOne returns a result instead of throwing, so a refusal for one agent
+  // cannot cancel the agents queued behind them.
+  assert.match(route, /async function resendOne\(/);
+  assert.doesNotMatch(route, /Promise\.all/);
+
+  // Every agent comes back named, sent or not.
+  assert.match(route, /results\.push\(await resendOne\(/);
+  assert.match(route, /agent: label/);
 });
 
 test('the payout copy goes to accounting even when the payee send fails', async () => {

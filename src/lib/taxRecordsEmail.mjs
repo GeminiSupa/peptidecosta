@@ -126,14 +126,18 @@ export function buildTaxRecordsCopy({ order = {}, html = '', text = '' } = {}) {
  * so a CC hands them the accountant's address. Separately sent, it is also
  * separately logged and separately survivable.
  */
-export function buildTaxRecordsPayoutCopy({ payout = {}, html = '', text = '' } = {}) {
+export function buildTaxRecordsPayoutCopy({ payout = {}, html = '', text = '', resent = false } = {}) {
   const payee = payout.name || payout.email || 'sin nombre';
   const period = payout.period ? ` — ${payout.period}` : '';
   const header = `Copia contable — Pago aprobado (${payout.kind || 'comisión'}) — ${payee}${period}`;
 
   return {
     to: taxRecordsRecipients().join(', '),
-    subject: header,
+    // A resend says so in the subject and nowhere else. The body stays
+    // exactly what accounting was sent the first time, so the two copies
+    // reconcile against each other line for line rather than reading as
+    // two separate payments.
+    subject: resent ? `[Resent] ${header}` : header,
     html: `<p style="font:600 14px/1.5 system-ui,sans-serif;color:#334155;margin:0 0 16px">${header}</p>${html}`,
     text: `${header}\n\n${text}`,
   };
@@ -196,12 +200,13 @@ export async function sendTaxRecordsPayoutCopy({
   payout = {},
   html = '',
   text = '',
+  resent = false,
   logPrefix = '[Tax records]',
 } = {}) {
   return dispatchTaxRecordsCopy({
     transporter,
     from,
-    message: buildTaxRecordsPayoutCopy({ payout, html, text }),
+    message: buildTaxRecordsPayoutCopy({ payout, html, text, resent }),
     logPrefix,
   });
 }
