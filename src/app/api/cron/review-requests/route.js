@@ -10,6 +10,8 @@ import {
 import nodemailer from 'nodemailer';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 import { orderCompletedAtMs } from '@/lib/agentDashboard.mjs';
+import { getBusinessLinks } from '@/lib/settings';
+import { buildReviewRequestEmail, reviewDestinations } from '@/lib/reviewRequestEmail.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
@@ -76,6 +78,11 @@ export async function GET(request) {
         })
       : null;
 
+    // Resolved once for the whole batch rather than per order: it is one read
+    // of the same site_settings row the storefront review badges use, so a
+    // profile changed in the admin CMS reaches this email too.
+    const destinations = reviewDestinations(await getBusinessLinks());
+
     let trustpilotSentCount = 0;
     let emailSentCount = 0;
     let skippedCount = 0;
@@ -114,37 +121,17 @@ export async function GET(request) {
         continue;
       }
 
-      const reviewLink = process.env.REVIEW_LINK_TRUSTPILOT || process.env.REVIEW_LINK_GOOGLE || 'https://catalog.peptidescostarica.net/customer-feedback';
-      
       const isSpanish = order.currency === 'CRC';
-      const subject = isSpanish ? `¿Cómo va tu investigación? 🧪` : `How is your research going? 🧪`;
-      const html = isSpanish 
-        ? `
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#333;">
-          <img src="https://catalog.peptidescostarica.net/logo.png?v=2" alt="Peptides Costa Rica" width="96" height="81" style="display:block;width:96px;height:81px;margin:0 auto 14px auto;border:0;outline:none;text-decoration:none;border-radius:10px;">
-          <h2>¡Nos encantaría saber tu opinión!</h2>
-          <p>Hola ${order.customer_name || ''},</p>
-          <p>Han pasado unos días desde que se completó tu pedido de Peptides Costa Rica. ¡Esperamos que tu investigación vaya de maravilla!</p>
-          <p>Si tienes un momento, te agradeceríamos mucho que nos dejaras una reseña sobre tu experiencia con nuestros productos y servicio.</p>
-          <p>
-            <a href="${reviewLink}" style="display:inline-block;padding:12px 24px;background:#10b981;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Dejar una Reseña</a>
-          </p>
-          <p>Gracias,<br/>El equipo de Peptides Costa Rica</p>
-        </div>
-        ` 
-        : `
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#333;">
-          <img src="https://catalog.peptidescostarica.net/logo.png?v=2" alt="Peptides Costa Rica" width="96" height="81" style="display:block;width:96px;height:81px;margin:0 auto 14px auto;border:0;outline:none;text-decoration:none;border-radius:10px;">
-          <h2>We'd love to hear from you!</h2>
-          <p>Hi ${order.customer_name || 'there'},</p>
-          <p>It's been a few days since your Peptides Costa Rica order was completed. We hope your research is going perfectly!</p>
-          <p>If you have a moment, we would greatly appreciate it if you could leave a review about your experience with our products and service.</p>
-          <p>
-            <a href="${reviewLink}" style="display:inline-block;padding:12px 24px;background:#10b981;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;">Leave a Review</a>
-          </p>
-          <p>Thank you,<br/>The Peptides Costa Rica Team</p>
-        </div>
-      `;
+      const { subject, html } = buildReviewRequestEmail({
+        customerName: order.customer_name,
+        lang: isSpanish ? 'es' : 'en',
+        destinations,
+      });
+
+      // WhatsApp's approved template takes a single link, so it gets the Google
+      // one — the listing the seller rating and the search result hang off.
+      // Adding Facebook there needs a new template through Meta review.
+      const reviewLink = destinations.google;
 
       try {
         await transporter.sendMail({
