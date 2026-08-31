@@ -18,7 +18,8 @@ import {
   summarizeOrderCommissions,
 } from '@/lib/orderCommission.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
-import { withTaxRecordsCc } from '@/lib/taxRecordsEmail.mjs';
+import { sendTaxRecordsPayoutCopy } from '@/lib/taxRecordsEmail.mjs';
+import { resolveTaxRecordsMailer } from '@/lib/taxRecordsSmtp.mjs';
 import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 import { applyCommissionAdjustments } from '@/lib/orderRefund.mjs';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
@@ -201,6 +202,7 @@ export async function POST(request) {
     // 3. Handle Approval & Outbound Email
     let emailSent = false;
     let emailError = null;
+    let accountingCopy = { sent: false, skipped: 'no email dispatched' };
 
     if (payout.agent_email) {
       const { smtp, from: notificationFrom } = getOrderMailSettings();
@@ -221,7 +223,11 @@ export async function POST(request) {
             bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
             from: notificationFrom,
             to: payout.agent_email.trim(),
-            cc: withTaxRecordsCc(ADMIN_CC_EMAILS),
+            // Accounting is deliberately not CC'd here. This message leaves on
+            // the Elastic transport, and PBAG's mailbox refuses that sender for
+            // its own domain, so a CC was silently discarded every week. They
+            // get their own copy below, on the transport that reaches them.
+            cc: ADMIN_CC_EMAILS,
             subject: subject,
             html: refreshedEmailHtml,
             text: refreshedEmailText,
@@ -232,6 +238,25 @@ export async function POST(request) {
           emailError = mailErr.message;
           // We will still proceed with updating the DB so we don't block state, but we flag it in response
         }
+
+        // Outside the agent try/catch on purpose — an approved payout is an
+        // expense accounting has to record whether or not the agent's own
+        // invoice reached them. Never throws.
+        const accountingMailer = resolveTaxRecordsMailer();
+        accountingCopy = await sendTaxRecordsPayoutCopy({
+          transporter: accountingMailer.transporter,
+          from: accountingMailer.from,
+          payout: {
+            kind: 'comisión',
+            name: payout.agent_name || payout.agent_email,
+            email: payout.agent_email,
+            period: periodDisplay,
+          },
+          html: refreshedEmailHtml,
+          text: refreshedEmailText,
+          logPrefix: '[Commission Approval]',
+        });
+        accountingCopy.transport = accountingMailer.source;
       } else {
         console.warn('[Commission Approval] SMTP credentials missing. Skipping email dispatch.');
         emailError = 'SMTP configurations not set in environment.';
@@ -338,6 +363,9 @@ export async function POST(request) {
       status: 'Approved',
       emailSent,
       emailError,
+      // Reported rather than swallowed: "did accounting get this payout?" was
+      // unanswerable while the copy rode along as a CC.
+      accountingCopy,
       adjustmentUsd: adjusted.deductedUsd,
       adjustmentCarriedUsd: adjusted.carriedUsd,
     });

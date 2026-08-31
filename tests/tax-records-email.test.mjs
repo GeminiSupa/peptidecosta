@@ -130,12 +130,23 @@ test('the copy is labelled so an accountant can file it without reading it', () 
   assert.match(buildTaxRecordsCopy({}).subject, /sin número/);
 });
 
-test('internal commission mail keeps its CC, and unapproved reports still have none', () => {
+test('an approved commission reaches accounting on its own transport, not as a CC', () => {
   const weeklyRoute = fs.readFileSync('src/app/api/admin/commissions/weekly-report/route.js', 'utf8');
   const approvalRoute = fs.readFileSync('src/app/api/admin/commissions/approve/route.js', 'utf8');
 
-  // That recipient is a sales agent on an already-internal CC list, not a customer.
-  assert.match(approvalRoute, /cc: withTaxRecordsCc\(ADMIN_CC_EMAILS\)/);
+  // The CC rode out on the agent's message, which leaves via Elastic carrying
+  // the .net domain in From — the exact send Rackspace refuses for its own
+  // mailboxes. Every approved payout was therefore recorded as sent while PBAG
+  // received none of them, the same failure the order copy already fixed.
+  assert.doesNotMatch(approvalRoute, /withTaxRecordsCc/);
+  assert.match(approvalRoute, /cc: ADMIN_CC_EMAILS/);
+
+  // Accounting gets its own message on the accounting mailbox instead.
+  assert.match(approvalRoute, /resolveTaxRecordsMailer\(\)/);
+  assert.match(approvalRoute, /sendTaxRecordsPayoutCopy\(/);
+  // Reported, so a refusal cannot show as a green tick again.
+  assert.match(approvalRoute, /accountingCopy,/);
+
   assert.doesNotMatch(weeklyRoute, /withTaxRecordsCc|sendTaxRecordsCopy/);
 });
 
