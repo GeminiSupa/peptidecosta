@@ -207,6 +207,42 @@ test('an approved payout copy names the payee and the period', () => {
   assert.match(message.html, /invoice/);
 });
 
+test('a resent copy says so in the subject and changes nothing else', () => {
+  const payout = { kind: 'comision', name: 'Korinne', period: '2026-08-24 to 2026-08-30' };
+  const original = buildTaxRecordsPayoutCopy({ payout, html: '<p>invoice</p>', text: 'invoice' });
+  const resent = buildTaxRecordsPayoutCopy({ payout, html: '<p>invoice</p>', text: 'invoice', resent: true });
+
+  assert.equal(resent.subject, `[Resent] ${original.subject}`);
+
+  // Everything accounting actually files has to be byte-for-byte the first
+  // copy, or the two cannot be reconciled as one payment.
+  assert.equal(resent.html, original.html);
+  assert.equal(resent.text, original.text);
+  assert.equal(resent.to, original.to);
+});
+
+test('the resend route sends only an approved payout, and only to accounting', () => {
+  const route = fs.readFileSync('src/app/api/admin/commissions/resend-accounting/route.js', 'utf8');
+
+  // Guards, in order: only a superadmin, only a slip that was approved, and
+  // only a report that was genuinely sent once already.
+  assert.match(route, /requireSuperadmin: true/);
+  assert.match(route, /APPROVED_STATUSES/);
+  assert.match(route, /payout\.email_html/);
+  assert.match(route, /resent: true/);
+
+  // It resends; it never pays, re-approves, or writes to the payout.
+  assert.doesNotMatch(route, /\.update\(/);
+  assert.doesNotMatch(route, /status: 'Approved'/);
+
+  // No second transport: the agent cannot be mailed from here.
+  assert.doesNotMatch(route, /nodemailer/);
+
+  // A refused address is an error, not a success. That inversion is the whole
+  // reason this route had to be written.
+  assert.match(route, /if \(!accountingCopy\.sent\)/);
+});
+
 test('the payout copy goes to accounting even when the payee send fails', async () => {
   const sent = [];
   const transporter = {

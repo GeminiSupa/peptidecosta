@@ -210,6 +210,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [payouts, setPayouts] = useState([]);
   const [loadingPayouts, setLoadingPayouts] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [resendingId, setResendingId] = useState(null);
   const [syncingCommissions, setSyncingCommissions] = useState(false);
   const [scanPeriod, setScanPeriod] = useState('previous'); // 'previous', 'current', 'all-time', or 'custom'
   const [customStartDate, setCustomStartDate] = useState('');
@@ -350,6 +351,32 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setRecipientsError(err.message);
     }
     setRecipientSavingId(null);
+  };
+
+  // Accounting's copy of a payout that was already approved.
+  //
+  // Approval refuses to run twice, so a slip approved before the accounting
+  // copy moved onto the accounting mailbox had no way to reach PBAG at all.
+  // This sends the stored report on its own: the payout is not touched, the
+  // agent is not emailed again, and only the subject says it is a resend.
+  const handleResendAccounting = async (payoutId) => {
+    setResendingId(payoutId);
+    try {
+      const response = await adminFetch('/api/admin/commissions/resend-accounting', {
+        method: 'POST',
+        body: JSON.stringify({ payoutId })
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert(`Accounting copy resent to ${data.accountingCopy?.to || 'accounting'}.`);
+      } else {
+        alert(`Could not resend to accounting: ${data.error}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error trying to resend the accounting copy.');
+    }
+    setResendingId(null);
   };
 
   const handlePayoutAction = async (payoutId, action) => {
@@ -1327,14 +1354,34 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
                           >
                             Record payment
                           </button>
+                          <button
+                            className="admin-btn"
+                            disabled={resendingId !== null}
+                            onClick={() => handleResendAccounting(p.id)}
+                            title="Send accounting its copy of this payout again"
+                            style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+                          >
+                            {resendingId === p.id ? 'Sending...' : 'Resend to accounting'}
+                          </button>
                         </>
                       ) : p.status === 'Paid' ? (
-                        <span style={{ fontSize: '0.75rem', color: '#4ade80' }}>
-                          Paid {p.paid_at ? new Date(p.paid_at).toLocaleDateString() : ''}
-                          {p.payment_method ? ` · ${p.payment_method}` : ''}
-                          {p.payment_reference ? ` · ${p.payment_reference}` : ''}
-                          {p.payment_receipt_url && <> · <a href={p.payment_receipt_url} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>receipt</a></>}
-                        </span>
+                        <>
+                          <span style={{ fontSize: '0.75rem', color: '#4ade80' }}>
+                            Paid {p.paid_at ? new Date(p.paid_at).toLocaleDateString() : ''}
+                            {p.payment_method ? ` · ${p.payment_method}` : ''}
+                            {p.payment_reference ? ` · ${p.payment_reference}` : ''}
+                            {p.payment_receipt_url && <> · <a href={p.payment_receipt_url} target="_blank" rel="noreferrer" style={{ color: '#38bdf8' }}>receipt</a></>}
+                          </span>
+                          <button
+                            className="admin-btn"
+                            disabled={resendingId !== null}
+                            onClick={() => handleResendAccounting(p.id)}
+                            title="Send accounting its copy of this payout again"
+                            style={{ padding: '6px 12px', fontSize: '0.75rem', marginLeft: 'auto' }}
+                          >
+                            {resendingId === p.id ? 'Sending...' : 'Resend to accounting'}
+                          </button>
+                        </>
                       ) : (
                         <>
                           <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>Rejected / removed</span>
