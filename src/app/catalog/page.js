@@ -4087,15 +4087,16 @@ export default function CatalogPage() {
               </div>
             )}
 
-            {/* BAC water breakdown — what is gifted vs. what is billed */}
-            {getBacSummary().bacUnits > 0 && (
+            {/* BAC water breakdown — the free gift always shows so the customer
+                sees it even when they add no paid water; billed extras follow. */}
+            {(getBacSummary().freeUnits > 0 || getBacSummary().bacUnits > 0) && (
               <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', fontSize: '0.75rem', color: theme === 'dark' ? '#7dd3fc' : '#0369a1', fontWeight: '600' }}>
                 {getBacSummary().freeUnits > 0 && (
                   <div style={bacBreakdownRowStyle}>
                     <span style={bacBreakdownLabelStyle}>🎁 {lang === 'en'
-                      ? `${getBacSummary().freeUnits} free vial${getBacSummary().freeUnits > 1 ? 's' : ''} included`
-                      : `${getBacSummary().freeUnits} vial${getBacSummary().freeUnits > 1 ? 'es' : ''} gratis incluido${getBacSummary().freeUnits > 1 ? 's' : ''}`}</span>
-                    <span style={bacBreakdownAmountStyle}>{formatPriceVal(0, currency)}</span>
+                      ? `Free bacteriostatic water: ${getBacSummary().freeLines.map((l) => `${l.qty} × ${l.sizeMl}ml`).join(' + ')}`
+                      : `Agua bacteriostática gratis: ${getBacSummary().freeLines.map((l) => `${l.qty} × ${l.sizeMl}ml`).join(' + ')}`}</span>
+                    <span style={{ ...bacBreakdownAmountStyle, color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: 800 }}>{lang === 'en' ? 'FREE' : 'GRATIS'}</span>
                   </div>
                 )}
                 {getBacSummary().paidLines.map((line, index) => (
