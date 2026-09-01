@@ -4715,6 +4715,12 @@ export default function CatalogPage() {
                         : 'Los datos de la tarjeta se envían de forma segura a Shield Hub Pay y no se almacenan en Costa Peptides.'}
                     </p>
                   </div>
+                  <p className="card-payment-fee-note">
+                    <strong>{lang === 'en' ? 'Note:' : 'Nota:'}</strong>{' '}
+                    {lang === 'en'
+                      ? 'Your bank may add a small international transaction fee (about 1–3%) to card payments. This fee comes from your bank, not from us.'
+                      : 'Tu banco podría añadir una pequeña comisión por transacción internacional (alrededor de 1–3%) a los pagos con tarjeta. Esta comisión la cobra tu banco, no nosotros.'}
+                  </p>
                   {/* Always render the button. Hiding it behind a "fill in your
                       details" notice made the customer hunt for the missing field
                       themselves; validateForm now names it and scrolls to it. */}

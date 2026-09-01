@@ -2330,6 +2330,21 @@ body {
     line-height: 1.35;
 }
 
+.card-payment-fee-note {
+    margin: 10px 0 0;
+    padding: 9px 10px;
+    border: 1px solid rgba(245, 158, 11, 0.28);
+    border-radius: 10px;
+    background: rgba(245, 158, 11, 0.10);
+    color: #92400e;
+    font-size: 0.74rem;
+    line-height: 1.4;
+}
+
+.card-payment-fee-note strong {
+    font-weight: 700;
+}
+
 .card-payment-btn {
     width: 100%;
     padding: 14px;
