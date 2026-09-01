@@ -58,6 +58,7 @@ import { buildReorderLines, mergeReorderIntoCart, reorderNoticeMessage } from '@
 import { takeReorder } from '@/lib/reorderHandoff';
 import PressBand from '@/components/PressBand';
 import { CatalogPromoBanner } from '@/components/StorefrontChrome';
+import ExitIntentOffer from '@/components/catalog/ExitIntentOffer';
 import { mergeLandingPageSettings } from '@/lib/landingContent';
 import {
   readCatalogParams,
@@ -2155,6 +2156,30 @@ export default function CatalogPage() {
       setPromoError(lang === 'en' ? 'Validation error' : 'Error de validación');
     }
     setPromoLoading(false);
+  };
+
+  // The exit-intent offer hands its code to the ordinary promo path rather than
+  // applying a discount of its own. It IS an ordinary promo code, and a private
+  // route into the cart would be a second place where a discount lands without
+  // the target-product and unit checks running.
+  const handleExitOfferApply = async (code) => {
+    await handleApplyPromo(code);
+    // Open the drawer so the customer sees the new total. An offer accepted
+    // with no visible change to the price is an offer they will not believe.
+    setIsCartOpen(true);
+  };
+
+  // The twenty minutes ran out with the code still applied. Take it back out
+  // here: leaving it would walk the customer to the payment button holding a
+  // total api/orders/create is about to refuse, and the failure would land at
+  // the single worst moment in the whole checkout.
+  const handleExitOfferExpire = (code) => {
+    if (!promoData?.valid || promoData.code !== code) return;
+    setPromoData(null);
+    setPromoCodeInput('');
+    setPromoError(lang === 'en'
+      ? 'Your extra discount expired and was removed from the cart.'
+      : 'Tu descuento extra venció y se quitó del carrito.');
   };
 
   // A cart can stop qualifying after the code was accepted — someone applies a
@@ -5118,6 +5143,30 @@ export default function CatalogPage() {
           </div>
         ))}
       </div>
+
+      {/* Last-chance discount for a first-time shopper leaving with a cart.
+          Unlike the access gate above it never blocks the catalog: it offers
+          something, it can always be closed, and it is shown once per visitor. */}
+      <ExitIntentOffer
+        lang={lang}
+        currency={currency}
+        sessionId={sessionId}
+        customerEmail={customerEmail}
+        customerPhone={customerPhone}
+        cartItemCount={cartItemCount}
+        discountableSubtotal={getDiscountableSubtotal()}
+        volumePct={getEffectiveVolumePct()}
+        cartTotalUsd={currency === 'USD'
+          ? getDiscountableSubtotal()
+          : getDiscountableSubtotal() / exchangeRate}
+        hasPromoApplied={Boolean(promoData?.valid)}
+        gateVisible={!gateAccessGranted && gateVisible}
+        checkoutBusy={orderSubmitting || orderSuccess}
+        appliedCode={promoData?.valid ? promoData.code : null}
+        onApply={handleExitOfferApply}
+        onExpire={handleExitOfferExpire}
+        whatsappNumber={links.whatsappNumber}
+      />
 
       {/* Second-chance WhatsApp opt-in re-prompt (dismissible, not a full gate) */}
       {showWaReprompt && (
