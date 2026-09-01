@@ -2639,6 +2639,12 @@ body {
     }
 
     .cart-suggestions {
+        padding: 12px 16px;
+    }
+
+    /* Phones scroll the strip by swiping, so the arrows are desktop-only —
+       same as the category bar. */
+    .cart-suggestions-nav {
         display: none;
     }
 
