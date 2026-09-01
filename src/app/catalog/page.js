@@ -4093,8 +4093,8 @@ export default function CatalogPage() {
                 {getBacSummary().freeUnits > 0 && (
                   <div style={bacBreakdownRowStyle}>
                     <span style={bacBreakdownLabelStyle}>🎁 {lang === 'en'
-                      ? `${getBacSummary().freeUnits} free vial${getBacSummary().freeUnits > 1 ? 's' : ''} (1 per peptide)`
-                      : `${getBacSummary().freeUnits} vial${getBacSummary().freeUnits > 1 ? 'es' : ''} gratis (1 por péptido)`}</span>
+                      ? `${getBacSummary().freeUnits} free vial${getBacSummary().freeUnits > 1 ? 's' : ''} included`
+                      : `${getBacSummary().freeUnits} vial${getBacSummary().freeUnits > 1 ? 'es' : ''} gratis incluido${getBacSummary().freeUnits > 1 ? 's' : ''}`}</span>
                     <span style={bacBreakdownAmountStyle}>{formatPriceVal(0, currency)}</span>
                   </div>
                 )}

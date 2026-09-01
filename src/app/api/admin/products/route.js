@@ -55,6 +55,11 @@ function productToDbRow(product, index) {
     description_es: product.descriptionEs || '',
     emoji: product.imageUrl ? '' : emojiForCategory(product.category),
     priority: index,
+    free_bac_water: typeof product.freeBacWater === 'boolean' ? product.freeBacWater : null,
+    free_bac_size_ml: Number(product.freeBacSizeMl) === 10 ? 10 : 3,
+    free_bac_vials_per_item: Number.isFinite(Number(product.freeBacVialsPerItem)) && Number(product.freeBacVialsPerItem) > 0
+      ? Math.floor(Number(product.freeBacVialsPerItem))
+      : 1,
   };
 
   if (isExistingProductId(product.id)) row.id = product.id;

@@ -7,6 +7,7 @@ import {
   BAC_WATER_10ML_ONLY_MIN_UNITS,
   isBacWater,
   isSupplyItem,
+  isReadyToUseBlend,
   splitCartUnits,
   bacUnitPrice,
   summarizeBacWater,
@@ -18,12 +19,18 @@ import {
   isSellableBacWater,
   isGiftLine,
   bacGiftShortfall,
+  bacFreeGrantForItem,
+  summarizeFreeVials,
+  defaultFreeBacConfig,
+  withBacGiftLines,
 } from '../src/lib/bacWater.mjs';
 
 const peptide = (qty = 1) => ({ product: 'Semaglutide 5mg', qty });
 const bac = (qty = 1, priceUsd) => ({ product: 'BAC Water 3ml', qty, priceUsd });
 const bac10 = (qty = 1, priceUsd) => ({ product: 'BAC Water 10ml', qty, priceUsd });
 const syringe = (qty = 1) => ({ product: 'Insulin Syringe 1ml', qty });
+const fatBlaster = (qty = 1) => ({ product: 'Fat Blaster Amino Blend 10ml', qty });
+const superHuman = (qty = 1) => ({ product: 'SUPER Human Amino Blend 10ml', qty });
 
 test('recognises BAC water in both languages', () => {
   assert.equal(isBacWater('BAC Water 3ml'), true);
@@ -38,6 +45,93 @@ test('supplies are not peptides and not BAC water', () => {
   assert.equal(isSupplyItem('Insulin Syringe 1ml'), true);
   assert.equal(isSupplyItem('Jeringa 1ml'), true);
   assert.equal(isBacWater('Insulin Syringe 1ml'), false);
+});
+
+test('ready-to-use amino blends earn no free vial, but 5-Amino-1MQ still does', () => {
+  assert.equal(isReadyToUseBlend('Fat Blaster Amino Blend 10ml'), true);
+  assert.equal(isReadyToUseBlend('SUPER Human Amino Blend 10ml'), true);
+  // 5-Amino-1MQ is a lyophilised peptide: it carries "amino" but not "blend",
+  // so it keeps its free vial.
+  assert.equal(isReadyToUseBlend('5-amino-1mq 5mg'), false);
+  assert.equal(isReadyToUseBlend('Semaglutide 5mg'), false);
+  assert.equal(isReadyToUseBlend(null), false);
+});
+
+test('amino blends count toward the discount but earn no free vial', () => {
+  const cart = [fatBlaster(2), superHuman(1), bac(1)];
+  const { bacUnits, peptideUnits, discountUnits } = splitCartUnits(cart);
+
+  assert.equal(bacUnits, 1);
+  assert.equal(peptideUnits, 0, 'blends are ready to use, no vial owed');
+  assert.equal(discountUnits, 3, 'blends are normal products for the volume discount');
+});
+
+test('a blend bought with a real peptide only earns a vial for the peptide', () => {
+  const s = summarizeBacWater([peptide(2), fatBlaster(1)], 'USD', 1);
+  assert.equal(s.freeUnits, 2, 'two peptides earn two vials; the blend earns none');
+});
+
+// --- Per-product free-water config -----------------------------------------
+
+const configured = (over = {}) => ({
+  product: 'Semaglutide 5mg',
+  qty: 1,
+  freeBacWater: true,
+  freeBacSizeMl: 3,
+  freeBacVialsPerItem: 1,
+  ...over,
+});
+
+test('the name-based default matches the old rule', () => {
+  assert.deepEqual(defaultFreeBacConfig('Semaglutide 5mg'), { freeBacWater: true, freeBacSizeMl: 3, freeBacVialsPerItem: 1 });
+  assert.equal(defaultFreeBacConfig('Fat Blaster Amino Blend 10ml').freeBacWater, false);
+  assert.equal(defaultFreeBacConfig('Insulin Syringe 1ml').freeBacWater, false);
+  assert.equal(defaultFreeBacConfig('BAC Water 3ml').freeBacWater, false);
+});
+
+test('explicit config wins over the name-based default', () => {
+  // A product the admin turned off earns nothing, even though the name says peptide.
+  assert.deepEqual(bacFreeGrantForItem(configured({ freeBacWater: false, qty: 3 })), { vials: 0, sizeMl: 3 });
+  // Two 10ml vials per item, three items = six 10ml vials.
+  assert.deepEqual(bacFreeGrantForItem(configured({ freeBacSizeMl: 10, freeBacVialsPerItem: 2, qty: 3 })), { vials: 6, sizeMl: 10 });
+});
+
+test('a configured cart earns free vials grouped by size', () => {
+  const cart = [
+    configured({ product: 'Semaglutide 5mg', qty: 2 }),
+    configured({ product: 'BPC-157 10mg', qty: 1, freeBacSizeMl: 10 }),
+    configured({ product: 'Fat Blaster Amino Blend 10ml', qty: 4, freeBacWater: false }),
+  ];
+  const { freeUnits, freeLines } = summarizeFreeVials(cart);
+  assert.equal(freeUnits, 3, 'two 3ml plus one 10ml; the blend earns none');
+  assert.deepEqual(freeLines, [{ sizeMl: 3, qty: 2 }, { sizeMl: 10, qty: 1 }]);
+});
+
+test('a config with no explicit setting falls back to the name rule', () => {
+  const s = summarizeFreeVials([{ product: 'Semaglutide 5mg', qty: 2 }, { product: 'Insulin Syringe 1ml', qty: 1 }]);
+  assert.equal(s.freeUnits, 2);
+});
+
+test('build produces a free line per size, priced at zero', () => {
+  const items = buildBacAwareOrderItems([
+    configured({ product: 'Semaglutide 5mg', qty: 1 }),
+    configured({ product: 'BPC-157 10mg', qty: 1, freeBacSizeMl: 10 }),
+  ], { currency: 'USD', priceOf: () => 90, lang: 'en' });
+
+  const gifts = items.filter((i) => i.price === 0);
+  assert.deepEqual(gifts, [
+    { product: 'Bacteriostatic Water 3ml (Free Gift)', qty: 1, price: 0 },
+    { product: 'Bacteriostatic Water 10ml (Free Gift)', qty: 1, price: 0 },
+  ]);
+  assert.equal(bacGiftShortfall(items).missing, 0, 'the built order lists everything it owes');
+});
+
+test('the top-up honours the configured size', () => {
+  // A configured 10ml-gift peptide stored without its gift line is topped up in 10ml.
+  const topped = withBacGiftLines([configured({ product: 'BPC-157 10mg', qty: 2, freeBacSizeMl: 10 })], 'en');
+  const gift = topped.find((i) => i.price === 0);
+  assert.equal(gift.product, 'Bacteriostatic Water 10ml (Free Gift)');
+  assert.equal(gift.qty, 2);
 });
 
 test('splits units: BAC out of the discount, supplies out of the allowance', () => {

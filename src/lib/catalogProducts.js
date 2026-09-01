@@ -1,4 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
+import { defaultFreeBacConfig, normalizeFreeBacSize } from './bacWater.mjs';
+
+/**
+ * The free-water setting a catalog product carries into the cart. A row the
+ * admin has saved carries its own values; one that predates the setting falls
+ * back to the name-based default, so behaviour is identical until it is edited.
+ */
+export function resolveFreeBacConfig(item) {
+  if (typeof item?.free_bac_water === 'boolean') {
+    return {
+      freeBacWater: item.free_bac_water,
+      freeBacSizeMl: normalizeFreeBacSize(item.free_bac_size_ml),
+      freeBacVialsPerItem: Number.isFinite(Number(item.free_bac_vials_per_item)) && Number(item.free_bac_vials_per_item) > 0
+        ? Math.floor(Number(item.free_bac_vials_per_item))
+        : 1,
+    };
+  }
+  return defaultFreeBacConfig(item?.product);
+}
 
 export function getEmojiForCategory(cat) {
   const c = (cat || '').toLowerCase();
@@ -75,11 +94,12 @@ export function mapDbProduct(item) {
     descriptionEn: item.description_en || '',
     descriptionEs: item.description_es || '',
     emoji: item.emoji || getEmojiForCategory(item.category),
+    ...resolveFreeBacConfig(item),
   };
 }
 
 const PRODUCT_SELECT =
-  'product,category,price_usd,price_crc,original_price_usd,original_price_crc,discount,sale_start_time,sale_end_time,status,inventory_count,low_stock_threshold,coa,image_url,description_en,description_es,emoji,priority';
+  'product,category,price_usd,price_crc,original_price_usd,original_price_crc,discount,sale_start_time,sale_end_time,status,inventory_count,low_stock_threshold,coa,image_url,description_en,description_es,emoji,priority,free_bac_water,free_bac_size_ml,free_bac_vials_per_item';
 
 /** Server-side catalog fetch with ISR-friendly caching. */
 export async function fetchCatalogProductsServer() {

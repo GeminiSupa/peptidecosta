@@ -76,7 +76,10 @@ export default function ProductsManager({
     String(p.lowStockThreshold ?? 5) !== String(mobileEditProduct.lowStockThreshold ?? 5) ||
     String(p.discount || '') !== String(mobileEditProduct.discount || '') ||
     String(p.imageUrl || '') !== String(mobileEditProduct.imageUrl || '') ||
-    String(p.coa || '') !== String(mobileEditProduct.coa || '')
+    String(p.coa || '') !== String(mobileEditProduct.coa || '') ||
+    Boolean(p.freeBacWater) !== Boolean(mobileEditProduct.freeBacWater) ||
+    String(p.freeBacSizeMl ?? 3) !== String(mobileEditProduct.freeBacSizeMl ?? 3) ||
+    String(p.freeBacVialsPerItem ?? 1) !== String(mobileEditProduct.freeBacVialsPerItem ?? 1)
   )));
   const openMobileEditor = (product) => {
     setMobileProductError('');
@@ -132,6 +135,9 @@ export default function ProductsManager({
       'discount',
       'imageUrl',
       'coa',
+      'freeBacWater',
+      'freeBacSizeMl',
+      'freeBacVialsPerItem',
     ].forEach((field) => {
       if (String(original[field] ?? '') !== String(mobileEditProduct[field] ?? '')) {
         handleCellChange(mobileEditProduct.id, field, mobileEditProduct[field]);
@@ -337,6 +343,7 @@ export default function ProductsManager({
                 <th style={{ minWidth: '200px' }}>Image URL / Physical Upload</th>
                 <th style={{ minWidth: '220px' }}>COA URL Link</th>
                 <th style={{ width: '120px', textAlign: 'center' }}>Info/Blog</th>
+                <th style={{ minWidth: '200px' }}>Free BAC Water Gift</th>
                 <th style={{ width: '110px', textAlign: 'center' }}>Catalog Visibility</th>
                 <th style={{ width: '100px', textAlign: 'center' }}>Action</th>
               </tr>
@@ -631,6 +638,51 @@ export default function ProductsManager({
                     </button>
                   </td>
 
+                  {/* Free BAC water gift — per product: on/off, free vial size, and how many free vials each unit earns */}
+                  <td data-label="Free BAC Water Gift">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '180px' }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', fontWeight: 700, color: p.freeBacWater ? '#4ade80' : '#94a3b8', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!p.freeBacWater}
+                          onChange={(e) => handleCellChange(p.id, 'freeBacWater', e.target.checked)}
+                        />
+                        {p.freeBacWater ? 'Gives free water' : 'No free water'}
+                      </label>
+                      {p.freeBacWater && (
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <select
+                            className="cell-select"
+                            value={String(p.freeBacSizeMl || 3)}
+                            onChange={(e) => handleCellChange(p.id, 'freeBacSizeMl', parseInt(e.target.value, 10))}
+                            style={{ width: 'auto' }}
+                            title="Size of each free vial"
+                          >
+                            <option value="3">3 ml</option>
+                            <option value="10">10 ml</option>
+                          </select>
+                          <input
+                            type="number"
+                            min="1"
+                            value={p.freeBacVialsPerItem || 1}
+                            onChange={(e) => {
+                              const n = parseInt(e.target.value, 10);
+                              handleCellChange(p.id, 'freeBacVialsPerItem', Number.isFinite(n) && n > 0 ? n : 1);
+                            }}
+                            style={{ width: '52px', background: 'transparent', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', padding: '3px 6px', fontSize: '0.75rem', outline: 'none' }}
+                            title="Free vials given per unit bought"
+                          />
+                          <span style={{ fontSize: '0.68rem', color: '#64748b' }}>per item</span>
+                        </div>
+                      )}
+                      <span style={{ fontSize: '0.68rem', color: '#64748b', lineHeight: 1.3 }}>
+                        {p.freeBacWater
+                          ? `Every 1 bought adds ${p.freeBacVialsPerItem || 1} free ${p.freeBacSizeMl || 3}ml vial${(p.freeBacVialsPerItem || 1) > 1 ? 's' : ''}, at no charge.`
+                          : 'This product ships with no free water.'}
+                      </span>
+                    </div>
+                  </td>
+
                   {/* Catalog Visibility toggle — hide/show on public catalog without deleting */}
                   <td data-label="Catalog Visibility" style={{ textAlign: 'center' }}>
                     <button
@@ -776,6 +828,41 @@ export default function ProductsManager({
                 <span>Bulk discount info</span>
                 <textarea rows="3" value={mobileEditProduct.discount || ''} onChange={(e) => updateMobileDraft('discount', e.target.value)} />
               </label>
+              <label>
+                <span>Free BAC water gift</span>
+                <select
+                  value={mobileEditProduct.freeBacWater ? 'on' : 'off'}
+                  onChange={(e) => updateMobileDraft('freeBacWater', e.target.value === 'on')}
+                >
+                  <option value="on">On — gives free water</option>
+                  <option value="off">Off — no free water</option>
+                </select>
+              </label>
+              {mobileEditProduct.freeBacWater && (
+                <div className="product-mobile-field-grid">
+                  <label>
+                    <span>Free vial size</span>
+                    <select
+                      value={String(mobileEditProduct.freeBacSizeMl || 3)}
+                      onChange={(e) => updateMobileDraft('freeBacSizeMl', parseInt(e.target.value, 10))}
+                    >
+                      <option value="3">3 ml</option>
+                      <option value="10">10 ml</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Free vials per item</span>
+                    <input
+                      inputMode="numeric"
+                      value={mobileEditProduct.freeBacVialsPerItem || 1}
+                      onChange={(e) => {
+                        const n = parseInt(e.target.value, 10);
+                        updateMobileDraft('freeBacVialsPerItem', Number.isFinite(n) && n > 0 ? n : 1);
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
               <label>
                 <span>Image</span>
                 <select

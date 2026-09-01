@@ -8,6 +8,8 @@
  *
  *   1. One free vial per peptide purchased, given automatically. Syringes and
  *      other reconstitution supplies do NOT earn a free vial — only peptides do.
+ *      Neither do the pre-mixed amino blends (Fat Blaster, SUPER Human): they
+ *      ship ready to use, so there is nothing to reconstitute and no vial owed.
  *   2. The gift is separate from the cart. A vial the customer puts in the cart
  *      is an EXTRA, on top of their free ones. Extras are priced per vial:
  *      $10 for the 3ml, $20 for the 10ml.
@@ -77,6 +79,19 @@ export function isSupplyItem(name) {
   return n.includes('syringe') || n.includes('jeringa') || n.includes('supply');
 }
 
+/**
+ * Pre-mixed amino blends (Fat Blaster, SUPER Human). They are liquid and ready
+ * to use, so buying one earns no free vial — there is nothing to reconstitute.
+ *
+ * The match is on "amino blend", which is deliberate: the 5-Amino-1MQ peptides
+ * carry "amino" but not "blend", and they DO need water, so they keep their
+ * free vial. Both blends are sold in English only, so no Spanish name is needed.
+ */
+export function isReadyToUseBlend(name) {
+  if (!name) return false;
+  return String(name).toLowerCase().includes('amino blend');
+}
+
 function qtyOf(item) {
   const qty = parseInt(item?.qty ?? item?.quantity ?? 0, 10);
   return Number.isFinite(qty) && qty > 0 ? qty : 0;
@@ -87,7 +102,7 @@ function qtyOf(item) {
  *
  * `discountUnits` is what the volume discount tiers read: everything except BAC
  * water. `peptideUnits` is what the free allowance reads: everything except BAC
- * water and supplies.
+ * water, supplies, and the ready-to-use amino blends.
  */
 export function splitCartUnits(cart = []) {
   let bacUnits = 0;
@@ -104,10 +119,97 @@ export function splitCartUnits(cart = []) {
       continue;
     }
     discountUnits += qty;
-    if (!isSupplyItem(name)) peptideUnits += qty;
+    if (!isSupplyItem(name) && !isReadyToUseBlend(name)) peptideUnits += qty;
   }
 
   return { bacUnits, peptideUnits, discountUnits };
+}
+
+/** Free-vial sizes an admin may hand out. Matches the sellable sizes. */
+export const BAC_FREE_SIZES_ML = Object.freeze([3, 10]);
+
+function toBoolFlag(value) {
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
+function toPositiveInt(value, fallback) {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/** A free size snapped to one we actually stock; anything unknown is 3ml. */
+export function normalizeFreeBacSize(value) {
+  return Number(value) === 10 ? 10 : 3;
+}
+
+/**
+ * The free-water setting a product should start with when the admin has never
+ * touched it. Peptides earn one 3ml vial each; BAC water, syringes and other
+ * supplies, and the ready-to-use amino blends earn none.
+ *
+ * This is the same rule the storefront used before the setting was per-product,
+ * so an unconfigured product behaves exactly as it always did — the admin only
+ * changes anything by deliberately overriding it.
+ */
+export function defaultFreeBacConfig(name) {
+  const earnsNone = isBacWater(name) || isSupplyItem(name) || isReadyToUseBlend(name);
+  return {
+    freeBacWater: !earnsNone,
+    freeBacSizeMl: 3,
+    freeBacVialsPerItem: 1,
+  };
+}
+
+/**
+ * How many free vials one cart line earns, and at what size.
+ *
+ * A line that carries an explicit per-product setting (`freeBacWater` present)
+ * is governed by it; otherwise the name-based default stands in, so older carts
+ * and hand-typed orders keep behaving as before. BAC water never earns a vial,
+ * whatever a stray setting says.
+ *
+ * @returns {{vials: number, sizeMl: number}}
+ */
+export function bacFreeGrantForItem(item) {
+  const qty = qtyOf(item);
+  const name = item?.product ?? item?.name;
+  if (qty === 0 || isBacWater(name)) return { vials: 0, sizeMl: 3 };
+
+  const hasConfig = item && item.freeBacWater !== undefined && item.freeBacWater !== null;
+  const cfg = hasConfig
+    ? {
+        freeBacWater: toBoolFlag(item.freeBacWater),
+        freeBacSizeMl: normalizeFreeBacSize(item.freeBacSizeMl),
+        freeBacVialsPerItem: toPositiveInt(item.freeBacVialsPerItem, 1),
+      }
+    : defaultFreeBacConfig(name);
+
+  if (!cfg.freeBacWater) return { vials: 0, sizeMl: cfg.freeBacSizeMl };
+  return { vials: cfg.freeBacVialsPerItem * qty, sizeMl: cfg.freeBacSizeMl };
+}
+
+/**
+ * The free vials a whole cart earns, as a total and grouped by size.
+ *
+ * `freeLines` is what the packing list and order record read to list each
+ * granted size on its own line; `freeUnits` is their sum, for the money and the
+ * cart badge that only care how many vials ship.
+ *
+ * @returns {{freeUnits: number, freeLines: Array<{sizeMl: number, qty: number}>}}
+ */
+export function summarizeFreeVials(cart = []) {
+  const bySize = new Map();
+  let freeUnits = 0;
+  for (const item of cart || []) {
+    const { vials, sizeMl } = bacFreeGrantForItem(item);
+    if (vials <= 0) continue;
+    freeUnits += vials;
+    bySize.set(sizeMl, (bySize.get(sizeMl) || 0) + vials);
+  }
+  const freeLines = [...bySize.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([sizeMl, qty]) => ({ sizeMl, qty }));
+  return { freeUnits, freeLines };
 }
 
 /**
@@ -151,10 +253,10 @@ export function summarizeBacWater(cart = [], currency = 'USD', exchangeRate = 1)
   const charge = paidLines.reduce((sum, line) => sum + line.charge, 0);
   const unitPrice = paidLines.length === 1 ? paidLines[0].unitPrice : null;
 
-  // The gift is one per peptide regardless of the cart, and everything in the
-  // cart is an extra that is paid for. A customer who never touches the BAC
-  // listing still receives their free vials.
-  const freeUnits = peptideUnits;
+  // The gift follows each product's own free-water setting, and everything in
+  // the cart is an extra that is paid for. A customer who never touches the BAC
+  // listing still receives whatever free vials their products earn.
+  const { freeUnits, freeLines } = summarizeFreeVials(cart);
   const paidUnits = bacUnits;
 
   return {
@@ -162,6 +264,7 @@ export function summarizeBacWater(cart = [], currency = 'USD', exchangeRate = 1)
     peptideUnits,
     discountUnits,
     freeUnits,
+    freeLines,
     paidUnits,
     paidLines,
     unitPrice,
@@ -239,20 +342,21 @@ export function buildBacAwareOrderItems(cart = [], opts = {}) {
     .map((item) => ({ product: item.product, qty: item.qty, price: priceOf(item) }));
 
   const bac = summarizeBacWater(cart, currency, exchangeRate);
-  const selectedThreeMlName = (cart || []).find((item) => (
-    isBacWater(item?.product) && getBacWaterSizeMl(item.product) === 3
-  ))?.product;
   for (const line of bac.paidLines) {
     items.push({ product: line.product, qty: line.qty, price: line.unitPrice });
   }
-  // The gift ships whether or not the customer added any, and is listed
-  // separately so the packing list and the order total agree.
-  if (bac.freeUnits > 0) {
+  // The gift ships whether or not the customer added any, and each free size is
+  // listed separately so the packing list and the order total agree. When the
+  // customer already bought that same size, the gift borrows its exact name.
+  for (const line of bac.freeLines) {
+    const boughtSameSize = (cart || []).find((item) => (
+      isBacWater(item?.product) && getBacWaterSizeMl(item.product) === line.sizeMl
+    ))?.product;
     items.push({
-      product: selectedThreeMlName
-        ? `${selectedThreeMlName} ${isEn ? '(Free Gift)' : '(Regalo)'}`
-        : bacGiftLineName(lang),
-      qty: bac.freeUnits,
+      product: boughtSameSize
+        ? `${boughtSameSize} ${isEn ? '(Free Gift)' : '(Regalo)'}`
+        : bacGiftLineName(lang, line.sizeMl),
+      qty: line.qty,
       price: 0,
     });
   }
@@ -261,10 +365,11 @@ export function buildBacAwareOrderItems(cart = [], opts = {}) {
 }
 
 /** The name a granted vial is listed under, in the customer's language. */
-export function bacGiftLineName(lang = 'es') {
+export function bacGiftLineName(lang = 'es', sizeMl = 3) {
+  const size = normalizeFreeBacSize(sizeMl) === 10 ? '10ml' : '3ml';
   return String(lang).toLowerCase().startsWith('en')
-    ? 'Bacteriostatic Water 3ml (Free Gift)'
-    : 'Agua Bacteriostática 3ml (Regalo)';
+    ? `Bacteriostatic Water ${size} (Free Gift)`
+    : `Agua Bacteriostática ${size} (Regalo)`;
 }
 
 /**
@@ -304,16 +409,16 @@ export function isGiftLine(item) {
  * @returns {{granted: number, present: number, missing: number}} vial counts
  */
 export function bacGiftShortfall(items = []) {
-  const { peptideUnits } = splitCartUnits(items);
+  const { freeUnits } = summarizeFreeVials(items);
   const present = (items || []).reduce(
     (sum, item) => (isGiftLine(item) ? sum + qtyOf(item) : sum),
     0,
   );
 
   return {
-    granted: peptideUnits,
+    granted: freeUnits,
     present,
-    missing: Math.max(0, peptideUnits - present),
+    missing: Math.max(0, freeUnits - present),
   };
 }
 
@@ -326,13 +431,28 @@ export function bacGiftShortfall(items = []) {
  * that already carries its gift gets its own array back untouched.
  */
 export function withBacGiftLines(items = [], lang = 'es') {
-  const { missing } = bacGiftShortfall(items);
-  if (missing <= 0) return items || [];
+  const { freeLines } = summarizeFreeVials(items);
+  if (!freeLines.length) return items || [];
 
-  return [
-    ...(items || []),
-    { product: bacGiftLineName(lang), qty: missing, price: 0 },
-  ];
+  // Gift vials the order already lists, counted per size, so a top-up only adds
+  // what is genuinely missing and never doubles a size that is already there.
+  const presentBySize = new Map();
+  for (const item of items || []) {
+    if (!isGiftLine(item)) continue;
+    const size = getBacWaterSizeMl(stripGiftSuffix(item?.product ?? item?.name)) ?? 3;
+    presentBySize.set(size, (presentBySize.get(size) || 0) + qtyOf(item));
+  }
+
+  const additions = [];
+  for (const { sizeMl, qty } of freeLines) {
+    const missing = Math.max(0, qty - (presentBySize.get(sizeMl) || 0));
+    if (missing > 0) {
+      additions.push({ product: bacGiftLineName(lang, sizeMl), qty: missing, price: 0 });
+    }
+  }
+  if (!additions.length) return items || [];
+
+  return [...(items || []), ...additions];
 }
 
 /**

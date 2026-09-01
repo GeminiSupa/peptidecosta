@@ -22,6 +22,7 @@ import {
   leadIsActiveForPipeline,
 } from '@/lib/leadConversion.mjs';
 import { markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
+import { defaultFreeBacConfig, normalizeFreeBacSize } from '@/lib/bacWater.mjs';
 import { 
   Lock, LayoutDashboard, ListFilter, Plus, Trash2, Mail, MessageCircle,
   Save, Upload, Download, Share2, Clipboard, LogOut, Check, 
@@ -2492,7 +2493,16 @@ Core Rules:
             inventoryCount: item.inventory_count !== undefined ? item.inventory_count : null,
             lowStockThreshold: item.low_stock_threshold !== undefined ? item.low_stock_threshold : 5,
             priority: item.priority || 0,
-            hidden: hiddenNames.includes(item.product)
+            hidden: hiddenNames.includes(item.product),
+            // A product the admin has never touched shows the old name-based
+            // rule, so the toggle reflects what actually happens today.
+            freeBacWater: typeof item.free_bac_water === 'boolean'
+              ? item.free_bac_water
+              : defaultFreeBacConfig(item.product).freeBacWater,
+            freeBacSizeMl: item.free_bac_size_ml != null ? normalizeFreeBacSize(item.free_bac_size_ml) : 3,
+            freeBacVialsPerItem: item.free_bac_vials_per_item != null && item.free_bac_vials_per_item > 0
+              ? item.free_bac_vials_per_item
+              : 1,
           }));
           setIsDbConnected(true);
         }
@@ -3085,7 +3095,10 @@ Core Rules:
       lowStockThreshold: 5,
       coa: '',
       imageUrl: '',
-      priority: newPriority
+      priority: newPriority,
+      freeBacWater: true,
+      freeBacSizeMl: 3,
+      freeBacVialsPerItem: 1,
     };
     setProducts([newRow, ...products]);
   };
@@ -3187,7 +3200,10 @@ Core Rules:
               lowStockThreshold: 5,
               coa: p.coa || '',
               imageUrl: p.imageUrl || '',
-              priority: idx
+              priority: idx,
+              freeBacWater: defaultFreeBacConfig(p.product).freeBacWater,
+              freeBacSizeMl: 3,
+              freeBacVialsPerItem: 1,
             };
           });
 
