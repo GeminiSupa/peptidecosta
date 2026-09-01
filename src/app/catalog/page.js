@@ -4063,19 +4063,33 @@ export default function CatalogPage() {
         {/* Suggestions Section */}
         {cart.length > 0 && getSuggestions().length > 0 && !orderSuccess && (
           <div className="cart-suggestions">
-            <h4 className="cart-suggestions-title">
-              {lang === 'en' ? '✨ You might also like' : '✨ También te puede interesar'}
-            </h4>
-            <div className="cart-suggestions-carousel">
-            <button
-              type="button"
-              className="sug-scroll-arrow"
-              onClick={() => scrollSuggestions(-1)}
-              disabled={!sugArrows.left}
-              aria-label={lang === 'en' ? 'Scroll suggestions left' : 'Desplazar sugerencias a la izquierda'}
-            >
-              <ChevronLeft size={16} />
-            </button>
+            <div className="cart-suggestions-head">
+              <h4 className="cart-suggestions-title">
+                {lang === 'en' ? '✨ You might also like' : '✨ También te puede interesar'}
+              </h4>
+              {(sugArrows.left || sugArrows.right) && (
+                <div className="cart-suggestions-nav">
+                  <button
+                    type="button"
+                    className="sug-scroll-arrow"
+                    onClick={() => scrollSuggestions(-1)}
+                    disabled={!sugArrows.left}
+                    aria-label={lang === 'en' ? 'Scroll suggestions left' : 'Desplazar sugerencias a la izquierda'}
+                  >
+                    <ChevronLeft size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className="sug-scroll-arrow"
+                    onClick={() => scrollSuggestions(1)}
+                    disabled={!sugArrows.right}
+                    aria-label={lang === 'en' ? 'Scroll suggestions right' : 'Desplazar sugerencias a la derecha'}
+                  >
+                    <ChevronRight size={15} />
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="cart-suggestions-scroll" ref={suggestionsScrollRef}>
               {getSuggestions().map((sug, idx) => (
                 <div key={idx} className="suggestion-card" onClick={() => {
@@ -4095,16 +4109,6 @@ export default function CatalogPage() {
                   </button>
                 </div>
               ))}
-            </div>
-            <button
-              type="button"
-              className="sug-scroll-arrow"
-              onClick={() => scrollSuggestions(1)}
-              disabled={!sugArrows.right}
-              aria-label={lang === 'en' ? 'Scroll suggestions right' : 'Desplazar sugerencias a la derecha'}
-            >
-              <ChevronRight size={16} />
-            </button>
             </div>
           </div>
         )}

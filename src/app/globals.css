@@ -1662,20 +1662,23 @@ body {
     font-size: 0.7rem;
     font-weight: 800;
     color: var(--text-muted);
-    margin-bottom: 8px;
+    margin: 0;
     text-transform: uppercase;
     letter-spacing: 0.3px;
 }
 
-.cart-suggestions-carousel {
+.cart-suggestions-head {
     display: flex;
     align-items: center;
-    gap: 6px;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
 }
 
-.cart-suggestions-carousel .cart-suggestions-scroll {
-    flex: 1;
-    min-width: 0;
+.cart-suggestions-nav {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
 }
 
 .sug-scroll-arrow {
