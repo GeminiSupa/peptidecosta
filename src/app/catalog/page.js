@@ -4760,6 +4760,13 @@ export default function CatalogPage() {
                         ? 'Secure card checkout powered by Shield Hub Pay sandbox'
                         : 'Pago seguro con tarjeta mediante Shield Hub Pay sandbox')}
                   </p>
+                  {currency === 'CRC' && (
+                    <p className="card-payment-caption">
+                      {lang === 'en'
+                        ? 'Card payments are processed in US dollars.'
+                        : 'Los pagos con tarjeta se procesan en dólares estadounidenses.'}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="cart-sticky-submit">
