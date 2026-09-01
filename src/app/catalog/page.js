@@ -434,6 +434,10 @@ export default function CatalogPage() {
   const [gateAccessGranted, setGateAccessGranted] = useState(false); // Default false for security, updated in useEffect
   const [gateLoading, setGateLoading] = useState(true);
   const [gateVisible, setGateVisible] = useState(false); // New visitors see products for 15s before the gate appears.
+  // A skip button appears in the gate's corner a few seconds after it opens, so
+  // a visitor who does not want to hand over contact details can still browse
+  // rather than typing a junk number just to get past it.
+  const [gateCloseVisible, setGateCloseVisible] = useState(false);
   const [gateInput, setGateInput] = useState('');
   const [gateSubmitting, setGateSubmitting] = useState(false);
   const [gateError, setGateError] = useState('');
@@ -543,6 +547,27 @@ export default function CatalogPage() {
     const timer = setTimeout(() => setGateVisible(true), CATALOG_GATE_DELAY_MS);
     return () => clearTimeout(timer);
   }, [loading, isCartOpen, cartItemCount]);
+
+  // Reveal the gate's skip button 5s after it opens, and hide it again whenever
+  // the gate is not on screen so a re-shown gate always starts without one.
+  useEffect(() => {
+    const gateOpen = !gateAccessGranted && gateVisible && !gateLoading;
+    if (!gateOpen) {
+      setGateCloseVisible(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setGateCloseVisible(true), 5000);
+    return () => clearTimeout(timer);
+  }, [gateAccessGranted, gateVisible, gateLoading]);
+
+  // Let someone into the catalog without handing over contact details. Grants
+  // the same access the bypass link does, so they are not asked again on this
+  // device — the point is to stop junk numbers, not to nag.
+  const dismissGate = () => {
+    try { localStorage.setItem('catalog_access_granted', 'true'); } catch {}
+    setGateAccessGranted(true);
+    setGateVisible(false);
+  };
 
   // Second-chance WhatsApp opt-in re-prompt: for visitors who unlocked the
   // catalog but never opted in. Fires once (after 15s), at most once / 3 days,
@@ -3498,6 +3523,25 @@ export default function CatalogPage() {
               maxWidth: '480px', width: '100%', textAlign: 'center', overflow: 'hidden',
               position: 'relative'
             }}>
+
+              {gateCloseVisible && (
+                <button
+                  type="button"
+                  onClick={dismissGate}
+                  aria-label={lang === 'en' ? 'Close and browse without signing up' : 'Cerrar y ver el catálogo sin registrarme'}
+                  title={lang === 'en' ? 'Continue without signing up' : 'Continuar sin registrarme'}
+                  style={{
+                    position: 'absolute', top: '12px', right: '12px', zIndex: 1,
+                    width: '30px', height: '30px', borderRadius: '50%', border: 'none',
+                    background: 'var(--bg-secondary)', color: 'var(--text-muted)',
+                    fontSize: '20px', lineHeight: 1, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    animation: 'fadeIn 0.3s ease',
+                  }}
+                >
+                  &times;
+                </button>
+              )}
 
               <div style={{ padding: '24px 24px 32px 24px' }}>
               <img src="/logo.png" alt="Peptides Costa Rica Logo" style={{ height: '40px', margin: '0 auto 16px auto', display: 'block', borderRadius: '8px' }} />
