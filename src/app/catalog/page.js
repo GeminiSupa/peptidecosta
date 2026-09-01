@@ -341,8 +341,10 @@ export default function CatalogPage() {
   const [searchFocused, setSearchFocused] = useState(false);
   const searchRef = useRef(null);
   const categoryScrollRef = useRef(null);
+  const suggestionsScrollRef = useRef(null);
   const autoPromoAppliedRef = useRef(false);
   const [catArrows, setCatArrows] = useState({ left: false, right: false });
+  const [sugArrows, setSugArrows] = useState({ left: false, right: false });
   const [activeCategory, setActiveCategory] = useState('all');
   // A ?category= value held until products load, so it can be resolved against
   // the real category names rather than trusted verbatim.
@@ -712,6 +714,46 @@ export default function CatalogPage() {
     if (!el) return;
     const start = el.scrollLeft;
     const dist = dir * 260;
+    const duration = 260;
+    let startTime = null;
+    const step = (ts) => {
+      if (startTime === null) startTime = ts;
+      const p = Math.min((ts - startTime) / duration, 1);
+      const ease = 0.5 - Math.cos(p * Math.PI) / 2; // easeInOutSine
+      el.scrollLeft = start + dist * ease;
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+
+  // "You might also like" carousel: same arrow behaviour as the category bar.
+  const updateSugArrows = useCallback(() => {
+    const el = suggestionsScrollRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setSugArrows({
+      left: scrollLeft > 4,
+      right: scrollLeft + clientWidth < scrollWidth - 4,
+    });
+  }, []);
+
+  useEffect(() => {
+    const el = suggestionsScrollRef.current;
+    if (!el) return;
+    updateSugArrows();
+    el.addEventListener('scroll', updateSugArrows, { passive: true });
+    window.addEventListener('resize', updateSugArrows);
+    return () => {
+      el.removeEventListener('scroll', updateSugArrows);
+      window.removeEventListener('resize', updateSugArrows);
+    };
+  }, [updateSugArrows, cart, products]);
+
+  const scrollSuggestions = (dir) => {
+    const el = suggestionsScrollRef.current;
+    if (!el) return;
+    const start = el.scrollLeft;
+    const dist = dir * 200;
     const duration = 260;
     let startTime = null;
     const step = (ts) => {
@@ -4024,7 +4066,17 @@ export default function CatalogPage() {
             <h4 className="cart-suggestions-title">
               {lang === 'en' ? '✨ You might also like' : '✨ También te puede interesar'}
             </h4>
-            <div className="cart-suggestions-scroll">
+            <div className="cart-suggestions-carousel">
+            <button
+              type="button"
+              className="sug-scroll-arrow"
+              onClick={() => scrollSuggestions(-1)}
+              disabled={!sugArrows.left}
+              aria-label={lang === 'en' ? 'Scroll suggestions left' : 'Desplazar sugerencias a la izquierda'}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <div className="cart-suggestions-scroll" ref={suggestionsScrollRef}>
               {getSuggestions().map((sug, idx) => (
                 <div key={idx} className="suggestion-card" onClick={() => {
                   addToCart(sug);
@@ -4043,6 +4095,16 @@ export default function CatalogPage() {
                   </button>
                 </div>
               ))}
+            </div>
+            <button
+              type="button"
+              className="sug-scroll-arrow"
+              onClick={() => scrollSuggestions(1)}
+              disabled={!sugArrows.right}
+              aria-label={lang === 'en' ? 'Scroll suggestions right' : 'Desplazar sugerencias a la derecha'}
+            >
+              <ChevronRight size={16} />
+            </button>
             </div>
           </div>
         )}

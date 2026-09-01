@@ -1667,6 +1667,41 @@ body {
     letter-spacing: 0.3px;
 }
 
+.cart-suggestions-carousel {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cart-suggestions-carousel .cart-suggestions-scroll {
+    flex: 1;
+    min-width: 0;
+}
+
+.sug-scroll-arrow {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+}
+
+.sug-scroll-arrow:hover:not(:disabled) {
+    background: var(--bg-secondary);
+}
+
+.sug-scroll-arrow:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
 .cart-suggestions-scroll {
     display: flex;
     flex-direction: row;
