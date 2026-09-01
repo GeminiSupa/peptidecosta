@@ -244,7 +244,10 @@ test('the resend route sends only an approved payout, and only to accounting', (
   assert.match(route, /failedCount/);
 });
 
-test('a whole week can be resent in one call, and one refusal does not sink the rest', () => {
+test('the route takes a list of slips, and one refusal does not sink the rest', () => {
+  // The admin panel sends one payout at a time. The route still takes a list,
+  // because that is what makes a refusal a per-agent result rather than a
+  // thrown request that loses whatever was queued behind it.
   const route = fs.readFileSync('src/app/api/admin/commissions/resend-accounting/route.js', 'utf8');
 
   // The caller names the slips. A date range would let a filter that moved

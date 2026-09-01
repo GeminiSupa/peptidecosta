@@ -18,6 +18,8 @@ import {
   stackedDiscountPercent,
   toPercent,
   DEAL_DISCOUNT_LABEL,
+  hasUntrackedStock,
+  isUnavailableForDeal,
 } from '../src/lib/dealOfWeek.mjs';
 
 // Costa Rica is UTC-6, so 23:59:59.999 CR is 05:59:59.999 UTC the NEXT day.
@@ -295,4 +297,35 @@ test('a pre-migration live deal still detects a manual USD price edit', () => {
   assert.equal(canSafelyRestoreLegacyProduct(current, baseline, deal), true);
   assert.equal(canSafelyRestoreLegacyProduct({ ...current, price_usd: '$99' }, baseline, deal), false);
   assert.equal(canSafelyRestoreLegacyProduct({ ...current, sale_end_time: null }, baseline, deal), false);
+});
+
+// Most of the catalog keeps no inventory count. Reading that null as a zero
+// count once blocked a deal on seven in-stock Tirzepatide sizes.
+test('an in-stock product with no inventory count is not treated as out of stock', () => {
+  const untracked = { product: 'Tirzepatide 60mg', status: 'In Stock', inventory_count: null };
+  assert.equal(isUnavailableForDeal(untracked), false);
+  assert.equal(hasUntrackedStock(untracked), true);
+});
+
+test('the same holds for the camelCase row the admin panel holds', () => {
+  const untracked = { product: 'Tirzepatide 120mg', status: 'In Stock', inventoryCount: null };
+  assert.equal(isUnavailableForDeal(untracked), false);
+  assert.equal(hasUntrackedStock(untracked), true);
+});
+
+test('a counted product that has run down to zero is still unavailable', () => {
+  assert.equal(isUnavailableForDeal({ status: 'In Stock', inventory_count: 0 }), true);
+  assert.equal(isUnavailableForDeal({ status: 'In Stock', inventoryCount: 0 }), true);
+  assert.equal(hasUntrackedStock({ status: 'In Stock', inventory_count: 0 }), false);
+});
+
+test('a product marked out of stock is unavailable however its units are counted', () => {
+  assert.equal(isUnavailableForDeal({ status: 'Out of Stock', inventory_count: 40 }), true);
+  assert.equal(isUnavailableForDeal({ status: 'Out of Stock', inventory_count: null }), true);
+});
+
+test('a counted product with units left is available and reads as tracked', () => {
+  const tracked = { status: 'In Stock', inventory_count: 12 };
+  assert.equal(isUnavailableForDeal(tracked), false);
+  assert.equal(hasUntrackedStock(tracked), false);
 });

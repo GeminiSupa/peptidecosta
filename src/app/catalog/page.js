@@ -1765,7 +1765,11 @@ export default function CatalogPage() {
     if (!query) {
       return visible.slice(0, 3);
     }
-    return rankCatalogSearchResults(visible, query, { limit: 5 });
+    // Ten, because that is the largest single product family (Retatrutide has
+    // ten sizes, Tirzepatide seven). At five, searching a family name hid the
+    // largest sizes and made them look unavailable. The dropdown caps its own
+    // height and scrolls, so a longer list does not grow the panel.
+    return rankCatalogSearchResults(visible, query, { limit: 10 });
   };
 
   const handlePopularTermClick = (term) => {

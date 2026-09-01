@@ -147,6 +147,33 @@ export function stackedDiscountPercent(discountPct, volumePct = 0) {
 }
 
 /**
+ * Stock rules for a deal, kept in one place because the panel warns on them and
+ * the launch refuses on them, and the two copies had already drifted apart.
+ *
+ * An inventory count of null means nobody counts that product's units, which is
+ * true of most of the catalog. Untracked is NOT out of stock — it is the case
+ * the manual-confirmation checkbox exists for — so a null count must never be
+ * read as a zero count. Both spellings are accepted: the database row is
+ * snake_case, the admin panel's row is camelCase.
+ */
+function stockCount(product) {
+  const raw = product?.inventoryCount !== undefined ? product.inventoryCount : product?.inventory_count;
+  return raw === undefined ? null : raw;
+}
+
+/** No count is kept, so the count says nothing about availability either way. */
+export function hasUntrackedStock(product) {
+  return stockCount(product) === null;
+}
+
+/** Genuinely unavailable: marked out of stock, or counted down to zero. */
+export function isUnavailableForDeal(product) {
+  if (product?.status !== 'In Stock') return true;
+  const count = stockCount(product);
+  return count !== null && Number(count) <= 0;
+}
+
+/**
  * One shared guard for the preview and launch paths. A high markdown is allowed
  * only after an explicit review, while a commercially dangerous combined
  * markdown is refused outright.

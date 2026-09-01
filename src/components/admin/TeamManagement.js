@@ -363,7 +363,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     const ids = Array.isArray(payoutIds) ? payoutIds : [payoutIds];
     if (ids.length === 0) return;
 
-    setResendingId(ids.length === 1 ? ids[0] : 'batch');
+    setResendingId(ids[0]);
     try {
       const response = await adminFetch('/api/admin/commissions/resend-accounting', {
         method: 'POST',
@@ -498,14 +498,6 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       return true;
     });
   }, [payouts, payoutFilterAgent, payoutFilterPeriod, payoutFilterStatus]);
-
-  // Every already-approved payout the current filter is showing. The batch
-  // button acts on exactly what is on screen, so it can never quietly mail a
-  // week the admin is not looking at.
-  const resendableShown = useMemo(
-    () => filteredPayouts.filter((p) => ['Approved', 'Payment Initiated', 'Failed', 'Paid'].includes(p.status)),
-    [filteredPayouts]
-  );
 
   const pendingDuplicateAgents = useMemo(() => {
     const pending = payouts.filter((p) => p.status === 'Pending');
@@ -1159,17 +1151,6 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
             <span style={{ fontSize: '0.8rem', color: '#64748b', alignSelf: 'center' }}>
               {filteredPayouts.length} payout{filteredPayouts.length === 1 ? '' : 's'}
             </span>
-            {resendableShown.length > 0 && (
-              <button
-                className="admin-btn"
-                disabled={resendingId !== null}
-                onClick={() => handleResendAccounting(resendableShown.map((p) => p.id))}
-                title="Send accounting a copy of every approved payout listed below"
-                style={{ padding: '8px 12px', fontSize: '0.85rem', marginLeft: 'auto' }}
-              >
-                {resendingId === 'batch' ? 'Sending...' : `Send ${resendableShown.length} to accounting`}
-              </button>
-            )}
           </div>
 
           {loadingPayouts ? (
