@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   TrendingUp, Users, ShoppingCart, Clock, 
   MapPin, Eye, DollarSign, Award, Target,
@@ -730,6 +730,27 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const potentialAbandonedRevenueUsd = activeAbandonedCarts.reduce((sum, c) => sum + calculateCartValue(c.cart_data), 0);
   const potentialAbandonedRevenueCrc = Math.round(potentialAbandonedRevenueUsd * FALLBACK_EXCHANGE_RATE);
 
+  const abandonedProductsStats = useMemo(() => {
+    const stats = {};
+    activeAbandonedCarts.forEach(c => {
+      const items = getCartItemsList(c.cart_data);
+      items.forEach(item => {
+        const name = item.product_name || item.name || item.product || 'Unknown Product';
+        const price = parseFloat((item.price_usd || item.priceUsd || item.price || '0').toString().replace(/[^0-9.]/g, '')) || 0;
+        const qty = parseInt(item.qty || item.quantity || 1) || 1;
+        
+        if (!stats[name]) {
+          stats[name] = { count: 0, revenueUsd: 0 };
+        }
+        stats[name].count += qty;
+        stats[name].revenueUsd += (price * qty);
+      });
+    });
+    
+    return Object.entries(stats)
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.count - a.count);
+  }, [activeAbandonedCarts]);
   // Average Catalog duration (Page Open time)
   const durationSessions = sessions.filter(s => s.catalog_duration > 0);
   const averageDurationSeconds = overviewSessions
@@ -2917,7 +2938,16 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                   })
               }
               {activeAbandonedCarts.length > 5 && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--an-ink-dim)' }}>+{activeAbandonedCarts.length - 5} more carts</span>
+                <div style={{ marginTop: '8px', textAlign: 'center' }}>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); onNavigate && onNavigate('carts'); }} 
+                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#38bdf8', padding: '4px 12px', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer', transition: 'background 0.2s' }}
+                    onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                    onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    View all {activeAbandonedCarts.length} carts in Carts Manager
+                  </button>
+                </div>
               )}
               {renderMetricExplainer('carts', 'Value sitting in abandoned carts', [
                 `Range: ${rangeLabel}`,
@@ -3739,6 +3769,39 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               </div>
             )}
           </div>
+
+          {/* Most Abandoned Products List */}
+          {abandonedProductsStats.length > 0 && (
+            <div className="top-targets-container">
+              <h4 style={{ fontSize: '0.875rem', color: 'var(--an-ink-muted)', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 600, letterSpacing: '0.5px' }}>
+                Most Abandoned Products
+              </h4>
+              
+              <div className="bar-chart-list">
+                {abandonedProductsStats.slice(0, 10).map((target, idx) => {
+                  const maxVal = Math.max(...abandonedProductsStats.map(t => t.count));
+                  const pct = maxVal > 0 ? (target.count / maxVal) * 100 : 0;
+                  return (
+                    <div className="bar-chart-row" key={target.name}>
+                      <div className="bar-row-label-row">
+                        <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>
+                          <span style={{ color: 'var(--an-ink-faint)', marginRight: '6px' }}>#{idx+1}</span>
+                          {target.name}
+                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                          <span className="bar-row-value" style={{ color: 'var(--an-warning)', fontSize: '0.875rem', fontWeight: 600 }}>{target.count} carts</span>
+                          <span style={{ color: 'var(--an-ink-muted)', fontSize: '0.7rem' }}>Lost: ${target.revenueUsd.toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <div className="bar-track" style={{ background: 'rgba(255,255,255,0.05)', height: '6px', borderRadius: '3px', marginTop: '4px' }}>
+                        <div className="bar-fill fill-sky" style={{ width: `${pct}%`, background: 'var(--an-warning)', height: '100%', borderRadius: '3px' }}></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Micro stats banner */}
           <div className="micro-stats-banner" style={{ marginTop: '20px', padding: '14px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
