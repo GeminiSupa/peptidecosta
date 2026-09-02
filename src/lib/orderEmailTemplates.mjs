@@ -111,7 +111,7 @@ export const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, tota
         ? `${isFirstSight ? 'A new order has been placed, but the card did not go through' : 'The card did not go through'}${order.declineReason ? ` — ${escapeHtml(order.declineReason)}` : ''}. Nothing was charged and the order is unpaid.`
         : 'The payment status for this order changed.')
     : 'A new order has been placed on the Peptides Costa Rica catalog.';
-  const customerPhoneDigits = (order.customerPhone || '').replace(/[^0-9]/g, '');
+  const customerPhoneDigits = String(order.customerPhone || '').replace(/[^0-9]/g, '');
 
   return `
     <!--[if mso]>

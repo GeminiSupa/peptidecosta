@@ -2635,15 +2635,30 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 </tr>
               </thead>
               <tbody>
-                {activeLiveSessions.slice(0, 20).map((session) => (
-                  <tr key={session.session_id} style={{ borderBottom: '1px solid rgba(255,255,255,.05)' }}>
-                    <td style={{ padding: '9px 6px', color: session.known_customer ? '#86efac' : '#cbd5e1', fontWeight: 700 }}>{session.known_customer ? 'Known customer' : 'Anonymous'}</td>
-                    <td style={{ padding: '9px 6px', color: 'var(--an-ink)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.hostname || 'catalog'}{session.current_path || '/catalog'}</td>
-                    <td style={{ padding: '9px 6px', color: 'var(--an-ink-soft)' }}>{session.last_touch_source || session.utm_source || 'direct'}{session.utm_campaign ? ` · ${session.utm_campaign}` : ''}</td>
-                    <td style={{ padding: '9px 6px', color: Number(session.cart_items) > 0 ? '#fbbf24' : '#64748b' }}>{Number(session.cart_items) || 0} item(s)</td>
-                    <td style={{ padding: '9px 6px', color: 'var(--an-ink-muted)' }}>{new Date(session.last_active).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
-                  </tr>
-                ))}
+                {activeLiveSessions.slice(0, 20).map((session) => {
+                  const cart = carts.find(c => c.session_id === session.session_id);
+                  const items = cart?.cart_data || [];
+                  return (
+                    <tr key={session.session_id} style={{ borderBottom: '1px solid rgba(255,255,255,.05)' }}>
+                      <td style={{ padding: '9px 6px', color: session.known_customer ? '#86efac' : '#cbd5e1', fontWeight: 700, verticalAlign: 'top' }}>
+                        {session.known_customer ? (session.customer_name || 'Known customer') : 'Anonymous'}
+                      </td>
+                      <td style={{ padding: '9px 6px', color: 'var(--an-ink)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{session.hostname || 'catalog'}{session.current_path || '/catalog'}</td>
+                      <td style={{ padding: '9px 6px', color: 'var(--an-ink-soft)', verticalAlign: 'top' }}>{session.last_touch_source || session.utm_source || 'direct'}{session.utm_campaign ? ` · ${session.utm_campaign}` : ''}</td>
+                      <td style={{ padding: '9px 6px', color: Number(session.cart_items) > 0 ? '#fbbf24' : '#64748b', verticalAlign: 'top' }}>
+                        <div>{Number(session.cart_items) || 0} item(s)</div>
+                        {items.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px', fontSize: '0.75rem', opacity: 0.9 }}>
+                            {items.map((item, idx) => (
+                              <div key={idx}>• {item.qty || 1}x {item.product_name || item.name || 'Product'}</div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '9px 6px', color: 'var(--an-ink-muted)', verticalAlign: 'top' }}>{new Date(session.last_active).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

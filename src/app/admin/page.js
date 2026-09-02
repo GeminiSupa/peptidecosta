@@ -4901,7 +4901,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   };
 
   const cmsField = (label, key, placeholder = label) => (
-    <label style={{ display: 'block' }}>
+    <label data-cms-search={cmsSearchText('landing', label, key)} style={{ display: 'block' }}>
       <span style={cmsLabelStyle}>{label}</span>
       <input
         type="text"
@@ -4914,7 +4914,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   );
 
   const cmsTextArea = (label, key, placeholder = label, minHeight = 70) => (
-    <label style={{ display: 'block' }}>
+    <label data-cms-search={cmsSearchText('landing', label, key)} style={{ display: 'block' }}>
       <span style={cmsLabelStyle}>{label}</span>
       <textarea
         placeholder={placeholder}

@@ -37,25 +37,25 @@ function sourceLabel({ utmSource, referrer, hostname }) {
   return 'direct';
 }
 
-async function isKnownCustomer(supabase, email, phone) {
+async function getCustomerIdentity(supabase, email, phone) {
   if (email) {
     const { data, error } = await supabase
       .from('orders')
-      .select('id')
+      .select('id, customer_name')
       .ilike('customer_email', email)
       .limit(1);
-    if (!error && data?.length) return true;
+    if (!error && data?.length) return { known: true, name: data[0].customer_name };
   }
-  const tail = phone.length >= 8 ? phone.slice(-8) : '';
+  const tail = phone && phone.length >= 8 ? phone.slice(-8) : '';
   if (tail) {
     const { data, error } = await supabase
       .from('orders')
-      .select('id')
+      .select('id, customer_name')
       .ilike('customer_phone', `%${tail}%`)
       .limit(1);
-    if (!error && data?.length) return true;
+    if (!error && data?.length) return { known: true, name: data[0].customer_name };
   }
-  return false;
+  return { known: false, name: null };
 }
 
 export function OPTIONS(request) {
@@ -98,10 +98,12 @@ export async function POST(request) {
 
     const { data: previous } = await supabase
       .from('visitor_sessions')
-      .select('known_customer, first_touch_source, created_at, city, region, country')
+      .select('known_customer, customer_name, first_touch_source, created_at, city, region, country')
       .eq('session_id', sessionId)
       .maybeSingle();
-    const knownCustomer = Boolean(previous?.known_customer) || await isKnownCustomer(supabase, email, phone);
+    const identity = await getCustomerIdentity(supabase, email, phone);
+    const knownCustomer = Boolean(previous?.known_customer) || identity.known;
+    const customerName = previous?.customer_name || identity.name || null;
     const source = sourceLabel({ utmSource, referrer, hostname });
     const location = body.location && typeof body.location === 'object' ? body.location : {};
     const now = new Date().toISOString();
@@ -122,6 +124,7 @@ export async function POST(request) {
       first_touch_source: previous?.first_touch_source || source,
       last_touch_source: source,
       known_customer: knownCustomer,
+      customer_name: customerName,
       cart_items: Math.max(0, Math.min(999, Number(body.cartItems) || 0)),
       ip_address: ip,
       city: clean(location.city, 120) || previous?.city || 'Unknown',
@@ -136,7 +139,7 @@ export async function POST(request) {
     const optionalSessionColumns = [
       'visitor_id', 'hostname', 'current_path', 'page_title', 'referrer',
       'utm_source', 'utm_medium', 'utm_campaign', 'gclid', 'fbclid',
-      'first_touch_source', 'last_touch_source', 'known_customer', 'cart_items',
+      'first_touch_source', 'last_touch_source', 'known_customer', 'customer_name', 'cart_items',
     ];
     const { error: sessionError } = await writeDroppingMissingColumns(
       sessionRow,

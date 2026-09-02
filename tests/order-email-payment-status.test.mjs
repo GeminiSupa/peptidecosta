@@ -125,3 +125,8 @@ test('a payment on an order the team already saw does not claim to be new', () =
   assert.match(later, /Payment Approved/);
   assert.doesNotMatch(later, /New Order/);
 });
+
+test('the admin email does not crash if customerPhone is an integer', () => {
+  const html = admin('Paid', { customerPhone: 50688887777 });
+  assert.match(html, /50688887777/);
+});

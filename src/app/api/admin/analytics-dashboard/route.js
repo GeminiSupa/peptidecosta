@@ -17,7 +17,7 @@ const SOURCES = [
   {
     key: 'sessions',
     table: 'visitor_sessions',
-    select: 'id, session_id, visitor_id, last_active, catalog_duration, city, device_info, created_at, hostname, current_path, page_title, known_customer, cart_items, first_touch_source, last_touch_source, utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer',
+    select: 'id, session_id, visitor_id, last_active, catalog_duration, city, device_info, created_at, hostname, current_path, page_title, known_customer, customer_name, cart_items, first_touch_source, last_touch_source, utm_source, utm_medium, utm_campaign, gclid, fbclid, referrer',
     timeColumn: 'last_active',
   },
   {
