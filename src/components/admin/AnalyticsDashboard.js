@@ -708,12 +708,22 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const cartAbandonmentRate = (activeAbandonedCarts.length / totalTrackedCarts) * 100;
   const cartRecoveryRate = (convertedCarts.length / totalTrackedCarts) * 100;
 
+  const getCartItemsList = (cartData) => {
+    if (!cartData) return [];
+    if (typeof cartData === 'string') {
+      try { cartData = JSON.parse(cartData); } catch (e) { return []; }
+    }
+    if (Array.isArray(cartData)) return cartData;
+    if (cartData && Array.isArray(cartData.items)) return cartData.items;
+    return [];
+  };
+
   // Potential Revenue (Abandoned Carts Value)
-  const calculateCartValue = (cartItems) => {
-    if (!Array.isArray(cartItems)) return 0;
-    return cartItems.reduce((acc, item) => {
-      const price = parseFloat((item.price_usd || item.priceUsd || '0').replace(/[^0-9.]/g, '')) || 0;
-      return acc + (price * (item.qty || 1));
+  const calculateCartValue = (cartData) => {
+    const items = getCartItemsList(cartData);
+    return items.reduce((acc, item) => {
+      const price = parseFloat((item.price_usd || item.priceUsd || item.price || '0').toString().replace(/[^0-9.]/g, '')) || 0;
+      return acc + (price * (item.qty || item.quantity || 1));
     }, 0);
   };
 
@@ -2637,7 +2647,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               <tbody>
                 {activeLiveSessions.slice(0, 20).map((session) => {
                   const cart = carts.find(c => c.session_id === session.session_id);
-                  const items = cart?.cart_data || [];
+                  const items = getCartItemsList(cart?.cart_data);
                   return (
                     <tr key={session.session_id} style={{ borderBottom: '1px solid rgba(255,255,255,.05)' }}>
                       <td style={{ padding: '9px 6px', color: session.known_customer ? '#86efac' : '#cbd5e1', fontWeight: 700, verticalAlign: 'top' }}>
@@ -2886,11 +2896,22 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 ? <span style={{ fontSize: '0.875rem', color: 'var(--an-ink-faint)' }}>No open abandoned carts.</span>
                 : activeAbandonedCarts.slice(0, 5).map(c => {
                     const val = calculateCartValue(c.cart_data);
-                    const product = Array.isArray(c.cart_data) && c.cart_data[0]?.product;
+                    const items = getCartItemsList(c.cart_data);
+                    const customerDisplay = c.customer_email || c.user_email || c.customer_phone || c.user_phone || c.customer_name || 'Guest Checkout';
+                    
                     return (
-                      <div className="metric-detail-row" key={c.id}>
-                        <span className="metric-detail-name">{product || 'Unknown item'}</span>
-                        <span className="metric-detail-val" style={{ color: 'var(--an-warning)' }}>${val.toFixed(0)}</span>
+                      <div className="metric-detail-row" key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span className="metric-detail-name" style={{ fontWeight: 600, color: '#f8fafc' }}>{customerDisplay}</span>
+                          <span className="metric-detail-val" style={{ color: 'var(--an-warning)', fontWeight: 600 }}>${val.toFixed(2)}</span>
+                        </div>
+                        {items.length > 0 && (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--an-ink-muted)', display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '4px' }}>
+                            {items.map((item, idx) => (
+                              <div key={idx}>• {item.qty || item.quantity || 1}x {item.product_name || item.name || item.product || 'Product'}</div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })
