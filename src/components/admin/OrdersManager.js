@@ -233,6 +233,7 @@ export default function OrdersManager({
   loadingOrders,
   handleOrderStatusUpdate,
   handleOrderSalesAgentUpdate,
+  handleMarkReadyToPrepare,
   setSelectedOrderDetails,
   openWhatsAppComposer,
   handleDeleteOrder,
@@ -623,6 +624,20 @@ export default function OrdersManager({
                       Complete
                     </button>
                   )}
+                  {(group.id === 'paid' || group.id === 'processing') && (
+                    order.ready_to_prepare_at ? (
+                      <span
+                        className="admin-btn"
+                        style={{ background: 'rgba(251, 191, 36, 0.12)', border: '1px solid rgba(251, 191, 36, 0.3)', color: '#fbbf24' }}
+                      >
+                        📦 Ready
+                      </span>
+                    ) : (
+                      <button type="button" className="admin-btn" onClick={() => handleMarkReadyToPrepare(order.id)}>
+                        📦 Ready to prepare
+                      </button>
+                    )
+                  )}
                   <button type="button" className="admin-btn" onClick={() => openOrderWhatsapp(order)}>
                     WhatsApp
                   </button>
@@ -840,14 +855,35 @@ export default function OrdersManager({
 
                           {group.id === 'processing' && (
                             <>
-                              <button 
-                                className="admin-btn admin-cta-btn" 
+                              <button
+                                className="admin-btn admin-cta-btn"
                                 onClick={() => handleOrderStatusUpdate(order.id, 'Order Complete')}
                                 style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
                               >
                                 ✅ Complete
                               </button>
                             </>
+                          )}
+
+                          {/* Hand-off to the Fulfillment queue — see FulfillmentManager. */}
+                          {(group.id === 'paid' || group.id === 'processing') && (
+                            order.ready_to_prepare_at ? (
+                              <span
+                                title={`Ready to prepare since ${new Date(order.ready_to_prepare_at).toLocaleString()}${order.ready_to_prepare_by ? ` (by ${order.ready_to_prepare_by})` : ''}`}
+                                style={{ padding: '6px 10px', fontSize: '0.75rem', background: 'rgba(251, 191, 36, 0.12)', border: '1px solid rgba(251, 191, 36, 0.3)', color: '#fbbf24', borderRadius: '6px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                📦 Ready
+                              </span>
+                            ) : (
+                              <button
+                                className="admin-btn admin-cta-btn"
+                                onClick={() => handleMarkReadyToPrepare(order.id)}
+                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#fbbf24', color: '#1c1917', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                                title="Hand this order to fulfillment for packing"
+                              >
+                                📦 Ready to prepare
+                              </button>
+                            )
                           )}
 
                           {/* Quick Agent Claim CTA */}

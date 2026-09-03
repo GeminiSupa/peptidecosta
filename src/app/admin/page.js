@@ -3560,6 +3560,34 @@ Core Rules:
     }
   };
 
+  // Hands an order to the Fulfillment queue. Lives here rather than only in
+  // OrderDetailPanel so the quick action in the Orders list (where an agent
+  // actually works) does not need its own copy of the same PATCH call.
+  const handleMarkReadyToPrepare = async (orderId) => {
+    try {
+      const response = await adminFetch('/api/admin/orders/update', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          orderId,
+          updates: {
+            ready_to_prepare_at: new Date().toISOString(),
+            ready_to_prepare_by: adminProfile?.name || adminProfile?.email || null,
+          },
+          activity: {
+            type: 'ready_to_prepare',
+            message: 'Marked ready to prepare — handed off to fulfillment',
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not mark this order ready to prepare');
+      handleOrderUpdated(data.order);
+    } catch (error) {
+      console.error('Mark ready to prepare error:', error);
+      alert(`Could not hand this order to fulfillment: ${error.message}`);
+    }
+  };
+
   // Delete a single order
   const handleDeleteOrder = async (orderId) => {
     const order = orders.find((o) => o.id === orderId);
@@ -5350,6 +5378,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             ordersRefreshError={ordersRefreshError}
             handleOrderStatusUpdate={handleOrderStatusUpdate}
             handleOrderSalesAgentUpdate={handleOrderSalesAgentUpdate}
+            handleMarkReadyToPrepare={handleMarkReadyToPrepare}
             setSelectedOrderDetails={setSelectedOrderDetails}
             openWhatsAppComposer={openWhatsAppComposer}
             handleDeleteOrder={handleDeleteOrder}
