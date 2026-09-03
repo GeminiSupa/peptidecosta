@@ -172,7 +172,7 @@ export async function POST(request) {
         const adminLead = order.notificationKind === 'payment-result'
           ? `${order.firstTeamAlert === true ? 'New Order ' : ''}${adminOutcome === 'paid' ? 'PAID' : adminOutcome === 'declined' ? 'DECLINED' : 'Payment update'}`
           : 'New Order';
-        const adminSubject = `${adminLead} ${order.orderNumber ? `#${order.orderNumber}` : ''} - ${order.customerName} [${order.paymentMethod?.toUpperCase()}]`;
+        const adminSubject = `${adminLead} ${order.orderNumber ? `#${order.orderNumber}` : ''} - ${order.customerName} [${String(order.paymentMethod || '').toUpperCase()}]`;
       const adminHtml = buildAdminHtml(order, paymentLabel, totalPrimary, totalUsd, totalCrc);
       
       const adminText = [
@@ -236,7 +236,7 @@ export async function POST(request) {
     }
 
     //  2. SEND CUSTOMER CONFIRMATION RECEIPT 
-    if (!skipCustomer && order.customerEmail && order.customerEmail.trim() !== '') {
+    if (!skipCustomer && order.customerEmail && String(order.customerEmail).trim() !== '') {
       // Declared out here so the accounting copy below can reuse the same body
       // after the customer's try/catch has closed.
       let customerHtml = '';
@@ -304,7 +304,7 @@ export async function POST(request) {
         const customerInfo = await transporter.sendMail({
           from: smtp.from,
           replyTo: smtp.replyTo,
-          to: order.customerEmail.trim(),
+          to: String(order.customerEmail).trim(),
           subject: customerSubject,
           html: customerHtml,
           text: customerText,
