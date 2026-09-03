@@ -9,8 +9,8 @@ import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { isRefundStatus } from '@/lib/orderRefund.mjs';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { orderVisibleToAgent } from '@/lib/agentOrders';
-import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, ORDER_INVENTORY_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
-import { sendAffiliateOrderWhatsApp } from '@/lib/orderWhatsAppAlerts';
+import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, ORDER_FULFILLMENT_COLUMNS, ORDER_INVENTORY_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import { recordReadyToPrepareNotification, sendAffiliateOrderWhatsApp, sendFulfillmentReadyWhatsApp } from '@/lib/orderWhatsAppAlerts';
 import { isFirstPaidTransition, shouldSendPaidConfirmation } from '@/lib/orderStatusEmails.mjs';
 import { shouldRestoreForStatus } from '@/lib/inventoryRestore.mjs';
 import { restoreInventoryForOrder } from '@/lib/inventoryRestoreServer';
@@ -66,6 +66,7 @@ export async function PATCH(request) {
       'payment_descriptor', 'payment_provider_response',
       'affiliate_id', 'agent_commission_rate_override', 'agent_commission_source',
       'manual_discount_type', 'manual_discount_value', 'manual_discount_reason',
+      'ready_to_prepare_at', 'ready_to_prepare_by',
     ];
     const patch = {};
     for (const key of allowed) {
@@ -370,7 +371,7 @@ export async function PATCH(request) {
 
     const { data, error, droppedColumns } = await writeDroppingMissingColumns(
       patch,
-      [...ORDER_ATTRIBUTION_COLUMNS, ...ORDER_INVENTORY_COLUMNS],
+      [...ORDER_ATTRIBUTION_COLUMNS, ...ORDER_INVENTORY_COLUMNS, ...ORDER_FULFILLMENT_COLUMNS],
       (row) => supabase
         .from('orders')
         .update(row)
@@ -428,6 +429,15 @@ export async function PATCH(request) {
       currentOrder.affiliate_id !== data.affiliate_id
     ) {
       await sendAffiliateOrderWhatsApp(supabase, data, data.order_number, data.id);
+    }
+
+    // The hand-off into the Fulfillment tab: only on the transition into the
+    // flag, never on every save of an order that already carries it, so
+    // reopening and re-saving an order already in the queue cannot re-buzz
+    // the packer's phone.
+    if (data.ready_to_prepare_at && !currentOrder.ready_to_prepare_at) {
+      await recordReadyToPrepareNotification(supabase, data, data.order_number);
+      await sendFulfillmentReadyWhatsApp(supabase, data, data.order_number, data.id);
     }
 
     // Trigger Customer Receipt if status changed to Paid/Completed

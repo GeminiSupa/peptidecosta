@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { analyticsWindow, previousRangeWindow } from '@/lib/analyticsDashboard.mjs';
+import { emailKey, phoneKey } from '@/lib/agentAttribution.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,7 @@ const SOURCES = [
   {
     key: 'carts',
     table: 'abandoned_carts',
-    select: 'id, session_id, status, cart_data, currency, created_at',
+    select: 'id, session_id, status, cart_data, currency, created_at, customer_name, customer_phone, customer_email',
     complete: true,
   },
   {
@@ -297,6 +298,43 @@ async function fetchPreviousOrders(supabase, window) {
   return { rows: data || [], error: null };
 }
 
+/**
+ * Team members, keyed by their own contact details.
+ *
+ * The live visitor table wants to say "Team: Dani" instead of "Known
+ * customer" when a cart's contact info is actually a colleague testing the
+ * storefront. The match happens here, server-side, so the browser never
+ * receives the team's own phone numbers — only the name already attached to
+ * the cart it asked for.
+ */
+async function fetchTeamDirectory(supabase) {
+  const { data, error } = await supabase.from('admin_profiles').select('name, email, whatsapp_number');
+  if (error) return { byEmail: new Map(), byPhone: new Map(), error: error.message };
+  const byEmail = new Map();
+  const byPhone = new Map();
+  for (const profile of data || []) {
+    const name = String(profile?.name || profile?.email || '').trim();
+    if (!name) continue;
+    const email = emailKey(profile?.email);
+    if (email) byEmail.set(email, name);
+    const phone = phoneKey(profile?.whatsapp_number);
+    if (phone) byPhone.set(phone, name);
+  }
+  return { byEmail, byPhone, error: null };
+}
+
+/** Tags each cart row with the team member it belongs to, if any. */
+function markTeamCarts(carts, directory) {
+  for (const cart of carts || []) {
+    const name = directory.byEmail.get(emailKey(cart.customer_email))
+      || directory.byPhone.get(phoneKey(cart.customer_phone));
+    if (name) {
+      cart.is_team_member = true;
+      cart.team_member_name = name;
+    }
+  }
+}
+
 export async function GET(request) {
   const auth = await verifyAdminSession(request, { requirePermission: 'analytics' });
   if (auth.error) return auth.error;
@@ -320,11 +358,12 @@ export async function GET(request) {
   const supabase = getSupabaseAdmin();
 
   try {
-    const [listHealth, overviewResult, previousOverview, previousOrders, ...results] = await Promise.all([
+    const [listHealth, overviewResult, previousOverview, previousOrders, teamDirectory, ...results] = await Promise.all([
       fetchListHealth(supabase, window),
       fetchOverview(supabase, window),
       previousWindow ? fetchOverview(supabase, previousWindow) : Promise.resolve({ overview: null }),
       fetchPreviousOrders(supabase, previousWindow),
+      fetchTeamDirectory(supabase),
       ...SOURCES.map((source) => fetchSource(supabase, source, window)),
       fetchCampaigns(supabase),
     ]);
@@ -336,6 +375,7 @@ export async function GET(request) {
     for (const result of results) {
       data[result.key] = result.rows;
       counts[result.key] = result.count;
+      if (result.key === 'carts') markTeamCarts(result.rows, teamDirectory);
       if (result.sampled) sampled.push(result.key);
       if (result.error) errors.push({ source: result.key, message: result.error });
       if (result.links) data.campaignLinks = result.links;

@@ -129,3 +129,9 @@ export const ORDER_INVENTORY_COLUMNS = [
   'inventory_deducted',
   'inventory_restored_at',
 ];
+
+/** Columns added by fulfillment-migration.sql. */
+export const ORDER_FULFILLMENT_COLUMNS = [
+  'ready_to_prepare_at',
+  'ready_to_prepare_by',
+];

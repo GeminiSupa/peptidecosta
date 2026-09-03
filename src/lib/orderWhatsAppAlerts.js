@@ -80,6 +80,91 @@ export async function recordNewOrderNotification(supabase, order, orderNumber) {
   if (error) throw new Error(error.message);
 }
 
+/** The in-dashboard bell, for whoever is looking at the screen right now. */
+export async function recordReadyToPrepareNotification(supabase, order, orderNumber) {
+  const itemCount = (order.items || []).reduce((total, item) => (
+    Number(item.price || 0) > 0 ? total + Number(item.qty || 0) : total
+  ), 0);
+  const { error } = await supabase.from('admin_notifications').insert({
+    type: 'ready_to_prepare',
+    title: `Ready to prepare: ${orderNumber}`,
+    body: `${order.customer_name || 'Customer'} - ${formatSalesAlertTotal(order)} - ${itemCount} ${itemCount === 1 ? 'unit' : 'units'}`.slice(0, 500),
+    link_tab: 'fulfillment',
+    link_ref: orderNumber,
+  });
+  if (error) console.warn('[order-whatsapp] Could not record ready-to-prepare notification:', error.message);
+}
+
+/**
+ * The WhatsApp ping to whoever packs orders, for when they are away from the
+ * screen. Sent to a fixed personal number rather than through
+ * notification_recipients — this alert has exactly one intended reader today.
+ *
+ * Reuses the "new order" template's four text slots (order #, customer +
+ * phone, total, item count) rather than pointing at a dedicated one: Meta has
+ * to approve a template before it can be sent, and nobody has requested
+ * approval for a "ready to prepare" wording yet. FULFILLMENT_READY_WHATSAPP_TEMPLATE
+ * can be set once one is approved, so the copy can say what actually happened
+ * instead of borrowing the new-order phrasing.
+ */
+export async function sendFulfillmentReadyWhatsApp(supabase, order, orderNumber, orderId = null) {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!accessToken || !phoneNumberId) return { skipped: 'missing_whatsapp_config' };
+
+  const ownerPhone = toE164(process.env.FULFILLMENT_OWNER_WHATSAPP || '50660626224', DEFAULT_PHONE_COUNTRY);
+  if (!isValidE164(ownerPhone)) return { skipped: 'missing_owner_whatsapp' };
+
+  const templateName = process.env.FULFILLMENT_READY_WHATSAPP_TEMPLATE || process.env.SALES_TEAM_WHATSAPP_TEMPLATE || 'alerta_nuevo_pedido';
+  const templateLanguage = process.env.FULFILLMENT_READY_WHATSAPP_TEMPLATE_LANGUAGE || process.env.SALES_TEAM_WHATSAPP_TEMPLATE_LANGUAGE || 'es';
+  const itemCount = (order.items || []).reduce((total, item) => (
+    Number(item.price || 0) > 0 ? total + Number(item.qty || 0) : total
+  ), 0);
+
+  try {
+    const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(WHATSAPP_TIMEOUT_MS),
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: ownerPhone,
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: templateLanguage },
+          components: [{
+            type: 'body',
+            parameters: [
+              { type: 'text', text: orderNumber },
+              { type: 'text', text: `${order.customer_name} - ${order.customer_phone || 'N/A'}` },
+              { type: 'text', text: formatSalesAlertTotal(order) },
+              { type: 'text', text: `${itemCount} ${itemCount === 1 ? 'articulo' : 'articulos'}` },
+            ],
+          }],
+        },
+      }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.error('[order-whatsapp] Fulfillment ready alert rejected by Meta:', result);
+      return { skipped: 'meta_rejected', error: result?.error?.message || `Meta API returned ${response.status}` };
+    }
+    const messageId = result.messages?.[0]?.id;
+    await logOrderAlert(supabase, {
+      phone: ownerPhone,
+      messageId,
+      summary: `Ready to prepare ${orderNumber} - ${order.customer_name} - ${formatSalesAlertTotal(order)}`,
+      orderId,
+      raw: result,
+    });
+    return { sent: true, phone: ownerPhone, messageId };
+  } catch (err) {
+    console.error('[order-whatsapp] Fulfillment ready alert error:', err.message);
+    return { skipped: 'send_failed', error: err.message };
+  }
+}
+
 async function resolveTeamOrderWhatsAppRecipients(supabase) {
   const { available, recipients } = await getNotificationRecipients(supabase, {
     channel: 'whatsapp',

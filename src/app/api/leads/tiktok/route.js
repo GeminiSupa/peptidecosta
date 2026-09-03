@@ -15,6 +15,8 @@ import {
   TIKTOK_LEAD_SOURCE,
   tikTokSubmissionRef,
 } from '@/lib/tiktokLeadPosting.mjs';
+import { resolveNextTikTokAgent } from '@/lib/tiktokRoundRobin.mjs';
+import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,7 +26,12 @@ const RESPONSE_SLA_MINUTES = 15;
 
 const json = (body, status = 200) => NextResponse.json(body, { status });
 
-async function loadTikTokAssignee(supabase) {
+/**
+ * Last resort if none of the three rotation agents are active and working
+ * leads right now — the single fixed assignee TikTok leads used to always go
+ * to. Better than a lead nobody owns.
+ */
+async function loadFallbackAssignee(supabase) {
   const { data, error } = await supabase
     .from('admin_profiles')
     .select('name, email, status, permissions')
@@ -35,7 +42,7 @@ async function loadTikTokAssignee(supabase) {
   const canWorkLeads = active
     && Array.isArray(data.permissions)
     && data.permissions.includes('leads');
-  return canWorkLeads ? data : null;
+  return canWorkLeads ? { name: String(data.name || data.email).trim(), email: String(data.email).trim().toLowerCase() } : null;
 }
 
 async function identityLeadIds(supabase, identities) {
@@ -65,15 +72,16 @@ async function loadExistingLead(supabase, identities) {
   return { lead: data };
 }
 
-async function recordAssignment(supabase, { leadId, previousAgent, newAgent }) {
-  const changed = String(previousAgent || '').trim().toLowerCase()
-    !== String(newAgent || '').trim().toLowerCase();
+// Only ever called for a lead that had no owner yet: one that already had an
+// agent keeps them (see the caller), so there is no "transferred" case left
+// to record here — a TikTok lead's ownership never changes once someone owns it.
+async function recordAssignment(supabase, { leadId, newAgent }) {
   const { error } = await supabase.from('lead_assignment_events').insert({
     lead_id: leadId,
-    action: previousAgent && changed ? 'transferred' : 'auto_assigned',
-    previous_agent: previousAgent || null,
+    action: 'auto_assigned',
+    previous_agent: null,
     new_agent: newAgent,
-    reason: 'TikTok form leads are assigned to Yese',
+    reason: 'TikTok form leads rotate between Pollita, Dani and Korinne',
     actor_email: 'tiktok-leads@peptidescostarica.net',
   });
   if (error) console.warn('[leads/tiktok] Assignment audit skipped:', error.message);
@@ -118,9 +126,6 @@ export async function POST(request) {
     if (!identities.length) return json({ error: 'email_or_phone_required' }, 400);
 
     const supabase = getSupabaseAdmin();
-    const assignee = await loadTikTokAssignee(supabase);
-    if (!assignee) return json({ error: 'tiktok_assignee_unavailable' }, 503);
-    const owner = String(assignee.name || assignee.email).trim();
     const submissionRef = tikTokSubmissionRef(lead.externalLeadId);
 
     // TikTok and connector retries reuse lead_id. A repeat is acknowledged
@@ -141,7 +146,7 @@ export async function POST(request) {
         success: true,
         record: 'duplicate',
         leadId: duplicate.id,
-        assignedAgent: duplicate.sales_agent || owner,
+        assignedAgent: duplicate.sales_agent || null,
         notification: 'duplicate_suppressed',
       });
     }
@@ -154,6 +159,18 @@ export async function POST(request) {
       }, 409);
     }
     const existing = existingResult.lead;
+
+    // A contact who already has a CRM lead keeps whoever owns it. Only a
+    // genuinely new lead is rotated — see tiktokRoundRobin.mjs for why.
+    const previousOwner = String(existing?.sales_agent || existing?.owner || existing?.assigned_to || '').trim();
+    let owner = previousOwner;
+    let rotatedAgent = null;
+    if (!owner) {
+      rotatedAgent = await resolveNextTikTokAgent(supabase) || await loadFallbackAssignee(supabase);
+      if (!rotatedAgent) return json({ error: 'tiktok_assignee_unavailable' }, 503);
+      owner = rotatedAgent.name;
+    }
+
     const nowIso = new Date().toISOString();
     const dueAt = responseDeadline(nowIso, RESPONSE_SLA_MINUTES);
     const contactMethod = existing?.contact_method || (lead.email ? 'email' : 'whatsapp');
@@ -162,7 +179,6 @@ export async function POST(request) {
       ? existing.name
       : lead.name;
     const note = buildNotes({ ...lead, name: displayName }, phone);
-    const previousOwner = String(existing?.sales_agent || existing?.owner || existing?.assigned_to || '').trim();
     const ownerChanged = previousOwner.toLowerCase() !== owner.toLowerCase();
     const qualification = {
       source: 'TikTok Forms',
@@ -211,11 +227,7 @@ export async function POST(request) {
     if (saveError) throw saveError;
 
     if (!existing || ownerChanged) {
-      await recordAssignment(supabase, {
-        leadId: saved.id,
-        previousAgent: previousOwner || null,
-        newAgent: owner,
-      });
+      await recordAssignment(supabase, { leadId: saved.id, newAgent: owner });
     }
 
     let notification = { tracked: true, status: 'pending' };
@@ -233,8 +245,13 @@ export async function POST(request) {
           failed: queued.failed ?? null,
         };
       } else {
+        // Legacy path only — the outbox table above is what normally sends
+        // this. It resolves the audience from the lead's actual owner; this
+        // one predates that and only ever knew a single fixed address, so a
+        // rotated lead falls back to the ops address rather than silently
+        // going nowhere.
         const deliveries = await sendLeadEmails({
-          recipients: [TIKTOK_ASSIGNEE_EMAIL],
+          recipients: [rotatedAgent?.email || TIKTOK_ASSIGNEE_EMAIL],
           details: {
             name: displayName,
             email: lead.email,
@@ -256,6 +273,25 @@ export async function POST(request) {
       // The database trigger already queued the durable job. A provider outage
       // must not make the connector retry the lead save itself.
       console.error('[leads/tiktok] Immediate notification attempt failed:', notificationError);
+    }
+
+    // The personal ping. Only fires on the rotation actually picking someone —
+    // never on a repeat submission to a lead that already has an owner — and
+    // only reaches that one agent's own number, not the shared lead-alert
+    // audience the outbox above already emailed.
+    if (rotatedAgent?.whatsapp) {
+      try {
+        const result = await sendLandingLeadWhatsAppAlerts(supabase, {
+          name: displayName,
+          phone,
+          qualification: { category: lead.campaign || 'TikTok' },
+          dueAt,
+          recipients: [{ label: rotatedAgent.name, destination: rotatedAgent.whatsapp }],
+        });
+        if (result.error) console.warn('[leads/tiktok] Round-robin WhatsApp ping skipped:', result.error);
+      } catch (whatsAppError) {
+        console.error('[leads/tiktok] Round-robin WhatsApp ping failed:', whatsAppError);
+      }
     }
 
     return json({

@@ -146,6 +146,7 @@ export default function OrderDetailPanel({
   isSuperadmin = false,
   onRequestRefund,
   exchangeRate = ADMIN_FALLBACK_EXCHANGE_RATE,
+  currentAgentName = '',
 }) {
   const initialShipping = order ? inferShippingCosts(order) : { crc: 0, usd: 0 };
   const initialCurrency = normalizeAdminOrderCurrency(order?.currency);
@@ -186,6 +187,7 @@ export default function OrderDetailPanel({
   const [attributionError, setAttributionError] = useState('');
   const [resendingCompletion, setResendingCompletion] = useState(false);
   const [resendingAccounting, setResendingAccounting] = useState(false);
+  const [markingReady, setMarkingReady] = useState(false);
 
   useEffect(() => {
     if (!order) return;
@@ -820,6 +822,60 @@ export default function OrderDetailPanel({
                 placeholder="Correos tracking #"
                 onBlur={(e) => onTrackingChange(order.id, e.target.value)}
               />
+            </div>
+            <div>
+              <label>Fulfillment</label>
+              {order.ready_to_prepare_at ? (
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 7, alignItems: 'flex-start' }}>
+                  <strong style={{ color: '#4ade80', fontSize: '.78rem' }}>
+                    Ready to prepare since {new Date(order.ready_to_prepare_at).toLocaleString()}
+                    {order.ready_to_prepare_by ? ` (by ${order.ready_to_prepare_by})` : ''}
+                  </strong>
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-secondary"
+                    disabled={markingReady}
+                    onClick={async () => {
+                      setMarkingReady(true);
+                      try {
+                        await patchOrder(
+                          { ready_to_prepare_at: null, ready_to_prepare_by: null },
+                          { type: 'note', message: 'Removed from the fulfillment queue' }
+                        );
+                      } catch (err) {
+                        alert(err.message);
+                      } finally {
+                        setMarkingReady(false);
+                      }
+                    }}
+                    style={{ fontSize: '.74rem', padding: '6px 9px' }}
+                  >
+                    {markingReady ? 'Removing…' : 'Remove from fulfillment queue'}
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-primary"
+                  disabled={markingReady}
+                  onClick={async () => {
+                    setMarkingReady(true);
+                    try {
+                      await patchOrder(
+                        { ready_to_prepare_at: new Date().toISOString(), ready_to_prepare_by: currentAgentName || null },
+                        { type: 'ready_to_prepare', message: 'Marked ready to prepare — handed off to fulfillment' }
+                      );
+                    } catch (err) {
+                      alert(err.message);
+                    } finally {
+                      setMarkingReady(false);
+                    }
+                  }}
+                  style={{ fontSize: '.78rem', padding: '7px 11px' }}
+                >
+                  {markingReady ? 'Sending…' : 'Mark ready to prepare'}
+                </button>
+              )}
             </div>
             {['Completed', 'Order Complete'].includes(order.status) && (
               <div>

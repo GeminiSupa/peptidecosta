@@ -619,6 +619,18 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const knownActiveUsers = activeLiveSessions.filter((session) => session.known_customer).length;
   const activeDomains = new Set(activeLiveSessions.map((session) => session.hostname).filter(Boolean)).size;
 
+  // A session and its abandoned cart share the same browser-issued session_id,
+  // so this is the only link between "who is on the site right now" and "who
+  // are they" — a cart is written the moment a visitor reaches checkout, with
+  // whatever name/contact they typed and whatever is in the cart. The dashboard
+  // route already flags a cart as staff testing the storefront themselves.
+  const cartBySessionId = {};
+  dbCarts.forEach((cart) => {
+    if (cart.session_id) cartBySessionId[cart.session_id] = cart;
+  });
+  const teamOnSiteCount = activeLiveSessions
+    .filter((session) => cartBySessionId[session.session_id]?.is_team_member).length;
+
   const livePageCounts = Object.entries(activeLiveSessions.reduce((counts, session) => {
     const label = `${session.hostname || 'catalog'}${session.current_path || '/catalog'}`;
     counts[label] = (counts[label] || 0) + 1;
@@ -2646,7 +2658,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             <p style={{ margin: 0, color: 'var(--an-ink-muted)', fontSize: '.78rem' }}>First-party heartbeat data across every domain using the shared tracker.</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {[['Active', activeLiveUsers], ['Known customers', knownActiveUsers], ['Domains', activeDomains], ['Journey events', totalJourneyEvents]].map(([label, value]) => (
+            {[['Active', activeLiveUsers], ['Known customers', knownActiveUsers], ['Team on site', teamOnSiteCount], ['Domains', activeDomains], ['Journey events', totalJourneyEvents]].map(([label, value]) => (
               <div key={label} style={{ background: 'var(--an-surface-raised)', borderRadius: 9, padding: '8px 11px', minWidth: 90 }}>
                 <div style={{ color: 'var(--an-ink)', fontWeight: 900, fontSize: '1rem' }}>{value}</div>
                 <div style={{ color: 'var(--an-ink-faint)', fontSize: '.66rem' }}>{label}</div>
@@ -2667,17 +2679,35 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
               </thead>
               <tbody>
                 {activeLiveSessions.slice(0, 20).map((session) => {
+                  const linkedCart = cartBySessionId[session.session_id];
+                  const isTeam = Boolean(linkedCart?.is_team_member);
+                  // A name off the linked cart beats the bare "Known customer"
+                  // label whenever we have one — it is the same fact, said
+                  // usefully. Falls back to the boolean when a returning
+                  // visitor hasn't reached checkout yet this session, so there
+                  // is no name to show.
+                  const visitorLabel = isTeam
+                    ? `Team: ${linkedCart.team_member_name}`
+                    : linkedCart?.customer_name
+                      ? linkedCart.customer_name
+                      : session.known_customer ? (session.customer_name || 'Known customer') : 'Anonymous';
+                  const visitorColor = isTeam
+                    ? '#c4b5fd'
+                    : (linkedCart?.customer_name || session.known_customer) ? '#86efac' : '#cbd5e1';
+                  const cartCount = Number(session.cart_items) || 0;
+                  
                   const cart = carts.find(c => c.session_id === session.session_id);
-                  const items = getCartItemsList(cart?.cart_data);
+                  const items = getCartItemsList(cart?.cart_data || linkedCart?.cart_data);
+                  
                   return (
                     <tr key={session.session_id} style={{ borderBottom: '1px solid rgba(255,255,255,.05)' }}>
-                      <td style={{ padding: '9px 6px', color: session.known_customer ? '#86efac' : '#cbd5e1', fontWeight: 700, verticalAlign: 'top' }}>
-                        {session.known_customer ? (session.customer_name || 'Known customer') : 'Anonymous'}
+                      <td style={{ padding: '9px 6px', color: visitorColor, fontWeight: 700, verticalAlign: 'top' }}>
+                        {visitorLabel}
                       </td>
                       <td style={{ padding: '9px 6px', color: 'var(--an-ink)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{session.hostname || 'catalog'}{session.current_path || '/catalog'}</td>
                       <td style={{ padding: '9px 6px', color: 'var(--an-ink-soft)', verticalAlign: 'top' }}>{session.last_touch_source || session.utm_source || 'direct'}{session.utm_campaign ? ` · ${session.utm_campaign}` : ''}</td>
-                      <td style={{ padding: '9px 6px', color: Number(session.cart_items) > 0 ? '#fbbf24' : '#64748b', verticalAlign: 'top' }}>
-                        <div>{Number(session.cart_items) || 0} item(s)</div>
+                      <td style={{ padding: '9px 6px', color: cartCount > 0 ? '#fbbf24' : '#64748b', verticalAlign: 'top' }}>
+                        <div>{cartCount > 0 ? `${cartCount} item(s)` : '0 item(s)'}</div>
                         {items.length > 0 && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px', fontSize: '0.75rem', opacity: 0.9 }}>
                             {items.map((item, idx) => (

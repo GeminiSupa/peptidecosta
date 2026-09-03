@@ -81,7 +81,7 @@ New CRM row (`201 Created`):
   "success": true,
   "record": "created",
   "leadId": "crm-uuid",
-  "assignedAgent": "Yese",
+  "assignedAgent": "Pollita",
   "source": "tiktok_form",
   "notification": {
     "tracked": true,
@@ -96,14 +96,22 @@ A repeated request with the same `lead_id` returns `200 OK`, `record` set to
 `duplicate`, and does not send a second notification.
 
 If the email or phone already exists in the CRM, the existing record is updated
-with the new TikTok enquiry and assigned to Yese instead of creating a duplicate
-contact.
+with the new TikTok enquiry and keeps whichever agent already owns it, instead
+of creating a duplicate contact.
 
 ## CRM behavior
 
+A brand-new TikTok lead — nobody already owns this phone/email in the CRM —
+rotates between Pollita, Dani and Korinne (`src/lib/tiktokRoundRobin.mjs`),
+skipping anyone inactive or without the Leads permission. A repeat submission
+from a contact who already has a CRM lead keeps that lead's existing owner;
+the rotation is never re-run for it. If none of the three are currently
+eligible, the lead falls back to whichever profile matches
+`TIKTOK_ASSIGNEE_EMAIL` (`surfyesi@hotmail.com`) rather than going unassigned.
+
 Every accepted submission is stored with:
 
-- `sales_agent`: Yese
+- `sales_agent`: the rotated (or kept) agent's name
 - `lead_source`: `tiktok_form`
 - `utm_source`: `tiktok`
 - `utm_medium`: `lead_form`
@@ -111,12 +119,17 @@ Every accepted submission is stored with:
 - `referrer`: `TikTok Instant Form · Lead <lead_id>`
 - TikTok campaign, form, ad, timestamp, and custom answers in the lead details
 
-The notification uses the existing retryable lead outbox and sends to Yese's
-active team-profile email, `surfyesi@hotmail.com`, with this exact subject:
+The notification uses the existing retryable lead outbox and sends to the
+assigned agent's active team-profile email, with this exact subject:
 
 ```text
 New Lead From TikTok Forms
 ```
+
+On a fresh rotation assignment only (never on a repeat submission to an
+already-owned lead), the newly assigned agent also gets a WhatsApp ping at
+their own `admin_profiles.whatsapp_number`, using the same `alerta_nuevo_lead`
+template AdWords leads already use.
 
 ## Error responses
 
@@ -130,7 +143,7 @@ New Lead From TikTok Forms
 | `409` | `contact_race` | Another request saved the same contact concurrently; retry with the same `lead_id`. |
 | `429` | `rate_limited` | More than 120 requests arrived from one IP within 10 minutes. |
 | `503` | `posting_not_configured` | `TIKTOK_LEAD_POSTING_SECRET` is not installed. |
-| `503` | `tiktok_assignee_unavailable` | Yese's active Leads-enabled profile could not be found. |
+| `503` | `tiktok_assignee_unavailable` | None of Pollita, Dani, Korinne, or the fallback profile are active and Leads-enabled. |
 | `500` | `save_failed` | The server could not save the lead. Retry the same `lead_id`. |
 
 For Make, Zapier, LeadsBridge, or another connector, create an HTTP POST step,

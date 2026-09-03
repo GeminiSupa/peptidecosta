@@ -31,7 +31,7 @@ import {
   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send, QrCode,
   Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft, Megaphone,
-  PanelLeftClose, PanelLeftOpen, Wallet, MapPinned, ChevronDown
+  PanelLeftClose, PanelLeftOpen, Wallet, MapPinned, ChevronDown, Package
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
@@ -120,6 +120,7 @@ const isValidOptionalUrl = (value) => {
 };
 
 const OrdersManager = dynamicTab(() => import('@/components/admin/OrdersManager'), 'Loading orders…');
+const FulfillmentManager = dynamicTab(() => import('@/components/admin/FulfillmentManager'), 'Loading fulfillment…');
 const ProductsManager = dynamicTab(() => import('@/components/admin/ProductsManager'), 'Loading products…');
 const EmailMarketingStudio = dynamicTab(() => import('@/components/admin/marketing/EmailMarketingStudio'), 'Loading marketing studio…');
 const WhatsAppSession = dynamicTab(() => import('@/components/admin/marketing/WhatsAppSession'), 'Loading WhatsApp session…');
@@ -189,6 +190,8 @@ function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, i
       return abandonedCarts.length
         ? `${abandonedCarts.length} cart${abandonedCarts.length !== 1 ? 's' : ''} to recover`
         : 'No active abandoned carts';
+    case 'fulfillment':
+      return 'Orders handed off by sales, waiting to be packed';
     case 'leads':
       return newLeads
         ? `${newLeads} new lead${newLeads !== 1 ? 's' : ''} · ${leads.length} total`
@@ -1705,6 +1708,14 @@ Core Rules:
   // Matches the Home tile and the "Needs payment" filter: every state waiting
   // on money, not just the literal 'Pending'.
   const pendingOrderCount = visibleOrders.filter((o) => isAwaitingPayment(o.status)).length;
+  // The Fulfillment badge: handed off by sales, not yet packed. Matches
+  // FulfillmentManager's own filter so the sidebar count and the tab's list
+  // never disagree.
+  const fulfillmentQueueCount = orders.filter((o) => {
+    if (!o.ready_to_prepare_at) return false;
+    const status = String(o.status || '').toLowerCase();
+    return !['order complete', 'completed', 'cancelled', 'declined', 'refunded'].includes(status);
+  }).length;
   const pendingReviewCount = reviews.filter((r) => r.status === 'Pending').length;
   const unreadFacebookCount = facebookNotifications.filter((n) => n.status === 'unread').length;
   const makeAdminTabMeta = (iconSize = 14) => ({
@@ -1725,6 +1736,12 @@ Core Rules:
       icon: <ClipboardList size={iconSize} />,
       badge: pendingOrderCount,
       badgeTone: 'danger',
+    },
+    fulfillment: {
+      label: 'Fulfillment',
+      icon: <Package size={iconSize} />,
+      badge: fulfillmentQueueCount,
+      badgeTone: 'warning',
     },
     customers: {
       label: 'Customers',
@@ -1841,7 +1858,7 @@ Core Rules:
   const desktopPrimaryTabIds = (
     isSubUserProfile
       ? ['my_earnings', 'my_qr', 'team_chat']
-      : ['home', 'orders', 'whatsapp_ai', 'live_chat', 'leads', 'customers', 'carts']
+      : ['home', 'orders', 'fulfillment', 'whatsapp_ai', 'live_chat', 'leads', 'customers', 'carts']
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
     { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects', 'messenger'] },
@@ -5346,6 +5363,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           </ErrorBoundary>
         )}
 
+        {/* TAB 2b: FULFILLMENT QUEUE */}
+        {activeTab === 'fulfillment' && (
+          <ErrorBoundary>
+            <FulfillmentManager orders={orders} setSelectedOrderDetails={setSelectedOrderDetails} />
+          </ErrorBoundary>
+        )}
+
         {/* TAB 3: SHARE LINKS GENERATOR */}
         {activeTab === 'share' && (
           <div>
@@ -7599,6 +7623,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           isSuperadmin={!!adminProfile?.is_superadmin}
           onRequestRefund={setRefundOrder}
           exchangeRate={exchangeRate}
+          currentAgentName={adminProfile?.name || adminProfile?.email || ''}
         />
       )}
 
