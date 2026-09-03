@@ -222,7 +222,7 @@ export async function POST(request) {
         subject: adminSubject,
         html: adminHtml,
         text: adminText,
-        replyTo: order.customerEmail || undefined,
+        replyTo: order.customerEmail ? String(order.customerEmail).trim() : undefined,
         attachments: [getOrderEmailLogoAttachment()],
       });
 
