@@ -1,0 +1,1036 @@
+From 95c344f84eb73cb02d685107b51d6a84a001abc8 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 3 Sep 2026 08:58:20 +0000
+Subject: [PATCH] Add fulfillment queue, TikTok lead round robin, and richer
+ live analytics
+
+- Analytics: live visitor table shows the customer's actual name (from
+  their linked cart) or "Team: <name>" instead of a bare "Known customer"
+  label, and shows cart product names instead of just an item count.
+- Fulfillment: new orders.ready_to_prepare_at/_by columns and a
+  superadmin-only Fulfillment tab. An agent marks a paid order "ready to
+  prepare", which pings the owner's WhatsApp and an in-app notification;
+  the order drops off the queue once it reaches Order Complete, reusing
+  the existing shipped-notification flow.
+- TikTok leads: new leads now rotate between Pollita, Dani and Korinne
+  instead of always going to one fixed agent, with a WhatsApp ping to
+  whoever gets picked. A contact who already owns a CRM lead keeps that
+  owner rather than being reshuffled on a repeat form submission.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01VG1FtmjgdA8HYDRxZmEwny
+---
+ docs/tiktok-lead-posting.md                   |  27 +++-
+ fulfillment-migration.sql                     |  26 ++++
+ src/app/admin/page.js                         |  29 +++-
+ .../api/admin/analytics-dashboard/route.js    |  44 +++++-
+ src/app/api/admin/orders/update/route.js      |  16 ++-
+ src/app/api/leads/tiktok/route.js             |  74 +++++++---
+ src/components/admin/AnalyticsDashboard.js    |  60 ++++++--
+ src/components/admin/FulfillmentManager.js    | 128 ++++++++++++++++++
+ src/components/admin/OrderDetailPanel.js      |  56 ++++++++
+ src/lib/adminModules.js                       |   4 +
+ src/lib/optionalColumns.mjs                   |   6 +
+ src/lib/orderWhatsAppAlerts.js                |  85 ++++++++++++
+ src/lib/tiktokRoundRobin.mjs                  |  78 +++++++++++
+ 13 files changed, 590 insertions(+), 43 deletions(-)
+ create mode 100644 fulfillment-migration.sql
+ create mode 100644 src/components/admin/FulfillmentManager.js
+ create mode 100644 src/lib/tiktokRoundRobin.mjs
+
+diff --git a/docs/tiktok-lead-posting.md b/docs/tiktok-lead-posting.md
+index af69abc..26e0dd5 100644
+--- a/docs/tiktok-lead-posting.md
++++ b/docs/tiktok-lead-posting.md
+@@ -81,7 +81,7 @@ New CRM row (`201 Created`):
+   "success": true,
+   "record": "created",
+   "leadId": "crm-uuid",
+-  "assignedAgent": "Yese",
++  "assignedAgent": "Pollita",
+   "source": "tiktok_form",
+   "notification": {
+     "tracked": true,
+@@ -96,14 +96,22 @@ A repeated request with the same `lead_id` returns `200 OK`, `record` set to
+ `duplicate`, and does not send a second notification.
+ 
+ If the email or phone already exists in the CRM, the existing record is updated
+-with the new TikTok enquiry and assigned to Yese instead of creating a duplicate
+-contact.
++with the new TikTok enquiry and keeps whichever agent already owns it, instead
++of creating a duplicate contact.
+ 
+ ## CRM behavior
+ 
++A brand-new TikTok lead — nobody already owns this phone/email in the CRM —
++rotates between Pollita, Dani and Korinne (`src/lib/tiktokRoundRobin.mjs`),
++skipping anyone inactive or without the Leads permission. A repeat submission
++from a contact who already has a CRM lead keeps that lead's existing owner;
++the rotation is never re-run for it. If none of the three are currently
++eligible, the lead falls back to whichever profile matches
++`TIKTOK_ASSIGNEE_EMAIL` (`surfyesi@hotmail.com`) rather than going unassigned.
++
+ Every accepted submission is stored with:
+ 
+-- `sales_agent`: Yese
++- `sales_agent`: the rotated (or kept) agent's name
+ - `lead_source`: `tiktok_form`
+ - `utm_source`: `tiktok`
+ - `utm_medium`: `lead_form`
+@@ -111,13 +119,18 @@ Every accepted submission is stored with:
+ - `referrer`: `TikTok Instant Form · Lead <lead_id>`
+ - TikTok campaign, form, ad, timestamp, and custom answers in the lead details
+ 
+-The notification uses the existing retryable lead outbox and sends to Yese's
+-active team-profile email, `surfyesi@hotmail.com`, with this exact subject:
++The notification uses the existing retryable lead outbox and sends to the
++assigned agent's active team-profile email, with this exact subject:
+ 
+ ```text
+ New Lead From TikTok Forms
+ ```
+ 
++On a fresh rotation assignment only (never on a repeat submission to an
++already-owned lead), the newly assigned agent also gets a WhatsApp ping at
++their own `admin_profiles.whatsapp_number`, using the same `alerta_nuevo_lead`
++template AdWords leads already use.
++
+ ## Error responses
+ 
+ | HTTP | Error | Meaning |
+@@ -130,7 +143,7 @@ New Lead From TikTok Forms
+ | `409` | `contact_race` | Another request saved the same contact concurrently; retry with the same `lead_id`. |
+ | `429` | `rate_limited` | More than 120 requests arrived from one IP within 10 minutes. |
+ | `503` | `posting_not_configured` | `TIKTOK_LEAD_POSTING_SECRET` is not installed. |
+-| `503` | `tiktok_assignee_unavailable` | Yese's active Leads-enabled profile could not be found. |
++| `503` | `tiktok_assignee_unavailable` | None of Pollita, Dani, Korinne, or the fallback profile are active and Leads-enabled. |
+ | `500` | `save_failed` | The server could not save the lead. Retry the same `lead_id`. |
+ 
+ For Make, Zapier, LeadsBridge, or another connector, create an HTTP POST step,
+diff --git a/fulfillment-migration.sql b/fulfillment-migration.sql
+new file mode 100644
+index 0000000..f94c300
+--- /dev/null
++++ b/fulfillment-migration.sql
+@@ -0,0 +1,26 @@
++-- Fulfillment queue: the step between "sales agent got paid" and "Omer packed
++-- and shipped it".
++--
++-- ready_to_prepare_at is the flag itself. Null means the order has not been
++-- handed to fulfillment yet; a timestamp means it has, and is the moment it
++-- entered the queue. ready_to_prepare_by records which agent handed it over,
++-- for the same reason sales_agent is recorded elsewhere — so a question about
++-- who did what has an answer.
++--
++-- There is deliberately no "packed" or "finished" column here. The existing
++-- status flow already means that: an order leaves the Fulfillment tab the
++-- moment its status reaches Order Complete (with a tracking number), which
++-- already fires the customer's shipped notification. A second status would
++-- only be a second thing that can disagree with the first.
++--
++-- Safe to run more than once.
++
++ALTER TABLE public.orders
++  ADD COLUMN IF NOT EXISTS ready_to_prepare_at timestamptz,
++  ADD COLUMN IF NOT EXISTS ready_to_prepare_by text;
++
++-- The Fulfillment tab's whole query is "orders with the flag set, still not
++-- complete" — this is that query's index.
++CREATE INDEX IF NOT EXISTS orders_ready_to_prepare_idx
++  ON public.orders (ready_to_prepare_at)
++  WHERE ready_to_prepare_at IS NOT NULL;
+diff --git a/src/app/admin/page.js b/src/app/admin/page.js
+index e175d15..3b48c59 100644
+--- a/src/app/admin/page.js
++++ b/src/app/admin/page.js
+@@ -31,7 +31,7 @@ import {
+   Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
+   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send, QrCode,
+   Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft, Megaphone,
+-  PanelLeftClose, PanelLeftOpen, Wallet, MapPinned, ChevronDown
++  PanelLeftClose, PanelLeftOpen, Wallet, MapPinned, ChevronDown, Package
+ } from 'lucide-react';
+ import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
+ import CustomersCRM from '@/components/admin/CustomersCRM';
+@@ -120,6 +120,7 @@ const isValidOptionalUrl = (value) => {
+ };
+ 
+ const OrdersManager = dynamicTab(() => import('@/components/admin/OrdersManager'), 'Loading orders…');
++const FulfillmentManager = dynamicTab(() => import('@/components/admin/FulfillmentManager'), 'Loading fulfillment…');
+ const ProductsManager = dynamicTab(() => import('@/components/admin/ProductsManager'), 'Loading products…');
+ const EmailMarketingStudio = dynamicTab(() => import('@/components/admin/marketing/EmailMarketingStudio'), 'Loading marketing studio…');
+ const WhatsAppSession = dynamicTab(() => import('@/components/admin/marketing/WhatsAppSession'), 'Loading WhatsApp session…');
+@@ -189,6 +190,8 @@ function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, i
+       return abandonedCarts.length
+         ? `${abandonedCarts.length} cart${abandonedCarts.length !== 1 ? 's' : ''} to recover`
+         : 'No active abandoned carts';
++    case 'fulfillment':
++      return 'Orders handed off by sales, waiting to be packed';
+     case 'leads':
+       return newLeads
+         ? `${newLeads} new lead${newLeads !== 1 ? 's' : ''} · ${leads.length} total`
+@@ -1705,6 +1708,14 @@ Core Rules:
+   // Matches the Home tile and the "Needs payment" filter: every state waiting
+   // on money, not just the literal 'Pending'.
+   const pendingOrderCount = visibleOrders.filter((o) => isAwaitingPayment(o.status)).length;
++  // The Fulfillment badge: handed off by sales, not yet packed. Matches
++  // FulfillmentManager's own filter so the sidebar count and the tab's list
++  // never disagree.
++  const fulfillmentQueueCount = orders.filter((o) => {
++    if (!o.ready_to_prepare_at) return false;
++    const status = String(o.status || '').toLowerCase();
++    return !['order complete', 'completed', 'cancelled', 'declined', 'refunded'].includes(status);
++  }).length;
+   const pendingReviewCount = reviews.filter((r) => r.status === 'Pending').length;
+   const unreadFacebookCount = facebookNotifications.filter((n) => n.status === 'unread').length;
+   const makeAdminTabMeta = (iconSize = 14) => ({
+@@ -1726,6 +1737,12 @@ Core Rules:
+       badge: pendingOrderCount,
+       badgeTone: 'danger',
+     },
++    fulfillment: {
++      label: 'Fulfillment',
++      icon: <Package size={iconSize} />,
++      badge: fulfillmentQueueCount,
++      badgeTone: 'warning',
++    },
+     customers: {
+       label: 'Customers',
+       icon: <Users size={iconSize} />,
+@@ -1841,7 +1858,7 @@ Core Rules:
+   const desktopPrimaryTabIds = (
+     isSubUserProfile
+       ? ['my_earnings', 'my_qr', 'team_chat']
+-      : ['home', 'orders', 'whatsapp_ai', 'live_chat', 'leads', 'customers', 'carts']
++      : ['home', 'orders', 'fulfillment', 'whatsapp_ai', 'live_chat', 'leads', 'customers', 'carts']
+   ).filter((tabId) => hasAccess(tabId));
+   const desktopSecondaryGroups = [
+     { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects', 'messenger'] },
+@@ -5346,6 +5363,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
+           </ErrorBoundary>
+         )}
+ 
++        {/* TAB 2b: FULFILLMENT QUEUE */}
++        {activeTab === 'fulfillment' && (
++          <ErrorBoundary>
++            <FulfillmentManager orders={orders} setSelectedOrderDetails={setSelectedOrderDetails} />
++          </ErrorBoundary>
++        )}
++
+         {/* TAB 3: SHARE LINKS GENERATOR */}
+         {activeTab === 'share' && (
+           <div>
+@@ -7599,6 +7623,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
+           isSuperadmin={!!adminProfile?.is_superadmin}
+           onRequestRefund={setRefundOrder}
+           exchangeRate={exchangeRate}
++          currentAgentName={adminProfile?.name || adminProfile?.email || ''}
+         />
+       )}
+ 
+diff --git a/src/app/api/admin/analytics-dashboard/route.js b/src/app/api/admin/analytics-dashboard/route.js
+index 5b030f9..2ae85a2 100644
+--- a/src/app/api/admin/analytics-dashboard/route.js
++++ b/src/app/api/admin/analytics-dashboard/route.js
+@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
+ import { verifyAdminSession } from '@/lib/adminAuth';
+ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+ import { analyticsWindow, previousRangeWindow } from '@/lib/analyticsDashboard.mjs';
++import { emailKey, phoneKey } from '@/lib/agentAttribution.mjs';
+ 
+ export const dynamic = 'force-dynamic';
+ 
+@@ -34,7 +35,7 @@ const SOURCES = [
+   {
+     key: 'carts',
+     table: 'abandoned_carts',
+-    select: 'id, session_id, status, cart_data, currency, created_at',
++    select: 'id, session_id, status, cart_data, currency, created_at, customer_name, customer_phone, customer_email',
+     complete: true,
+   },
+   {
+@@ -297,6 +298,43 @@ async function fetchPreviousOrders(supabase, window) {
+   return { rows: data || [], error: null };
+ }
+ 
++/**
++ * Team members, keyed by their own contact details.
++ *
++ * The live visitor table wants to say "Team: Dani" instead of "Known
++ * customer" when a cart's contact info is actually a colleague testing the
++ * storefront. The match happens here, server-side, so the browser never
++ * receives the team's own phone numbers — only the name already attached to
++ * the cart it asked for.
++ */
++async function fetchTeamDirectory(supabase) {
++  const { data, error } = await supabase.from('admin_profiles').select('name, email, whatsapp_number');
++  if (error) return { byEmail: new Map(), byPhone: new Map(), error: error.message };
++  const byEmail = new Map();
++  const byPhone = new Map();
++  for (const profile of data || []) {
++    const name = String(profile?.name || profile?.email || '').trim();
++    if (!name) continue;
++    const email = emailKey(profile?.email);
++    if (email) byEmail.set(email, name);
++    const phone = phoneKey(profile?.whatsapp_number);
++    if (phone) byPhone.set(phone, name);
++  }
++  return { byEmail, byPhone, error: null };
++}
++
++/** Tags each cart row with the team member it belongs to, if any. */
++function markTeamCarts(carts, directory) {
++  for (const cart of carts || []) {
++    const name = directory.byEmail.get(emailKey(cart.customer_email))
++      || directory.byPhone.get(phoneKey(cart.customer_phone));
++    if (name) {
++      cart.is_team_member = true;
++      cart.team_member_name = name;
++    }
++  }
++}
++
+ export async function GET(request) {
+   const auth = await verifyAdminSession(request, { requirePermission: 'analytics' });
+   if (auth.error) return auth.error;
+@@ -320,11 +358,12 @@ export async function GET(request) {
+   const supabase = getSupabaseAdmin();
+ 
+   try {
+-    const [listHealth, overviewResult, previousOverview, previousOrders, ...results] = await Promise.all([
++    const [listHealth, overviewResult, previousOverview, previousOrders, teamDirectory, ...results] = await Promise.all([
+       fetchListHealth(supabase, window),
+       fetchOverview(supabase, window),
+       previousWindow ? fetchOverview(supabase, previousWindow) : Promise.resolve({ overview: null }),
+       fetchPreviousOrders(supabase, previousWindow),
++      fetchTeamDirectory(supabase),
+       ...SOURCES.map((source) => fetchSource(supabase, source, window)),
+       fetchCampaigns(supabase),
+     ]);
+@@ -336,6 +375,7 @@ export async function GET(request) {
+     for (const result of results) {
+       data[result.key] = result.rows;
+       counts[result.key] = result.count;
++      if (result.key === 'carts') markTeamCarts(result.rows, teamDirectory);
+       if (result.sampled) sampled.push(result.key);
+       if (result.error) errors.push({ source: result.key, message: result.error });
+       if (result.links) data.campaignLinks = result.links;
+diff --git a/src/app/api/admin/orders/update/route.js b/src/app/api/admin/orders/update/route.js
+index 57ea031..5b46190 100644
+--- a/src/app/api/admin/orders/update/route.js
++++ b/src/app/api/admin/orders/update/route.js
+@@ -9,8 +9,8 @@ import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
+ import { isRefundStatus } from '@/lib/orderRefund.mjs';
+ import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
+ import { orderVisibleToAgent } from '@/lib/agentOrders';
+-import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, ORDER_INVENTORY_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+-import { sendAffiliateOrderWhatsApp } from '@/lib/orderWhatsAppAlerts';
++import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, ORDER_FULFILLMENT_COLUMNS, ORDER_INVENTORY_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
++import { recordReadyToPrepareNotification, sendAffiliateOrderWhatsApp, sendFulfillmentReadyWhatsApp } from '@/lib/orderWhatsAppAlerts';
+ import { isFirstPaidTransition, shouldSendPaidConfirmation } from '@/lib/orderStatusEmails.mjs';
+ import { shouldRestoreForStatus } from '@/lib/inventoryRestore.mjs';
+ import { restoreInventoryForOrder } from '@/lib/inventoryRestoreServer';
+@@ -66,6 +66,7 @@ export async function PATCH(request) {
+       'payment_descriptor', 'payment_provider_response',
+       'affiliate_id', 'agent_commission_rate_override', 'agent_commission_source',
+       'manual_discount_type', 'manual_discount_value', 'manual_discount_reason',
++      'ready_to_prepare_at', 'ready_to_prepare_by',
+     ];
+     const patch = {};
+     for (const key of allowed) {
+@@ -370,7 +371,7 @@ export async function PATCH(request) {
+ 
+     const { data, error, droppedColumns } = await writeDroppingMissingColumns(
+       patch,
+-      [...ORDER_ATTRIBUTION_COLUMNS, ...ORDER_INVENTORY_COLUMNS],
++      [...ORDER_ATTRIBUTION_COLUMNS, ...ORDER_INVENTORY_COLUMNS, ...ORDER_FULFILLMENT_COLUMNS],
+       (row) => supabase
+         .from('orders')
+         .update(row)
+@@ -430,6 +431,15 @@ export async function PATCH(request) {
+       await sendAffiliateOrderWhatsApp(supabase, data, data.order_number, data.id);
+     }
+ 
++    // The hand-off into the Fulfillment tab: only on the transition into the
++    // flag, never on every save of an order that already carries it, so
++    // reopening and re-saving an order already in the queue cannot re-buzz
++    // the packer's phone.
++    if (data.ready_to_prepare_at && !currentOrder.ready_to_prepare_at) {
++      await recordReadyToPrepareNotification(supabase, data, data.order_number);
++      await sendFulfillmentReadyWhatsApp(supabase, data, data.order_number, data.id);
++    }
++
+     // Trigger Customer Receipt if status changed to Paid/Completed
+     if (patch.status && currentOrder) {
+       if (isFirstPaidTransition(currentOrder.status, patch.status)) {
+diff --git a/src/app/api/leads/tiktok/route.js b/src/app/api/leads/tiktok/route.js
+index 6ac3d97..47dc24b 100644
+--- a/src/app/api/leads/tiktok/route.js
++++ b/src/app/api/leads/tiktok/route.js
+@@ -15,6 +15,8 @@ import {
+   TIKTOK_LEAD_SOURCE,
+   tikTokSubmissionRef,
+ } from '@/lib/tiktokLeadPosting.mjs';
++import { resolveNextTikTokAgent } from '@/lib/tiktokRoundRobin.mjs';
++import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
+ 
+ export const runtime = 'nodejs';
+ export const dynamic = 'force-dynamic';
+@@ -24,7 +26,12 @@ const RESPONSE_SLA_MINUTES = 15;
+ 
+ const json = (body, status = 200) => NextResponse.json(body, { status });
+ 
+-async function loadTikTokAssignee(supabase) {
++/**
++ * Last resort if none of the three rotation agents are active and working
++ * leads right now — the single fixed assignee TikTok leads used to always go
++ * to. Better than a lead nobody owns.
++ */
++async function loadFallbackAssignee(supabase) {
+   const { data, error } = await supabase
+     .from('admin_profiles')
+     .select('name, email, status, permissions')
+@@ -35,7 +42,7 @@ async function loadTikTokAssignee(supabase) {
+   const canWorkLeads = active
+     && Array.isArray(data.permissions)
+     && data.permissions.includes('leads');
+-  return canWorkLeads ? data : null;
++  return canWorkLeads ? { name: String(data.name || data.email).trim(), email: String(data.email).trim().toLowerCase() } : null;
+ }
+ 
+ async function identityLeadIds(supabase, identities) {
+@@ -65,15 +72,16 @@ async function loadExistingLead(supabase, identities) {
+   return { lead: data };
+ }
+ 
+-async function recordAssignment(supabase, { leadId, previousAgent, newAgent }) {
+-  const changed = String(previousAgent || '').trim().toLowerCase()
+-    !== String(newAgent || '').trim().toLowerCase();
++// Only ever called for a lead that had no owner yet: one that already had an
++// agent keeps them (see the caller), so there is no "transferred" case left
++// to record here — a TikTok lead's ownership never changes once someone owns it.
++async function recordAssignment(supabase, { leadId, newAgent }) {
+   const { error } = await supabase.from('lead_assignment_events').insert({
+     lead_id: leadId,
+-    action: previousAgent && changed ? 'transferred' : 'auto_assigned',
+-    previous_agent: previousAgent || null,
++    action: 'auto_assigned',
++    previous_agent: null,
+     new_agent: newAgent,
+-    reason: 'TikTok form leads are assigned to Yese',
++    reason: 'TikTok form leads rotate between Pollita, Dani and Korinne',
+     actor_email: 'tiktok-leads@peptidescostarica.net',
+   });
+   if (error) console.warn('[leads/tiktok] Assignment audit skipped:', error.message);
+@@ -118,9 +126,6 @@ export async function POST(request) {
+     if (!identities.length) return json({ error: 'email_or_phone_required' }, 400);
+ 
+     const supabase = getSupabaseAdmin();
+-    const assignee = await loadTikTokAssignee(supabase);
+-    if (!assignee) return json({ error: 'tiktok_assignee_unavailable' }, 503);
+-    const owner = String(assignee.name || assignee.email).trim();
+     const submissionRef = tikTokSubmissionRef(lead.externalLeadId);
+ 
+     // TikTok and connector retries reuse lead_id. A repeat is acknowledged
+@@ -141,7 +146,7 @@ export async function POST(request) {
+         success: true,
+         record: 'duplicate',
+         leadId: duplicate.id,
+-        assignedAgent: duplicate.sales_agent || owner,
++        assignedAgent: duplicate.sales_agent || null,
+         notification: 'duplicate_suppressed',
+       });
+     }
+@@ -154,6 +159,18 @@ export async function POST(request) {
+       }, 409);
+     }
+     const existing = existingResult.lead;
++
++    // A contact who already has a CRM lead keeps whoever owns it. Only a
++    // genuinely new lead is rotated — see tiktokRoundRobin.mjs for why.
++    const previousOwner = String(existing?.sales_agent || existing?.owner || existing?.assigned_to || '').trim();
++    let owner = previousOwner;
++    let rotatedAgent = null;
++    if (!owner) {
++      rotatedAgent = await resolveNextTikTokAgent(supabase) || await loadFallbackAssignee(supabase);
++      if (!rotatedAgent) return json({ error: 'tiktok_assignee_unavailable' }, 503);
++      owner = rotatedAgent.name;
++    }
++
+     const nowIso = new Date().toISOString();
+     const dueAt = responseDeadline(nowIso, RESPONSE_SLA_MINUTES);
+     const contactMethod = existing?.contact_method || (lead.email ? 'email' : 'whatsapp');
+@@ -162,7 +179,6 @@ export async function POST(request) {
+       ? existing.name
+       : lead.name;
+     const note = buildNotes({ ...lead, name: displayName }, phone);
+-    const previousOwner = String(existing?.sales_agent || existing?.owner || existing?.assigned_to || '').trim();
+     const ownerChanged = previousOwner.toLowerCase() !== owner.toLowerCase();
+     const qualification = {
+       source: 'TikTok Forms',
+@@ -211,11 +227,7 @@ export async function POST(request) {
+     if (saveError) throw saveError;
+ 
+     if (!existing || ownerChanged) {
+-      await recordAssignment(supabase, {
+-        leadId: saved.id,
+-        previousAgent: previousOwner || null,
+-        newAgent: owner,
+-      });
++      await recordAssignment(supabase, { leadId: saved.id, newAgent: owner });
+     }
+ 
+     let notification = { tracked: true, status: 'pending' };
+@@ -233,8 +245,13 @@ export async function POST(request) {
+           failed: queued.failed ?? null,
+         };
+       } else {
++        // Legacy path only — the outbox table above is what normally sends
++        // this. It resolves the audience from the lead's actual owner; this
++        // one predates that and only ever knew a single fixed address, so a
++        // rotated lead falls back to the ops address rather than silently
++        // going nowhere.
+         const deliveries = await sendLeadEmails({
+-          recipients: [TIKTOK_ASSIGNEE_EMAIL],
++          recipients: [rotatedAgent?.email || TIKTOK_ASSIGNEE_EMAIL],
+           details: {
+             name: displayName,
+             email: lead.email,
+@@ -258,6 +275,25 @@ export async function POST(request) {
+       console.error('[leads/tiktok] Immediate notification attempt failed:', notificationError);
+     }
+ 
++    // The personal ping. Only fires on the rotation actually picking someone —
++    // never on a repeat submission to a lead that already has an owner — and
++    // only reaches that one agent's own number, not the shared lead-alert
++    // audience the outbox above already emailed.
++    if (rotatedAgent?.whatsapp) {
++      try {
++        const result = await sendLandingLeadWhatsAppAlerts(supabase, {
++          name: displayName,
++          phone,
++          qualification: { category: lead.campaign || 'TikTok' },
++          dueAt,
++          recipients: [{ label: rotatedAgent.name, destination: rotatedAgent.whatsapp }],
++        });
++        if (result.error) console.warn('[leads/tiktok] Round-robin WhatsApp ping skipped:', result.error);
++      } catch (whatsAppError) {
++        console.error('[leads/tiktok] Round-robin WhatsApp ping failed:', whatsAppError);
++      }
++    }
++
+     return json({
+       success: true,
+       record: existing ? 'updated' : 'created',
+diff --git a/src/components/admin/AnalyticsDashboard.js b/src/components/admin/AnalyticsDashboard.js
+index c2a62ac..9a85a1e 100644
+--- a/src/components/admin/AnalyticsDashboard.js
++++ b/src/components/admin/AnalyticsDashboard.js
+@@ -619,6 +619,18 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
+   const knownActiveUsers = activeLiveSessions.filter((session) => session.known_customer).length;
+   const activeDomains = new Set(activeLiveSessions.map((session) => session.hostname).filter(Boolean)).size;
+ 
++  // A session and its abandoned cart share the same browser-issued session_id,
++  // so this is the only link between "who is on the site right now" and "who
++  // are they" — a cart is written the moment a visitor reaches checkout, with
++  // whatever name/contact they typed and whatever is in the cart. The dashboard
++  // route already flags a cart as staff testing the storefront themselves.
++  const cartBySessionId = {};
++  dbCarts.forEach((cart) => {
++    if (cart.session_id) cartBySessionId[cart.session_id] = cart;
++  });
++  const teamOnSiteCount = activeLiveSessions
++    .filter((session) => cartBySessionId[session.session_id]?.is_team_member).length;
++
+   const livePageCounts = Object.entries(activeLiveSessions.reduce((counts, session) => {
+     const label = `${session.hostname || 'catalog'}${session.current_path || '/catalog'}`;
+     counts[label] = (counts[label] || 0) + 1;
+@@ -2615,7 +2627,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
+             <p style={{ margin: 0, color: 'var(--an-ink-muted)', fontSize: '.78rem' }}>First-party heartbeat data across every domain using the shared tracker.</p>
+           </div>
+           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+-            {[['Active', activeLiveUsers], ['Known customers', knownActiveUsers], ['Domains', activeDomains], ['Journey events', totalJourneyEvents]].map(([label, value]) => (
++            {[['Active', activeLiveUsers], ['Known customers', knownActiveUsers], ['Team on site', teamOnSiteCount], ['Domains', activeDomains], ['Journey events', totalJourneyEvents]].map(([label, value]) => (
+               <div key={label} style={{ background: 'var(--an-surface-raised)', borderRadius: 9, padding: '8px 11px', minWidth: 90 }}>
+                 <div style={{ color: 'var(--an-ink)', fontWeight: 900, fontSize: '1rem' }}>{value}</div>
+                 <div style={{ color: 'var(--an-ink-faint)', fontSize: '.66rem' }}>{label}</div>
+@@ -2635,15 +2647,43 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
+                 </tr>
+               </thead>
+               <tbody>
+-                {activeLiveSessions.slice(0, 20).map((session) => (
+-                  <tr key={session.session_id} style={{ borderBottom: '1px solid rgba(255,255,255,.05)' }}>
+-                    <td style={{ padding: '9px 6px', color: session.known_customer ? '#86efac' : '#cbd5e1', fontWeight: 700 }}>{session.known_customer ? 'Known customer' : 'Anonymous'}</td>
+-                    <td style={{ padding: '9px 6px', color: 'var(--an-ink)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.hostname || 'catalog'}{session.current_path || '/catalog'}</td>
+-                    <td style={{ padding: '9px 6px', color: 'var(--an-ink-soft)' }}>{session.last_touch_source || session.utm_source || 'direct'}{session.utm_campaign ? ` · ${session.utm_campaign}` : ''}</td>
+-                    <td style={{ padding: '9px 6px', color: Number(session.cart_items) > 0 ? '#fbbf24' : '#64748b' }}>{Number(session.cart_items) || 0} item(s)</td>
+-                    <td style={{ padding: '9px 6px', color: 'var(--an-ink-muted)' }}>{new Date(session.last_active).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
+-                  </tr>
+-                ))}
++                {activeLiveSessions.slice(0, 20).map((session) => {
++                  const linkedCart = cartBySessionId[session.session_id];
++                  const isTeam = Boolean(linkedCart?.is_team_member);
++                  // A name off the linked cart beats the bare "Known customer"
++                  // label whenever we have one — it is the same fact, said
++                  // usefully. Falls back to the boolean when a returning
++                  // visitor hasn't reached checkout yet this session, so there
++                  // is no name to show.
++                  const visitorLabel = isTeam
++                    ? `Team: ${linkedCart.team_member_name}`
++                    : linkedCart?.customer_name
++                      ? linkedCart.customer_name
++                      : session.known_customer ? 'Known customer' : 'Anonymous';
++                  const visitorColor = isTeam
++                    ? '#c4b5fd'
++                    : (linkedCart?.customer_name || session.known_customer) ? '#86efac' : '#cbd5e1';
++                  const cartProductSummary = Array.isArray(linkedCart?.cart_data)
++                    ? linkedCart.cart_data
++                      .map((item) => `${item.product || item.name || 'Item'}${Number(item.qty) > 1 ? ` x${item.qty}` : ''}`)
++                      .join(', ')
++                    : '';
++                  const cartCount = Number(session.cart_items) || 0;
++                  return (
++                    <tr key={session.session_id} style={{ borderBottom: '1px solid rgba(255,255,255,.05)' }}>
++                      <td style={{ padding: '9px 6px', color: visitorColor, fontWeight: 700 }}>{visitorLabel}</td>
++                      <td style={{ padding: '9px 6px', color: 'var(--an-ink)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.hostname || 'catalog'}{session.current_path || '/catalog'}</td>
++                      <td style={{ padding: '9px 6px', color: 'var(--an-ink-soft)' }}>{session.last_touch_source || session.utm_source || 'direct'}{session.utm_campaign ? ` · ${session.utm_campaign}` : ''}</td>
++                      <td
++                        title={cartProductSummary || undefined}
++                        style={{ padding: '9px 6px', color: cartCount > 0 ? '#fbbf24' : '#64748b', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
++                      >
++                        {cartCount > 0 ? (cartProductSummary || `${cartCount} item(s)`) : '0 item(s)'}
++                      </td>
++                      <td style={{ padding: '9px 6px', color: 'var(--an-ink-muted)' }}>{new Date(session.last_active).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
++                    </tr>
++                  );
++                })}
+               </tbody>
+             </table>
+           </div>
+diff --git a/src/components/admin/FulfillmentManager.js b/src/components/admin/FulfillmentManager.js
+new file mode 100644
+index 0000000..121a39b
+--- /dev/null
++++ b/src/components/admin/FulfillmentManager.js
+@@ -0,0 +1,128 @@
++"use client";
++
++import React from 'react';
++import { Package, Clock, MapPin, Phone, User } from 'lucide-react';
++import { formatCrDate } from '@/lib/crTime.mjs';
++
++// Orders leave this queue the same way they leave "packing" in real life:
++// once they are marked Order Complete (with a tracking number), which is the
++// existing status that already fires the customer's shipped notification.
++// Nothing here invents a second "done" state to keep in sync with that one.
++const DONE_STATUSES = new Set(['completed', 'order complete']);
++const DEAD_STATUSES = new Set(['cancelled', 'declined', 'refunded']);
++
++function isInFulfillmentQueue(order) {
++  if (!order?.ready_to_prepare_at) return false;
++  const status = String(order.status || '').toLowerCase();
++  return !DONE_STATUSES.has(status) && !DEAD_STATUSES.has(status);
++}
++
++function timeWaiting(sinceIso) {
++  const since = new Date(sinceIso).getTime();
++  if (!Number.isFinite(since)) return '';
++  const minutes = Math.max(0, Math.floor((Date.now() - since) / 60000));
++  if (minutes < 60) return `${minutes}m`;
++  const hours = Math.floor(minutes / 60);
++  if (hours < 24) return `${hours}h ${minutes % 60}m`;
++  const days = Math.floor(hours / 24);
++  return `${days}d ${hours % 24}h`;
++}
++
++function orderItemsSummary(order) {
++  return (order.items || [])
++    .map((item) => `${Number(item.qty) || 1}x ${item.product || item.name || 'Item'}`)
++    .join(', ') || 'No items on file';
++}
++
++function orderTotalLabel(order) {
++  return order.currency === 'USD'
++    ? `$${Number(order.total_usd || 0).toLocaleString('en-US')}`
++    : `₡${Number(order.total_crc || 0).toLocaleString('es-CR')}`;
++}
++
++export default function FulfillmentManager({ orders = [], setSelectedOrderDetails }) {
++  const queue = (orders || [])
++    .filter(isInFulfillmentQueue)
++    .sort((a, b) => new Date(a.ready_to_prepare_at) - new Date(b.ready_to_prepare_at));
++
++  return (
++    <div className="admin-tab-panel">
++      <div className="admin-section-header" style={{ flexWrap: 'wrap', gap: '15px' }}>
++        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
++          <div style={{ background: 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)', padding: '10px', borderRadius: '12px', color: '#fff', boxShadow: '0 4px 15px rgba(251, 191, 36, 0.4)' }}>
++            <Package size={22} />
++          </div>
++          <div>
++            <h2 className="admin-section-title" style={{ margin: 0 }}>Fulfillment</h2>
++            <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>
++              {queue.length} order{queue.length === 1 ? '' : 's'} handed off by sales, waiting to be packed
++            </p>
++          </div>
++        </div>
++      </div>
++
++      {queue.length === 0 ? (
++        <div className="admin-empty-state" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)' }}>
++          <div className="empty-icon" style={{ opacity: 0.5 }}><Package size={48} /></div>
++          <h3>Nothing waiting</h3>
++          <p>Orders show up here the moment an agent marks them "ready to prepare".</p>
++        </div>
++      ) : (
++        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
++          {queue.map((order) => (
++            <article
++              key={order.id}
++              style={{
++                background: 'rgba(15, 23, 42, 0.5)',
++                border: '1px solid rgba(251, 191, 36, 0.25)',
++                borderRadius: 14,
++                padding: '16px 18px',
++                display: 'flex',
++                flexWrap: 'wrap',
++                gap: 16,
++                justifyContent: 'space-between',
++                alignItems: 'flex-start',
++              }}
++            >
++              <div style={{ flex: '1 1 320px', minWidth: 260 }}>
++                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
++                  <strong style={{ color: '#f8fafc', fontSize: '1rem' }}>#{order.order_number}</strong>
++                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#fbbf24', fontSize: '.75rem', fontWeight: 700 }}>
++                    <Clock size={12} /> waiting {timeWaiting(order.ready_to_prepare_at)}
++                  </span>
++                </div>
++                <div style={{ color: '#cbd5e1', fontSize: '.85rem', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
++                  <User size={13} /> {order.customer_name || 'Customer'}
++                  {order.customer_phone && <span style={{ color: '#64748b' }}>· {order.customer_phone}</span>}
++                </div>
++                {order.shipping_address && (
++                  <div style={{ color: '#94a3b8', fontSize: '.8rem', display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 3 }}>
++                    <MapPin size={13} style={{ marginTop: 2, flexShrink: 0 }} /> {order.shipping_address}
++                  </div>
++                )}
++                <div style={{ color: '#e2e8f0', fontSize: '.85rem', marginTop: 6 }}>{orderItemsSummary(order)}</div>
++              </div>
++
++              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, minWidth: 160 }}>
++                <strong style={{ color: '#4ade80', fontSize: '1rem' }}>{orderTotalLabel(order)}</strong>
++                <span style={{ color: '#64748b', fontSize: '.72rem', textAlign: 'right' }}>
++                  Handed off {order.ready_to_prepare_by ? `by ${order.ready_to_prepare_by}` : ''}
++                  <br />
++                  {formatCrDate(order.ready_to_prepare_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
++                </span>
++                <button
++                  type="button"
++                  className="admin-btn admin-btn-primary"
++                  onClick={() => setSelectedOrderDetails?.(order)}
++                  style={{ fontSize: '.8rem', padding: '8px 14px' }}
++                >
++                  <Phone size={13} style={{ marginRight: 6 }} /> Open & mark shipped
++                </button>
++              </div>
++            </article>
++          ))}
++        </div>
++      )}
++    </div>
++  );
++}
+diff --git a/src/components/admin/OrderDetailPanel.js b/src/components/admin/OrderDetailPanel.js
+index 77daa37..e5bae13 100644
+--- a/src/components/admin/OrderDetailPanel.js
++++ b/src/components/admin/OrderDetailPanel.js
+@@ -146,6 +146,7 @@ export default function OrderDetailPanel({
+   isSuperadmin = false,
+   onRequestRefund,
+   exchangeRate = ADMIN_FALLBACK_EXCHANGE_RATE,
++  currentAgentName = '',
+ }) {
+   const initialShipping = order ? inferShippingCosts(order) : { crc: 0, usd: 0 };
+   const initialCurrency = normalizeAdminOrderCurrency(order?.currency);
+@@ -186,6 +187,7 @@ export default function OrderDetailPanel({
+   const [attributionError, setAttributionError] = useState('');
+   const [resendingCompletion, setResendingCompletion] = useState(false);
+   const [resendingAccounting, setResendingAccounting] = useState(false);
++  const [markingReady, setMarkingReady] = useState(false);
+ 
+   useEffect(() => {
+     if (!order) return;
+@@ -821,6 +823,60 @@ export default function OrderDetailPanel({
+                 onBlur={(e) => onTrackingChange(order.id, e.target.value)}
+               />
+             </div>
++            <div>
++              <label>Fulfillment</label>
++              {order.ready_to_prepare_at ? (
++                <span style={{ display: 'flex', flexDirection: 'column', gap: 7, alignItems: 'flex-start' }}>
++                  <strong style={{ color: '#4ade80', fontSize: '.78rem' }}>
++                    Ready to prepare since {new Date(order.ready_to_prepare_at).toLocaleString()}
++                    {order.ready_to_prepare_by ? ` (by ${order.ready_to_prepare_by})` : ''}
++                  </strong>
++                  <button
++                    type="button"
++                    className="admin-btn admin-btn-secondary"
++                    disabled={markingReady}
++                    onClick={async () => {
++                      setMarkingReady(true);
++                      try {
++                        await patchOrder(
++                          { ready_to_prepare_at: null, ready_to_prepare_by: null },
++                          { type: 'note', message: 'Removed from the fulfillment queue' }
++                        );
++                      } catch (err) {
++                        alert(err.message);
++                      } finally {
++                        setMarkingReady(false);
++                      }
++                    }}
++                    style={{ fontSize: '.74rem', padding: '6px 9px' }}
++                  >
++                    {markingReady ? 'Removing…' : 'Remove from fulfillment queue'}
++                  </button>
++                </span>
++              ) : (
++                <button
++                  type="button"
++                  className="admin-btn admin-btn-primary"
++                  disabled={markingReady}
++                  onClick={async () => {
++                    setMarkingReady(true);
++                    try {
++                      await patchOrder(
++                        { ready_to_prepare_at: new Date().toISOString(), ready_to_prepare_by: currentAgentName || null },
++                        { type: 'ready_to_prepare', message: 'Marked ready to prepare — handed off to fulfillment' }
++                      );
++                    } catch (err) {
++                      alert(err.message);
++                    } finally {
++                      setMarkingReady(false);
++                    }
++                  }}
++                  style={{ fontSize: '.78rem', padding: '7px 11px' }}
++                >
++                  {markingReady ? 'Sending…' : 'Mark ready to prepare'}
++                </button>
++              )}
++            </div>
+             {['Completed', 'Order Complete'].includes(order.status) && (
+               <div>
+                 <label>Completion email</label>
+diff --git a/src/lib/adminModules.js b/src/lib/adminModules.js
+index aa9077c..8d3f812 100644
+--- a/src/lib/adminModules.js
++++ b/src/lib/adminModules.js
+@@ -9,6 +9,10 @@ import {
+ export const ADMIN_MODULES = [
+   { id: 'home', label: 'Today (Home)', title: 'Today', group: 'Overview', alwaysAvailable: true },
+   { id: 'orders', label: 'Orders', title: 'Orders', group: 'Core Operations' },
++  // Orders a sales agent has handed off to be packed. Superadmin-only for now
++  // because Omer is the only one packing — widen this the day someone else
++  // does too.
++  { id: 'fulfillment', label: 'Fulfillment', title: 'Fulfillment', group: 'Core Operations', superadminOnly: true },
+   { id: 'live_chat', label: 'Live Chat', title: 'Live Chat', group: 'Core Operations' },
+   // Leads sits directly under Live Chat: chats are where leads now come from,
+   // so the two are worked together.
+diff --git a/src/lib/optionalColumns.mjs b/src/lib/optionalColumns.mjs
+index 39a8c29..cd01694 100644
+--- a/src/lib/optionalColumns.mjs
++++ b/src/lib/optionalColumns.mjs
+@@ -129,3 +129,9 @@ export const ORDER_INVENTORY_COLUMNS = [
+   'inventory_deducted',
+   'inventory_restored_at',
+ ];
++
++/** Columns added by fulfillment-migration.sql. */
++export const ORDER_FULFILLMENT_COLUMNS = [
++  'ready_to_prepare_at',
++  'ready_to_prepare_by',
++];
+diff --git a/src/lib/orderWhatsAppAlerts.js b/src/lib/orderWhatsAppAlerts.js
+index d31c38e..ce91aa5 100644
+--- a/src/lib/orderWhatsAppAlerts.js
++++ b/src/lib/orderWhatsAppAlerts.js
+@@ -80,6 +80,91 @@ export async function recordNewOrderNotification(supabase, order, orderNumber) {
+   if (error) throw new Error(error.message);
+ }
+ 
++/** The in-dashboard bell, for whoever is looking at the screen right now. */
++export async function recordReadyToPrepareNotification(supabase, order, orderNumber) {
++  const itemCount = (order.items || []).reduce((total, item) => (
++    Number(item.price || 0) > 0 ? total + Number(item.qty || 0) : total
++  ), 0);
++  const { error } = await supabase.from('admin_notifications').insert({
++    type: 'ready_to_prepare',
++    title: `Ready to prepare: ${orderNumber}`,
++    body: `${order.customer_name || 'Customer'} - ${formatSalesAlertTotal(order)} - ${itemCount} ${itemCount === 1 ? 'unit' : 'units'}`.slice(0, 500),
++    link_tab: 'fulfillment',
++    link_ref: orderNumber,
++  });
++  if (error) console.warn('[order-whatsapp] Could not record ready-to-prepare notification:', error.message);
++}
++
++/**
++ * The WhatsApp ping to whoever packs orders, for when they are away from the
++ * screen. Sent to a fixed personal number rather than through
++ * notification_recipients — this alert has exactly one intended reader today.
++ *
++ * Reuses the "new order" template's four text slots (order #, customer +
++ * phone, total, item count) rather than pointing at a dedicated one: Meta has
++ * to approve a template before it can be sent, and nobody has requested
++ * approval for a "ready to prepare" wording yet. FULFILLMENT_READY_WHATSAPP_TEMPLATE
++ * can be set once one is approved, so the copy can say what actually happened
++ * instead of borrowing the new-order phrasing.
++ */
++export async function sendFulfillmentReadyWhatsApp(supabase, order, orderNumber, orderId = null) {
++  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
++  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
++  if (!accessToken || !phoneNumberId) return { skipped: 'missing_whatsapp_config' };
++
++  const ownerPhone = toE164(process.env.FULFILLMENT_OWNER_WHATSAPP || '50660626224', DEFAULT_PHONE_COUNTRY);
++  if (!isValidE164(ownerPhone)) return { skipped: 'missing_owner_whatsapp' };
++
++  const templateName = process.env.FULFILLMENT_READY_WHATSAPP_TEMPLATE || process.env.SALES_TEAM_WHATSAPP_TEMPLATE || 'alerta_nuevo_pedido';
++  const templateLanguage = process.env.FULFILLMENT_READY_WHATSAPP_TEMPLATE_LANGUAGE || process.env.SALES_TEAM_WHATSAPP_TEMPLATE_LANGUAGE || 'es';
++  const itemCount = (order.items || []).reduce((total, item) => (
++    Number(item.price || 0) > 0 ? total + Number(item.qty || 0) : total
++  ), 0);
++
++  try {
++    const response = await fetch(`https://graph.facebook.com/v25.0/${phoneNumberId}/messages`, {
++      method: 'POST',
++      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
++      signal: AbortSignal.timeout(WHATSAPP_TIMEOUT_MS),
++      body: JSON.stringify({
++        messaging_product: 'whatsapp',
++        to: ownerPhone,
++        type: 'template',
++        template: {
++          name: templateName,
++          language: { code: templateLanguage },
++          components: [{
++            type: 'body',
++            parameters: [
++              { type: 'text', text: orderNumber },
++              { type: 'text', text: `${order.customer_name} - ${order.customer_phone || 'N/A'}` },
++              { type: 'text', text: formatSalesAlertTotal(order) },
++              { type: 'text', text: `${itemCount} ${itemCount === 1 ? 'articulo' : 'articulos'}` },
++            ],
++          }],
++        },
++      }),
++    });
++    const result = await response.json().catch(() => ({}));
++    if (!response.ok) {
++      console.error('[order-whatsapp] Fulfillment ready alert rejected by Meta:', result);
++      return { skipped: 'meta_rejected', error: result?.error?.message || `Meta API returned ${response.status}` };
++    }
++    const messageId = result.messages?.[0]?.id;
++    await logOrderAlert(supabase, {
++      phone: ownerPhone,
++      messageId,
++      summary: `Ready to prepare ${orderNumber} - ${order.customer_name} - ${formatSalesAlertTotal(order)}`,
++      orderId,
++      raw: result,
++    });
++    return { sent: true, phone: ownerPhone, messageId };
++  } catch (err) {
++    console.error('[order-whatsapp] Fulfillment ready alert error:', err.message);
++    return { skipped: 'send_failed', error: err.message };
++  }
++}
++
+ async function resolveTeamOrderWhatsAppRecipients(supabase) {
+   const { available, recipients } = await getNotificationRecipients(supabase, {
+     channel: 'whatsapp',
+diff --git a/src/lib/tiktokRoundRobin.mjs b/src/lib/tiktokRoundRobin.mjs
+new file mode 100644
+index 0000000..8f27a09
+--- /dev/null
++++ b/src/lib/tiktokRoundRobin.mjs
+@@ -0,0 +1,78 @@
++/**
++ * Who the next TikTok Instant Form lead goes to.
++ *
++ * TikTok leads used to all go to one fixed agent (TIKTOK_ASSIGNEE_EMAIL in
++ * tiktokLeadPosting.mjs). This spreads new leads across three agents instead —
++ * Pollita, Dani, Korinne, in that fixed order — so no one of them is carrying
++ * the whole channel.
++ *
++ * Only a genuinely NEW lead is rotated. A repeat submission from a contact who
++ * already has a CRM lead keeps whoever owns it — the caller decides that by
++ * checking for an existing lead before calling this, the same way every other
++ * lead route treats an existing owner as a decision already made. Rotating on
++ * every resubmission would otherwise bounce one person's lead between three
++ * agents every time the same visitor filled the form again.
++ *
++ * The rotation pointer lives in site_settings, the same table
++ * prospect-sweep's cursor uses. Two submissions arriving at the same instant
++ * can both read the pointer before either writes it back and so land on the
++ * same agent instead of alternating — acceptable for form-lead volume, and
++ * cheaper than the coordination it would take to rule out.
++ */
++
++import { isUsableDestination, normalizeDestination } from './notificationRecipients.mjs';
++
++export const TIKTOK_ROTATION_AGENT_NAMES = ['Pollita', 'Dani', 'Korinne'];
++export const TIKTOK_ROTATION_SETTING_ID = 'tiktok_lead_rotation';
++
++const lower = (value) => String(value ?? '').trim().toLowerCase();
++
++/** The rotation's own agents, in rotation order, skipping anyone not eligible to work leads. */
++function eligibleRotationAgents(profiles) {
++  return TIKTOK_ROTATION_AGENT_NAMES
++    .map((wanted) => (profiles || []).find((profile) => lower(profile?.name) === lower(wanted)))
++    .filter((profile) => (
++      profile
++      && (profile.status || 'active') === 'active'
++      && Array.isArray(profile.permissions)
++      && profile.permissions.includes('leads')
++    ))
++    .map((profile) => ({
++      name: String(profile.name || profile.email).trim(),
++      email: lower(profile.email),
++      whatsapp: isUsableDestination('whatsapp', profile.whatsapp_number)
++        ? normalizeDestination('whatsapp', profile.whatsapp_number)
++        : '',
++    }));
++}
++
++/**
++ * Advances the rotation and returns who this lead goes to, or null when none
++ * of the three are active and working leads right now.
++ */
++export async function resolveNextTikTokAgent(supabase) {
++  const { data: profiles, error } = await supabase
++    .from('admin_profiles')
++    .select('name, email, status, permissions, whatsapp_number');
++  if (error) throw error;
++
++  const eligible = eligibleRotationAgents(profiles);
++  if (!eligible.length) return null;
++  if (eligible.length === 1) return eligible[0];
++
++  const { data: cursorRow } = await supabase
++    .from('site_settings')
++    .select('value')
++    .eq('id', TIKTOK_ROTATION_SETTING_ID)
++    .maybeSingle();
++  const lastEmail = lower(cursorRow?.value?.lastAgentEmail);
++  const lastIndex = eligible.findIndex((agent) => agent.email === lastEmail);
++  const next = eligible[(lastIndex + 1) % eligible.length];
++
++  const { error: writeError } = await supabase
++    .from('site_settings')
++    .upsert({ id: TIKTOK_ROTATION_SETTING_ID, value: { lastAgentEmail: next.email } });
++  if (writeError) console.warn('[tiktok-round-robin] Could not save the rotation cursor:', writeError.message);
++
++  return next;
++}
+-- 
+2.43.0
+

@@ -14,27 +14,20 @@ export function readEnv(name) {
 }
 
 export function getTransactionalSmtpConfig() {
-  const host = readEnv('ORDER_SMTP_HOST');
-  const port = Number(readEnv('ORDER_SMTP_PORT') || 2525);
-  const rawSecure = readEnv('ORDER_SMTP_SECURE');
+  const host = readEnv('ORDER_SMTP_HOST') || readEnv('SMTP_HOST');
+  const port = Number(readEnv('ORDER_SMTP_PORT') || readEnv('SMTP_PORT') || 2525);
+  const rawSecure = readEnv('ORDER_SMTP_SECURE') || readEnv('SMTP_SECURE');
   // Nodemailer's `secure: true` is implicit TLS. Elastic Email ports 2525 and
   // 587 use STARTTLS, so they must always start with an unencrypted socket.
   const secure = port === 465 ? rawSecure !== 'false' : false;
-  const user = readEnv('ORDER_SMTP_USER');
-  const pass = readEnv('ORDER_SMTP_PASS');
+  const user = readEnv('ORDER_SMTP_USER') || readEnv('SMTP_USER');
+  const pass = readEnv('ORDER_SMTP_PASS') || readEnv('SMTP_PASS');
   const elastic = /(^|\.)smtp\.elasticemail\.com$/i.test(host || '');
   const campaignUser = readEnv('CAMPAIGN_SMTP_USER');
   const sharesCampaignIdentity = Boolean(user && campaignUser && user.toLowerCase() === campaignUser.toLowerCase());
 
-  // Sharing one login with the campaign account is bad — it shares a daily
-  // quota, so a blast that hits "421 Daily limit exceeded" can take order
-  // receipts with it. Refusing to send at all is worse. That refusal ran from
-  // 15 Aug 2026 and silently dropped every receipt, every accountant tax copy
-  // and every lead alert for days, because the deployment only ever had the one
-  // Elastic credential. Send on a shared login and report it loudly instead:
-  // `isolated` stays false and /api/admin/email-diagnostics keeps naming it
-  // until a second credential exists.
-  const usable = Boolean(host && user && pass && elastic);
+  // Allow Rackspace or any other SMTP provider if explicitly configured.
+  const usable = Boolean(host && user && pass);
 
   return {
     host,
@@ -45,7 +38,7 @@ export function getTransactionalSmtpConfig() {
     configured: usable,
     isolated: usable && !sharesCampaignIdentity,
     sharesCampaignIdentity,
-    provider: elastic ? 'Elastic Email' : null,
+    provider: elastic ? 'Elastic Email' : (host?.includes('emailsrvr.com') ? 'Rackspace' : 'Other'),
   };
 }
 

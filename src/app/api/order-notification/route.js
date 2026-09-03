@@ -8,6 +8,7 @@ import { getOrderEmailLogoAttachment } from '@/lib/orderEmailBranding.mjs';
 import { withBacGiftLines } from '@/lib/bacWater.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
+import { getCampaignSmtpConfig } from '@/lib/campaignSmtp.js';
 import { orderEmailActivity, recordOrderEmails } from '@/lib/orderEmailLog.mjs';
 import { classifyPaymentOutcome } from '@/lib/paymentOutcome.mjs';
 import { verifyAdminSession } from '@/lib/adminAuth';
@@ -154,6 +155,18 @@ export async function POST(request) {
       ...SMTP_TIMEOUTS,
     });
 
+    const campaignSmtp = getCampaignSmtpConfig();
+    const campaignTransporter = campaignSmtp.configured ? nodemailer.createTransport({
+      host: campaignSmtp.host,
+      port: campaignSmtp.port,
+      secure: campaignSmtp.secure,
+      auth: {
+        user: campaignSmtp.user,
+        pass: campaignSmtp.pass,
+      },
+      ...SMTP_TIMEOUTS,
+    }) : null;
+
     const results = {
       adminNotification: { sent: false },
       customerReceipt: { sent: false, skipped: true }
@@ -225,6 +238,25 @@ export async function POST(request) {
         replyTo: order.customerEmail ? String(order.customerEmail).trim() : undefined,
         attachments: [getOrderEmailLogoAttachment()],
       });
+
+      if (campaignTransporter) {
+        try {
+          await campaignTransporter.sendMail({
+            from: campaignSmtp.from,
+            to: addressing.to,
+            cc: addressing.cc,
+            bcc: addressing.bcc,
+            subject: `[Redundancy] ${adminSubject}`,
+            html: adminHtml,
+            text: adminText,
+            replyTo: order.customerEmail ? String(order.customerEmail).trim() : undefined,
+            attachments: [getOrderEmailLogoAttachment()],
+          });
+          console.log(`[Order notification] Redundant admin email dispatched via Campaign SMTP`);
+        } catch (redundancyErr) {
+          console.error('[Order notification] Redundant admin notification failed to send:', redundancyErr);
+        }
+      }
 
       const recipientCount = 1 + addressing.cc.length + addressing.bcc.length;
       results.adminNotification = { sent: true, messageId: adminInfo.messageId, recipients: recipientCount };

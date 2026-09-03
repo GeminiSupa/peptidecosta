@@ -34,7 +34,7 @@ function restoreEnv() {
 
 test.after(restoreEnv);
 
-test('transactional SMTP ignores generic Rackspace settings', async () => {
+test('transactional SMTP accepts generic Rackspace settings', async () => {
   clearEnv();
   process.env.SMTP_HOST = 'secure.emailsrvr.com';
   process.env.SMTP_PORT = '465';
@@ -45,10 +45,10 @@ test('transactional SMTP ignores generic Rackspace settings', async () => {
   const { getTransactionalSmtpConfig } = await import('../src/lib/transactionalSmtp.js');
   const config = getTransactionalSmtpConfig();
 
-  assert.equal(config.configured, false);
-  assert.equal(config.host, undefined);
-  assert.equal(config.user, undefined);
-  assert.equal(config.pass, undefined);
+  assert.equal(config.configured, true);
+  assert.equal(config.host, 'secure.emailsrvr.com');
+  assert.equal(config.user, 'mailbox@example.com');
+  assert.equal(config.pass, 'legacy-secret');
 });
 
 test('transactional SMTP refuses to reuse Elastic campaign credentials', async () => {
@@ -107,7 +107,7 @@ test('an order configuration sharing the campaign identity still sends, but is n
   assert.equal(config.sharesCampaignIdentity, true);
 });
 
-test('a dedicated Rackspace order host is rejected', async () => {
+test('a dedicated Rackspace order host is accepted', async () => {
   clearEnv();
   process.env.ORDER_SMTP_HOST = 'secure.emailsrvr.com';
   process.env.ORDER_SMTP_USER = 'mailbox@example.com';
@@ -116,6 +116,6 @@ test('a dedicated Rackspace order host is rejected', async () => {
   const { getTransactionalSmtpConfig } = await import('../src/lib/transactionalSmtp.js');
   const config = getTransactionalSmtpConfig();
 
-  assert.equal(config.configured, false);
-  assert.equal(config.provider, null);
+  assert.equal(config.configured, true);
+  assert.equal(config.provider, 'Rackspace');
 });

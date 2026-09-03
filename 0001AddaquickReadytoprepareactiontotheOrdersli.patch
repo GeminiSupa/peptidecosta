@@ -1,0 +1,143 @@
+From 43c58e7e3ab50e64b61ca9becdd23ffc0273fa03 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 3 Sep 2026 15:48:39 +0000
+Subject: [PATCH] Add a quick "Ready to prepare" action to the Orders list
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The fulfillment hand-off only lived in OrderDetailPanel, behind "Details".
+Agents work paid/processing orders from the Orders list itself, where the
+status and agent dropdowns already are — so add the same action there
+(desktop Actions column and mobile card) rather than only inside the full
+order panel.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01VG1FtmjgdA8HYDRxZmEwny
+---
+ src/app/admin/page.js                 | 29 +++++++++++++++++++
+ src/components/admin/OrdersManager.js | 40 +++++++++++++++++++++++++--
+ 2 files changed, 67 insertions(+), 2 deletions(-)
+
+diff --git a/src/app/admin/page.js b/src/app/admin/page.js
+index 3b48c59..f6c5524 100644
+--- a/src/app/admin/page.js
++++ b/src/app/admin/page.js
+@@ -3560,6 +3560,34 @@ Core Rules:
+     }
+   };
+ 
++  // Hands an order to the Fulfillment queue. Lives here rather than only in
++  // OrderDetailPanel so the quick action in the Orders list (where an agent
++  // actually works) does not need its own copy of the same PATCH call.
++  const handleMarkReadyToPrepare = async (orderId) => {
++    try {
++      const response = await adminFetch('/api/admin/orders/update', {
++        method: 'PATCH',
++        body: JSON.stringify({
++          orderId,
++          updates: {
++            ready_to_prepare_at: new Date().toISOString(),
++            ready_to_prepare_by: adminProfile?.name || adminProfile?.email || null,
++          },
++          activity: {
++            type: 'ready_to_prepare',
++            message: 'Marked ready to prepare — handed off to fulfillment',
++          },
++        }),
++      });
++      const data = await response.json();
++      if (!response.ok) throw new Error(data.error || 'Could not mark this order ready to prepare');
++      handleOrderUpdated(data.order);
++    } catch (error) {
++      console.error('Mark ready to prepare error:', error);
++      alert(`Could not hand this order to fulfillment: ${error.message}`);
++    }
++  };
++
+   // Delete a single order
+   const handleDeleteOrder = async (orderId) => {
+     const order = orders.find((o) => o.id === orderId);
+@@ -5350,6 +5378,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
+             ordersRefreshError={ordersRefreshError}
+             handleOrderStatusUpdate={handleOrderStatusUpdate}
+             handleOrderSalesAgentUpdate={handleOrderSalesAgentUpdate}
++            handleMarkReadyToPrepare={handleMarkReadyToPrepare}
+             setSelectedOrderDetails={setSelectedOrderDetails}
+             openWhatsAppComposer={openWhatsAppComposer}
+             handleDeleteOrder={handleDeleteOrder}
+diff --git a/src/components/admin/OrdersManager.js b/src/components/admin/OrdersManager.js
+index ff1e5cf..14b8453 100644
+--- a/src/components/admin/OrdersManager.js
++++ b/src/components/admin/OrdersManager.js
+@@ -233,6 +233,7 @@ export default function OrdersManager({
+   loadingOrders,
+   handleOrderStatusUpdate,
+   handleOrderSalesAgentUpdate,
++  handleMarkReadyToPrepare,
+   setSelectedOrderDetails,
+   openWhatsAppComposer,
+   handleDeleteOrder,
+@@ -623,6 +624,20 @@ export default function OrdersManager({
+                       Complete
+                     </button>
+                   )}
++                  {(group.id === 'paid' || group.id === 'processing') && (
++                    order.ready_to_prepare_at ? (
++                      <span
++                        className="admin-btn"
++                        style={{ background: 'rgba(251, 191, 36, 0.12)', border: '1px solid rgba(251, 191, 36, 0.3)', color: '#fbbf24' }}
++                      >
++                        📦 Ready
++                      </span>
++                    ) : (
++                      <button type="button" className="admin-btn" onClick={() => handleMarkReadyToPrepare(order.id)}>
++                        📦 Ready to prepare
++                      </button>
++                    )
++                  )}
+                   <button type="button" className="admin-btn" onClick={() => openOrderWhatsapp(order)}>
+                     WhatsApp
+                   </button>
+@@ -840,8 +855,8 @@ export default function OrdersManager({
+ 
+                           {group.id === 'processing' && (
+                             <>
+-                              <button 
+-                                className="admin-btn admin-cta-btn" 
++                              <button
++                                className="admin-btn admin-cta-btn"
+                                 onClick={() => handleOrderStatusUpdate(order.id, 'Order Complete')}
+                                 style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
+                               >
+@@ -850,6 +865,27 @@ export default function OrdersManager({
+                             </>
+                           )}
+ 
++                          {/* Hand-off to the Fulfillment queue — see FulfillmentManager. */}
++                          {(group.id === 'paid' || group.id === 'processing') && (
++                            order.ready_to_prepare_at ? (
++                              <span
++                                title={`Ready to prepare since ${new Date(order.ready_to_prepare_at).toLocaleString()}${order.ready_to_prepare_by ? ` (by ${order.ready_to_prepare_by})` : ''}`}
++                                style={{ padding: '6px 10px', fontSize: '0.75rem', background: 'rgba(251, 191, 36, 0.12)', border: '1px solid rgba(251, 191, 36, 0.3)', color: '#fbbf24', borderRadius: '6px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
++                              >
++                                📦 Ready
++                              </span>
++                            ) : (
++                              <button
++                                className="admin-btn admin-cta-btn"
++                                onClick={() => handleMarkReadyToPrepare(order.id)}
++                                style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#fbbf24', color: '#1c1917', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
++                                title="Hand this order to fulfillment for packing"
++                              >
++                                📦 Ready to prepare
++                              </button>
++                            )
++                          )}
++
+                           {/* Quick Agent Claim CTA */}
+                           {!order.sales_agent && (
+                             <button 
+-- 
+2.43.0
+
