@@ -82,6 +82,17 @@ const nextConfig = {
         source: '/lp/thank-you',
         destination: '/lp/thank-you.html',
       },
+      // The GLP-1 variant, a second ad landing page run alongside /lp so the two
+      // can be tested against each other. Same standalone-file arrangement, same
+      // reason for the rewrites; it is public/glp-1/index.html.
+      {
+        source: '/glp-1',
+        destination: '/glp-1/index.html',
+      },
+      {
+        source: '/glp-1/thank-you',
+        destination: '/glp-1/thank-you.html',
+      },
     ];
   },
 
@@ -114,6 +125,21 @@ const nextConfig = {
       },
       {
         source: '/lp/thank-you.html',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
+      // Same reasoning for the GLP-1 variant's confirmation page.
+      {
+        source: '/glp-1/thank-you',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
+      {
+        source: '/glp-1/thank-you.html',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
           { key: 'Cache-Control', value: 'no-store' },

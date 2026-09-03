@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { getLeadAlertAudience } from '@/lib/leadNotificationRecipients';
+import { getLeadAlertAudience, isAdLandingSource } from '@/lib/leadNotificationRecipients';
 import { landingQualificationNotes } from '@/lib/landingLead.mjs';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
@@ -181,7 +181,7 @@ export async function deliverClaimedLeadNotificationJob(supabase, job) {
     // Campaign leads only. The storefront form saves through the same outbox,
     // and buzzing an agent's personal phone for every catalog enquiry is how an
     // alert stops being read.
-    const whatsappRecipients = details.source === 'adwords_lp' ? audience.whatsapp : [];
+    const whatsappRecipients = isAdLandingSource(details.source) ? audience.whatsapp : [];
     const intended = [
       ...emailRecipients.map((destination) => ({ channel: 'email', destination })),
       ...whatsappRecipients.map((recipient) => ({ channel: 'whatsapp', destination: recipient.destination })),
@@ -196,7 +196,7 @@ export async function deliverClaimedLeadNotificationJob(supabase, job) {
 
     const emailDeliveries = await sendLeadEmails({ recipients: unsentEmails, details });
     let whatsappDeliveries = [];
-    if (details.source === 'adwords_lp' && unsentWhatsApp.length) {
+    if (isAdLandingSource(details.source) && unsentWhatsApp.length) {
       const result = await sendLandingLeadWhatsAppAlerts(supabase, {
         name: details.name,
         phone: details.phone,

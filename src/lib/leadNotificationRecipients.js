@@ -5,6 +5,22 @@ import { isMissingRecipientsTable, missingRecipientColumn } from '@/lib/notifica
 const splitList = (value = '') => String(value || '').split(',').map((entry) => entry.trim()).filter(Boolean);
 
 /**
+ * The paid-ad landing pages, as opposed to the storefront forms that post to the
+ * same route. Membership decides two things: whether the dedicated Google Ads
+ * recipient list is consulted before the general one, and whether an agent's
+ * phone is buzzed over WhatsApp.
+ *
+ * `glp1_lp` is the GLP-1 variant at /glp, a second ad page run alongside /lp so
+ * the two can be tested against each other. It was added here because a page
+ * missing from this list still saves its leads and still emails, which is
+ * exactly why the gap is easy to miss: alerts simply arrive on one channel
+ * fewer. Any future landing page needs its source added here too.
+ */
+const AD_LANDING_SOURCES = new Set(['adwords_lp', 'glp1_lp']);
+
+export const isAdLandingSource = (source = '') => AD_LANDING_SOURCES.has(source);
+
+/**
  * Active rows on both channels with one alert flag set, or null if the flag's
  * column is absent.
  *
@@ -54,7 +70,7 @@ export async function getLeadAlertAudience(supabase = null, { source = '', owner
   let managedAvailable = false;
 
   try {
-    if (source === 'adwords_lp') {
+    if (isAdLandingSource(source)) {
       const adwords = await rowsFlagged(db, 'adwords_lead');
       if (adwords?.length) {
         managedAvailable = true;

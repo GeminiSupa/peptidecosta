@@ -9,7 +9,7 @@ import { rateLimit } from '@/lib/rateLimit.mjs';
 import { classifyLeadSubmission, HONEYPOT_FIELD } from '@/lib/leadSpam.mjs';
 import nodemailer from 'nodemailer';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
-import { getLeadAlertAudience } from '@/lib/leadNotificationRecipients';
+import { getLeadAlertAudience, isAdLandingSource } from '@/lib/leadNotificationRecipients';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { enqueueAndProcessLeadNotification } from '@/lib/leadNotificationDelivery';
 import { responseDeadline } from '@/lib/leadNotifications.mjs';
@@ -424,7 +424,7 @@ export async function POST(request) {
       // buzzing an agent's personal phone for every catalog enquiry is how an
       // alert stops being read. Sent after the email and in its own try, so a
       // WhatsApp outage cannot cost us the email as well.
-      if (source === 'adwords_lp' && !notificationResult?.outbox) {
+      if (isAdLandingSource(source) && !notificationResult?.outbox) {
         try {
           const { whatsapp } = await getLeadAlertAudience(supabase, { source, owner });
           const result = await sendLandingLeadWhatsAppAlerts(supabase, {

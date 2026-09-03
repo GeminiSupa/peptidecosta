@@ -261,6 +261,13 @@ test('the outbox resolves the audience from the saved owner, not from the job', 
   // Re-derived on every attempt: a retry hours later must reach the same
   // conclusion as the original save.
   assert.match(delivery, /owner: details\.assignedAgent/);
-  // Personal phones stay off ordinary storefront enquiries.
-  assert.match(delivery, /details\.source === 'adwords_lp' \? audience\.whatsapp : \[\]/);
+  // Personal phones stay off ordinary storefront enquiries. The gate is now
+  // isAdLandingSource rather than a bare comparison, because there is more than
+  // one ad landing page (/lp and /glp) and the storefront forms must stay out of
+  // both. Asserting the helper keeps the rule in one place: a new landing page is
+  // opted in by joining AD_LANDING_SOURCES, never by editing this line.
+  assert.match(delivery, /isAdLandingSource\(details\.source\) \? audience\.whatsapp : \[\]/);
+  const recipients = fs.readFileSync('src/lib/leadNotificationRecipients.js', 'utf8');
+  assert.match(recipients, /AD_LANDING_SOURCES = new Set\(\[[^\]]*'adwords_lp'[^\]]*\]\)/);
+  assert.match(recipients, /AD_LANDING_SOURCES = new Set\(\[[^\]]*'glp1_lp'[^\]]*\]\)/);
 });
