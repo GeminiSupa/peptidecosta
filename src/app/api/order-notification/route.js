@@ -122,6 +122,18 @@ export async function POST(request) {
           promoCodesList = promos.filter((p) => (
             // Never surface hidden codes (private mailer-only codes) in emails.
             !p.hidden
+            // Nor an affiliate's own referral code. JEANPAUL pays Jean Paul 20%
+            // of whatever it is used on, and it was printed at the foot of
+            // every receipt the business sent — so any customer could pay him a
+            // commission on a sale he had no part in. A referral code is for
+            // the person who earns it to hand out, not for us to advertise.
+            && !p.affiliate_id
+            // Nor a code minted for one named person. A usage_limit of 1 is
+            // definitionally single-use: the WELCOME-XXXXXX codes are issued to
+            // one customer each, and an unused one appearing here would be
+            // offered to every other customer before its owner could spend it.
+            // A genuine capped campaign ("first 100") is unaffected.
+            && Number(p.usage_limit) !== 1
             && (p.usage_limit === null || p.usage_limit === undefined
               || Number(p.usage_count || 0) < Number(p.usage_limit))
           ));
