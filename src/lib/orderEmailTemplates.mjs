@@ -242,10 +242,10 @@ export const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, t
 
   const isEn = lang === 'en';
   const isPaid = isPaidStatus(order.status);
-  // A receipt sent a second time, after staff corrected the order — normally a
-  // negotiated discount that was agreed before the sale but entered after it.
-  // It must not arrive looking like a duplicate of the first mail: a buyer
-  // keeping books needs to know which of the two copies is the real record.
+  // A receipt sent again on request. The wording stays general on purpose: it
+  // is simply the customer's copy of the order as it stands, with no reference
+  // to an earlier mail, no admission that anything was wrong, and nothing that
+  // reads as an apology. Staff send these for all sorts of ordinary reasons.
   const isResend = order.isResend === true;
   // Was `order.status === 'Declined'`. Every other refusal the gateway can
   // return — "Payment Blocked", "Error", a cancelled sale — failed that test
@@ -260,7 +260,7 @@ export const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, t
   const showDeclinedHelpAction = isDeclined;
   const strings = {
     title: isResend
-      ? (isEn ? 'Updated Receipt' : 'Recibo Actualizado')
+      ? (isEn ? 'Your Receipt' : 'Su Recibo')
       : isPaid
       ? (isEn ? 'Order Confirmed!' : '¡Pedido Confirmado!')
       : isDeclined
@@ -270,8 +270,8 @@ export const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, t
           : (isEn ? 'Action Required: Complete Payment' : 'Acción Requerida: Completar Pago'),
     subtitle: isResend
       ? (isEn
-        ? 'This corrected receipt replaces the one we sent earlier. The pricing below is final — please keep this copy for your records.'
-        : 'Este recibo corregido reemplaza el que enviamos anteriormente. El precio a continuación es el definitivo — por favor conserve esta copia para sus registros.')
+        ? 'Here are the details of your order. Please keep this copy for your records.'
+        : 'Aquí están los detalles de su pedido. Por favor conserve esta copia para sus registros.')
       : isPaid
       ? (isEn ? "We've received your order and payment. Here are your transaction details." : 'Hemos recibido su pedido y su pago. A continuación encontrará los detalles.')
       : isDeclined

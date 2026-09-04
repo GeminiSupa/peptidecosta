@@ -7,8 +7,10 @@
  * never agreed — and for a pharmacy owner keeping books, a second copy that
  * looks identical to the first is not a fix, it is a second wrong record.
  *
- * So a resend has to do two things this asserts: carry the discount that was
- * entered late, and say plainly that it replaces the earlier copy.
+ * A resend has to carry the discount that was entered late. Its wording stays
+ * general — it is the customer's copy of the order, not an apology and not a
+ * reference to an earlier mail — so these also pin down that no correction
+ * language leaks into it.
  */
 
 import test from 'node:test';
@@ -51,18 +53,23 @@ const renderReceipt = (order, extra = {}) => buildCustomerHtml(
   [],
 );
 
-test('a resent receipt announces itself as a correction, not a duplicate', () => {
+test('a resent receipt is worded neutrally, with no apology in it', () => {
   const html = renderReceipt(DISCOUNTED_ORDER, { isResend: true });
 
-  assert.match(html, /Updated Receipt/);
-  assert.match(html, /replaces the one we sent earlier/);
+  assert.match(html, /Your Receipt/);
+  assert.match(html, /Please keep this copy for your records/);
+
+  // Nothing that points at an earlier mail or admits a mistake. Staff resend
+  // receipts for ordinary reasons and the customer need not be told why.
+  for (const wording of [/corrected/i, /replaces/i, /updated receipt/i, /apolog/i, /sorry/i, /earlier/i]) {
+    assert.doesNotMatch(html, wording);
+  }
 });
 
 test('the ordinary receipt is untouched by the resend wording', () => {
   const html = renderReceipt(DISCOUNTED_ORDER);
 
-  assert.doesNotMatch(html, /Updated Receipt/);
-  assert.doesNotMatch(html, /replaces the one we sent earlier/);
+  assert.doesNotMatch(html, /Your Receipt/);
   assert.match(html, /Order Confirmed/);
 });
 
@@ -76,7 +83,7 @@ test('a resent receipt carries the discount that was entered late', () => {
   assert.match(html, /\$600\.00/); // the pre-discount subtotal is still shown
 });
 
-test('a Spanish resend is corrected in Spanish', () => {
+test('a Spanish resend is worded in Spanish', () => {
   const order = { ...DISCOUNTED_ORDER, currency: 'CRC' };
   const html = buildCustomerHtml(
     { ...buildOrderNotificationPayload(order, order.order_number), isResend: true },
@@ -91,8 +98,9 @@ test('a Spanish resend is corrected in Spanish', () => {
     [],
   );
 
-  assert.match(html, /Recibo Actualizado/);
-  assert.match(html, /Reemplaza el que enviamos anteriormente|reemplaza el que enviamos anteriormente/);
+  assert.match(html, /Su Recibo/);
+  assert.match(html, /conserve esta copia para sus registros/);
+  assert.doesNotMatch(html, /corregido|reemplaza|anteriormente/i);
 });
 
 test('the order history distinguishes a resend from the original receipt', () => {

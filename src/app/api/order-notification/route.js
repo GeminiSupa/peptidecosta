@@ -291,8 +291,8 @@ export async function POST(request) {
         const outcome = classifyPaymentOutcome(order.status);
         const customerSubject = order.isResend === true
           ? (orderLang === 'en'
-            ? `Updated receipt - Order #${order.orderNumber || ''} - Peptides Costa Rica`
-            : `Recibo actualizado - Pedido #${order.orderNumber || ''} - Péptidos Costa Rica`)
+            ? `Your receipt - Order #${order.orderNumber || ''} - Peptides Costa Rica`
+            : `Su recibo - Pedido #${order.orderNumber || ''} - Péptidos Costa Rica`)
           : outcome === 'declined'
           ? (orderLang === 'en'
             ? `Payment declined - Order #${order.orderNumber || ''} - Peptides Costa Rica`
