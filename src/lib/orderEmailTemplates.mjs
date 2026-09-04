@@ -238,6 +238,20 @@ export const buildAdminHtml = (order, paymentLabel, totalPrimary, totalUsd, tota
 };
 
 // Customer HTML Receipt Builder
+/**
+ * `promoCodesList` is accepted and deliberately unused.
+ *
+ * The receipt used to print every active code as an "Active Codes" footer.
+ * That footer was advertising things that were never ours to give away — an
+ * affiliate's referral code, which pays its owner 20% of whatever it is used
+ * on, and single-use codes minted for one named customer each. Filtering it
+ * down to genuine public offers left one code in it, which is not a promotion,
+ * and the business would rather not turn a receipt into an advert at all.
+ *
+ * The parameter stays because every caller passes it positionally; removing it
+ * would silently shift the arguments after it. The banner set in the admin
+ * panel still shows — that one is written on purpose, for everyone.
+ */
 export const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, totalCrc, lang, links, salesTextEn, salesTextEs, promoCodesList) => {
 
   const isEn = lang === 'en';
@@ -457,11 +471,10 @@ export const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, t
         </div>
         ` : ''}
 
-        ${(promoCodesList && promoCodesList.length > 0) || (isEn ? salesTextEn : salesTextEs) ? `
+        ${(isEn ? salesTextEn : salesTextEs) ? `
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:16px;padding:20px;margin:0 auto 32px;max-width:500px;text-align:center;">
-          <h4 style="margin:0 0 10px;color:#b45309;font-size:15px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;">🎁 ${isEn ? 'Current Sales & Promo Codes' : 'Ventas Actuales y Códigos Promocionales'}</h4>
-          ${(isEn ? salesTextEn : salesTextEs) ? `<p style="margin:0 0 10px;color:#92400e;font-size:14px;line-height:1.5;font-weight:500;">${escapeHtml(isEn ? salesTextEn : salesTextEs)}</p>` : ''}
-          ${promoCodesList && promoCodesList.length > 0 ? `<p style="margin:0;color:#92400e;font-size:14px;line-height:1.5;"><strong>${isEn ? 'Active Codes:' : 'Códigos Activos:'}</strong> <br/> ${promoCodesList.map(p => `<span style="background:#fef3c7;padding:2px 6px;border-radius:4px;border:1px solid #fde68a;"><strong>${p.code}</strong> (${p.discount_pct * 100}% off)</span>`).join(' ')}</p>` : ''}
+          <h4 style="margin:0 0 10px;color:#b45309;font-size:15px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px;">🎁 ${isEn ? 'Current Sales' : 'Ventas Actuales'}</h4>
+          <p style="margin:0;color:#92400e;font-size:14px;line-height:1.5;font-weight:500;">${escapeHtml(isEn ? salesTextEn : salesTextEs)}</p>
         </div>
         ` : ''}
 
