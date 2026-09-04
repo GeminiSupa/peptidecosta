@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 
 import {
   calculateAdminOrderTotals,
+  getAdminVolumeDiscountPct,
   isManualOrderSource,
   manualDiscountReplacesVolume,
 } from '../src/lib/adminOrderTotals.mjs';
@@ -130,4 +131,37 @@ test('the server rebuild drops the tier the same way the screen does', () => {
   const saved = (suppressed.total - suppressed.shipping) - manual + SHIPPING;
 
   assert.equal(preview.total, saved);
+});
+
+test('the orders list badge reports what was taken, not what was qualified for', () => {
+  // Seven vials qualify for the 15% tier. On a manual order carrying a
+  // negotiated discount that tier is not applied, and the list must not
+  // advertise it beside a total that plainly excludes it.
+  const items = [{ product: 'Retatrutide 5mg', qty: 7, price: 45037 }];
+  assert.equal(getAdminVolumeDiscountPct(items), 15);
+
+  const manualOrder = {
+    source: 'admin_manual',
+    manual_discount_type: 'percentage',
+    manual_discount_value: 33,
+  };
+  const replaced = manualDiscountReplacesVolume(
+    manualOrder.source, manualOrder.manual_discount_type, manualOrder.manual_discount_value,
+  );
+  assert.equal(replaced, true);
+  assert.equal(replaced ? 0 : getAdminVolumeDiscountPct(items), 0, 'no volume badge on this row');
+
+  // The same seven vials on a website order still earn, and still show, 15%.
+  const webOrder = { source: 'website', manual_discount_type: null, manual_discount_value: 0 };
+  const webReplaced = manualDiscountReplacesVolume(
+    webOrder.source, webOrder.manual_discount_type, webOrder.manual_discount_value,
+  );
+  assert.equal(webReplaced ? 0 : getAdminVolumeDiscountPct(items), 15);
+
+  // And a manual order with no discount typed keeps its volume badge.
+  const plainManual = { source: 'admin_manual', manual_discount_type: null, manual_discount_value: 0 };
+  const plainReplaced = manualDiscountReplacesVolume(
+    plainManual.source, plainManual.manual_discount_type, plainManual.manual_discount_value,
+  );
+  assert.equal(plainReplaced ? 0 : getAdminVolumeDiscountPct(items), 15);
 });

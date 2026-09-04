@@ -1,6 +1,6 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Database, Download, MessageCircle, Plus, RefreshCw, Trash2 } from 'lucide-react';
-import { getAdminVolumeDiscountPct } from '@/lib/adminOrderTotals.mjs';
+import { getAdminVolumeDiscountPct, manualDiscountReplacesVolume } from '@/lib/adminOrderTotals.mjs';
 import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
 import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 import { formatCrDate } from '@/lib/crTime.mjs';
@@ -669,7 +669,20 @@ export default function OrdersManager({
                   const items = Array.isArray(order.items) ? order.items : [];
                   const orderDate = getOrderDateLabel(order);
 
-                  const _discountPct = getAdminVolumeDiscountPct(items);
+                  // What was actually taken off, not what the item count would
+                  // qualify for. On a manual order a negotiated discount stands
+                  // in place of the volume tier, so reading the tier straight
+                  // off the items advertised a 15% that was never applied —
+                  // next to a total that plainly did not include it.
+                  const _replacedVolume = manualDiscountReplacesVolume(
+                    order.source, order.manual_discount_type, order.manual_discount_value,
+                  );
+                  const _discountPct = _replacedVolume ? 0 : getAdminVolumeDiscountPct(items);
+                  const _manualDiscountLabel = _replacedVolume
+                    ? (order.manual_discount_type === 'percentage'
+                      ? `-${Number(order.manual_discount_value)}% order discount`
+                      : 'order discount')
+                    : '';
                   
                   const status = String(order.status || '').toLowerCase();
                   const cardBadge = getCardPaymentBadge(order);
@@ -738,6 +751,11 @@ export default function OrdersManager({
                         {_discountPct > 0 && (
                           <span style={{ display: 'block', fontSize: '0.65rem', color: '#4ade80', fontWeight: '700', marginTop: '2px' }}>
                             -{_discountPct}% vol. discount
+                          </span>
+                        )}
+                        {_manualDiscountLabel && (
+                          <span style={{ display: 'block', fontSize: '0.65rem', color: '#c084fc', fontWeight: '700', marginTop: '2px' }}>
+                            {_manualDiscountLabel}
                           </span>
                         )}
                       </td>
