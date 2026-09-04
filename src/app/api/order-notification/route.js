@@ -7,8 +7,8 @@ import { buildOrderEmailAddressing, getOrderNotificationRecipients } from '@/lib
 import { getOrderEmailLogoAttachment } from '@/lib/orderEmailBranding.mjs';
 import { withBacGiftLines } from '@/lib/bacWater.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
-import { getCampaignSmtpConfig } from '@/lib/campaignSmtp.js';
 import { orderEmailActivity, recordOrderEmails } from '@/lib/orderEmailLog.mjs';
 import { classifyPaymentOutcome } from '@/lib/paymentOutcome.mjs';
 import { verifyAdminSession } from '@/lib/adminAuth';
@@ -96,16 +96,27 @@ export async function POST(request) {
         }
 
         const now = new Date().toISOString();
-        const { data: promos } = await supabase
+        // The usage check is done here, not in the query. PostgREST has no way
+        // to compare one column against another, so `usage_limit.gt.usage_count`
+        // was read as the literal string "usage_count" and the request failed
+        // with `invalid input syntax for type integer`. That error was caught
+        // below and swallowed, which took the whole promo list down with it —
+        // so the "Active Codes" block has never once rendered in a receipt.
+        const { data: promos, error: promoError } = await supabase
           .from('promo_codes')
           .select('*')
           .eq('is_active', true)
-          .or(`valid_until.is.null,valid_until.gt.${now}`)
-          .or(`usage_limit.is.null,usage_limit.gt.usage_count`);
-        
+          .or(`valid_until.is.null,valid_until.gt.${now}`);
+
+        if (promoError) throw new Error(promoError.message);
+
         if (promos && promos.length > 0) {
-          // Never surface hidden codes (private mailer-only codes) in emails.
-          promoCodesList = promos.filter((p) => !p.hidden);
+          promoCodesList = promos.filter((p) => (
+            // Never surface hidden codes (private mailer-only codes) in emails.
+            !p.hidden
+            && (p.usage_limit === null || p.usage_limit === undefined
+              || Number(p.usage_count || 0) < Number(p.usage_limit))
+          ));
         }
       } catch (err) {
         console.warn('Could not fetch sales/promos for email:', err.message);
@@ -154,18 +165,6 @@ export async function POST(request) {
       },
       ...SMTP_TIMEOUTS,
     });
-
-    const campaignSmtp = getCampaignSmtpConfig();
-    const campaignTransporter = campaignSmtp.configured ? nodemailer.createTransport({
-      host: campaignSmtp.host,
-      port: campaignSmtp.port,
-      secure: campaignSmtp.secure,
-      auth: {
-        user: campaignSmtp.user,
-        pass: campaignSmtp.pass,
-      },
-      ...SMTP_TIMEOUTS,
-    }) : null;
 
     const results = {
       adminNotification: { sent: false },
@@ -239,28 +238,31 @@ export async function POST(request) {
         attachments: [getOrderEmailLogoAttachment()],
       });
 
-      if (campaignTransporter) {
-        try {
-          await campaignTransporter.sendMail({
-            from: campaignSmtp.from,
-            to: addressing.to,
-            cc: addressing.cc,
-            bcc: addressing.bcc,
-            subject: `[Redundancy] ${adminSubject}`,
-            html: adminHtml,
-            text: adminText,
-            replyTo: order.customerEmail ? String(order.customerEmail).trim() : undefined,
-            attachments: [getOrderEmailLogoAttachment()],
-          });
-          console.log(`[Order notification] Redundant admin email dispatched via Campaign SMTP`);
-        } catch (redundancyErr) {
-          console.error('[Order notification] Redundant admin notification failed to send:', redundancyErr);
-        }
+      // A server can accept the submission and still refuse individual
+      // addresses, and nodemailer reports that in `info.rejected` rather than
+      // by throwing. Nothing here used to read it, so the team alert recorded
+      // "sent" even when the company inbox was the address being turned away —
+      // which is exactly how a silent outage survives. The accounting copy
+      // learned this the hard way; the same rule applies here.
+      const refused = (adminInfo?.rejected || []).map((entry) => String(entry));
+      const accepted = (adminInfo?.accepted || []).map((entry) => String(entry));
+
+      // Nobody took it. Fall into the catch below so the caller sees a failure
+      // rather than a message id for a message that reached no one.
+      if (accepted.length === 0) {
+        throw new Error(`the mail server refused every recipient${refused.length ? ` (${refused.join(', ')})` : ''}`);
       }
 
-      const recipientCount = 1 + addressing.cc.length + addressing.bcc.length;
-      results.adminNotification = { sent: true, messageId: adminInfo.messageId, recipients: recipientCount };
-      console.log(`[Order notification] Admin email dispatched to ${recipientCount} recipients: ${adminInfo.messageId}`);
+      results.adminNotification = {
+        sent: true,
+        messageId: adminInfo.messageId,
+        recipients: accepted.length,
+        ...(refused.length ? { refused } : {}),
+      };
+      if (refused.length) {
+        console.error(`[Order notification] Admin email REFUSED for ${refused.join(', ')} (accepted: ${accepted.join(', ')})`);
+      }
+      console.log(`[Order notification] Admin email dispatched to ${accepted.length} recipients: ${adminInfo.messageId}`);
     } catch (adminErr) {
       console.error('[Order notification] Admin notification failed to send:', adminErr);
       results.adminNotification = { sent: false, error: adminErr.message };
@@ -377,8 +379,21 @@ export async function POST(request) {
 
     // One write for every email this handler sent, so the order carries its own
     // delivery history and the customer timeline can show it. Never throws.
+    // The service-role client, not the anon one. `orders` denies anon writes
+    // outright ("permission denied for table orders"), so every entry written
+    // here was silently discarded — which is why no team alert or customer
+    // receipt has ever appeared in an order's history while the completion
+    // receipt, written by an admin client, always did.
+    let logClient = null;
+    try {
+      logClient = getSupabaseAdmin();
+    } catch (adminClientErr) {
+      console.warn('[Order notification] No service-role client for the email log:', adminClientErr.message);
+      logClient = isSupabaseConfigured ? supabase : null;
+    }
+
     await recordOrderEmails(
-      isSupabaseConfigured ? supabase : null,
+      logClient,
       { order_number: order.orderNumber || order.order_number },
       [
         skipAdmin ? null : orderEmailActivity({
@@ -386,6 +401,14 @@ export async function POST(request) {
           sent: results.adminNotification.sent,
           error: results.adminNotification.error,
         }),
+        // Named separately so a refused company inbox is visible on the order
+        // even though the alert did reach the rest of the team.
+        results.adminNotification.refused?.length ? orderEmailActivity({
+          kind: 'admin-alert',
+          to: results.adminNotification.refused.join(', '),
+          sent: false,
+          error: 'the mail server refused this recipient',
+        }) : null,
         results.customerReceipt.skipped ? null : orderEmailActivity({
           kind: 'customer-receipt',
           to: order.customerEmail,
