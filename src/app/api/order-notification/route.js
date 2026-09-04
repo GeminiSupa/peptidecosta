@@ -46,6 +46,23 @@ function getOrderSmtpConfig() {
   const from = `Peptides Costa Rica <${fromEmail}>`;
   const replyTo = readEnv('ORDER_NOTIFICATION_REPLY_TO') || readEnv('SMTP_REPLY_TO') || fromEmail;
 
+  // The team alert is the one message addressed INTO the company's own domain,
+  // and that is what makes it a special case.
+  //
+  // The domain's MX is Rackspace. Mail claiming `From: info@peptidescostarica.net`
+  // that arrives from Elastic is, from Rackspace's side, its own domain coming
+  // from an outside server — so it is refused at the door. Nothing reaches the
+  // Spam folder, which is why looking there proves nothing and why this went
+  // unnoticed for weeks. It is the FROM domain that trips the rule, not the
+  // recipient, so the recipient does not have to change: info@ stays the team's
+  // inbox and only this message's sender moves off the blocked domain.
+  //
+  // Unset, this is exactly the old behaviour. Customer receipts are deliberately
+  // untouched — they go to outside mailboxes, which never had the problem, and
+  // must keep presenting the company address. Same approach TAX_RECORDS_SMTP_FROM
+  // already takes for the accountant's copy.
+  const teamAlertFrom = readEnv('ORDER_TEAM_ALERT_FROM') || from;
+
   return {
     host,
     port,
@@ -53,6 +70,7 @@ function getOrderSmtpConfig() {
     user,
     pass,
     from,
+    teamAlertFrom,
     replyTo,
     configured,
   };
@@ -227,7 +245,7 @@ export async function POST(request) {
       const addressing = buildOrderEmailAddressing(recipients);
 
       const adminInfo = await transporter.sendMail({
-        from: smtp.from,
+        from: smtp.teamAlertFrom,
         to: addressing.to,
         cc: addressing.cc,
         bcc: addressing.bcc,
