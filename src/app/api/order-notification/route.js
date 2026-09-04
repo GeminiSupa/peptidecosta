@@ -46,6 +46,13 @@ function getOrderSmtpConfig() {
   const from = `Peptides Costa Rica <${fromEmail}>`;
   const replyTo = readEnv('ORDER_NOTIFICATION_REPLY_TO') || readEnv('SMTP_REPLY_TO') || fromEmail;
 
+  // A silent copy of every receipt a customer is sent, for whoever needs to be
+  // able to answer "what exactly did they get?" without asking them to forward
+  // it. BCC, never CC: the customer's own headers must not name anyone else,
+  // which is the mistake the accounting copy was pulled out of the receipt to
+  // fix. Comma-separated for more than one watcher; unset means no copy.
+  const receiptBcc = readEnv('ORDER_RECEIPT_BCC') || '';
+
   return {
     host,
     port,
@@ -54,6 +61,7 @@ function getOrderSmtpConfig() {
     pass,
     from,
     replyTo,
+    receiptBcc,
     configured,
   };
 }
@@ -343,11 +351,22 @@ export async function POST(request) {
           from: smtp.from,
           replyTo: smtp.replyTo,
           to: String(order.customerEmail).trim(),
+          // Hidden from the customer, and never allowed to be the reason a
+          // receipt counts as delivered — that is judged on `to` alone below.
+          ...(smtp.receiptBcc ? { bcc: smtp.receiptBcc } : {}),
           subject: customerSubject,
           html: customerHtml,
           text: customerText,
           attachments: [getOrderEmailLogoAttachment()],
         });
+
+        // A server can accept the message and still refuse one address. With a
+        // BCC on it, "somebody was accepted" no longer means the customer was,
+        // so the customer's own address is checked by name.
+        const refused = (customerInfo?.rejected || []).map((entry) => String(entry).toLowerCase());
+        if (refused.includes(String(order.customerEmail).trim().toLowerCase())) {
+          throw new Error(`the mail server refused ${String(order.customerEmail).trim()}`);
+        }
 
         results.customerReceipt = { sent: true, messageId: customerInfo.messageId };
         console.log(`[Order notification] Customer receipt dispatched: ${customerInfo.messageId} to ${order.customerEmail}`);
