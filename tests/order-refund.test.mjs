@@ -263,10 +263,12 @@ test('the status dropdown cannot write a refund status', () => {
 
 test('a rejected status change is put back on screen, not left showing', () => {
   const page = fs.readFileSync('src/app/admin/page.js', 'utf8');
-  const handler = page.slice(
-    page.indexOf('const handleOrderStatusUpdate'),
-    page.indexOf('const handleOrderStatusUpdate') + 3000,
-  );
+  // Read to the handler's own closing brace rather than a guessed number of
+  // characters. The window was 3000, and adding the send confirmation pushed
+  // the rollback past it — the test failed on an offset while the behaviour it
+  // describes was untouched.
+  const start = page.indexOf('const handleOrderStatusUpdate');
+  const handler = page.slice(start, page.indexOf('\n  };', start));
 
   // The row is changed optimistically before the server is asked. Without a
   // rollback the panel showed "Refunded" on an order the server had refused,

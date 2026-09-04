@@ -165,3 +165,48 @@ test('the orders list badge reports what was taken, not what was qualified for',
   );
   assert.equal(plainReplaced ? 0 : getAdminVolumeDiscountPct(items), 15);
 });
+
+/**
+ * The volume discount is now the operator's explicit choice on a checkbox,
+ * not a rule inferred from whether a discount was typed. The inference stays
+ * as the default for callers that make no choice.
+ */
+test('an explicit choice beats the inferred rule, in both directions', () => {
+  const resolve = (order, type, value) => (
+    order.apply_volume_discount === undefined
+      ? manualDiscountReplacesVolume('admin_manual', type, value)
+      : order.apply_volume_discount === false
+  );
+
+  // Ticked: the customer earned both, even with a negotiated discount on top.
+  assert.equal(resolve({ apply_volume_discount: true }, 'percentage', 25), false);
+
+  // Unticked: no tier, even with no negotiated discount at all.
+  assert.equal(resolve({ apply_volume_discount: false }, null, 0), true);
+
+  // No choice made: the default rule decides, exactly as before.
+  assert.equal(resolve({}, 'percentage', 25), true);
+  assert.equal(resolve({}, null, 0), false);
+});
+
+test('reopening an order honours the choice it was saved with', () => {
+  // A stored choice must survive an edit. Before this was recorded, editing
+  // the items on an order saved with both discounts would silently drop the
+  // volume one and charge the customer more than they agreed to.
+  const resolveOnEdit = (currentOrder, type, value) => (
+    currentOrder.apply_volume_discount === null || currentOrder.apply_volume_discount === undefined
+      ? manualDiscountReplacesVolume(currentOrder.source, type, value)
+      : currentOrder.apply_volume_discount === false
+  );
+
+  const keptBoth = { source: 'admin_manual', apply_volume_discount: true };
+  assert.equal(resolveOnEdit(keptBoth, 'percentage', 25), false, 'the tier stays on');
+
+  const replacedIt = { source: 'admin_manual', apply_volume_discount: false };
+  assert.equal(resolveOnEdit(replacedIt, 'percentage', 25), true);
+
+  // Orders from before the column existed, and every website order, fall back
+  // to the default rule.
+  assert.equal(resolveOnEdit({ source: 'admin_manual', apply_volume_discount: null }, 'percentage', 25), true);
+  assert.equal(resolveOnEdit({ source: 'website', apply_volume_discount: null }, 'percentage', 25), false);
+});

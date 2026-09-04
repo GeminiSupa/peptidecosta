@@ -152,3 +152,13 @@ export const ORDER_MANUAL_DISCOUNT_COLUMNS = [
   'manual_discount_amount_usd',
   'manual_discount_amount_crc',
 ];
+
+/**
+ * What add-order-volume-discount-flag.sql adds.
+ *
+ * One nullable column recording whether staff chose to apply the automatic
+ * volume discount on a manual order. Without the migration the choice simply
+ * is not remembered between edits — which must never be a reason an order
+ * cannot be saved at all.
+ */
+export const ORDER_VOLUME_DISCOUNT_COLUMNS = ['apply_volume_discount'];

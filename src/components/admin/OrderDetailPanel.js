@@ -5,6 +5,7 @@ import { Copy, Mail, Phone, Plus, Trash2, BadgePercent } from 'lucide-react';
 import { formatActivityType } from '@/lib/orderActivity';
 import { formatCrInstant } from '@/lib/crTime.mjs';
 import { adminFetch } from '@/lib/adminApi';
+import { confirmCustomerEmail } from '@/lib/confirmCustomerEmail.mjs';
 import ProductCombobox from './ProductCombobox';
 import { isAgentReferralSource, isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import { bacGiftShortfall } from '@/lib/bacWater.mjs';
@@ -903,6 +904,12 @@ export default function OrderDetailPanel({
                     ? 'Emails the customer a corrected receipt with the order exactly as it stands now'
                     : 'This order has no email address on it'}
                   onClick={async () => {
+                    // Nothing here can be taken back, and the button sits in a
+                    // column of controls that only change the record.
+                    if (!confirmCustomerEmail('receipt', order.customer_email, [
+                      `Order: ${order.order_number}`,
+                      `Total: ${orderCurrency === 'USD' ? `$${Number(order.total_usd || 0).toFixed(2)}` : `₡${Number(order.total_crc || 0).toLocaleString()}`}`,
+                    ])) return;
                     setResendingReceipt(true);
                     setReceiptResendNotice('');
                     const result = await onResendReceipt?.(order);
@@ -943,6 +950,10 @@ export default function OrderDetailPanel({
                     className="admin-btn admin-btn-secondary"
                     disabled={resendingCompletion || !order.customer_email}
                     onClick={async () => {
+                      if (!confirmCustomerEmail('completion email', order.customer_email, [
+                        `Order: ${order.order_number}`,
+                        order.tracking_number ? `Tracking: ${order.tracking_number}` : 'No tracking number on this order yet.',
+                      ])) return;
                       setResendingCompletion(true);
                       await onResendCompletion?.(order);
                       setResendingCompletion(false);

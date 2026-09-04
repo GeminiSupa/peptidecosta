@@ -18,7 +18,13 @@ import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { applyCustomerHistoryAttribution } from '@/lib/customerHistoryAttributionServer';
 import { notifyLowInventory, prepareInventoryReservation } from '@/lib/orderInventoryServer';
-import { ORDER_INVENTORY_COLUMNS, ORDER_MANUAL_DISCOUNT_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import {
+  ORDER_ATTRIBUTION_COLUMNS,
+  ORDER_INVENTORY_COLUMNS,
+  ORDER_MANUAL_DISCOUNT_COLUMNS,
+  ORDER_VOLUME_DISCOUNT_COLUMNS,
+  writeDroppingMissingColumns,
+} from '@/lib/optionalColumns.mjs';
 import {
   recordNewOrderNotification,
   sendAffiliateOrderWhatsApp,
@@ -99,8 +105,14 @@ async function resolvePromo(supabase, order) {
   return promo;
 }
 
-async function applyAffiliateAttribution(supabase, row, promo) {
-  const affiliateId = promo?.affiliate_id || null;
+/**
+ * @param explicitAffiliateId an affiliate chosen on the order form, which wins
+ *   over the promo code's own. Staff sometimes credit an affiliate for a deal
+ *   they brought in without a code ever being typed, and before this the only
+ *   way to record that was to save the order and immediately edit it.
+ */
+async function applyAffiliateAttribution(supabase, row, promo, explicitAffiliateId = null) {
+  const affiliateId = explicitAffiliateId || promo?.affiliate_id || null;
   if (!affiliateId) return { ...row, affiliate_id: null, ...affiliateCommissionPatch(row, null) };
 
   const { data: affiliate, error } = await supabase
@@ -179,11 +191,14 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Discount reason cannot exceed 200 characters' }, { status: 400 });
     }
 
-    // Every order this route writes is a manual one, so a negotiated discount
-    // always replaces the volume tier rather than compounding with it.
-    const replaceVolumeDiscount = manualDiscountReplacesVolume(
-      'admin_manual', manualDiscountType, manualDiscountValue,
-    );
+    // Whether the automatic volume tier applies is the operator's own call,
+    // made on a checkbox next to the discount. It defaults to the rule the
+    // form follows — a negotiated discount replaces the tier — so an API
+    // caller that says nothing still gets sensible pricing, but an explicit
+    // choice is never overridden by an inference.
+    const replaceVolumeDiscount = order.apply_volume_discount === undefined
+      ? manualDiscountReplacesVolume('admin_manual', manualDiscountType, manualDiscountValue)
+      : order.apply_volume_discount === false;
 
     const authoritative = authoritativeCheckout({
       postedOrder: { ...order, currency },
@@ -248,9 +263,37 @@ export async function POST(request) {
       payment_method: paymentMethod,
       status: paymentMethod === 'card' ? 'Payment Pending' : requestedStatus,
       source: 'admin_manual',
+      // Recorded so reopening and re-saving this order cannot quietly reprice
+      // it against a rule the operator did not choose.
+      apply_volume_discount: !replaceVolumeDiscount,
       sales_agent: String(order.sales_agent || '').trim() || null,
       internal_notes: String(order.internal_notes || '').trim() || null,
     };
+
+    // Attribution decides what the business pays its own people, so only a
+    // superadmin may set it. Staff creating their own orders are pinned to
+    // themselves at the profile rate, exactly as before.
+    const requestedAffiliateId = auth.profile.is_superadmin
+      ? (String(order.affiliate_id || '').trim() || null)
+      : null;
+    const requestedCommissionRate = auth.profile.is_superadmin
+      && order.agent_commission_rate_override !== undefined
+      && order.agent_commission_rate_override !== null
+      && order.agent_commission_rate_override !== ''
+      ? Number(order.agent_commission_rate_override)
+      : null;
+    if (requestedCommissionRate !== null
+      && (!Number.isFinite(requestedCommissionRate) || requestedCommissionRate < 0 || requestedCommissionRate > 100)) {
+      return NextResponse.json({ error: 'Commission override must be between 0 and 100' }, { status: 400 });
+    }
+    const requestedCommissionSource = requestedCommissionRate === null
+      ? null
+      : (String(order.agent_commission_source || '').trim() || 'custom_override');
+    if (requestedCommissionRate !== null && !String(row.sales_agent || '').trim()) {
+      return NextResponse.json({
+        error: 'Choose a credited agent before setting a commission override.',
+      }, { status: 400 });
+    }
 
     if (!auth.profile.is_superadmin) {
       const requestedAgent = String(row.sales_agent || '').trim().toLowerCase();
@@ -260,8 +303,15 @@ export async function POST(request) {
       row.sales_agent = row.sales_agent || auth.profile.name || auth.profile.email || auth.user.email;
     }
 
-    row = await applyAffiliateAttribution(supabase, row, promo);
+    row = await applyAffiliateAttribution(supabase, row, promo, requestedAffiliateId);
     row = await applyCustomerHistoryAttribution(supabase, row);
+
+    // Last, so an explicitly chosen rate outranks anything the affiliate or
+    // customer-history rules worked out for themselves.
+    if (requestedCommissionRate !== null) {
+      row.agent_commission_rate_override = requestedCommissionRate;
+      row.agent_commission_source = requestedCommissionSource;
+    }
     const discountNote = manualDiscountType
       ? ` · order discount ${manualDiscountType === 'percentage' ? `${manualDiscountValue}%` : `${manualDiscountValue} ${currency}`}${manualDiscountReason ? ` — ${manualDiscountReason}` : ''}`
       : '';
@@ -276,7 +326,15 @@ export async function POST(request) {
 
     // Same defence the storefront checkout already had: a manual order must not
     // fail outright just because add-inventory-restore.sql has not been run yet.
-    const optionalOrderColumns = [...ORDER_INVENTORY_COLUMNS, ...ORDER_MANUAL_DISCOUNT_COLUMNS];
+    const optionalOrderColumns = [
+      ...ORDER_INVENTORY_COLUMNS,
+      ...ORDER_MANUAL_DISCOUNT_COLUMNS,
+      // The attribution columns arrive by their own hand-run migration too, and
+      // an order must still save without them — the same list the edit route
+      // already tolerates.
+      ...ORDER_ATTRIBUTION_COLUMNS,
+      ...ORDER_VOLUME_DISCOUNT_COLUMNS,
+    ];
     let { data, error, droppedColumns } = await writeDroppingMissingColumns(
       row,
       optionalOrderColumns,

@@ -63,6 +63,9 @@ import WhatsAppAnalyticsPanel from '@/components/admin/WhatsAppAnalyticsPanel';
 import { DEFAULT_WHATSAPP_AI_PROMPT } from '@/lib/whatsappRecovery';
 import { DEFAULT_BUSINESS_LINKS, normalizeBusinessLinks } from '@/lib/businessLinks';
 import { confirmDelete, confirmBulkDelete } from '@/lib/confirmDelete.mjs';
+import { confirmCustomerEmail } from '@/lib/confirmCustomerEmail.mjs';
+import { shouldSendPaidConfirmation } from '@/lib/orderStatusEmails.mjs';
+import { isCompletedOrderStatus } from '@/lib/taxRecordsEmail.mjs';
 import { claimOrderInDb } from '@/lib/claimOrder';
 import { filterOrdersVisibleToAgent, orderVisibleToAgent } from '@/lib/agentOrders';
 import {
@@ -3393,9 +3396,15 @@ Core Rules:
     }
   };
 
-  const resendOrderAccountingCopy = async (order) => (
-    sendOrderCompletionNotification(order, { accountingOnly: true })
-  );
+  const resendOrderAccountingCopy = async (order) => {
+    // Not customer-facing, but a duplicate copy of a sale is exactly what the
+    // accountant must not receive, so it asks too.
+    if (!confirmCustomerEmail('accounting copy', 'the accountant', [
+      `Order: ${order.order_number}`,
+      'They may already hold a copy of this sale.',
+    ])) return;
+    return sendOrderCompletionNotification(order, { accountingOnly: true });
+  };
 
   // Re-sends the buyer's own receipt, rebuilt from the order as it stands now.
   // Returns the outcome rather than alerting: the panel shows it inline next to
@@ -3433,6 +3442,25 @@ Core Rules:
       if (prevOrder) setRefundOrder(prevOrder);
       return;
     }
+    // Two of these transitions mail the customer, and nothing used to say so.
+    // Dragging a status in the list is a bookkeeping gesture; that it also put
+    // a receipt in someone's inbox was invisible until the inbox showed it.
+    // Only asked when a mail will genuinely be sent, so ordinary status
+    // changes stay one click.
+    const willSendPaidReceipt = shouldSendPaidConfirmation(prevOrder?.status, newStatus);
+    const willSendCompletion = ['Completed', 'Order Complete'].includes(newStatus)
+      && !['Completed', 'Order Complete'].includes(prevOrder?.status);
+    if ((willSendPaidReceipt || willSendCompletion) && prevOrder?.customer_email) {
+      const emailKind = willSendCompletion ? 'completion email' : 'payment receipt';
+      if (!confirmCustomerEmail(emailKind, prevOrder.customer_email, [
+        `Order: ${prevOrder.order_number}`,
+        `Status: ${prevOrder.status || 'unknown'} → ${newStatus}`,
+        willSendCompletion && isCompletedOrderStatus(newStatus)
+          ? 'Accounting is copied on this one too.'
+          : '',
+      ])) return;
+    }
+
     setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
     if (selectedOrderDetails?.id === orderId) {
       setSelectedOrderDetails({ ...selectedOrderDetails, status: newStatus });
@@ -4182,6 +4210,15 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   // 5. Send Automated Outbound WhatsApp Message
   const handleSendWaMessage = async () => {
     if (!waRecipient || !waMessageText.trim()) return;
+
+    // The composer shows the message, but not who it lands on — and the
+    // recipient is the half that cannot be undone. The number is quoted so a
+    // wrong row picked from the list is caught here rather than by the person
+    // who receives it.
+    if (!confirmCustomerEmail('WhatsApp message', waRecipient.phone, [
+      waRecipient.name ? `Name: ${waRecipient.name}` : '',
+      waRecipient.orderNumber ? `Order: ${waRecipient.orderNumber}` : '',
+    ])) return;
 
     setWaSending(true);
     try {
@@ -7735,6 +7772,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         products={products}
         orders={orders}
         agents={agents}
+        affiliates={orderAffiliates}
         isSuperadmin={!!adminProfile?.is_superadmin}
         initialCustomer={manualOrderCustomer}
         exchangeRate={exchangeRate}

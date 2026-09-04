@@ -7,13 +7,15 @@ import {
   ADMIN_FALLBACK_EXCHANGE_RATE,
   calculateAdminOrderTotals,
   getAdminCurrencyPair,
-  manualDiscountReplacesVolume,
+  getAdminVolumeDiscountPct,
 } from '@/lib/adminOrderTotals.mjs';
 import { bacGiftShortfall } from '@/lib/bacWater.mjs';
 import {
   buildManualOrderCustomerOptions,
   resolveManualOrderCustomerPrefill,
 } from '@/lib/manualOrderCustomer.mjs';
+import { confirmCustomerEmail } from '@/lib/confirmCustomerEmail.mjs';
+import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import ManualCustomerCombobox from './ManualCustomerCombobox';
 import ProductCombobox from './ProductCombobox';
 
@@ -24,6 +26,8 @@ const emptyForm = () => ({
   shipping_cost_crc: 0, shipping_cost_usd: 0, items: [{ ...EMPTY_ITEM }],
   manual_discount_type: 'none', manual_discount_value: '', manual_discount_reason: '',
   internal_notes: '', sales_agent: '', notify_customer: true,
+  affiliate_id: '', commission_mode: 'default', commission_override_pct: 20,
+  apply_volume_discount: true,
 });
 
 export default function ManualOrderModal({
@@ -32,6 +36,7 @@ export default function ManualOrderModal({
   products = [],
   orders = [],
   agents = [],
+  affiliates = [],
   isSuperadmin = false,
   initialCustomer = null,
   exchangeRate = ADMIN_FALLBACK_EXCHANGE_RATE,
@@ -136,12 +141,11 @@ export default function ManualOrderModal({
   } = calculateAdminOrderTotals(form.items, shipping, {
     manualDiscountType,
     manualDiscountValue: form.manual_discount_value,
-    // A negotiated discount stands in place of the volume tier on a manual
-    // order, so 25% typed here is 25% off the list price and not 25% off an
-    // already-reduced one.
-    replaceVolumeDiscount: manualDiscountReplacesVolume(
-      'admin_manual', manualDiscountType, form.manual_discount_value,
-    ),
+    // The operator's own choice, not a rule inferred behind their back. It
+    // starts off the moment a negotiated discount is typed — 25% agreed on the
+    // phone means 25% off the list price — but they can put it back for a
+    // customer who has earned both.
+    replaceVolumeDiscount: !form.apply_volume_discount,
   });
 
   // The preview and the receipt must agree to the cent, so it is worth being
@@ -149,6 +153,15 @@ export default function ManualOrderModal({
   // single total and hoping. The promo code's own discount is deliberately
   // absent: it is resolved and priced by the server against the live promo
   // table, so the browser has no honest figure for it until the order saves.
+  const qualifyingVolumePct = getAdminVolumeDiscountPct(form.items);
+  const volumeTierLabel = qualifyingVolumePct > 0
+    ? `${qualifyingVolumePct}% on this cart`
+    : 'this cart does not reach the 5-vial tier';
+
+  const salesAgentAffiliateOptions = affiliates.filter(isSalesAgentAffiliate);
+  const externalAffiliateOptions = affiliates.filter((affiliate) => !isSalesAgentAffiliate(affiliate));
+  const selectedAffiliate = affiliates.find((affiliate) => affiliate.id === form.affiliate_id) || null;
+
   const money = (amount) => form.currency === 'USD'
     ? `$${Number(amount).toFixed(2)}`
     : `₡${Math.round(Number(amount)).toLocaleString()}`;
@@ -177,6 +190,25 @@ export default function ManualOrderModal({
       }
       if (manualDiscountType === 'percentage' && discountValue > 100) {
         setError('Percentage discount cannot exceed 100%.');
+        setSaving(false);
+        return;
+      }
+    }
+
+    if (isSuperadmin && form.commission_mode !== 'default' && !form.sales_agent.trim()) {
+      setError('Choose a credited agent before setting a commission override.');
+      setSaving(false);
+      return;
+    }
+
+    // Saving this order puts a receipt in a real inbox. Confirmed here, before
+    // the request goes out, because there is no undo on the other side of it.
+    if (form.notify_customer && form.payment_method !== 'card' && form.customer_email.trim()) {
+      if (!confirmCustomerEmail('order receipt', form.customer_email.trim(), [
+        `Total: ${money(total)}`,
+        manualDiscountType ? `Includes your ${form.manual_discount_value}${manualDiscountType === 'percentage' ? '%' : ` ${form.currency}`} order discount.` : '',
+        'Untick "Email the customer their receipt" to save the order without sending anything.',
+      ])) {
         setSaving(false);
         return;
       }
@@ -212,9 +244,17 @@ export default function ManualOrderModal({
               : null,
             internal_notes: form.internal_notes.trim() || null,
             notify_customer: form.notify_customer,
-            ...(isSuperadmin && form.sales_agent.trim()
-              ? { sales_agent: form.sales_agent.trim() }
-              : {}),
+            apply_volume_discount: form.apply_volume_discount,
+            ...(isSuperadmin ? {
+              ...(form.sales_agent.trim() ? { sales_agent: form.sales_agent.trim() } : {}),
+              affiliate_id: form.affiliate_id || null,
+              agent_commission_rate_override: form.commission_mode === 'default'
+                ? null
+                : Math.max(0, Number(form.commission_override_pct) || 0),
+              agent_commission_source: form.commission_mode === 'default'
+                ? null
+                : (form.commission_mode === 'agent_referral' ? 'agent_referral' : 'custom_override'),
+            } : {}),
           },
         }),
       });
@@ -397,7 +437,13 @@ export default function ManualOrderModal({
               <select
                 className="admin-select"
                 value={form.manual_discount_type}
-                onChange={(e) => setForm({ ...form, manual_discount_type: e.target.value })}
+                onChange={(e) => setForm({
+                  ...form,
+                  manual_discount_type: e.target.value,
+                  // Follows the discount by default; the checkbox below still
+                  // has the last word.
+                  apply_volume_discount: e.target.value === 'none',
+                })}
               >
                 <option value="none">No manual discount</option>
                 <option value="percentage">Percentage</option>
@@ -424,8 +470,26 @@ export default function ManualOrderModal({
                 placeholder="Reason shown on receipt (optional)"
               />
             </div>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '10px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={form.apply_volume_discount}
+                onChange={(e) => setForm({ ...form, apply_volume_discount: e.target.checked })}
+                style={{ marginTop: '2px' }}
+              />
+              <span style={{ fontSize: '0.75rem', color: '#cbd5e1', lineHeight: 1.4 }}>
+                Also apply the automatic volume discount ({volumeTierLabel})
+                <span style={{ display: 'block', color: '#94a3b8', fontSize: '0.7rem', marginTop: '2px' }}>
+                  {form.apply_volume_discount
+                    ? (manualDiscountType
+                      ? 'Both discounts come off — the customer pays less than the figure you typed above.'
+                      : 'The usual bulk pricing applies.')
+                    : 'Off, so the discount you typed above is the whole discount.'}
+                </span>
+              </span>
+            </label>
             <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
-              Applied after volume and promo discounts, before shipping. The reason appears on the customer&apos;s receipt.
+              The order discount is applied after volume and promo discounts, before shipping. The reason appears on the customer&apos;s receipt.
             </p>
           </div>
 
@@ -484,20 +548,94 @@ export default function ManualOrderModal({
           </label>
 
           <h4 style={{ margin: '16px 0 8px', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.05em' }}>Internal</h4>
+          {/* Attribution, the same three fields the order panel carries. They
+              decide what the business pays its own people, so the server
+              accepts them from a superadmin only — staff creating their own
+              orders stay pinned to themselves at their profile rate. Setting
+              them here saves saving the order and immediately reopening it. */}
           {isSuperadmin && (
-            <select
-              className="admin-select"
-              value={form.sales_agent}
-              onChange={(e) => setForm({ ...form, sales_agent: e.target.value })}
-              style={{ marginBottom: '8px' }}
-            >
-              <option value="">Credit this sale to… (nobody)</option>
-              {/* `agents` is a list of plain names, not profile objects. */}
-              {agents
-                .map((agent) => String(agent || '').trim())
-                .filter(Boolean)
-                .map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
+            <div style={{ display: 'grid', gap: '8px', marginBottom: '8px' }}>
+              <select
+                className="admin-select"
+                value={form.sales_agent}
+                onChange={(e) => setForm({ ...form, sales_agent: e.target.value })}
+              >
+                <option value="">Credit this sale to… (nobody)</option>
+                {/* `agents` is a list of plain names, not profile objects. */}
+                {agents
+                  .map((agent) => String(agent || '').trim())
+                  .filter(Boolean)
+                  .map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+
+              <select
+                className="admin-select"
+                value={form.affiliate_id}
+                onChange={(e) => {
+                  const affiliateId = e.target.value;
+                  const affiliate = affiliates.find((row) => row.id === affiliateId);
+                  // A sales-agent affiliate is one person paid one combined
+                  // 20%, so picking one settles the agent and the rate too.
+                  setForm((current) => (isSalesAgentAffiliate(affiliate) ? {
+                    ...current,
+                    affiliate_id: affiliateId,
+                    sales_agent: affiliate.name || affiliate.email || current.sales_agent,
+                    commission_mode: 'agent_referral',
+                    commission_override_pct: 20,
+                  } : { ...current, affiliate_id: affiliateId }));
+                }}
+              >
+                <option value="">No affiliate (a promo code sets this by itself)</option>
+                {salesAgentAffiliateOptions.length > 0 && (
+                  <optgroup label="Sales agents - combined 20%">
+                    {salesAgentAffiliateOptions.map((affiliate) => (
+                      <option key={affiliate.id} value={affiliate.id}>{affiliate.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {externalAffiliateOptions.length > 0 && (
+                  <optgroup label="External affiliates">
+                    {externalAffiliateOptions.map((affiliate) => (
+                      <option key={affiliate.id} value={affiliate.id}>{affiliate.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
+                <select
+                  className="admin-select"
+                  value={form.commission_mode}
+                  onChange={(e) => setForm({
+                    ...form,
+                    commission_mode: e.target.value,
+                    commission_override_pct: e.target.value === 'agent_referral' ? 20 : form.commission_override_pct,
+                  })}
+                >
+                  <option value="default">Agent commission: profile rate</option>
+                  <option value="agent_referral">Agent referral - combined 20%</option>
+                  <option value="custom">Custom percentage</option>
+                </select>
+                <input
+                  className="admin-input"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={form.commission_override_pct}
+                  disabled={form.commission_mode !== 'custom'}
+                  onChange={(e) => setForm({ ...form, commission_override_pct: e.target.value })}
+                  placeholder="Override %"
+                />
+              </div>
+              {selectedAffiliate && (
+                <div style={{ color: '#94a3b8', fontSize: '.7rem' }}>
+                  {isSalesAgentAffiliate(selectedAffiliate)
+                    ? 'Sales-agent affiliate: one combined 20% payout in the agent report, no separate affiliate commission.'
+                    : `External affiliate: paid at ${(Number(selectedAffiliate.commission_rate || 0) * 100).toFixed(0)}%.`}
+                </div>
+              )}
+            </div>
           )}
           <textarea
             className="admin-input"

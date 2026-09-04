@@ -211,9 +211,14 @@ export async function PATCH(request) {
       const nextManualValue = Number(
         ('manual_discount_value' in patch ? patch.manual_discount_value : currentOrder.manual_discount_value) || 0
       );
-      const replaceVolumeDiscount = manualDiscountReplacesVolume(
-        currentOrder.source, nextManualType, nextManualValue,
-      );
+      // The choice the operator made when the order was created wins. Only
+      // when it was never recorded — a website order, or one saved before
+      // add-order-volume-discount-flag.sql was run — does the default rule
+      // decide, so reopening an order cannot silently reprice it.
+      const replaceVolumeDiscount = currentOrder.apply_volume_discount === null
+        || currentOrder.apply_volume_discount === undefined
+        ? manualDiscountReplacesVolume(currentOrder.source, nextManualType, nextManualValue)
+        : currentOrder.apply_volume_discount === false;
 
       const authoritative = authoritativeCheckout({
         postedOrder: { ...currentOrder, items, currency },
