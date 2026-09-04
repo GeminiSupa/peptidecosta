@@ -242,6 +242,11 @@ export const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, t
 
   const isEn = lang === 'en';
   const isPaid = isPaidStatus(order.status);
+  // A receipt sent a second time, after staff corrected the order — normally a
+  // negotiated discount that was agreed before the sale but entered after it.
+  // It must not arrive looking like a duplicate of the first mail: a buyer
+  // keeping books needs to know which of the two copies is the real record.
+  const isResend = order.isResend === true;
   // Was `order.status === 'Declined'`. Every other refusal the gateway can
   // return — "Payment Blocked", "Error", a cancelled sale — failed that test
   // and was shown to the customer as a payment still in progress.
@@ -254,15 +259,21 @@ export const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, t
   // to act on it, which is the state they write in angry from.
   const showDeclinedHelpAction = isDeclined;
   const strings = {
-    title: isPaid
+    title: isResend
+      ? (isEn ? 'Updated Receipt' : 'Recibo Actualizado')
+      : isPaid
       ? (isEn ? 'Order Confirmed!' : '¡Pedido Confirmado!')
       : isDeclined
         ? (isEn ? 'Payment Declined' : 'Pago Rechazado')
         : isGatewayPayment
           ? (isEn ? 'Order Received - Payment Processing' : 'Pedido Recibido - Pago en Proceso')
           : (isEn ? 'Action Required: Complete Payment' : 'Acción Requerida: Completar Pago'),
-    subtitle: isPaid 
-      ? (isEn ? "We've received your order and payment. Here are your transaction details." : 'Hemos recibido su pedido y su pago. A continuación encontrará los detalles.') 
+    subtitle: isResend
+      ? (isEn
+        ? 'This corrected receipt replaces the one we sent earlier. The pricing below is final — please keep this copy for your records.'
+        : 'Este recibo corregido reemplaza el que enviamos anteriormente. El precio a continuación es el definitivo — por favor conserve esta copia para sus registros.')
+      : isPaid
+      ? (isEn ? "We've received your order and payment. Here are your transaction details." : 'Hemos recibido su pedido y su pago. A continuación encontrará los detalles.')
       : isDeclined
         ? (isEn ? "Your card payment was declined. Please try again or choose a different payment method." : 'Su pago con tarjeta fue rechazado. Por favor intente nuevamente o elija un método de pago distinto.')
         : isGatewayPayment

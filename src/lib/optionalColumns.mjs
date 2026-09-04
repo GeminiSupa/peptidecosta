@@ -135,3 +135,20 @@ export const ORDER_FULFILLMENT_COLUMNS = [
   'ready_to_prepare_at',
   'ready_to_prepare_by',
 ];
+
+/**
+ * Columns added by add-manual-order-discounts.sql.
+ *
+ * A manual order can now carry a negotiated discount from the moment it is
+ * created, which means the create route writes these on every order rather
+ * than only when staff edit one. That must not become a new way for an un-run
+ * migration to block order entry altogether: without the SQL the discount is
+ * simply not recorded, and the order still saves at its discounted total.
+ */
+export const ORDER_MANUAL_DISCOUNT_COLUMNS = [
+  'manual_discount_type',
+  'manual_discount_value',
+  'manual_discount_reason',
+  'manual_discount_amount_usd',
+  'manual_discount_amount_crc',
+];

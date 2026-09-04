@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Copy, Phone, Plus, Trash2, BadgePercent } from 'lucide-react';
+import { Copy, Mail, Phone, Plus, Trash2, BadgePercent } from 'lucide-react';
 import { formatActivityType } from '@/lib/orderActivity';
 import { formatCrInstant } from '@/lib/crTime.mjs';
 import { adminFetch } from '@/lib/adminApi';
@@ -141,6 +141,7 @@ export default function OrderDetailPanel({
   onTrackingChange,
   onResendCompletion,
   onResendAccounting,
+  onResendReceipt,
   agents = [],
   affiliates = [],
   isSuperadmin = false,
@@ -185,6 +186,8 @@ export default function OrderDetailPanel({
   const [commissionOverridePct, setCommissionOverridePct] = useState(order.agent_commission_rate_override || 20);
   const [savingAttribution, setSavingAttribution] = useState(false);
   const [attributionError, setAttributionError] = useState('');
+  const [resendingReceipt, setResendingReceipt] = useState(false);
+  const [receiptResendNotice, setReceiptResendNotice] = useState('');
   const [resendingCompletion, setResendingCompletion] = useState(false);
   const [resendingAccounting, setResendingAccounting] = useState(false);
   const [markingReady, setMarkingReady] = useState(false);
@@ -206,6 +209,7 @@ export default function OrderDetailPanel({
     setManualDiscountReason(order.manual_discount_reason || '');
     setDiscountError('');
     setPhoneCopied(false);
+    setReceiptResendNotice('');
     setCardLinkCopied(false);
     setCardLinkError('');
     setCreditedAgent(order.sales_agent || '');
@@ -876,6 +880,47 @@ export default function OrderDetailPanel({
                   {markingReady ? 'Sending…' : 'Mark ready to prepare'}
                 </button>
               )}
+            </div>
+            {/* Any status, not just completed. The case this exists for is a
+                negotiated order whose discount was entered after the receipt
+                went out — the customer is holding a figure that was never the
+                agreed price, and waiting for the order to complete before it
+                can be corrected is exactly the wait that caused the problem. */}
+            <div>
+              <label>Customer receipt</label>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 7, alignItems: 'flex-start' }}>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-secondary"
+                  disabled={resendingReceipt || !order.customer_email}
+                  title={order.customer_email
+                    ? 'Emails the customer a corrected receipt with the order exactly as it stands now'
+                    : 'This order has no email address on it'}
+                  onClick={async () => {
+                    setResendingReceipt(true);
+                    setReceiptResendNotice('');
+                    const result = await onResendReceipt?.(order);
+                    setReceiptResendNotice(
+                      result?.sent
+                        ? `Corrected receipt sent to ${result.to}.`
+                        : `Could not send: ${result?.error || 'unknown error'}`
+                    );
+                    setResendingReceipt(false);
+                  }}
+                  style={{ fontSize: '.74rem', padding: '6px 9px' }}
+                >
+                  <Mail size={13} />
+                  {resendingReceipt ? 'Sending…' : 'Resend receipt with current totals'}
+                </button>
+                {!order.customer_email && (
+                  <small style={{ color: '#94a3b8' }}>No email address on this order.</small>
+                )}
+                {receiptResendNotice && (
+                  <small style={{ color: receiptResendNotice.startsWith('Could not') ? '#f87171' : '#4ade80' }}>
+                    {receiptResendNotice}
+                  </small>
+                )}
+              </span>
             </div>
             {['Completed', 'Order Complete'].includes(order.status) && (
               <div>

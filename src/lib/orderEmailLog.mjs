@@ -20,6 +20,7 @@ import { appendOrderActivity } from './orderActivity.js';
 const EMAIL_LABELS = {
   'admin-alert': 'Team order alert',
   'customer-receipt': 'Order receipt',
+  'receipt-resend': 'Corrected order receipt (resent)',
   'completion-receipt': 'Completion receipt',
   'accounting-copy': 'Accounting copy',
   'refund-notice': 'Refund notice',

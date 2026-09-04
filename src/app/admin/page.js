@@ -2121,11 +2121,33 @@ Core Rules:
     }
   };
 
-  const handleManualOrderCreated = (order) => {
+  const handleManualOrderCreated = (order, alerts = null) => {
     setOrders((prev) => [order, ...prev]);
     setSelectedOrderDetails(order);
     setNotifRefreshKey((k) => k + 1);
     navigateToTab('orders');
+
+    // Say so when the buyer's receipt did not go out. The order is saved and
+    // open on screen, and the panel's "Resend receipt with current totals"
+    // button is the fix — so this names the problem and the remedy rather
+    // than leaving a silent gap the customer discovers first.
+    if (alerts?.customerReceipt === 'failed') {
+      alert(
+        `Order ${order.order_number} was created, but the receipt did not reach `
+        + `${order.customer_email || 'the customer'}.
+
+`
+        + `${alerts.emailError || 'The mail server did not accept it.'}
+
+`
+        + 'The order is open below — use "Resend receipt with current totals" to try again.'
+      );
+    } else if (alerts?.customerReceipt === 'no_email_on_order') {
+      alert(
+        `Order ${order.order_number} was created. No email address was on it, so no `
+        + 'receipt was sent — add one to the order and resend if they need it.'
+      );
+    }
   };
 
   // Hold an order out of the money figures, or force one in. Applies across the
@@ -3374,6 +3396,29 @@ Core Rules:
   const resendOrderAccountingCopy = async (order) => (
     sendOrderCompletionNotification(order, { accountingOnly: true })
   );
+
+  // Re-sends the buyer's own receipt, rebuilt from the order as it stands now.
+  // Returns the outcome rather than alerting: the panel shows it inline next to
+  // the button that asked for it.
+  const resendOrderReceipt = async (order) => {
+    try {
+      const res = await adminFetch('/api/admin/orders/resend-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.id, orderNumber: order.order_number }),
+      });
+      const data = await res.json().catch(() => ({}));
+      // The route logs the attempt either way, so the panel's history is
+      // refreshed on a failure too.
+      if (data.order) handleOrderUpdated(data.order);
+      if (!res.ok || !data.sent) {
+        return { sent: false, error: data.error || `Request failed (${res.status})` };
+      }
+      return { sent: true, to: data.to };
+    } catch (err) {
+      return { sent: false, error: err.message };
+    }
+  };
 
   // Order status update
   const handleOrderStatusUpdate = async (orderId, newStatus) => {
@@ -7647,6 +7692,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           onTrackingChange={handleOrderTrackingUpdate}
           onResendCompletion={sendOrderCompletionNotification}
           onResendAccounting={resendOrderAccountingCopy}
+          onResendReceipt={resendOrderReceipt}
           agents={agents}
           affiliates={orderAffiliates}
           isSuperadmin={!!adminProfile?.is_superadmin}
@@ -7688,6 +7734,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         onClose={closeManualOrder}
         products={products}
         orders={orders}
+        agents={agents}
+        isSuperadmin={!!adminProfile?.is_superadmin}
         initialCustomer={manualOrderCustomer}
         exchangeRate={exchangeRate}
         exchangeRateUpdatedAt={exchangeRateUpdatedAt}

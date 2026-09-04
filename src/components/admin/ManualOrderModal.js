@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, UserRoundSearch } from 'lucide-react';
+import { BadgePercent, Plus, Trash2, UserRoundSearch } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import {
   ADMIN_FALLBACK_EXCHANGE_RATE,
@@ -21,6 +21,8 @@ const emptyForm = () => ({
   customer_name: '', customer_phone: '', customer_email: '', customer_id_number: '', customer_id_type: '1',
   shipping_address: '', currency: 'CRC', payment_method: 'whatsapp', status: 'Pending', promo_code: '',
   shipping_cost_crc: 0, shipping_cost_usd: 0, items: [{ ...EMPTY_ITEM }],
+  manual_discount_type: 'none', manual_discount_value: '', manual_discount_reason: '',
+  internal_notes: '', sales_agent: '', notify_customer: true,
 });
 
 export default function ManualOrderModal({
@@ -28,6 +30,8 @@ export default function ManualOrderModal({
   onClose,
   products = [],
   orders = [],
+  agents = [],
+  isSuperadmin = false,
   initialCustomer = null,
   exchangeRate = ADMIN_FALLBACK_EXCHANGE_RATE,
   exchangeRateUpdatedAt = null,
@@ -121,7 +125,26 @@ export default function ManualOrderModal({
   const giftShortfall = bacGiftShortfall(form.items);
 
   const shipping = form.currency === 'USD' ? Number(form.shipping_cost_usd) || 0 : Number(form.shipping_cost_crc) || 0;
-  const { discountPct, total } = calculateAdminOrderTotals(form.items, shipping);
+  const manualDiscountType = form.manual_discount_type === 'none' ? null : form.manual_discount_type;
+  const {
+    itemsSubtotal,
+    discountPct,
+    discountAmount,
+    manualDiscountAmount,
+    total,
+  } = calculateAdminOrderTotals(form.items, shipping, {
+    manualDiscountType,
+    manualDiscountValue: form.manual_discount_value,
+  });
+
+  // The preview and the receipt must agree to the cent, so it is worth being
+  // explicit about what the customer will be shown rather than printing a
+  // single total and hoping. The promo code's own discount is deliberately
+  // absent: it is resolved and priced by the server against the live promo
+  // table, so the browser has no honest figure for it until the order saves.
+  const money = (amount) => form.currency === 'USD'
+    ? `$${Number(amount).toFixed(2)}`
+    : `₡${Math.round(Number(amount)).toLocaleString()}`;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -136,6 +159,20 @@ export default function ManualOrderModal({
       setError('Add at least one item with a price.');
       setSaving(false);
       return;
+    }
+
+    const discountValue = Number(form.manual_discount_value || 0);
+    if (manualDiscountType) {
+      if (!Number.isFinite(discountValue) || discountValue <= 0) {
+        setError('Enter a discount greater than zero, or set the discount back to "No manual discount".');
+        setSaving(false);
+        return;
+      }
+      if (manualDiscountType === 'percentage' && discountValue > 100) {
+        setError('Percentage discount cannot exceed 100%.');
+        setSaving(false);
+        return;
+      }
     }
 
     const totals = getAdminCurrencyPair(total, form.currency, liveExchangeRate);
@@ -161,12 +198,25 @@ export default function ManualOrderModal({
             promo_code: form.promo_code.trim() || null,
             shipping_cost_usd: shippingCosts.usd,
             shipping_cost_crc: shippingCosts.crc,
+            manual_discount_type: manualDiscountType,
+            manual_discount_value: manualDiscountType ? discountValue : 0,
+            manual_discount_reason: manualDiscountType
+              ? (form.manual_discount_reason.trim() || null)
+              : null,
+            internal_notes: form.internal_notes.trim() || null,
+            notify_customer: form.notify_customer,
+            ...(isSuperadmin && form.sales_agent.trim()
+              ? { sales_agent: form.sales_agent.trim() }
+              : {}),
           },
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create order');
-      onCreated(data.order);
+      // The order saved either way — a refused receipt must not look like a
+      // refused order. It is handed up so the page can say so plainly instead
+      // of the agent finding out when the customer asks where their receipt is.
+      onCreated(data.order, data.alerts);
       onClose();
     } catch (err) {
       setError(err.message);
@@ -306,15 +356,136 @@ export default function ManualOrderModal({
                 [form.currency === 'USD' ? 'shipping_cost_usd' : 'shipping_cost_crc']: e.target.value,
               })}
             />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', fontWeight: 800, fontSize: '1.1rem', color: '#38bdf8' }}>
-              {discountPct > 0 && (
-                <div style={{ fontSize: '0.8rem', color: '#16a34a', fontWeight: 'bold' }}>
-                  Volume discount: {discountPct}% off
-                </div>
-              )}
-              Total: {form.currency === 'USD' ? `$${total.toFixed(2)}` : `₡${Math.round(total).toLocaleString()}`}
+          </div>
+
+          {/* The negotiated discount, entered before the order is saved rather
+              than after it. Bulk buyers agree their price on the phone; when
+              the only place to record it was the order detail panel, the
+              customer's confirmation went out at the undiscounted price and
+              their receipt was wrong from the moment it arrived. */}
+          <div style={{
+            marginTop: '12px',
+            padding: '14px',
+            borderRadius: '10px',
+            border: '1px solid rgba(56, 189, 248, 0.22)',
+            background: 'rgba(56, 189, 248, 0.06)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '10px', color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem' }}>
+              <BadgePercent size={16} /> Order discount
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 0.8fr) minmax(100px, 0.7fr) minmax(180px, 1.5fr)', gap: '8px' }}>
+              <select
+                className="admin-select"
+                value={form.manual_discount_type}
+                onChange={(e) => setForm({ ...form, manual_discount_type: e.target.value })}
+              >
+                <option value="none">No manual discount</option>
+                <option value="percentage">Percentage</option>
+                <option value="fixed">Fixed amount</option>
+              </select>
+              <input
+                className="admin-input"
+                type="number"
+                min="0"
+                max={form.manual_discount_type === 'percentage' ? '100' : undefined}
+                step={form.manual_discount_type === 'percentage' ? '0.1' : (form.currency === 'USD' ? '0.01' : '1')}
+                value={form.manual_discount_value}
+                onChange={(e) => setForm({ ...form, manual_discount_value: e.target.value })}
+                disabled={!manualDiscountType}
+                placeholder={form.manual_discount_type === 'percentage' ? 'Percent' : `Amount ${form.currency}`}
+              />
+              <input
+                className="admin-input"
+                value={form.manual_discount_reason}
+                maxLength={200}
+                onChange={(e) => setForm({ ...form, manual_discount_reason: e.target.value })}
+                disabled={!manualDiscountType}
+                placeholder="Reason shown on receipt (optional)"
+              />
+            </div>
+            <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
+              Applied after volume and promo discounts, before shipping. The reason appears on the customer&apos;s receipt.
+            </p>
+          </div>
+
+          <div className="order-detail-totals" style={{ marginTop: '12px' }}>
+            <div><span>Items subtotal</span><span>{money(itemsSubtotal)}</span></div>
+            {discountPct > 0 && (
+              <div style={{ color: '#16a34a' }}>
+                <span>Volume discount ({discountPct}%)</span>
+                <span>-{money(discountAmount)}</span>
+              </div>
+            )}
+            {manualDiscountAmount > 0 && (
+              <div style={{ color: '#c084fc' }}>
+                <span>Order discount{form.manual_discount_reason.trim() ? ` (${form.manual_discount_reason.trim()})` : ''}</span>
+                <span>-{money(manualDiscountAmount)}</span>
+              </div>
+            )}
+            <div><span>Shipping</span><span>{shipping > 0 ? money(shipping) : 'FREE'}</span></div>
+            <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#38bdf8' }}>
+              <span>Total</span><span>{money(total)}</span>
             </div>
           </div>
+          {form.promo_code.trim() && (
+            <div style={{ color: '#7dd3fc', fontSize: '.7rem', marginTop: '6px' }}>
+              Promo <strong>{form.promo_code.trim().toUpperCase()}</strong> is checked and priced when the order is saved, so its discount is not in the figures above.
+            </div>
+          )}
+
+          <label style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '9px',
+            marginTop: '14px',
+            padding: '11px 12px',
+            borderRadius: '10px',
+            border: '1px solid rgba(148, 163, 184, 0.22)',
+            background: 'rgba(148, 163, 184, 0.06)',
+            cursor: 'pointer',
+          }}>
+            <input
+              type="checkbox"
+              checked={form.notify_customer}
+              onChange={(e) => setForm({ ...form, notify_customer: e.target.checked })}
+              style={{ marginTop: '2px' }}
+            />
+            <span style={{ fontSize: '0.78rem', color: '#cbd5e1', lineHeight: 1.45 }}>
+              <strong>Email the customer their receipt</strong>
+              <span style={{ display: 'block', color: '#94a3b8', fontSize: '0.72rem', marginTop: '2px' }}>
+                {form.payment_method === 'card'
+                  ? 'Card orders wait for the payment result before anything is sent to the customer.'
+                  : form.notify_customer
+                    ? 'They get the receipt and the WhatsApp confirmation, both showing the total above.'
+                    : 'Nothing goes to the customer. Use this only when typing up an order they already received.'}
+              </span>
+            </span>
+          </label>
+
+          <h4 style={{ margin: '16px 0 8px', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.05em' }}>Internal</h4>
+          {isSuperadmin && (
+            <select
+              className="admin-select"
+              value={form.sales_agent}
+              onChange={(e) => setForm({ ...form, sales_agent: e.target.value })}
+              style={{ marginBottom: '8px' }}
+            >
+              <option value="">Credit this sale to… (nobody)</option>
+              {/* `agents` is a list of plain names, not profile objects. */}
+              {agents
+                .map((agent) => String(agent || '').trim())
+                .filter(Boolean)
+                .map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          )}
+          <textarea
+            className="admin-input"
+            placeholder="Internal notes (never shown to the customer)"
+            rows={2}
+            maxLength={2000}
+            value={form.internal_notes}
+            onChange={(e) => setForm({ ...form, internal_notes: e.target.value })}
+          />
 
           {error && <p style={{ color: '#f87171', fontSize: '0.85rem' }}>{error}</p>}
 

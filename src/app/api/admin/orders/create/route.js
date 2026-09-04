@@ -7,12 +7,17 @@ import { isGiftLine, stripGiftSuffix } from '@/lib/bacWater.mjs';
 import { authoritativeCheckout } from '@/lib/authoritativeCheckout.mjs';
 import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
-import { getAdminCurrencyPair, normalizeAdminOrderCurrency } from '@/lib/adminOrderTotals.mjs';
+import {
+  calculateManualDiscountAmount,
+  getAdminCurrencyPair,
+  normalizeAdminOrderCurrency,
+  normalizeManualDiscountType,
+} from '@/lib/adminOrderTotals.mjs';
 import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { applyCustomerHistoryAttribution } from '@/lib/customerHistoryAttributionServer';
 import { notifyLowInventory, prepareInventoryReservation } from '@/lib/orderInventoryServer';
-import { ORDER_INVENTORY_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import { ORDER_INVENTORY_COLUMNS, ORDER_MANUAL_DISCOUNT_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import {
   recordNewOrderNotification,
   sendAffiliateOrderWhatsApp,
@@ -166,10 +171,46 @@ export async function POST(request) {
     const primaryShipping = Math.max(0, Number(
       currency === 'USD' ? order.shipping_cost_usd : order.shipping_cost_crc,
     ) || 0);
-    const primaryTotal = authoritative.total - authoritative.shipping + primaryShipping;
+
+    // A negotiated discount, entered on the order form itself rather than
+    // afterwards. Bulk buyers agree a price before the order is written down,
+    // and until now the only place to record that was the order detail panel —
+    // which meant the confirmation reached the customer carrying a price
+    // nobody had agreed to. Same validation as /api/admin/orders/update so the
+    // two entry points cannot disagree about what a valid discount is.
+    const manualDiscountType = normalizeManualDiscountType(order.manual_discount_type);
+    const manualDiscountValue = Number(order.manual_discount_value || 0);
+    const manualDiscountReason = String(order.manual_discount_reason || '').trim();
+    if (!Number.isFinite(manualDiscountValue) || manualDiscountValue < 0) {
+      return NextResponse.json({ error: 'Discount value must be zero or greater' }, { status: 400 });
+    }
+    if (manualDiscountType === 'percentage' && manualDiscountValue > 100) {
+      return NextResponse.json({ error: 'Percentage discount cannot exceed 100%' }, { status: 400 });
+    }
+    if (manualDiscountReason.length > 200) {
+      return NextResponse.json({ error: 'Discount reason cannot exceed 200 characters' }, { status: 400 });
+    }
+
+    // Applied to what is left after the volume and promo discounts the
+    // authoritative rebuild already worked out, and before shipping — the same
+    // order the edit route and the receipt template use. Taken off
+    // `authoritative`'s own arithmetic rather than recomputed here, so a promo
+    // that overrides the volume tier cannot be discounted twice.
+    const subtotalAfterCatalogDiscounts = Math.max(0, authoritative.total - authoritative.shipping);
+    const rawManualDiscount = calculateManualDiscountAmount(
+      subtotalAfterCatalogDiscounts,
+      manualDiscountType,
+      manualDiscountValue,
+    );
+    const manualDiscountAmount = currency === 'USD'
+      ? Number(rawManualDiscount.toFixed(2))
+      : Math.round(rawManualDiscount);
+
+    const primaryTotal = subtotalAfterCatalogDiscounts - manualDiscountAmount + primaryShipping;
     const totals = getAdminCurrencyPair(primaryTotal, currency, liveExchangeRate);
     const shipping = getAdminCurrencyPair(primaryShipping, currency, liveExchangeRate);
     const promoDiscount = getAdminCurrencyPair(authoritative.promoDiscount, currency, liveExchangeRate);
+    const manualDiscount = getAdminCurrencyPair(manualDiscountAmount, currency, liveExchangeRate);
     const paymentMethod = String(order.payment_method || 'whatsapp').trim().toLowerCase();
     const requestedStatus = SAFE_STATUSES.has(order.status) ? order.status : 'Pending';
 
@@ -189,11 +230,17 @@ export async function POST(request) {
       shipping_cost_crc: shipping.crc,
       discount_amount_usd: promoDiscount.usd,
       discount_amount_crc: promoDiscount.crc,
+      manual_discount_type: manualDiscountType,
+      manual_discount_value: manualDiscountType ? manualDiscountValue : 0,
+      manual_discount_reason: manualDiscountType ? (manualDiscountReason || null) : null,
+      manual_discount_amount_usd: manualDiscount.usd,
+      manual_discount_amount_crc: manualDiscount.crc,
       promo_code: promo?.code || null,
       payment_method: paymentMethod,
       status: paymentMethod === 'card' ? 'Payment Pending' : requestedStatus,
       source: 'admin_manual',
       sales_agent: String(order.sales_agent || '').trim() || null,
+      internal_notes: String(order.internal_notes || '').trim() || null,
     };
 
     if (!auth.profile.is_superadmin) {
@@ -206,9 +253,12 @@ export async function POST(request) {
 
     row = await applyAffiliateAttribution(supabase, row, promo);
     row = await applyCustomerHistoryAttribution(supabase, row);
+    const discountNote = manualDiscountType
+      ? ` · order discount ${manualDiscountType === 'percentage' ? `${manualDiscountValue}%` : `${manualDiscountValue} ${currency}`}${manualDiscountReason ? ` — ${manualDiscountReason}` : ''}`
+      : '';
     row.activity_log = appendOrderActivity([], {
       type: 'manual_entry',
-      message: `Manual order created by ${auth.user.email} · catalog pricing verified · FX $1 = ₡${liveExchangeRate} (${rateResult.source})`,
+      message: `Manual order created by ${auth.user.email} · catalog pricing verified${discountNote} · FX $1 = ₡${liveExchangeRate} (${rateResult.source})`,
       by: auth.user.email,
     });
 
@@ -217,19 +267,23 @@ export async function POST(request) {
 
     // Same defence the storefront checkout already had: a manual order must not
     // fail outright just because add-inventory-restore.sql has not been run yet.
+    const optionalOrderColumns = [...ORDER_INVENTORY_COLUMNS, ...ORDER_MANUAL_DISCOUNT_COLUMNS];
     let { data, error, droppedColumns } = await writeDroppingMissingColumns(
       row,
-      ORDER_INVENTORY_COLUMNS,
+      optionalOrderColumns,
       (attempt) => supabase.from('orders').insert(attempt).select('*').single(),
     );
-    if (droppedColumns?.length) {
+    if (droppedColumns?.some((column) => ORDER_INVENTORY_COLUMNS.includes(column))) {
       console.warn('[admin/orders/create] inventory columns not stored — run add-inventory-restore.sql');
+    }
+    if (droppedColumns?.some((column) => ORDER_MANUAL_DISCOUNT_COLUMNS.includes(column))) {
+      console.warn('[admin/orders/create] manual discount columns not stored — run add-manual-order-discounts.sql');
     }
     if (error && row.affiliate_id && isForeignKeyError(error)) {
       const { affiliate_id, affiliate_commission_usd, affiliate_commission_crc, ...withoutAffiliate } = row;
       ({ data, error } = await writeDroppingMissingColumns(
         withoutAffiliate,
-        ORDER_INVENTORY_COLUMNS,
+        optionalOrderColumns,
         (attempt) => supabase.from('orders').insert(attempt).select('*').single(),
       ));
     }
@@ -269,24 +323,82 @@ export async function POST(request) {
     }
 
     const baseUrl = new URL(request.url).origin;
+
+    // Staff can hold the customer's notifications back for one order. This is
+    // for backfills: an order typed in weeks after it was delivered, entered
+    // straight as Order Complete, must not greet the customer with "Order
+    // Confirmed!" for something they already have. Everything else — the team
+    // alert, the affiliate alert, the accounting copy on a completed sale —
+    // still goes out, because those are the business's own records.
+    //
+    // Defaults to notifying. An API caller that says nothing gets the receipt.
+    const notifyCustomer = order.notify_customer !== false;
+
+    // A manual order now emails the customer their receipt, not just the team.
+    //
+    // It never used to. `sendAdminOrderEmail` defaults to adminNotificationOnly,
+    // so a phone or WhatsApp order produced a team alert and a WhatsApp message
+    // and nothing the customer could file. Buyers who keep books — pharmacies,
+    // clinics, anyone reclaiming the cost — had no document until the order
+    // reached Paid, which for a bank transfer can be days, and for an order
+    // entered straight as Paid never happened at all.
+    //
+    // forceCustomerReceipt is what lifts the admin-only default: one call, one
+    // SMTP connection, both mails. Card orders still send neither — they are
+    // held at Payment Pending and the gateway's own payment-result mail is the
+    // first thing the customer should receive.
+    const skipCustomerAlerts = paymentMethod === 'card' || !notifyCustomer;
     const alerts = [
-      paymentMethod === 'card'
-        ? Promise.resolve({ skipped: 'card_payment_pending' })
+      skipCustomerAlerts
+        ? Promise.resolve({ skipped: paymentMethod === 'card' ? 'card_payment_pending' : 'not_notifying' })
         : sendCustomerOrderConfirmation(supabase, data, data.order_number, data.id),
       sendTeamOrderWhatsApp(supabase, data, data.order_number, data.id),
       sendAffiliateOrderWhatsApp(supabase, data, data.order_number, data.id),
+      // The team alert is not the customer's to suppress, so this still runs
+      // when notifications are held back — it just stops carrying the receipt.
       paymentMethod === 'card'
         ? Promise.resolve({ skipped: 'card_payment_pending' })
-        : sendAdminOrderEmail(baseUrl, data, data.order_number),
+        : sendAdminOrderEmail(baseUrl, data, data.order_number, {
+          notificationOptions: { forceCustomerReceipt: notifyCustomer },
+        }),
     ];
-    const alertResults = await Promise.allSettled(alerts);
+    const [customerWhatsApp, teamWhatsApp, affiliateWhatsApp, emailResult] =
+      await Promise.allSettled(alerts);
+
+    // Named rather than positional. The old array of four bare statuses could
+    // not say *which* alert failed, so a customer receipt that never left the
+    // building looked the same as an affiliate alert that was never due.
+    const alertStatus = {
+      customerWhatsApp: customerWhatsApp.status,
+      teamWhatsApp: teamWhatsApp.status,
+      affiliateWhatsApp: affiliateWhatsApp.status,
+      email: emailResult.status,
+      customerReceipt: emailResult.value?.results?.customerReceipt?.sent === true
+        ? 'sent'
+        : !notifyCustomer
+          ? 'held_back_by_operator'
+          : paymentMethod === 'card'
+            ? 'card_payment_pending'
+            : data.customer_email
+              ? 'failed'
+              : 'no_email_on_order',
+      emailError: emailResult.status === 'rejected'
+        ? String(emailResult.reason?.message || 'unknown error')
+        : (emailResult.value?.results?.customerReceipt?.error || null),
+    };
+    if (alertStatus.customerReceipt === 'failed') {
+      console.error(
+        `[admin/orders/create] customer receipt for ${data.order_number} did not send:`,
+        alertStatus.emailError,
+      );
+    }
 
     return NextResponse.json({
       ok: true,
       order: data,
       exchangeRate: liveExchangeRate,
       exchangeRateSource: rateResult.source,
-      alerts: alertResults.map((result) => result.status),
+      alerts: alertStatus,
     });
   } catch (error) {
     if (inventory) await inventory.rollback().catch(() => {});

@@ -281,7 +281,11 @@ export async function POST(request) {
         // whether anything is wrong. "Order Confirmation" over a refused card
         // is the whole complaint in one line, so it tracks the outcome.
         const outcome = classifyPaymentOutcome(order.status);
-        const customerSubject = outcome === 'declined'
+        const customerSubject = order.isResend === true
+          ? (orderLang === 'en'
+            ? `Updated receipt - Order #${order.orderNumber || ''} - Peptides Costa Rica`
+            : `Recibo actualizado - Pedido #${order.orderNumber || ''} - Péptidos Costa Rica`)
+          : outcome === 'declined'
           ? (orderLang === 'en'
             ? `Payment declined - Order #${order.orderNumber || ''} - Peptides Costa Rica`
             : `Pago rechazado - Pedido #${order.orderNumber || ''} - Péptidos Costa Rica`)
@@ -355,20 +359,30 @@ export async function POST(request) {
       // Outside the customer try/catch on purpose — accounting's copy of a
       // completed sale must go out whether or not the customer's own receipt
       // did. Never throws, so it cannot break this route either.
-      const accountingMailer = resolveTaxRecordsMailer();
-      results.accountingCopy = await sendTaxRecordsCopy({
-        transporter: accountingMailer.transporter,
-        from: accountingMailer.from,
-        order: {
-          status: order.status,
-          order_number: order.orderNumber || order.order_number,
-          customer_name: order.customerName || order.customer_name,
-        },
-        html: customerHtml,
-        text: customerText,
-        logPrefix: '[Order notification]',
-      });
-      results.accountingCopy.transport = accountingMailer.source;
+      //
+      // A resend is the exception. The accountant already holds this sale, and
+      // an unlabelled second copy of it reads as a second sale — the exact
+      // double-booking the separate accounting send was built to end. The
+      // "Resend accounting only" button covers the case where they genuinely
+      // need the corrected figures.
+      if (order.suppressAccountingCopy === true) {
+        results.accountingCopy = { sent: false, skipped: 'resend' };
+      } else {
+        const accountingMailer = resolveTaxRecordsMailer();
+        results.accountingCopy = await sendTaxRecordsCopy({
+          transporter: accountingMailer.transporter,
+          from: accountingMailer.from,
+          order: {
+            status: order.status,
+            order_number: order.orderNumber || order.order_number,
+            customer_name: order.customerName || order.customer_name,
+          },
+          html: customerHtml,
+          text: customerText,
+          logPrefix: '[Order notification]',
+        });
+        results.accountingCopy.transport = accountingMailer.source;
+      }
     }
 
     //  3. SEND CUSTOMER WHATSAPP NOTIFICATION (DISABLED)
@@ -410,7 +424,7 @@ export async function POST(request) {
           error: 'the mail server refused this recipient',
         }) : null,
         results.customerReceipt.skipped ? null : orderEmailActivity({
-          kind: 'customer-receipt',
+          kind: order.isResend === true ? 'receipt-resend' : 'customer-receipt',
           to: order.customerEmail,
           sent: results.customerReceipt.sent,
           error: results.customerReceipt.error,
