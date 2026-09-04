@@ -20,6 +20,7 @@ import {
   getAdminCurrencyPair,
   getAdminOrderSubtotal,
   getAdminShippingCosts,
+  manualDiscountReplacesVolume,
   normalizeAdminOrderCurrency,
 } from '@/lib/adminOrderTotals.mjs';
 
@@ -331,6 +332,11 @@ export default function OrderDetailPanel({
     promoDiscountAmount: promoDiscount,
     manualDiscountType,
     manualDiscountValue,
+    // Manual orders only. A website order's volume discount is the offer the
+    // customer accepted at checkout and is not staff's to overwrite.
+    replaceVolumeDiscount: manualDiscountReplacesVolume(
+      order.source, manualDiscountType, manualDiscountValue,
+    ),
   });
   const totalCosts = getAdminCurrencyPair(orderTotal, orderCurrency, exchangeRate);
 

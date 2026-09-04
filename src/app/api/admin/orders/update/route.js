@@ -19,6 +19,7 @@ import { internalJsonHeaders } from '@/lib/internalRequestAuth.mjs';
 import {
   calculateAdminOrderTotals,
   getAdminCurrencyPair,
+  manualDiscountReplacesVolume,
   normalizeAdminOrderCurrency,
   normalizeManualDiscountType,
 } from '@/lib/adminOrderTotals.mjs';
@@ -201,11 +202,25 @@ export async function PATCH(request) {
           ? null
           : Number(product.inventory_count || 0) + Number(reservedByProduct.get(product.product) || 0),
       }));
+      // Resolved before the rebuild: on a manual order a negotiated discount
+      // replaces the volume tier, and the rebuild has to price it that way or
+      // reopening the order would quietly change its total.
+      const nextManualType = normalizeManualDiscountType(
+        'manual_discount_type' in patch ? patch.manual_discount_type : currentOrder.manual_discount_type
+      );
+      const nextManualValue = Number(
+        ('manual_discount_value' in patch ? patch.manual_discount_value : currentOrder.manual_discount_value) || 0
+      );
+      const replaceVolumeDiscount = manualDiscountReplacesVolume(
+        currentOrder.source, nextManualType, nextManualValue,
+      );
+
       const authoritative = authoritativeCheckout({
         postedOrder: { ...currentOrder, items, currency },
         products: productsAvailableToThisOrder,
         promo,
         exchangeRate: rateResult.rate,
+        suppressVolumeDiscount: replaceVolumeDiscount,
       });
       if (!authoritative.ok) {
         return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });
@@ -219,16 +234,11 @@ export async function PATCH(request) {
       patch.discount_amount_crc = promoDiscountPair.crc;
       patch.discount_amount_usd = promoDiscountPair.usd;
 
-      const manualType = normalizeManualDiscountType(
-        'manual_discount_type' in patch ? patch.manual_discount_type : currentOrder.manual_discount_type
-      );
-      const manualValue = Number(
-        ('manual_discount_value' in patch ? patch.manual_discount_value : currentOrder.manual_discount_value) || 0
-      );
       const totals = calculateAdminOrderTotals(authoritative.items, shipping, {
         promoDiscountAmount: authoritative.promoDiscount,
-        manualDiscountType: manualType,
-        manualDiscountValue: manualValue,
+        manualDiscountType: nextManualType,
+        manualDiscountValue: nextManualValue,
+        replaceVolumeDiscount,
       });
       const primaryTotal = currency === 'CRC' ? Math.round(totals.total) : Number(totals.total.toFixed(2));
       const totalPair = getAdminCurrencyPair(primaryTotal, currency, rateResult.rate);

@@ -10,6 +10,7 @@ import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import {
   calculateManualDiscountAmount,
   getAdminCurrencyPair,
+  manualDiscountReplacesVolume,
   normalizeAdminOrderCurrency,
   normalizeManualDiscountType,
 } from '@/lib/adminOrderTotals.mjs';
@@ -158,19 +159,6 @@ export async function POST(request) {
     }
     const liveExchangeRate = rateResult.rate;
 
-    const authoritative = authoritativeCheckout({
-      postedOrder: { ...order, currency },
-      products: products || [],
-      promo,
-      exchangeRate: liveExchangeRate,
-    });
-    if (!authoritative.ok) {
-      return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });
-    }
-
-    const primaryShipping = Math.max(0, Number(
-      currency === 'USD' ? order.shipping_cost_usd : order.shipping_cost_crc,
-    ) || 0);
 
     // A negotiated discount, entered on the order form itself rather than
     // afterwards. Bulk buyers agree a price before the order is written down,
@@ -190,6 +178,27 @@ export async function POST(request) {
     if (manualDiscountReason.length > 200) {
       return NextResponse.json({ error: 'Discount reason cannot exceed 200 characters' }, { status: 400 });
     }
+
+    // Every order this route writes is a manual one, so a negotiated discount
+    // always replaces the volume tier rather than compounding with it.
+    const replaceVolumeDiscount = manualDiscountReplacesVolume(
+      'admin_manual', manualDiscountType, manualDiscountValue,
+    );
+
+    const authoritative = authoritativeCheckout({
+      postedOrder: { ...order, currency },
+      products: products || [],
+      promo,
+      exchangeRate: liveExchangeRate,
+      suppressVolumeDiscount: replaceVolumeDiscount,
+    });
+    if (!authoritative.ok) {
+      return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });
+    }
+
+    const primaryShipping = Math.max(0, Number(
+      currency === 'USD' ? order.shipping_cost_usd : order.shipping_cost_crc,
+    ) || 0);
 
     // Applied to what is left after the volume and promo discounts the
     // authoritative rebuild already worked out, and before shipping — the same

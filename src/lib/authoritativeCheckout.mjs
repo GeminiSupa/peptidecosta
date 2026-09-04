@@ -45,7 +45,16 @@ function promoDiscountAmount(cart, totals, promo, currency) {
   return roundCurrency(base * pct, currency);
 }
 
-export function authoritativeCheckout({ postedOrder, products, promo = null, exchangeRate }) {
+export function authoritativeCheckout({
+  postedOrder,
+  products,
+  promo = null,
+  exchangeRate,
+  // Set only by the admin order routes, for a manual order carrying a
+  // negotiated discount: that discount replaces the volume tier rather than
+  // stacking on top of it. Never set from the public checkout.
+  suppressVolumeDiscount = false,
+}) {
   const currency = postedOrder?.currency === 'USD' ? 'USD' : 'CRC';
   const productByName = new Map((products || []).map((product) => [normalize(product.product), product]));
   const requestedByName = new Map();
@@ -130,7 +139,9 @@ export function authoritativeCheckout({ postedOrder, products, promo = null, exc
   }
 
   const vialCount = requested.filter((item) => !isBacWater(item.product)).reduce((sum, item) => sum + item.qty, 0);
-  const volumeDiscountPct = effectiveVolumeDiscountPct(promo, getVolumeDiscountPct(vialCount));
+  const volumeDiscountPct = suppressVolumeDiscount
+    ? 0
+    : effectiveVolumeDiscountPct(promo, getVolumeDiscountPct(vialCount));
   const totals = computeOrderTotals(requested, currency, exchangeRate, { volumeDiscountPct });
   const promoDiscount = promoDiscountAmount(requested, totals, promo, currency);
   const finalTotal = roundCurrency(totals.discountedTotal - promoDiscount + totals.shipping, currency);

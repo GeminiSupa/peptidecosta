@@ -72,6 +72,29 @@ export function calculateManualDiscountAmount(baseAmount, type, value) {
   return Math.min(base, normalizedValue);
 }
 
+/**
+ * Whether a negotiated discount takes the place of the automatic volume tier.
+ *
+ * On a manual order it does. When an agent tells a bulk buyer "25% off", the
+ * buyer expects 25% off the list price — not 25% off a price the 20% volume
+ * tier has already reduced, which is what stacking them produced: a typed 25%
+ * came out as roughly 40% and the negotiated figure appeared nowhere on the
+ * receipt. Website orders are untouched: nobody negotiated those, and their
+ * volume discount is the offer the customer accepted at checkout.
+ *
+ * The order's own `source` decides it, so an admin-created order keeps the
+ * same arithmetic when it is reopened and edited later.
+ */
+export function isManualOrderSource(source) {
+  return String(source || '').trim().toLowerCase() === 'admin_manual';
+}
+
+export function manualDiscountReplacesVolume(source, type, value) {
+  return isManualOrderSource(source)
+    && normalizeManualDiscountType(type) !== null
+    && finiteNonNegative(value) > 0;
+}
+
 export function calculateAdminOrderTotals(items = [], shipping = 0, discounts = {}) {
   const itemsSubtotal = getAdminOrderSubtotal(items);
   const discountableSubtotal = (items || []).reduce((sum, item) => {
@@ -80,7 +103,10 @@ export function calculateAdminOrderTotals(items = [], shipping = 0, discounts = 
     return sum + (Number(item.price) || 0) * (Number(item.qty) || 1);
   }, 0);
   const excludedSubtotal = itemsSubtotal - discountableSubtotal;
-  const discountPct = getAdminVolumeDiscountPct(items);
+  // A negotiated discount stands alone: see manualDiscountReplacesVolume.
+  const discountPct = discounts.replaceVolumeDiscount === true
+    ? 0
+    : getAdminVolumeDiscountPct(items);
   const discountAmount = discountPct > 0
     ? discountableSubtotal * (discountPct / 100)
     : 0;

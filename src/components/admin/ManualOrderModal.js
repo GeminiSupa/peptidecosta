@@ -7,6 +7,7 @@ import {
   ADMIN_FALLBACK_EXCHANGE_RATE,
   calculateAdminOrderTotals,
   getAdminCurrencyPair,
+  manualDiscountReplacesVolume,
 } from '@/lib/adminOrderTotals.mjs';
 import { bacGiftShortfall } from '@/lib/bacWater.mjs';
 import {
@@ -135,6 +136,12 @@ export default function ManualOrderModal({
   } = calculateAdminOrderTotals(form.items, shipping, {
     manualDiscountType,
     manualDiscountValue: form.manual_discount_value,
+    // A negotiated discount stands in place of the volume tier on a manual
+    // order, so 25% typed here is 25% off the list price and not 25% off an
+    // already-reduced one.
+    replaceVolumeDiscount: manualDiscountReplacesVolume(
+      'admin_manual', manualDiscountType, form.manual_discount_value,
+    ),
   });
 
   // The preview and the receipt must agree to the cent, so it is worth being
@@ -344,19 +351,29 @@ export default function ManualOrderModal({
             <Plus size={14} /> Add item
           </button>
 
-          <div className="manual-order-grid">
-            <input
-              className="admin-input"
-              type="number"
-              min="0"
-              placeholder={form.currency === 'USD' ? 'Shipping cost USD' : 'Shipping cost CRC'}
-              value={form.currency === 'USD' ? form.shipping_cost_usd : form.shipping_cost_crc}
-              onChange={(e) => setForm({
-                ...form,
-                [form.currency === 'USD' ? 'shipping_cost_usd' : 'shipping_cost_crc']: e.target.value,
-              })}
-            />
-          </div>
+          {/* A standing label, not a placeholder. The placeholder vanishes the
+              moment a figure is typed, which left an unlabelled box sitting
+              between the items and the discount with no way to tell what the
+              number in it meant. */}
+          <label
+            htmlFor="manual-order-shipping"
+            style={{ display: 'block', color: '#cbd5e1', fontSize: '.72rem', fontWeight: 800, margin: '4px 0 6px' }}
+          >
+            Shipping fee ({form.currency === 'USD' ? '$ USD' : '₡ CRC'}) — leave 0 for free shipping
+          </label>
+          <input
+            id="manual-order-shipping"
+            className="admin-input"
+            type="number"
+            min="0"
+            step={form.currency === 'USD' ? '0.01' : '1'}
+            placeholder={form.currency === 'USD' ? 'Shipping fee in USD' : 'Shipping fee in CRC'}
+            value={form.currency === 'USD' ? form.shipping_cost_usd : form.shipping_cost_crc}
+            onChange={(e) => setForm({
+              ...form,
+              [form.currency === 'USD' ? 'shipping_cost_usd' : 'shipping_cost_crc']: e.target.value,
+            })}
+          />
 
           {/* The negotiated discount, entered before the order is saved rather
               than after it. Bulk buyers agree their price on the phone; when
@@ -373,7 +390,10 @@ export default function ManualOrderModal({
             <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '10px', color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem' }}>
               <BadgePercent size={16} /> Order discount
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px, 0.8fr) minmax(100px, 0.7fr) minmax(180px, 1.5fr)', gap: '8px' }}>
+            {/* Two columns, with the reason on its own row underneath. The
+                order panel's three-across layout has the width for it; this
+                modal does not, and it clipped every one of the three labels. */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
               <select
                 className="admin-select"
                 value={form.manual_discount_type}
@@ -396,6 +416,7 @@ export default function ManualOrderModal({
               />
               <input
                 className="admin-input"
+                style={{ gridColumn: '1 / -1' }}
                 value={form.manual_discount_reason}
                 maxLength={200}
                 onChange={(e) => setForm({ ...form, manual_discount_reason: e.target.value })}

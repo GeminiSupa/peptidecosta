@@ -1,0 +1,133 @@
+/**
+ * A negotiated discount stands in place of the automatic volume tier.
+ *
+ * The two used to stack. An agent typing "25%" for a bulk buyer produced a 20%
+ * volume discount followed by 25% off the remainder — about 40% off in total,
+ * and the figure that was actually negotiated appeared on neither the screen
+ * nor the receipt. On a manual order the typed figure is now the whole
+ * discount. Website orders are untouched: nobody negotiated those, and their
+ * volume discount is the offer the customer accepted at checkout.
+ */
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  calculateAdminOrderTotals,
+  isManualOrderSource,
+  manualDiscountReplacesVolume,
+} from '../src/lib/adminOrderTotals.mjs';
+import { authoritativeCheckout } from '../src/lib/authoritativeCheckout.mjs';
+
+// Ten vials at ₡45,037 — the order from the report that prompted this.
+const ITEMS = [{ product: 'Retatrutide 5mg', qty: 10, price: 45037 }];
+const SHIPPING = 5;
+
+test('the reported order: 25% typed is 25% taken, not 40%', () => {
+  const totals = calculateAdminOrderTotals(ITEMS, SHIPPING, {
+    manualDiscountType: 'percentage',
+    manualDiscountValue: 25,
+    replaceVolumeDiscount: true,
+  });
+
+  assert.equal(totals.itemsSubtotal, 450370);
+  assert.equal(totals.discountPct, 0, 'the volume tier steps aside');
+  assert.equal(totals.discountAmount, 0);
+  assert.equal(totals.manualDiscountAmount, 112592.5);
+  assert.equal(totals.total, 450370 - 112592.5 + SHIPPING);
+
+  // What it used to do, kept here so the difference is on the record.
+  const stacked = calculateAdminOrderTotals(ITEMS, SHIPPING, {
+    manualDiscountType: 'percentage',
+    manualDiscountValue: 25,
+  });
+  assert.equal(stacked.discountPct, 20);
+  assert.ok(stacked.total < totals.total, 'stacking charged the customer less than agreed');
+});
+
+test('a fixed negotiated amount also replaces the tier', () => {
+  const totals = calculateAdminOrderTotals(ITEMS, SHIPPING, {
+    manualDiscountType: 'fixed',
+    manualDiscountValue: 50000,
+    replaceVolumeDiscount: true,
+  });
+
+  assert.equal(totals.discountAmount, 0);
+  assert.equal(totals.manualDiscountAmount, 50000);
+  assert.equal(totals.total, 450370 - 50000 + SHIPPING);
+});
+
+test('with no manual discount the volume tier still applies', () => {
+  const totals = calculateAdminOrderTotals(ITEMS, SHIPPING, {
+    replaceVolumeDiscount: manualDiscountReplacesVolume('admin_manual', null, 0),
+  });
+
+  assert.equal(totals.discountPct, 20);
+  assert.equal(totals.discountAmount, 90074);
+  assert.equal(totals.manualDiscountAmount, 0);
+});
+
+test('the rule is manual orders only', () => {
+  assert.equal(isManualOrderSource('admin_manual'), true);
+  assert.equal(isManualOrderSource('website'), false);
+  assert.equal(isManualOrderSource(null), false);
+
+  // A website order keeps its volume discount even when staff add a discount
+  // on top — that tier is the offer the shopper accepted, not staff's to undo.
+  assert.equal(manualDiscountReplacesVolume('website', 'percentage', 25), false);
+  assert.equal(manualDiscountReplacesVolume('woocommerce', 'fixed', 100), false);
+  assert.equal(manualDiscountReplacesVolume('admin_manual', 'percentage', 25), true);
+
+  // A discount box left empty is not a negotiated price.
+  assert.equal(manualDiscountReplacesVolume('admin_manual', 'percentage', 0), false);
+  assert.equal(manualDiscountReplacesVolume('admin_manual', 'none', 25), false);
+});
+
+test('the server rebuild drops the tier the same way the screen does', () => {
+  // CRC is always derived from the catalog USD price and the live rate, on the
+  // screen and on the server alike, so the fixture has to be self-consistent:
+  // $100 at ₡450.37 is the ₡45,037 the agent sees in the items list.
+  const products = [{
+    product: 'Retatrutide 5mg',
+    price_usd: 100,
+    price_crc: 45037,
+    status: 'In Stock',
+    inventory_count: null,
+  }];
+  const RATE = 450.37;
+
+  const suppressed = authoritativeCheckout({
+    postedOrder: { items: ITEMS, currency: 'CRC' },
+    products,
+    promo: null,
+    exchangeRate: RATE,
+    suppressVolumeDiscount: true,
+  });
+  assert.equal(suppressed.ok, true);
+  assert.equal(suppressed.volumeDiscountPct, 0);
+  assert.equal(suppressed.volumeDiscountAmount, 0);
+
+  // The public checkout never passes the flag, so it is unaffected.
+  const normal = authoritativeCheckout({
+    postedOrder: { items: ITEMS, currency: 'CRC' },
+    products,
+    promo: null,
+    exchangeRate: RATE,
+  });
+  assert.equal(normal.volumeDiscountPct, 20);
+
+  // Screen and server land on the same figure.
+  const preview = calculateAdminOrderTotals(ITEMS, SHIPPING, {
+    manualDiscountType: 'percentage',
+    manualDiscountValue: 25,
+    replaceVolumeDiscount: true,
+  });
+  const manual = calculateAdminOrderTotals(suppressed.items, 0, {
+    manualDiscountType: 'percentage',
+    manualDiscountValue: 25,
+    replaceVolumeDiscount: true,
+  }).manualDiscountAmount;
+  const saved = (suppressed.total - suppressed.shipping) - manual + SHIPPING;
+
+  assert.equal(preview.total, saved);
+});
