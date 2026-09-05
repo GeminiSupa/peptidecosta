@@ -24,80 +24,43 @@ export const cleanPhoneNumber = (phone: string | null | undefined): string => {
   return cleaned;
 };
 
-/**
- * The opening line used when a caller has no message of its own — the nav bar,
- * the catalog's sticky CTA, the footer. Keyed by the site's language toggle.
- *
- * Spanish is the fallback because the storefront itself defaults to Spanish
- * (`useState('es')`); an English default meant a Costa Rican customer reading a
- * Spanish page opened WhatsApp holding an English sentence.
- *
- * Kept ungendered ("me interesa", not "estoy interesado/a") — the customer is
- * the one who appears to have written it.
- */
-const DEFAULT_GREETING: Record<string, string> = {
-  en: "Hello I'm interested",
-  es: 'Hola, me interesa',
-};
+// The link and the greeting live in whatsappLink.mjs, which pulls in nothing, so
+// the sentence a customer reads can be tested without Supabase or a browser.
+// Re-exported here because every caller already imports from '@/lib/whatsapp'.
+export { DEFAULT_GREETING, buildWhatsAppLink } from './whatsappLink.mjs';
+import { readClickAttribution } from './whatsappLink.mjs';
 
 /**
- * Build a WhatsApp link that includes a source identifier.
- * The source is embedded in the pre‑filled text so the sales team can see where the user came from.
- * Example: buildWhatsAppLink('50684046973', null, 'es')
- *   => "https://wa.me/50684046973?text=Hola%2C%20me%20interesa"
+ * Record one WhatsApp click, with the campaign that led to it.
  *
- * @param phone - recipient in E.164 without the '+'
- * @param baseMessage - the message to pre-fill; falsy picks the greeting for `lang`
- * @param lang - 'es' | 'en', the language the customer is reading the site in
+ * This is where the attribution went when it came out of the customer's own
+ * message. It carries the utm values and referrer the storefront already keeps
+ * in localStorage, so an agent can still see which campaign produced a chat —
+ * from the CRM, rather than from a bracketed note in the customer's greeting.
+ *
+ * Fails quietly on purpose. It runs on the click that opens WhatsApp, and a
+ * logging problem must never stand between a customer and the conversation
+ * they are trying to start. The insert also predates the table it writes to
+ * (`whatsapp_leads` did not exist, so every click was being discarded) — the
+ * warning below is what makes that visible instead of silent.
+ *
+ * @param source - which button was used, e.g. 'catalog_sticky_cta'
+ * @param lang - the language the page was in, when the caller knows it
  */
-export const buildWhatsAppLink = (
-  phone: string,
-  baseMessage?: string | null,
-  lang: string = 'es'
-): string => {
-  const greeting = baseMessage || DEFAULT_GREETING[lang] || DEFAULT_GREETING.es;
-  let trackingText = '';
-  
-  if (typeof window !== 'undefined') {
-    const source = localStorage.getItem('lead_utm_source');
-    const campaign = localStorage.getItem('lead_utm_campaign');
-    const referrer = localStorage.getItem('lead_referrer');
-    
-    let sourceLabel = '';
-    if (source) {
-      sourceLabel = source;
-    } else if (referrer) {
-      try {
-        const url = new URL(referrer);
-        sourceLabel = url.hostname.replace('www.', '');
-      } catch (e) {
-        // ignore invalid urls
-      }
-    }
-    
-    if (sourceLabel) {
-      trackingText = `\n\n[Source: ${sourceLabel}${campaign ? ` (Camp: ${campaign})` : ''}]`;
-    }
-  }
-
-  const encodedMessage = encodeURIComponent(`${greeting}${trackingText}`);
-  return `https://wa.me/${phone}?text=${encodedMessage}`;
-};
-
-/**
- * Log a WhatsApp click source to Supabase for analytics.
- * Creates a row in the `whatsapp_leads` table with session id and source.
- * If Supabase is not configured the call is a no‑op.
- */
-export const logWhatsAppSource = async (source: string) => {
+export const logWhatsAppSource = async (source: string, lang: string = '') => {
   if (!isSupabaseConfigured || !supabase) return;
   try {
     const sessionId = typeof window !== 'undefined' ? localStorage.getItem('cart_session_id') : undefined;
-    await supabase.from('whatsapp_leads').insert({
+    const attribution = readClickAttribution(localStorage, lang);
+    const { error } = await supabase.from('whatsapp_leads').insert({
       session_id: sessionId,
       source,
+      ...attribution,
       clicked_at: new Date().toISOString(),
     });
+    // supabase-js returns the failure rather than throwing it, so without this
+    // check a missing table or a blocked insert looks exactly like a success.
+    if (error) console.warn('Failed to log WhatsApp source:', error.message);
   } catch (err) {
     console.warn('Failed to log WhatsApp source:', err);
   }

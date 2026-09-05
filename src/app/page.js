@@ -180,7 +180,7 @@ export default function LandingPage() {
   };
 
   const openWhatsApp = (source) => {
-    logWhatsAppSource(source);
+    logWhatsAppSource(source, lang);
     localStorage.setItem('whatsapp_source', source);
     window.open(buildWhatsAppLink(links.whatsappNumber, null, lang), '_blank');
   };

@@ -416,7 +416,7 @@ export default function CatalogPage() {
   const cartItemCount = cart.reduce((total, item) => total + item.qty, 0);
 
   const openCatalogWhatsApp = () => {
-    logWhatsAppSource('catalog_sticky_cta');
+    logWhatsAppSource('catalog_sticky_cta', lang);
     localStorage.setItem('whatsapp_source', 'catalog_sticky_cta');
     window.open(buildWhatsAppLink(links.whatsappNumber, null, lang), '_blank', 'noopener,noreferrer');
   };

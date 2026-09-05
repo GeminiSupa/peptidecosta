@@ -298,7 +298,7 @@ export function StorefrontBulkBand({ lang, settings }) {
   const { links } = useBusinessLinks();
   const suffix = lang === 'en' ? 'En' : 'Es';
   const openWhatsApp = () => {
-    logWhatsAppSource('bulk_cta');
+    logWhatsAppSource('bulk_cta', lang);
     localStorage.setItem('whatsapp_source', 'bulk_cta');
     window.open(buildWhatsAppLink(links.whatsappNumber, null, lang), '_blank');
   };
@@ -337,7 +337,7 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
   ];
 
   const openWhatsApp = () => {
-    logWhatsAppSource('footer_cr');
+    logWhatsAppSource('footer_cr', lang);
     localStorage.setItem('whatsapp_source', 'footer_cr');
     window.open(buildWhatsAppLink(links.whatsappNumber, null, lang), '_blank');
   };
