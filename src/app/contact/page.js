@@ -283,7 +283,7 @@ export default function ContactPage() {
       </main>
 
       <StorefrontFooter lang={lang} settings={landingSettings} />
-      <MobileActionBar lang={lang} whatsappHref={buildWhatsAppLink(links.whatsappNumber)} />
+      <MobileActionBar lang={lang} whatsappHref={buildWhatsAppLink(links.whatsappNumber, null, lang)} />
     </div>
   );
 }

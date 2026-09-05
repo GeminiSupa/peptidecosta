@@ -86,7 +86,7 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
       || DEFAULT_LANDING_PAGE_SETTINGS.catalogBannerUrl);
 
   const href = (() => {
-    if (rawHref === 'whatsapp') return buildWhatsAppLink(links.whatsappNumber);
+    if (rawHref === 'whatsapp') return buildWhatsAppLink(links.whatsappNumber, null, lang);
     const safeHref = sanitizeBannerHref(rawHref);
     if (!safeHref) return `/catalog?lang=${lang}`;
     if (safeHref.startsWith('http') || safeHref.startsWith('mailto:') || safeHref.startsWith('tel:') || safeHref.startsWith('#')) {
@@ -300,7 +300,7 @@ export function StorefrontBulkBand({ lang, settings }) {
   const openWhatsApp = () => {
     logWhatsAppSource('bulk_cta');
     localStorage.setItem('whatsapp_source', 'bulk_cta');
-    window.open(buildWhatsAppLink(links.whatsappNumber), '_blank');
+    window.open(buildWhatsAppLink(links.whatsappNumber, null, lang), '_blank');
   };
 
   return (
@@ -339,7 +339,7 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
   const openWhatsApp = () => {
     logWhatsAppSource('footer_cr');
     localStorage.setItem('whatsapp_source', 'footer_cr');
-    window.open(buildWhatsAppLink(links.whatsappNumber), '_blank');
+    window.open(buildWhatsAppLink(links.whatsappNumber, null, lang), '_blank');
   };
 
   return (

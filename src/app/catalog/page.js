@@ -418,7 +418,7 @@ export default function CatalogPage() {
   const openCatalogWhatsApp = () => {
     logWhatsAppSource('catalog_sticky_cta');
     localStorage.setItem('whatsapp_source', 'catalog_sticky_cta');
-    window.open(buildWhatsAppLink(links.whatsappNumber), '_blank', 'noopener,noreferrer');
+    window.open(buildWhatsAppLink(links.whatsappNumber, null, lang), '_blank', 'noopener,noreferrer');
   };
 
   // Reviews States

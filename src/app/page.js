@@ -182,7 +182,7 @@ export default function LandingPage() {
   const openWhatsApp = (source) => {
     logWhatsAppSource(source);
     localStorage.setItem('whatsapp_source', source);
-    window.open(buildWhatsAppLink(links.whatsappNumber), '_blank');
+    window.open(buildWhatsAppLink(links.whatsappNumber, null, lang), '_blank');
   };
 
   // The two storefront CTAs now collect a lead instead of handing the visitor
@@ -193,7 +193,7 @@ export default function LandingPage() {
 
   const resolvePageHref = (href = '/catalog') => {
     if (!href) return `/catalog?lang=${lang}`;
-    if (href === 'whatsapp') return buildWhatsAppLink(links.whatsappNumber);
+    if (href === 'whatsapp') return buildWhatsAppLink(links.whatsappNumber, null, lang);
     if (href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) {
       return href;
     }
