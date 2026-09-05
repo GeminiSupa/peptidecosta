@@ -10,6 +10,36 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
 })(window,document,'script','dataLayer','GTM-M2GVDQ44');</script>
 <!-- End Google Tag Manager -->
+<!-- Google tag (gtag.js)
+     Supplied by Dustin on 2026-09-05, and this snippet is ALL that was
+     supplied: the base tag and nothing else. Recorded here because it does not
+     complete Google Ads conversion tracking on its own, and the gap is not an
+     omission at this end.
+
+     What this snippet does do, and why it is kept even though GTM already
+     loads AW-18193858920: GTM never defines window.gtag on the page, and the
+     conversion code on thank-you.html is guarded by
+     `if (typeof window.gtag === "function")`. Without these lines that guard is
+     false and the whole block is skipped in silence. The Ads tag being fetched
+     a second time is accepted for that reason; page_view is not a conversion,
+     so the duplicate does not inflate conversion counts.
+
+     What is still MISSING: the conversion LABEL. A conversion is reported as
+     send_to: "<conversion id>/<conversion label>", and only the id was given.
+     Until the label arrives, FALLBACK_ADS.conversionLabel in thank-you.html
+     stays empty and that page logs "Google Ads conversion not configured"
+     instead of reporting. The label is in Google Ads under
+     Tools -> Conversions -> the conversion action -> Tag setup -> Install
+     manually, as the part after the slash in send_to. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18193858920"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'AW-18193858920');
+</script>
+<!-- End Google tag -->
 <title>Explore GLP-1 Options — Free Guidance | Peptides Costa Rica</title>
 <meta name="description" content="Clear, plain-language information about GLP-1 — what it is, how it works in the body, and what may be available to you. Free guidance in English or Spanish. No pressure, no commitment.">
 <meta name="theme-color" content="#06213F">

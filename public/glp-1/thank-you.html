@@ -10,6 +10,22 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
 })(window,document,'script','dataLayer','GTM-M2GVDQ44');</script>
 <!-- End Google Tag Manager -->
+<!-- Google tag (gtag.js)
+     Same snippet Dustin supplied on 2026-09-05, repeated here because this is
+     the page that actually reports the conversion. See the fuller note in
+     index.html: the base tag was all that was provided, and the conversion
+     LABEL is still missing, so FALLBACK_ADS.conversionLabel below is empty and
+     no conversion is reported yet. These lines exist to define window.gtag,
+     which GTM does not, and which the reporting code further down requires. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18193858920"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'AW-18193858920');
+</script>
+<!-- End Google tag -->
 <title>Thank you — Peptides Costa Rica</title>
 <meta name="description" content="Your request has been received. Someone on our team will be in touch shortly with the information you asked for.">
 <meta name="theme-color" content="#12307B">
@@ -160,7 +176,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
 /* Fallback only. The real values travel with the lead from the landing page,
    so index.html stays the single place you configure Google Ads. */
-var FALLBACK_ADS = { conversionId: "", conversionLabel: "" };
+/* conversionId filled in 2026-09-05 from the tag Dustin supplied.
+   conversionLabel is STILL EMPTY because it was never supplied — the snippet he
+   gave contained only the base tag. Both halves are required below
+   (`if (ads.conversionId && ads.conversionLabel)`), so until the label is added
+   here this page reports nothing and logs "Google Ads conversion not
+   configured". Paste the label between the quotes and it starts working; no
+   other change is needed. */
+var FALLBACK_ADS = { conversionId: "AW-18193858920", conversionLabel: "" };
 
 var STORE = "pcr_lead";
 var MAX_AGE_MS = 30 * 60 * 1000;
