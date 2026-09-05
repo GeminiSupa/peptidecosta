@@ -28,6 +28,7 @@ import {
   OPT_OUT_CONFIRMATION,
   OPT_IN_CONFIRMATION,
 } from '@/lib/whatsappCompliance';
+import { verifyMetaWebhook } from '@/lib/metaWebhookAuth';
 
 // ─── Supabase client (server-side with service role for writes) ───
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -68,7 +69,11 @@ export async function GET(request) {
 // ─── POST: Handle Incoming WhatsApp Events ───
 export async function POST(request) {
   try {
-    const body = await request.json();
+    // Prove Meta sent this before acting on it. Anything unsigned is refused,
+    // so the endpoint can no longer be used to invent conversations or leads.
+    const verified = await verifyMetaWebhook(request, 'whatsapp');
+    if (verified.response) return verified.response;
+    const body = JSON.parse(verified.rawBody || '{}');
 
     // Meta sends events under entry[].changes[].value
     const entries = body?.entry || [];

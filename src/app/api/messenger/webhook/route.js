@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getPageAccessToken } from '@/lib/facebookPageToken';
+import { verifyMetaWebhook } from '@/lib/metaWebhookAuth';
 
 // ─── Supabase client (service role for server writes) ───
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -44,7 +45,11 @@ export async function GET(request) {
  */
 export async function POST(request) {
   try {
-    const body = await request.json();
+    // Prove Meta sent this before acting on it. Anything unsigned is refused,
+    // so the endpoint can no longer be used to invent conversations.
+    const verified = await verifyMetaWebhook(request, 'messenger');
+    if (verified.response) return verified.response;
+    const body = JSON.parse(verified.rawBody || '{}');
     console.log('[Messenger Webhook] 📩 Event Received:', JSON.stringify(body, null, 2));
 
     const PAGE_ACCESS_TOKEN = await getPageAccessToken();
