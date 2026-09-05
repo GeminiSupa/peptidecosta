@@ -9,7 +9,7 @@
 
 import {
   FACEBOOK_REVIEW_URL,
-  GOOGLE_LOCAL_LISTING_URL,
+  GOOGLE_REVIEW_URL,
   getFacebookReviewUrl,
 } from './businessLinks.js';
 
@@ -41,7 +41,9 @@ export function escapeHtml(value) {
  */
 export function reviewDestinations(links = {}, env = process.env) {
   return {
-    google: trim(env.REVIEW_LINK_GOOGLE) || trim(links.googleReviewUrl) || GOOGLE_LOCAL_LISTING_URL,
+    // GOOGLE_REVIEW_URL, not the listing: this is an ask for a review, so it
+    // must land on the rating form rather than the map card.
+    google: trim(env.REVIEW_LINK_GOOGLE) || trim(links.googleReviewUrl) || GOOGLE_REVIEW_URL,
     facebook: trim(env.REVIEW_LINK_FACEBOOK) || getFacebookReviewUrl(links) || FACEBOOK_REVIEW_URL,
     trustpilot: trim(env.REVIEW_LINK_TRUSTPILOT),
   };

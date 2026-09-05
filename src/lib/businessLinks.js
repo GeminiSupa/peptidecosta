@@ -1,5 +1,21 @@
 export const GOOGLE_LOCAL_LISTING_URL = 'https://maps.app.goo.gl/b9YaeUXyuvBuj8vo8';
 
+/**
+ * Where "leave us a Google review" points.
+ *
+ * Deliberately NOT the listing URL above. That one opens the map card, and the
+ * customer then has to find "Write a review" for themselves — every step
+ * between the ask and the star rating loses people, and this link is the whole
+ * point of the review email. The g.page/r/…/review form opens the rating box
+ * directly.
+ *
+ * Supplied by Omer on 2026-09-05 from Google Business Profile -> Ask for
+ * reviews. Verified to resolve to listing 0xa1fd683cec6185e1:0x1e3a5dbf8dd4b8d6,
+ * the same business as GOOGLE_LOCAL_LISTING_URL, through Google's own
+ * review-solicitation flow.
+ */
+export const GOOGLE_REVIEW_URL = 'https://g.page/r/Cda41I2_XToeEBM/review';
+
 export const FACEBOOK_REVIEW_URL = 'https://www.facebook.com/costaricapeptides/reviews';
 
 // Retired Facebook profiles, same idea as the Google listings below: a stored
@@ -29,6 +45,13 @@ const LEGACY_GOOGLE_LISTING_URLS = new Set([
   'https://maps.app.goo.gl/jJCMHBM8aPXx67G3A',
 ]);
 
+// Anything in here, saved as the REVIEW link, is a map card rather than a
+// rating form and loses to GOOGLE_REVIEW_URL.
+const LISTING_URLS_USED_AS_REVIEW_LINKS = new Set([
+  GOOGLE_LOCAL_LISTING_URL,
+  ...LEGACY_GOOGLE_LISTING_URLS,
+]);
+
 export const DEFAULT_BUSINESS_LINKS = {
   whatsappNumber: '50684046973',
   whatsappDisplay: '+506 8404-6973',
@@ -40,7 +63,7 @@ export const DEFAULT_BUSINESS_LINKS = {
   trustpilotUrl: TRUSTPILOT_REVIEW_URLS.en,
   trustpilotUrlEn: TRUSTPILOT_REVIEW_URLS.en,
   trustpilotUrlEs: TRUSTPILOT_REVIEW_URLS.es,
-  googleReviewUrl: GOOGLE_LOCAL_LISTING_URL,
+  googleReviewUrl: GOOGLE_REVIEW_URL,
   // Empty on purpose. A non-empty default here outranked facebookUrl in every
   // `facebookReviewUrl || facebookUrl` chain, so setting the profile field in
   // the CMS could never take effect — the default silently won. The canonical
@@ -59,8 +82,12 @@ export function normalizeBusinessLinks(value) {
     merged.googleMapsUrl = GOOGLE_LOCAL_LISTING_URL;
   }
 
-  if (!merged.googleReviewUrl || LEGACY_GOOGLE_LISTING_URLS.has(merged.googleReviewUrl)) {
-    merged.googleReviewUrl = GOOGLE_LOCAL_LISTING_URL;
+  // A listing URL saved in the review field is upgraded to the review form.
+  // The current listing URL is included: it was the default for this field
+  // until 2026-09-05, so it is sitting in saved rows meaning "review link"
+  // while only ever opening the map card.
+  if (!merged.googleReviewUrl || LISTING_URLS_USED_AS_REVIEW_LINKS.has(merged.googleReviewUrl)) {
+    merged.googleReviewUrl = GOOGLE_REVIEW_URL;
   }
 
   // Cleared rather than replaced, so a profile URL set in the CMS still gets

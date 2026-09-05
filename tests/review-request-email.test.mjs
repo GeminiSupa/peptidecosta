@@ -2,14 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import { FACEBOOK_REVIEW_URL, GOOGLE_LOCAL_LISTING_URL } from '../src/lib/businessLinks.js';
+import { FACEBOOK_REVIEW_URL, GOOGLE_REVIEW_URL } from '../src/lib/businessLinks.js';
 import { buildReviewRequestEmail, escapeHtml, reviewDestinations } from '../src/lib/reviewRequestEmail.mjs';
 
 test('both review pages are linked with nothing configured', () => {
   // The email used to carry one button pointing at /customer-feedback, a page
   // of other people's testimonials with no way to leave one of your own.
+  //
+  // Google is the rating form, not the map listing it used to be: an ask for a
+  // review that lands on a map card makes the customer hunt for "Write a
+  // review" themselves.
   const d = reviewDestinations({}, {});
-  assert.equal(d.google, GOOGLE_LOCAL_LISTING_URL);
+  assert.equal(d.google, GOOGLE_REVIEW_URL);
   assert.equal(d.facebook, FACEBOOK_REVIEW_URL);
 });
 
@@ -45,9 +49,9 @@ test('the email carries a Google button and a Facebook button, in that order', (
   const d = reviewDestinations({}, {});
   for (const lang of ['es', 'en']) {
     const { html } = buildReviewRequestEmail({ customerName: 'Ana', lang, destinations: d });
-    assert.ok(html.includes(GOOGLE_LOCAL_LISTING_URL), `${lang} should link Google`);
+    assert.ok(html.includes(GOOGLE_REVIEW_URL), `${lang} should link Google`);
     assert.ok(html.includes(FACEBOOK_REVIEW_URL), `${lang} should link Facebook`);
-    assert.ok(html.indexOf(GOOGLE_LOCAL_LISTING_URL) < html.indexOf(FACEBOOK_REVIEW_URL), `${lang} should lead with Google`);
+    assert.ok(html.indexOf(GOOGLE_REVIEW_URL) < html.indexOf(FACEBOOK_REVIEW_URL), `${lang} should lead with Google`);
     // No third call to action unless Trustpilot is configured.
     assert.doesNotMatch(html, /trustpilot/i, `${lang} should not mention Trustpilot`);
     assert.doesNotMatch(html, /customer-feedback/, `${lang} should not send anyone to the testimonials page`);
