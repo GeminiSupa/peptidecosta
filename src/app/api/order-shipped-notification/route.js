@@ -9,7 +9,8 @@ import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 import { orderEmailActivity, recordOrderEmails } from '@/lib/orderEmailLog.mjs';
 import { withBacGiftLines } from '@/lib/bacWater.mjs';
 import { CORREOS_TRACKING_URL, correosTrackingStrings, hasTrackingNumber } from '@/lib/correosTracking.mjs';
-import { pickReviewPlatform } from '@/lib/reviewPlatformSplit.mjs';
+import { pickReviewPlatform, trustpilotMonthlyCap } from '@/lib/reviewPlatformSplit.mjs';
+import { decideForOrder, recordReviewAsk } from '@/lib/reviewAskHistory.mjs';
 import { writeDroppingMissingColumns, ORDER_REVIEW_PLATFORM_COLUMNS } from '@/lib/optionalColumns.mjs';
 
 // Read at request time, never at module scope.
@@ -341,8 +342,21 @@ export async function POST(request) {
     // The month's Trustpilot usage is counted first, because the plan caps how
     // many invitations it will actually deliver; past the cap everyone goes to
     // Google rather than being handed an invitation that never arrives.
+    //
+    // The customer's own history decides first: someone already asked is not
+    // asked again on a later order, and someone who clicked is offered a site
+    // they have not used. The split and the cap only choose for a customer with
+    // no history at all.
     const trustpilotThisMonth = await countTrustpilotInvitesThisMonth(supabase);
-    const reviewPlatform = pickReviewPlatform(order, process.env, { trustpilotThisMonth });
+    const cap = trustpilotMonthlyCap(process.env);
+    const trustpilotHasRoom = !Number.isFinite(trustpilotThisMonth) || trustpilotThisMonth < cap;
+    const firstChoice = pickReviewPlatform(order, process.env, { trustpilotThisMonth });
+
+    const reviewDecision = hasCustomerEmail
+      ? await decideForOrder(supabase, order, { firstChoice, trustpilotHasRoom })
+      : { ask: false, platform: null, offer: [], reason: 'no customer email' };
+
+    const reviewPlatform = reviewDecision.platform;
     const useTrustpilot = reviewPlatform === 'trustpilot';
 
     // Trustpilot AFS structured data (read by Trustpilot from the BCC'd copy).
@@ -439,14 +453,20 @@ export async function POST(request) {
     // Only the Trustpilot half is stamped here. Stamping the Google half too
     // would close the very door the cron looks through, which is how the
     // Google/Facebook email came to never send at all.
-    if (customerInfo && !alreadyInvited && useTrustpilot && supabase) {
+    if (customerInfo && !alreadyInvited && supabase && !reviewDecision.retry && (useTrustpilot || !reviewDecision.ask)) {
+      // Two cases stamp the order here. A Trustpilot invitation has just gone
+      // out with the BCC above. And a decision NOT to ask is stamped too, so
+      // the cron does not pick the order up later and ask anyway — the column
+      // is the only thing standing between "already handled" and "still owed".
+      // The Google half is deliberately left unstamped for the cron.
+      const platform = useTrustpilot ? 'trustpilot' : 'skipped';
       try {
         // review_platform is what the monthly cap is counted against. It comes
         // from a hand-run migration, so it is dropped rather than allowed to
         // fail the stamp: losing the count is recoverable, losing the dedupe
         // would re-invite the customer on the next resend.
         await writeDroppingMissingColumns(
-          { review_requested_at: new Date().toISOString(), review_platform: 'trustpilot' },
+          { review_requested_at: new Date().toISOString(), review_platform: platform },
           ORDER_REVIEW_PLATFORM_COLUMNS,
           (row) => {
             let update = supabase.from('orders').update(row);
@@ -454,6 +474,13 @@ export async function POST(request) {
             return update;
           },
         );
+        if (useTrustpilot) {
+          await recordReviewAsk(supabase, {
+            email: order.customer_email,
+            order,
+            platforms: ['trustpilot'],
+          });
+        }
       } catch (err) {
         console.error('[Order Shipped Notification] Failed to mark review_requested_at:', err.message);
       }

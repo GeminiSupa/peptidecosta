@@ -13,6 +13,7 @@ import { orderCompletedAtMs } from '@/lib/agentDashboard.mjs';
 import { getBusinessLinks } from '@/lib/settings';
 import { buildReviewRequestEmail, reviewDestinations } from '@/lib/reviewRequestEmail.mjs';
 import { writeDroppingMissingColumns, ORDER_REVIEW_PLATFORM_COLUMNS } from '@/lib/optionalColumns.mjs';
+import { decideForOrder, recordReviewAsk, reviewClickUrl } from '@/lib/reviewAskHistory.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
@@ -128,17 +129,61 @@ export async function GET(request) {
         continue;
       }
 
+      // The customer's history decides again here, five days after the order
+      // was completed, rather than being trusted from then: they may have
+      // ordered twice that week, or clicked a button from an earlier email in
+      // the meantime. `offer` is the sites they have not already used.
+      const decision = await decideForOrder(supabase, order, {
+        firstChoice: 'google',
+        trustpilotHasRoom: false, // this cron only ever sends the Google/Facebook email
+      });
+
+      if (!decision.ask) {
+        // Only a real decision is final. `retry` means the history could not be
+        // read at all, so the order is left untouched and reconsidered tomorrow
+        // rather than quietly retired.
+        if (!decision.retry) {
+          await writeDroppingMissingColumns(
+            { review_requested_at: new Date().toISOString(), review_platform: 'skipped' },
+            ORDER_REVIEW_PLATFORM_COLUMNS,
+            (row) => supabase.from('orders').update(row).eq('id', order.id),
+          );
+        }
+        skippedCount++;
+        continue;
+      }
+
+      const askId = await recordReviewAsk(supabase, {
+        email: order.customer_email,
+        order,
+        platforms: decision.offer,
+      });
+
       const isSpanish = order.currency === 'CRC';
+      // Only the offered sites get a button, and each one goes through the
+      // click redirect so the choice is recorded.
+      const offered = {
+        google: decision.offer.includes('google')
+          ? reviewClickUrl(askId, 'google', destinations.google)
+          : '',
+        facebook: decision.offer.includes('facebook')
+          ? reviewClickUrl(askId, 'facebook', destinations.facebook)
+          : '',
+        trustpilot: '',
+      };
+
       const { subject, html } = buildReviewRequestEmail({
         customerName: order.customer_name,
         lang: isSpanish ? 'es' : 'en',
-        destinations,
+        destinations: offered,
       });
 
-      // WhatsApp's approved template takes a single link, so it gets the Google
-      // one — the listing the seller rating and the search result hang off.
-      // Adding Facebook there needs a new template through Meta review.
-      const reviewLink = destinations.google;
+      // WhatsApp's approved template takes a single link, so it gets the first
+      // site still on offer — Google when it is there, since that is the
+      // listing the seller rating and the search result hang off. Sending the
+      // site they already clicked would undo the whole point of the history.
+      const waPlatform = decision.offer.includes('google') ? 'google' : decision.offer[0];
+      const reviewLink = reviewClickUrl(askId, waPlatform, destinations[waPlatform] || destinations.google);
 
       try {
         await transporter.sendMail({
@@ -188,7 +233,8 @@ export async function GET(request) {
         // ------------------------------------
 
         // Mark as sent. Recorded as 'google' so it is not counted against the
-        // Trustpilot monthly cap — these orders never touched Trustpilot.
+        // Trustpilot monthly cap — these orders never touched Trustpilot. The
+        // customer-level record was written before the send, by recordReviewAsk.
         await writeDroppingMissingColumns(
           { review_requested_at: new Date().toISOString(), review_platform: 'google' },
           ORDER_REVIEW_PLATFORM_COLUMNS,
