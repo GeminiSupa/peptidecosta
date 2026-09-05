@@ -14,6 +14,7 @@ import { getBusinessLinks } from '@/lib/settings';
 import { buildReviewRequestEmail, reviewDestinations } from '@/lib/reviewRequestEmail.mjs';
 import { writeDroppingMissingColumns, ORDER_REVIEW_PLATFORM_COLUMNS } from '@/lib/optionalColumns.mjs';
 import { decideForOrder, recordReviewAsk, reviewClickUrl } from '@/lib/reviewAskHistory.mjs';
+import { reviewRequestDelayDays } from '@/lib/reviewAskPolicy.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
@@ -35,8 +36,14 @@ export async function GET(request) {
     // Find completed orders that have not been asked for a review yet. The
     // orders table does not have updated_at, so we fetch candidates and derive
     // the completion date from activity_log, falling back to created_at.
-    const fiveDaysAgo = new Date();
-    fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+    //
+    // Two days, down from five (Omer, 2026-09-05): the order is still fresh in
+    // the customer's mind, and the Trustpilot half is on its own ~7-day delay
+    // anyway, so the two halves were never comparable. Configurable because
+    // this is exactly the sort of number that gets tuned by watching results.
+    const waitDays = reviewRequestDelayDays();
+    const eligibleBefore = new Date();
+    eligibleBefore.setDate(eligibleBefore.getDate() - waitDays);
 
     const { data: candidateOrders, error } = await supabase
       .from('orders')
@@ -51,7 +58,7 @@ export async function GET(request) {
     }
 
     const eligibleOrders = (candidateOrders || [])
-      .filter((order) => getReviewEligibilityDate(order) <= fiveDaysAgo)
+      .filter((order) => getReviewEligibilityDate(order) <= eligibleBefore)
       .slice(0, 50);
 
     if (!eligibleOrders || eligibleOrders.length === 0) {

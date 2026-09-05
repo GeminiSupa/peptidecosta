@@ -43,15 +43,16 @@ test('the gap is respected right up to its last day', () => {
   assert.equal(due.ask, true);
 });
 
-test('someone who ignored two asks is left alone for good', () => {
+test('someone who ignored three asks is left alone for good', () => {
   const history = [
+    { platforms: ['google', 'facebook'], asked_at: daysAgo(1200) },
     { platforms: ['google', 'facebook'], asked_at: daysAgo(800) },
     { platforms: ['google', 'facebook'], asked_at: daysAgo(400) },
   ];
   assert.equal(history.length, MAX_ASKS_WITHOUT_A_CLICK);
   const r = ask({ history });
   assert.equal(r.ask, false);
-  assert.match(r.reason, /ignored 2 asks/);
+  assert.match(r.reason, /ignored 3 asks/);
 });
 
 // ── a click earns the next site ──────────────────────────────────────────────
@@ -106,17 +107,19 @@ test('a Trustpilot ask does not count as ignored, since a click was invisible', 
   assert.match(r.reason, /unknowable/);
 });
 
-test('but that concession is granted only once', () => {
+test('after the Trustpilot concession the normal limit applies', () => {
   const history = [
-    { platforms: ['trustpilot'], asked_at: daysAgo(900) },
-    { platforms: ['google', 'facebook'], asked_at: daysAgo(600) },
+    { platforms: ['trustpilot'], asked_at: daysAgo(1200) },
+    { platforms: ['google', 'facebook'], asked_at: daysAgo(900) },
   ];
   const r = ask({ history });
-  assert.equal(r.ask, true, 'one ignored non-Trustpilot ask still allows the second');
-  const worse = ask({
-    history: [...history, { platforms: ['google', 'facebook'], asked_at: daysAgo(300) }],
-  });
-  assert.equal(worse.ask, false, 'two ignored asks ends it');
+  assert.equal(r.ask, true, 'one ignored non-Trustpilot ask still allows the next');
+
+  const three = [...history, { platforms: ['google', 'facebook'], asked_at: daysAgo(600) }];
+  assert.equal(ask({ history: three }).ask, true, 'and the third');
+
+  const four = [...three, { platforms: ['google', 'facebook'], asked_at: daysAgo(300) }];
+  assert.equal(ask({ history: four }).ask, false, 'three ignored asks ends it');
 });
 
 test('two Trustpilot asks still only earn one Google ask', () => {
@@ -210,4 +213,68 @@ test('a decision always names what it offers', () => {
     assert.ok(r.ask === true && r.offer.length > 0, 'an ask always carries at least one site');
     assert.ok(typeof r.reason === 'string' && r.reason.length > 0);
   }
+});
+
+test('the wait after an order is completed is 2 days, and configurable', async () => {
+  const { DEFAULT_REQUEST_DELAY_DAYS, reviewRequestDelayDays } = await import('../src/lib/reviewAskPolicy.mjs');
+  assert.equal(DEFAULT_REQUEST_DELAY_DAYS, 2);
+  assert.equal(reviewRequestDelayDays({}), 2);
+  assert.equal(reviewRequestDelayDays({ REVIEW_REQUEST_DELAY_DAYS: '5' }), 5);
+  assert.equal(reviewRequestDelayDays({ REVIEW_REQUEST_DELAY_DAYS: '0' }), 0);
+  // A nonsense or negative value must not turn into "ask everyone immediately".
+  assert.equal(reviewRequestDelayDays({ REVIEW_REQUEST_DELAY_DAYS: '-3' }), 2);
+  assert.equal(reviewRequestDelayDays({ REVIEW_REQUEST_DELAY_DAYS: 'soon' }), 2);
+});
+
+// ── the ignored-requests flag ────────────────────────────────────────────────
+
+test('three ignored requests flags the customer, two does not', async () => {
+  const { reviewIgnoreFlag } = await import('../src/lib/reviewAskPolicy.mjs');
+  const ig = (n) => Array.from({ length: n }, (_, i) => ({ platforms: ['google', 'facebook'], asked_at: daysAgo(900 - i * 200) }));
+
+  assert.equal(reviewIgnoreFlag(ig(1)).flagged, false);
+  assert.equal(reviewIgnoreFlag(ig(2)).flagged, false);
+  assert.equal(reviewIgnoreFlag(ig(3)).flagged, true);
+  assert.equal(reviewIgnoreFlag(ig(3)).ignored, 3);
+  assert.match(reviewIgnoreFlag(ig(3)).label, /Ignored 3 review requests/);
+});
+
+test('a customer who clicked is never flagged', async () => {
+  const { reviewIgnoreFlag } = await import('../src/lib/reviewAskPolicy.mjs');
+  const rows = [
+    { platforms: ['google', 'facebook'], asked_at: daysAgo(900) },
+    { platforms: ['google', 'facebook'], asked_at: daysAgo(600) },
+    { platforms: ['google', 'facebook'], clicked_platform: 'google', asked_at: daysAgo(300) },
+  ];
+  assert.equal(reviewIgnoreFlag(rows).flagged, false);
+  assert.equal(reviewIgnoreFlag(rows).ignored, 0);
+});
+
+test('Trustpilot asks do not count towards the flag', async () => {
+  const { reviewIgnoreFlag } = await import('../src/lib/reviewAskPolicy.mjs');
+  // Their click would have been invisible, so it is not evidence of ignoring.
+  const rows = [
+    { platforms: ['trustpilot'], asked_at: daysAgo(900) },
+    { platforms: ['trustpilot'], asked_at: daysAgo(600) },
+    { platforms: ['trustpilot'], asked_at: daysAgo(300) },
+  ];
+  assert.equal(reviewIgnoreFlag(rows).flagged, false);
+});
+
+test('the flag survives junk and empty history', async () => {
+  const { reviewIgnoreFlag } = await import('../src/lib/reviewAskPolicy.mjs');
+  for (const h of [[], null, undefined, [null, undefined]]) {
+    assert.equal(reviewIgnoreFlag(h).flagged, false);
+    assert.equal(reviewIgnoreFlag(h).label, '');
+  }
+});
+
+test('a third ask is now allowed before stopping', () => {
+  const two = [
+    { platforms: ['google', 'facebook'], asked_at: daysAgo(900) },
+    { platforms: ['google', 'facebook'], asked_at: daysAgo(400) },
+  ];
+  assert.equal(ask({ history: two }).ask, true, 'the third ask is allowed');
+  const three = [...two, { platforms: ['google', 'facebook'], asked_at: daysAgo(200) }];
+  assert.equal(ask({ history: three }).ask, false, 'the fourth is not');
 });

@@ -31,13 +31,66 @@ export const DEFAULT_REASK_AFTER_DAYS = 180;
 /**
  * Asks allowed to a customer who has never clicked anything.
  *
- * Two: the original, and one more after the gap. Someone who ignored two asks
- * has answered the question. Customers who DO click are not bound by this —
- * a click earns the next site, since it suggests the last one worked.
+ * Three (Omer, 2026-09-05): the original and two more, each a gap apart, so
+ * roughly one a year. Someone who ignored three has answered the question, and
+ * reaching that point flags them — see reviewIgnoreFlag. Customers who DO click
+ * are not bound by this: a click earns the next site, since it suggests the
+ * last ask worked.
  */
-export const MAX_ASKS_WITHOUT_A_CLICK = 2;
+export const MAX_ASKS_WITHOUT_A_CLICK = 3;
+
+/**
+ * Days to wait after an order is completed before asking for a review.
+ *
+ * Two, not five: the purchase is still fresh, and the Trustpilot half runs on
+ * Trustpilot's own delay regardless, so a longer wait here bought nothing.
+ * `REVIEW_REQUEST_DELAY_DAYS` overrides it; 0 means the next run after
+ * completion.
+ */
+export const DEFAULT_REQUEST_DELAY_DAYS = 2;
+
+/**
+ * @param {object} [env] - defaults to process.env
+ * @returns {number} days to wait, never negative
+ */
+export function reviewRequestDelayDays(env = process.env) {
+  const raw = String(env?.REVIEW_REQUEST_DELAY_DAYS ?? '').trim();
+  if (raw === '') return DEFAULT_REQUEST_DELAY_DAYS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_REQUEST_DELAY_DAYS;
+  return Math.round(parsed);
+}
 
 const days = (ms) => ms / 86400000;
+
+/**
+ * Whether this customer has ignored enough review requests to be flagged.
+ *
+ * Derived from the ask history rather than stored on the customer. There is no
+ * customers table to hang a flag on — a customer here is an email address that
+ * appears on orders — and a derived flag cannot drift out of step with the
+ * asks it describes. Trustpilot asks are excluded: a click on one of those was
+ * never visible to us, so counting it as ignored would be counting our own
+ * blind spot against the customer.
+ *
+ * @param {Array} history - the same rows decideReviewAsk takes
+ * @returns {{ignored: number, flagged: boolean, label: string}}
+ */
+export function reviewIgnoreFlag(history = []) {
+  const rows = Array.isArray(history) ? history.filter(Boolean) : [];
+  const everClicked = rows.some((h) => h.clicked_platform);
+  const ignored = everClicked
+    ? 0
+    : rows.filter((h) => !(Array.isArray(h.platforms) ? h.platforms : []).includes('trustpilot')).length;
+
+  return {
+    ignored,
+    flagged: ignored >= MAX_ASKS_WITHOUT_A_CLICK,
+    label: ignored >= MAX_ASKS_WITHOUT_A_CLICK
+      ? `Ignored ${ignored} review requests`
+      : '',
+  };
+}
 
 /** Same person, whatever they typed. Not a merge of separate addresses. */
 export function normaliseCustomerKey(email) {
