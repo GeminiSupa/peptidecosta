@@ -162,3 +162,17 @@ export const ORDER_MANUAL_DISCOUNT_COLUMNS = [
  * cannot be saved at all.
  */
 export const ORDER_VOLUME_DISCOUNT_COLUMNS = ['apply_volume_discount'];
+
+/**
+ * What add-review-platform.sql adds.
+ *
+ * Records which review site an order was asked for, so the month's Trustpilot
+ * invitations can be counted against the plan's cap. Without the migration the
+ * count falls back to every stamped order in the month, which over-counts and
+ * therefore sends more orders to Google — the safe direction, since the failure
+ * it exists to prevent is exceeding Trustpilot's allowance.
+ *
+ * It must never block the completion email: the customer's receipt matters more
+ * than the record of which site they were pointed at.
+ */
+export const ORDER_REVIEW_PLATFORM_COLUMNS = ['review_platform'];

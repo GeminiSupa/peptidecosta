@@ -100,3 +100,27 @@ test('the cron sends what the builder produced and nothing hardcoded', async () 
   assert.doesNotMatch(source, /customer-feedback/);
   assert.doesNotMatch(source, /Dejar una Reseña/);
 });
+
+test('the Google half of the split is never also sent to Trustpilot', () => {
+  // REVIEW_LINK_TRUSTPILOT is set in production, so the builder would happily
+  // add a Trustpilot line to this email. The cron drops it: an order only
+  // reaches the cron because the completion route assigned it to Google.
+  const withLink = reviewDestinations({}, {
+    REVIEW_LINK_TRUSTPILOT: 'https://www.trustpilot.com/evaluate/peptidescostarica.net',
+  });
+  assert.ok(withLink.trustpilot, 'guard: the builder would otherwise include it');
+
+  const asTheCronSends = { ...withLink, trustpilot: '' };
+  for (const lang of ['es', 'en']) {
+    const { html } = buildReviewRequestEmail({ customerName: 'Ana', lang, destinations: asTheCronSends });
+    assert.doesNotMatch(html, /trustpilot/i, `${lang} email must not mention Trustpilot`);
+    // The two it should carry are still there.
+    assert.ok(html.includes(withLink.google), `${lang} email keeps the Google link`);
+    assert.ok(html.includes(withLink.facebook), `${lang} email keeps the Facebook link`);
+  }
+});
+
+test('the cron strips the Trustpilot destination before building', async () => {
+  const source = await readFile(new URL('../src/app/api/cron/review-requests/route.js', import.meta.url), 'utf8');
+  assert.match(source, /trustpilot:\s*''/, 'the cron must blank the Trustpilot destination');
+});

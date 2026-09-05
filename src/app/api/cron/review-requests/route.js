@@ -12,6 +12,7 @@ import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 import { orderCompletedAtMs } from '@/lib/agentDashboard.mjs';
 import { getBusinessLinks } from '@/lib/settings';
 import { buildReviewRequestEmail, reviewDestinations } from '@/lib/reviewRequestEmail.mjs';
+import { writeDroppingMissingColumns, ORDER_REVIEW_PLATFORM_COLUMNS } from '@/lib/optionalColumns.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
@@ -81,7 +82,13 @@ export async function GET(request) {
     // Resolved once for the whole batch rather than per order: it is one read
     // of the same site_settings row the storefront review badges use, so a
     // profile changed in the admin CMS reaches this email too.
-    const destinations = reviewDestinations(await getBusinessLinks());
+    // The two halves of the split must not bleed into each other. Every order
+    // this cron reaches is, by construction, one the completion route left for
+    // Google — the Trustpilot half is stamped and filtered out above. So the
+    // Trustpilot link is dropped here even when REVIEW_LINK_TRUSTPILOT is set
+    // (it is, in production): a customer asked for Google should not be handed
+    // Trustpilot in the same breath, or the split stops being a split.
+    const destinations = { ...reviewDestinations(await getBusinessLinks()), trustpilot: '' };
 
     let trustpilotSentCount = 0;
     let emailSentCount = 0;
@@ -180,11 +187,13 @@ export async function GET(request) {
         }
         // ------------------------------------
 
-        // Mark as sent in DB
-        await supabase
-          .from('orders')
-          .update({ review_requested_at: new Date().toISOString() })
-          .eq('id', order.id);
+        // Mark as sent. Recorded as 'google' so it is not counted against the
+        // Trustpilot monthly cap — these orders never touched Trustpilot.
+        await writeDroppingMissingColumns(
+          { review_requested_at: new Date().toISOString(), review_platform: 'google' },
+          ORDER_REVIEW_PLATFORM_COLUMNS,
+          (row) => supabase.from('orders').update(row).eq('id', order.id),
+        );
 
         emailSentCount++;
       } catch (err) {

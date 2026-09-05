@@ -9,6 +9,8 @@ import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 import { orderEmailActivity, recordOrderEmails } from '@/lib/orderEmailLog.mjs';
 import { withBacGiftLines } from '@/lib/bacWater.mjs';
 import { CORREOS_TRACKING_URL, correosTrackingStrings, hasTrackingNumber } from '@/lib/correosTracking.mjs';
+import { pickReviewPlatform } from '@/lib/reviewPlatformSplit.mjs';
+import { writeDroppingMissingColumns, ORDER_REVIEW_PLATFORM_COLUMNS } from '@/lib/optionalColumns.mjs';
 
 // Read at request time, never at module scope.
 //
@@ -35,6 +37,47 @@ function getMailSettings() {
 // order-complete email and Trustpilot sends the customer a verified review
 // invitation (default 7-day delay, configured in the Trustpilot dashboard).
 const TRUSTPILOT_AFS_BCC = process.env.TRUSTPILOT_AFS_BCC || 'peptidescostarica.net+7777886f21@invite.trustpilot.com';
+
+/**
+ * How many Trustpilot invitations have gone out this calendar month.
+ *
+ * Counted against `review_platform`, which arrives via add-review-platform.sql.
+ * If that migration has not been run the column is missing and the query fails;
+ * the fallback counts every invitation stamped this month instead. That
+ * over-counts — Google-half orders are stamped too — which spends the allowance
+ * sooner and pushes more orders to Google. Wrong in the safe direction: the
+ * failure worth preventing is Trustpilot silently dropping invitations, not
+ * sending a few too few.
+ *
+ * Returns null when the count cannot be established at all, which the caller
+ * reads as "assume there is room" rather than blocking the receipt.
+ */
+async function countTrustpilotInvitesThisMonth(supabase) {
+  if (!supabase) return null;
+  const monthStart = new Date();
+  monthStart.setUTCDate(1);
+  monthStart.setUTCHours(0, 0, 0, 0);
+  const since = monthStart.toISOString();
+
+  try {
+    const exact = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('review_platform', 'trustpilot')
+      .gte('review_requested_at', since);
+    if (!exact.error) return exact.count ?? 0;
+
+    const fallback = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .not('review_requested_at', 'is', null)
+      .gte('review_requested_at', since);
+    if (!fallback.error) return fallback.count ?? 0;
+  } catch (err) {
+    console.error('[Order Shipped Notification] Trustpilot cap lookup failed:', err.message);
+  }
+  return null;
+}
 
 const escapeHtml = (value = '') => String(value)
   .replace(/&/g, '&amp;')
@@ -288,6 +331,20 @@ export async function POST(request) {
       }
     }
 
+    // One review site per customer, not both. An order in the Trustpilot half
+    // is BCC'd below and stamped as invited; an order in the Google half is
+    // deliberately left unstamped so the review-requests cron picks it up five
+    // days later with the Google/Facebook email. Stable per order number, so
+    // re-marking an order complete cannot move it into the other half and get
+    // the customer asked twice. Ratio: REVIEW_TRUSTPILOT_SHARE, default 50.
+    //
+    // The month's Trustpilot usage is counted first, because the plan caps how
+    // many invitations it will actually deliver; past the cap everyone goes to
+    // Google rather than being handed an invitation that never arrives.
+    const trustpilotThisMonth = await countTrustpilotInvitesThisMonth(supabase);
+    const reviewPlatform = pickReviewPlatform(order, process.env, { trustpilotThisMonth });
+    const useTrustpilot = reviewPlatform === 'trustpilot';
+
     // Trustpilot AFS structured data (read by Trustpilot from the BCC'd copy).
     // Not visible to the customer; gives Trustpilot the name, order ref, and language.
     const trustpilotSnippet = `
@@ -299,7 +356,7 @@ export async function POST(request) {
   "locale": ${JSON.stringify(orderLang === 'en' ? 'en-US' : 'es-ES')}
 }
 </script>`;
-    const customerHtmlWithTrustpilot = shouldSendCustomer && !alreadyInvited
+    const customerHtmlWithTrustpilot = shouldSendCustomer && !alreadyInvited && useTrustpilot
       ? customerHtml + trustpilotSnippet
       : customerHtml;
 
@@ -327,7 +384,7 @@ export async function POST(request) {
     // Customer-facing mail carries no internal BCC. Trustpilot stays: the AFS
     // invitation is triggered by that BCC'd copy, not by an internal watcher.
     const bccList = [
-      alreadyInvited ? null : TRUSTPILOT_AFS_BCC,
+      alreadyInvited || !useTrustpilot ? null : TRUSTPILOT_AFS_BCC,
     ].filter(Boolean);
 
     // The customer's receipt carries no accounting CC. This route is still the
@@ -379,11 +436,24 @@ export async function POST(request) {
     // Guarded on the send actually landing: the customer send no longer throws,
     // so without this a failed receipt would still be marked as invited and the
     // cron would never retry it.
-    if (customerInfo && !alreadyInvited && supabase) {
+    // Only the Trustpilot half is stamped here. Stamping the Google half too
+    // would close the very door the cron looks through, which is how the
+    // Google/Facebook email came to never send at all.
+    if (customerInfo && !alreadyInvited && useTrustpilot && supabase) {
       try {
-        let update = supabase.from('orders').update({ review_requested_at: new Date().toISOString() });
-        update = order.id ? update.eq('id', order.id) : update.eq('order_number', order.order_number);
-        await update;
+        // review_platform is what the monthly cap is counted against. It comes
+        // from a hand-run migration, so it is dropped rather than allowed to
+        // fail the stamp: losing the count is recoverable, losing the dedupe
+        // would re-invite the customer on the next resend.
+        await writeDroppingMissingColumns(
+          { review_requested_at: new Date().toISOString(), review_platform: 'trustpilot' },
+          ORDER_REVIEW_PLATFORM_COLUMNS,
+          (row) => {
+            let update = supabase.from('orders').update(row);
+            update = order.id ? update.eq('id', order.id) : update.eq('order_number', order.order_number);
+            return update;
+          },
+        );
       } catch (err) {
         console.error('[Order Shipped Notification] Failed to mark review_requested_at:', err.message);
       }
@@ -448,7 +518,8 @@ export async function POST(request) {
             error: customerError,
           },
       accountingCopy: taxCopy,
-      trustpilotInvited: Boolean(customerInfo) && !alreadyInvited,
+      trustpilotInvited: Boolean(customerInfo) && !alreadyInvited && useTrustpilot,
+      reviewPlatform,
       completionNotificationStatus: accountingOnly ? undefined : deliveryStatus,
       completionNotificationError: accountingOnly ? undefined : deliveryError,
       accountingOnly,
