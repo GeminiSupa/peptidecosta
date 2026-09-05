@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/adminApi';
+import SocialReviewResults from './SocialReviewResults';
 
 /**
  * The Social Reviews tab: how review requests are sent, editable without a
@@ -167,6 +168,10 @@ export default function SocialReviewsSettings() {
           </button>
         </div>
       </div>
+
+      {/* Results first: the settings below are worth changing only in response
+          to what the numbers say. */}
+      <SocialReviewResults />
 
       {/* ── When a request is sent ─────────────────────────────────────── */}
       <div style={card}>
