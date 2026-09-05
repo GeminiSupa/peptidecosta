@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/adminApi';
 import SocialReviewResults from './SocialReviewResults';
+import ReviewEmailEditor from './ReviewEmailEditor';
 
 /**
  * The Social Reviews tab: how review requests are sent, editable without a
@@ -273,6 +274,9 @@ export default function SocialReviewsSettings() {
           />
         </Field>
       </div>
+
+      {/* ── The email itself ───────────────────────────────────────────── */}
+      <ReviewEmailEditor settings={settings} onChange={set} />
 
       {/* ── Links ──────────────────────────────────────────────────────── */}
       <div style={card}>

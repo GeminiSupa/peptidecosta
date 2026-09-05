@@ -14,7 +14,7 @@ import { getBusinessLinks } from '@/lib/settings';
 import { buildReviewRequestEmail, reviewDestinations } from '@/lib/reviewRequestEmail.mjs';
 import { writeDroppingMissingColumns, ORDER_REVIEW_PLATFORM_COLUMNS } from '@/lib/optionalColumns.mjs';
 import { decideForOrder, recordReviewAsk, reviewClickUrl } from '@/lib/reviewAskHistory.mjs';
-import { getReviewSettings } from '@/lib/reviewSettings.mjs';
+import { getReviewSettings, reviewEmailTemplate } from '@/lib/reviewSettings.mjs';
 import { pickSocialPlatform } from '@/lib/reviewPlatformSplit.mjs';
 
 export const runtime = 'nodejs';
@@ -206,6 +206,7 @@ export async function GET(request) {
         customerName: order.customer_name,
         lang: isSpanish ? 'es' : 'en',
         destinations: offered,
+        template: reviewEmailTemplate(reviewSettings, isSpanish ? 'es' : 'en'),
       });
 
       // WhatsApp's approved template takes a single link, so it gets the first

@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getReviewSettings, saveReviewSettings } from '@/lib/reviewSettings.mjs';
 import { getBusinessLinks } from '@/lib/settings';
-import { reviewDestinations } from '@/lib/reviewRequestEmail.mjs';
+import { BUTTONS_PLACEHOLDER, reviewDestinations } from '@/lib/reviewRequestEmail.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -73,10 +73,25 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Expected a settings object' }, { status: 400 });
     }
 
+    const incoming = body.settings ?? body;
+
+    // Normalising would silently blank a body with no {{buttons}}, which is the
+    // safe thing to store but a terrible thing to do without saying so: someone
+    // would save a template, see it vanish, and not know why. Rejected with the
+    // reason instead.
+    for (const [field, label] of [['emailBodyEs', 'Spanish'], ['emailBodyEn', 'English']]) {
+      const value = String(incoming?.[field] ?? '').trim();
+      if (value && !value.includes(BUTTONS_PLACEHOLDER)) {
+        return NextResponse.json({
+          error: `The ${label} email must contain ${BUTTONS_PLACEHOLDER} somewhere — that is where the review buttons go. Without it the email would arrive with nothing to click.`,
+        }, { status: 422 });
+      }
+    }
+
     const supabase = getSupabaseAdmin();
     // saveReviewSettings normalises before writing, so the panel cannot store a
     // value the sending code would then have to defend itself against.
-    const settings = await saveReviewSettings(supabase, body.settings ?? body);
+    const settings = await saveReviewSettings(supabase, incoming);
 
     return NextResponse.json({ settings });
   } catch (err) {

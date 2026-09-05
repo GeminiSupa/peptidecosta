@@ -5,7 +5,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 import { getBusinessLinks } from '@/lib/settings';
 import { buildReviewRequestEmail, reviewDestinations } from '@/lib/reviewRequestEmail.mjs';
-import { getReviewSettings } from '@/lib/reviewSettings.mjs';
+import { getReviewSettings, reviewEmailTemplate } from '@/lib/reviewSettings.mjs';
 import { loadReviewAskHistory, recordReviewAsk, reviewClickUrl } from '@/lib/reviewAskHistory.mjs';
 import { TRACKABLE_PLATFORMS, decideReviewAsk } from '@/lib/reviewAskPolicy.mjs';
 import { writeDroppingMissingColumns, ORDER_REVIEW_PLATFORM_COLUMNS } from '@/lib/optionalColumns.mjs';
@@ -144,10 +144,12 @@ export async function POST(request) {
       trustpilot: '',
     };
 
+    const lang = order.currency === 'CRC' ? 'es' : 'en';
     const { subject, html } = buildReviewRequestEmail({
       customerName: order.customer_name,
-      lang: order.currency === 'CRC' ? 'es' : 'en',
+      lang,
       destinations: offered,
+      template: reviewEmailTemplate(settings, lang),
     });
 
     const transporter = nodemailer.createTransport({

@@ -18,6 +18,8 @@
  * the wrong people, or nobody.
  */
 
+import { BUTTONS_PLACEHOLDER } from './reviewRequestEmail.mjs';
+
 export const REVIEW_SETTINGS_ID = 'review_settings';
 
 /** Order statuses that make an order eligible to be asked for a review. */
@@ -47,6 +49,12 @@ export const DEFAULT_REVIEW_SETTINGS = {
   googleReviewUrl: '',
   facebookReviewUrl: '',
   trustpilotReviewUrl: '',
+  // The review email, per language. Blank means "use the built-in wording",
+  // which is the sane default and what every send used before this existed.
+  emailSubjectEs: '',
+  emailBodyEs: '',
+  emailSubjectEn: '',
+  emailBodyEn: '',
 };
 
 const trimmed = (value) => String(value ?? '').trim();
@@ -79,6 +87,20 @@ function safeUrl(value) {
   } catch {
     return '';
   }
+}
+
+/**
+ * A custom email body, or blank.
+ *
+ * A body with no {{buttons}} is rejected here rather than stored, because the
+ * result would be a review email with nothing to click — which looks like it
+ * sent perfectly. Blank falls back to the built-in wording, so rejecting is
+ * always safe.
+ */
+function emailBody(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  return raw.includes(BUTTONS_PLACEHOLDER) ? raw : '';
 }
 
 function statusList(value, fallback) {
@@ -132,7 +154,23 @@ export function normalizeReviewSettings(stored, env = process.env) {
     googleReviewUrl: safeUrl(pick(row.googleReviewUrl, env?.REVIEW_LINK_GOOGLE)),
     facebookReviewUrl: safeUrl(pick(row.facebookReviewUrl, env?.REVIEW_LINK_FACEBOOK)),
     trustpilotReviewUrl: safeUrl(pick(row.trustpilotReviewUrl, env?.REVIEW_LINK_TRUSTPILOT)),
+    emailSubjectEs: String(row.emailSubjectEs ?? '').trim(),
+    emailBodyEs: emailBody(row.emailBodyEs),
+    emailSubjectEn: String(row.emailSubjectEn ?? '').trim(),
+    emailBodyEn: emailBody(row.emailBodyEn),
   };
+}
+
+/**
+ * The template for one language, in the shape buildReviewRequestEmail wants.
+ *
+ * @param {object} settings - normalised settings
+ * @param {string} lang - 'es' | 'en'
+ */
+export function reviewEmailTemplate(settings, lang) {
+  return lang === 'en'
+    ? { subject: settings?.emailSubjectEn || '', body: settings?.emailBodyEn || '' }
+    : { subject: settings?.emailSubjectEs || '', body: settings?.emailBodyEs || '' };
 }
 
 /**

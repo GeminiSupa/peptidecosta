@@ -98,6 +98,33 @@ const COPY = {
 const LOGO_URL = 'https://catalog.peptidescostarica.net/logo.png?v=2';
 
 /**
+ * The one placeholder a custom body must contain.
+ *
+ * The review buttons cannot be written by hand: each carries a click-tracking
+ * URL with the ask id for that customer, generated at send time. A template
+ * without this would produce a review email with nothing to click, which looks
+ * like it worked.
+ */
+export const BUTTONS_PLACEHOLDER = '{{buttons}}';
+
+/** Placeholders a custom template may use. */
+export const TEMPLATE_PLACEHOLDERS = ['{{name}}', BUTTONS_PLACEHOLDER, '{{logo}}'];
+
+/**
+ * Fill the placeholders in a custom template.
+ *
+ * The name is escaped by the caller before it arrives; buttons and logo are our
+ * own markup. Unknown {{tokens}} are left exactly as typed rather than blanked,
+ * so a typo is visible in the preview instead of silently deleting a line.
+ */
+function renderTemplate(source, { name, buttons, logo }) {
+  return String(source)
+    .split('{{name}}').join(name)
+    .split(BUTTONS_PLACEHOLDER).join(buttons)
+    .split('{{logo}}').join(logo);
+}
+
+/**
  * Subject and HTML for one customer.
  *
  * Two buttons rather than one, stacked rather than side by side: side-by-side
@@ -107,7 +134,14 @@ const LOGO_URL = 'https://catalog.peptidescostarica.net/logo.png?v=2';
  * rating and the search result hang off — with Facebook the equal-weight second
  * ask rather than a hidden text link.
  */
-export function buildReviewRequestEmail({ customerName, lang = 'es', destinations = {} } = {}) {
+export function buildReviewRequestEmail({
+  customerName,
+  lang = 'es',
+  destinations = {},
+  // { subject, body } written in the Social Reviews tab. Either may be blank,
+  // in which case the built-in wording below is used for that half.
+  template = null,
+} = {}) {
   const copy = COPY[lang === 'en' ? 'en' : 'es'];
   const name = escapeHtml(trim(customerName));
 
@@ -123,18 +157,34 @@ export function buildReviewRequestEmail({ customerName, lang = 'es', destination
     ? `\n          <p style="margin:4px 0 0;font-size:13px;"><a href="${escapeHtml(destinations.trustpilot)}" target="_blank" rel="noopener noreferrer" style="color:#0f766e;">${escapeHtml(copy.trustpilot)}</a></p>`
     : '';
 
-  const html = `
+  const buttonBlock = `<div style="margin:22px 0;text-align:center;">${buttons}${trustpilot}
+          </div>`;
+
+  const builtIn = `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#333;">
           <img src="${LOGO_URL}" alt="Peptides Costa Rica" width="96" height="81" style="display:block;width:96px;height:81px;margin:0 auto 14px auto;border:0;outline:none;text-decoration:none;border-radius:10px;">
           <h2>${copy.heading}</h2>
           <p>${copy.greeting(name)}</p>
           <p>${copy.intro}</p>
           <p>${copy.ask}</p>
-          <div style="margin:22px 0;text-align:center;">${buttons}${trustpilot}
-          </div>
+          ${buttonBlock}
           <p>${copy.signoff}</p>
         </div>
       `;
 
-  return { subject: copy.subject, html };
+  const customBody = trim(template?.body);
+  // The buttons are rendered here, not by whoever wrote the template: they
+  // carry the click-tracking URL and the per-customer ask id, and the whole
+  // point of the email is that they are present and correct. The template only
+  // says where they go. A body without the placeholder is not used at all —
+  // see the guard in reviewSettings, which is what stops one being saved.
+  const html = customBody && customBody.includes(BUTTONS_PLACEHOLDER)
+    ? renderTemplate(customBody, { name, buttons: buttonBlock, logo: LOGO_URL })
+    : builtIn;
+
+  const customSubject = trim(template?.subject);
+  return {
+    subject: customSubject ? renderTemplate(customSubject, { name, buttons: '', logo: '' }) : copy.subject,
+    html,
+  };
 }
