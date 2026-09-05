@@ -14,12 +14,14 @@ import { getBusinessLinks } from '@/lib/settings';
 import { buildReviewRequestEmail, reviewDestinations } from '@/lib/reviewRequestEmail.mjs';
 import { writeDroppingMissingColumns, ORDER_REVIEW_PLATFORM_COLUMNS } from '@/lib/optionalColumns.mjs';
 import { decideForOrder, recordReviewAsk, reviewClickUrl } from '@/lib/reviewAskHistory.mjs';
-import { reviewRequestDelayDays } from '@/lib/reviewAskPolicy.mjs';
+import { getReviewSettings } from '@/lib/reviewSettings.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
-const COMPLETE_STATUSES = ['Order Complete', 'Completed'];
+// Which statuses qualify now comes from the Social Reviews settings; this is
+// only the shape of the default, kept for readers of this file.
+// See DEFAULT_TRIGGER_STATUSES in reviewSettings.mjs.
 
 function getReviewEligibilityDate(order) {
   const when = new Date(orderCompletedAtMs(order));
@@ -33,6 +35,10 @@ export async function GET(request) {
   try {
     const supabase = getSupabaseAdmin();
 
+    // Everything tunable comes from the Social Reviews settings, so changing
+    // the wait or which statuses qualify is a panel edit, not a deploy.
+    const reviewSettings = await getReviewSettings(supabase);
+
     // Find completed orders that have not been asked for a review yet. The
     // orders table does not have updated_at, so we fetch candidates and derive
     // the completion date from activity_log, falling back to created_at.
@@ -41,14 +47,13 @@ export async function GET(request) {
     // the customer's mind, and the Trustpilot half is on its own ~7-day delay
     // anyway, so the two halves were never comparable. Configurable because
     // this is exactly the sort of number that gets tuned by watching results.
-    const waitDays = reviewRequestDelayDays();
     const eligibleBefore = new Date();
-    eligibleBefore.setDate(eligibleBefore.getDate() - waitDays);
+    eligibleBefore.setDate(eligibleBefore.getDate() - reviewSettings.waitDays);
 
     const { data: candidateOrders, error } = await supabase
       .from('orders')
       .select('id, order_number, customer_email, customer_name, customer_phone, currency, payment_method, total_usd, total_crc, created_at, activity_log')
-      .in('status', COMPLETE_STATUSES)
+      .in('status', reviewSettings.triggerStatuses)
       .is('review_requested_at', null)
       .order('created_at', { ascending: true })
       .limit(100); // Process in batches to avoid timeouts
@@ -96,7 +101,18 @@ export async function GET(request) {
     // Trustpilot link is dropped here even when REVIEW_LINK_TRUSTPILOT is set
     // (it is, in production): a customer asked for Google should not be handed
     // Trustpilot in the same breath, or the split stops being a split.
-    const destinations = { ...reviewDestinations(await getBusinessLinks()), trustpilot: '' };
+    // A link set in the Social Reviews panel outranks the site's business
+    // links, which is why it is layered in as if it were the env override —
+    // reviewDestinations already resolves that precedence, so it is not
+    // reimplemented here.
+    const destinations = {
+      ...reviewDestinations(await getBusinessLinks(), {
+        ...process.env,
+        REVIEW_LINK_GOOGLE: reviewSettings.googleReviewUrl || process.env.REVIEW_LINK_GOOGLE,
+        REVIEW_LINK_FACEBOOK: reviewSettings.facebookReviewUrl || process.env.REVIEW_LINK_FACEBOOK,
+      }),
+      trustpilot: '',
+    };
 
     let trustpilotSentCount = 0;
     let emailSentCount = 0;
@@ -143,6 +159,10 @@ export async function GET(request) {
       const decision = await decideForOrder(supabase, order, {
         firstChoice: 'google',
         trustpilotHasRoom: false, // this cron only ever sends the Google/Facebook email
+        policy: {
+          reaskAfterDays: reviewSettings.reaskAfterDays,
+          maxAsksWithoutClick: reviewSettings.maxAsksWithoutClick,
+        },
       });
 
       if (!decision.ask) {

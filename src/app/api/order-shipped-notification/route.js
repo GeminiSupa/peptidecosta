@@ -9,7 +9,8 @@ import { getTransactionalSmtpConfig } from '@/lib/transactionalSmtp';
 import { orderEmailActivity, recordOrderEmails } from '@/lib/orderEmailLog.mjs';
 import { withBacGiftLines } from '@/lib/bacWater.mjs';
 import { CORREOS_TRACKING_URL, correosTrackingStrings, hasTrackingNumber } from '@/lib/correosTracking.mjs';
-import { pickReviewPlatform, trustpilotMonthlyCap } from '@/lib/reviewPlatformSplit.mjs';
+import { pickReviewPlatform } from '@/lib/reviewPlatformSplit.mjs';
+import { getReviewSettings } from '@/lib/reviewSettings.mjs';
 import { decideForOrder, recordReviewAsk } from '@/lib/reviewAskHistory.mjs';
 import { writeDroppingMissingColumns, ORDER_REVIEW_PLATFORM_COLUMNS } from '@/lib/optionalColumns.mjs';
 
@@ -347,13 +348,31 @@ export async function POST(request) {
     // asked again on a later order, and someone who clicked is offered a site
     // they have not used. The split and the cap only choose for a customer with
     // no history at all.
+    const reviewSettings = await getReviewSettings(supabase);
     const trustpilotThisMonth = await countTrustpilotInvitesThisMonth(supabase);
-    const cap = trustpilotMonthlyCap(process.env);
-    const trustpilotHasRoom = !Number.isFinite(trustpilotThisMonth) || trustpilotThisMonth < cap;
-    const firstChoice = pickReviewPlatform(order, process.env, { trustpilotThisMonth });
+    const trustpilotHasRoom = !Number.isFinite(trustpilotThisMonth)
+      || trustpilotThisMonth < reviewSettings.trustpilotMonthlyCap;
+
+    // The split and the cap are panel settings, so they are handed to
+    // pickReviewPlatform as its environment rather than read from process.env.
+    const firstChoice = pickReviewPlatform(
+      order,
+      {
+        REVIEW_TRUSTPILOT_SHARE: String(reviewSettings.trustpilotSharePct),
+        REVIEW_TRUSTPILOT_MONTHLY_CAP: String(reviewSettings.trustpilotMonthlyCap),
+      },
+      { trustpilotThisMonth },
+    );
 
     const reviewDecision = hasCustomerEmail
-      ? await decideForOrder(supabase, order, { firstChoice, trustpilotHasRoom })
+      ? await decideForOrder(supabase, order, {
+        firstChoice,
+        trustpilotHasRoom,
+        policy: {
+          reaskAfterDays: reviewSettings.reaskAfterDays,
+          maxAsksWithoutClick: reviewSettings.maxAsksWithoutClick,
+        },
+      })
       : { ask: false, platform: null, offer: [], reason: 'no customer email' };
 
     const reviewPlatform = reviewDecision.platform;

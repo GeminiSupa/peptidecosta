@@ -99,7 +99,10 @@ test('a customer name cannot break the email or inject markup', () => {
 test('the cron sends what the builder produced and nothing hardcoded', async () => {
   const source = await readFile(new URL('../src/app/api/cron/review-requests/route.js', import.meta.url), 'utf8');
   assert.match(source, /buildReviewRequestEmail\(/);
-  assert.match(source, /reviewDestinations\(await getBusinessLinks\(\)\)/);
+  // The destinations come from the builder over the site's business links,
+  // layered with the Social Reviews settings — never a URL typed in this file.
+  assert.match(source, /reviewDestinations\(await getBusinessLinks\(\)/);
+  assert.doesNotMatch(source, /https:\/\/(g\.page|maps\.app\.goo\.gl|www\.facebook\.com)/);
   // The dead-end fallback and both inline HTML bodies are gone.
   assert.doesNotMatch(source, /customer-feedback/);
   assert.doesNotMatch(source, /Dejar una Reseña/);

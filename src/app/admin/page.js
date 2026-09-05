@@ -12,6 +12,7 @@ import 'jspdf-autotable';
 import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
+import SocialReviewsSettings from '@/components/admin/SocialReviewsSettings';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { getWhatsAppMessageSource } from '@/lib/whatsappMessageLog';
 import { APPROVED_WHATSAPP_AGENT_TEMPLATES } from '@/lib/whatsappTemplates.mjs';
@@ -1169,6 +1170,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [sharePresets, setSharePresets] = useState(() => readSharePresets());
   const [sharePresetSaved, setSharePresetSaved] = useState(false);
   const [reviewStatusFilter, setReviewStatusFilter] = useState('Pending');
+  // 'product' = the testimonials to moderate, 'social' = how requests are sent.
+  const [reviewsSubTab, setReviewsSubTab] = useState('product');
   const [reviewProductFilter, setReviewProductFilter] = useState('all');
   const [reviewModerationReasons, setReviewModerationReasons] = useState({});
 
@@ -5707,7 +5710,37 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         )}
 
         
+        {/* Two different jobs under one tab: moderating the testimonials
+            customers wrote, and configuring the requests we send out. */}
         {activeTab === 'reviews' && (
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+            {[
+              { id: 'product', label: 'Product Reviews' },
+              { id: 'social', label: 'Social Reviews' },
+            ].map((sub) => (
+              <button
+                key={sub.id}
+                type="button"
+                onClick={() => setReviewsSubTab(sub.id)}
+                style={{
+                  padding: '8px 18px', borderRadius: '999px', fontSize: '0.88rem', fontWeight: 700,
+                  cursor: 'pointer',
+                  background: reviewsSubTab === sub.id ? 'rgba(56, 189, 248, 0.14)' : 'rgba(148,163,184,0.08)',
+                  border: `1px solid ${reviewsSubTab === sub.id ? 'rgba(56,189,248,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                  color: reviewsSubTab === sub.id ? '#38bdf8' : '#94a3b8',
+                }}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {activeTab === 'reviews' && reviewsSubTab === 'social' && (
+          <SocialReviewsSettings />
+        )}
+
+        {activeTab === 'reviews' && reviewsSubTab === 'product' && (
           loadingReviews ? (
             <div style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '12px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)', textAlign: 'center', marginTop: '20px' }}>
               <div className="sync-spinner" style={{ color: '#fbbf24', marginBottom: '15px' }}><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></div>

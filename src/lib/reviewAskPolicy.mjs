@@ -124,6 +124,11 @@ export function decideReviewAsk({
   trustpilotHasRoom = true,
   now = Date.now(),
   env = process.env,
+  // Resolved Social Reviews settings, when the caller has them. Passing them
+  // beats reading the environment here, so a change in the admin panel takes
+  // effect without a deploy. Absent, the environment and defaults still apply,
+  // which is what keeps the unit tests honest about the fallback path.
+  policy = null,
 } = {}) {
   const nowMs = now instanceof Date ? now.getTime() : Number(now);
   const asks = (Array.isArray(history) ? history : [])
@@ -148,7 +153,7 @@ export function decideReviewAsk({
   // Never two asks close together, whatever else is true. This is the guard
   // that stops a customer who orders weekly from being asked weekly.
   const last = asks[asks.length - 1];
-  const gap = reaskAfterDays(env);
+  const gap = Number.isFinite(policy?.reaskAfterDays) ? policy.reaskAfterDays : reaskAfterDays(env);
   if (days(nowMs - last.askedMs) < gap) {
     return no(`asked ${Math.floor(days(nowMs - last.askedMs))}d ago, under the ${gap}d gap`);
   }
@@ -179,7 +184,10 @@ export function decideReviewAsk({
     return { ask: true, platform: 'google', offer: [...TRACKABLE_PLATFORMS], reason: 'Trustpilot result unknowable, one ask on a site we can see' };
   }
 
-  if (nonTrustpilotAsks >= MAX_ASKS_WITHOUT_A_CLICK) {
+  const maxAsks = Number.isFinite(policy?.maxAsksWithoutClick)
+    ? policy.maxAsksWithoutClick
+    : MAX_ASKS_WITHOUT_A_CLICK;
+  if (nonTrustpilotAsks >= maxAsks) {
     return no(`ignored ${nonTrustpilotAsks} asks`);
   }
 
