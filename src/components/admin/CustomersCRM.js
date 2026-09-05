@@ -3,7 +3,7 @@ import {
   Users, User, Mail, MessageCircle, DollarSign, Calendar,
   ArrowDownUp, BadgeCheck, Search, Upload, Crown, Phone, MapPin, ShoppingBag,
   Sparkles, Brain, Edit2, Save, Send, X, History, Clock, ClipboardList,
-  Activity, CheckCircle2, Copy, AlertTriangle, Target
+  Activity, CheckCircle2, Copy, AlertTriangle, Target, Trash2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -560,6 +560,32 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
       alert("Failed to save customer data. Please try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteCustomer = async (cust) => {
+    if (!window.confirm(`Are you absolutely sure you want to permanently delete ${cust.name}? This will remove all their orders, carts, and lead history and cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      const res = await adminFetch('/api/admin/crm/customer/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cust.email,
+          phone: cust.phone,
+          name: cust.name
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete customer');
+      
+      // Reload page to reflect deletion across all tabs
+      window.location.reload();
+    } catch (err) {
+      console.error("Delete customer error:", err);
+      alert(err.message);
     }
   };
 
@@ -1815,6 +1841,9 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
                             <Mail size={13} />
                           </a>
                         )}
+                        <button className="crm-icon-btn delete" onClick={() => handleDeleteCustomer(cust)} title="Delete Customer" style={{ color: '#ef4444' }}>
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     </td>
                   </tr>

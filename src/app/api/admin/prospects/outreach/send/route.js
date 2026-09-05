@@ -16,7 +16,7 @@ import {
 import { PROSPECT_OUTREACH_FIELDS, resolveBookingUrl } from '@/lib/prospectOutreachServer';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+import { LIVE_SITE_URL } from '@/lib/publicUrl';
 
 const escapeHtml = (value) => String(value ?? '')
   .replaceAll('&', '&amp;')
@@ -24,21 +24,29 @@ const escapeHtml = (value) => String(value ?? '')
   .replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;');
 
-function linkify(text) {
+function linkify(text, prospectId) {
   return escapeHtml(text).replace(
     /(https?:\/\/[^\s<]+)/g,
-    (url) => `<a href="${url}" style="color:#2563eb">${url}</a>`,
+    (url) => {
+      const trackingUrl = prospectId 
+        ? `${LIVE_SITE_URL || 'https://peptidescostarica.net'}/api/tracking/click?url=${encodeURIComponent(url)}&p=${encodeURIComponent(prospectId)}` 
+        : url;
+      return `<a href="${trackingUrl}" style="color:#2563eb">${url}</a>`;
+    },
   );
 }
 
-function emailHtml(body, disclosure) {
+function emailHtml(body, disclosure, prospectId) {
   const paragraphs = body.split(/\n{2,}/).map((block) => (
-    `<p style="margin:0 0 14px">${linkify(block).replaceAll('\n', '<br />')}</p>`
+    `<p style="margin:0 0 14px">${linkify(block, prospectId).replaceAll('\n', '<br />')}</p>`
   )).join('');
+
+  const pixel = prospectId ? `<img src="${LIVE_SITE_URL || 'https://peptidescostarica.net'}/api/tracking/pixel?p=${encodeURIComponent(prospectId)}" width="1" height="1" alt="" style="display:none;" />` : '';
 
   return `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#0f172a">
 ${paragraphs}
 <p style="margin:22px 0 0;padding-top:14px;border-top:1px solid #e2e8f0;font-size:12px;color:#64748b">${escapeHtml(disclosure)}</p>
+${pixel}
 </div>`;
 }
 
@@ -174,7 +182,7 @@ export async function POST(request) {
           to: permission.identity,
           subject: baseLog.subject,
           text: `${messageBody}\n\n—\n${disclosure}`,
-          html: emailHtml(messageBody, disclosure),
+          html: emailHtml(messageBody, disclosure, prospect.id),
         });
         providerId = info?.messageId || null;
       } catch (sendError) {

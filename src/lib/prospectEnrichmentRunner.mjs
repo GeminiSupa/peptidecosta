@@ -346,6 +346,7 @@ export function enrichmentUpdates(payload = {}, target = {}) {
     whatsapp_permission_source_url: whatsappRaised ? payload.whatsappPermissionSourceUrl : target.whatsapp_permission_source_url || null,
     whatsapp_permission_evidence: whatsappRaised ? payload.whatsappPermissionEvidence : target.whatsapp_permission_evidence || null,
     contact_source_url: payload.sourceUrl || target.contact_source_url || null,
+    social_profiles: payload.socialProfiles?.length ? payload.socialProfiles : target.social_profiles || [],
     enriched_at: new Date().toISOString(),
   };
 }

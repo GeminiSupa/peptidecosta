@@ -37,6 +37,22 @@ export async function GET(request) {
     }
   }
 
+  const prospect_id = url.searchParams.get('p');
+  if (prospect_id) {
+    try {
+      const user_agent = request.headers.get('user-agent') || 'unknown';
+      const supabaseAdmin = getSupabaseAdmin();
+      supabaseAdmin
+        .from('prospect_activity_logs')
+        .insert([{ prospect_id, activity_type: 'link_clicked', activity_details: { url: target_url, user_agent } }])
+        .then(({ error }) => {
+          if (error) console.error('[Link Tracking] Log failed:', error.message);
+        });
+    } catch (err) {
+      console.error('Error processing prospect click:', err);
+    }
+  }
+
   // Redirect to the actual destination
   return NextResponse.redirect(destination.toString());
 }
