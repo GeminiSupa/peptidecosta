@@ -7,6 +7,7 @@ import { formatCrInstant } from '@/lib/crTime.mjs';
 import { adminFetch } from '@/lib/adminApi';
 import { confirmCustomerEmail } from '@/lib/confirmCustomerEmail.mjs';
 import ProductCombobox from './ProductCombobox';
+import AskForReviewButton from './AskForReviewButton';
 import { isAgentReferralSource, isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import { bacGiftShortfall } from '@/lib/bacWater.mjs';
 import { formatAmount as formatRefundMoney, orderCanBeRefunded } from '@/lib/orderRefund.mjs';
@@ -935,6 +936,23 @@ export default function OrderDetailPanel({
                 )}
               </span>
             </div>
+            {/* Only on a completed order. Asking someone to review a purchase
+                that has not arrived reads as though nobody is paying
+                attention, and the automatic request has the same rule. */}
+            {['Completed', 'Order Complete'].includes(order.status) && (
+              <div>
+                <label>Review request</label>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 7, alignItems: 'flex-start' }}>
+                  <AskForReviewButton
+                    order={order}
+                    onDone={() => onUpdated?.({ ...order, review_requested_at: new Date().toISOString() })}
+                  />
+                  {!order.customer_email && (
+                    <small style={{ color: '#94a3b8' }}>No email address on this order.</small>
+                  )}
+                </span>
+              </div>
+            )}
             {['Completed', 'Order Complete'].includes(order.status) && (
               <div>
                 <label>Completion email</label>

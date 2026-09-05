@@ -358,7 +358,7 @@ export async function POST(request) {
     const firstChoice = pickReviewPlatform(
       order,
       {
-        REVIEW_TRUSTPILOT_SHARE: String(reviewSettings.trustpilotSharePct),
+        REVIEW_GOOGLE_SHARE: String(reviewSettings.googleSharePct),
         REVIEW_TRUSTPILOT_MONTHLY_CAP: String(reviewSettings.trustpilotMonthlyCap),
       },
       { trustpilotThisMonth },

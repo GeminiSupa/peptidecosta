@@ -15,6 +15,7 @@ import { buildReviewRequestEmail, reviewDestinations } from '@/lib/reviewRequest
 import { writeDroppingMissingColumns, ORDER_REVIEW_PLATFORM_COLUMNS } from '@/lib/optionalColumns.mjs';
 import { decideForOrder, recordReviewAsk, reviewClickUrl } from '@/lib/reviewAskHistory.mjs';
 import { getReviewSettings } from '@/lib/reviewSettings.mjs';
+import { pickSocialPlatform } from '@/lib/reviewPlatformSplit.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
@@ -157,8 +158,10 @@ export async function GET(request) {
       // ordered twice that week, or clicked a button from an earlier email in
       // the meantime. `offer` is the sites they have not already used.
       const decision = await decideForOrder(supabase, order, {
-        firstChoice: 'google',
-        trustpilotHasRoom: false, // this cron only ever sends the Google/Facebook email
+        // Google or Facebook by the configured ratio; Trustpilot is not on the
+        // table here, it is delivered by the BCC on the completion email.
+        firstChoice: pickSocialPlatform(order, { REVIEW_GOOGLE_SHARE: String(reviewSettings.googleSharePct) }),
+        trustpilotHasRoom: false,
         policy: {
           reaskAfterDays: reviewSettings.reaskAfterDays,
           maxAsksWithoutClick: reviewSettings.maxAsksWithoutClick,

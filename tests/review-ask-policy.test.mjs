@@ -13,14 +13,18 @@ const ask = (over) => decideReviewAsk({ now: NOW, env: {}, ...over });
 
 // ── the ordinary path ────────────────────────────────────────────────────────
 
-test('a brand new customer is asked, following the split', () => {
+test('a brand new customer is asked for exactly one site', () => {
   assert.deepEqual(
     ask({ history: [], firstChoice: 'trustpilot' }),
     { ask: true, platform: 'trustpilot', offer: ['trustpilot'], reason: 'first ask' },
   );
   const g = ask({ history: [], firstChoice: 'google' });
   assert.equal(g.platform, 'google');
-  assert.deepEqual(g.offer, ['google', 'facebook']);
+  assert.deepEqual(g.offer, ['google'], 'one site, not both');
+
+  const f = ask({ history: [], firstChoice: 'facebook' });
+  assert.equal(f.platform, 'facebook');
+  assert.deepEqual(f.offer, ['facebook']);
 });
 
 test('a full Trustpilot month sends a new customer to Google instead', () => {

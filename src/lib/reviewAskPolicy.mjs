@@ -143,11 +143,14 @@ export function decideReviewAsk({
 
   const no = (reason) => ({ ask: false, platform: null, offer: [], reason });
 
-  // A customer nobody has asked yet: the split and the cap decide.
+  // A customer nobody has asked yet: the cap and the ratio decide, and they
+  // get exactly one site.
   if (asks.length === 0) {
-    return firstChoice === 'trustpilot' && trustpilotHasRoom
-      ? { ask: true, platform: 'trustpilot', offer: ['trustpilot'], reason: 'first ask' }
-      : { ask: true, platform: 'google', offer: [...TRACKABLE_PLATFORMS], reason: 'first ask' };
+    if (firstChoice === 'trustpilot' && trustpilotHasRoom) {
+      return { ask: true, platform: 'trustpilot', offer: ['trustpilot'], reason: 'first ask' };
+    }
+    const site = TRACKABLE_PLATFORMS.includes(firstChoice) ? firstChoice : 'google';
+    return { ask: true, platform: site, offer: [site], reason: 'first ask' };
   }
 
   // Never two asks close together, whatever else is true. This is the guard
@@ -164,9 +167,11 @@ export function decideReviewAsk({
 
   if (clicked.size > 0) {
     // They engaged, so they are worth asking again — but only about a site they
-    // have not already been to.
+    // have not already been to. Still one site: the ratio's preference first
+    // when both are still open.
     if (remaining.length > 0) {
-      return { ask: true, platform: 'google', offer: remaining, reason: `clicked ${[...clicked].join('+')}, offering what is left` };
+      const site = remaining.includes(firstChoice) ? firstChoice : remaining[0];
+      return { ask: true, platform: site, offer: [site], reason: `clicked ${[...clicked].join('+')}, offering ${site}` };
     }
     if (!askedTrustpilot && trustpilotHasRoom) {
       return { ask: true, platform: 'trustpilot', offer: ['trustpilot'], reason: 'clicked every trackable site, Trustpilot left' };
@@ -180,8 +185,9 @@ export function decideReviewAsk({
   // their click would have been invisible to us. So it does not count towards
   // the ignored-ask limit, and they get one Google/Facebook ask instead.
   const nonTrustpilotAsks = asks.filter((a) => !a.platforms.includes('trustpilot')).length;
+  const preferred = TRACKABLE_PLATFORMS.includes(firstChoice) ? firstChoice : 'google';
   if (askedTrustpilot && nonTrustpilotAsks === 0) {
-    return { ask: true, platform: 'google', offer: [...TRACKABLE_PLATFORMS], reason: 'Trustpilot result unknowable, one ask on a site we can see' };
+    return { ask: true, platform: preferred, offer: [preferred], reason: 'Trustpilot result unknowable, one ask on a site we can see' };
   }
 
   const maxAsks = Number.isFinite(policy?.maxAsksWithoutClick)
@@ -191,5 +197,6 @@ export function decideReviewAsk({
     return no(`ignored ${nonTrustpilotAsks} asks`);
   }
 
-  return { ask: true, platform: 'google', offer: remaining.length ? remaining : [...TRACKABLE_PLATFORMS], reason: 'one more ask after the gap' };
+  const next = remaining.includes(preferred) ? preferred : (remaining[0] || preferred);
+  return { ask: true, platform: next, offer: [next], reason: 'one more ask after the gap' };
 }

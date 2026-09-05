@@ -17,15 +17,14 @@ import { adminFetch } from '@/lib/adminApi';
  * and reflected back, rather than accepted and quietly misbehaving later.
  */
 
-/** Statuses an order can be in. Multi-select: asking on "Shipped" is legitimate. */
-const ORDER_STATUSES = [
-  'Order Complete',
-  'Completed',
-  'Shipped',
-  'Processing',
-  'Paid',
-  'Pending',
-];
+/**
+ * Fallback list, used only if the statuses cannot be read from the orders.
+ *
+ * The real list comes from the API, counted off the orders themselves. A
+ * hardcoded one drifts: the first version of this screen offered "Shipped" and
+ * "Completed", and no order in the database has ever had either.
+ */
+const FALLBACK_STATUSES = [{ status: 'Order Complete', orders: null }];
 
 const card = {
   background: '#0e1626',
@@ -70,6 +69,8 @@ function Field({ title, help, children }) {
 export default function SocialReviewsSettings() {
   const [settings, setSettings] = useState(null);
   const [effectiveLinks, setEffectiveLinks] = useState({});
+  // Read off the orders themselves, with how many carry each status.
+  const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // Plain language, shown next to the button. Never an alert().
@@ -83,6 +84,7 @@ export default function SocialReviewsSettings() {
       if (!res.ok) throw new Error(data?.error || 'Could not load the review settings');
       setSettings(data.settings);
       setEffectiveLinks(data.effectiveLinks || {});
+      setStatuses(data.availableStatuses || []);
       setNotice(null);
     } catch (err) {
       setNotice({ tone: 'error', text: `Could not load the settings: ${err.message}` });
@@ -138,7 +140,7 @@ export default function SocialReviewsSettings() {
     );
   }
 
-  const googleShare = 100 - settings.trustpilotSharePct;
+  const facebookShare = 100 - settings.googleSharePct;
 
   return (
     <div className="admin-orders-tab">
@@ -175,13 +177,14 @@ export default function SocialReviewsSettings() {
           help="An order is only asked about once it reaches one of these. Most shops use Order Complete."
         >
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {ORDER_STATUSES.map((status) => {
+            {(statuses.length ? statuses : FALLBACK_STATUSES).map(({ status, orders }) => {
               const on = (settings.triggerStatuses || []).includes(status);
               return (
                 <button
                   key={status}
                   type="button"
                   onClick={() => toggleStatus(status)}
+                  title={orders === null ? undefined : `${orders} order${orders === 1 ? '' : 's'} currently have this status`}
                   style={{
                     padding: '7px 14px', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600,
                     cursor: 'pointer',
@@ -191,6 +194,9 @@ export default function SocialReviewsSettings() {
                   }}
                 >
                   {on ? '✓ ' : ''}{status}
+                  {orders !== null && (
+                    <span style={{ opacity: 0.6, fontWeight: 400, marginLeft: 6 }}>{orders}</span>
+                  )}
                 </button>
               );
             })}
@@ -236,24 +242,24 @@ export default function SocialReviewsSettings() {
         <h3 style={{ color: '#f8fafc', fontSize: '1rem', margin: '0 0 16px' }}>Which site they are asked for</h3>
 
         <Field
-          title={`Split: ${settings.trustpilotSharePct}% Trustpilot, ${googleShare}% Google + Facebook`}
-          help="Each customer is asked for one site only, never both. New customers are divided by this ratio."
+          title={`Google ${settings.googleSharePct}% · Facebook ${facebookShare}%`}
+          help="Each customer is asked for one site only. This divides the customers who are not going to Trustpilot. Trustpilot has no share of its own — its monthly limit below decides how many it takes, and Google and Facebook have no limit."
         >
           <input
             type="range" min="0" max="100" step="5"
-            value={settings.trustpilotSharePct}
-            onChange={(e) => set('trustpilotSharePct', Number(e.target.value))}
+            value={settings.googleSharePct}
+            onChange={(e) => set('googleSharePct', Number(e.target.value))}
             style={{ width: '100%' }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b', marginTop: '4px' }}>
-            <span>All Google + Facebook</span>
-            <span>All Trustpilot</span>
+            <span>All Facebook</span>
+            <span>All Google</span>
           </div>
         </Field>
 
         <Field
           title="Trustpilot invitations per month"
-          help="Trustpilot's plan caps how many invitations it will deliver. Past this number everyone goes to Google and Facebook instead, and it resets on the 1st. Set 0 to stop using Trustpilot."
+          help="Trustpilot's plan caps how many invitations it will deliver. It takes orders while the month's allowance lasts; after that everyone goes to Google or Facebook, and it resets on the 1st. Set 0 to stop using Trustpilot."
         >
           <input
             type="number" min="0" style={input}

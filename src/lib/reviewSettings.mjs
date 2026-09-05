@@ -33,8 +33,14 @@ export const DEFAULT_REVIEW_SETTINGS = {
   reaskAfterDays: 180,
   // Asks allowed to someone who never clicks, after which they are flagged.
   maxAsksWithoutClick: 3,
-  // Share of new customers sent to Trustpilot rather than Google/Facebook.
-  trustpilotSharePct: 50,
+  // How the customers who are NOT going to Trustpilot divide between Google
+  // and Facebook. 70 means 70% Google, 30% Facebook.
+  //
+  // There is no Trustpilot share, because Trustpilot is not competing for
+  // volume: its plan caps it, and once the cap is spent it is out of the
+  // running for the month whatever a ratio said. Google and Facebook have no
+  // limit, so the only real question is how to divide between those two.
+  googleSharePct: 50,
   // Hard ceiling on Trustpilot invitations per calendar month.
   trustpilotMonthlyCap: 50,
   // Blank means "use the site's configured business links".
@@ -117,8 +123,8 @@ export function normalizeReviewSettings(stored, env = process.env) {
     maxAsksWithoutClick: boundedInt(pick(row.maxAsksWithoutClick, env?.REVIEW_MAX_ASKS), {
       min: 1, max: 10, fallback: d.maxAsksWithoutClick,
     }),
-    trustpilotSharePct: boundedInt(pick(row.trustpilotSharePct, env?.REVIEW_TRUSTPILOT_SHARE), {
-      min: 0, max: 100, fallback: d.trustpilotSharePct,
+    googleSharePct: boundedInt(pick(row.googleSharePct, env?.REVIEW_GOOGLE_SHARE), {
+      min: 0, max: 100, fallback: d.googleSharePct,
     }),
     trustpilotMonthlyCap: boundedInt(pick(row.trustpilotMonthlyCap, env?.REVIEW_TRUSTPILOT_MONTHLY_CAP), {
       min: 0, fallback: d.trustpilotMonthlyCap,

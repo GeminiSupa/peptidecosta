@@ -12,8 +12,8 @@ test('nothing saved and nothing in the environment gives the defaults', () => {
 });
 
 test('the saved row wins over the environment', () => {
-  const s = norm({ trustpilotSharePct: 70 }, { REVIEW_TRUSTPILOT_SHARE: '20' });
-  assert.equal(s.trustpilotSharePct, 70);
+  const s = norm({ googleSharePct: 70 }, { REVIEW_GOOGLE_SHARE: '20' });
+  assert.equal(s.googleSharePct, 70);
 });
 
 test('an environment variable still applies where the row says nothing', () => {
@@ -25,8 +25,8 @@ test('an environment variable still applies where the row says nothing', () => {
 });
 
 test('numbers are clamped to something sane', () => {
-  assert.equal(norm({ trustpilotSharePct: 150 }, {}).trustpilotSharePct, 100);
-  assert.equal(norm({ trustpilotSharePct: -5 }, {}).trustpilotSharePct, 0);
+  assert.equal(norm({ googleSharePct: 150 }, {}).googleSharePct, 100);
+  assert.equal(norm({ googleSharePct: -5 }, {}).googleSharePct, 0);
   assert.equal(norm({ waitDays: -1 }, {}).waitDays, 0);
   assert.equal(norm({ waitDays: 5000 }, {}).waitDays, 365);
   assert.equal(norm({ maxAsksWithoutClick: 0 }, {}).maxAsksWithoutClick, 1);
@@ -42,7 +42,7 @@ test('a typo falls back to the default rather than to zero', () => {
 
 test('a decimal is rounded, not truncated to nonsense', () => {
   assert.equal(norm({ waitDays: 2.6 }, {}).waitDays, 3);
-  assert.equal(norm({ trustpilotSharePct: '62.4' }, {}).trustpilotSharePct, 62);
+  assert.equal(norm({ googleSharePct: '62.4' }, {}).googleSharePct, 62);
 });
 
 test('trigger statuses accept a list or a comma string', () => {
@@ -71,7 +71,7 @@ test('a blank link means "use the site links", not "no link"', () => {
 });
 
 test('the shape is always complete, whatever was saved', () => {
-  const s = norm({ nonsense: true, trustpilotSharePct: 30 }, {});
+  const s = norm({ nonsense: true, googleSharePct: 30 }, {});
   for (const key of Object.keys(DEFAULT_REVIEW_SETTINGS)) {
     assert.ok(key in s, `${key} must always be present`);
   }
@@ -81,5 +81,5 @@ test('the shape is always complete, whatever was saved', () => {
 test('a cap of 0 is honoured, not treated as unset', () => {
   // 0 means "send nothing to Trustpilot", which is a real choice.
   assert.equal(norm({ trustpilotMonthlyCap: 0 }, {}).trustpilotMonthlyCap, 0);
-  assert.equal(norm({ trustpilotSharePct: 0 }, {}).trustpilotSharePct, 0);
+  assert.equal(norm({ googleSharePct: 0 }, {}).googleSharePct, 0);
 });

@@ -28,8 +28,29 @@ export async function GET(request) {
     // broken. A blank field means "use the site's business links".
     const effective = reviewDestinations(await getBusinessLinks().catch(() => ({})));
 
+    // The statuses that actually exist on orders, so the panel offers real
+    // choices. A hardcoded list drifts: it listed "Shipped" and "Completed",
+    // neither of which any order has ever had, while omitting ones that do.
+    let availableStatuses = [];
+    try {
+      const { data: rows } = await supabase.from('orders').select('status').limit(5000);
+      const counts = new Map();
+      for (const r of rows || []) {
+        if (r.status) counts.set(r.status, (counts.get(r.status) ?? 0) + 1);
+      }
+      // Statuses already selected are kept even at zero orders, so a saved
+      // setting never silently disappears from the screen that owns it.
+      for (const s of settings.triggerStatuses) if (!counts.has(s)) counts.set(s, 0);
+      availableStatuses = [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([status, orders]) => ({ status, orders }));
+    } catch (err) {
+      console.warn('[admin/review-settings] could not list statuses:', err.message);
+    }
+
     return NextResponse.json({
       settings,
+      availableStatuses,
       effectiveLinks: {
         google: effective.google,
         facebook: effective.facebook,
