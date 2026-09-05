@@ -136,7 +136,7 @@ export async function sendFulfillmentReadyWhatsApp(supabase, order, orderNumber,
           components: [{
             type: 'body',
             parameters: [
-              { type: 'text', text: orderNumber },
+              { type: 'text', text: `[PREPARAR] ${orderNumber}` },
               { type: 'text', text: `${order.customer_name} - ${order.customer_phone || 'N/A'}` },
               { type: 'text', text: formatSalesAlertTotal(order) },
               { type: 'text', text: `${itemCount} ${itemCount === 1 ? 'articulo' : 'articulos'}` },
