@@ -51,7 +51,10 @@ export const DEFAULT_LANDING_PAGE_SETTINGS = {
     },
     {
       outlet: 'The Tico Times',
-      logoUrl: '',
+      // Their masthead, saved locally rather than hotlinked: ticotimes.net sits
+      // behind a firewall that refuses anything automated, so a remote <img>
+      // would be a broken image on the customer's screen.
+      logoUrl: '/tico-times-logo.png',
       url: 'https://ticotimes.net/2026/07/26/why-two-fitness-veterans-chose-costa-rica-to-launch-a-new-peptide-company-peptides-costa-rica',
       titleEn: 'Why Two Fitness Veterans Chose Costa Rica To Launch A Peptide Company.',
       titleEs: 'Por que dos veteranos del fitness eligieron Costa Rica para lanzar una empresa de peptidos.',
