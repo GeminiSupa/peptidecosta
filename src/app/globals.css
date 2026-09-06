@@ -5905,10 +5905,25 @@ body:has(.product-grid.grid-view) {
    so left-packing the label and logos left a dead gap on the right and read as
    misaligned against those badges. With two outlets there is no quote left to
    absorb that space, so the group has to centre itself. */
+/* Three columns rather than a centred flex row, so it is the OUTLETS that sit
+   in the middle of the band and not the label-plus-outlets group. Centring the
+   whole row is arithmetically centred but reads as crooked: the eye lands on
+   the logos, and with "Visto en" taking space only on the left they end up
+   noticeably right of centre. The empty third column balances the label.
+
+   auto for the middle column, not 1fr: the outlets keep their intrinsic width
+   so a logo is never squashed. */
 .press-band--multi.catalog-press-band {
-    display: flex;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
     gap: 14px;
+}
+
+/* Against the outlets rather than hard left, so it still reads as one phrase
+   while leaving the logos centred. */
+.press-band--multi.catalog-press-band .press-band-label {
+    justify-self: end;
 }
 
 .press-band--multi .press-band-outlets {
@@ -6046,6 +6061,17 @@ body:has(.product-grid.grid-view) {
     /* Three columns of content do not fit next to two outlets on a phone. */
     .catalog-press-band .press-band-quote {
         display: none;
+    }
+    /* The empty balancing column costs width a phone does not have, and the
+       band is narrow enough that centring the whole row reads as centred
+       anyway. Wrapping beats a logo pushed off the edge. */
+    .press-band--multi.catalog-press-band {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    .press-band--multi.catalog-press-band .press-band-label {
+        justify-self: auto;
     }
 }
 
