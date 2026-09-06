@@ -5976,12 +5976,26 @@ body:has(.product-grid.grid-view) {
     border-left: 1px solid var(--border);
 }
 
+/* An outlet with no logo file falls back to its name in type. That is a
+   permanent state for The Tico Times, which has never had a logo here, so the
+   wordmark has to look like a masthead standing beside a logo rather than like
+   a logo that failed to load.
+
+   Sized and boxed to the same 26px as .press-band-logo so the two sit on one
+   optical line, and stepped back from full black: at 0.86rem/700 it out-shouted
+   the actual logo next to it, which is what made the row look unfinished. */
 .press-band-wordmark {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
     font-family: Georgia, 'Times New Roman', serif;
-    font-size: 0.86rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    /* Opacity rather than a lighter colour token: --text-muted is too faint to
+       read as a masthead, and this holds up in both light and dark themes. */
     color: var(--text-main);
+    opacity: 0.85;
     white-space: nowrap;
 }
 
