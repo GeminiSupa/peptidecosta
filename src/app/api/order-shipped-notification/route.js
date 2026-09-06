@@ -454,11 +454,17 @@ export async function POST(request) {
     // PBAG is a Rackspace mailbox, so its configured accounting/Rackspace SMTP
     // is primary. Elastic acceptance does not prove final delivery to PBAG and
     // must not hide an accounting-mailbox failure.
+    // customerHtml, NOT customerHtmlWithTrustpilot. The Trustpilot block is a
+    // <script> tag, and it exists solely for Trustpilot's parser to read off
+    // the copy BCC'd to them. Accounting has no use for it, and a script tag in
+    // a message body is one of the strongest spam signals there is: this copy
+    // was rejected outright twice, 26 Aug and 3 Sep, with
+    // "550 5.7.1 ... detected sending high likelihood spam".
     const taxCopy = await sendTaxRecordsCopy({
       transporter: accountingMailer.transporter,
       from: accountingMailer.from,
       order,
-      html: customerHtmlWithTrustpilot,
+      html: customerHtml,
       text: customerText,
       logPrefix: '[Order Shipped Notification]',
     });
