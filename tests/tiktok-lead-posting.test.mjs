@@ -99,7 +99,12 @@ test('the endpoint fixes assignment and source server-side and uses the durable 
     'utf8',
   );
   assert.match(route, /TIKTOK_LEAD_POSTING_SECRET/);
-  assert.match(route, /loadTikTokAssignee/);
+  // Assignment moved from a single fixed assignee to a rotation between three
+  // agents in 62706d0 (2026-09-03). loadTikTokAssignee no longer exists;
+  // resolveNextTikTokAgent picks, and loadFallbackAssignee catches the case
+  // where none of the three are active.
+  assert.match(route, /resolveNextTikTokAgent/);
+  assert.match(route, /loadFallbackAssignee/);
   assert.match(route, /sales_agent: owner/);
   assert.match(route, /lead_source: TIKTOK_LEAD_SOURCE/);
   assert.match(route, /utm_source: 'tiktok'/);
@@ -117,7 +122,12 @@ test('posting instructions name the endpoint, authentication and retry contract'
   assert.match(docs, /POST https:\/\/catalog\.peptidescostarica\.net\/api\/leads\/tiktok/);
   assert.match(docs, /Authorization: Bearer <TIKTOK_LEAD_POSTING_SECRET>/);
   assert.match(docs, /New Lead From TikTok Forms/);
-  assert.match(docs, /assigned to Yese/i);
+  // The docs must describe the rotation that actually runs, not the single
+  // fixed assignee it replaced on 2026-09-03. This assertion is what stops the
+  // instructions drifting away from the code again.
+  assert.match(docs, /rotates between Pollita, Dani and Korinne/i);
+  assert.match(docs, /keeps that lead's existing owner/i);
+  assert.doesNotMatch(docs, /assigned to Yese/i);
   assert.match(docs, /Reuse the same value on retries/i);
 });
 
