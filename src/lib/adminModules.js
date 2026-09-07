@@ -12,7 +12,7 @@ export const ADMIN_MODULES = [
   // Orders a sales agent has handed off to be packed. Superadmin-only for now
   // because Omer is the only one packing — widen this the day someone else
   // does too.
-  { id: 'fulfillment', label: 'Fulfillment', title: 'Fulfillment', group: 'Core Operations', superadminOnly: true },
+  { id: 'fulfillment', label: 'Fulfillment', title: 'Fulfillment', group: 'Core Operations' },
   { id: 'live_chat', label: 'Live Chat', title: 'Live Chat', group: 'Core Operations' },
   // Leads sits directly under Live Chat: chats are where leads now come from,
   // so the two are worked together.
