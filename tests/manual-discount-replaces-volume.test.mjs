@@ -10,6 +10,7 @@
  */
 
 import test from 'node:test';
+import { tenPlusDiscountPct } from '../src/lib/bulkDeal.mjs';
 import assert from 'node:assert/strict';
 
 import {
@@ -42,7 +43,7 @@ test('the reported order: 25% typed is 25% taken, not 40%', () => {
     manualDiscountType: 'percentage',
     manualDiscountValue: 25,
   });
-  assert.equal(stacked.discountPct, 20);
+  assert.equal(stacked.discountPct, tenPlusDiscountPct());
   assert.ok(stacked.total < totals.total, 'stacking charged the customer less than agreed');
 });
 
@@ -63,8 +64,11 @@ test('with no manual discount the volume tier still applies', () => {
     replaceVolumeDiscount: manualDiscountReplacesVolume('admin_manual', null, 0),
   });
 
-  assert.equal(totals.discountPct, 20);
-  assert.equal(totals.discountAmount, 90074);
+  // Subtotal is fixed by the fixture; the tier it earns is not, so derive the
+  // amount from the rate in force instead of pinning the deal-week figure.
+  const SUBTOTAL = 450370;
+  assert.equal(totals.discountPct, tenPlusDiscountPct());
+  assert.equal(totals.discountAmount, SUBTOTAL * tenPlusDiscountPct() / 100);
   assert.equal(totals.manualDiscountAmount, 0);
 });
 
@@ -115,7 +119,9 @@ test('the server rebuild drops the tier the same way the screen does', () => {
     promo: null,
     exchangeRate: RATE,
   });
-  assert.equal(normal.volumeDiscountPct, 20);
+  // Read the rate rather than hardcoding it: a deal week raises the 10+ tier,
+  // and a literal here just fails every time marketing runs one.
+  assert.equal(normal.volumeDiscountPct, tenPlusDiscountPct());
 
   // Screen and server land on the same figure.
   const preview = calculateAdminOrderTotals(ITEMS, SHIPPING, {

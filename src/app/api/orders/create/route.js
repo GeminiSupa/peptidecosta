@@ -521,6 +521,10 @@ export async function POST(request) {
     }
 
     order.items = authoritative.items;
+    // Recorded rather than recomputed later: the tier rules change during a
+    // deal week, and this order's badge must keep showing the rate it was
+    // actually charged. Dropped harmlessly if the migration has not been run.
+    order.volume_discount_pct = authoritative.volumeDiscountPct ?? 0;
     order.total_usd = authoritative.totalUsd;
     order.total_crc = authoritative.totalCrc;
     order.discount_amount_usd = order.currency === 'USD'
@@ -586,7 +590,7 @@ export async function POST(request) {
     // than its marketing tag.
     let { data, error, droppedColumns } = await writeDroppingMissingColumns(
       orderRow,
-      ['utm_campaign', 'deal_id', 'inventory_deducted'],
+      ['utm_campaign', 'deal_id', 'inventory_deducted', 'volume_discount_pct'],
       (row) => supabase.from('orders').insert(row).select('id, order_number').single(),
     );
     if (droppedColumns?.length) {

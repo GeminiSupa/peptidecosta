@@ -15,6 +15,7 @@
 // bundler, and this module is the authority on what the cart charges, so the
 // unit tests have to be able to import it directly.
 import { isBacWater, summarizeBacWater, applyBacAwareDiscount } from './bacWater.mjs';
+import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT } from './bulkDeal.mjs';
 
 export const FALLBACK_EXCHANGE_RATE = 454.48; // USD -> CRC, matches catalog fallback
 export const FREE_SHIPPING_USD_THRESHOLD = 200;
@@ -50,9 +51,8 @@ export function getUnitPrice(product, currency, exchangeRate = FALLBACK_EXCHANGE
 
 /** Volume discount percentage based on total vial (unit) count. */
 export function getVolumeDiscountPct(vialCount) {
-  const isDealActive = Date.now() < new Date('2026-09-14T05:59:59Z').getTime();
-  if (vialCount >= 10) return isDealActive ? 35 : 20;
-  if (vialCount >= 5) return 15;
+  if (vialCount >= 10) return tenPlusDiscountPct();
+  if (vialCount >= 5) return STANDARD_FIVE_PLUS_PCT;
   return 0;
 }
 

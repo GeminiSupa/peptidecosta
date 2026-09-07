@@ -1,6 +1,6 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Database, Download, MessageCircle, Plus, RefreshCw, Trash2 } from 'lucide-react';
-import { getAdminVolumeDiscountPct, manualDiscountReplacesVolume } from '@/lib/adminOrderTotals.mjs';
+import { getAdminVolumeDiscountPct, manualDiscountReplacesVolume, storedOrderVolumePct } from '@/lib/adminOrderTotals.mjs';
 import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
 import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 import { formatCrDate } from '@/lib/crTime.mjs';
@@ -677,7 +677,13 @@ export default function OrdersManager({
                   const _replacedVolume = manualDiscountReplacesVolume(
                     order.source, order.manual_discount_type, order.manual_discount_value,
                   );
-                  const _discountPct = _replacedVolume ? 0 : getAdminVolumeDiscountPct(items);
+                  // What this order was charged, not what today's tiers would
+                  // give it: a deal week moves the 10+ rate, and recomputing
+                  // relabelled every order taken during it once it lapsed.
+                  const _recordedPct = storedOrderVolumePct(order);
+                  const _discountPct = _replacedVolume
+                    ? 0
+                    : (_recordedPct ?? getAdminVolumeDiscountPct(items));
                   const _manualDiscountLabel = _replacedVolume
                     ? (order.manual_discount_type === 'percentage'
                       ? `-${Number(order.manual_discount_value)}% order discount`

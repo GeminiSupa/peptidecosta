@@ -1,4 +1,5 @@
 import { isBacWater, splitCartUnits } from './bacWater.mjs';
+import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT } from './bulkDeal.mjs';
 
 export const ADMIN_FALLBACK_EXCHANGE_RATE = 454.48;
 
@@ -6,10 +7,18 @@ export function normalizeAdminOrderCurrency(currency) {
   return String(currency || '').trim().toUpperCase() === 'USD' ? 'USD' : 'CRC';
 }
 
+// Must track getVolumeDiscountPct in src/lib/pricing.js, which is what the
+// create/update routes actually charge. When this read a fixed 20% through a
+// 35% deal week the form quoted the agent a total the server then contradicted
+// on the saved order.
+//
+// Known limit: the orders list recomputes this from the items, so an order
+// placed during a deal shows the standing tier once the deal lapses. Fixing
+// that properly means storing the percentage on the order.
 export function getAdminVolumeDiscountPct(items = []) {
   const { discountUnits } = splitCartUnits(items);
-  if (discountUnits >= 10) return 20;
-  if (discountUnits >= 5) return 15;
+  if (discountUnits >= 10) return tenPlusDiscountPct();
+  if (discountUnits >= 5) return STANDARD_FIVE_PLUS_PCT;
   return 0;
 }
 
@@ -95,6 +104,24 @@ export function manualDiscountReplacesVolume(source, type, value) {
     && finiteNonNegative(value) > 0;
 }
 
+/**
+ * The volume rate recorded on an order when it was priced, or null.
+ *
+ * Reading it back beats recomputing: the tier rules move during a deal week,
+ * so re-running them over an old order reprices it against today's offer --
+ * on the badge, and on the total if anyone reopens and saves it.
+ *
+ * NULL/absent means the order predates add-order-volume-discount-pct.sql (or
+ * the migration has not been run), and the caller falls back to the item count
+ * exactly as it did before.
+ */
+export function storedOrderVolumePct(order) {
+  const raw = order?.volume_discount_pct;
+  if (raw === null || raw === undefined || raw === '') return null;
+  const pct = Number(raw);
+  return Number.isFinite(pct) && pct >= 0 ? pct : null;
+}
+
 export function calculateAdminOrderTotals(items = [], shipping = 0, discounts = {}) {
   const itemsSubtotal = getAdminOrderSubtotal(items);
   const discountableSubtotal = (items || []).reduce((sum, item) => {
@@ -104,9 +131,18 @@ export function calculateAdminOrderTotals(items = [], shipping = 0, discounts = 
   }, 0);
   const excludedSubtotal = itemsSubtotal - discountableSubtotal;
   // A negotiated discount stands alone: see manualDiscountReplacesVolume.
+  // Otherwise prefer the rate recorded when the order was priced; only fall
+  // back to the item count when there is none (a brand new order, or a row
+  // older than the column).
+  const recordedPct = Number.isFinite(Number(discounts.volumeDiscountPct))
+    && discounts.volumeDiscountPct !== null
+    && discounts.volumeDiscountPct !== undefined
+    && discounts.volumeDiscountPct !== ''
+    ? Number(discounts.volumeDiscountPct)
+    : null;
   const discountPct = discounts.replaceVolumeDiscount === true
     ? 0
-    : getAdminVolumeDiscountPct(items);
+    : (recordedPct ?? getAdminVolumeDiscountPct(items));
   const discountAmount = discountPct > 0
     ? discountableSubtotal * (discountPct / 100)
     : 0;

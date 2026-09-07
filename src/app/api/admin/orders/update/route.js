@@ -22,6 +22,7 @@ import {
   manualDiscountReplacesVolume,
   normalizeAdminOrderCurrency,
   normalizeManualDiscountType,
+  storedOrderVolumePct,
 } from '@/lib/adminOrderTotals.mjs';
 import {
   applySalesAgentReferral,
@@ -226,6 +227,11 @@ export async function PATCH(request) {
         promo,
         exchangeRate: rateResult.rate,
         suppressVolumeDiscount: replaceVolumeDiscount,
+        // Same principle as apply_volume_discount above: the rate recorded when
+        // this order was priced wins, so editing an item cannot move a deal-week
+        // order onto the standing tier. Absent on older rows, which reprice as
+        // they always did.
+        volumeDiscountPctOverride: storedOrderVolumePct(currentOrder),
       });
       if (!authoritative.ok) {
         return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });
@@ -244,6 +250,7 @@ export async function PATCH(request) {
         manualDiscountType: nextManualType,
         manualDiscountValue: nextManualValue,
         replaceVolumeDiscount,
+        volumeDiscountPct: storedOrderVolumePct(currentOrder),
       });
       const primaryTotal = currency === 'CRC' ? Math.round(totals.total) : Number(totals.total.toFixed(2));
       const totalPair = getAdminCurrencyPair(primaryTotal, currency, rateResult.rate);

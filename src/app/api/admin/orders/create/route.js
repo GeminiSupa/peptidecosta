@@ -23,6 +23,7 @@ import {
   ORDER_INVENTORY_COLUMNS,
   ORDER_MANUAL_DISCOUNT_COLUMNS,
   ORDER_VOLUME_DISCOUNT_COLUMNS,
+  ORDER_VOLUME_DISCOUNT_PCT_COLUMNS,
   writeDroppingMissingColumns,
 } from '@/lib/optionalColumns.mjs';
 import {
@@ -266,6 +267,10 @@ export async function POST(request) {
       // Recorded so reopening and re-saving this order cannot quietly reprice
       // it against a rule the operator did not choose.
       apply_volume_discount: !replaceVolumeDiscount,
+      // The rate charged, not the rate today's rules would produce: a deal week
+      // moves the 10+ tier, and the orders list must keep reporting what this
+      // customer was actually given.
+      volume_discount_pct: authoritative.volumeDiscountPct ?? 0,
       sales_agent: String(order.sales_agent || '').trim() || null,
       internal_notes: String(order.internal_notes || '').trim() || null,
     };
@@ -334,6 +339,7 @@ export async function POST(request) {
       // already tolerates.
       ...ORDER_ATTRIBUTION_COLUMNS,
       ...ORDER_VOLUME_DISCOUNT_COLUMNS,
+      ...ORDER_VOLUME_DISCOUNT_PCT_COLUMNS,
     ];
     let { data, error, droppedColumns } = await writeDroppingMissingColumns(
       row,
@@ -345,6 +351,9 @@ export async function POST(request) {
     }
     if (droppedColumns?.some((column) => ORDER_MANUAL_DISCOUNT_COLUMNS.includes(column))) {
       console.warn('[admin/orders/create] manual discount columns not stored — run add-manual-order-discounts.sql');
+    }
+    if (droppedColumns?.some((column) => ORDER_VOLUME_DISCOUNT_PCT_COLUMNS.includes(column))) {
+      console.warn('[admin/orders/create] volume discount pct not stored — run add-order-volume-discount-pct.sql');
     }
     if (error && row.affiliate_id && isForeignKeyError(error)) {
       const { affiliate_id, affiliate_commission_usd, affiliate_commission_crc, ...withoutAffiliate } = row;

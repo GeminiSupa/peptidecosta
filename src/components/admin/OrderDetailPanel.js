@@ -24,6 +24,7 @@ import {
   getAdminShippingCosts,
   manualDiscountReplacesVolume,
   normalizeAdminOrderCurrency,
+  storedOrderVolumePct,
 } from '@/lib/adminOrderTotals.mjs';
 
 /**
@@ -334,6 +335,10 @@ export default function OrderDetailPanel({
     promoDiscountAmount: promoDiscount,
     manualDiscountType,
     manualDiscountValue,
+    // The rate this order was priced at. Without it, reopening an order taken
+    // during a deal week would recompute the total at today's lower tier and
+    // let staff save the customer a different figure than they agreed to.
+    volumeDiscountPct: storedOrderVolumePct(order),
     // Manual orders only. A website order's volume discount is the offer the
     // customer accepted at checkout and is not staff's to overwrite.
     replaceVolumeDiscount: manualDiscountReplacesVolume(

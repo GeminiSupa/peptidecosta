@@ -164,6 +164,18 @@ export const ORDER_MANUAL_DISCOUNT_COLUMNS = [
 export const ORDER_VOLUME_DISCOUNT_COLUMNS = ['apply_volume_discount'];
 
 /**
+ * What add-order-volume-discount-pct.sql adds.
+ *
+ * The volume-discount percentage an order was actually charged, so a later
+ * change to the tier rules cannot reprice history on screen. Kept separate
+ * from ORDER_VOLUME_DISCOUNT_COLUMNS because it arrives by its own migration.
+ *
+ * Without it the reader falls back to recomputing from the items, which is
+ * what it did before this column existed — degraded, never fatal.
+ */
+export const ORDER_VOLUME_DISCOUNT_PCT_COLUMNS = ['volume_discount_pct'];
+
+/**
  * What add-review-platform.sql adds.
  *
  * Records which review site an order was asked for, so the month's Trustpilot

@@ -54,6 +54,12 @@ export function authoritativeCheckout({
   // negotiated discount: that discount replaces the volume tier rather than
   // stacking on top of it. Never set from the public checkout.
   suppressVolumeDiscount = false,
+  // The volume rate this order was originally priced at, for the admin edit
+  // route only. Re-pricing an existing order must not move it onto today's
+  // tier: an order taken during a deal week would otherwise lose the rate the
+  // customer agreed to the moment the deal lapsed. Null/undefined means "work
+  // it out from the cart", which is what every new order does.
+  volumeDiscountPctOverride = null,
 }) {
   const currency = postedOrder?.currency === 'USD' ? 'USD' : 'CRC';
   const productByName = new Map((products || []).map((product) => [normalize(product.product), product]));
@@ -139,9 +145,17 @@ export function authoritativeCheckout({
   }
 
   const vialCount = requested.filter((item) => !isBacWater(item.product)).reduce((sum, item) => sum + item.qty, 0);
+  const overridePct = Number(volumeDiscountPctOverride);
+  const hasOverride = volumeDiscountPctOverride !== null
+    && volumeDiscountPctOverride !== undefined
+    && volumeDiscountPctOverride !== ''
+    && Number.isFinite(overridePct)
+    && overridePct >= 0;
   const volumeDiscountPct = suppressVolumeDiscount
     ? 0
-    : effectiveVolumeDiscountPct(promo, getVolumeDiscountPct(vialCount));
+    : (hasOverride
+      ? effectiveVolumeDiscountPct(promo, overridePct)
+      : effectiveVolumeDiscountPct(promo, getVolumeDiscountPct(vialCount)));
   const totals = computeOrderTotals(requested, currency, exchangeRate, { volumeDiscountPct });
   const promoDiscount = promoDiscountAmount(requested, totals, promo, currency);
   const finalTotal = roundCurrency(totals.discountedTotal - promoDiscount + totals.shipping, currency);

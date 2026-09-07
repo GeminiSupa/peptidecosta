@@ -13,6 +13,7 @@ import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getFacebookReviewUrl, getTrustpilotReviewUrl, TRUSTPILOT_RATING } from '@/lib/businessLinks';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
 import { checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct } from '@/lib/promoEligibility.mjs';
+import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT } from '@/lib/bulkDeal.mjs';
 import {
   PHONE_COUNTRIES,
   DEFAULT_PHONE_COUNTRY,
@@ -2078,13 +2079,16 @@ export default function CatalogPage() {
   const getCartTotal = (cartItems, cur = currency, rate = exchangeRate) =>
     getDiscountableSubtotal(cartItems, cur, rate) + getBacSummary(cartItems, cur, rate).charge;
 
-  // Volume discount tiers: 5+ vials = 15%, 10+ vials = 20%.
+  // Volume discount tiers: 5+ vials = 15%, 10+ vials = the rate in
+  // src/lib/bulkDeal.mjs (raised while a bulk deal runs, back to 20% after).
   // BAC water vials are excluded — they never move the customer up a tier.
   const getCartVialCount = (cartItems) => getBacSummary(cartItems).discountUnits;
 
+  // Must stay identical to getVolumeDiscountPct in src/lib/pricing.js, which
+  // is what the server re-charges on; both now read the same module.
   const getVolumeDiscountPct = (vialCount) => {
-    if (vialCount >= 10) return 20;
-    if (vialCount >= 5) return 15;
+    if (vialCount >= 10) return tenPlusDiscountPct();
+    if (vialCount >= 5) return STANDARD_FIVE_PLUS_PCT;
     return 0;
   };
 
@@ -4192,8 +4196,8 @@ export default function CatalogPage() {
             {getCartVialCount() >= 5 && getCartVialCount() < 10 && (
               <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: '700' }}>
                 {lang === 'en'
-                  ? `🔥 Add ${10 - getCartVialCount()} more vial${10 - getCartVialCount() > 1 ? 's' : ''} to unlock ${Date.now() < 1789279199000 ? '35' : '20'}% OFF!`
-                  : `🔥 ¡Añade ${10 - getCartVialCount()} vial${10 - getCartVialCount() > 1 ? 'es' : ''} más para desbloquear ${Date.now() < 1789279199000 ? '35' : '20'}% DESC.!`}
+                  ? `🔥 Add ${10 - getCartVialCount()} more vial${10 - getCartVialCount() > 1 ? 's' : ''} to unlock ${tenPlusDiscountPct()}% OFF!`
+                  : `🔥 ¡Añade ${10 - getCartVialCount()} vial${10 - getCartVialCount() > 1 ? 'es' : ''} más para desbloquear ${tenPlusDiscountPct()}% DESC.!`}
               </div>
             )}
 
