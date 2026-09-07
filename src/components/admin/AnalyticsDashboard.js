@@ -2703,6 +2703,18 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                     <tr key={session.session_id} style={{ borderBottom: '1px solid rgba(255,255,255,.05)' }}>
                       <td style={{ padding: '9px 6px', color: visitorColor, fontWeight: 700, verticalAlign: 'top' }}>
                         {visitorLabel}
+                        {linkedCart?.customer_phone && (
+                          <div style={{ marginTop: '4px' }}>
+                            <button
+                              type="button"
+                              className="analytics-btn-outline"
+                              style={{ fontSize: '0.65rem', padding: '2px 6px', borderColor: 'var(--an-accent)', color: 'var(--an-accent)' }}
+                              onClick={() => onNavigate && onNavigate('whatsapp_ai')}
+                            >
+                              Message Now
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: '9px 6px', color: 'var(--an-ink)', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{session.hostname || 'catalog'}{session.current_path || '/catalog'}</td>
                       <td style={{ padding: '9px 6px', color: 'var(--an-ink-soft)', verticalAlign: 'top' }}>{session.last_touch_source || session.utm_source || 'direct'}{session.utm_campaign ? ` · ${session.utm_campaign}` : ''}</td>
@@ -3109,7 +3121,17 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                       </div>
                       <div className="interest-item-footer">
                         <span>Conv: {p.conversion.toFixed(0)}%</span>
-                        <span style={{ color: '#fb923c', fontSize: '0.75rem' }}>Needs Promo</span>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <span style={{ color: '#fb923c', fontSize: '0.75rem' }}>Needs Promo</span>
+                          <button
+                            type="button"
+                            className="analytics-btn-outline"
+                            style={{ fontSize: '0.7rem', padding: '2px 8px', borderColor: '#fb923c', color: '#fb923c' }}
+                            onClick={() => onNavigate && onNavigate('deals')}
+                          >
+                            Create
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -3689,6 +3711,14 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 {cartAbandonmentRate.toFixed(0)}%
               </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--an-ink-faint)', marginTop: '4px' }}>Active abandoned carts</div>
+              <button
+                type="button"
+                className="analytics-btn-outline"
+                style={{ marginTop: '12px', width: '100%', fontSize: '0.75rem', padding: '4px', borderColor: 'var(--an-warning)', color: 'var(--an-warning)' }}
+                onClick={() => onNavigate && onNavigate('carts')}
+              >
+                Recover Carts
+              </button>
             </div>
 
             <div className="behavior-box">
