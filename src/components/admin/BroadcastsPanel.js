@@ -768,12 +768,9 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: '#e2e8f0', fontSize: '0.95rem' }}>Approved Meta WhatsApp Template</label>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <input 
-                type="text"
-                list="meta-templates-list"
+              <select
                 className="admin-input"
                 style={{ flex: 1, background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '12px 16px', borderRadius: '8px', fontSize: '0.95rem' }}
-                placeholder="e.g. nuevos_productos_lanzamiento"
                 value={channels.whatsappTemplateName || ''}
                 onChange={e => {
                   const templateName = e.target.value;
@@ -787,7 +784,12 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
                       : [],
                   });
                 }}
-              />
+              >
+                <option value="">-- Select an approved template --</option>
+                {metaTemplates.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
               <select 
                 className="admin-input"
                 style={{ width: '120px', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: '8px' }}
@@ -797,11 +799,6 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
                 <option value="es">ES (Spanish)</option>
                 <option value="en_US">EN (English)</option>
               </select>
-              <datalist id="meta-templates-list">
-                {metaTemplates.map(t => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
             </div>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Use an approved template name to bypass the 24-hour window restriction and reach all leads.</p>
             {channels.whatsappTemplateName && usesCustomTemplateParameters && (
