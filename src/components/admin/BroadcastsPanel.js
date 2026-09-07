@@ -31,6 +31,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   const [newBannerEn, setNewBannerEn] = useState('');
   const [newBannerEs, setNewBannerEs] = useState('');
   const [bannersLoading, setBannersLoading] = useState(true);
+  const [metaTemplates, setMetaTemplates] = useState([]);
 
   const loadBanners = async () => {
     try {
@@ -131,6 +132,13 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   useEffect(() => {
     fetchScheduled();
     loadBanners();
+
+    adminFetch('/api/admin/whatsapp-templates-list')
+      .then(res => res.json())
+      .then(data => {
+        if (data.templates) setMetaTemplates(data.templates);
+      })
+      .catch(e => console.error('Failed to load templates', e));
 
     const pendingContacts = localStorage.getItem('pending_broadcast_contacts');
     if (pendingContacts) {
@@ -762,6 +770,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
             <div style={{ display: 'flex', gap: '10px' }}>
               <input 
                 type="text"
+                list="meta-templates-list"
                 className="admin-input"
                 style={{ flex: 1, background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', padding: '12px 16px', borderRadius: '8px', fontSize: '0.95rem' }}
                 placeholder="e.g. nuevos_productos_lanzamiento"
@@ -788,6 +797,11 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
                 <option value="es">ES (Spanish)</option>
                 <option value="en_US">EN (English)</option>
               </select>
+              <datalist id="meta-templates-list">
+                {metaTemplates.map(t => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
             </div>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Use an approved template name to bypass the 24-hour window restriction and reach all leads.</p>
             {channels.whatsappTemplateName && usesCustomTemplateParameters && (
