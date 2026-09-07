@@ -50,7 +50,7 @@ export function getUnitPrice(product, currency, exchangeRate = FALLBACK_EXCHANGE
 
 /** Volume discount percentage based on total vial (unit) count. */
 export function getVolumeDiscountPct(vialCount) {
-  if (vialCount >= 10) return 20;
+  if (vialCount >= 10) return 35;
   if (vialCount >= 5) return 15;
   return 0;
 }

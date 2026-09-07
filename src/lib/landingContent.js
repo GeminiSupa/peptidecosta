@@ -1,8 +1,8 @@
 export const DEFAULT_LANDING_PAGE_SETTINGS = {
   landingVersion: 'v2',
   bannerActive: true,
-  bannerTextEn: '',
-  bannerTextEs: '',
+  bannerTextEn: 'Week of BIG bulk discounts! Buy 10 vials or more of ANYTHING, get 35% off. (Excludes Bac water)',
+  bannerTextEs: '¡Semana de GRANDES descuentos! Compra 10 viales o más de CUALQUIER producto y obtén 35% de descuento. (Excluye agua bacteriostática)',
   topBarTextEn: '',
   topBarTextEs: '',
   heroKickerEn: 'PEPTIDES COSTA RICA',
@@ -138,8 +138,8 @@ export const DEFAULT_LANDING_PAGE_SETTINGS = {
   // product" and omit the 20% tier, which both understated the offer and
   // contradicted the promo banner ("puedes combinar diferentes productos")
   // running above it on the same page.
-  bulkTextEn: 'Mix any products: buy 5 or more vials for 15% off, or 10 or more for 20% off.',
-  bulkTextEs: 'Combina los productos que quieras: 5 viales o más, 15% de descuento; 10 o más, 20%.',
+  bulkTextEn: 'Mix any products: buy 5 or more vials for 15% off, or 10 or more for 35% off.',
+  bulkTextEs: 'Combina los productos que quieras: 5 viales o más, 15% de descuento; 10 o más, 35%.',
   bulkButtonEn: 'Contact Us',
   bulkButtonEs: 'Contáctenos',
   footerDescriptionEn: 'Peptides Costa Rica offers premium, research-backed peptides for weight loss, muscle growth, energy, recovery, and healthy aging with trusted quality and bulk savings across Costa Rica.',
@@ -470,7 +470,7 @@ export const DEFAULT_PUBLIC_PAGE_SETTINGS = {
     // less than the checkout applies, on both tiers.
     tiers: [
       { labelEn: '5+ Vials', labelEs: '5+ Viales', valueEn: '15% OFF', valueEs: '15% DESC.', textEn: 'Automatic discount at checkout.', textEs: 'Descuento automático en caja.' },
-      { labelEn: '10+ Vials', labelEs: '10+ Viales', valueEn: '20% OFF', valueEs: '20% DESC.', textEn: 'Best value for active researchers.', textEs: 'Mejor valor para investigadores activos.' },
+      { labelEn: '10+ Vials', labelEs: '10+ Viales', valueEn: '35% OFF', valueEs: '35% DESC.', textEn: 'Best value for active researchers.', textEs: 'Mejor valor para investigadores activos.' },
       { labelEn: '25+ Vials', labelEs: '25+ Viales', valueEn: 'Contact Us', valueEs: 'Contáctanos', textEn: 'Custom wholesale pricing available.', textEs: 'Precios mayoristas personalizados.' },
     ],
     // Index of the tier rendered with the highlighted/scaled treatment.
