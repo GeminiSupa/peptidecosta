@@ -50,7 +50,8 @@ export function getUnitPrice(product, currency, exchangeRate = FALLBACK_EXCHANGE
 
 /** Volume discount percentage based on total vial (unit) count. */
 export function getVolumeDiscountPct(vialCount) {
-  if (vialCount >= 10) return 35;
+  const isDealActive = Date.now() < new Date('2026-09-14T05:59:59Z').getTime();
+  if (vialCount >= 10) return isDealActive ? 35 : 20;
   if (vialCount >= 5) return 15;
   return 0;
 }

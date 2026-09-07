@@ -4192,8 +4192,8 @@ export default function CatalogPage() {
             {getCartVialCount() >= 5 && getCartVialCount() < 10 && (
               <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: '700' }}>
                 {lang === 'en'
-                  ? `🔥 Add ${10 - getCartVialCount()} more vial${10 - getCartVialCount() > 1 ? 's' : ''} to unlock 35% OFF!`
-                  : `🔥 ¡Añade ${10 - getCartVialCount()} vial${10 - getCartVialCount() > 1 ? 'es' : ''} más para desbloquear 35% DESC.!`}
+                  ? `🔥 Add ${10 - getCartVialCount()} more vial${10 - getCartVialCount() > 1 ? 's' : ''} to unlock ${Date.now() < 1789279199000 ? '35' : '20'}% OFF!`
+                  : `🔥 ¡Añade ${10 - getCartVialCount()} vial${10 - getCartVialCount() > 1 ? 'es' : ''} más para desbloquear ${Date.now() < 1789279199000 ? '35' : '20'}% DESC.!`}
               </div>
             )}
 
