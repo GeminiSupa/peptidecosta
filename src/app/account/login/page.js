@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 import { getCustomerSupabase } from '@/lib/customerSupabase';
 import { useCustomerSession, useStorefrontLang } from '@/hooks/useCustomerSession';
@@ -27,6 +28,7 @@ function LoginForm() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [turnstileToken, setTurnstileToken] = useState('');
   const codeInputRef = useRef(null);
 
   // Where to land after signing in. Only same-site paths are honoured, so a
@@ -59,7 +61,7 @@ function LoginForm() {
       const res = await fetch('/api/account/request-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, lang }),
+        body: JSON.stringify({ email, lang, turnstileToken }),
       });
       const data = await res.json().catch(() => ({}));
 
@@ -180,7 +182,15 @@ function LoginForm() {
 
               {error ? <p className="account-auth-error">{error}</p> : null}
 
-              <button type="submit" className="account-btn-primary" disabled={busy || !email}>
+              <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
+                <Turnstile
+                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                  onSuccess={(token) => setTurnstileToken(token)}
+                  options={{ theme: 'light' }}
+                />
+              </div>
+
+              <button type="submit" className="account-btn-primary" disabled={busy || !email || !turnstileToken}>
                 {busy
                   ? (isEn ? 'Sending…' : 'Enviando…')
                   : (isEn ? 'Send me a code' : 'Enviarme un código')}

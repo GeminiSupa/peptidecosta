@@ -38,6 +38,7 @@ export async function POST(request) {
 
   const isEn = String(body?.lang || '').toLowerCase().startsWith('en');
   const email = normalizeEmail(body?.email);
+  const turnstileToken = body?.turnstileToken;
 
   if (!email || !EMAIL_PATTERN.test(email)) {
     return NextResponse.json(
@@ -49,6 +50,63 @@ export async function POST(request) {
         ),
       },
       { status: 400 },
+    );
+  }
+
+  // Turnstile verification
+  const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA'; // testing secret
+  if (!turnstileToken) {
+    return NextResponse.json(
+      {
+        error: message(
+          isEn,
+          'Please complete the security check.',
+          'Por favor complete el control de seguridad.',
+        ),
+      },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const cfFormData = new URLSearchParams();
+    cfFormData.append('secret', turnstileSecret);
+    cfFormData.append('response', turnstileToken);
+    
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+    if (ip) {
+      cfFormData.append('remoteip', ip);
+    }
+
+    const cfRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: cfFormData,
+    });
+    
+    const cfData = await cfRes.json();
+    if (!cfData.success) {
+      return NextResponse.json(
+        {
+          error: message(
+            isEn,
+            'Security check failed. Please try again.',
+            'El control de seguridad falló. Inténtelo de nuevo.',
+          ),
+        },
+        { status: 400 },
+      );
+    }
+  } catch (error) {
+    console.error('[account/request-code] Turnstile verification failed:', error);
+    return NextResponse.json(
+      {
+        error: message(
+          isEn,
+          'Security check failed. Please try again.',
+          'El control de seguridad falló. Inténtelo de nuevo.',
+        ),
+      },
+      { status: 500 },
     );
   }
 
