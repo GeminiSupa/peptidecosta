@@ -128,3 +128,38 @@ export function splitOwnDomainRecipients(addressing = {}, domain = OWN_MAIL_DOMA
     hasRest: Boolean(rest.to.length || rest.cc.length || rest.bcc.length),
   };
 }
+
+/**
+ * The receipt watchers who have not already had the team alert.
+ *
+ * ORDER_RECEIPT_BCC silently copies someone on every customer receipt so they
+ * can see exactly what the buyer got. The owner's address is on that list AND
+ * on notification_recipients, so a single order put two mails in one inbox —
+ * "New Order #1234" and "Order received #1234" — one to read and one to
+ * ignore, on every order.
+ *
+ * The watcher list keeps its purpose for anyone who is not on the team alert;
+ * for anyone who is, the alert already told them the order exists. Comparison
+ * is on the address alone, so a display name or different capitalisation
+ * cannot smuggle a duplicate through.
+ */
+export function receiptBccExcluding(receiptBcc, alreadyNotified = []) {
+  const seen = new Set(
+    (Array.isArray(alreadyNotified) ? alreadyNotified : [alreadyNotified])
+      .flatMap((entry) => String(entry || '').split(','))
+      .map(emailAddressOf)
+      .filter(Boolean),
+  );
+
+  const kept = [];
+  const added = new Set();
+  for (const entry of String(receiptBcc || '').split(',')) {
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const address = emailAddressOf(trimmed);
+    if (!address || seen.has(address) || added.has(address)) continue;
+    added.add(address);
+    kept.push(trimmed);
+  }
+  return kept.join(', ');
+}

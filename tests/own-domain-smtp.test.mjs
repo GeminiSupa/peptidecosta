@@ -106,3 +106,54 @@ test('port 587 is STARTTLS, not implicit TLS', () => {
 test('the domain is the real one, not a placeholder', () => {
   assert.equal(OWN_MAIL_DOMAIN, 'peptidescostarica.net');
 });
+
+/**
+ * One order, one email per inbox.
+ *
+ * ORDER_RECEIPT_BCC copies a watcher on every customer receipt. The owner's
+ * address is on that list and on notification_recipients, so each order put
+ * two mails in his inbox — "New Order #1234" and "Order received #1234".
+ */
+
+import { receiptBccExcluding } from '../src/lib/ownDomainSmtp.mjs';
+
+test('a watcher who already had the team alert is not copied again', () => {
+  const team = ['info@peptidescostarica.net', 'omerforce@gmail.com', 'korinneda@icloud.com'];
+  assert.equal(receiptBccExcluding('omerforce@gmail.com', team), '');
+});
+
+test('a watcher who is not on the team alert still gets the receipt copy', () => {
+  const team = ['info@peptidescostarica.net'];
+  assert.equal(receiptBccExcluding('omerforce@gmail.com', team), 'omerforce@gmail.com');
+});
+
+test('a display name or different case cannot smuggle a duplicate through', () => {
+  const team = ['Owner inbox <OMERFORCE@gmail.com>'];
+  assert.equal(receiptBccExcluding('omerforce@gmail.com', team), '');
+  assert.equal(receiptBccExcluding('Owner <omerforce@GMAIL.com>', ['omerforce@gmail.com']), '');
+});
+
+test('several watchers are filtered one by one, not all or nothing', () => {
+  const team = ['omerforce@gmail.com'];
+  assert.equal(
+    receiptBccExcluding('omerforce@gmail.com, accounts@pbag.co.cr', team),
+    'accounts@pbag.co.cr',
+  );
+});
+
+test('the same watcher listed twice is copied once', () => {
+  assert.equal(
+    receiptBccExcluding('a@x.com, A@X.com', []),
+    'a@x.com',
+  );
+});
+
+test('no watchers configured stays no watchers', () => {
+  assert.equal(receiptBccExcluding('', ['omerforce@gmail.com']), '');
+  assert.equal(receiptBccExcluding(undefined, []), '');
+});
+
+test('when no team alert was sent, nobody is excluded', () => {
+  // A receipt-only send (customerReceiptOnly) must still copy its watchers.
+  assert.equal(receiptBccExcluding('omerforce@gmail.com', []), 'omerforce@gmail.com');
+});

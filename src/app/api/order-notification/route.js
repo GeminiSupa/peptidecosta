@@ -9,7 +9,7 @@ import { withBacGiftLines } from '@/lib/bacWater.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
-import { getOwnDomainSmtpConfig, splitOwnDomainRecipients } from '@/lib/ownDomainSmtp.mjs';
+import { getOwnDomainSmtpConfig, splitOwnDomainRecipients, receiptBccExcluding } from '@/lib/ownDomainSmtp.mjs';
 import { orderEmailActivity, recordOrderEmails } from '@/lib/orderEmailLog.mjs';
 import { classifyPaymentOutcome } from '@/lib/paymentOutcome.mjs';
 import { verifyAdminSession } from '@/lib/adminAuth';
@@ -192,6 +192,10 @@ export async function POST(request) {
       customerReceipt: { sent: false, skipped: true }
     };
 
+    // Filled in by the admin block below, and read by the customer receipt so
+    // the two mails cannot both land in the same inbox for one order.
+    let teamAlertAddresses = [];
+
     const isPaid = isPaidStatus(order.status);
     const skipAdmin = order.customerReceiptOnly === true;
     const skipCustomer = order.adminNotificationOnly === true && order.forceCustomerReceipt !== true;
@@ -246,6 +250,12 @@ export async function POST(request) {
 
       const recipients = await getOrderNotificationRecipients();
       const addressing = buildOrderEmailAddressing(recipients);
+      // Everyone the team alert reaches. The receipt's silent copy skips them:
+      // one order used to land twice in the owner's inbox, once as "New Order"
+      // and once as "Order received".
+      teamAlertAddresses = [addressing.to, addressing.cc, addressing.bcc]
+        .flat()
+        .filter(Boolean);
 
       // Rackspace hosts peptidescostarica.net and refuses mail claiming to be
       // from that domain when it arrives from anywhere but Rackspace. Elastic
@@ -412,13 +422,20 @@ export async function POST(request) {
         // No accounting CC: the accountant's copy is sent separately below, so
         // a failure here cannot take it down and customers never see the
         // address in their headers.
+        // A watcher who already had the team alert does not need the receipt
+        // as well; skipAdmin means no alert went out, so nobody is excluded.
+        const receiptWatchers = receiptBccExcluding(
+          smtp.receiptBcc,
+          skipAdmin ? [] : teamAlertAddresses,
+        );
+
         const customerInfo = await transporter.sendMail({
           from: smtp.from,
           replyTo: smtp.replyTo,
           to: String(order.customerEmail).trim(),
           // Hidden from the customer, and never allowed to be the reason a
           // receipt counts as delivered — that is judged on `to` alone below.
-          ...(smtp.receiptBcc ? { bcc: smtp.receiptBcc } : {}),
+          ...(receiptWatchers ? { bcc: receiptWatchers } : {}),
           subject: customerSubject,
           html: customerHtml,
           text: customerText,
