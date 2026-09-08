@@ -501,7 +501,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           <p class="pane__q" data-i18n="q.contact">Where should we send it?</p>
           <p class="pane__h" data-i18n="q.contact.h">Last step — then someone picks it up from here.</p>
           <div class="frm">
-            <input type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true"
+            <input type="text" name="subject" tabindex="-1" autocomplete="off" aria-hidden="true"
                    style="position:absolute;left:-9999px;width:1px;height:0;padding:0;border:0;opacity:0">
             <div class="row2">
               <div class="fld"><span class="fld__i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.4" r="3.6"/><path d="M5.4 20a6.6 6.6 0 0 1 13.2 0"/></svg></span>
@@ -723,7 +723,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           <p class="pane__q" data-i18n="q.contact">Where should we send it?</p>
           <p class="pane__h" data-i18n="q.contact.h">Last step — then someone picks it up from here.</p>
           <div class="frm">
-            <input type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true"
+            <input type="text" name="subject" tabindex="-1" autocomplete="off" aria-hidden="true"
                    style="position:absolute;left:-9999px;width:1px;height:0;padding:0;border:0;opacity:0">
             <div class="row2">
               <div class="fld"><span class="fld__i"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.4" r="3.6"/><path d="M5.4 20a6.6 6.6 0 0 1 13.2 0"/></svg></span>
@@ -853,6 +853,11 @@ function wizard(prefix, where){
   var step   = 1;
   var answers = {};
   var started = false;
+  // When this wizard was first shown, for the route's form_ms check. The hero
+  // form is there from page load; the popup wizard is restarted when it opens,
+  // via restartClock() on the handle below, so a visitor who fills it in ten
+  // seconds an hour after landing is not measured from landing.
+  var openedAt = Date.now();
 
   function paint(){
     panes.forEach(function(pane){
@@ -904,7 +909,7 @@ function wizard(prefix, where){
 
   btn.addEventListener("click", function(){
     if (sending || done) return;
-    if (root.querySelector('[name="company"]').value !== "") return;   // honeypot
+    if (root.querySelector('[name="subject"]').value !== "") return;   // honeypot, also posted for the route to judge
     if (box) box.hidden = true;
 
     var f = document.getElementById(prefix + "fname");
@@ -929,6 +934,8 @@ function wizard(prefix, where){
     var replyLang = (answers.language === "Español") ? "es" : (answers.language === "English" ? "en" : lang);
     var consentEl = document.querySelector('[data-i18n="f.consent"]');
     var payload = {
+      subject: root.querySelector('[name="subject"]').value,
+      form_ms: Date.now() - openedAt,
       name: (first + " " + last).trim(),
       email: e.value.trim(),
       phone: ph.value.trim(),
@@ -984,7 +991,7 @@ function wizard(prefix, where){
   });
 
   paint();
-  return { repaint: paint };
+  return { repaint: paint, restartClock: function(){ openedAt = Date.now(); } };
 }
 
 function post(payload){
@@ -1019,6 +1026,7 @@ function openPop(trigger){
   if (fired || done || ov.classList.contains("open")) return;
   if (engaged) track("popup_over_form", { note: "opened while the hero form was in progress" });
   fired = true;
+  if (popWiz && popWiz.restartClock) popWiz.restartClock();
   lastFocus = document.activeElement;
   ov.hidden = false;
   requestAnimationFrame(function(){ ov.classList.add("open"); });

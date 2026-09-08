@@ -71,6 +71,52 @@ test('a standalone ad page we do not control still gets through', () => {
   assert.equal(verdict.spam, false);
 });
 
+test('a page that sends no duration is still judged only on the person', () => {
+  // The AdWords pages at /lp and /glp-1 are plain HTML rather than our React
+  // forms, and neither reported a duration. Every lead off them therefore
+  // arrived already carrying no_form_timer, and one ordinary quirk on top —
+  // a Costa Rican number that happens to read as a run, a throwaway inbox, a
+  // long name — was enough to bin it. The visitor was told it had been
+  // received and Ads counted the conversion, so nothing looked wrong until the
+  // leads did not arrive.
+  //
+  // From a real browser, silence about the page must not be evidence about the
+  // person: it takes two things wrong with the submission itself.
+  for (const quirk of [
+    { phone: '+506 8765 4321' },
+    { email: 'ana@mailinator.com' },
+    { name: 'Dr. Roberto Castillo Mena de la Vega Jiménez Rojas Solano Mora' },
+  ]) {
+    const verdict = classifyLeadSubmission({
+      ...realLead,
+      ...quirk,
+      elapsedMs: undefined,
+      hasBrowserOrigin: true,
+    });
+    assert.ok(verdict.soft.includes('no_form_timer'), JSON.stringify(quirk));
+    assert.equal(verdict.spam, false, JSON.stringify(quirk));
+  }
+
+  // Two things wrong with the submission itself is still a drop, timer or no.
+  const twoQuirks = classifyLeadSubmission({
+    ...realLead,
+    email: 'x@guerrillamail.com',
+    phone: '11111111',
+    elapsedMs: undefined,
+    hasBrowserOrigin: true,
+  });
+  assert.equal(twoQuirks.spam, true);
+
+  // And the pair that describes a script — no page behind it at all — is
+  // untouched by this: silence about the duration still counts there.
+  const scripted = classifyLeadSubmission({
+    ...realLead,
+    elapsedMs: undefined,
+    hasBrowserOrigin: false,
+  });
+  assert.equal(scripted.spam, true);
+});
+
 test('a clock that moved backwards is not treated as a bot', () => {
   const verdict = classifyLeadSubmission({ ...realLead, elapsedMs: -4000 });
   assert.equal(verdict.spam, false);

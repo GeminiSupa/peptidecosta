@@ -9,6 +9,7 @@ import { rateLimit } from '@/lib/rateLimit.mjs';
 import { classifyLeadSubmission, HONEYPOT_FIELD } from '@/lib/leadSpam.mjs';
 import nodemailer from 'nodemailer';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
+import { getOwnDomainSmtpConfig, splitOwnDomainRecipients } from '@/lib/ownDomainSmtp.mjs';
 import { getLeadAlertAudience, isAdLandingSource } from '@/lib/leadNotificationRecipients';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { enqueueAndProcessLeadNotification } from '@/lib/leadNotificationDelivery';
@@ -115,15 +116,65 @@ async function sendLandingLeadAlert({
   // The assigned agent is deliberately kept out of the subject and left in the
   // body: who owns a lead can change, and whether it is auto-assigned at all is
   // still undecided, so the subject should not depend on it.
-  await transporter.sendMail({
-    from,
-    to: fromEmail,
-    bcc: recipients.join(', '),
+  const message = {
     replyTo: email || undefined,
     subject: leadNotificationEmailSubject(source, { name, slaMinutes, hasDeadline: Boolean(dueAt) }),
     text: lines.join('\n'),
     html: `<h2>${emailTitle}</h2><ul>${lines.slice(1).map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>`,
-  });
+  };
+
+  // Our own mailboxes take their copy from our own mail host; everyone else
+  // stays on Elastic. Rackspace refuses mail claiming to be from the domain it
+  // hosts when it arrives from anywhere else, and refuses it after Elastic has
+  // already returned success — so this alert was recorded as sent and thrown
+  // away. See src/lib/ownDomainSmtp.mjs for the full history. The outbox worker
+  // in leadNotificationDelivery.js does the same thing; this path only runs
+  // before the outbox migration, and it went wrong the same way.
+  //
+  // `recipients` is passed as an array, not a joined string: the splitter reads
+  // one entry per address, and a comma-joined string is a single unreadable
+  // entry that would send the whole list down one route.
+  const ownDomain = getOwnDomainSmtpConfig();
+  const split = ownDomain.configured
+    ? splitOwnDomainRecipients({ to: [fromEmail], bcc: recipients })
+    : { ownRecipients: [], rest: { to: [fromEmail], cc: [], bcc: recipients }, hasOwn: false, hasRest: true };
+
+  const sends = [];
+  // Skipped when every recipient is ours: sendMail with an empty list throws,
+  // and would report an alert that did reach the team as a total failure.
+  if (split.hasRest) {
+    sends.push(transporter.sendMail({
+      from,
+      to: split.rest.to,
+      cc: split.rest.cc,
+      bcc: split.rest.bcc,
+      ...message,
+    }));
+  }
+  if (split.hasOwn) {
+    const ownTransporter = nodemailer.createTransport({
+      host: ownDomain.host,
+      port: ownDomain.port,
+      secure: ownDomain.secure,
+      auth: { user: ownDomain.user, pass: ownDomain.pass },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
+    });
+    // Rackspace accepts its own user sending as itself. Presenting a different
+    // own-domain address is the thing it turns away.
+    sends.push(ownTransporter.sendMail({ from: ownDomain.from, to: split.ownRecipients, ...message }));
+  }
+
+  // One failing route must not hide the other's result. Only a send that
+  // reached nobody is an error worth throwing.
+  const settled = await Promise.allSettled(sends);
+  const failures = settled.filter((result) => result.status === 'rejected');
+  if (failures.length) {
+    console.error('[leads/contact] a lead alert delivery route failed:',
+      failures.map((failure) => String(failure.reason?.message || failure.reason)).join(' | '));
+  }
+  if (failures.length === settled.length) throw failures[0].reason;
   return { outbox: false, emailSent: true };
 }
 
@@ -202,7 +253,15 @@ export async function POST(request) {
       hasBrowserOrigin: Boolean(request.headers.get('origin')),
     });
     if (verdict.spam) {
-      console.warn(`[leads/contact] dropped a suspected bot submission from ${ip} (${verdict.reasons.join(', ')}) source=${source}`);
+      // The contact details go in the line, not just the verdict. Nothing is
+      // saved, so this log is the only copy that exists — and when three paid
+      // leads went missing off the AdWords page, "dropped from 1.2.3.4
+      // (filler_phone, no_form_timer)" could say how many had been binned but
+      // not who any of them were, so none of them could be called back.
+      console.warn(
+        `[leads/contact] dropped a suspected bot submission from ${ip} (${verdict.reasons.join(', ')}) source=${source}`,
+        `\n  name=${JSON.stringify(name)} email=${JSON.stringify(email)} phone=${JSON.stringify(phoneRaw)}`,
+      );
       return withCors({ success: true, leadId: null, record: 'ignored' });
     }
 

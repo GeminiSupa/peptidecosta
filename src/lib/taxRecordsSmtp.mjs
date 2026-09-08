@@ -26,10 +26,17 @@ export function getTaxRecordsSmtpConfig(env = process.env) {
   const legacyHost = read(env, 'SMTP_HOST');
   const useDedicated = Boolean(dedicatedHost);
 
+  // The legacy SMTP_* account is inherited ONLY when it is the Rackspace
+  // mailbox. A generic Elastic login must never carry the accountant's copy:
+  // Elastic accepts the submission and Rackspace discards it afterwards, so
+  // inheriting it reports delivery for mail PBAG never received — the exact
+  // false success this module was written to stop.
+  const useRackspaceMailbox = !useDedicated && isRackspaceMailHost(legacyHost);
+
   const prefix = useDedicated ? 'TAX_RECORDS_SMTP_' : 'SMTP_';
   const host = useDedicated
     ? dedicatedHost
-    : legacyHost;
+    : (useRackspaceMailbox ? legacyHost : '');
   const port = Number(read(env, `${prefix}PORT`) || 465);
   const rawSecure = read(env, `${prefix}SECURE`);
   const secure = port === 465 ? rawSecure !== 'false' : false;

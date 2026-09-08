@@ -3,6 +3,7 @@ import { getLeadAlertAudience, isAdLandingSource } from '@/lib/leadNotificationR
 import { landingQualificationNotes } from '@/lib/landingLead.mjs';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
+import { getOwnDomainSmtpConfig, isOwnDomainAddress } from '@/lib/ownDomainSmtp.mjs';
 import { leadNotificationEmailSubject, leadNotificationTitle } from '@/lib/tiktokLeadPosting.mjs';
 
 const RETRY_MINUTES = [1, 5, 15, 60, 240];
@@ -82,9 +83,43 @@ export async function sendLeadEmails({ recipients, details, slaMinutes = 15 }) {
     socketTimeout: 20000,
   });
 
+  // The team's own mailboxes have to be written to from our own mail host.
+  //
+  // Rackspace hosts peptidescostarica.net and refuses mail claiming to be from
+  // that domain when it arrives from anywhere else. We send through Elastic,
+  // which accepts the submission and reports success, so every alert to
+  // info@peptidescostarica.net was recorded `sent` and then discarded at
+  // Rackspace's boundary with nothing here to see it. That is not a theory: the
+  // order route hit the identical wall and ownDomainSmtp.mjs carries the whole
+  // history, and between 2 and 8 Sep 2026 nineteen leads reached the database
+  // while the team's inbox got no alert for any of them.
+  //
+  // Routing is per recipient because that is the unit the outbox already tracks
+  // and because only our own addresses may move: gmail, hotmail and the rest
+  // stay on Elastic. Rackspace is a small business mailbox, not a sending
+  // platform, and pushing general volume through it is what got it blocked in
+  // August. Unconfigured, every recipient stays on Elastic exactly as before.
+  const ownDomain = getOwnDomainSmtpConfig();
+  const ownTransporter = ownDomain.configured
+    ? nodemailer.createTransport({
+      host: ownDomain.host,
+      port: ownDomain.port,
+      secure: ownDomain.secure,
+      auth: { user: ownDomain.user, pass: ownDomain.pass },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
+    })
+    : null;
+
   const results = await Promise.allSettled(recipients.map(async (destination) => {
-    const result = await transporter.sendMail({
-      from,
+    const viaOwnHost = Boolean(ownTransporter) && isOwnDomainAddress(destination);
+    const result = await (viaOwnHost ? ownTransporter : transporter).sendMail({
+      // Rackspace accepts its own user sending as itself, so the own-host copy
+      // presents the mailbox address rather than whatever ORDER_NOTIFICATION_FROM
+      // holds — presenting a different own-domain address is the very thing it
+      // refuses.
+      from: viaOwnHost ? ownDomain.from : from,
       to: destination,
       replyTo: details.email || undefined,
       subject: leadNotificationEmailSubject(details.source, {
