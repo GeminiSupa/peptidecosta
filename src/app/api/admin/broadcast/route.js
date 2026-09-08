@@ -181,7 +181,9 @@ export async function DELETE(request) {
 function clampHour(value) {
   if (value === null || value === undefined || value === '') return null;
   const n = Math.floor(Number(value));
-  if (!Number.isFinite(n) || n < 0 || n > 23) return null;
+  // 24 is a valid end: "midnight, end of day". readSendWindow treats 0 -> 24
+  // as no restriction at all.
+  if (!Number.isFinite(n) || n < 0 || n > 24) return null;
   return n;
 }
 

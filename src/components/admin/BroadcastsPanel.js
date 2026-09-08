@@ -3,11 +3,20 @@ import { confirmDelete } from '@/lib/confirmDelete.mjs';
 import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader, Calendar, Trash2 } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import BroadcastProgress from '@/components/admin/BroadcastProgress';
+import { crHourOf, readSendWindow, withinSendWindow } from '@/lib/broadcastPacing.mjs';
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
   value: h,
   label: `${String(h).padStart(2, '0')}:00`,
 }));
+
+// The end runs to 24:00, not 23:00. A dropdown that stops at 23:00 reads as
+// "all day" and is not — a send queued at 23:40 against 00:00-23:00 sits until
+// morning, which is exactly the trap this list exists to remove.
+const END_HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const h = i + 1;
+  return { value: h, label: h === 24 ? '24:00 (midnight)' : `${String(h).padStart(2, '0')}:00` };
+});
 
 function hoursInWindow(start, end) {
   const s = Number(start), e = Number(end);
@@ -56,6 +65,13 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   const [windowStartHour, setWindowStartHour] = useState(8);
   const [windowEndHour, setWindowEndHour] = useState(20);
   const [windowEnabled, setWindowEnabled] = useState(true);
+  // Costa Rica's clock, ticking, so the "outside your hours" warning below
+  // cannot go stale while the operator fills the form in.
+  const [crNow, setCrNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setCrNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
   const [isEstimateLoading, setIsEstimateLoading] = useState(false);
 
   // Banners State
@@ -208,6 +224,14 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
     ? 'Lead, cart recovery, promo, and prospect outreach must use a Marketing template.'
     : 'Broadcast promos are Marketing. Use Utility only for order, payment, shipping, or account updates the customer is expecting.';
   const displayedEstimate = audience === 'custom' ? customContactEstimate : audienceEstimate;
+
+  // What the chosen hours mean right now. Without this the operator only finds
+  // out their send is held by watching a progress bar sit at 0.
+  const currentCrHour = crHourOf(crNow);
+  const activeWindow = windowEnabled
+    ? readSendWindow({ send_window_start_hour: windowStartHour, send_window_end_hour: windowEndHour })
+    : null;
+  const heldByWindow = Boolean(activeWindow) && !withinSendWindow(activeWindow, crNow);
 
   // How long the send will actually take at the chosen speed. Worth showing:
   // 1,500 WhatsApp messages at 10 every 10 minutes is a full day, and that is
@@ -754,13 +778,22 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
             )}
 
             <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(148,163,184,0.15)' }}>
+              <div style={{ color: '#e2e8f0', fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px' }}>
+                When to send <span style={{ color: '#94a3b8', fontWeight: 400 }}>(Costa Rica time — {String(currentCrHour).padStart(2, '0')}:00 there now)</span>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '6px' }}>
+                <input
+                  type="radio" name="send-window" checked={!windowEnabled}
+                  onChange={() => setWindowEnabled(false)}
+                />
+                <span style={{ color: '#f8fafc', fontSize: '0.8rem' }}>Send now — any hour, day or night</span>
+              </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '8px' }}>
                 <input
-                  type="checkbox"
-                  checked={windowEnabled}
-                  onChange={(e) => setWindowEnabled(e.target.checked)}
+                  type="radio" name="send-window" checked={windowEnabled}
+                  onChange={() => setWindowEnabled(true)}
                 />
-                <span style={{ color: '#e2e8f0', fontSize: '0.8rem', fontWeight: 700 }}>Only send during these hours</span>
+                <span style={{ color: '#f8fafc', fontSize: '0.8rem' }}>Only during these hours</span>
               </label>
               {windowEnabled ? (
                 <>
@@ -782,17 +815,23 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
                         onChange={(e) => setWindowEndHour(Number(e.target.value))}
                         style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', marginTop: '3px' }}
                       >
-                        {HOUR_OPTIONS.map((h) => <option key={h.value} value={h.value}>{h.label}</option>)}
+                        {END_HOUR_OPTIONS.map((h) => <option key={h.value} value={h.value}>{h.label}</option>)}
                       </select>
                     </label>
                   </div>
-                  <div style={{ marginTop: '6px', color: '#94a3b8', fontSize: '0.72rem', lineHeight: 1.45 }}>
-                    Costa Rica time — where the message lands, not where you are. Sending pauses outside these hours and picks up again at {HOUR_OPTIONS[windowStartHour]?.label}.
-                  </div>
+                  {heldByWindow ? (
+                    <div style={{ marginTop: '6px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24', fontSize: '0.74rem', lineHeight: 1.45 }}>
+                      ⏸️ It is {String(currentCrHour).padStart(2, '0')}:00 in Costa Rica, outside these hours. Nothing will send until {HOUR_OPTIONS[windowStartHour]?.label}. Pick “Send now” above to go immediately.
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: '6px', color: '#94a3b8', fontSize: '0.72rem', lineHeight: 1.45 }}>
+                      Where the message lands, not where you are. Sending starts now and pauses outside these hours.
+                    </div>
+                  )}
                 </>
               ) : (
-                <div style={{ color: '#fbbf24', fontSize: '0.72rem', lineHeight: 1.45 }}>
-                  ⚠️ Sending runs around the clock, including the middle of the night in Costa Rica.
+                <div style={{ color: '#94a3b8', fontSize: '0.72rem', lineHeight: 1.45 }}>
+                  Starts immediately and keeps going through the night in Costa Rica. Fine for a test; think twice for a large marketing send.
                 </div>
               )}
             </div>

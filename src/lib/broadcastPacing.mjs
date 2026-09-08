@@ -173,14 +173,24 @@ export function crHourOf(ms) {
 export function readSendWindow(row) {
   const start = toHour(row?.send_window_start_hour);
   const end = toHour(row?.send_window_end_hour);
-  if (start === null || end === null || start === end) return null;
+  if (start === null || end === null) return null;
+  // A zero-length window would never open. 0 -> 24 covers the whole day, which
+  // is the same as no window at all, so say so rather than gating every run.
+  if (start === end) return null;
+  if (start === 0 && end === 24) return null;
   return { start, end };
 }
 
+/**
+ * 0-24. The end accepts 24 for "midnight, end of day", because an operator
+ * reading a dropdown that stops at 23:00 picks it meaning "all day" and then
+ * finds their 23:40 send held until morning. With 24 allowed, 0 -> 24 says
+ * what it looks like it says.
+ */
 function toHour(value) {
   if (value === null || value === undefined || value === '') return null;
   const n = Math.floor(Number(value));
-  if (!Number.isFinite(n) || n < 0 || n > 23) return null;
+  if (!Number.isFinite(n) || n < 0 || n > 24) return null;
   return n;
 }
 

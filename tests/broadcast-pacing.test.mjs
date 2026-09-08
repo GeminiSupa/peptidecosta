@@ -214,3 +214,18 @@ test('the Costa Rica hour is read as CR time, not the reader\'s clock', () => {
   assert.equal(crHourOf(Date.parse('2026-09-09T02:00:00Z')), 20);
   assert.equal(crHourOf(Date.parse('2026-09-09T06:00:00Z')), 0);
 });
+
+test('24:00 as an end means the end of the day, not a held send', () => {
+  // The trap: a dropdown ending at 23:00 reads as "all day", so a send queued
+  // at 23:40 sat until morning with the progress bar on zero.
+  const allDay = readSendWindow({ send_window_start_hour: 0, send_window_end_hour: 24 });
+  assert.equal(allDay, null, '0 to 24 is no restriction at all');
+
+  const evening = readSendWindow({ send_window_start_hour: 8, send_window_end_hour: 24 });
+  assert.equal(withinSendWindow(evening, crAt(9, 23)), true, '23:40 must send');
+  assert.equal(withinSendWindow(evening, crAt(9, 3)), false, 'but 3am must not');
+
+  // The old 0-23 still behaves as written: it genuinely stops at 11pm.
+  const stopsAt23 = readSendWindow({ send_window_start_hour: 0, send_window_end_hour: 23 });
+  assert.equal(withinSendWindow(stopsAt23, crAt(9, 23)), false);
+});
