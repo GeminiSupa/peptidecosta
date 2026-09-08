@@ -9,6 +9,7 @@ import { withBacGiftLines } from '@/lib/bacWater.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
+import { getOwnDomainSmtpConfig, splitOwnDomainRecipients } from '@/lib/ownDomainSmtp.mjs';
 import { orderEmailActivity, recordOrderEmails } from '@/lib/orderEmailLog.mjs';
 import { classifyPaymentOutcome } from '@/lib/paymentOutcome.mjs';
 import { verifyAdminSession } from '@/lib/adminAuth';
@@ -246,17 +247,69 @@ export async function POST(request) {
       const recipients = await getOrderNotificationRecipients();
       const addressing = buildOrderEmailAddressing(recipients);
 
-      const adminInfo = await transporter.sendMail({
-        from: smtp.from,
-        to: addressing.to,
-        cc: addressing.cc,
-        bcc: addressing.bcc,
+      // Rackspace hosts peptidescostarica.net and refuses mail claiming to be
+      // from that domain when it arrives from anywhere but Rackspace. Elastic
+      // accepts the submission and reports success, so the alert to info@ was
+      // discarded after we had already logged it as delivered. Our own
+      // mailboxes therefore get their copy from our own host; everyone else
+      // stays on Elastic. See src/lib/ownDomainSmtp.mjs for the full history.
+      const ownDomainSmtp = getOwnDomainSmtpConfig();
+      const split = ownDomainSmtp.configured
+        ? splitOwnDomainRecipients(addressing)
+        : { ownRecipients: [], rest: addressing, hasOwn: false, hasRest: true };
+
+      const message = {
         subject: adminSubject,
         html: adminHtml,
         text: adminText,
         replyTo: order.customerEmail ? String(order.customerEmail).trim() : undefined,
         attachments: [getOrderEmailLogoAttachment()],
-      });
+      };
+
+      const sends = [];
+
+      // Everyone not on our domain, through Elastic as before. Skipped when the
+      // whole list is ours — sendMail with no recipients throws, and would
+      // report the entire alert as failed.
+      if (split.hasRest) {
+        sends.push(transporter.sendMail({
+          from: smtp.from,
+          to: split.rest.to,
+          cc: split.rest.cc,
+          bcc: split.rest.bcc,
+          ...message,
+        }));
+      }
+
+      // Our own mailboxes, through our own host.
+      if (split.hasOwn) {
+        const ownTransporter = nodemailer.createTransport({
+          host: ownDomainSmtp.host,
+          port: ownDomainSmtp.port,
+          secure: ownDomainSmtp.secure,
+          auth: { user: ownDomainSmtp.user, pass: ownDomainSmtp.pass },
+          ...SMTP_TIMEOUTS,
+        });
+        sends.push(ownTransporter.sendMail({
+          from: ownDomainSmtp.from,
+          to: split.ownRecipients,
+          ...message,
+        }));
+      }
+
+      // One failing route must not hide the other's result: the team still
+      // needs to know the alert reached somebody, and which half did not.
+      const settled = await Promise.allSettled(sends);
+      const failures = settled.filter((r) => r.status === 'rejected');
+      if (failures.length) {
+        console.error('[Order notification] a delivery route failed:',
+          failures.map((f) => String(f.reason?.message || f.reason)).join(' | '));
+      }
+      const adminInfo = {
+        accepted: settled.flatMap((r) => (r.status === 'fulfilled' ? (r.value?.accepted || []) : [])),
+        rejected: settled.flatMap((r) => (r.status === 'fulfilled' ? (r.value?.rejected || []) : [])),
+        messageId: settled.find((r) => r.status === 'fulfilled')?.value?.messageId,
+      };
 
       // A server can accept the submission and still refuse individual
       // addresses, and nodemailer reports that in `info.rejected` rather than
