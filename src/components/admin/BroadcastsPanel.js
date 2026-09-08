@@ -787,7 +787,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
                     </label>
                   </div>
                   <div style={{ marginTop: '6px', color: '#94a3b8', fontSize: '0.72rem', lineHeight: 1.45 }}>
-                    Costa Rica time. Sending pauses outside these hours and picks up again at {HOUR_OPTIONS[windowStartHour]?.label}. Your own clock is 11 hours ahead.
+                    Costa Rica time — where the message lands, not where you are. Sending pauses outside these hours and picks up again at {HOUR_OPTIONS[windowStartHour]?.label}.
                   </div>
                 </>
               ) : (
