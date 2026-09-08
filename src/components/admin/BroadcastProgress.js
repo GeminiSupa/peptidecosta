@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Activity, CheckCircle2, XCircle, ShieldOff, Clock, ChevronDown, ChevronUp, Loader } from 'lucide-react';
+import { Activity, CheckCircle2, XCircle, ShieldOff, Clock, ChevronDown, ChevronUp, Loader, Zap } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
 const POLL_MS = 5000;
@@ -23,6 +23,7 @@ export default function BroadcastProgress() {
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState({});
   const [stoppingId, setStoppingId] = useState(null);
+  const [releasingId, setReleasingId] = useState(null);
   const timerRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -71,6 +72,30 @@ export default function BroadcastProgress() {
       alert(`Could not stop broadcast: ${err.message}`);
     } finally {
       setStoppingId(null);
+    }
+  };
+
+  // Release a broadcast that is waiting — for its quiet hours, or for the gap
+  // between batches. Stopping and rebuilding was the only way to do this, and
+  // that loses track of who has already been sent to.
+  const handleSendNow = async (broadcast) => {
+    if (!broadcast?.id || releasingId) return;
+    if (!confirm('Send the rest of this broadcast now? Any sending-hours limit on it will be removed.')) return;
+
+    setReleasingId(broadcast.id);
+    try {
+      const res = await adminFetch('/api/admin/broadcasts/progress', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: broadcast.id, action: 'send_now' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `Send now failed (${res.status})`);
+      await load();
+    } catch (err) {
+      alert(`Could not release broadcast: ${err.message}`);
+    } finally {
+      setReleasingId(null);
     }
   };
 
@@ -132,6 +157,17 @@ export default function BroadcastProgress() {
                   )}
                 </div>
                 <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {canStop && (
+                    <button
+                      type="button"
+                      onClick={() => handleSendNow(b)}
+                      disabled={releasingId === b.id}
+                      title="Send the rest now, ignoring any sending-hours limit"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 800, padding: '3px 9px', borderRadius: '999px', whiteSpace: 'nowrap', cursor: releasingId === b.id ? 'default' : 'pointer', color: '#4ade80', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)' }}
+                    >
+                      <Zap size={12} /> {releasingId === b.id ? 'Starting' : 'Send now'}
+                    </button>
+                  )}
                   {canStop && (
                     <button
                       type="button"
