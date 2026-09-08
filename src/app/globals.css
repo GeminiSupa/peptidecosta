@@ -2348,6 +2348,49 @@ body {
     font-weight: 700;
 }
 
+.card-payment-statement-notice {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin: 10px 0 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(14, 165, 233, 0.22);
+    border-radius: 10px;
+    background: rgba(14, 165, 233, 0.06);
+}
+
+.card-payment-statement-notice__icon {
+    font-size: 1.15rem;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.card-payment-statement-notice__heading {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.card-payment-statement-notice__list {
+    margin: 0;
+    padding: 0 0 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: 0.73rem;
+    line-height: 1.45;
+    font-weight: 600;
+}
+
+.card-payment-statement-notice__list strong {
+    color: var(--text-secondary);
+}
+
 .card-payment-btn {
     width: 100%;
     margin-top: 12px;
@@ -2500,6 +2543,36 @@ body {
     color: #61708c;
     font-size: 0.78rem;
     line-height: 1.45;
+}
+
+.card-pay-statement-notice {
+    margin: 14px 0 0;
+    padding: 12px 14px;
+    border: 1px solid rgba(14, 120, 200, 0.22);
+    border-radius: 8px;
+    background: rgba(239, 246, 255, 0.7);
+    color: #374d6c;
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
+.card-pay-statement-notice__heading {
+    margin: 0 0 8px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #1e3a5f;
+}
+
+.card-pay-statement-notice__list {
+    margin: 0;
+    padding: 0 0 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.card-pay-statement-notice__list strong {
+    color: #1e3a5f;
 }
 
 .card-pay-form {

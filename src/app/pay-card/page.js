@@ -196,6 +196,23 @@ function CardPaymentContent() {
                   ? 'Card details are processed by Shield Hub Pay and are not stored by Costa Peptides.'
                   : 'Los datos de tarjeta son procesados por Shield Hub Pay y no se almacenan en Costa Peptides.'}
               </p>
+              <div className="card-pay-statement-notice">
+                <p className="card-pay-statement-notice__heading">
+                  🏦 {isEn ? 'What you will see on your statement:' : 'Lo que verás en tu estado de cuenta:'}
+                </p>
+                <ul className="card-pay-statement-notice__list">
+                  <li>
+                    {isEn
+                      ? <><strong>Mexican bank</strong> — the charge is routed through Mexico with a USD conversion. This is normal.</>
+                      : <><strong>Banco mexicano</strong> — el cargo se procesa a través de México con conversión a USD. Esto es normal.</>}
+                  </li>
+                  <li>
+                    {isEn
+                      ? <>Statement name: <strong>&ldquo;SOF IA&rdquo;</strong> — this is our payment processor. <strong>Do not dispute</strong> this charge.</>
+                      : <>Nombre en el estado de cuenta: <strong>&ldquo;SOF IA&rdquo;</strong> — este es nuestro procesador de pagos. <strong>No disputes</strong> este cargo.</>}
+                  </li>
+                </ul>
+              </div>
             </aside>
 
             <form className="card-pay-panel card-pay-form" onSubmit={submitPayment}>
