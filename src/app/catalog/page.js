@@ -4773,6 +4773,26 @@ export default function CatalogPage() {
                       ? 'Your bank may add a small international transaction fee (about 1–3%) to card payments. This fee comes from your bank, not from us.'
                       : 'Tu banco podría añadir una pequeña comisión por transacción internacional (alrededor de 1–3%) a los pagos con tarjeta. Esta comisión la cobra tu banco, no nosotros.'}
                   </p>
+                  <div className="card-payment-statement-notice">
+                    <span className="card-payment-statement-notice__icon">🏦</span>
+                    <div>
+                      <strong className="card-payment-statement-notice__heading">
+                        {lang === 'en' ? 'What you will see on your statement:' : 'Lo que verás en tu estado de cuenta:'}
+                      </strong>
+                      <ul className="card-payment-statement-notice__list">
+                        <li>
+                          {lang === 'en'
+                            ? <>The charge is processed through a <strong>Mexican bank</strong> with a USD conversion — this is normal and expected.</>                            
+                            : <>El cargo se procesa a través de un <strong>banco mexicano</strong> con conversión a USD — esto es normal y esperado.</>}
+                        </li>
+                        <li>
+                          {lang === 'en'
+                            ? <>It will appear on your statement as <strong>&ldquo;SOF IA&rdquo;</strong> (our payment processor&apos;s name). Do <strong>not</strong> dispute this charge — it is us.</>
+                            : <>Aparecerá en tu estado de cuenta como <strong>&ldquo;SOF IA&rdquo;</strong> (el nombre de nuestro procesador de pagos). <strong>No</strong> disputes este cargo — somos nosotros.</>}
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
                   {/* Always render the button. Hiding it behind a "fill in your
                       details" notice made the customer hunt for the missing field
                       themselves; validateForm now names it and scrolls to it. */}

@@ -146,7 +146,7 @@ export async function POST(request) {
         amount: amountUsd.toFixed(2),
         currency: 'USD',
         transaction_reference: order.order_number,
-        redirectback_url: `${baseUrl}/thank-you?lang=${encodeURIComponent(lang)}&order=${encodeURIComponent(order.order_number)}`,
+        redirectback_url: `${baseUrl}/thank-you?lang=${encodeURIComponent(lang)}&order=${encodeURIComponent(order.order_number)}&payment=card`,
         notification_url: `${baseUrl}/api/shieldhubpay/webhook`,
         customer: {
           first: name.first,

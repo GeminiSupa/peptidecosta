@@ -17,6 +17,7 @@ function ThankYouContent() {
   const { allowed: accountsAvailable } = useAccountAccess();
   const [lang, setLang] = useState('es');
   const [mounted, setMounted] = useState(false);
+  const [paidByCard, setPaidByCard] = useState(false);
   const [reviewClicked, setReviewClicked] = useState(false);
   const [copiedReferral, setCopiedReferral] = useState(false);
 
@@ -34,6 +35,9 @@ function ThankYouContent() {
         if (storedLang === 'en' || storedLang === 'es') {
           setLang(storedLang);
         }
+      }
+      if (params.get('payment') === 'card') {
+        setPaidByCard(true);
       }
     }
   }, []);
@@ -57,7 +61,13 @@ function ThankYouContent() {
       referralWhatsapp: "Share on WhatsApp",
       accountTitle: "📦 Track this order",
       accountBody: "Create your account with the same email you just used, and this order — along with every order you have placed before — appears in it automatically. Track shipments and reorder in one tap.",
-      accountButton: "Set up my account"
+      accountButton: "Set up my account",
+      cardStatementTitle: "🏦 About your card statement",
+      cardStatementBody: "So there are no surprises — here is exactly what to expect:",
+      cardStatementMexicoLabel: "Charged from Mexico:",
+      cardStatementMexicoDetail: "Our payment processor routes the charge through a Mexican bank with a USD conversion. This is completely normal — your order is with us in Costa Rica.",
+      cardStatementNameLabel: "Statement descriptor:",
+      cardStatementNameDetail: "The charge will appear as \"SOF IA\" on your card statement. That is our payment processor — it is us. Please do not dispute this charge.",
     },
     es: {
       title: "Orden Recibida",
@@ -77,7 +87,13 @@ function ThankYouContent() {
       referralWhatsapp: "Compartir por WhatsApp",
       accountTitle: "📦 Dé seguimiento a este pedido",
       accountBody: "Cree su cuenta con el mismo correo que acaba de usar y este pedido — junto con todos los que ha hecho antes — aparecerá automáticamente. Siga sus envíos y vuelva a pedir con un solo toque.",
-      accountButton: "Crear mi cuenta"
+      accountButton: "Crear mi cuenta",
+      cardStatementTitle: "🏦 Sobre tu estado de cuenta",
+      cardStatementBody: "Para que no haya sorpresas — esto es exactamente lo que esperarás:",
+      cardStatementMexicoLabel: "Cargo desde México:",
+      cardStatementMexicoDetail: "Nuestro procesador de pagos enruta el cargo a través de un banco mexicano con conversión a USD. Esto es completamente normal — tu pedido es con nosotros en Costa Rica.",
+      cardStatementNameLabel: "Nombre en el estado de cuenta:",
+      cardStatementNameDetail: "El cargo aparecerá como \"SOF IA\" en tu estado de cuenta. Ese es nuestro procesador de pagos — somos nosotros. Por favor no disputes este cargo.",
     }
   };
 
@@ -368,6 +384,47 @@ function ThankYouContent() {
           </Link>
         </div>
         ) : null}
+
+        {/* Card statement notice — shown only for card payments */}
+        {paidByCard && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(245, 158, 11, 0.05) 100%)',
+            border: '1px solid rgba(251, 191, 36, 0.35)',
+            borderRadius: '16px',
+            padding: '20px 22px',
+            marginBottom: '24px',
+            textAlign: 'left',
+          }}>
+            <p style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: '800', color: '#fbbf24', letterSpacing: '-0.2px' }}>
+              {t.cardStatementTitle}
+            </p>
+            <p style={{ margin: '0 0 14px', fontSize: '0.82rem', color: '#94a3b8', lineHeight: 1.5 }}>
+              {t.cardStatementBody}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '1.1rem', flexShrink: 0, marginTop: '1px' }}>🇲🇽</span>
+                <div>
+                  <span style={{ fontWeight: '700', color: '#e2e8f0', fontSize: '0.82rem' }}>{t.cardStatementMexicoLabel}</span>{' '}
+                  <span style={{ color: '#94a3b8', fontSize: '0.82rem', lineHeight: 1.5 }}>{t.cardStatementMexicoDetail}</span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                <span style={{ fontSize: '1.1rem', flexShrink: 0, marginTop: '1px' }}>💳</span>
+                <div>
+                  <span style={{ fontWeight: '700', color: '#e2e8f0', fontSize: '0.82rem' }}>{t.cardStatementNameLabel}</span>{' '}
+                  <span style={{ color: '#94a3b8', fontSize: '0.82rem', lineHeight: 1.5 }}>
+                    {t.cardStatementNameDetail.split('"SOF IA"').map((part, i, arr) =>
+                      i < arr.length - 1
+                        ? <React.Fragment key={i}>{part}<strong style={{ color: '#fbbf24', background: 'rgba(251,191,36,0.12)', padding: '1px 6px', borderRadius: '4px' }}>&ldquo;SOF IA&rdquo;</strong></React.Fragment>
+                        : <React.Fragment key={i}>{part}</React.Fragment>
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Button & Notice */}
         <div style={{
