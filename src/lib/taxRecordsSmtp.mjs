@@ -25,12 +25,11 @@ export function getTaxRecordsSmtpConfig(env = process.env) {
   const dedicatedHost = read(env, 'TAX_RECORDS_SMTP_HOST');
   const legacyHost = read(env, 'SMTP_HOST');
   const useDedicated = Boolean(dedicatedHost);
-  const useRackspaceMailbox = !useDedicated && isRackspaceMailHost(legacyHost);
 
   const prefix = useDedicated ? 'TAX_RECORDS_SMTP_' : 'SMTP_';
   const host = useDedicated
     ? dedicatedHost
-    : (useRackspaceMailbox ? legacyHost : '');
+    : legacyHost;
   const port = Number(read(env, `${prefix}PORT`) || 465);
   const rawSecure = read(env, `${prefix}SECURE`);
   const secure = port === 465 ? rawSecure !== 'false' : false;
