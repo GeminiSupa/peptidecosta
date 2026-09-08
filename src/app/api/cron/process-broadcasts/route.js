@@ -13,8 +13,11 @@ import { broadcastFailureRecovery } from '@/lib/broadcastFailureRecovery.mjs';
 import { marketingCopyHeader } from '@/lib/marketingEmailAddressing.mjs';
 import {
   channelPacing, channelIsDue, planBatch, encodeRemaining, nextRunTimes, canChainImmediately,
+  readSendWindow, withinSendWindow, nextWindowOpening,
 } from '@/lib/broadcastPacing.mjs';
-import { writeDroppingMissingColumns, BROADCAST_PACING_COLUMNS } from '@/lib/optionalColumns.mjs';
+import {
+  writeDroppingMissingColumns, BROADCAST_PACING_COLUMNS, BROADCAST_WINDOW_COLUMNS,
+} from '@/lib/optionalColumns.mjs';
 
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
@@ -376,6 +379,22 @@ export async function GET(request) {
 
       // Each channel keeps its own place in the queue and its own clock, so a
       // slow WhatsApp drip and a fast email send can run off one broadcast.
+      // Quiet hours come first: a paced send must not spend the night buzzing
+      // phones. Outside the window the broadcast is put straight back to
+      // pending for the next opening, with nothing sent.
+      const sendWindow = readSendWindow(broadcast);
+      const windowNow = Date.now();
+      if (sendWindow && !withinSendWindow(sendWindow, windowNow)) {
+        const resumeAt = new Date(nextWindowOpening(sendWindow, windowNow)).toISOString();
+        await supabase.from('scheduled_broadcasts')
+          .update({ status: 'pending', scheduled_at: resumeAt })
+          .eq('id', broadcast.id);
+        await supabase.from('deals').update({ announcement_status: 'sending' }).eq('broadcast_id', broadcast.id);
+        settledBroadcastIds.add(broadcast.id);
+        activeBroadcastId = null;
+        continue;
+      }
+
       const emailPacing = channelPacing(broadcast, 'email');
       const whatsappPacing = channelPacing(broadcast, 'whatsapp');
       const runAt = Date.now();
@@ -514,7 +533,9 @@ export async function GET(request) {
             status: 'pending',
             audience: 'custom',
             custom_contacts: remainingStr,
-            scheduled_at: timing.scheduledAt,
+            scheduled_at: sendWindow
+              ? new Date(nextWindowOpening(sendWindow, Date.parse(timing.scheduledAt))).toISOString()
+              : timing.scheduledAt,
             email_next_at: timing.emailNextAt,
             whatsapp_next_at: timing.whatsappNextAt,
           },
@@ -528,7 +549,8 @@ export async function GET(request) {
 
         // Self-trigger only when nothing is being waited for. Chaining through
         // a configured delay would busy-loop the function and undo the pacing.
-        if (canChainImmediately(timing.scheduledAt, Date.now())) {
+        if (canChainImmediately(timing.scheduledAt, Date.now())
+          && withinSendWindow(sendWindow, Date.now())) {
           const host = request.headers.get('host') || 'localhost:3000';
           const protocol = host.includes('localhost') ? 'http' : 'https';
           fetch(`${protocol}://${host}/api/cron/process-broadcasts`, {

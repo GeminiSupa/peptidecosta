@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { writeDroppingMissingColumns, BROADCAST_PACING_COLUMNS } from '@/lib/optionalColumns.mjs';
+import { writeDroppingMissingColumns, BROADCAST_PACING_COLUMNS, BROADCAST_WINDOW_COLUMNS } from '@/lib/optionalColumns.mjs';
 import {
   DEFAULT_BATCH_SIZE, DEFAULT_DELAY_SECONDS, MAX_BATCH_SIZE, MAX_DELAY_SECONDS,
 } from '@/lib/broadcastPacing.mjs';
@@ -177,6 +177,14 @@ export async function DELETE(request) {
   }
 }
 
+/** A whole CR hour 0-23, or null for "no restriction". */
+function clampHour(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n < 0 || n > 23) return null;
+  return n;
+}
+
 /** Keep a hand-made API call from turning a typo into a burst. */
 function clampPacing(value, fallback, min, max) {
   if (value === null || value === undefined || value === '') return fallback;
@@ -320,7 +328,15 @@ export async function POST(request) {
       email_batch_delay_seconds: clampPacing(pacing?.emailDelaySeconds, DEFAULT_DELAY_SECONDS, 0, MAX_DELAY_SECONDS),
       whatsapp_batch_size: clampPacing(pacing?.whatsappBatchSize, DEFAULT_BATCH_SIZE, 1, MAX_BATCH_SIZE),
       whatsapp_batch_delay_seconds: clampPacing(pacing?.whatsappDelaySeconds, DEFAULT_DELAY_SECONDS, 0, MAX_DELAY_SECONDS),
+      // Quiet hours, in Costa Rica time. Equal start and end would mean a
+      // zero-length window that never opens, so it is treated as "no limit".
+      send_window_start_hour: clampHour(pacing?.windowStartHour),
+      send_window_end_hour: clampHour(pacing?.windowEndHour),
     };
+    if (pacingColumns.send_window_start_hour === pacingColumns.send_window_end_hour) {
+      pacingColumns.send_window_start_hour = null;
+      pacingColumns.send_window_end_hour = null;
+    }
 
     if (!message && !whatsappTemplateName && !(channels?.email && channels?.emailHtmlContent)) {
       return NextResponse.json({ error: 'Message, Template Name, or custom email HTML is required' }, { status: 400 });
@@ -363,7 +379,7 @@ export async function POST(request) {
       };
       const { data: inserted, error } = await writeDroppingMissingColumns(
         payload,
-        ['deal_id', ...BROADCAST_PACING_COLUMNS],
+        ['deal_id', ...BROADCAST_PACING_COLUMNS, ...BROADCAST_WINDOW_COLUMNS],
         (row) => supabase.from('scheduled_broadcasts').insert(row).select('id').single(),
       );
       if (error) throw error;
@@ -416,7 +432,7 @@ export async function POST(request) {
       };
       const { data: inserted, error: insertError } = await writeDroppingMissingColumns(
         payload,
-        ['deal_id', ...BROADCAST_PACING_COLUMNS],
+        ['deal_id', ...BROADCAST_PACING_COLUMNS, ...BROADCAST_WINDOW_COLUMNS],
         (row) => supabase.from('scheduled_broadcasts').insert(row).select().single(),
       );
 

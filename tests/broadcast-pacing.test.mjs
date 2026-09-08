@@ -144,3 +144,73 @@ test('the processor only self-triggers when nothing is being waited for', () => 
     'chaining through a delay would busy-loop and defeat the pacing');
   assert.equal(canChainImmediately(null, NOW), false);
 });
+
+/**
+ * Quiet hours.
+ *
+ * Pacing a send slowly is right for 1,500 recipients and wrong for a night:
+ * spread over thirteen hours, a broadcast started in the afternoon runs until
+ * dawn and buzzes phones at 3am. Spam reports are what actually get a WhatsApp
+ * number restricted, so the window matters more than the throughput.
+ */
+
+import {
+  readSendWindow, withinSendWindow, nextWindowOpening, crHourOf,
+} from '../src/lib/broadcastPacing.mjs';
+
+/**
+ * An instant at a given Costa Rica hour (UTC-6, no DST).
+ * Date.UTC, not string building: CR 19:00 is 25:00 UTC the same day, which is
+ * not a time you can write down but is a date Date.UTC rolls over correctly.
+ */
+const crAt = (day, hour) => Date.UTC(2026, 8, day, hour + 6);
+
+test('a broadcast with no window set sends around the clock, as before', () => {
+  assert.equal(readSendWindow({}), null);
+  assert.equal(withinSendWindow(null, crAt(9, 3)), true);
+  assert.equal(nextWindowOpening(null, crAt(9, 3)), crAt(9, 3));
+});
+
+test('an equal start and end is treated as no window, not a window that never opens', () => {
+  assert.equal(readSendWindow({ send_window_start_hour: 9, send_window_end_hour: 9 }), null);
+  assert.equal(readSendWindow({ send_window_start_hour: 8, send_window_end_hour: null }), null);
+  assert.equal(readSendWindow({ send_window_start_hour: 99, send_window_end_hour: 20 }), null);
+});
+
+test('8:00-20:00 sends by day and holds overnight', () => {
+  const w = readSendWindow({ send_window_start_hour: 8, send_window_end_hour: 20 });
+  assert.deepEqual(w, { start: 8, end: 20 });
+
+  assert.equal(withinSendWindow(w, crAt(9, 8)), true, 'the start hour is included');
+  assert.equal(withinSendWindow(w, crAt(9, 13)), true);
+  assert.equal(withinSendWindow(w, crAt(9, 19)), true);
+  assert.equal(withinSendWindow(w, crAt(9, 20)), false, 'the end hour is excluded');
+  assert.equal(withinSendWindow(w, crAt(9, 23)), false);
+  assert.equal(withinSendWindow(w, crAt(9, 3)), false, '3am is the whole point');
+  assert.equal(withinSendWindow(w, crAt(9, 7)), false);
+});
+
+test('a held broadcast resumes at the next opening, not immediately', () => {
+  const w = { start: 8, end: 20 };
+  // Late evening waits for the morning.
+  assert.equal(crHourOf(nextWindowOpening(w, crAt(9, 21))), 8);
+  // The small hours wait for the same morning.
+  assert.equal(crHourOf(nextWindowOpening(w, crAt(9, 3))), 8);
+  // An instant already inside the window is not moved at all.
+  assert.equal(nextWindowOpening(w, crAt(9, 12)), crAt(9, 12));
+});
+
+test('a window may wrap midnight', () => {
+  const w = readSendWindow({ send_window_start_hour: 20, send_window_end_hour: 6 });
+  assert.equal(withinSendWindow(w, crAt(9, 22)), true);
+  assert.equal(withinSendWindow(w, crAt(9, 2)), true);
+  assert.equal(withinSendWindow(w, crAt(9, 12)), false);
+  assert.equal(crHourOf(nextWindowOpening(w, crAt(9, 12))), 20);
+});
+
+test('the Costa Rica hour is read as CR time, not the reader\'s clock', () => {
+  // 02:00 UTC is 20:00 the previous day in Costa Rica — the difference that
+  // decides whether a message lands at dinner or at 2am.
+  assert.equal(crHourOf(Date.parse('2026-09-09T02:00:00Z')), 20);
+  assert.equal(crHourOf(Date.parse('2026-09-09T06:00:00Z')), 0);
+});

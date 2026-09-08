@@ -12,6 +12,8 @@
  * nothing is configured, so an existing broadcast paces exactly as before.
  */
 
+import { CR_UTC_OFFSET_HOURS } from './crTime.mjs';
+
 export const DEFAULT_BATCH_SIZE = 10;
 export const DEFAULT_DELAY_SECONDS = 0;
 
@@ -148,4 +150,63 @@ export function canChainImmediately(scheduledAt, now = Date.now()) {
   if (!scheduledAt) return false;
   const ms = Date.parse(scheduledAt);
   return Number.isFinite(ms) && ms <= now;
+}
+
+/**
+ * The hours a broadcast is allowed to send, in Costa Rica time.
+ *
+ * A slow drip is the right way to send to 1,500 people and the wrong way to
+ * spend a night: paced over thirteen hours, a send started in the afternoon
+ * runs through until dawn, buzzing phones at 3am. That is how a business earns
+ * spam reports, which is what actually gets a WhatsApp number restricted.
+ *
+ * Hours are whole numbers 0-23 in CR wall time, and the window is inclusive of
+ * the start hour and exclusive of the end: 8 to 20 means the first message may
+ * go at 08:00 and the last before 20:00. Null on either side means no
+ * restriction, which is how every existing broadcast behaves.
+ */
+export function crHourOf(ms) {
+  const cr = new Date(ms - CR_UTC_OFFSET_HOURS * 3600_000);
+  return cr.getUTCHours();
+}
+
+export function readSendWindow(row) {
+  const start = toHour(row?.send_window_start_hour);
+  const end = toHour(row?.send_window_end_hour);
+  if (start === null || end === null || start === end) return null;
+  return { start, end };
+}
+
+function toHour(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n < 0 || n > 23) return null;
+  return n;
+}
+
+/** True when the CR hour at `ms` falls inside the window. Handles a window that wraps midnight. */
+export function withinSendWindow(window, ms) {
+  if (!window) return true;
+  const hour = crHourOf(ms);
+  const { start, end } = window;
+  return start < end
+    ? hour >= start && hour < end
+    : hour >= start || hour < end; // e.g. 20 -> 6, overnight
+}
+
+/**
+ * When sending may next resume. Returns `ms` unchanged if it is already inside
+ * the window, otherwise the next window start, to the hour.
+ */
+export function nextWindowOpening(window, ms) {
+  if (!window || withinSendWindow(window, ms)) return ms;
+  // Step to the top of the next hour repeatedly until the window opens. At most
+  // 24 steps, and it keeps the arithmetic honest across the CR offset.
+  const cr = new Date(ms - CR_UTC_OFFSET_HOURS * 3600_000);
+  cr.setUTCMinutes(0, 0, 0);
+  for (let i = 1; i <= 24; i += 1) {
+    const candidate = cr.getTime() + i * 3600_000 + CR_UTC_OFFSET_HOURS * 3600_000;
+    if (withinSendWindow(window, candidate)) return candidate;
+  }
+  return ms;
 }

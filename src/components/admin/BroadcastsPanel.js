@@ -4,6 +4,17 @@ import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader, Calenda
 import { adminFetch } from '@/lib/adminApi';
 import BroadcastProgress from '@/components/admin/BroadcastProgress';
 
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
+  value: h,
+  label: `${String(h).padStart(2, '0')}:00`,
+}));
+
+function hoursInWindow(start, end) {
+  const s = Number(start), e = Number(end);
+  if (!Number.isFinite(s) || !Number.isFinite(e) || s === e) return 24;
+  return s < e ? e - s : 24 - s + e;
+}
+
 function formatDuration(seconds) {
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.round(seconds / 60);
@@ -40,6 +51,11 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   const [emailDelaySeconds, setEmailDelaySeconds] = useState(0);
   const [whatsappBatchSize, setWhatsappBatchSize] = useState(10);
   const [whatsappDelaySeconds, setWhatsappDelaySeconds] = useState(0);
+  // Quiet hours in Costa Rica time. A paced send otherwise runs through the
+  // night; 8am-8pm is the sane default for a customer's phone.
+  const [windowStartHour, setWindowStartHour] = useState(8);
+  const [windowEndHour, setWindowEndHour] = useState(20);
+  const [windowEnabled, setWindowEnabled] = useState(true);
   const [isEstimateLoading, setIsEstimateLoading] = useState(false);
 
   // Banners State
@@ -206,10 +222,18 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
       const batches = Math.ceil(n / batchSize);
       if (batches <= 1) { lines.push(`${label}: ${n} in a single batch.`); return; }
       const seconds = (batches - 1) * wait;
-      lines.push(
-        `${label}: ${n} in ${batches} batches of ${batchSize}`
-        + (wait > 0 ? ` — about ${formatDuration(seconds)}.` : ' — sent back to back.')
-      );
+      if (wait <= 0) {
+        lines.push(`${label}: ${n} in ${batches} batches of ${batchSize} — sent back to back.`);
+        return;
+      }
+      // A quiet-hours window stretches the wall-clock time: 13 hours of sending
+      // through a 12-hour window is not 13 hours, it is two days.
+      const windowHours = windowEnabled ? hoursInWindow(windowStartHour, windowEndHour) : 24;
+      const days = windowHours > 0 ? seconds / 3600 / windowHours : 0;
+      const spread = windowEnabled && days > 1
+        ? ` — about ${formatDuration(seconds)} of sending, spread over ${Math.ceil(days)} days at ${String(windowStartHour).padStart(2, '0')}:00-${String(windowEndHour).padStart(2, '0')}:00 CR.`
+        : ` — about ${formatDuration(seconds)}.`;
+      lines.push(`${label}: ${n} in ${batches} batches of ${batchSize}${spread}`);
     };
     if (channels.email) describe('Email', displayedEstimate?.emailTargets, emailBatchSize, emailDelaySeconds);
     if (channels.whatsapp) describe('WhatsApp', displayedEstimate?.whatsappTargets, whatsappBatchSize, whatsappDelaySeconds);
@@ -217,6 +241,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   }, [
     channels.email, channels.whatsapp, displayedEstimate,
     emailBatchSize, emailDelaySeconds, whatsappBatchSize, whatsappDelaySeconds,
+    windowEnabled, windowStartHour, windowEndHour,
   ]);
 
 
@@ -397,6 +422,8 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
           pacing: {
             emailBatchSize, emailDelaySeconds,
             whatsappBatchSize, whatsappDelaySeconds,
+            windowStartHour: windowEnabled ? windowStartHour : null,
+            windowEndHour: windowEnabled ? windowEndHour : null,
           },
           dealId: sourceDealId || null,
         })
@@ -725,6 +752,50 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
             {!channels.email && !channels.whatsapp && (
               <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>Turn on a channel to set its speed.</div>
             )}
+
+            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(148,163,184,0.15)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '8px' }}>
+                <input
+                  type="checkbox"
+                  checked={windowEnabled}
+                  onChange={(e) => setWindowEnabled(e.target.checked)}
+                />
+                <span style={{ color: '#e2e8f0', fontSize: '0.8rem', fontWeight: 700 }}>Only send during these hours</span>
+              </label>
+              {windowEnabled ? (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <label style={{ display: 'block' }}>
+                      <span style={{ color: '#94a3b8', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>From</span>
+                      <select
+                        className="admin-input" value={windowStartHour}
+                        onChange={(e) => setWindowStartHour(Number(e.target.value))}
+                        style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', marginTop: '3px' }}
+                      >
+                        {HOUR_OPTIONS.map((h) => <option key={h.value} value={h.value}>{h.label}</option>)}
+                      </select>
+                    </label>
+                    <label style={{ display: 'block' }}>
+                      <span style={{ color: '#94a3b8', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Until</span>
+                      <select
+                        className="admin-input" value={windowEndHour}
+                        onChange={(e) => setWindowEndHour(Number(e.target.value))}
+                        style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', marginTop: '3px' }}
+                      >
+                        {HOUR_OPTIONS.map((h) => <option key={h.value} value={h.value}>{h.label}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div style={{ marginTop: '6px', color: '#94a3b8', fontSize: '0.72rem', lineHeight: 1.45 }}>
+                    Costa Rica time. Sending pauses outside these hours and picks up again at {HOUR_OPTIONS[windowStartHour]?.label}. Your own clock is 11 hours ahead.
+                  </div>
+                </>
+              ) : (
+                <div style={{ color: '#fbbf24', fontSize: '0.72rem', lineHeight: 1.45 }}>
+                  ⚠️ Sending runs around the clock, including the middle of the night in Costa Rica.
+                </div>
+              )}
+            </div>
 
             {pacingSummary && (
               <div style={{ marginTop: '10px', color: '#cbd5e1', fontSize: '0.75rem', lineHeight: 1.45 }}>

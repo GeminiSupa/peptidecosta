@@ -206,3 +206,15 @@ export const BROADCAST_PACING_COLUMNS = [
   'whatsapp_batch_delay_seconds',
   'whatsapp_next_at',
 ];
+
+/**
+ * What add-broadcast-send-window.sql adds.
+ *
+ * The Costa Rica hours a broadcast may send in. Without the migration a send
+ * runs around the clock exactly as it did before — the operator's quiet hours
+ * are lost, which is worse than before but still a delivered broadcast.
+ */
+export const BROADCAST_WINDOW_COLUMNS = [
+  'send_window_start_hour',
+  'send_window_end_hour',
+];
