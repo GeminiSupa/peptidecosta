@@ -9,6 +9,7 @@
 // masked, and every other value shown is already visible in a mail header.
 
 import { getTaxRecordsSmtpConfig } from './taxRecordsSmtp.mjs';
+import { getOwnDomainSmtpConfig, OWN_MAIL_DOMAIN } from './ownDomainSmtp.mjs';
 
 const status = (raw) => {
   if (raw === undefined || raw === null) return 'unset';
@@ -85,6 +86,10 @@ const ACCOUNTING_KEYS = [
   'TAX_RECORDS_SMTP_HOST', 'TAX_RECORDS_SMTP_PORT', 'TAX_RECORDS_SMTP_SECURE',
   'TAX_RECORDS_SMTP_USER', 'TAX_RECORDS_SMTP_PASS', 'TAX_RECORDS_SMTP_FROM',
 ];
+const OWN_DOMAIN_KEYS = [
+  'OWN_DOMAIN_SMTP_HOST', 'OWN_DOMAIN_SMTP_PORT', 'OWN_DOMAIN_SMTP_SECURE',
+  'OWN_DOMAIN_SMTP_USER', 'OWN_DOMAIN_SMTP_PASS', 'OWN_DOMAIN_SMTP_FROM',
+];
 const ADDRESSING_KEYS = [
   'ORDER_NOTIFICATION_FROM', 'ORDER_NOTIFICATION_FROM_EMAIL', 'ORDER_NOTIFICATION_TO',
   'ORDER_NOTIFICATION_REPLY_TO', 'TAX_RECORDS_CC_EMAIL', 'LEAD_NOTIFICATION_TO',
@@ -94,9 +99,10 @@ export function buildEmailDiagnostics({ env = process.env, transactional, campai
   const user = transactional?.user || '';
   const from = resolveFromHeaders(env, user);
   const accounting = getTaxRecordsSmtpConfig(env);
+  const ownDomain = getOwnDomainSmtpConfig(env);
 
   const envReport = {};
-  for (const key of [...TRANSACTIONAL_KEYS, ...CAMPAIGN_KEYS, ...ACCOUNTING_KEYS, ...ADDRESSING_KEYS]) {
+  for (const key of [...TRANSACTIONAL_KEYS, ...CAMPAIGN_KEYS, ...ACCOUNTING_KEYS, ...OWN_DOMAIN_KEYS, ...ADDRESSING_KEYS]) {
     envReport[key] = status(env[key]);
   }
 
@@ -113,10 +119,17 @@ export function buildEmailDiagnostics({ env = process.env, transactional, campai
   if (fromLeaksLogin(from.leadAlert, user)) {
     problems.push('Lead alerts are sent FROM the SMTP login, not info@ — set ORDER_NOTIFICATION_FROM.');
   }
+  // Order alerts AND lead alerts both address our own inbox, and Rackspace
+  // discards own-domain mail that arrives from Elastic after Elastic has already
+  // reported success. Unconfigured, this is not a warning about a future risk:
+  // it is the live cause of an alert that says sent and is never seen.
+  if (!ownDomain.configured) {
+    problems.push(`Own-domain SMTP is NOT configured — every alert addressed to @${OWN_MAIL_DOMAIN} goes out through Elastic, which Rackspace discards after reporting success. Set OWN_DOMAIN_SMTP_HOST/_USER/_PASS to the Rackspace mailbox.`);
+  }
   if (!accounting.configured) {
     problems.push('Accounting SMTP is NOT configured — PBAG copies are skipped instead of being falsely reported as delivered through Elastic.');
   }
-  const dirty = whitespaceWarning(env, [...TRANSACTIONAL_KEYS, ...CAMPAIGN_KEYS, ...ACCOUNTING_KEYS, ...ADDRESSING_KEYS]);
+  const dirty = whitespaceWarning(env, [...TRANSACTIONAL_KEYS, ...CAMPAIGN_KEYS, ...ACCOUNTING_KEYS, ...OWN_DOMAIN_KEYS, ...ADDRESSING_KEYS]);
   if (dirty.length) {
     problems.push(`Value has leading/trailing whitespace: ${dirty.join(', ')}`);
   }
@@ -151,6 +164,16 @@ export function buildEmailDiagnostics({ env = process.env, transactional, campai
       primaryLogin: maskLogin(accounting.user),
       primaryPasswordPresent: Boolean(accounting.pass),
       primaryFrom: accounting.from || '(unset)',
+    },
+    ownDomain: {
+      configured: ownDomain.configured,
+      domain: OWN_MAIL_DOMAIN,
+      host: ownDomain.host || '(unset)',
+      port: ownDomain.port,
+      implicitTls: ownDomain.secure,
+      login: maskLogin(ownDomain.user),
+      passwordPresent: Boolean(ownDomain.pass),
+      from: ownDomain.from || '(unset)',
     },
     fromHeaders: from,
     accountingCc: read(env, 'TAX_RECORDS_CC_EMAIL') || 'pbagcr@peptidescostarica.net (default)',
