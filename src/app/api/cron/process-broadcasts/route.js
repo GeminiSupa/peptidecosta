@@ -11,6 +11,10 @@ import { LIVE_SITE_URL } from '@/lib/publicUrl';
 import { buildTemplateParameters } from '@/lib/broadcastTemplateParam.mjs';
 import { broadcastFailureRecovery } from '@/lib/broadcastFailureRecovery.mjs';
 import { marketingCopyHeader } from '@/lib/marketingEmailAddressing.mjs';
+import {
+  channelPacing, channelIsDue, planBatch, encodeRemaining, nextRunTimes, canChainImmediately,
+} from '@/lib/broadcastPacing.mjs';
+import { writeDroppingMissingColumns, BROADCAST_PACING_COLUMNS } from '@/lib/optionalColumns.mjs';
 
 export const dynamic = 'force-dynamic'; // Prevent caching so cron runs accurately
 
@@ -333,6 +337,28 @@ export async function GET(request) {
         });
       }
 
+      // Everyone who ticked the WhatsApp consent box, whether they have ever
+      // ordered or not. The opt-in gate below still runs on each number; this
+      // audience just stops the operator having to broadcast to "Everyone" and
+      // rely on that gate to throw most of it away.
+      if (audience === 'whatsapp_optins') {
+        const { data: optedIn, error: optInError } = await supabase
+          .from('catalog_leads')
+          .select('contact_value, contact_method')
+          .eq('whatsapp_consent', true);
+        if (optInError) throw new Error(`WhatsApp opt-in audience lookup failed: ${optInError.message}`);
+        optedIn?.forEach((lead) => {
+          const key = lead.contact_value;
+          if (!key || targets.has(key)) return;
+          const isEmail = String(key).includes('@');
+          targets.set(key, {
+            phone: isEmail ? null : key,
+            email: isEmail ? key : null,
+            name: null,
+          });
+        });
+      }
+
       if (audience === 'custom' && custom_contacts) {
         const contactsList = custom_contacts.split(/[\n,]+/).map(c => c.trim()).filter(Boolean);
         contactsList.forEach(c => {
@@ -347,22 +373,36 @@ export async function GET(request) {
       }
 
       const contacts = Array.from(targets.values());
-      const BATCH_SIZE = 10;
-      const batchContacts = contacts.slice(0, BATCH_SIZE);
-      const remainingContacts = contacts.slice(BATCH_SIZE);
+
+      // Each channel keeps its own place in the queue and its own clock, so a
+      // slow WhatsApp drip and a fast email send can run off one broadcast.
+      const emailPacing = channelPacing(broadcast, 'email');
+      const whatsappPacing = channelPacing(broadcast, 'whatsapp');
+      const runAt = Date.now();
+      const emailDue = Boolean(channels.email) && channelIsDue(broadcast, 'email', runAt);
+      const whatsappDue = Boolean(channels.whatsapp) && channelIsDue(broadcast, 'whatsapp', runAt);
+
+      const { sendNow, emailRemaining, whatsappRemaining } = planBatch(contacts, {
+        emailDue,
+        whatsappDue,
+        emailBatchSize: emailPacing.batchSize,
+        whatsappBatchSize: whatsappPacing.batchSize,
+      });
 
       let queuedCount = 0;
-      const retryContacts = [];
+      let emailSentThisRun = false;
+      let whatsappSentThisRun = false;
+      const retryEntries = [];
 
-      for (let i = 0; i < batchContacts.length; i++) {
-        const contact = batchContacts[i];
+      for (let i = 0; i < sendNow.length; i++) {
+        const { contact, doEmail, doWhatsapp } = sendNow[i];
         await new Promise(r => setTimeout(r, 20)); 
         let sentWhatsapp = false;
         let sentEmail = false;
         let retryWhatsapp = false;
         let retryEmail = false;
 
-        if (channels.whatsapp && contact.phone) {
+        if (doWhatsapp && channels.whatsapp && contact.phone) {
           // OPT-IN GATE: never WhatsApp-broadcast to a number that has not
           // explicitly opted in. This is the #1 protection against Meta spam
           // flags — "All Customers"/"Everyone" audiences include people who
@@ -396,7 +436,7 @@ export async function GET(request) {
             retryWhatsapp = result.retryable;
           }
         }
-        if (channels.email && contact.email && (message || channels.emailHtmlContent)) {
+        if (doEmail && channels.email && contact.email && (message || channels.emailHtmlContent)) {
           const result = await guardedSend({
             broadcastId: broadcast.id,
             identity: normalizeMarketingIdentity(contact.email, 'email'),
@@ -421,7 +461,13 @@ export async function GET(request) {
           retryEmail = result.retryable;
         }
         if (sentWhatsapp || sentEmail) queuedCount++;
-        if (retryWhatsapp || retryEmail) retryContacts.push(contact);
+        if (doEmail) emailSentThisRun = true;
+        if (doWhatsapp) whatsappSentThisRun = true;
+        // A retry owes only the channel that failed, so the one that got
+        // through is not sent twice.
+        if (retryWhatsapp || retryEmail) {
+          retryEntries.push({ contact, doEmail: !retryEmail, doWhatsapp: !retryWhatsapp });
+        }
       }
 
       totalSent += queuedCount;
@@ -439,28 +485,50 @@ export async function GET(request) {
         continue;
       }
 
-      const contactsToRequeue = [...remainingContacts, ...retryContacts];
-      if (contactsToRequeue.length > 0) {
-        // Re-queue the remaining contacts
-        const remainingStr = contactsToRequeue.map(c => {
-          if (c.phone && c.email) return `${c.phone}|${c.email}`;
-          if (c.phone) return `${c.phone}`;
-          if (c.email) return `${c.email}`;
-          return '';
-        }).filter(Boolean).join(',');
+      // What is still owed: everything the batch did not reach, plus the
+      // half-done entries a retry left behind.
+      const untouched = sendNow.length
+        ? contacts.filter((c) => !sendNow.some((entry) => entry.contact === c))
+        : contacts;
+      const remainingStr = [
+        ...encodeRemaining(untouched.map((contact) => ({ contact, doEmail: false, doWhatsapp: false }))),
+        ...encodeRemaining(retryEntries),
+      ].join(',');
 
-        await supabase.from('scheduled_broadcasts').update({ 
-          status: 'pending',
-          audience: 'custom',
-          custom_contacts: remainingStr,
-          scheduled_at: retryContacts.length && remainingContacts.length === 0
-            ? new Date(Date.now() + 5 * 60 * 1000).toISOString()
-            : new Date().toISOString()
-        }).eq('id', broadcast.id);
+      const timing = nextRunTimes({
+        emailRemaining, whatsappRemaining,
+        emailSentThisRun, whatsappSentThisRun,
+        emailDelaySeconds: emailPacing.delaySeconds,
+        whatsappDelaySeconds: whatsappPacing.delaySeconds,
+        emailNextAt: broadcast.email_next_at,
+        whatsappNextAt: broadcast.whatsapp_next_at,
+        now: runAt,
+      });
+
+      if (remainingStr && !timing.done) {
+        // The pacing stamps travel with the row, so the next run knows which
+        // channel is allowed to send. They arrive by their own migration, and
+        // a broadcast must still advance without them.
+        const { droppedColumns: pacingDropped } = await writeDroppingMissingColumns(
+          {
+            status: 'pending',
+            audience: 'custom',
+            custom_contacts: remainingStr,
+            scheduled_at: timing.scheduledAt,
+            email_next_at: timing.emailNextAt,
+            whatsapp_next_at: timing.whatsappNextAt,
+          },
+          BROADCAST_PACING_COLUMNS,
+          (row) => supabase.from('scheduled_broadcasts').update(row).eq('id', broadcast.id).select('id').single(),
+        );
+        if (pacingDropped?.length) {
+          console.warn('[CRON Process Broadcasts] pacing not stored — run add-broadcast-batch-pacing.sql');
+        }
         await supabase.from('deals').update({ announcement_status: 'sending' }).eq('broadcast_id', broadcast.id);
 
-        // Immediately trigger the next run asynchronously
-        if (remainingContacts.length > 0) {
+        // Self-trigger only when nothing is being waited for. Chaining through
+        // a configured delay would busy-loop the function and undo the pacing.
+        if (canChainImmediately(timing.scheduledAt, Date.now())) {
           const host = request.headers.get('host') || 'localhost:3000';
           const protocol = host.includes('localhost') ? 'http' : 'https';
           fetch(`${protocol}://${host}/api/cron/process-broadcasts`, {

@@ -4,6 +4,15 @@ import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader, Calenda
 import { adminFetch } from '@/lib/adminApi';
 import BroadcastProgress from '@/components/admin/BroadcastProgress';
 
+function formatDuration(seconds) {
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+}
+
 const FLEXIBLE_OFFER_TEMPLATE = 'promo_precio_especial_v1';
 const FLEXIBLE_OFFER_FIELDS = ['Product ({{1}})', 'Offer ({{2}})', 'End date ({{3}})', 'Catalog link ({{4}})'];
 
@@ -24,6 +33,13 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   const [targetProducts, setTargetProducts] = useState([]);
   const [sourceDealId, setSourceDealId] = useState(null);
   const [audienceEstimate, setAudienceEstimate] = useState(null);
+  // Per-channel pacing. Meta rate-shapes marketing WhatsApp and reads a burst
+  // as spam; email is bounded by the daily allowance instead. Defaults match
+  // the old hardcoded behaviour: 10 a run, no wait.
+  const [emailBatchSize, setEmailBatchSize] = useState(10);
+  const [emailDelaySeconds, setEmailDelaySeconds] = useState(0);
+  const [whatsappBatchSize, setWhatsappBatchSize] = useState(10);
+  const [whatsappDelaySeconds, setWhatsappDelaySeconds] = useState(0);
   const [isEstimateLoading, setIsEstimateLoading] = useState(false);
 
   // Banners State
@@ -157,6 +173,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
     abandoned_carts: 'Abandoned Carts',
     all_leads: 'Everyone (Customers + Leads)',
     leads_7_days: 'Recent Leads (Last 7 Days)',
+    whatsapp_optins: 'WhatsApp Opt-Ins',
     custom: 'Custom List'
   };
 
@@ -175,6 +192,33 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
     ? 'Lead, cart recovery, promo, and prospect outreach must use a Marketing template.'
     : 'Broadcast promos are Marketing. Use Utility only for order, payment, shipping, or account updates the customer is expecting.';
   const displayedEstimate = audience === 'custom' ? customContactEstimate : audienceEstimate;
+
+  // How long the send will actually take at the chosen speed. Worth showing:
+  // 1,500 WhatsApp messages at 10 every 10 minutes is a full day, and that is
+  // not obvious from two number boxes.
+  const pacingSummary = useMemo(() => {
+    const lines = [];
+    const describe = (label, count, size, delay) => {
+      const n = Number(count) || 0;
+      const batchSize = Math.max(1, Math.floor(Number(size)) || 1);
+      const wait = Math.max(0, Math.floor(Number(delay)) || 0);
+      if (!n) return;
+      const batches = Math.ceil(n / batchSize);
+      if (batches <= 1) { lines.push(`${label}: ${n} in a single batch.`); return; }
+      const seconds = (batches - 1) * wait;
+      lines.push(
+        `${label}: ${n} in ${batches} batches of ${batchSize}`
+        + (wait > 0 ? ` — about ${formatDuration(seconds)}.` : ' — sent back to back.')
+      );
+    };
+    if (channels.email) describe('Email', displayedEstimate?.emailTargets, emailBatchSize, emailDelaySeconds);
+    if (channels.whatsapp) describe('WhatsApp', displayedEstimate?.whatsappTargets, whatsappBatchSize, whatsappDelaySeconds);
+    return lines.join(' ');
+  }, [
+    channels.email, channels.whatsapp, displayedEstimate,
+    emailBatchSize, emailDelaySeconds, whatsappBatchSize, whatsappDelaySeconds,
+  ]);
+
 
   useEffect(() => {
     if (audience === 'custom') {
@@ -350,6 +394,10 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
           whatsappTemplateLanguage: channels.whatsappTemplateLanguage || 'es',
           scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
           enableBatching: channels.whatsapp, // Automatically batch whatsapp to avoid limits
+          pacing: {
+            emailBatchSize, emailDelaySeconds,
+            whatsappBatchSize, whatsappDelaySeconds,
+          },
           dealId: sourceDealId || null,
         })
       });
@@ -566,6 +614,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
             <option value="abandoned_carts">Abandoned Carts (Not purchased yet)</option>
             <option value="all_leads">Everyone (Customers + Leads)</option>
             <option value="leads_7_days">Recent Leads (Last 7 Days)</option>
+            <option value="whatsapp_optins">WhatsApp Opt-Ins (consented contacts)</option>
             <option value="custom">Custom List (Manual Entry)</option>
           </select>
 
@@ -605,6 +654,83 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
             <div style={{ color: '#cbd5e1', fontSize: '0.76rem', lineHeight: 1.45 }}>
               {channels.whatsapp ? whatsappCategoryReason : 'WhatsApp is turned off for this broadcast.'}
             </div>
+          </div>
+
+          {/* Sending speed. Split per channel because the two are limited by
+              different things: Meta rate-shapes marketing WhatsApp and reads a
+              burst as spam, while email is capped by the daily allowance on the
+              shared Elastic login. */}
+          <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(56, 189, 248, 0.18)', borderRadius: '10px' }}>
+            <div style={{ color: '#e2e8f0', fontSize: '0.82rem', fontWeight: 700, marginBottom: '4px' }}>Sending speed</div>
+            <div style={{ color: '#94a3b8', fontSize: '0.74rem', lineHeight: 1.45, marginBottom: '10px' }}>
+              How many go out at a time, and how long to wait before the next lot. A wait of 0 sends everything as fast as the provider allows.
+            </div>
+
+            {channels.email && (
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ color: '#7dd3fc', fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Mail size={13} /> Email
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <label style={{ display: 'block' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Batch size</span>
+                    <input
+                      type="number" min="1" max="500" className="admin-input"
+                      value={emailBatchSize}
+                      onChange={(e) => setEmailBatchSize(e.target.value)}
+                      style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', marginTop: '3px' }}
+                    />
+                  </label>
+                  <label style={{ display: 'block' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Wait (seconds)</span>
+                    <input
+                      type="number" min="0" max="86400" className="admin-input"
+                      value={emailDelaySeconds}
+                      onChange={(e) => setEmailDelaySeconds(e.target.value)}
+                      style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', marginTop: '3px' }}
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {channels.whatsapp && (
+              <div>
+                <div style={{ color: '#4ade80', fontSize: '0.75rem', fontWeight: 700, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Smartphone size={13} /> WhatsApp
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <label style={{ display: 'block' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Batch size</span>
+                    <input
+                      type="number" min="1" max="500" className="admin-input"
+                      value={whatsappBatchSize}
+                      onChange={(e) => setWhatsappBatchSize(e.target.value)}
+                      style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', marginTop: '3px' }}
+                    />
+                  </label>
+                  <label style={{ display: 'block' }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Wait (seconds)</span>
+                    <input
+                      type="number" min="0" max="86400" className="admin-input"
+                      value={whatsappDelaySeconds}
+                      onChange={(e) => setWhatsappDelaySeconds(e.target.value)}
+                      style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', marginTop: '3px' }}
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {!channels.email && !channels.whatsapp && (
+              <div style={{ color: '#94a3b8', fontSize: '0.75rem' }}>Turn on a channel to set its speed.</div>
+            )}
+
+            {pacingSummary && (
+              <div style={{ marginTop: '10px', color: '#cbd5e1', fontSize: '0.75rem', lineHeight: 1.45 }}>
+                {pacingSummary}
+              </div>
+            )}
           </div>
 
           {audience === 'custom' && (

@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
-import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import { writeDroppingMissingColumns, BROADCAST_PACING_COLUMNS } from '@/lib/optionalColumns.mjs';
+import {
+  DEFAULT_BATCH_SIZE, DEFAULT_DELAY_SECONDS, MAX_BATCH_SIZE, MAX_DELAY_SECONDS,
+} from '@/lib/broadcastPacing.mjs';
 import { createClient } from '@supabase/supabase-js';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
@@ -174,6 +177,14 @@ export async function DELETE(request) {
   }
 }
 
+/** Keep a hand-made API call from turning a typo into a burst. */
+function clampPacing(value, fallback, min, max) {
+  if (value === null || value === undefined || value === '') return fallback;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 async function collectBroadcastTargets(audience, customContacts) {
   const targets = new Map();
 
@@ -231,6 +242,24 @@ async function collectBroadcastTargets(audience, customContacts) {
     });
   }
 
+  // Everyone who ticked the WhatsApp consent box. The per-number opt-in gate
+  // in the processor still runs; this simply lets the operator target the
+  // opted-in list directly instead of broadcasting to "Everyone" and having
+  // most of it discarded.
+  if (audience === 'whatsapp_optins') {
+    const { data: optedIn, error: optInError } = await supabase
+      .from('catalog_leads')
+      .select('contact_value, contact_method')
+      .eq('whatsapp_consent', true);
+    if (optInError) throw new Error(`WhatsApp opt-in audience lookup failed: ${optInError.message}`);
+    optedIn?.forEach((lead) => {
+      const key = lead.contact_value;
+      if (!key || targets.has(key)) return;
+      const isEmail = String(key).includes('@');
+      targets.set(key, { phone: isEmail ? null : key, email: isEmail ? key : null, name: null });
+    });
+  }
+
   if (audience === 'custom' && customContacts) {
     const contactsList = customContacts.split(/[\n,]+/).map(c => c.trim()).filter(Boolean);
     contactsList.forEach(c => {
@@ -282,7 +311,16 @@ export async function POST(request) {
   const auth = await verifyAdminSession(request);
   if (auth.error) return auth.error;
   try {
-    const { audience, channels, message, testContact, customContacts, scheduledAt, enableBatching, whatsappTemplateName, whatsappTemplateLanguage, dealId } = await request.json();
+    const { audience, channels, message, testContact, customContacts, scheduledAt, enableBatching, whatsappTemplateName, whatsappTemplateLanguage, dealId, pacing } = await request.json();
+
+    // The operator's chosen speed, clamped here as well as in the processor so
+    // a hand-made API call cannot queue a 10,000-message burst.
+    const pacingColumns = {
+      email_batch_size: clampPacing(pacing?.emailBatchSize, DEFAULT_BATCH_SIZE, 1, MAX_BATCH_SIZE),
+      email_batch_delay_seconds: clampPacing(pacing?.emailDelaySeconds, DEFAULT_DELAY_SECONDS, 0, MAX_DELAY_SECONDS),
+      whatsapp_batch_size: clampPacing(pacing?.whatsappBatchSize, DEFAULT_BATCH_SIZE, 1, MAX_BATCH_SIZE),
+      whatsapp_batch_delay_seconds: clampPacing(pacing?.whatsappDelaySeconds, DEFAULT_DELAY_SECONDS, 0, MAX_DELAY_SECONDS),
+    };
 
     if (!message && !whatsappTemplateName && !(channels?.email && channels?.emailHtmlContent)) {
       return NextResponse.json({ error: 'Message, Template Name, or custom email HTML is required' }, { status: 400 });
@@ -321,10 +359,11 @@ export async function POST(request) {
         scheduled_at: scheduledAt,
         status: 'pending',
         deal_id: dealId || null,
+        ...pacingColumns,
       };
       const { data: inserted, error } = await writeDroppingMissingColumns(
         payload,
-        ['deal_id'],
+        ['deal_id', ...BROADCAST_PACING_COLUMNS],
         (row) => supabase.from('scheduled_broadcasts').insert(row).select('id').single(),
       );
       if (error) throw error;
@@ -373,10 +412,11 @@ export async function POST(request) {
         scheduled_at: new Date().toISOString(),
         status: 'pending',
         deal_id: dealId || null,
+        ...pacingColumns,
       };
       const { data: inserted, error: insertError } = await writeDroppingMissingColumns(
         payload,
-        ['deal_id'],
+        ['deal_id', ...BROADCAST_PACING_COLUMNS],
         (row) => supabase.from('scheduled_broadcasts').insert(row).select().single(),
       );
 

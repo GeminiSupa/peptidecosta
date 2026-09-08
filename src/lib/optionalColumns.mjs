@@ -188,3 +188,21 @@ export const ORDER_VOLUME_DISCOUNT_PCT_COLUMNS = ['volume_discount_pct'];
  * than the record of which site they were pointed at.
  */
 export const ORDER_REVIEW_PLATFORM_COLUMNS = ['review_platform'];
+
+/**
+ * What add-broadcast-batch-pacing.sql adds.
+ *
+ * Per-channel batch size, wait, and next-send stamp on scheduled_broadcasts.
+ * Without the migration a broadcast paces the way it always did — 10 per run,
+ * no wait — and must still send: dropping the operator's chosen speed is a
+ * degraded broadcast, but failing the write would strand it mid-send with half
+ * its audience messaged and no record of the rest.
+ */
+export const BROADCAST_PACING_COLUMNS = [
+  'email_batch_size',
+  'email_batch_delay_seconds',
+  'email_next_at',
+  'whatsapp_batch_size',
+  'whatsapp_batch_delay_seconds',
+  'whatsapp_next_at',
+];
