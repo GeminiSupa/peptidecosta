@@ -1,8 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Activity, CheckCircle2, XCircle, ShieldOff, Clock, ChevronDown, ChevronUp, Loader, Zap } from 'lucide-react';
+import { Activity, CheckCircle2, XCircle, ShieldOff, Clock, ChevronDown, ChevronUp, Loader, Zap, Gauge } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
 const POLL_MS = 5000;
+
+function formatHours(seconds) {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours}h ${rest}m` : `${hours}h`;
+}
 
 function formatDuration(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return null;
@@ -24,6 +33,8 @@ export default function BroadcastProgress() {
   const [expanded, setExpanded] = useState({});
   const [stoppingId, setStoppingId] = useState(null);
   const [releasingId, setReleasingId] = useState(null);
+  const [pacingEdit, setPacingEdit] = useState({});   // broadcast id -> draft values
+  const [savingPacingId, setSavingPacingId] = useState(null);
   const timerRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -96,6 +107,28 @@ export default function BroadcastProgress() {
       alert(`Could not release broadcast: ${err.message}`);
     } finally {
       setReleasingId(null);
+    }
+  };
+
+  const handleSavePacing = async (broadcast) => {
+    const draft = pacingEdit[broadcast.id];
+    if (!draft || savingPacingId) return;
+
+    setSavingPacingId(broadcast.id);
+    try {
+      const res = await adminFetch('/api/admin/broadcasts/progress', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: broadcast.id, action: 'update_pacing', pacing: draft }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `Update failed (${res.status})`);
+      setPacingEdit((prev) => { const next = { ...prev }; delete next[broadcast.id]; return next; });
+      await load();
+    } catch (err) {
+      alert(`Could not change the speed: ${err.message}`);
+    } finally {
+      setSavingPacingId(null);
     }
   };
 
@@ -211,6 +244,76 @@ export default function BroadcastProgress() {
                   </span>
                 )}
               </div>
+
+              {canStop && (
+                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #1e293b' }}>
+                  {!pacingEdit[b.id] ? (
+                    <button
+                      type="button"
+                      onClick={() => setPacingEdit((prev) => ({
+                        ...prev,
+                        [b.id]: {
+                          whatsappBatchSize: b.whatsapp_batch_size ?? 10,
+                          whatsappDelaySeconds: b.whatsapp_batch_delay_seconds ?? 0,
+                        },
+                      }))}
+                      style={{ background: 'transparent', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <Gauge size={14} /> Change sending speed
+                    </button>
+                  ) : (
+                    <div>
+                      <div style={{ color: '#94a3b8', fontSize: '0.72rem', marginBottom: '8px', lineHeight: 1.45 }}>
+                        Applies from the next batch. Recipients already sent to are not sent to again.
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '8px', alignItems: 'end' }}>
+                        <label style={{ display: 'block' }}>
+                          <span style={{ color: '#94a3b8', fontSize: '0.66rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>How many at a time</span>
+                          <input
+                            type="number" min="1" max="500" className="admin-input"
+                            value={pacingEdit[b.id].whatsappBatchSize}
+                            onChange={(e) => setPacingEdit((prev) => ({ ...prev, [b.id]: { ...prev[b.id], whatsappBatchSize: e.target.value } }))}
+                            style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', marginTop: '3px' }}
+                          />
+                        </label>
+                        <label style={{ display: 'block' }}>
+                          <span style={{ color: '#94a3b8', fontSize: '0.66rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Wait between (seconds)</span>
+                          <input
+                            type="number" min="0" max="86400" className="admin-input"
+                            value={pacingEdit[b.id].whatsappDelaySeconds}
+                            onChange={(e) => setPacingEdit((prev) => ({ ...prev, [b.id]: { ...prev[b.id], whatsappDelaySeconds: e.target.value } }))}
+                            style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', marginTop: '3px' }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleSavePacing(b)}
+                          disabled={savingPacingId === b.id}
+                          style={{ fontSize: '0.75rem', fontWeight: 700, padding: '7px 12px', borderRadius: '8px', cursor: 'pointer', color: '#0f172a', background: '#38bdf8', border: 'none' }}
+                        >
+                          {savingPacingId === b.id ? 'Saving' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPacingEdit((prev) => { const next = { ...prev }; delete next[b.id]; return next; })}
+                          style={{ fontSize: '0.75rem', fontWeight: 700, padding: '7px 12px', borderRadius: '8px', cursor: 'pointer', color: '#94a3b8', background: 'transparent', border: '1px solid #334155' }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {Number(pacingEdit[b.id].whatsappDelaySeconds) > 0 && p.total > p.reached && (
+                        <div style={{ marginTop: '8px', color: '#cbd5e1', fontSize: '0.74rem' }}>
+                          {Math.max(0, p.total - p.reached)} left — about{' '}
+                          {formatHours(
+                            (Math.ceil(Math.max(0, p.total - p.reached) / Math.max(1, Number(pacingEdit[b.id].whatsappBatchSize) || 1)) - 1)
+                            * (Number(pacingEdit[b.id].whatsappDelaySeconds) || 0)
+                          )}{' '}of sending at this speed.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {b.problems?.length > 0 && (
                 <>

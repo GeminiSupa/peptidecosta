@@ -5,6 +5,7 @@ import { computeBroadcastProgress, estimateCompletion } from '@/lib/broadcastPro
 import {
   writeDroppingMissingColumns, BROADCAST_PACING_COLUMNS, BROADCAST_WINDOW_COLUMNS,
 } from '@/lib/optionalColumns.mjs';
+import { MAX_BATCH_SIZE, MAX_DELAY_SECONDS } from '@/lib/broadcastPacing.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,7 @@ export async function GET(request) {
 
     const { data: broadcasts, error: broadcastError } = await supabase
       .from('scheduled_broadcasts')
-      .select('id, audience, channels, message, status, scheduled_at, created_at, custom_contacts')
+      .select('*')
       .order('created_at', { ascending: false })
       .limit(MAX_BROADCASTS);
 
@@ -80,6 +81,15 @@ export async function GET(request) {
         progress,
         estimate: progress.isComplete ? null : estimateCompletion(broadcastEvents, progress.remaining, now),
         problems,
+        // The current speed, so the panel can show it and let it be changed
+        // without stopping the broadcast. Absent until the pacing migrations
+        // are run, which the form treats as the built-in default.
+        whatsapp_batch_size: broadcast.whatsapp_batch_size ?? null,
+        whatsapp_batch_delay_seconds: broadcast.whatsapp_batch_delay_seconds ?? null,
+        email_batch_size: broadcast.email_batch_size ?? null,
+        email_batch_delay_seconds: broadcast.email_batch_delay_seconds ?? null,
+        send_window_start_hour: broadcast.send_window_start_hour ?? null,
+        send_window_end_hour: broadcast.send_window_end_hour ?? null,
       };
     });
 
@@ -95,15 +105,64 @@ export async function PATCH(request) {
   if (auth.error) return auth.error;
 
   try {
-    const { id, action } = await request.json();
+    const { id, action, pacing } = await request.json();
     if (!id) {
       return NextResponse.json({ error: 'Broadcast id is required' }, { status: 400 });
     }
-    if (!['cancel', 'send_now'].includes(action)) {
+    if (!['cancel', 'send_now', 'update_pacing'].includes(action)) {
       return NextResponse.json({ error: 'Unsupported broadcast action' }, { status: 400 });
     }
 
     const supabase = getSupabaseAdmin();
+
+    // Change how fast a broadcast that is already running goes out. The speed
+    // that felt right when queuing 1,500 marketing messages often does not an
+    // hour later, and the alternative — stop and rebuild — re-sends to everyone
+    // already messaged.
+    if (action === 'update_pacing') {
+      const patch = {};
+      const setIf = (key, value, min, max) => {
+        if (value === null || value === undefined || value === '') return;
+        const n = Math.floor(Number(value));
+        if (!Number.isFinite(n)) return;
+        patch[key] = Math.min(max, Math.max(min, n));
+      };
+      setIf('whatsapp_batch_size', pacing?.whatsappBatchSize, 1, MAX_BATCH_SIZE);
+      setIf('whatsapp_batch_delay_seconds', pacing?.whatsappDelaySeconds, 0, MAX_DELAY_SECONDS);
+      setIf('email_batch_size', pacing?.emailBatchSize, 1, MAX_BATCH_SIZE);
+      setIf('email_batch_delay_seconds', pacing?.emailDelaySeconds, 0, MAX_DELAY_SECONDS);
+      setIf('send_window_start_hour', pacing?.windowStartHour, 0, 24);
+      setIf('send_window_end_hour', pacing?.windowEndHour, 0, 24);
+
+      if (Object.keys(patch).length === 0) {
+        return NextResponse.json({ error: 'Nothing to change' }, { status: 400 });
+      }
+
+      // A slower speed must apply from the NEXT batch, not retroactively: the
+      // stamp already on the row was written against the old delay.
+      patch.whatsapp_next_at = null;
+      patch.email_next_at = null;
+
+      const { data: updated, error: updateError } = await writeDroppingMissingColumns(
+        patch,
+        [...BROADCAST_PACING_COLUMNS, ...BROADCAST_WINDOW_COLUMNS],
+        (row) => supabase
+          .from('scheduled_broadcasts')
+          .update(row)
+          .eq('id', id)
+          .in('status', ['pending', 'processing'])
+          .select('id, status, whatsapp_batch_size, whatsapp_batch_delay_seconds, send_window_start_hour, send_window_end_hour')
+          .maybeSingle(),
+      );
+      if (updateError) {
+        console.error('[admin/broadcasts/progress/update_pacing]', updateError.message);
+        return NextResponse.json({ error: updateError.message }, { status: 500 });
+      }
+      if (!updated) {
+        return NextResponse.json({ error: 'Broadcast is already finished or was not found' }, { status: 409 });
+      }
+      return NextResponse.json({ ok: true, broadcast: updated });
+    }
 
     // Release a broadcast that is waiting — for its quiet hours, or for the
     // gap between batches. Stopping and rebuilding it was the only way to send
