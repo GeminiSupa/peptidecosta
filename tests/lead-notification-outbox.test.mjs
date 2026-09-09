@@ -27,3 +27,23 @@ test('CRM exposes alert status and a superadmin retry action', async () => {
   assert.match(leads, /retryLeadNotification/);
   assert.match(leads, /Only a superadmin can transfer/);
 });
+
+test('own-domain lead alerts leave from our own mail host, not Elastic', async () => {
+  const delivery = await readFile(new URL('../src/lib/leadNotificationDelivery.js', import.meta.url), 'utf8');
+
+  // Rackspace refuses own-domain mail arriving from Elastic, and Elastic
+  // reports success anyway — so info@ alerts were logged as sent and binned.
+  assert.match(delivery, /getOwnDomainSmtpConfig, isOwnDomainAddress/);
+  assert.match(delivery, /const viaOwnHost = Boolean\(ownTransporter\) && isOwnDomainAddress\(destination\)/);
+  assert.match(delivery, /from: viaOwnHost \? ownDomain\.from : from/);
+
+  // Unconfigured must behave exactly as before rather than throwing: no own
+  // host means every recipient keeps going out through Elastic.
+  assert.match(delivery, /ownDomain\.configured\s*\?[\s\S]*?:\s*null/);
+});
+
+test('lead alert SMTP fails fast instead of outliving the invocation', async () => {
+  const delivery = await readFile(new URL('../src/lib/leadNotificationDelivery.js', import.meta.url), 'utf8');
+  assert.match(delivery, /const SMTP_TIMEOUTS = \{/);
+  assert.match(delivery, /connectionTimeout: 10000/);
+});
