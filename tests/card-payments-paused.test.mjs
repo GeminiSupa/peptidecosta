@@ -149,45 +149,26 @@ test('the notice has styling, so it is not invisible text on the checkout', () =
 });
 
 // ---------------------------------------------------------------------------
-// A paused card option offers WhatsApp, rather than a dead end
+// The pay-by-link page still offers a way to pay
 // ---------------------------------------------------------------------------
 
-test('the paused card tile stays clickable and opens the WhatsApp prompt', () => {
-  // A `disabled` button cannot be tapped, focused or read out by a screen
-  // reader, so a customer who wanted to pay by card would get no answer and no
-  // next step. During a pause the tile diverts instead of refusing.
-  assert.match(catalog, /divert: CARD_PAYMENTS_PAUSED/);
-  assert.match(catalog, /disabled: !CARD_CHECKOUT_ENABLED/);
-  assert.ok(
-    !catalog.includes('disabled: !CARD_CHECKOUT_AVAILABLE'),
-    'the card tile is still hard-disabled during a pause, so the prompt is unreachable',
-  );
-  assert.match(catalog, /if \(method\.divert\) \{\s*setCardPausedPromptOpen\(true\)/);
-});
-
-test('the prompt hands the customer to the WhatsApp order they can still finish', () => {
-  assert.match(catalog, /\{cardPausedPromptOpen && \(/);
-  // The primary action switches method and drops them on the submit button, so
-  // the order goes through the ordinary WhatsApp checkout — same record, same
-  // receipt — rather than a second, parallel order path.
-  assert.match(catalog, /setPaymentMethod\('whatsapp'\);\s*setCardPausedPromptOpen\(false\);\s*revealField\('orderSubmit'\)/);
-  assert.match(catalog, /id="field-orderSubmit"/);
-  // And a way out for someone who has not filled the form in yet.
-  assert.match(catalog, /logWhatsAppSource\('card_paused_prompt', lang\)/);
-  assert.match(catalog, /buildWhatsAppLink\(\s*links\.whatsappNumber/);
-});
-
 test('the pay-by-link page offers WhatsApp with the order number', () => {
-  // This customer has an order already agreed; sending them back to the
-  // catalog to start again would lose the sale.
+  // This customer has an order already agreed and only needs another way to
+  // pay it; sending them back to the catalog to start again would lose it.
   assert.match(payPage, /buildWhatsAppLink\(/);
   assert.match(payPage, /Order #\$\{orderNumber\}/);
   assert.match(payPage, /useBusinessLinks/);
+  assert.match(
+    fs.readFileSync('src/app/globals.css', 'utf8'),
+    /\.card-paused-whatsapp \{/,
+  );
 });
 
-test('the prompt and the paused tile both have styling', () => {
-  const css = fs.readFileSync('src/app/globals.css', 'utf8');
-  assert.match(css, /\.card-paused-modal \{/);
-  assert.match(css, /\.card-paused-modal__cta \{/);
-  assert.match(css, /\.payment-method-card\.paused \{/);
+test('the checkout does not pop anything up when the card tile is tapped', () => {
+  // Reverted deliberately. The card option is a plain disabled tile during a
+  // pause; the apology under the payment methods is the whole of the message.
+  for (const gone of ['cardPausedPromptOpen', 'card-paused-modal', 'divert:']) {
+    assert.ok(!catalog.includes(gone), `${gone} is still in the checkout`);
+  }
+  assert.match(catalog, /disabled: !CARD_CHECKOUT_AVAILABLE/);
 });
