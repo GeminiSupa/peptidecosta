@@ -25,7 +25,16 @@ export const ADMIN_MODULES = [
   { id: 'share', label: 'Share Links', title: 'Share Links', group: 'Sales & Marketing' },
   { id: 'reviews', label: 'Reviews', title: 'Reviews', group: 'Sales & Marketing' },
   { id: 'facebook', label: 'FB Alerts', title: 'Facebook Alerts', group: 'Sales & Marketing', hiddenFromNav: true },
-  { id: 'messenger', label: 'Facebook Inbox', title: 'Facebook Inbox', group: 'Sales & Marketing', alwaysAvailable: true },
+  // Permission-gated rather than always-available. The Facebook inbox carries
+  // customer conversations, and this tab was reachable by every active staff
+  // profile whatever their permissions said — including an outside affiliate
+  // given a login purely to watch their own commission.
+  //
+  // The API half was already written and already dead: adminApiPermissions maps
+  // /api/messenger and /api/facebook to this key, but resolveAdminTabAccess
+  // short-circuited to true for every staff member, so the rule never refused
+  // anybody. Dropping the flag switches the tab and those routes on together.
+  { id: 'messenger', label: 'Facebook Inbox', title: 'Facebook Inbox', group: 'Sales & Marketing' },
   { id: 'marketing', label: 'Marketing Studio', title: 'Marketing Studio', group: 'Sales & Marketing' },
   { id: 'affiliates', label: 'Affiliates', title: 'Affiliates & Promo Codes', group: 'Sales & Marketing' },
   { id: 'deals', label: 'Deal of the Week', title: 'Deal of the Week', group: 'Sales & Marketing' },
@@ -53,7 +62,13 @@ export const ADMIN_MODULES = [
   // Sandbox card payments. The panel and its route existed for a while with
   // nothing mounting them, so there was no way to reach it from the dashboard.
   { id: 'payment_test', label: 'Payment Test', title: 'Payment Test (Sandbox)', group: 'System & AI', superadminOnly: true },
-  { id: 'team_chat', label: 'Team Chat', title: 'Team Chat', group: 'System & AI', alwaysAvailable: true },
+  // Permission-gated for the same reason as messenger: internal staff talk is
+  // not something a login handed to an outside partner should open by default.
+  //
+  // Hiding the tab is only half of it. TeamChat.js reads team_messages straight
+  // from the browser client, so the row-level policy is what actually decides
+  // who can read the thread — see restrict-messenger-team-chat-access.sql.
+  { id: 'team_chat', label: 'Team Chat', title: 'Team Chat', group: 'System & AI' },
   // A sub-user's entire dashboard: this plus my_qr, and nothing else.
   // Deliberately NOT hiddenFromNav — the mobile "More" sheet is built from
   // ADMIN_NAV_GROUPS, which drops hidden modules, and hiding this one left a
