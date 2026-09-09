@@ -28,6 +28,22 @@ const MESSAGES = {
     es: 'El pago con tarjeta no está disponible en este momento. No se ha realizado ningún cargo — escríbanos por WhatsApp y tomamos su pedido.',
   },
 
+  /**
+   * Card payment is switched off on purpose while we fix something, rather
+   * than broken by accident. Distinct from `unavailable` because the customer
+   * is owed an apology and an explanation here, not a shrug — and because a
+   * deliberate pause is a state we want to be able to find in the logs.
+   *
+   * Not retryable: the button stays locked, because pressing it again during a
+   * maintenance window cannot work and only invites the double-charge shape
+   * described under `unconfirmed`.
+   */
+  paused: {
+    retryable: false,
+    en: 'We are very sorry — card payments are temporarily paused while we carry out maintenance on our payment system. Nothing has been charged to your card. Please message us on WhatsApp and we will take your order right away, or try again a little later. We apologise for the inconvenience.',
+    es: 'Lamentamos mucho las molestias — los pagos con tarjeta están pausados temporalmente mientras realizamos mantenimiento en nuestro sistema de pagos. No se ha realizado ningún cargo a su tarjeta. Escríbanos por WhatsApp y tomamos su pedido de inmediato, o intente de nuevo más tarde. Disculpe las molestias.',
+  },
+
   card_details: {
     retryable: true,
     en: 'Please check your card number, expiry date and security code, then try again.',

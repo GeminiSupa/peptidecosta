@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { buildCardPaymentPath, canSignCardPaymentLinks, getPublicBaseUrl } from '@/lib/cardPaymentLink';
 import { orderVisibleToAgent } from '@/lib/agentOrders';
+import { areCardPaymentsPaused } from '@/lib/cardPaymentsPaused.mjs';
 
 export const runtime = 'nodejs';
 
@@ -11,6 +12,16 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   try {
+    // Staff-facing, so this one says plainly what is happening rather than
+    // apologising: a link minted now would be refused the moment the customer
+    // used it, and "the link you sent me does not work" is a worse experience
+    // than being told up front to take the order another way.
+    if (areCardPaymentsPaused()) {
+      return NextResponse.json({
+        error: 'Card payments are paused for maintenance, so payment links cannot be sent right now. Take the order by WhatsApp, SINPE or bank transfer instead.',
+      }, { status: 503 });
+    }
+
     if (!canSignCardPaymentLinks()) {
       return NextResponse.json({ error: 'Card payment link signing is not configured' }, { status: 500 });
     }
