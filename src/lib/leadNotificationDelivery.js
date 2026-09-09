@@ -3,9 +3,19 @@ import { getLeadAlertAudience, isAdLandingSource } from '@/lib/leadNotificationR
 import { landingQualificationNotes } from '@/lib/landingLead.mjs';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { getTransactionalSmtpConfig, readEnv } from '@/lib/transactionalSmtp';
+import { getOwnDomainSmtpConfig, isOwnDomainAddress } from '@/lib/ownDomainSmtp.mjs';
 import { leadNotificationEmailSubject, leadNotificationTitle } from '@/lib/tiktokLeadPosting.mjs';
 
 const RETRY_MINUTES = [1, 5, 15, 60, 240];
+
+// Nodemailer's defaults (2 min to connect, 10 min socket) outlive a serverless
+// invocation, so a stalled handshake reads as "no alert was sent" with nothing
+// in the logs. Fail fast instead.
+const SMTP_TIMEOUTS = {
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 20000,
+};
 
 const escapeHtml = (value = '') => String(value)
   .replace(/&/g, '&amp;')
@@ -42,7 +52,13 @@ function leadDetails(lead) {
   };
 }
 
-export async function sendLeadEmails({ recipients, details, slaMinutes = 15 }) {
+export async function sendLeadEmails({
+  recipients,
+  details,
+  slaMinutes = 15,
+  env = process.env,
+  createTransport = (config) => nodemailer.createTransport(config),
+}) {
   if (!recipients.length) return [];
   const smtp = getTransactionalSmtpConfig();
   if (!smtp.configured) {
@@ -72,19 +88,37 @@ export async function sendLeadEmails({ recipients, details, slaMinutes = 15 }) {
     || readEnv('CAMPAIGN_SMTP_FROM_EMAIL')
     || smtp.user;
   const from = readEnv('ORDER_NOTIFICATION_FROM') || `Peptides Costa Rica <${fromEmail}>`;
-  const transporter = nodemailer.createTransport({
+  const transporter = createTransport({
     host: smtp.host,
     port: smtp.port,
     secure: smtp.secure,
     auth: { user: smtp.user, pass: smtp.pass },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 20000,
+    ...SMTP_TIMEOUTS,
   });
 
+  // Rackspace hosts peptidescostarica.net and refuses mail claiming to come
+  // from that domain when it arrives from anywhere but Rackspace. Elastic
+  // accepts the submission and answers success, so the alert to info@ was
+  // recorded as sent and then discarded at Rackspace's boundary — which is
+  // exactly what happened to every ad-campaign lead alert from 2 Sep. The
+  // order notification already routes around this; the lead alert never did,
+  // which is why one kept arriving and the other stopped. Our own mailboxes
+  // now get their copy from our own host too. See src/lib/ownDomainSmtp.mjs.
+  const ownDomain = getOwnDomainSmtpConfig(env);
+  const ownTransporter = ownDomain.configured
+    ? createTransport({
+      host: ownDomain.host,
+      port: ownDomain.port,
+      secure: ownDomain.secure,
+      auth: { user: ownDomain.user, pass: ownDomain.pass },
+      ...SMTP_TIMEOUTS,
+    })
+    : null;
+
   const results = await Promise.allSettled(recipients.map(async (destination) => {
-    const result = await transporter.sendMail({
-      from,
+    const viaOwnHost = Boolean(ownTransporter) && isOwnDomainAddress(destination);
+    const result = await (viaOwnHost ? ownTransporter : transporter).sendMail({
+      from: viaOwnHost ? ownDomain.from : from,
       to: destination,
       replyTo: details.email || undefined,
       subject: leadNotificationEmailSubject(details.source, {
