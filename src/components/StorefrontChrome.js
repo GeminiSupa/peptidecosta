@@ -6,7 +6,7 @@ import { ChevronDown, Globe, Menu, Search, ShoppingBag, X } from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import { getFacebookReviewUrl, getTrustpilotReviewUrl, isExternalHttpUrl, TRUSTPILOT_RATING } from '@/lib/businessLinks';
+import { getFacebookReviewUrl, getTrustpilotReviewUrl, isExternalHttpUrl } from '@/lib/businessLinks';
 import { useTrustpilotRating } from '@/hooks/useTrustpilotRating';
 import { DEFAULT_LANDING_PAGE_SETTINGS } from '@/lib/landingContent';
 import { normalizeBannerCopy, replaceUsdPlaceholders, sanitizeBannerHref } from '@/lib/bannerText';

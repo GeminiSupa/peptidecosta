@@ -10,7 +10,7 @@ import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, cleanPhoneNumber, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import { getFacebookReviewUrl, getTrustpilotReviewUrl, TRUSTPILOT_RATING } from '@/lib/businessLinks';
+import { getFacebookReviewUrl, getTrustpilotReviewUrl } from '@/lib/businessLinks';
 import { useTrustpilotRating } from '@/hooks/useTrustpilotRating';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
 import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct, replacesVolumeDiscount } from '@/lib/promoEligibility.mjs';
