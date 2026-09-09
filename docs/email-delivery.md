@@ -1,5 +1,8 @@
 # Email delivery configuration
 
+Debugging a missing email? Start at
+[docs/email-delivery-runbook.md](./email-delivery-runbook.md), not here.
+
 Marketing and critical email use separate Elastic Email identities so a bulk
 campaign throttle cannot stop order receipts, shipping notices, lead alerts,
 inquiry replies, review requests, or payout reports.

@@ -47,3 +47,17 @@ test('lead alert SMTP fails fast instead of outliving the invocation', async () 
   assert.match(delivery, /const SMTP_TIMEOUTS = \{/);
   assert.match(delivery, /connectionTimeout: 10000/);
 });
+
+test('the email runbook records the own-domain trap and how to investigate it', async () => {
+  const runbook = await readFile(new URL('../docs/email-delivery-runbook.md', import.meta.url), 'utf8');
+
+  // The false comfort that derailed three investigations.
+  assert.match(runbook, /is not evidence that anybody received anything/);
+  // The mechanism, and the module that already solves it.
+  assert.match(runbook, /ownDomainSmtp\.mjs/);
+  assert.match(runbook, /OWN_DOMAIN_SMTP_\*/);
+  // The steps, in the order that actually works.
+  assert.match(runbook, /email-diagnostics\?verify=1/);
+  assert.match(runbook, /View Source/);
+  assert.match(runbook, /2 Sep 2026/);
+});
