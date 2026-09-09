@@ -176,7 +176,7 @@ function CardPaymentContent() {
                 only needs a way to pay it. So the way out is a message that
                 names the order, not a trip back to the catalog to start over. */}
             <a
-              className="whatsapp-btn card-paused-modal__cta"
+              className="whatsapp-btn card-paused-whatsapp"
               href={buildWhatsAppLink(
                 links.whatsappNumber,
                 orderNumber

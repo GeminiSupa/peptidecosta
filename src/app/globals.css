@@ -2141,21 +2141,6 @@ body {
     transform: none;
 }
 
-/* Paused, not disabled. It reads as unavailable — muted, amber-edged, carrying
-   a "Maintenance" badge — but it is still a live button, because tapping it is
-   how the customer is offered WhatsApp instead. A real `disabled` tile would
-   swallow the tap and leave them with nowhere to go. */
-.payment-method-card.paused {
-    opacity: 0.72;
-    border-color: rgba(245, 158, 11, 0.4);
-    background: rgba(245, 158, 11, 0.06);
-}
-
-.payment-method-card.paused:hover {
-    border-color: rgba(245, 158, 11, 0.6);
-    transform: none;
-}
-
 .payment-method-card.active {
     border-color: var(--primary);
     background: rgba(234, 179, 8, 0.1);
@@ -2366,62 +2351,19 @@ body {
     line-height: 1.45;
 }
 
-/* The popup a customer gets when they reach for the card option during a
-   pause. Centred, because it is one message and one obvious way forward. */
-.card-paused-modal {
-    text-align: center;
-    max-width: 420px;
-}
-
-.card-paused-modal__icon {
-    font-size: 2rem;
-    line-height: 1;
-    margin-bottom: 10px;
-}
-
-.card-paused-modal h2 {
-    margin: 0 0 10px;
-    color: var(--text-primary);
-    font-size: 1.15rem;
-    font-weight: 900;
-    line-height: 1.3;
-}
-
-.card-paused-modal__body {
-    margin: 0 0 20px;
-    color: var(--text-muted);
-    font-size: 0.85rem;
-    font-weight: 600;
-    line-height: 1.5;
-}
-
-.card-paused-modal__cta {
+/* The WhatsApp button on /pay-card during a pause. That customer has an order
+   already agreed and only needs another way to pay it, so the page gives them
+   one instead of sending them back to the catalog to start over. */
+.card-paused-whatsapp {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
     width: 100%;
+    margin: 6px 0 4px;
     padding: 14px;
     font-size: 1rem;
     text-decoration: none;
-}
-
-.card-paused-modal__secondary {
-    display: block;
-    width: 100%;
-    margin-top: 12px;
-    padding: 4px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    font-weight: 700;
-    text-decoration: underline;
-    cursor: pointer;
-}
-
-.card-paused-modal__secondary:hover {
-    color: var(--text-primary);
 }
 
 .card-payment-security-note {

@@ -33,8 +33,8 @@ Do all three. The first two are the ones customers see; the third is the one
 that matters if a customer has an old tab or an old payment link open.
 
 1. Open `/catalog`, add anything to the cart, go to checkout. The **Card** tile
-   is muted with a "Maintenance" badge, and an amber apology sits under the
-   payment methods. **Tap the Card tile** — a popup appears offering WhatsApp.
+   is greyed out with a "Maintenance" badge, and an amber apology sits under
+   the payment methods.
 2. Open any `/pay-card?order=...&token=...` link. It shows the apology in both
    Spanish and English, with a WhatsApp button that names the order number,
    instead of a card form.
@@ -67,29 +67,19 @@ gateway is configured, before the order row is written, and long before a card
 is charged. `tests/card-payments-paused.test.mjs` asserts that ordering, so it
 cannot drift later.
 
-## Anyone reaching for card is sent to WhatsApp
+## Where the customer is pointed instead
 
-The card tile stays **clickable** during a pause. It is deliberately not a
-`disabled` button: a disabled button cannot be tapped, focused, or read out by
-a screen reader, so a customer who came here to pay by card would get no
-answer and no next step. Tapping it opens a popup instead.
+The card tile is a plain disabled tile during a pause, with a "Maintenance"
+badge, and the apology sits underneath the payment methods. The apology itself
+is what tells them to message on WhatsApp — there is no popup, and tapping the
+tile does nothing. (A click-through popup was tried and removed on purpose; if
+you are thinking of adding one back, that was a deliberate decision, not an
+oversight.)
 
-The popup offers two ways forward:
-
-- **"Order on WhatsApp instead"** switches the payment method to WhatsApp,
-  closes the popup, and scrolls them to the order button. Their cart and the
-  details they already typed are untouched, and the order then goes through the
-  ordinary WhatsApp checkout — same order record, same receipt. Nothing about
-  it is a special case, which is exactly why it is safe.
-- **"Or message us directly"** opens a WhatsApp chat with a short note saying
-  they were trying to pay by card. For someone who has not filled the form in
-  yet, or would rather just talk to a person. The click is attributed as
-  `card_paused_prompt`, so you can see in the WhatsApp source stats how much
-  traffic the pause is sending you.
-
-On `/pay-card`, the WhatsApp button carries the order number, because that
-customer already has an agreed order and only needs another way to pay it —
-sending them back to the catalog to start again would lose the sale.
+`/pay-card` is the exception. That customer has an order already agreed and
+only needs another way to pay it, so the page carries a WhatsApp button with
+their order number on it. Sending them back to the catalog to start over would
+lose the sale.
 
 ## What the customer sees
 
