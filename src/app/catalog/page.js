@@ -68,12 +68,21 @@ import {
   rankCatalogSearchResults,
   compareBySaleAndStock,
 } from '@/lib/catalogFilters.mjs';
+import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
+import { areCardPaymentsPausedForClient } from '@/lib/cardPaymentsPaused.mjs';
 
 // const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
 const FALLBACK_EXCHANGE_RATE = 454.48;
 const FREE_SHIPPING_USD_THRESHOLD = 200;
 const FLAT_SHIPPING_CRC = 2500;
+// The maintenance pause, read at module scope. Kept separate from
+// CARD_CHECKOUT_ENABLED below because the two mean different things to a
+// customer: "not built yet" (Coming soon) versus "temporarily broken, we are
+// sorry". CARD_CHECKOUT_AVAILABLE is what the checkout actually keys on, so
+// either switch alone is enough to take the card option away.
+const CARD_PAYMENTS_PAUSED = areCardPaymentsPausedForClient();
 const CARD_CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CARD_CHECKOUT === 'true';
+const CARD_CHECKOUT_AVAILABLE = CARD_CHECKOUT_ENABLED && !CARD_PAYMENTS_PAUSED;
 // 'live' hides the sandbox/test labels. Keep unset (sandbox) until the LIVE
 // Shield Hub Pay credentials are in place, then set NEXT_PUBLIC_CARD_CHECKOUT_MODE=live.
 const CARD_CHECKOUT_LIVE = process.env.NEXT_PUBLIC_CARD_CHECKOUT_MODE === 'live';
@@ -2500,6 +2509,20 @@ export default function CatalogPage() {
   const startCardCheckout = async () => {
     if (cardSubmitLockRef.current || cardSubmitting || cart.length === 0) return;
 
+    // Belt and braces. The card tile is disabled during a pause so this should
+    // be unreachable, but saveOrderToDatabase runs before the charge does — an
+    // order row written for a payment the API will refuse is a support ticket
+    // nobody needs, so stop here rather than one step later.
+    if (CARD_PAYMENTS_PAUSED) {
+      setCheckoutError({
+        title: lang === 'en'
+          ? 'Card payments are temporarily paused'
+          : 'Los pagos con tarjeta están pausados temporalmente',
+        detail: cardCheckoutMessage('paused', lang).message,
+      });
+      return;
+    }
+
     // Clear the last failure before trying again, so a banner left on screen
     // always describes this attempt and never the previous one.
     setCheckoutError(null);
@@ -4658,15 +4681,19 @@ export default function CatalogPage() {
                     icon: <CreditCard size={18} />,
                     iconColor: '#0ea5e9', // Blue
                     title: lang === 'en' ? 'Card' : 'Tarjeta',
-                    detail: CARD_CHECKOUT_ENABLED
-                      ? (CARD_CHECKOUT_LIVE
-                        ? (lang === 'en' ? 'Visa / Mastercard' : 'Visa / Mastercard')
-                        : (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox'))
-                      : (lang === 'en' ? 'Coming soon' : 'Próximamente'),
-                    badge: CARD_CHECKOUT_ENABLED
-                      ? (CARD_CHECKOUT_LIVE ? null : (lang === 'en' ? 'Test' : 'Prueba'))
-                      : (lang === 'en' ? 'Soon' : 'Pronto'),
-                    disabled: !CARD_CHECKOUT_ENABLED,
+                    detail: CARD_PAYMENTS_PAUSED
+                      ? (lang === 'en' ? 'Temporarily unavailable' : 'No disponible temporalmente')
+                      : (CARD_CHECKOUT_ENABLED
+                        ? (CARD_CHECKOUT_LIVE
+                          ? (lang === 'en' ? 'Visa / Mastercard' : 'Visa / Mastercard')
+                          : (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox'))
+                        : (lang === 'en' ? 'Coming soon' : 'Próximamente')),
+                    badge: CARD_PAYMENTS_PAUSED
+                      ? (lang === 'en' ? 'Maintenance' : 'Mantenimiento')
+                      : (CARD_CHECKOUT_ENABLED
+                        ? (CARD_CHECKOUT_LIVE ? null : (lang === 'en' ? 'Test' : 'Prueba'))
+                        : (lang === 'en' ? 'Soon' : 'Pronto')),
+                    disabled: !CARD_CHECKOUT_AVAILABLE,
                   },
                 ].map(method => (
                   <button
@@ -4690,6 +4717,26 @@ export default function CatalogPage() {
                   </button>
                 ))}
               </div>
+
+              {/* The apology, said where the customer is looking when they
+                  find the card option greyed out. A disabled tile with a
+                  "Maintenance" badge tells them something is wrong but not
+                  that we know, that their card is safe, or what to do
+                  instead — so all three are said here in plain words. */}
+              {CARD_PAYMENTS_PAUSED && (
+                <div className="card-paused-notice" role="status">
+                  <span aria-hidden="true">🔧</span>
+                  <div>
+                    <strong>
+                      {lang === 'en'
+                        ? 'Card payments are temporarily paused'
+                        : 'Los pagos con tarjeta están pausados temporalmente'}
+                    </strong>
+                    <p>{cardCheckoutMessage('paused', lang).message}</p>
+                  </div>
+                </div>
+              )}
+
               {renderPaymentTotalNotice()}
 
               {/* Anything that stopped the order, said on the page.
@@ -4711,7 +4758,7 @@ export default function CatalogPage() {
                 </div>
               )}
 
-              {paymentMethod === 'card' ? (
+              {paymentMethod === 'card' && !CARD_PAYMENTS_PAUSED ? (
                 <div className="card-payment-panel">
                   <div className="card-payment-fields">
                     <div>

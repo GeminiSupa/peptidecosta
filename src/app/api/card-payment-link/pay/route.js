@@ -8,6 +8,7 @@ import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, 
 import { sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
 import { parseBillingAddress } from '@/lib/billingAddress.mjs';
 import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
+import { areCardPaymentsPaused } from '@/lib/cardPaymentsPaused.mjs';
 import { withPaymentStatusActivity } from '@/lib/paymentStatusActivity.mjs';
 
 export const runtime = 'nodejs';
@@ -75,6 +76,14 @@ export async function POST(request) {
     const body = await request.json();
     const { orderNumber, token, card, customerEmail, customerIp, lang = 'es' } = body;
     customerLang = lang === 'en' ? 'en' : 'es';
+
+    // The kill switch, ahead of every other check. A payment link already sent
+    // to a customer keeps working on its own, so pausing the storefront alone
+    // would leave this path charging cards throughout the maintenance window.
+    if (areCardPaymentsPaused()) {
+      return stopPayment('paused', customerLang, 503,
+        `Card payments are paused for maintenance; refused ${orderNumber || 'an unnumbered order'}`);
+    }
 
     // Checked after the body is read so the reply is in their language.
     if (!isShieldHubPayConfigured()) {

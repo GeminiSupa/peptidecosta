@@ -3,7 +3,13 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { CreditCard, Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { CreditCard, Lock, AlertCircle, CheckCircle2, Wrench } from 'lucide-react';
+import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
+import { areCardPaymentsPausedForClient } from '@/lib/cardPaymentsPaused.mjs';
+
+// Read once at module scope: this is a build-time constant, and re-reading it
+// per render would only invite someone to think it can change mid-session.
+const CARD_PAYMENTS_PAUSED = areCardPaymentsPausedForClient();
 
 function formatMoney(value, currency = 'USD') {
   const amount = Number(value || 0);
@@ -58,6 +64,13 @@ function CardPaymentContent() {
       } finally {
         if (!cancelled) setLoading(false);
       }
+    }
+
+    // Nothing to load during a pause — the page shows the apology instead of a
+    // form, so fetching the order would only put a loading flash in front of it.
+    if (CARD_PAYMENTS_PAUSED) {
+      setLoading(false);
+      return () => {};
     }
 
     if (!orderNumber || !token) {
@@ -143,7 +156,21 @@ function CardPaymentContent() {
           <span>{isEn ? 'Secure card payment' : 'Pago seguro con tarjeta'}</span>
         </div>
 
-        {loading ? (
+        {/* First branch in the chain on purpose. A link that arrived before the
+            pause began is still a valid, signed link, so without this the
+            customer would be shown a working-looking card form and only find
+            out at submit time. Both languages, because the order is never
+            loaded during a pause and isEn has nothing to go on. */}
+        {CARD_PAYMENTS_PAUSED ? (
+          <div className="card-pay-panel card-pay-message">
+            <Wrench size={28} />
+            <h1>Pagos con tarjeta en mantenimiento</h1>
+            <p>{cardCheckoutMessage('paused', 'es').message}</p>
+            <h2 style={{ fontSize: '1rem', marginTop: '18px' }}>Card payments under maintenance</h2>
+            <p>{cardCheckoutMessage('paused', 'en').message}</p>
+            <Link href="/catalog">Volver al catálogo / Return to catalog</Link>
+          </div>
+        ) : loading ? (
           <div className="card-pay-panel">
             <p className="card-pay-muted">{isEn ? 'Loading payment link...' : 'Cargando enlace de pago...'}</p>
           </div>

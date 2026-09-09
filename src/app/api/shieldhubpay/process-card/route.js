@@ -6,6 +6,7 @@ import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, 
 import { sendCardHandoffReceipt, sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
+import { areCardPaymentsPaused } from '@/lib/cardPaymentsPaused.mjs';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { getPublicSiteUrl } from '@/lib/publicUrl';
 import { sendCustomerOrderConfirmation } from '@/lib/orderWhatsAppAlerts';
@@ -187,6 +188,15 @@ export async function POST(req) {
     const { body } = await readLimitedJson(req, 16 * 1024);
     failedOrderNumber = body?.orderNumber || null;
     customerLang = body?.lang === 'en' ? 'en' : 'es';
+
+    // The kill switch, ahead of every other check and long before the gateway
+    // is touched. The storefront hides the card form during a pause, but a tab
+    // opened before the pause began still has one, and this route is public —
+    // so the refusal has to live here, not only in the page that calls it.
+    if (areCardPaymentsPaused()) {
+      return stopCheckout('paused', customerLang, 503,
+        `Card payments are paused for maintenance; refused ${failedOrderNumber || 'an unnumbered order'}`);
+    }
 
     // Checked after the body is read so the customer is answered in their own
     // language rather than a default one.
