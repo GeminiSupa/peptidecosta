@@ -107,68 +107,12 @@ Preheader:
 40% llevando 5 o más viales. Código CELLULAR40. Termina el jueves.
 ```
 
-Body HTML — paste into the campaign editor's HTML view. Table-based and inline
-styled, because Gmail and Outlook strip a `<style>` block and ignore flexbox.
+Body HTML lives in **`docs/cellular40-email-es.html`**. Open it in a browser
+to preview, then copy the whole file into the campaign editor's HTML view.
 
-```html
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:24px 0;font-family:Arial,Helvetica,sans-serif;">
-  <tr><td align="center">
-    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;">
-
-      <tr><td style="background:#c2410c;padding:22px 28px;text-align:center;">
-        <div style="color:#ffffff;font-size:13px;font-weight:bold;letter-spacing:1.5px;">OFERTA RELÁMPAGO 48 HORAS</div>
-        <div style="color:#ffffff;font-size:32px;font-weight:bold;padding-top:6px;">40% DE DESCUENTO</div>
-        <div style="color:#fed7aa;font-size:15px;padding-top:6px;">MOTS-C · NAD+ · SS-31</div>
-      </td></tr>
-
-      <tr><td style="padding:28px;">
-        <p style="margin:0 0 16px;font-size:16px;color:#111827;">Hola,</p>
-        <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">
-          Por 48 horas tenemos <strong>40% de descuento</strong> en nuestra línea de
-          optimización celular, llevando <strong>5 o más viales</strong>. Podés
-          combinar entre los tres productos para llegar a los 5.
-        </p>
-
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border-left:4px solid #c2410c;border-radius:6px;margin-bottom:22px;">
-          <tr><td style="padding:16px 18px;">
-            <div style="font-size:13px;color:#9a3412;font-weight:bold;letter-spacing:0.5px;">SOPORTE MITOCONDRIAL</div>
-            <div style="font-size:14px;color:#374151;line-height:1.9;padding-top:8px;">
-              • Más energía<br>
-              • Antienvejecimiento<br>
-              • Renovación celular<br>
-              • Salud mitocondrial
-            </div>
-          </td></tr>
-        </table>
-
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px dashed #c2410c;border-radius:8px;margin-bottom:24px;">
-          <tr><td align="center" style="padding:16px;">
-            <div style="font-size:12px;color:#6b7280;letter-spacing:1px;">CÓDIGO PROMOCIONAL</div>
-            <div style="font-size:26px;font-weight:bold;color:#c2410c;letter-spacing:2px;padding-top:4px;">CELLULAR40</div>
-          </td></tr>
-        </table>
-
-        <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 22px;">
-          <tr><td style="background:#c2410c;border-radius:8px;">
-            <a href="https://catalog.peptidescostarica.net/catalog?lang=es&promo_code=CELLULAR40" style="display:inline-block;padding:15px 42px;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;">
-              Ver la oferta
-            </a>
-          </td></tr>
-        </table>
-
-        <p style="margin:0;font-size:13px;color:#6b7280;text-align:center;line-height:1.6;">
-          Termina el jueves 10 de septiembre.<br>
-          Descuento válido en MOTS-C, NAD+ y SS-31 llevando 5 o más viales.
-        </p>
-      </td></tr>
-
-    </table>
-  </td></tr>
-</table>
-```
-
-The link already carries `promo_code=CELLULAR40`, so the code is applied the
-moment they land and the button does the typing.
+It is kept as its own file rather than pasted here so there is only one copy to
+change. Colours come from the site's own tokens: navy `#002766` carries it,
+orange `#BF4F0B` appears once on the button and nowhere else.
 
 ---
 

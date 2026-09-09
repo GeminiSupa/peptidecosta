@@ -3,68 +3,77 @@
 
      Cómo usarlo:
        1. Abrí este archivo en el navegador para verlo.
-       2. Copiá TODO el contenido y pegalo en el editor de campañas,
-          en la vista HTML (no en la vista de texto).
+       2. Copiá TODO y pegalo en el editor de campañas, vista HTML.
 
-     Asunto:      ⚡ 48 horas: 40% en MOTS-C, NAD+ y SS-31
-     Preheader:   40% llevando 5 o más viales. Código CELLULAR40.
+     Asunto:     48 horas: 40% en MOTS-C, NAD+ y SS-31
+     Preheader:  40% llevando 5 o más viales. Código CELLULAR40.
 
-     El enlace ya lleva promo_code=CELLULAR40, así que el código se
-     aplica solo al llegar. El cliente no escribe nada.
+     Colores de marca, tomados de globals.css:
+       #002766  azul marino  (--primary)   la base
+       #BF4F0B  naranja      (--cta)       solo el botón y el código
+       #F58220  naranja claro (--accent-on-dark) solo sobre el marino
+     El marino manda y el naranja acentúa, igual que en el sitio.
 
-     Está armado con tablas y estilos en línea a propósito: Gmail borra
-     los bloques <style> y Outlook ignora flexbox.
+     El enlace ya lleva promo_code=CELLULAR40: el código se aplica solo.
+
+     Tablas y estilos en línea a propósito: Gmail borra los bloques
+     <style> y Outlook ignora flexbox.
      =================================================================== -->
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:24px 0;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F6F9;padding:32px 12px;font-family:Arial,Helvetica,sans-serif;">
   <tr><td align="center">
-    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e3e8ef;border-radius:14px;overflow:hidden;">
 
-      <tr><td style="background:#c2410c;padding:24px 28px;text-align:center;">
-        <div style="color:#ffffff;font-size:13px;font-weight:bold;letter-spacing:1.5px;">OFERTA RELÁMPAGO 48 HORAS</div>
-        <div style="color:#ffffff;font-size:34px;font-weight:bold;padding-top:6px;line-height:1.1;">40% DE DESCUENTO</div>
-        <div style="color:#fed7aa;font-size:15px;padding-top:8px;">MOTS-C &middot; NAD+ &middot; SS-31</div>
+      <!-- Cabecera marino. Una sola línea naranja como acento. -->
+      <tr><td style="background:#002766;padding:34px 32px;text-align:center;">
+        <div style="color:#F58220;font-size:12px;font-weight:bold;letter-spacing:2px;">48 HORAS</div>
+        <div style="color:#ffffff;font-size:30px;font-weight:bold;padding-top:10px;line-height:1.2;">40% de descuento</div>
+        <div style="color:#b9c6da;font-size:15px;padding-top:10px;">MOTS-C &nbsp;&middot;&nbsp; NAD+ &nbsp;&middot;&nbsp; SS-31</div>
       </td></tr>
 
-      <tr><td style="padding:28px;">
-        <p style="margin:0 0 16px;font-size:16px;color:#111827;">Hola,</p>
+      <tr><td style="padding:34px 32px 8px;">
+        <p style="margin:0 0 18px;font-size:16px;color:#0b2545;">Hola,</p>
 
-        <p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">
-          Por 48 horas tenemos <strong>40% de descuento</strong> en nuestra línea de
-          optimización celular, llevando <strong>5 o más viales</strong>.
+        <p style="margin:0 0 26px;font-size:15px;line-height:1.7;color:#3d4a5c;">
+          Por 48 horas tenemos <strong style="color:#002766;">40% de descuento</strong> en
+          nuestra línea de optimización celular, llevando
+          <strong style="color:#002766;">5 o más viales</strong>.
           Podés combinar entre los tres productos para llegar a los 5.
         </p>
 
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border-left:4px solid #c2410c;border-radius:6px;margin-bottom:22px;">
-          <tr><td style="padding:16px 18px;">
-            <div style="font-size:13px;color:#9a3412;font-weight:bold;letter-spacing:0.5px;">OPTIMIZACIÓN CELULAR &mdash; SOPORTE MITOCONDRIAL</div>
-            <div style="font-size:14px;color:#374151;line-height:1.9;padding-top:8px;">
-              &bull; Más energía<br>
-              &bull; Antienvejecimiento<br>
-              &bull; Renovación celular<br>
-              &bull; Salud mitocondrial
-            </div>
+        <!-- Beneficios. Sin caja de color: el texto ya se lee bien solo. -->
+        <div style="font-size:11px;color:#7a8699;font-weight:bold;letter-spacing:1.5px;padding-bottom:12px;">
+          SOPORTE MITOCONDRIAL
+        </div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e3e8ef;margin-bottom:28px;">
+          <tr><td style="padding:13px 0;border-bottom:1px solid #e3e8ef;font-size:15px;color:#3d4a5c;">Más energía</td></tr>
+          <tr><td style="padding:13px 0;border-bottom:1px solid #e3e8ef;font-size:15px;color:#3d4a5c;">Antienvejecimiento</td></tr>
+          <tr><td style="padding:13px 0;border-bottom:1px solid #e3e8ef;font-size:15px;color:#3d4a5c;">Renovación celular</td></tr>
+          <tr><td style="padding:13px 0;border-bottom:1px solid #e3e8ef;font-size:15px;color:#3d4a5c;">Salud mitocondrial</td></tr>
+        </table>
+
+        <!-- El código. Marino sobre gris claro, sin gritar. -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F6F9;border:1px solid #dbe2ec;border-radius:10px;margin-bottom:28px;">
+          <tr><td align="center" style="padding:20px;">
+            <div style="font-size:11px;color:#7a8699;letter-spacing:1.5px;font-weight:bold;">CÓDIGO</div>
+            <div style="font-size:25px;font-weight:bold;color:#002766;letter-spacing:3px;padding-top:7px;">CELLULAR40</div>
           </td></tr>
         </table>
 
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px dashed #c2410c;border-radius:8px;margin-bottom:24px;">
-          <tr><td align="center" style="padding:16px;">
-            <div style="font-size:12px;color:#6b7280;letter-spacing:1px;">CÓDIGO PROMOCIONAL</div>
-            <div style="font-size:27px;font-weight:bold;color:#c2410c;letter-spacing:2px;padding-top:4px;">CELLULAR40</div>
-          </td></tr>
-        </table>
-
-        <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 22px;">
-          <tr><td style="background:#c2410c;border-radius:8px;">
+        <!-- Único elemento naranja de peso. Es el clic. -->
+        <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 26px;">
+          <tr><td style="background:#BF4F0B;border-radius:8px;">
             <a href="https://catalog.peptidescostarica.net/catalog?lang=es&amp;promo_code=CELLULAR40"
-               style="display:inline-block;padding:15px 42px;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;">
+               style="display:inline-block;padding:16px 48px;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;">
               Ver la oferta
             </a>
           </td></tr>
         </table>
+      </td></tr>
 
-        <p style="margin:0;font-size:13px;color:#6b7280;text-align:center;line-height:1.6;">
+      <tr><td style="padding:20px 32px 30px;border-top:1px solid #e3e8ef;">
+        <p style="margin:0;font-size:12.5px;color:#7a8699;text-align:center;line-height:1.7;">
           Termina el jueves 10 de septiembre.<br>
-          Descuento válido en MOTS-C, NAD+ y SS-31 llevando 5 o más viales.<br>
+          Válido en MOTS-C, NAD+ y SS-31 llevando 5 o más viales.<br>
           Los demás productos mantienen su precio normal.
         </p>
       </td></tr>
