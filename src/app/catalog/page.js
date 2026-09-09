@@ -78,8 +78,9 @@ const FLAT_SHIPPING_CRC = 2500;
 // The maintenance pause, read at module scope. Kept separate from
 // CARD_CHECKOUT_ENABLED below because the two mean different things to a
 // customer: "not built yet" (Coming soon) versus "temporarily broken, we are
-// sorry". CARD_CHECKOUT_AVAILABLE is what the checkout actually keys on, so
-// either switch alone is enough to take the card option away.
+// sorry" — one shows a "Coming soon" tile nobody can press, the other a live
+// tile that offers WhatsApp instead. CARD_CHECKOUT_AVAILABLE is what the card
+// form itself keys on, so either switch alone takes the form away.
 const CARD_PAYMENTS_PAUSED = areCardPaymentsPausedForClient();
 const CARD_CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CARD_CHECKOUT === 'true';
 const CARD_CHECKOUT_AVAILABLE = CARD_CHECKOUT_ENABLED && !CARD_PAYMENTS_PAUSED;
@@ -469,6 +470,11 @@ export default function CatalogPage() {
   // actively harmful: every attempt builds a NEW order number, and the
   // double-charge lock only guards a single one.
   const [cardRetryBlocked, setCardRetryBlocked] = useState(false);
+  // Shown when someone reaches for the card option during a maintenance pause.
+  // A greyed-out tile tells a customer to go away; this offers them the till
+  // that is still open instead, which is the whole point of pausing one method
+  // rather than closing the shop.
+  const [cardPausedPromptOpen, setCardPausedPromptOpen] = useState(false);
   // Synchronous double-submit guard. The `cardSubmitting` state guard updates too
   // late to stop a fast second click, so a ref blocks re-entry the instant the
   // handler fires — repeated charge attempts are what trip the gateway's
@@ -4693,7 +4699,13 @@ export default function CatalogPage() {
                       : (CARD_CHECKOUT_ENABLED
                         ? (CARD_CHECKOUT_LIVE ? null : (lang === 'en' ? 'Test' : 'Prueba'))
                         : (lang === 'en' ? 'Soon' : 'Pronto')),
-                    disabled: !CARD_CHECKOUT_AVAILABLE,
+                    // Not disabled during a pause — see `divert` below.
+                    disabled: !CARD_CHECKOUT_ENABLED,
+                    // A paused tile stays clickable on purpose. A disabled
+                    // button cannot be tapped, focused or read out, so a
+                    // customer who wanted to pay by card would be left with no
+                    // answer and no next step. Clicking it offers WhatsApp.
+                    divert: CARD_PAYMENTS_PAUSED,
                   },
                 ].map(method => (
                   <button
@@ -4703,8 +4715,15 @@ export default function CatalogPage() {
                     aria-checked={paymentMethod === method.value}
                     aria-disabled={method.disabled || undefined}
                     disabled={method.disabled}
-                    className={`payment-method-card ${paymentMethod === method.value ? 'active' : ''} ${method.disabled ? 'disabled' : ''}`}
-                    onClick={() => !method.disabled && setPaymentMethod(method.value)}
+                    className={`payment-method-card ${paymentMethod === method.value ? 'active' : ''} ${method.disabled ? 'disabled' : ''} ${method.divert ? 'paused' : ''}`}
+                    onClick={() => {
+                      if (method.disabled) return;
+                      if (method.divert) {
+                        setCardPausedPromptOpen(true);
+                        return;
+                      }
+                      setPaymentMethod(method.value);
+                    }}
                   >
                     <span className="payment-method-icon" style={method.iconColor ? { color: method.iconColor } : {}}>{method.icon}</span>
                     <span className="payment-method-copy">
@@ -4758,7 +4777,7 @@ export default function CatalogPage() {
                 </div>
               )}
 
-              {paymentMethod === 'card' && !CARD_PAYMENTS_PAUSED ? (
+              {paymentMethod === 'card' && CARD_CHECKOUT_AVAILABLE ? (
                 <div className="card-payment-panel">
                   <div className="card-payment-fields">
                     <div>
@@ -4923,9 +4942,13 @@ export default function CatalogPage() {
                 </div>
               ) : (
                 <div className="cart-sticky-submit">
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     form="checkout-form-main"
+                    // revealField() scrolls and focuses by this id — it is how
+                    // the paused-card prompt hands the customer straight to the
+                    // button that still works.
+                    id="field-orderSubmit"
                     className="whatsapp-btn"
                     disabled={orderSubmitting || checkBacOnlyMinimum(cart).blocked}
                     style={{ width: '100%', padding: '16px', fontSize: '1.05rem', boxShadow: '0 -4px 20px rgba(0,0,0,0.1)' }}
@@ -5188,6 +5211,82 @@ export default function CatalogPage() {
               )}
             </div>
             
+          </div>
+        </div>
+      )}
+
+      {/* Card paused → WhatsApp.
+          Reached by tapping the Card option while payments are paused. The
+          customer came here ready to buy, so this does not just apologise: it
+          hands them the method that still works, with their cart and details
+          untouched. "Order on WhatsApp" switches the payment method and drops
+          them on the submit button, so they finish through the ordinary
+          WhatsApp checkout — same order record, same receipt, nothing special
+          about it. See docs/card-payments-pause.md. */}
+      {cardPausedPromptOpen && (
+        <div className="modal active" onClick={() => setCardPausedPromptOpen(false)}>
+          <div
+            className="modal-content card-paused-modal"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="card-paused-title"
+          >
+            <button
+              className="close-modal"
+              onClick={() => setCardPausedPromptOpen(false)}
+              aria-label={lang === 'en' ? 'Close' : 'Cerrar'}
+            >
+              &times;
+            </button>
+
+            <div className="card-paused-modal__icon" aria-hidden="true">🔧</div>
+
+            <h2 id="card-paused-title">
+              {lang === 'en'
+                ? 'Card payments are temporarily paused'
+                : 'Los pagos con tarjeta están pausados temporalmente'}
+            </h2>
+
+            <p className="card-paused-modal__body">
+              {cardCheckoutMessage('paused', lang).message}
+            </p>
+
+            <button
+              type="button"
+              className="whatsapp-btn card-paused-modal__cta"
+              onClick={() => {
+                setPaymentMethod('whatsapp');
+                setCardPausedPromptOpen(false);
+                revealField('orderSubmit');
+              }}
+            >
+              <MessageCircle size={18} />
+              {lang === 'en' ? 'Order on WhatsApp instead' : 'Ordenar por WhatsApp'}
+            </button>
+
+            {/* For someone whose checkout form is not filled in yet, or who
+                would simply rather talk to a person than fill in a form. */}
+            <button
+              type="button"
+              className="card-paused-modal__secondary"
+              onClick={() => {
+                logWhatsAppSource('card_paused_prompt', lang);
+                window.open(
+                  buildWhatsAppLink(
+                    links.whatsappNumber,
+                    lang === 'en'
+                      ? 'Hi! I was trying to pay by card on the website. Could you help me place my order?'
+                      : '¡Hola! Estaba intentando pagar con tarjeta en el sitio web. ¿Me pueden ayudar a hacer mi pedido?',
+                    lang,
+                  ),
+                  '_blank',
+                  'noopener,noreferrer',
+                );
+              }}
+            >
+              {lang === 'en' ? 'Or message us directly' : 'O escríbanos directamente'}
+            </button>
           </div>
         </div>
       )}
