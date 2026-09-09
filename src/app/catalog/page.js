@@ -12,7 +12,7 @@ import { buildWhatsAppLink, cleanPhoneNumber, logWhatsAppSource } from '@/lib/wh
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getFacebookReviewUrl, getTrustpilotReviewUrl, TRUSTPILOT_RATING } from '@/lib/businessLinks';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
-import { checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct } from '@/lib/promoEligibility.mjs';
+import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct, replacesVolumeDiscount } from '@/lib/promoEligibility.mjs';
 import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT } from '@/lib/bulkDeal.mjs';
 import {
   PHONE_COUNTRIES,
@@ -2084,6 +2084,15 @@ export default function CatalogPage() {
   // BAC water vials are excluded — they never move the customer up a tier.
   const getCartVialCount = (cartItems) => getBacSummary(cartItems).discountUnits;
 
+  // Units that count toward a promo's minimum. A code naming target products
+  // counts only those, so padding the basket with items it does not discount
+  // no longer unlocks it. An untargeted code keeps reading the whole cart.
+  const getPromoUnitCount = (promo) => (
+    String(promo?.target_product || '').trim()
+      ? countPromoEligibleUnits(promo, cart)
+      : getCartVialCount()
+  );
+
   // Must stay identical to getVolumeDiscountPct in src/lib/pricing.js, which
   // is what the server re-charges on; both now read the same module.
   const getVolumeDiscountPct = (vialCount) => {
@@ -2108,6 +2117,9 @@ export default function CatalogPage() {
   // checkout path reads this rather than getVolumeDiscountPct directly.
   const getEffectiveVolumePct = () =>
     effectiveVolumeDiscountPct(promoData?.valid ? promoData : null, getVolumeDiscountPct(getCartVialCount()));
+
+  // True when an applied code has taken the volume tiers off the table.
+  const volumeTierHintSuppressed = Boolean(promoData?.valid && replacesVolumeDiscount(promoData));
 
   // The discount lands on the non-BAC subtotal only; the BAC charge is added
   // back afterwards at face value.
@@ -2203,7 +2215,14 @@ export default function CatalogPage() {
       const res = await fetch('/api/promo/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: codeToApply, unitCount: getCartVialCount(), lang }),
+        body: JSON.stringify({
+          code: codeToApply,
+          unitCount: getCartVialCount(),
+          // The server needs the lines to count a targeted code, because which
+          // products count depends on the code it has just looked up.
+          items: cart.map((item) => ({ product: item.product, qty: item.qty })),
+          lang,
+        }),
       });
       const data = await res.json();
       if (data.valid) {
@@ -2259,7 +2278,7 @@ export default function CatalogPage() {
   // limits have to be re-checked whenever the cart changes.
   useEffect(() => {
     if (!promoData?.valid) return;
-    const check = checkUnitLimits(promoData, getCartVialCount());
+    const check = checkUnitLimits(promoData, getPromoUnitCount(promoData));
     if (check.ok) return;
     setPromoData(null);
     setPromoError(unitLimitsMessage(promoData, check.unitCount, lang));
@@ -4185,15 +4204,19 @@ export default function CatalogPage() {
               </div>
             )}
 
-            {/* Next tier hint */}
-            {getCartVialCount() >= 1 && getCartVialCount() < 5 && (
+            {/* Next tier hint.
+                Hidden while a code that REPLACES the volume discount is applied
+                — promising "add 5 more for 35% off" is a promise the cart then
+                refuses to keep, because effectiveVolumeDiscountPct has already
+                zeroed that tier in favour of the code. */}
+            {!volumeTierHintSuppressed && getCartVialCount() >= 1 && getCartVialCount() < 5 && (
               <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: '700' }}>
                 {lang === 'en'
                   ? `🔥 Add ${5 - getCartVialCount()} more vial${5 - getCartVialCount() > 1 ? 's' : ''} for 15% OFF!`
                   : `🔥 ¡Añade ${5 - getCartVialCount()} vial${5 - getCartVialCount() > 1 ? 'es' : ''} más para 15% DESC.!`}
               </div>
             )}
-            {getCartVialCount() >= 5 && getCartVialCount() < 10 && (
+            {!volumeTierHintSuppressed && getCartVialCount() >= 5 && getCartVialCount() < 10 && (
               <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: '700' }}>
                 {lang === 'en'
                   ? `🔥 Add ${10 - getCartVialCount()} more vial${10 - getCartVialCount() > 1 ? 's' : ''} to unlock ${tenPlusDiscountPct()}% OFF!`

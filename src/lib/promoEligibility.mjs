@@ -1,3 +1,5 @@
+import { promoTargetsProduct } from './promoBadge.mjs';
+
 /**
  * Cart-dependent promo conditions.
  *
@@ -14,6 +16,38 @@ export function countCartUnits(cart = []) {
     const qty = parseInt(item?.qty ?? item?.quantity ?? 1, 10);
     return sum + (Number.isFinite(qty) && qty > 0 ? qty : 0);
   }, 0);
+}
+
+/** The product name on a cart line, whichever shape the caller uses. */
+function lineProductName(item) {
+  return item?.product ?? item?.name ?? '';
+}
+
+/**
+ * Units that count toward a promo's minimum and maximum.
+ *
+ * A promo naming target products counts ONLY those products. Counting the whole
+ * basket let a shopper unlock "40% off when you buy 5" with four vials of
+ * something the code does not discount at all — the cheapest thing in the shop
+ * bought four times over turned one full-price vial into a 40%-off one.
+ *
+ * The discount itself was always scoped correctly; it was the gate in front of
+ * it that was not, so the leak paid out real money on the sale products while
+ * looking like the customer had met the condition.
+ *
+ * A promo with no target list still counts the whole cart, which is what every
+ * ordinary code does and what the volume tiers do, so nothing about those
+ * changes here.
+ *
+ * Matching is promoTargetsProduct, the same comparison the sale ribbon and the
+ * discount arithmetic use. One rule, so a product cannot be discountable but
+ * uncountable, or the reverse.
+ */
+export function countPromoEligibleUnits(promo, cart = []) {
+  if (!String(promo?.target_product || '').trim()) return countCartUnits(cart);
+  return countCartUnits(
+    (cart || []).filter((item) => promoTargetsProduct(promo, lineProductName(item)))
+  );
 }
 
 export function getMinUnits(promo) {
