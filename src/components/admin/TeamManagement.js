@@ -10,6 +10,30 @@ import { ADMIN_MODULE_LABELS, ASSIGNABLE_ADMIN_MODULE_IDS, ASSIGNABLE_ADMIN_MODU
 import { payoutMatchesPeriod } from '@/lib/commissionScan.mjs';
 import PayoutSettlementDialog from './PayoutSettlementDialog';
 
+/**
+ * The round × in a modal header.
+ *
+ * There is no .close-btn rule in any stylesheet, so this carries the whole
+ * appearance. Without the font-size and colour the glyph rendered as a barely
+ * visible dot inside the circle.
+ */
+const CLOSE_BTN_STYLE = {
+  background: 'rgba(255,255,255,0.05)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: '50%',
+  width: '32px',
+  height: '32px',
+  flexShrink: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: '1.15rem',
+  lineHeight: 1,
+  color: '#94a3b8',
+  cursor: 'pointer',
+  padding: 0,
+};
+
 /** One labelled on/off row in the member notification panel. */
 function NotificationToggle({ icon, title, hint, checked, onChange, activeColor = '#38bdf8' }) {
   return (
@@ -577,6 +601,37 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       fetchRecipients();
     }
   }, [activeSubTab]);
+
+  /**
+   * Escape closes whichever modal is open, and the page behind it stops
+   * scrolling while one is. Both modals are tall enough to scroll internally,
+   * so without the lock a scroll gesture aimed at the form moves the roster
+   * underneath instead once the form hits its end.
+   *
+   * A save in flight blocks both exits, the same guard the buttons use.
+   */
+  const anyModalOpen = isModalOpen || Boolean(editingPayout && payoutForm);
+  const modalBusy = formLoading || avatarUploading || payoutSaveLoading;
+
+  useEffect(() => {
+    if (!anyModalOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape' || modalBusy) return;
+      setIsModalOpen(false);
+      setEditingPayout(null);
+      setPayoutForm(null);
+    };
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [anyModalOpen, modalBusy]);
 
   const handleOpenModal = (user = null) => {
     setFormError('');
@@ -1416,13 +1471,17 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
 
       {/* Edit payout modal */}
       {editingPayout && payoutForm && (
-        <div className="modal-overlay" style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
-          <div className="modal-content" style={{ maxWidth: '520px', background: 'linear-gradient(145deg, #111827 0%, #0f172a 100%)', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <div className="modal-header" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '16px', marginBottom: '16px' }}>
+        <div
+          className="modal active"
+          style={{ zIndex: 250 }}
+          onClick={() => { if (!payoutSaveLoading) { setEditingPayout(null); setPayoutForm(null); } }}
+        >
+          <div className="modal-content" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '520px', padding: '24px', background: 'linear-gradient(145deg, #111827 0%, #0f172a 100%)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div className="modal-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '16px', marginBottom: '16px' }}>
               <h2 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#f8fafc', margin: 0 }}>
                 Edit Payout — {editingPayout.agent_name}
               </h2>
-              <button className="close-btn" onClick={() => { setEditingPayout(null); setPayoutForm(null); }}>×</button>
+              <button type="button" className="close-btn" onClick={() => { setEditingPayout(null); setPayoutForm(null); }} aria-label="Close" style={CLOSE_BTN_STYLE}>×</button>
             </div>
             <form onSubmit={handleSavePayoutEdit}>
               <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0 0 16px' }}>
@@ -1493,13 +1552,17 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
 
       {/* Edit/Create Modal */}
       {isModalOpen && (
-        <div className="modal-overlay" style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
-          <div className="modal-content" style={{ maxWidth: '550px', background: 'linear-gradient(145deg, #111827 0%, #0f172a 100%)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
-            <div className="modal-header" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '16px', marginBottom: '20px' }}>
+        <div
+          className="modal active"
+          style={{ zIndex: 250 }}
+          onClick={() => { if (!formLoading && !avatarUploading) setIsModalOpen(false); }}
+        >
+          <div className="modal-content" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '550px', padding: '24px', background: 'linear-gradient(145deg, #111827 0%, #0f172a 100%)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+            <div className="modal-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '16px', marginBottom: '20px' }}>
               <h2 style={{ fontSize: '1.25rem', fontWeight: '800', color: '#f8fafc', margin: 0 }}>
                 {editingUserId ? 'Edit Team Member' : 'Add New Team Member'}
               </h2>
-              <button className="close-btn" onClick={() => setIsModalOpen(false)} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+              <button type="button" className="close-btn" onClick={() => setIsModalOpen(false)} aria-label="Close" style={CLOSE_BTN_STYLE}>×</button>
             </div>
             
             <div className="modal-body">
