@@ -4567,8 +4567,8 @@ body {
     position: absolute;
     top: 0;
     left: 0;
-    width: 88px;
-    height: 88px;
+    width: 104px;
+    height: 104px;
     overflow: hidden;
     pointer-events: none;
     z-index: 3;
@@ -4576,10 +4576,15 @@ body {
 
 .sale-badge span {
     position: absolute;
-    left: -38px;
-    top: 20px;
-    width: 132px;
-    padding: 5px 0;
+    left: -40px;
+    top: 26px;
+    width: 152px;
+    /* The band runs corner to corner, so its two ends sit outside the clipped
+       square and are meant to be cut. The horizontal padding keeps the text
+       inside the part that survives: without it a long label like
+       "OFERTA RELAMPAGO 48H" had its first and last letters sliced off, which
+       read as a broken ribbon rather than a long one. */
+    padding: 5px 30px;
     transform: rotate(-45deg);
     background: var(--cta);
     color: #ffffff;
@@ -4594,8 +4599,8 @@ body {
 /* Compact grid cards are narrower — scale the ribbon down so it does not
    swallow the thumbnail. */
 .product-grid.compact-view .sale-badge {
-    width: 68px;
-    height: 68px;
+    width: 82px;
+    height: 82px;
 }
 
 .product-grid.compact-view .sale-badge span {
