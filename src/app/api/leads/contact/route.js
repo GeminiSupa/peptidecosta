@@ -202,7 +202,15 @@ export async function POST(request) {
       hasBrowserOrigin: Boolean(request.headers.get('origin')),
     });
     if (verdict.spam) {
-      console.warn(`[leads/contact] dropped a suspected bot submission from ${ip} (${verdict.reasons.join(', ')}) source=${source}`);
+      // The contact details go in the line, not just the verdict. Nothing is
+      // saved, so this log is the only copy that exists — and when three paid
+      // leads went missing off the AdWords page, "dropped from 1.2.3.4
+      // (filler_phone, no_form_timer)" could say how many had been binned but
+      // not who any of them were, so none of them could be called back.
+      console.warn(
+        `[leads/contact] dropped a suspected bot submission from ${ip} (${verdict.reasons.join(', ')}) source=${source}`,
+        `\n  name=${JSON.stringify(name)} email=${JSON.stringify(email)} phone=${JSON.stringify(phoneRaw)}`,
+      );
       return withCors({ success: true, leadId: null, record: 'ignored' });
     }
 

@@ -864,7 +864,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             <p class="fld__help" data-i18n="f.alt.help">Add this only if you would rather be reached on a different number.</p>
           </div>
 
-          <input class="hp" type="text" id="company" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <input class="hp" type="text" id="subject" name="subject" tabindex="-1" autocomplete="off" aria-hidden="true">
 
           <label class="chk" for="consent">
             <input type="checkbox" id="consent">
@@ -1236,6 +1236,11 @@ $$(".acc__btn").forEach(function(btn){
 /* ---------- modal ---------- */
 var ov=$("#ov"), mod=$("#mod");
 var TOTAL=5, current=1, started=false, completed=false, everOpened=false, lastFocus=null;
+// When the visitor was first shown a field, for the route's form_ms check.
+// Page load is the fallback and the modal opening resets it, because this
+// modal auto-opens on a timer or a scroll depth and a visitor who fills it in
+// six seconds twenty minutes after landing must not be measured from landing.
+var formOpenedAt = Date.now();
 var answers={category:"",location:"",volume:"",preferredLanguage:""};
 
 function pane(n){return $('.pane[data-step="'+n+'"]');}
@@ -1270,6 +1275,7 @@ function goTo(n,focus){
 }
 function openM(src){
   if(ov.classList.contains("open")) return;
+  formOpenedAt = Date.now();
   lastFocus=document.activeElement;
   ov.classList.add("open");
   document.body.classList.add("is-locked");
@@ -1407,6 +1413,13 @@ function toApiPayload(f){
   var chosen = answers.preferredLanguage || (lang === "es" ? "Spanish" : "English");
   var consentEl = document.querySelector('[data-i18n="f.consent"]');
   return {
+    // The two bot checks the route runs, in the shape src/lib/leadSpam.mjs
+    // reads them — the same pair useLeadFormTrap sends from the React forms.
+    // This page is plain HTML and sent neither, so its honeypot was enforced
+    // only in the browser and every lead it did send arrived with no duration
+    // against it. Both are now the server's to judge.
+    subject:                  $("#subject").value,
+    form_ms:                  Date.now() - formOpenedAt,
     name:                     [f.first, f.last].filter(Boolean).join(" "),
     email:                    f.email,
     phone:                    f.phone,
@@ -1606,7 +1619,7 @@ function showFormError(show){
 $("#qForm").addEventListener("submit", function(e){
   e.preventDefault();
   if (isSubmitting) return;                 // duplicate-submit guard
-  if ($("#company").value !== "") return;   // honeypot
+  if ($("#subject").value !== "") return;   // honeypot, also posted for the route to judge
 
   // Clear the previous transport error first: whatever went wrong last time
   // does not describe this attempt, and it must never sit alongside a field error.

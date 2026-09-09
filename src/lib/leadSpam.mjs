@@ -206,8 +206,19 @@ export function classifyLeadSubmission({
   if (!hasBrowserOrigin) soft.push('no_origin');
   if (!timed) soft.push('no_form_timer');
 
+  // A missing duration only counts against a caller that also arrived without
+  // an Origin — that pair is the script. On its own it says nothing, because
+  // whole pages of ours have gone out not sending one: the two ad landing
+  // pages in public/ are plain HTML rather than our React forms, and every
+  // lead they sent arrived already one signal down. A single ordinary quirk
+  // on top — a Costa Rican number that reads as a run, a throwaway inbox, a
+  // long name — was then enough to bin a paid lead, and the visitor was told
+  // it had been received. Counting it only in the pair keeps the script caught
+  // and stops silence about the page standing in as evidence about the person.
+  const counted = soft.filter((reason) => reason !== 'no_form_timer' || !hasBrowserOrigin);
+
   return {
-    spam: hard.length > 0 || soft.length >= 2,
+    spam: hard.length > 0 || counted.length >= 2,
     hard,
     soft,
     reasons: [...hard, ...soft],
