@@ -172,3 +172,57 @@ test('the checkout does not pop anything up when the card tile is tapped', () =>
   }
   assert.match(catalog, /disabled: !CARD_CHECKOUT_AVAILABLE/);
 });
+
+// ---------------------------------------------------------------------------
+// Staff are told, so a deliberate pause does not read as a broken admin panel
+// ---------------------------------------------------------------------------
+
+const adminBanner = fs.readFileSync('src/components/admin/CardPaymentsPausedBanner.js', 'utf8');
+const adminPage = fs.readFileSync('src/app/admin/page.js', 'utf8');
+const orderPanel = fs.readFileSync('src/components/admin/OrderDetailPanel.js', 'utf8');
+const methodRoute = fs.readFileSync('src/app/api/admin/orders/payment-method/route.js', 'utf8');
+
+test('the banner renders nothing while card payments are running', () => {
+  // It sits permanently in the admin layout, so the off state has to cost
+  // nothing and show nothing.
+  assert.match(adminBanner, /if \(!CARD_PAYMENTS_PAUSED\) return null;/);
+  assert.match(adminBanner, /areCardPaymentsPausedForClient\(\)/);
+});
+
+test('the banner says what staff can and cannot do', () => {
+  assert.match(adminBanner, /Card payments are paused for maintenance/);
+  // The three things a person on the phone to a customer actually needs.
+  assert.match(adminBanner, /cannot pay by card/i);
+  assert.match(adminBanner, /payment links/i);
+  // JSX wraps the sentence across lines, so match across the whitespace.
+  assert.match(adminBanner, /WhatsApp,\s+SINPE\s+or\s+bank\s+transfer/);
+});
+
+test('the banner is on every admin tab, not just Orders', () => {
+  // A pause changes what the whole team can promise; the person who needs to
+  // know may be in Leads or the Facebook inbox.
+  assert.match(adminPage, /import CardPaymentsPausedBanner from '@\/components\/admin\/CardPaymentsPausedBanner'/);
+  assert.match(adminPage, /<\/header>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<CardPaymentsPausedBanner \/>/);
+});
+
+test('the copy-payment-link button disables itself rather than erroring', () => {
+  // The route refuses either way, but a button that visibly cannot be pressed
+  // explains itself; one that errors on click reads as a broken panel.
+  assert.match(orderPanel, /disabled=\{cardLinkLoading \|\| CARD_PAYMENTS_PAUSED\}/);
+  assert.match(orderPanel, /'Card payments paused'/);
+  assert.match(orderPanel, /<CardPaymentsPausedBanner compact \/>/);
+});
+
+test('switching an order to card explains why no link came back', () => {
+  // The change is still allowed — an order can be marked as a card order ready
+  // for when payments resume — but no link is minted that would be refused.
+  assert.match(methodRoute, /import \{ areCardPaymentsPaused \} from '@\/lib\/cardPaymentsPaused\.mjs'/);
+  assert.match(methodRoute, /if \(areCardPaymentsPaused\(\)\) \{\s*paymentLinkError =/);
+  assert.match(methodRoute, /card payments are paused for maintenance, so no payment link was created/);
+});
+
+test('the admin banner has styling', () => {
+  const css = fs.readFileSync('src/app/globals.css', 'utf8');
+  assert.match(css, /\.admin-card-paused-banner \{/);
+  assert.match(css, /\.admin-card-paused-banner\.compact \{/);
+});

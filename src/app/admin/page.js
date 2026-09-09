@@ -46,6 +46,7 @@ import MyTeamManager from '@/components/admin/MyTeamManager';
 import TeamQrCodes from '@/components/admin/TeamQrCodes';
 import InquiriesManager from '@/components/admin/InquiriesManager';
 import DashboardHome from '@/components/admin/DashboardHome';
+import CardPaymentsPausedBanner from '@/components/admin/CardPaymentsPausedBanner';
 import AgentDashboard from '@/components/admin/AgentDashboard';
 import GlobalSearch from '@/components/admin/GlobalSearch';
 import NotificationCenter from '@/components/admin/NotificationCenter';
@@ -5391,6 +5392,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             return subtitle ? <p className="admin-page-subtitle">{subtitle}</p> : null;
           })()}
         </header>
+
+        {/* Sits above every tab, not only Orders. A pause changes what the
+            whole team can promise a customer, and the person who needs to know
+            is as likely to be in Leads or the Facebook inbox as in Orders.
+            Renders nothing when card payments are running. */}
+        <CardPaymentsPausedBanner />
 
         {/* TAB 1: SPREADSHEET EDITOR */}
         {activeTab === 'home' && (

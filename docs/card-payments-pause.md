@@ -38,8 +38,10 @@ that matters if a customer has an old tab or an old payment link open.
 2. Open any `/pay-card?order=...&token=...` link. It shows the apology in both
    Spanish and English, with a WhatsApp button that names the order number,
    instead of a card form.
-3. In the admin Orders screen, try to generate a card payment link. It refuses
-   with "Card payments are paused for maintenance".
+3. Open the admin portal. An amber "Card payments are paused for maintenance"
+   banner sits under the page title on every tab, and on any order the
+   "Copy card payment link" button is disabled and reads "Card payments
+   paused".
 
 If the storefront still offers a card form, the redeploy did not pick the
 variable up. Check it is set on the **Production** environment, not only
@@ -81,6 +83,27 @@ only needs another way to pay it, so the page carries a WhatsApp button with
 their order number on it. Sending them back to the catalog to start over would
 lose the sale.
 
+## What staff see
+
+A pause looks like a bug from the inside unless somebody says otherwise: the
+"Copy card payment link" button starts refusing, customers start asking where
+the card option went, and only the person who set the variable knows it was
+deliberate. So the admin portal says so in three places:
+
+- An amber banner under the page title on **every** admin tab. A pause changes
+  what the whole team can promise, and the person who needs to know is as
+  likely to be in Leads or the Facebook inbox as in Orders.
+- The **"Copy card payment link"** button on an order is disabled and reads
+  "Card payments paused", with the same banner inline above it. A button that
+  visibly cannot be pressed explains itself; one that errors on click reads as
+  a broken admin panel.
+- Switching an order's payment method **to** card still works — an order can be
+  marked as a card order ready for when payments resume — but no link is minted,
+  and the agent is told why in the notice that comes back.
+
+All of it renders nothing at all when card payments are running, so it can live
+in the layout permanently.
+
 ## What the customer sees
 
 One piece of copy, defined once in `src/lib/cardCheckoutMessages.mjs` under the
@@ -113,6 +136,10 @@ file.
 | `src/app/api/admin/orders/card-payment-link/route.js` | Link generation, refused |
 | `src/app/catalog/page.js` | Card tile disabled, apology shown |
 | `src/app/pay-card/page.js` | Apology instead of the card form |
+| `src/components/admin/CardPaymentsPausedBanner.js` | The staff banner, page-wide and `compact` |
+| `src/app/admin/page.js` | Banner under the page title, every tab |
+| `src/components/admin/OrderDetailPanel.js` | Payment-link button disabled, banner inline |
+| `src/app/api/admin/orders/payment-method/route.js` | Mints no link while paused, says why |
 
 ### Why two reader functions
 
