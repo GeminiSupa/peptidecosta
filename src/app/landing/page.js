@@ -41,6 +41,7 @@ import {
   TRUSTPILOT_REVIEW_COUNT,
 } from '@/lib/businessLinks';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
+import { useTrustpilotRating } from '@/hooks/useTrustpilotRating';
 import LeadFormTrap, { useLeadFormTrap } from '@/components/LeadFormTrap';
 import { isDiallablePhone } from '@/lib/leadContact.mjs';
 import './landing.css';
@@ -430,6 +431,7 @@ function LeadModal({ open, onClose, lang, source, utm, onSubmitted, settings }) 
 export default function LeadGenerationLandingPage() {
   const [lang, setLang] = useState('es');
   const { links } = useBusinessLinks();
+  const { rating: liveTrustpilotRating, reviewCount: liveTrustpilotCount } = useTrustpilotRating();
   const [modalOpen, setModalOpen] = useState(false);
   const [modalTrigger, setModalTrigger] = useState('');
   const [source, setSource] = useState('adwords_lp');
@@ -527,9 +529,9 @@ export default function LeadGenerationLandingPage() {
 
   const ratingCards = useMemo(() => [
     { name: 'Google', rating: '5.0', color: '#f4b400', href: links.googleReviewUrl || links.googleMapsUrl, detail: lang === 'en' ? 'Customer rating' : 'Calificación de clientes' },
-    { name: 'Trustpilot', rating: TRUSTPILOT_RATING, color: '#00b67a', href: getTrustpilotReviewUrl(lang, links), detail: `${TRUSTPILOT_REVIEW_COUNT} ${c.reviews}` },
+    { name: 'Trustpilot', rating: liveTrustpilotRating, color: '#00b67a', href: getTrustpilotReviewUrl(lang, links), detail: `${liveTrustpilotCount} ${c.reviews}` },
     { name: 'Facebook', rating: '5.0', color: '#1877f2', href: getFacebookReviewUrl(links), detail: lang === 'en' ? 'Community rating' : 'Calificación de la comunidad' },
-  ], [c.reviews, lang, links]);
+  ], [c.reviews, lang, links, liveTrustpilotRating, liveTrustpilotCount]);
 
   return (
     <div className="lead-lp">

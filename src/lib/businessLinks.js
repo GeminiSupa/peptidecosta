@@ -30,10 +30,11 @@ export const TRUSTPILOT_REVIEW_URLS = {
   es: 'https://es.trustpilot.com/review/peptidescostarica.net',
 };
 
-// Verified against the public Trustpilot profile on 2026-08-13. Keep the
-// catalog and storefront chrome on one value so they cannot drift apart.
-export const TRUSTPILOT_RATING = '4.4';
-export const TRUSTPILOT_REVIEW_COUNT = 11;
+// Fallback values used when the live /api/trustpilot-rating fetch fails.
+// Updated 2026-09-09 to match the current Trustpilot profile (4.6 / 12 reviews).
+// The live values are fetched dynamically via useTrustpilotRating hook.
+export const TRUSTPILOT_RATING = '4.6';
+export const TRUSTPILOT_REVIEW_COUNT = 12;
 
 // Retired listings. A stored value that matches one of these loses to
 // GOOGLE_LOCAL_LISTING_URL in normalizeBusinessLinks, so add the outgoing URL

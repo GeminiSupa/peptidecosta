@@ -7,6 +7,7 @@ import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { buildWhatsAppLink, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getFacebookReviewUrl, getTrustpilotReviewUrl, isExternalHttpUrl, TRUSTPILOT_RATING } from '@/lib/businessLinks';
+import { useTrustpilotRating } from '@/hooks/useTrustpilotRating';
 import { DEFAULT_LANDING_PAGE_SETTINGS } from '@/lib/landingContent';
 import { normalizeBannerCopy, replaceUsdPlaceholders, sanitizeBannerHref } from '@/lib/bannerText';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
@@ -318,6 +319,7 @@ export function StorefrontBulkBand({ lang, settings }) {
 
 export function StorefrontFooter({ lang, settings, categories = [] }) {
   const { links } = useBusinessLinks();
+  const { rating: liveTrustpilotRating } = useTrustpilotRating();
   const suffix = lang === 'en' ? 'En' : 'Es';
   const withLang = (href = '/') => {
     if (href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return href;
@@ -331,7 +333,7 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
     // Fallback only — must match real product categories so the links filter.
     : ['Weight Loss & Metabolism', 'Performance & Hormones', 'Anti-Aging & Longevity', 'Recovery & Healing'];
   const reviewLinks = [
-    { id: 'trustpilot', label: 'Trustpilot', score: TRUSTPILOT_RATING, logo: '★', href: getTrustpilotReviewUrl(lang, links) },
+    { id: 'trustpilot', label: 'Trustpilot', score: liveTrustpilotRating, logo: '★', href: getTrustpilotReviewUrl(lang, links) },
     { id: 'google', label: 'Google', score: '5.0', logo: 'G', href: links.googleReviewUrl || links.googleMapsUrl },
     { id: 'facebook', label: 'Facebook', score: '5.0', logo: 'f', href: getFacebookReviewUrl(links) },
   ];
