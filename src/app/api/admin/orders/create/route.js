@@ -5,7 +5,7 @@ import { appendOrderActivity } from '@/lib/orderActivity';
 import { agentMatchKeys } from '@/lib/agentOrders';
 import { isGiftLine, stripGiftSuffix } from '@/lib/bacWater.mjs';
 import { authoritativeCheckout } from '@/lib/authoritativeCheckout.mjs';
-import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
+import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import {
   calculateManualDiscountAmount,
@@ -77,7 +77,9 @@ async function resolvePromo(supabase, order) {
 
   const unitCheck = checkUnitLimits(
     promo,
-    countCartUnits(order.items.filter((item) => !isGiftLine(item))),
+    // Same rule the storefront enforces: a targeted code counts only the
+    // products it covers, so a staff-entered order cannot unlock it either.
+    countPromoEligibleUnits(promo, order.items.filter((item) => !isGiftLine(item))),
   );
   if (!unitCheck.ok) {
     throw Object.assign(new Error(unitLimitsMessage(promo, unitCheck.unitCount, order.currency === 'USD' ? 'en' : 'es')), { status: 400 });

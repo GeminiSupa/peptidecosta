@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
+import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -64,7 +64,18 @@ export async function POST(request) {
     // Unit conditions (minimum and maximum). Checked here rather than only in
     // the browser so they cannot be sidestepped by calling this endpoint
     // directly.
-    const unitCheck = checkUnitLimits(promo, body?.unitCount);
+    // A targeted code counts only the products it covers, so the cart's own
+    // total is the wrong number to judge it by. Recomputed here from the lines
+    // themselves whenever the browser sends them, which also means the figure
+    // the gate reads is no longer one the browser chose.
+    //
+    // unitCount stays as the fallback for an untargeted code, where the browser
+    // has already excluded BAC water the way the volume tiers do.
+    const unitCount = Array.isArray(body?.items) && String(promo.target_product || '').trim()
+      ? countPromoEligibleUnits(promo, body.items)
+      : body?.unitCount;
+
+    const unitCheck = checkUnitLimits(promo, unitCount);
     if (!unitCheck.ok) {
       return NextResponse.json({
         valid: false,

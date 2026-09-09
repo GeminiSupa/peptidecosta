@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
-import { countCartUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
+import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 import { isGiftLine, stripGiftSuffix } from '@/lib/bacWater.mjs';
 import { authoritativeCheckout, activeDealForOrder } from '@/lib/authoritativeCheckout.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
@@ -453,7 +453,9 @@ export async function POST(request) {
       // so the cart size is verified once more before anything is saved.
       const unitCheck = checkUnitLimits(
         promoData,
-        countCartUnits(order.items.filter((item) => !isGiftLine(item))),
+        // Only the products this code discounts count toward its minimum. A
+        // basket padded with items the code does not cover must not unlock it.
+        countPromoEligibleUnits(promoData, order.items.filter((item) => !isGiftLine(item))),
       );
       if (!unitCheck.ok) {
         return NextResponse.json({
