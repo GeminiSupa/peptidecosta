@@ -37,6 +37,26 @@ WHERE COALESCE(is_superadmin, false) = false
   );
 
 -- -------------------------------------------------------------------------
+-- 1b. Take the two keys back off anyone who should never have had them
+-- -------------------------------------------------------------------------
+-- Section 1 grants both keys to every staff profile, because its job is to
+-- leave the existing team exactly as it was. Anyone added since this file was
+-- written gets caught by that too, which is wrong for an outside partner given
+-- a login purely to watch their own commission.
+--
+-- List those people here by email before running. Editing this list is the
+-- whole point of the block, so it is expected to differ between runs.
+UPDATE public.admin_profiles
+SET permissions = COALESCE((
+  SELECT jsonb_agg(value)
+  FROM jsonb_array_elements_text(COALESCE(permissions, '[]'::jsonb)) AS value
+  WHERE value NOT IN ('messenger', 'team_chat')
+), '[]'::jsonb)
+WHERE lower(trim(email)) IN (
+  'coto.tatiana12@yahoo.com'
+);
+
+-- -------------------------------------------------------------------------
 -- 2. Team chat is closed at the database, not just in the navigation
 -- -------------------------------------------------------------------------
 -- TeamChat.js reads team_messages straight from the browser Supabase client,
