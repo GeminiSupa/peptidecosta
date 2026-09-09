@@ -33,18 +33,26 @@ test('internal signatures are bound to path, body, and a short time window', () 
   assert.equal(verifyInternalRequest(request, body, '/api/order-notification', { now: timestamp + 6 * 60 * 1000 }), false);
 });
 
-test('storefront origin checks allow company subdomains and reject foreign sites', () => {
+test('storefront origin checks allow company subdomains, Referer headers, and reject foreign sites', () => {
   const company = new Request('https://catalog.peptidescostarica.net/api/orders/create', {
     headers: { Origin: 'https://checkout.peptidescostarica.net' },
   });
   const foreign = new Request('https://catalog.peptidescostarica.net/api/orders/create', {
     headers: { Origin: 'https://attacker.example' },
   });
-  const missing = new Request('https://catalog.peptidescostarica.net/api/orders/create');
+  const missingOriginWithValidReferer = new Request('https://catalog.peptidescostarica.net/api/orders/create', {
+    headers: { Referer: 'https://peptidescostarica.net/catalog' },
+  });
+  const missingOriginWithForeignReferer = new Request('https://catalog.peptidescostarica.net/api/orders/create', {
+    headers: { Referer: 'https://attacker.example/page' },
+  });
+  const companyHostNoOrigin = new Request('https://catalog.peptidescostarica.net/api/orders/create');
 
   assert.equal(isTrustedStorefrontRequest(company), true);
   assert.equal(isTrustedStorefrontRequest(foreign), false);
-  assert.equal(isTrustedStorefrontRequest(missing), false);
+  assert.equal(isTrustedStorefrontRequest(missingOriginWithValidReferer), true);
+  assert.equal(isTrustedStorefrontRequest(missingOriginWithForeignReferer), false);
+  assert.equal(isTrustedStorefrontRequest(companyHostNoOrigin), true);
 });
 
 test('JSON bodies are rejected before an oversized payload can be processed', async () => {
