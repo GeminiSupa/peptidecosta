@@ -78,6 +78,10 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   const [banners, setBanners] = useState([]);
   const [newBannerEn, setNewBannerEn] = useState('');
   const [newBannerEs, setNewBannerEs] = useState('');
+  // Countdown settings for the banner being written. Saved with it, but inert
+  // on the storefront until SALE_COUNTDOWN_ENABLED is switched on.
+  const [newBannerCountdown, setNewBannerCountdown] = useState(false);
+  const [newBannerEndsAt, setNewBannerEndsAt] = useState('');
   const [bannersLoading, setBannersLoading] = useState(true);
   const [metaTemplates, setMetaTemplates] = useState([]);
 
@@ -112,8 +116,15 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
 
   const handleCreateOrUpdateBanner = () => {
     if (!newBannerEn || !newBannerEs) return alert('Please fill both EN and ES text');
+    // An end time with no date typed stores null rather than an empty string, so
+    // parseEndsAt never has to guess what '' was meant to mean.
+    const countdownEndsAt = newBannerEndsAt ? new Date(newBannerEndsAt).toISOString() : null;
+    const countdownEnabled = Boolean(newBannerCountdown && countdownEndsAt);
+
     if (editingBannerId) {
-      const updated = banners.map(b => b.id === editingBannerId ? { ...b, textEn: newBannerEn, textEs: newBannerEs } : b);
+      const updated = banners.map(b => b.id === editingBannerId
+        ? { ...b, textEn: newBannerEn, textEs: newBannerEs, countdownEnabled, countdownEndsAt }
+        : b);
       saveBanners(updated);
       setEditingBannerId(null);
     } else {
@@ -121,17 +132,27 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
         id: Date.now().toString(),
         textEn: newBannerEn,
         textEs: newBannerEs,
+        countdownEnabled,
+        countdownEndsAt,
         isActive: false
       };
       saveBanners([...banners, newBanner]);
     }
     setNewBannerEn('');
     setNewBannerEs('');
+    setNewBannerCountdown(false);
+    setNewBannerEndsAt('');
   };
 
   const startEditBanner = (b) => {
     setNewBannerEn(b.textEn);
     setNewBannerEs(b.textEs);
+    setNewBannerCountdown(Boolean(b.countdownEnabled));
+    // datetime-local wants 'YYYY-MM-DDTHH:mm' in local time, not the stored ISO.
+    setNewBannerEndsAt(b.countdownEndsAt
+      ? new Date(new Date(b.countdownEndsAt).getTime() - new Date().getTimezoneOffset() * 60000)
+        .toISOString().slice(0, 16)
+      : '');
     setEditingBannerId(b.id);
     // The form sits above the list; without this, clicking Edit appears to do
     // nothing because the populated fields are off-screen.
@@ -510,6 +531,39 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
           <div>
             <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Spanish Banner Text (Use {'{{usd_200}}'} for dynamic currency)</label>
             <input type="text" value={newBannerEs} onChange={e => setNewBannerEs(e.target.value)} className="admin-input" placeholder="e.g. ¡Envío gratis superior a {{usd_200}}!" style={{ width: '100%' }} />
+          </div>
+          <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.88rem', color: '#e2e8f0', fontWeight: 700 }}>
+              <input
+                type="checkbox"
+                checked={newBannerCountdown}
+                onChange={e => setNewBannerCountdown(e.target.checked)}
+                style={{ width: '17px', height: '17px', accentColor: '#38bdf8', cursor: 'pointer' }}
+              />
+              Show a countdown on this banner
+            </label>
+            <p style={{ margin: '6px 0 0 27px', fontSize: '0.75rem', color: '#94a3b8' }}>
+              Counts down to the time below, then hides itself. Set this to the
+              same moment the promo code expires.
+            </p>
+            {newBannerCountdown && (
+              <div style={{ marginTop: '10px', marginLeft: '27px' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '5px' }}>
+                  Sale ends (your local time)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={newBannerEndsAt}
+                  onChange={e => setNewBannerEndsAt(e.target.value)}
+                  className="admin-input"
+                  style={{ width: '100%', maxWidth: '260px' }}
+                />
+              </div>
+            )}
+            <p style={{ margin: '10px 0 0 27px', fontSize: '0.72rem', color: '#fbbf24', fontWeight: 700 }}>
+              Not live yet. The countdown stays hidden on the storefront until
+              SALE_COUNTDOWN_ENABLED is switched on in src/lib/saleCountdown.mjs.
+            </p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button type="button" onClick={handleCreateOrUpdateBanner} style={{ flex: 1, padding: '8px 16px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>

@@ -4,7 +4,12 @@ import {
   checkUnitLimits,
   countCartUnits,
   countPromoEligibleUnits,
+  effectiveVolumeDiscountPct,
+  promoTargetLabel,
+  replacesVolumeDiscount,
+  unitLimitsMessage,
 } from '../src/lib/promoEligibility.mjs';
+import { promoTargetsProduct } from '../src/lib/promoBadge.mjs';
 
 // The 48-hour CELLULAR40 sale: 40% off MOTS-C, NAD+ and SS-31, on carts of five
 // vials or more, mixable across those three.
@@ -93,4 +98,72 @@ test('an empty or missing cart is zero, not a crash', () => {
   assert.equal(countPromoEligibleUnits(CELLULAR40, []), 0);
   assert.equal(countPromoEligibleUnits(CELLULAR40, undefined), 0);
   assert.equal(countPromoEligibleUnits(null, [{ product: 'SS-31 25mg', qty: 2 }]), 2);
+});
+
+// --- What the customer is told, and what they are charged -----------------
+// One order earns one kind of discount. A basket mixing sale and non-sale
+// products takes the sale rate on the sale products and nothing on the rest,
+// and the wording has to say so or the cart looks like it shortchanged them.
+
+test('a mixed basket discounts the sale products and leaves the rest alone', () => {
+  // Five covered vials plus two the code does not touch: the code unlocks, and
+  // the two are still full price.
+  const cart = [
+    { product: 'SS-31 25mg', qty: 3, price: 450 },
+    { product: 'NAD+ 500mg', qty: 2, price: 90 },
+    { product: 'Retatrutide 5mg', qty: 2, price: 100 },
+  ];
+
+  assert.equal(countPromoEligibleUnits(CELLULAR40, cart), 5, 'only the covered vials count');
+  assert.equal(checkUnitLimits(CELLULAR40, countPromoEligibleUnits(CELLULAR40, cart)).ok, true);
+
+  // The discount base is the covered lines only.
+  const covered = cart.filter((item) => promoTargetsProduct(CELLULAR40, item.product));
+  const base = covered.reduce((sum, item) => sum + item.price * item.qty, 0);
+  assert.equal(base, 1530, '3x450 + 2x90, with the Retatrutide left out');
+  assert.equal(Number((base * CELLULAR40.discount_pct).toFixed(2)), 612);
+});
+
+test('the shortfall message names the products instead of just a number', () => {
+  // Five vials of something else used to be told "you need 5 units", which
+  // reads as a broken cart to someone holding exactly five.
+  const cart = [{ product: 'Retatrutide 5mg', qty: 5 }];
+  const units = countPromoEligibleUnits(CELLULAR40, cart);
+
+  const es = unitLimitsMessage(CELLULAR40, units, 'es');
+  assert.match(es, /MOTS-C/);
+  assert.match(es, /NAD\+/);
+  assert.match(es, /SS-31/);
+  assert.match(es, /solo/, 'says the code is limited to them');
+
+  const en = unitLimitsMessage(CELLULAR40, units, 'en');
+  assert.match(en, /only/);
+  assert.match(en, /MOTS-C, NAD\+ and SS-31/);
+});
+
+test('an untargeted code keeps its plain wording', () => {
+  const openCode = { code: 'WELCOME10', min_units: 5, discount_pct: 0.1, target_product: null };
+  const message = unitLimitsMessage(openCode, 2, 'en');
+  assert.match(message, /5 units or more/);
+  assert.equal(promoTargetLabel(openCode, 'en'), null);
+});
+
+test('the target list is worded, not dumped', () => {
+  assert.equal(promoTargetLabel(CELLULAR40, 'en'), 'MOTS-C, NAD+ and SS-31');
+  assert.equal(promoTargetLabel(CELLULAR40, 'es'), 'MOTS-C, NAD+ y SS-31');
+  assert.equal(promoTargetLabel({ target_product: 'SS-31' }, 'en'), 'SS-31');
+});
+
+test('one order earns one kind of discount, never both', () => {
+  // A code with a unit minimum is a negotiated bulk deal, so it REPLACES the
+  // automatic volume tier rather than compounding with it. Two 40%s on one
+  // basket is the giveaway this guards against.
+  assert.equal(replacesVolumeDiscount(CELLULAR40), true);
+  assert.equal(effectiveVolumeDiscountPct(CELLULAR40, 20), 0, 'the volume tier steps aside');
+  assert.equal(effectiveVolumeDiscountPct(CELLULAR40, 35), 0);
+
+  // An ordinary code has no minimum, so the volume tier still applies.
+  const openCode = { code: 'WELCOME10', discount_pct: 0.1 };
+  assert.equal(replacesVolumeDiscount(openCode), false);
+  assert.equal(effectiveVolumeDiscountPct(openCode, 20), 20);
 });

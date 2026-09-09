@@ -50,6 +50,26 @@ export function countPromoEligibleUnits(promo, cart = []) {
   );
 }
 
+/**
+ * The promo's target list, worded for a customer.
+ *
+ * "MOTS-C,NAD+,SS-31" is a database value, not a sentence, so it is spaced and
+ * joined with the right conjunction for the language before it goes anywhere a
+ * shopper can read it.
+ */
+export function promoTargetLabel(promo, lang = 'es') {
+  const names = String(promo?.target_product || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0];
+
+  const isEn = String(lang).toLowerCase().startsWith('en');
+  const last = names[names.length - 1];
+  return `${names.slice(0, -1).join(', ')} ${isEn ? 'and' : 'y'} ${last}`;
+}
+
 export function getMinUnits(promo) {
   const value = Number(promo?.min_units ?? 0);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
@@ -113,6 +133,14 @@ export function maxUnitsMessage(promo, unitCount, lang = 'es') {
   if (ok) return null;
 
   const isEn = String(lang).toLowerCase().startsWith('en');
+  const targets = promoTargetLabel(promo, lang);
+
+  if (targets) {
+    return isEn
+      ? `This code covers up to ${maxUnits} vials of ${targets} — remove ${excess} to use it.`
+      : `Este código cubre hasta ${maxUnits} viales de ${targets} — quitá ${excess} para usarlo.`;
+  }
+
   return isEn
     ? `This code covers up to ${maxUnits} units — remove ${excess} to use it.`
     : `Este código cubre hasta ${maxUnits} unidades — quitá ${excess} para usarlo.`;
@@ -174,6 +202,18 @@ export function minUnitsMessage(promo, unitCount, lang = 'es') {
   if (ok) return null;
 
   const isEn = String(lang).toLowerCase().startsWith('en');
+  const targets = promoTargetLabel(promo, lang);
+
+  // Naming the products is not decoration on a targeted code. Its minimum
+  // counts only what it covers, so a basket holding five vials of something
+  // else is told it needs five — which reads as a broken cart unless the
+  // sentence says which five.
+  if (targets) {
+    return isEn
+      ? `This code applies to ${targets} only. Add ${shortfall} more of them to reach ${minUnits} and unlock it.`
+      : `Este código aplica solo a ${targets}. Agregá ${shortfall} más de estos para llegar a ${minUnits} y activarlo.`;
+  }
+
   return isEn
     ? `This code needs ${minUnits} units or more — add ${shortfall} more to use it.`
     : `Este código requiere ${minUnits} unidades o más — agregá ${shortfall} más para usarlo.`;

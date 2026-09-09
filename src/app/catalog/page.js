@@ -12,7 +12,7 @@ import { buildWhatsAppLink, cleanPhoneNumber, logWhatsAppSource } from '@/lib/wh
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getFacebookReviewUrl, getTrustpilotReviewUrl, TRUSTPILOT_RATING } from '@/lib/businessLinks';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
-import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct, replacesVolumeDiscount } from '@/lib/promoEligibility.mjs';
+import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct, replacesVolumeDiscount, promoTargetLabel } from '@/lib/promoEligibility.mjs';
 import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT } from '@/lib/bulkDeal.mjs';
 import {
   PHONE_COUNTRIES,
@@ -4329,7 +4329,22 @@ export default function CatalogPage() {
               )}
               {promoData?.valid && (
                 <div style={{ color: '#4ade80', fontSize: '0.8rem', paddingLeft: '4px', fontWeight: '600' }}>
-                  {lang === 'en' ? `Code applied: ${promoData.discount_pct * 100}% off` : `Código aplicado: ${promoData.discount_pct * 100}% de descuento`}
+                  {/* Says what the discount covers, not only its size. A
+                      targeted code leaves the rest of the basket at full price,
+                      and a bare "40% off" over a total that moved by less than
+                      40% reads as the cart shortchanging the customer. */}
+                  {(() => {
+                    const pct = promoData.discount_pct * 100;
+                    const targets = promoTargetLabel(promoData, lang);
+                    if (!targets) {
+                      return lang === 'en'
+                        ? `Code applied: ${pct}% off`
+                        : `Código aplicado: ${pct}% de descuento`;
+                    }
+                    return lang === 'en'
+                      ? `Code applied: ${pct}% off ${targets} — other products stay at their normal price`
+                      : `Código aplicado: ${pct}% de descuento en ${targets} — los demás productos mantienen su precio normal`;
+                  })()}
                 </div>
               )}
             </div>

@@ -11,6 +11,8 @@ import { DEFAULT_LANDING_PAGE_SETTINGS } from '@/lib/landingContent';
 import { normalizeBannerCopy, replaceUsdPlaceholders, sanitizeBannerHref } from '@/lib/bannerText';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import PromoTicker from '@/components/PromoTicker';
+import SaleCountdown from './SaleCountdown';
+import { shouldShowCountdown } from '@/lib/saleCountdown.mjs';
 
 function parseBannerText(text = '') {
   return replaceUsdPlaceholders(text, (amount) => `$${amount}`);
@@ -64,6 +66,10 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
     .map(normalizeBannerCopy)
     .filter((item) => item.text);
   const activeText = activeTextItems.map((item) => item.text).join(' • ');
+  // The first banner opted into a countdown that is switched on and not yet
+  // over. Returns undefined while SALE_COUNTDOWN_ENABLED is false, which is why
+  // nothing renders today however the banners are configured.
+  const countdownBanner = promoBanners.find((banner) => shouldShowCountdown(banner));
   const activeTextHref = activeTextItems.find((item) => item.href)?.href || '';
 
   const imageUrl = activeImageBanner?.imageUrl
@@ -101,7 +107,18 @@ export function CatalogPromoBanner({ lang = 'es', settings, className = '', forc
     : {};
 
   if (activeText && !activeImageBanner) {
-    return <PromoTicker active text={activeText} href={href} className={textTickerClassName(className)} lang={lang} />;
+    const ticker = (
+      <PromoTicker active text={activeText} href={href} className={textTickerClassName(className)} lang={lang} />
+    );
+    // Wrapped only when a countdown is actually showing, so the DOM is
+    // byte-for-byte what it is today while the feature stays switched off.
+    if (!countdownBanner) return ticker;
+    return (
+      <div className="catalog-promo-banner-with-countdown">
+        {ticker}
+        <SaleCountdown banner={countdownBanner} lang={lang} variant="block" />
+      </div>
+    );
   }
 
   if (textOnly) return null;
