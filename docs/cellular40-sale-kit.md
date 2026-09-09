@@ -47,8 +47,8 @@ approved for this kind of send. It takes four parameters.
 |------|---------|---------------------|
 | `{{1}}` | Product | `MOTS-C, NAD+ y SS-31` |
 | `{{2}}` | Offer | `40% de descuento llevando 5 o más viales (código CELLULAR40)` |
-| `{{3}}` | End date | `jueves 10 de septiembre, 10:00 a.m.` |
-| `{{4}}` | Catalog link | your catalog URL with `?promo_code=CELLULAR40` |
+| `{{3}}` | End date | `jueves 10 de septiembre` |
+| `{{4}}` | Catalog link | `https://catalog.peptidescostarica.net/catalog?lang=es&promo_code=CELLULAR40` |
 
 Put `?promo_code=CELLULAR40` on the link. The catalog reads that parameter and
 applies the code on arrival, so nobody has to type it.
@@ -61,7 +61,7 @@ Send at roughly T-6h to anyone who opened but did not order. Same template, only
 `{{3}}` changes:
 
 ```
-{{3}} = hoy a las 10:00 a.m. — últimas horas
+{{3}} = hoy — últimas horas
 ```
 
 ### If you send free-form instead of a template
@@ -84,9 +84,9 @@ Soporte mitocondrial y energía celular:
 • Renovación celular
 • Salud mitocondrial
 
-Termina el jueves 10 de septiembre a las 10:00 a.m.
+Termina el jueves 10 de septiembre.
 
-Ordená acá 👉 [enlace]
+Ordená acá 👉 https://catalog.peptidescostarica.net/catalog?lang=es&promo_code=CELLULAR40
 ```
 
 `{{name}}` is substituted automatically. A contact with no name on file reads
@@ -150,14 +150,14 @@ styled, because Gmail and Outlook strip a `<style>` block and ignore flexbox.
 
         <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 22px;">
           <tr><td style="background:#c2410c;border-radius:8px;">
-            <a href="{{CATALOG_URL}}?promo_code=CELLULAR40" style="display:inline-block;padding:15px 42px;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;">
+            <a href="https://catalog.peptidescostarica.net/catalog?lang=es&promo_code=CELLULAR40" style="display:inline-block;padding:15px 42px;color:#ffffff;font-size:16px;font-weight:bold;text-decoration:none;">
               Ver la oferta
             </a>
           </td></tr>
         </table>
 
         <p style="margin:0;font-size:13px;color:#6b7280;text-align:center;line-height:1.6;">
-          Termina el jueves 10 de septiembre a las 10:00 a.m.<br>
+          Termina el jueves 10 de septiembre.<br>
           Descuento válido en MOTS-C, NAD+ y SS-31 llevando 5 o más viales.
         </p>
       </td></tr>
@@ -167,8 +167,8 @@ styled, because Gmail and Outlook strip a `<style>` block and ignore flexbox.
 </table>
 ```
 
-Replace `{{CATALOG_URL}}` with the catalog address. The `?promo_code=CELLULAR40`
-after it applies the code when they land, so the button does the typing.
+The link already carries `promo_code=CELLULAR40`, so the code is applied the
+moment they land and the button does the typing.
 
 ---
 
