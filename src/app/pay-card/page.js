@@ -6,6 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { CreditCard, Lock, AlertCircle, CheckCircle2, Wrench } from 'lucide-react';
 import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
 import { areCardPaymentsPausedForClient } from '@/lib/cardPaymentsPaused.mjs';
+import { buildWhatsAppLink } from '@/lib/whatsappLink.mjs';
+import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 
 // Read once at module scope: this is a build-time constant, and re-reading it
 // per render would only invite someone to think it can change mid-session.
@@ -21,6 +23,7 @@ function CardPaymentContent() {
   const searchParams = useSearchParams();
   const orderNumber = searchParams.get('order') || '';
   const token = searchParams.get('token') || '';
+  const { links } = useBusinessLinks();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -168,6 +171,24 @@ function CardPaymentContent() {
             <p>{cardCheckoutMessage('paused', 'es').message}</p>
             <h2 style={{ fontSize: '1rem', marginTop: '18px' }}>Card payments under maintenance</h2>
             <p>{cardCheckoutMessage('paused', 'en').message}</p>
+
+            {/* The order already exists and is already agreed — this customer
+                only needs a way to pay it. So the way out is a message that
+                names the order, not a trip back to the catalog to start over. */}
+            <a
+              className="whatsapp-btn card-paused-modal__cta"
+              href={buildWhatsAppLink(
+                links.whatsappNumber,
+                orderNumber
+                  ? `Hola / Hi! Order #${orderNumber} — quiero pagar por otro medio / I would like to pay by another method.`
+                  : 'Hola / Hi! Quiero pagar mi pedido por otro medio / I would like to pay for my order by another method.',
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Pagar por WhatsApp / Pay via WhatsApp
+            </a>
+
             <Link href="/catalog">Volver al catálogo / Return to catalog</Link>
           </div>
         ) : loading ? (
