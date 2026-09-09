@@ -8,6 +8,10 @@ import { adminFetch } from '@/lib/adminApi';
 import { confirmCustomerEmail } from '@/lib/confirmCustomerEmail.mjs';
 import ProductCombobox from './ProductCombobox';
 import AskForReviewButton from './AskForReviewButton';
+import CardPaymentsPausedBanner from './CardPaymentsPausedBanner';
+import { areCardPaymentsPausedForClient } from '@/lib/cardPaymentsPaused.mjs';
+
+const CARD_PAYMENTS_PAUSED = areCardPaymentsPausedForClient();
 import { isAgentReferralSource, isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import { bacGiftShortfall } from '@/lib/bacWater.mjs';
 import { formatAmount as formatRefundMoney, orderCanBeRefunded } from '@/lib/orderRefund.mjs';
@@ -1018,16 +1022,24 @@ export default function OrderDetailPanel({
               lineHeight: 1.45,
             }}>
               Verify this card payment in Shield Hub Pay before fulfilling the order.
+              <CardPaymentsPausedBanner compact />
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px', alignItems: 'center' }}>
                 <button
                   type="button"
                   className="admin-btn admin-btn-secondary"
                   onClick={copyCardPaymentLink}
-                  disabled={cardLinkLoading}
+                  // Disabled rather than left to fail at the route. The route
+                  // refuses either way, but a button that visibly cannot be
+                  // pressed explains itself; one that errors on click reads as
+                  // a broken admin panel.
+                  disabled={cardLinkLoading || CARD_PAYMENTS_PAUSED}
+                  title={CARD_PAYMENTS_PAUSED ? 'Card payments are paused for maintenance' : undefined}
                   style={{ fontSize: '0.78rem', padding: '8px 10px' }}
                 >
                   <Copy size={13} />
-                  {cardLinkLoading ? 'Creating link...' : cardLinkCopied ? 'Payment link copied' : 'Copy card payment link'}
+                  {CARD_PAYMENTS_PAUSED
+                    ? 'Card payments paused'
+                    : cardLinkLoading ? 'Creating link...' : cardLinkCopied ? 'Payment link copied' : 'Copy card payment link'}
                 </button>
                 {cardLinkError && (
                   <span style={{ color: '#f87171', fontSize: '0.78rem' }}>{cardLinkError}</span>

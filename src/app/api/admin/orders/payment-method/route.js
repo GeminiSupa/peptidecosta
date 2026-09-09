@@ -4,6 +4,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { orderVisibleToAgent } from '@/lib/agentOrders';
 import { buildCardPaymentPath, canSignCardPaymentLinks, getPublicBaseUrl } from '@/lib/cardPaymentLink';
+import { areCardPaymentsPaused } from '@/lib/cardPaymentsPaused.mjs';
 import {
   paymentMethodActivity,
   paymentMethodPatch,
@@ -81,7 +82,13 @@ export async function POST(request) {
     let paymentUrl = null;
     let paymentLinkError = null;
     if (plan.to === 'card' && order.order_number) {
-      if (canSignCardPaymentLinks()) {
+      // The change itself is allowed — an order can legitimately be marked as
+      // a card order while payments are paused, ready for when they resume.
+      // What must not happen is a link going out that the pay route will
+      // refuse, so the agent is told plainly instead of being handed one.
+      if (areCardPaymentsPaused()) {
+        paymentLinkError = 'card payments are paused for maintenance, so no payment link was created. Take payment by WhatsApp, SINPE or bank transfer for now.';
+      } else if (canSignCardPaymentLinks()) {
         paymentUrl = `${getPublicBaseUrl(request.url)}${buildCardPaymentPath(order.order_number)}`;
       } else {
         paymentLinkError = 'Card payment link signing is not configured, so no link could be created.';

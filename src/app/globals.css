@@ -2366,6 +2366,62 @@ body {
     text-decoration: none;
 }
 
+/* The staff-facing maintenance banner. Amber, like the customer-facing notice,
+   so the two read as the same event rather than two separate problems. */
+.admin-card-paused-banner {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 18px;
+    padding: 14px 16px;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 12px;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.admin-card-paused-banner__icon {
+    display: flex;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: #fbbf24;
+}
+
+.admin-card-paused-banner strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #fbbf24;
+    font-size: 0.9rem;
+    font-weight: 800;
+}
+
+.admin-card-paused-banner p {
+    margin: 0;
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+/* Inline inside a panel that already has its own amber box, so it drops the
+   background and keeps only the rule and the text. */
+.admin-card-paused-banner.compact {
+    margin: 10px 0 0;
+    padding: 8px 0 0;
+    border: none;
+    border-top: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 0;
+    background: none;
+    gap: 8px;
+}
+
+.admin-card-paused-banner.compact strong {
+    font-size: 0.8rem;
+}
+
+.admin-card-paused-banner.compact p {
+    font-size: 0.76rem;
+}
+
 .card-payment-security-note {
     margin: 0;
     padding: 9px 10px;
