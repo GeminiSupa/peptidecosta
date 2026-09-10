@@ -354,6 +354,7 @@ Rules:
       const activeTab = String(context.activeTab || '').trim().slice(0, 80);
       const isSuperAdmin = Boolean(context.isSuperAdmin);
       const isSubUserAgent = Boolean(context.isSubUser);
+      const agentLang = context.lang === 'en' ? 'en' : 'es'; // default Spanish
       const allowedTabs = Array.isArray(context.allowedTabs)
         ? context.allowedTabs.map((t) => String(t).trim()).filter(Boolean)
         : null; // null means not specified → show all
@@ -363,6 +364,9 @@ Rules:
       }
 
       const tabHint = activeTab ? `The agent is currently on the "${activeTab}" tab.` : '';
+      const langInstruction = agentLang === 'en'
+        ? 'LANGUAGE: Always reply in English.'
+        : 'IDIOMA: Responde siempre en español.';
 
       // Build a role-specific access summary injected at the top of the prompt
       let accessContext = '';
@@ -377,7 +381,7 @@ Rules:
       finalPrompt = `You are "Omer" — a knowledgeable, friendly AI admin assistant built into the Peptides Costa Rica administration dashboard.
 Your job is to help admin agents and sales staff understand exactly how to use every feature of the system that they have permission to access.
 Always introduce yourself as Omer if asked who you are.
-You reply in the same language as the question (Spanish or English). Keep answers clear, structured, and practical.
+${langInstruction}
 ${tabHint}
 ${accessContext}
 
