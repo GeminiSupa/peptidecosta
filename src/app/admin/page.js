@@ -59,6 +59,7 @@ import AbandonedCartEditPanel from '@/components/admin/AbandonedCartEditPanel';
 import ManualOrderModal from '@/components/admin/ManualOrderModal';
 import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
 import WebsitePanel from '@/components/admin/WebsitePanel';
+import AdminHelpBot from '@/components/admin/AdminHelpBot';
 import DealOfWeekPanel from '@/components/admin/DealOfWeekPanel';
 import WhatsAppInbox from '@/components/admin/WhatsAppInbox';
 import WhatsAppAnalyticsPanel from '@/components/admin/WhatsAppAnalyticsPanel';
@@ -8520,6 +8521,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         onExportXLSX={() => handleExport('xlsx')}
         onExportPDF={() => handleExport('pdf')}
       />
+
+      {/* Floating AI Help Bot — available from any admin tab */}
+      {isAuthenticated && <AdminHelpBot activeTab={activeTab} />}
     </div>
   );
 }
