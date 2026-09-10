@@ -12,7 +12,15 @@ export default function EntryDisclaimer() {
 
   useEffect(() => {
     if (isAdminRoute) return;
-    const hasAccepted = localStorage.getItem('compliance_accepted') === 'true';
+    
+    let hasAccepted = false;
+    try {
+      hasAccepted = localStorage.getItem('compliance_accepted') === 'true';
+    } catch (e) {
+      // Ignore error if localStorage is blocked by privacy settings
+      console.warn('localStorage is disabled or restricted.');
+    }
+
     if (!hasAccepted) {
       setAccepted(false);
       document.body.style.overflow = 'hidden';
@@ -29,7 +37,11 @@ export default function EntryDisclaimer() {
   }
 
   const handleAgree = () => {
-    localStorage.setItem('compliance_accepted', 'true');
+    try {
+      localStorage.setItem('compliance_accepted', 'true');
+    } catch (e) {
+      // Ignore if blocked
+    }
     setAccepted(true);
     document.body.style.overflow = '';
   };
