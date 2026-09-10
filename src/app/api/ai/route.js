@@ -350,16 +350,33 @@ Rules:
     } else if (mode === 'help_bot') {
       const userQuestion = String(prompt || '').trim().slice(0, 2000);
       const activeTab = String(context.activeTab || '').trim().slice(0, 80);
+      const isSuperAdmin = Boolean(context.isSuperAdmin);
+      const isSubUserAgent = Boolean(context.isSubUser);
+      const allowedTabs = Array.isArray(context.allowedTabs)
+        ? context.allowedTabs.map((t) => String(t).trim()).filter(Boolean)
+        : null; // null means not specified → show all
+
       if (!userQuestion) {
         return NextResponse.json({ error: 'Missing question for help bot' }, { status: 400 });
       }
 
       const tabHint = activeTab ? `The agent is currently on the "${activeTab}" tab.` : '';
 
+      // Build a role-specific access summary injected at the top of the prompt
+      let accessContext = '';
+      if (isSuperAdmin) {
+        accessContext = 'AGENT ROLE: Super Admin — has access to ALL sections of the system.';
+      } else if (isSubUserAgent) {
+        accessContext = 'AGENT ROLE: Sub-User — only has access to My Earnings and My QR & Scans. If asked about any other section, politely explain they do not have permission and suggest contacting the system owner.';
+      } else if (allowedTabs && allowedTabs.length > 0) {
+        accessContext = `AGENT ROLE: Staff Agent — ONLY has access to these sections: ${allowedTabs.join(', ')}.\nIMPORTANT: If the agent asks about a section NOT in that list, politely explain they do not have access to it and suggest contacting the Super Admin to request permission. Do not explain how to use sections they cannot see.`;
+      }
+
       finalPrompt = `You are "Peptides Costa Rica Admin Assistant" — a knowledgeable, friendly AI guide built into the administration dashboard of Peptides Costa Rica.
-Your job is to help admin agents and sales staff understand exactly how to use every feature of the system.
+Your job is to help admin agents and sales staff understand exactly how to use every feature of the system that they have permission to access.
 You reply in the same language as the question (Spanish or English). Keep answers clear, structured, and practical.
 ${tabHint}
+${accessContext}
 
 === COMPLETE SYSTEM KNOWLEDGE BASE ===
 

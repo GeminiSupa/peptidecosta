@@ -1,43 +1,140 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { adminFetch } from '@/lib/adminApi';
+import { ADMIN_MODULES, resolveAdminTabAccess } from '@/lib/adminModules';
+import { isSubUser } from '@/lib/subUserTier.mjs';
 import { Bot, ChevronDown, Loader2, Send, Sparkles, X } from 'lucide-react';
 
-// Quick-start chips shown on first open
-const QUICK_CHIPS = [
-  { en: 'How do I process an order?', es: '¿Cómo proceso un pedido?' },
-  { en: 'How to recover an abandoned cart?', es: '¿Cómo recupero un carrito abandonado?' },
-  { en: 'How do I add a product?', es: '¿Cómo agrego un producto?' },
-  { en: 'How do I send a broadcast?', es: '¿Cómo envío un anuncio masivo?' },
-  { en: 'How do flash sales work?', es: '¿Cómo funcionan las ventas flash?' },
-  { en: 'How does WhatsApp AI reply work?', es: '¿Cómo funciona el AI de WhatsApp?' },
-];
-
-const WELCOME_MESSAGE = {
-  role: 'assistant',
-  text: '👋 Hi! I\'m your **Admin Assistant**. I know everything about this system — orders, leads, carts, products, broadcasts, WhatsApp, analytics, and more.\n\nAsk me anything or pick a quick topic below.',
+// Map tab IDs → human-friendly names used in quick chips / welcome message
+const TAB_LABELS = {
+  home:         { en: 'Home / Dashboard',       es: 'Inicio / Panel' },
+  orders:       { en: 'Orders',                 es: 'Pedidos' },
+  fulfillment:  { en: 'Fulfillment',            es: 'Despacho' },
+  live_chat:    { en: 'Live Chat',              es: 'Chat en vivo' },
+  leads:        { en: 'Leads',                  es: 'Leads' },
+  prospects:    { en: 'Prospector',             es: 'Prospector' },
+  carts:        { en: 'Abandoned Carts',        es: 'Carritos abandonados' },
+  spreadsheet:  { en: 'Products',               es: 'Productos' },
+  customers:    { en: 'Customers (CRM)',        es: 'Clientes (CRM)' },
+  inquiries:    { en: 'Inquiries',              es: 'Consultas' },
+  share:        { en: 'Share Links',            es: 'Links de referido' },
+  reviews:      { en: 'Reviews',                es: 'Reseñas' },
+  messenger:    { en: 'Facebook Inbox',         es: 'Bandeja Facebook' },
+  marketing:    { en: 'Marketing Studio',       es: 'Estudio de marketing' },
+  affiliates:   { en: 'Affiliates & Promos',   es: 'Afiliados y promociones' },
+  deals:        { en: 'Deal of the Week',       es: 'Oferta de la semana' },
+  my_qr:        { en: 'My QR & Scans',         es: 'Mi QR y escaneos' },
+  my_team:      { en: 'My Team',               es: 'Mi equipo' },
+  my_earnings:  { en: 'My Earnings',           es: 'Mis ganancias' },
+  broadcasts:   { en: 'Announcements',         es: 'Anuncios masivos' },
+  analytics:    { en: 'Analytics',             es: 'Analítica' },
+  cms:          { en: 'CMS / Website',         es: 'CMS / Sitio web' },
+  website:      { en: 'Marketing Website',     es: 'Sitio de marketing' },
+  whatsapp_ai:  { en: 'WhatsApp Inbox',        es: 'Bandeja WhatsApp' },
+  wa_session:   { en: 'WhatsApp Device',       es: 'Dispositivo WhatsApp' },
+  team:         { en: 'Team Management',       es: 'Gestión del equipo' },
+  team_chat:    { en: 'Team Chat',             es: 'Chat del equipo' },
+  payment_test: { en: 'Payment Test',          es: 'Prueba de pagos' },
 };
 
+// Quick-start chips per tab — shown when the bot opens
+const TAB_CHIPS = {
+  orders:      { en: 'How do I process an order?',         es: '¿Cómo proceso un pedido?' },
+  carts:       { en: 'How to recover an abandoned cart?',  es: '¿Cómo recupero un carrito?' },
+  leads:       { en: 'How do I follow up on a lead?',      es: '¿Cómo doy seguimiento a un lead?' },
+  spreadsheet: { en: 'How do I add a product?',            es: '¿Cómo agrego un producto?' },
+  broadcasts:  { en: 'How do I send a broadcast?',         es: '¿Cómo envío un anuncio masivo?' },
+  whatsapp_ai: { en: 'How does WhatsApp AI reply work?',   es: '¿Cómo funciona el AI de WhatsApp?' },
+  affiliates:  { en: 'How do flash sales work?',           es: '¿Cómo funcionan las ventas flash?' },
+  customers:   { en: 'How do I view a customer profile?',  es: '¿Cómo veo el perfil de un cliente?' },
+  analytics:   { en: 'How do I read the analytics?',       es: '¿Cómo leo la analítica?' },
+  live_chat:   { en: 'How do I reply in live chat?',       es: '¿Cómo respondo en el chat en vivo?' },
+};
+
+// Fallback chips if nothing matches the agent's tabs
+const FALLBACK_CHIPS = [
+  { en: 'What can I do in this system?', es: '¿Qué puedo hacer en este sistema?' },
+  { en: 'How do I process an order?',    es: '¿Cómo proceso un pedido?' },
+  { en: 'How do I contact a customer?',  es: '¿Cómo contacto a un cliente?' },
+];
+
 function renderMarkdown(text) {
-  // Bold
   let html = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  // Numbered steps
   html = html.replace(/^(\d+)\. (.+)$/gm, '<div class="ahb-step"><span>$1</span>$2</div>');
-  // Bullet points (- or •)
   html = html.replace(/^[-•] (.+)$/gm, '<div class="ahb-bullet">$1</div>');
-  // Arrow steps (→)
   html = html.replace(/→/g, '<span class="ahb-arrow">→</span>');
-  // Double newlines → paragraph breaks
   html = html.replace(/\n\n/g, '<br/><br/>');
-  // Single newlines
   html = html.replace(/\n/g, '<br/>');
   return html;
 }
 
-export default function AdminHelpBot({ activeTab = '' }) {
+function detectLang() {
+  if (typeof navigator === 'undefined') return 'es';
+  return navigator.language?.toLowerCase().startsWith('en') ? 'en' : 'es';
+}
+
+export default function AdminHelpBot({ activeTab = '', profile = null }) {
+  const lang = detectLang();
+
+  // ── Compute which tabs this agent can access ──────────────────────────────
+  const allowedTabIds = useMemo(() => {
+    if (!profile) return ADMIN_MODULES.map((m) => m.id); // not loaded yet → show all
+    return ADMIN_MODULES
+      .filter((m) => resolveAdminTabAccess(m.id, profile))
+      .map((m) => m.id);
+  }, [profile]);
+
+  const isSuperAdmin = Boolean(profile?.is_superadmin);
+  const isSubUserProfile = isSubUser(profile);
+
+  // Human-readable list of allowed tabs for greeting
+  const allowedTabNames = useMemo(
+    () => allowedTabIds.map((id) => TAB_LABELS[id]?.[lang] || id).filter(Boolean),
+    [allowedTabIds, lang],
+  );
+
+  // Quick chips: prefer chips for the agent's allowed tabs, up to 6
+  const chips = useMemo(() => {
+    const picked = allowedTabIds
+      .filter((id) => TAB_CHIPS[id])
+      .slice(0, 6)
+      .map((id) => TAB_CHIPS[id]);
+    return picked.length ? picked : FALLBACK_CHIPS;
+  }, [allowedTabIds]);
+
+  // Welcome message tailored to the agent's role
+  const welcomeText = useMemo(() => {
+    if (!profile) {
+      return lang === 'en'
+        ? "👋 Hi! I'm your **Admin Assistant**. Ask me anything about how to use the system."
+        : '👋 ¡Hola! Soy tu **Asistente de Admin**. Pregúntame lo que quieras sobre el sistema.';
+    }
+    const name = profile.full_name?.split(' ')[0] || (lang === 'en' ? 'there' : '');
+    const greeting = lang === 'en'
+      ? `👋 Hi${name ? ` ${name}` : ''}! I'm your **Admin Assistant**.`
+      : `👋 ¡Hola${name ? ` ${name}` : ''}! Soy tu **Asistente de Admin**.`;
+
+    if (isSuperAdmin) {
+      return lang === 'en'
+        ? `${greeting} As **Super Admin** you have access to the entire system. Ask me how to use any feature.`
+        : `${greeting} Como **Super Admin** tienes acceso a todo el sistema. Pregúntame cómo usar cualquier función.`;
+    }
+
+    if (isSubUserProfile) {
+      return lang === 'en'
+        ? `${greeting} You have access to **My Earnings** and **My QR & Scans**. Ask me anything about those.`
+        : `${greeting} Tienes acceso a **Mis Ganancias** y **Mi QR y Escaneos**. Pregúntame lo que necesites.`;
+    }
+
+    const tabList = allowedTabNames.slice(0, 8).join(', ');
+    return lang === 'en'
+      ? `${greeting} You have access to: **${tabList}**.\n\nAsk me how to use any of those sections, or pick a quick topic below.`
+      : `${greeting} Tienes acceso a: **${tabList}**.\n\nPregúntame cómo usar cualquiera de esas secciones, o elige un tema rápido abajo.`;
+  }, [profile, isSuperAdmin, isSubUserProfile, allowedTabNames, lang]);
+
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState([WELCOME_MESSAGE]);
+  const [messages, setMessages] = useState([{ role: 'assistant', text: welcomeText }]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [pulsing, setPulsing] = useState(true);
@@ -45,22 +142,23 @@ export default function AdminHelpBot({ activeTab = '' }) {
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Stop the pulse after 6 seconds
+  // Update welcome message if profile loads after mount
+  useEffect(() => {
+    setMessages([{ role: 'assistant', text: welcomeText }]);
+    setChipsVisible(true);
+  }, [welcomeText]);
+
   useEffect(() => {
     const t = setTimeout(() => setPulsing(false), 6000);
     return () => clearTimeout(t);
   }, []);
 
-  // Scroll to bottom whenever messages change
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // Focus input when panel opens
   useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 150);
-    }
+    if (open) setTimeout(() => inputRef.current?.focus(), 150);
   }, [open]);
 
   async function sendMessage(text) {
@@ -79,16 +177,29 @@ export default function AdminHelpBot({ activeTab = '' }) {
         body: JSON.stringify({
           mode: 'help_bot',
           prompt: question,
-          context: { activeTab },
+          context: {
+            activeTab,
+            allowedTabs: allowedTabIds,          // ← agent's actual permissions
+            isSuperAdmin,
+            isSubUser: isSubUserProfile,
+          },
         }),
       });
       const data = await res.json();
-      const reply = data?.text?.trim() || "Sorry, I couldn't find an answer. Please try rephrasing or contact the system owner.";
+      const reply = data?.text?.trim()
+        || (lang === 'en'
+          ? "Sorry, I couldn't find an answer. Please try rephrasing or contact the system owner."
+          : 'Lo siento, no encontré una respuesta. Intenta reformular tu pregunta o contacta al administrador.');
       setMessages((prev) => [...prev, { role: 'assistant', text: reply }]);
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', text: '⚠️ Connection error. Please check your internet and try again.' },
+        {
+          role: 'assistant',
+          text: lang === 'en'
+            ? '⚠️ Connection error. Please check your internet and try again.'
+            : '⚠️ Error de conexión. Verifica tu internet e inténtalo de nuevo.',
+        },
       ]);
     } finally {
       setLoading(false);
@@ -102,12 +213,6 @@ export default function AdminHelpBot({ activeTab = '' }) {
     }
   }
 
-  function handleChip(chip) {
-    // Detect language from browser or default Spanish
-    const lang = navigator.language?.toLowerCase().startsWith('en') ? 'en' : 'es';
-    sendMessage(chip[lang]);
-  }
-
   return (
     <>
       {/* ─── Floating trigger button ─── */}
@@ -119,7 +224,7 @@ export default function AdminHelpBot({ activeTab = '' }) {
         title="Admin Help Assistant"
       >
         {open ? <ChevronDown size={20} /> : <Bot size={20} />}
-        {!open && <span>Help</span>}
+        {!open && <span>{lang === 'en' ? 'Help' : 'Ayuda'}</span>}
       </button>
 
       {/* ─── Chat panel ─── */}
@@ -128,12 +233,16 @@ export default function AdminHelpBot({ activeTab = '' }) {
           {/* Header */}
           <div className="ahb-header">
             <div className="ahb-header-left">
-              <div className="ahb-avatar">
-                <Sparkles size={14} />
-              </div>
+              <div className="ahb-avatar"><Sparkles size={14} /></div>
               <div>
-                <strong>Admin Assistant</strong>
-                <span>Powered by AI · Always here to help</span>
+                <strong>{lang === 'en' ? 'Admin Assistant' : 'Asistente Admin'}</strong>
+                <span>
+                  {isSuperAdmin
+                    ? (lang === 'en' ? 'Super Admin · Full access' : 'Super Admin · Acceso completo')
+                    : isSubUserProfile
+                      ? (lang === 'en' ? 'Sub-User · Limited access' : 'Sub-usuario · Acceso limitado')
+                      : (lang === 'en' ? `${allowedTabIds.length} sections available` : `${allowedTabIds.length} secciones disponibles`)}
+                </span>
               </div>
             </div>
             <button
@@ -151,9 +260,7 @@ export default function AdminHelpBot({ activeTab = '' }) {
             {messages.map((msg, i) => (
               <div key={i} className={`ahb-msg ahb-msg--${msg.role}`}>
                 {msg.role === 'assistant' && (
-                  <div className="ahb-msg-avatar">
-                    <Bot size={12} />
-                  </div>
+                  <div className="ahb-msg-avatar"><Bot size={12} /></div>
                 )}
                 <div
                   className="ahb-msg-bubble"
@@ -163,31 +270,26 @@ export default function AdminHelpBot({ activeTab = '' }) {
               </div>
             ))}
 
-            {/* Quick-start chips after welcome */}
+            {/* Quick-start chips */}
             {chipsVisible && messages.length === 1 && (
               <div className="ahb-chips">
-                {QUICK_CHIPS.map((chip) => {
-                  const lang = typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('en') ? 'en' : 'es';
-                  return (
-                    <button
-                      key={chip.en}
-                      type="button"
-                      className="ahb-chip"
-                      onClick={() => handleChip(chip)}
-                    >
-                      {chip[lang]}
-                    </button>
-                  );
-                })}
+                {chips.map((chip) => (
+                  <button
+                    key={chip.en}
+                    type="button"
+                    className="ahb-chip"
+                    onClick={() => sendMessage(chip[lang])}
+                  >
+                    {chip[lang]}
+                  </button>
+                ))}
               </div>
             )}
 
             {/* Typing indicator */}
             {loading && (
               <div className="ahb-msg ahb-msg--assistant">
-                <div className="ahb-msg-avatar">
-                  <Bot size={12} />
-                </div>
+                <div className="ahb-msg-avatar"><Bot size={12} /></div>
                 <div className="ahb-msg-bubble ahb-typing">
                   <span /><span /><span />
                 </div>
@@ -205,7 +307,7 @@ export default function AdminHelpBot({ activeTab = '' }) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything about the system…"
+              placeholder={lang === 'en' ? 'Ask anything about the system…' : 'Pregunta lo que necesites…'}
               rows={1}
               disabled={loading}
             />
@@ -224,7 +326,6 @@ export default function AdminHelpBot({ activeTab = '' }) {
 
       {/* ─── Scoped styles ─── */}
       <style>{`
-        /* Trigger button */
         .ahb-trigger {
           position: fixed;
           bottom: 28px;
@@ -250,23 +351,20 @@ export default function AdminHelpBot({ activeTab = '' }) {
           box-shadow: 0 8px 32px rgba(124,58,237,0.6), 0 2px 8px rgba(0,0,0,0.4);
         }
         .ahb-trigger:active { transform: scale(0.97); }
-        .ahb-trigger--pulse {
-          animation: ahb-pulse 2s ease-in-out 3;
-        }
+        .ahb-trigger--pulse { animation: ahb-pulse 2s ease-in-out 3; }
         @keyframes ahb-pulse {
           0%, 100% { box-shadow: 0 4px 24px rgba(124,58,237,0.45); }
           50% { box-shadow: 0 4px 40px rgba(124,58,237,0.9), 0 0 0 8px rgba(124,58,237,0.15); }
         }
 
-        /* Panel */
         .ahb-panel {
           position: fixed;
           bottom: 90px;
           right: 28px;
           z-index: 8999;
-          width: 380px;
+          width: 390px;
           max-width: calc(100vw - 40px);
-          height: 520px;
+          height: 530px;
           max-height: calc(100vh - 120px);
           display: flex;
           flex-direction: column;
@@ -282,7 +380,6 @@ export default function AdminHelpBot({ activeTab = '' }) {
           to   { opacity: 1; transform: translateY(0) scale(1); }
         }
 
-        /* Header */
         .ahb-header {
           display: flex;
           align-items: center;
@@ -292,95 +389,47 @@ export default function AdminHelpBot({ activeTab = '' }) {
           border-bottom: 1px solid rgba(124,58,237,0.2);
           flex-shrink: 0;
         }
-        .ahb-header-left {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
+        .ahb-header-left { display: flex; align-items: center; gap: 10px; }
         .ahb-avatar {
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
+          width: 32px; height: 32px; border-radius: 50%;
           background: linear-gradient(135deg, #7c3aed, #4f46e5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #fff;
-          flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+          color: #fff; flex-shrink: 0;
           box-shadow: 0 0 12px rgba(124,58,237,0.5);
         }
-        .ahb-header-left > div:last-child {
-          display: flex;
-          flex-direction: column;
-          gap: 1px;
-        }
-        .ahb-header strong {
-          font-size: 0.88rem;
-          color: #e2e8f0;
-          font-weight: 700;
-          display: block;
-        }
-        .ahb-header span {
-          font-size: 0.72rem;
-          color: #7c3aed;
-          font-weight: 500;
-        }
+        .ahb-header-left > div:last-child { display: flex; flex-direction: column; gap: 1px; }
+        .ahb-header strong { font-size: 0.88rem; color: #e2e8f0; font-weight: 700; display: block; }
+        .ahb-header span { font-size: 0.7rem; color: #a78bfa; font-weight: 500; }
         .ahb-close {
-          background: transparent;
-          border: none;
-          color: #64748b;
-          cursor: pointer;
-          padding: 4px;
-          border-radius: 6px;
-          display: flex;
-          align-items: center;
+          background: transparent; border: none; color: #64748b;
+          cursor: pointer; padding: 4px; border-radius: 6px;
+          display: flex; align-items: center;
           transition: color 0.15s, background 0.15s;
         }
         .ahb-close:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
 
-        /* Messages */
         .ahb-messages {
-          flex: 1;
-          overflow-y: auto;
+          flex: 1; overflow-y: auto;
           padding: 14px 14px 8px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
+          display: flex; flex-direction: column; gap: 12px;
           scroll-behavior: smooth;
         }
         .ahb-messages::-webkit-scrollbar { width: 4px; }
         .ahb-messages::-webkit-scrollbar-track { background: transparent; }
         .ahb-messages::-webkit-scrollbar-thumb { background: rgba(124,58,237,0.3); border-radius: 4px; }
 
-        /* Message rows */
-        .ahb-msg {
-          display: flex;
-          align-items: flex-start;
-          gap: 8px;
-          max-width: 100%;
-        }
-        .ahb-msg--user {
-          flex-direction: row-reverse;
-        }
+        .ahb-msg { display: flex; align-items: flex-start; gap: 8px; max-width: 100%; }
+        .ahb-msg--user { flex-direction: row-reverse; }
         .ahb-msg-avatar {
-          width: 24px;
-          height: 24px;
-          border-radius: 50%;
+          width: 24px; height: 24px; border-radius: 50%;
           background: linear-gradient(135deg, #7c3aed, #4f46e5);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: #fff;
-          flex-shrink: 0;
-          margin-top: 2px;
+          display: flex; align-items: center; justify-content: center;
+          color: #fff; flex-shrink: 0; margin-top: 2px;
         }
         .ahb-msg-bubble {
           max-width: calc(100% - 36px);
-          padding: 10px 13px;
-          border-radius: 14px;
-          font-size: 0.82rem;
-          line-height: 1.55;
-          color: #e2e8f0;
+          padding: 10px 13px; border-radius: 14px;
+          font-size: 0.82rem; line-height: 1.55; color: #e2e8f0;
         }
         .ahb-msg--assistant .ahb-msg-bubble {
           background: rgba(255,255,255,0.05);
@@ -393,60 +442,28 @@ export default function AdminHelpBot({ activeTab = '' }) {
           border-top-right-radius: 4px;
           text-align: right;
         }
-
-        /* Inline markdown helpers */
         .ahb-msg-bubble strong { color: #a78bfa; font-weight: 700; }
-        .ahb-step {
-          display: flex;
-          gap: 8px;
-          align-items: baseline;
-          margin: 3px 0;
-        }
+        .ahb-step { display: flex; gap: 8px; align-items: baseline; margin: 3px 0; }
         .ahb-step span {
-          min-width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: rgba(124,58,237,0.35);
-          color: #a78bfa;
-          font-size: 0.7rem;
-          font-weight: 700;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
+          min-width: 18px; height: 18px; border-radius: 50%;
+          background: rgba(124,58,237,0.35); color: #a78bfa;
+          font-size: 0.7rem; font-weight: 700;
+          display: flex; align-items: center; justify-content: center; flex-shrink: 0;
         }
-        .ahb-bullet {
-          padding-left: 14px;
-          position: relative;
-          margin: 2px 0;
-        }
+        .ahb-bullet { padding-left: 14px; position: relative; margin: 2px 0; }
         .ahb-bullet::before {
-          content: '';
-          position: absolute;
-          left: 4px;
-          top: 7px;
-          width: 4px;
-          height: 4px;
-          border-radius: 50%;
-          background: #7c3aed;
+          content: ''; position: absolute; left: 4px; top: 7px;
+          width: 4px; height: 4px; border-radius: 50%; background: #7c3aed;
         }
         .ahb-arrow { color: #a78bfa; font-weight: 700; margin: 0 2px; }
 
-        /* Typing indicator */
         .ahb-typing {
-          display: flex !important;
-          align-items: center;
-          gap: 5px;
-          padding: 12px 16px !important;
-          min-width: 52px;
+          display: flex !important; align-items: center;
+          gap: 5px; padding: 12px 16px !important; min-width: 52px;
         }
         .ahb-typing span {
-          width: 7px;
-          height: 7px;
-          border-radius: 50%;
-          background: #7c3aed;
-          animation: ahb-dot 1.2s ease-in-out infinite;
-          display: block;
+          width: 7px; height: 7px; border-radius: 50%; background: #7c3aed;
+          animation: ahb-dot 1.2s ease-in-out infinite; display: block;
         }
         .ahb-typing span:nth-child(2) { animation-delay: 0.2s; }
         .ahb-typing span:nth-child(3) { animation-delay: 0.4s; }
@@ -455,56 +472,35 @@ export default function AdminHelpBot({ activeTab = '' }) {
           40% { transform: scale(1.15); opacity: 1; }
         }
 
-        /* Quick-start chips */
-        .ahb-chips {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 7px;
-          padding: 2px 0 4px 32px;
-        }
+        .ahb-chips { display: flex; flex-wrap: wrap; gap: 7px; padding: 2px 0 4px 32px; }
         .ahb-chip {
-          padding: 5px 11px;
-          border-radius: 20px;
+          padding: 5px 11px; border-radius: 20px;
           border: 1px solid rgba(124,58,237,0.4);
-          background: rgba(124,58,237,0.1);
-          color: #c4b5fd;
-          font-size: 0.75rem;
-          cursor: pointer;
+          background: rgba(124,58,237,0.1); color: #c4b5fd;
+          font-size: 0.75rem; cursor: pointer;
           transition: background 0.15s, border-color 0.15s, transform 0.12s;
-          line-height: 1.3;
-          text-align: left;
+          line-height: 1.3; text-align: left;
         }
         .ahb-chip:hover {
-          background: rgba(124,58,237,0.22);
-          border-color: rgba(124,58,237,0.7);
+          background: rgba(124,58,237,0.22); border-color: rgba(124,58,237,0.7);
           transform: translateY(-1px);
         }
 
-        /* Input row */
         .ahb-input-row {
-          display: flex;
-          align-items: flex-end;
-          gap: 8px;
+          display: flex; align-items: flex-end; gap: 8px;
           padding: 10px 12px 12px;
           border-top: 1px solid rgba(255,255,255,0.06);
-          background: rgba(6,11,19,0.6);
-          flex-shrink: 0;
+          background: rgba(6,11,19,0.6); flex-shrink: 0;
         }
         .ahb-input {
           flex: 1;
           background: rgba(255,255,255,0.04);
           border: 1px solid rgba(124,58,237,0.25);
-          border-radius: 12px;
-          color: #e2e8f0;
-          font-size: 0.83rem;
-          padding: 10px 12px;
-          resize: none;
-          outline: none;
-          font-family: inherit;
-          line-height: 1.45;
-          transition: border-color 0.18s;
-          max-height: 100px;
-          overflow-y: auto;
+          border-radius: 12px; color: #e2e8f0;
+          font-size: 0.83rem; padding: 10px 12px;
+          resize: none; outline: none; font-family: inherit;
+          line-height: 1.45; transition: border-color 0.18s;
+          max-height: 100px; overflow-y: auto;
         }
         .ahb-input:focus {
           border-color: rgba(124,58,237,0.6);
@@ -513,16 +509,11 @@ export default function AdminHelpBot({ activeTab = '' }) {
         .ahb-input::placeholder { color: #475569; }
         .ahb-input:disabled { opacity: 0.5; }
         .ahb-send {
-          width: 38px;
-          height: 38px;
-          border-radius: 10px;
+          width: 38px; height: 38px; border-radius: 10px;
           border: none;
           background: linear-gradient(135deg, #7c3aed, #4f46e5);
-          color: #fff;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          color: #fff; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
           flex-shrink: 0;
           transition: opacity 0.15s, transform 0.15s;
           box-shadow: 0 2px 10px rgba(124,58,237,0.4);
@@ -532,7 +523,6 @@ export default function AdminHelpBot({ activeTab = '' }) {
         .ahb-spin { animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* Mobile */
         @media (max-width: 480px) {
           .ahb-panel { right: 12px; bottom: 80px; width: calc(100vw - 24px); }
           .ahb-trigger { right: 16px; bottom: 20px; }

@@ -8523,7 +8523,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       />
 
       {/* Floating AI Help Bot — available from any admin tab */}
-      {isAuthenticated && <AdminHelpBot activeTab={activeTab} />}
+      {isAuthenticated && <AdminHelpBot activeTab={activeTab} profile={adminProfile} />}
     </div>
   );
 }
