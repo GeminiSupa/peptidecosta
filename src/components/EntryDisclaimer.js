@@ -17,6 +17,11 @@ export default function EntryDisclaimer() {
       setAccepted(false);
       document.body.style.overflow = 'hidden';
     }
+
+    // Ensure we always clean up the scroll lock if the component unmounts
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isAdminRoute]);
 
   if (isAdminRoute || accepted) {
@@ -72,9 +77,11 @@ export default function EntryDisclaimer() {
           -webkit-backdrop-filter: blur(8px);
           z-index: 2147483647; /* Maximum possible z-index to stay above everything */
           display: flex;
-          align-items: center;
+          align-items: flex-start; /* Allows scrolling if modal is taller than viewport */
           justify-content: center;
-          padding: 20px;
+          padding: 40px 20px;
+          overflow-y: auto;
+          overscroll-behavior: contain;
         }
 
         .entry-disclaimer-modal {
@@ -83,6 +90,7 @@ export default function EntryDisclaimer() {
           max-width: 600px;
           width: 100%;
           padding: 36px 32px;
+          margin: auto; /* Centers perfectly when smaller than viewport, scrolls nicely when bigger */
           box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
           border: 2px solid #e2e8f0;
           animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1);
@@ -97,6 +105,7 @@ export default function EntryDisclaimer() {
           text-transform: uppercase;
           letter-spacing: 0.05em;
           font-family: var(--font-montserrat), sans-serif;
+          word-break: break-word;
         }
 
         .entry-disclaimer-text {
@@ -105,6 +114,7 @@ export default function EntryDisclaimer() {
           margin-bottom: 16px;
           line-height: 1.5;
           font-family: var(--font-inter), sans-serif;
+          word-break: break-word;
         }
 
         .entry-disclaimer-list {
@@ -117,7 +127,11 @@ export default function EntryDisclaimer() {
         }
 
         .entry-disclaimer-list li {
-          margin-bottom: 10px;
+          margin-bottom: 12px;
+          word-break: break-word;
+        }
+        .entry-disclaimer-list li:last-child {
+          margin-bottom: 0;
         }
 
         .entry-disclaimer-actions {
@@ -174,8 +188,12 @@ export default function EntryDisclaimer() {
         }
 
         @media (max-width: 480px) {
+          .entry-disclaimer-overlay {
+            padding: 20px 16px;
+          }
+
           .entry-disclaimer-modal {
-            padding: 24px 20px;
+            padding: 28px 20px;
           }
           
           .entry-disclaimer-title {
@@ -184,6 +202,7 @@ export default function EntryDisclaimer() {
           
           .entry-disclaimer-actions {
             flex-direction: column-reverse;
+            gap: 12px;
           }
           
           .entry-btn-agree, .entry-btn-disagree {
