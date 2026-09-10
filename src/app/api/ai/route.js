@@ -527,7 +527,8 @@ ${userQuestion}`;
       'generate_email_template',
       'draft_broadcast',
       'generate_journey',
-      'cross_sell'
+      'cross_sell',
+      'help_bot'
     ]);
 
     let responseText = '';
@@ -557,7 +558,7 @@ ${userQuestion}`;
     } else {
       console.log(`[AI API] Using Gemini for mode "${mode}"`);
       const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
         {
           method: 'POST',
           headers: {
