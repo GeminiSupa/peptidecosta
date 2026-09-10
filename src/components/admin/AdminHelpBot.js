@@ -53,7 +53,14 @@ function renderMarkdown(text) {
 export default function AdminHelpBot({ activeTab = '', profile = null }) {
   const isSuperAdmin = Boolean(profile?.is_superadmin);
   const isSubUserProfile = isSubUser(profile);
-  const firstName = profile?.full_name?.split(' ')[0] || profile?.email?.split('@')[0] || null;
+  // Try multiple fields — different profiles may populate different columns
+  const firstName = (
+    profile?.full_name?.split(' ')[0] ||
+    profile?.name?.split(' ')[0] ||
+    profile?.display_name?.split(' ')[0] ||
+    profile?.email?.split('@')[0] ||
+    null
+  )?.trim() || null;
 
   // Compute allowed tab IDs from the agent's real permissions
   const allowedTabIds = useMemo(() => {
@@ -70,19 +77,23 @@ export default function AdminHelpBot({ activeTab = '', profile = null }) {
     return picked.length ? picked : FALLBACK_CHIPS;
   }, [allowedTabIds]);
 
-  // Welcome message — personalised once profile loads
+  // Welcome message — agent greeted by their name, bot introduces itself as Omer
   const welcomeText = useMemo(() => {
-    const hi = firstName ? `👋 Hola **${firstName}**!` : '👋 Hola!';
-    if (!profile) return `${hi} Soy **Omer**, tu asistente de admin. Pregúntame cómo usar cualquier función del sistema.`;
+    // While profile hasn't loaded yet show a neutral greeting
+    if (!profile) {
+      return `👋 ¡Hola! Soy **Omer**, tu asistente de admin. Cargando tu perfil…`;
+    }
+
+    const agentGreeting = firstName ? `👋 ¡Hola, **${firstName}**!` : '👋 ¡Hola!';
 
     if (isSuperAdmin) {
-      return `${hi} Soy **Omer**, tu asistente de admin. Como **Super Admin** tienes acceso a todo el sistema.\n\nPregúntame lo que necesites o elige un tema rápido abajo.`;
+      return `${agentGreeting} Soy **Omer**, tu asistente de admin. Como **Super Admin** tienes acceso a todo el sistema.\n\nPregúntame lo que necesites o elige un tema rápido abajo.`;
     }
     if (isSubUserProfile) {
-      return `${hi} Soy **Omer**, tu asistente de admin. Tienes acceso a **Mis Ganancias** y **Mi QR**.\n\nPregúntame lo que necesites sobre esas secciones.`;
+      return `${agentGreeting} Soy **Omer**, tu asistente de admin. Tienes acceso a **Mis Ganancias** y **Mi QR**.\n\nPregúntame lo que necesites sobre esas secciones.`;
     }
     const sectionNames = (allowedTabIds || []).map((id) => TAB_LABELS[id] || id).filter(Boolean).slice(0, 8).join(', ');
-    return `${hi} Soy **Omer**, tu asistente de admin. Tienes acceso a: **${sectionNames}**.\n\nPregúntame cómo usar cualquiera de esas secciones, o elige un tema abajo.`;
+    return `${agentGreeting} Soy **Omer**, tu asistente de admin. Tienes acceso a: **${sectionNames}**.\n\nPregúntame cómo usar cualquiera de esas secciones, o elige un tema abajo.`;
   }, [profile, isSuperAdmin, isSubUserProfile, firstName, allowedTabIds]);
 
   const [open, setOpen] = useState(false);
