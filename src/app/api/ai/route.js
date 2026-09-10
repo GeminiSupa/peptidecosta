@@ -527,14 +527,13 @@ ${userQuestion}`;
       'generate_email_template',
       'draft_broadcast',
       'generate_journey',
-      'cross_sell',
-      'help_bot'
+      'cross_sell'
     ]);
 
     let responseText = '';
 
-    if (openAiModes.has(mode) && OPENAI_API_KEY) {
-      console.log(`[AI API] Using OpenAI for mode "${mode}"`);
+    const fetchOpenAI = async () => {
+      console.log(`[AI API] Fetching from OpenAI for mode "${mode}"`);
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -542,51 +541,70 @@ ${userQuestion}`;
           'Authorization': `Bearer ${OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini', // or whatever model is preferred
+          model: 'gpt-4o-mini',
           messages: [{ role: 'user', content: finalPrompt }],
         }),
       });
 
       const data = await response.json();
-
       if (!response.ok) {
         console.error('[AI API] OpenAI API error:', data);
-        return NextResponse.json({ error: data.error?.message || 'OpenAI API call failed' }, { status: response.status });
+        throw new Error(data.error?.message || 'OpenAI API call failed');
       }
+      return data.choices?.[0]?.message?.content || '';
+    };
 
-      responseText = data.choices?.[0]?.message?.content || '';
+    if (openAiModes.has(mode) && OPENAI_API_KEY) {
+      try {
+        responseText = await fetchOpenAI();
+      } catch (err) {
+        return NextResponse.json({ error: err.message }, { status: 500 });
+      }
     } else {
-      console.log(`[AI API] Using Gemini for mode "${mode}"`);
-      const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-goog-api-key': GEMINI_API_KEY,
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: finalPrompt,
-                  },
-                ],
-              },
-            ],
-          }),
+      console.log(`[AI API] Using Gemini for mode "${mode}" (with 7s timeout)`);
+      let geminiSuccess = false;
+
+      try {
+        const response = await fetch(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-goog-api-key': GEMINI_API_KEY,
+            },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: finalPrompt }] }],
+            }),
+            signal: AbortSignal.timeout(7000)
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          geminiSuccess = true;
+        } else {
+          // It failed (e.g. 429, 503) — we don't throw, we let it fall through to the fallback
+          const data = await response.json().catch(() => ({}));
+          console.warn(`[AI API] Gemini returned ${response.status}:`, data);
         }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error('[AI API] Google Gemini API error:', data);
-        return NextResponse.json({ error: data.error?.message || 'Gemini API call failed' }, { status: response.status });
+      } catch (err) {
+        console.warn(`[AI API] Gemini fetch failed or timed out:`, err.name === 'TimeoutError' ? '7s timeout reached' : err.message);
       }
 
-      responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (!geminiSuccess) {
+        if (OPENAI_API_KEY) {
+          console.log(`[AI API] Gemini unavailable, falling back to OpenAI...`);
+          try {
+            responseText = await fetchOpenAI();
+          } catch (err) {
+            return NextResponse.json({ error: err.message }, { status: 500 });
+          }
+        } else {
+          return NextResponse.json({ error: 'Gemini is currently busy (high demand) and no fallback is available. Please try again.' }, { status: 503 });
+        }
+      }
     }
     
     return NextResponse.json({ success: true, text: responseText });
