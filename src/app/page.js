@@ -29,14 +29,14 @@ const USER_SELECTED_LANG_KEY = 'lang_user_selected';
 // Shown until the live categories load, and used to build ?category= links, so
 // these must match the category values stored on products.
 const CATEGORY_FALLBACKS = [
-  'Weight Loss & Metabolism',
-  'Performance & Hormones',
-  'Anti-Aging & Longevity',
-  'Recovery & Healing',
-  'Cognitive & Mood',
-  'Sexual Health',
-  'Skin & Hair',
-  'Sleep',
+  'BPC-157',
+  'CJC-1295',
+  'GHK-Cu',
+  'NAD+',
+  'Retatrutide',
+  'Semaglutide',
+  'Sermorelin',
+  'TB-500',
 ];
 
 const FALLBACK_PRODUCTS = [
