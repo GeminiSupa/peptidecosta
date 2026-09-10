@@ -73,16 +73,16 @@ export default function AdminHelpBot({ activeTab = '', profile = null }) {
   // Welcome message — personalised once profile loads
   const welcomeText = useMemo(() => {
     const hi = firstName ? `👋 Hola **${firstName}**!` : '👋 Hola!';
-    if (!profile) return `${hi} Soy tu **Asistente Admin**. Pregúntame cómo usar cualquier función del sistema.`;
+    if (!profile) return `${hi} Soy **Omer**, tu asistente de admin. Pregúntame cómo usar cualquier función del sistema.`;
 
     if (isSuperAdmin) {
-      return `${hi} Soy tu **Asistente Admin**. Como **Super Admin** tienes acceso a todo el sistema.\n\nPregúntame lo que necesites o elige un tema rápido abajo.`;
+      return `${hi} Soy **Omer**, tu asistente de admin. Como **Super Admin** tienes acceso a todo el sistema.\n\nPregúntame lo que necesites o elige un tema rápido abajo.`;
     }
     if (isSubUserProfile) {
-      return `${hi} Soy tu **Asistente Admin**. Tienes acceso a **Mis Ganancias** y **Mi QR**.\n\nPregúntame lo que necesites sobre esas secciones.`;
+      return `${hi} Soy **Omer**, tu asistente de admin. Tienes acceso a **Mis Ganancias** y **Mi QR**.\n\nPregúntame lo que necesites sobre esas secciones.`;
     }
     const sectionNames = (allowedTabIds || []).map((id) => TAB_LABELS[id] || id).filter(Boolean).slice(0, 8).join(', ');
-    return `${hi} Soy tu **Asistente Admin**. Tienes acceso a: **${sectionNames}**.\n\nPregúntame cómo usar cualquiera de esas secciones, o elige un tema abajo.`;
+    return `${hi} Soy **Omer**, tu asistente de admin. Tienes acceso a: **${sectionNames}**.\n\nPregúntame cómo usar cualquiera de esas secciones, o elige un tema abajo.`;
   }, [profile, isSuperAdmin, isSubUserProfile, firstName, allowedTabIds]);
 
   const [open, setOpen] = useState(false);
@@ -183,8 +183,8 @@ export default function AdminHelpBot({ activeTab = '', profile = null }) {
         type="button"
         className={`ahb-trigger${pulsing ? ' ahb-trigger--pulse' : ''}`}
         onClick={() => setOpen((v) => !v)}
-        aria-label="Abrir asistente de ayuda"
-        title="Asistente Admin"
+        aria-label="Abrir a Omer"
+        title="Omer · Asistente Admin"
       >
         {open ? <ChevronDown size={20} /> : <Bot size={20} />}
         {!open && <span>Ayuda</span>}
@@ -192,12 +192,12 @@ export default function AdminHelpBot({ activeTab = '', profile = null }) {
 
       {/* ─── Chat panel ─── */}
       {open && (
-        <div className="ahb-panel" role="dialog" aria-label="Asistente Admin">
+        <div className="ahb-panel" role="dialog" aria-label="Omer · Asistente Admin">
           <div className="ahb-header">
             <div className="ahb-header-left">
               <div className="ahb-avatar"><Sparkles size={14} /></div>
               <div>
-                <strong>Asistente Admin</strong>
+                <strong>Omer</strong>
                 <span>{headerSubtitle}</span>
               </div>
             </div>
