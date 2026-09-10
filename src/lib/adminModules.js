@@ -34,7 +34,7 @@ export const ADMIN_MODULES = [
   // /api/messenger and /api/facebook to this key, but resolveAdminTabAccess
   // short-circuited to true for every staff member, so the rule never refused
   // anybody. Dropping the flag switches the tab and those routes on together.
-  { id: 'messenger', label: 'Facebook Inbox', title: 'Facebook Inbox', group: 'Sales & Marketing' },
+  { id: 'messenger', label: 'Facebook Inbox', title: 'Facebook Inbox', group: 'Sales & Marketing', hiddenFromNav: true },
   { id: 'marketing', label: 'Marketing Studio', title: 'Marketing Studio', group: 'Sales & Marketing' },
   { id: 'affiliates', label: 'Affiliates', title: 'Affiliates & Promo Codes', group: 'Sales & Marketing' },
   { id: 'deals', label: 'Deal of the Week', title: 'Deal of the Week', group: 'Sales & Marketing' },
