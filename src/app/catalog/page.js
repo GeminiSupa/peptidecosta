@@ -352,7 +352,12 @@ export default function CatalogPage() {
   const searchRef = useRef(null);
   const categoryScrollRef = useRef(null);
   const suggestionsScrollRef = useRef(null);
-  const autoPromoAppliedRef = useRef(false);
+  // The code a ?promo= link arrived with, held until the cart can actually
+  // take it, and the unit count of the last attempt so a cart that has not
+  // changed is not revalidated over and over.
+  const autoPromoCodeRef = useRef(null);
+  const autoPromoTriedUnitsRef = useRef(-1);
+  const autoPromoInitRef = useRef(false);
   const [catArrows, setCatArrows] = useState({ left: false, right: false });
   const [sugArrows, setSugArrows] = useState({ left: false, right: false });
   const [activeCategory, setActiveCategory] = useState('all');
@@ -2210,7 +2215,15 @@ export default function CatalogPage() {
     return currency === 'USD' ? roundToCents(total) : total;
   };
 
-  const handleApplyPromo = async (codeOverride = null) => {
+  /**
+   * Validate a code against the cart and apply it.
+   *
+   * `quiet` suppresses the failure message. It is for the automatic attempt a
+   * ?promo= link makes on its own: a basket that does not qualify yet is the
+   * normal state of a shopper who has just walked in, not something to accuse
+   * them of. A code the customer typed themselves always reports back.
+   */
+  const handleApplyPromo = async (codeOverride = null, { quiet = false } = {}) => {
     // Only a string can be a code. A click event slipping in here stringified
     // to "[object Object]", overwrote the input, and failed validation - which
     // read as "my promo codes are broken" during a live sale.
@@ -2240,7 +2253,9 @@ export default function CatalogPage() {
           const hasTargetItem = cart.some(item => targets.some(t => item.product.toLowerCase().includes(t)));
           if (!hasTargetItem) {
             setPromoData(null);
-            setPromoError(lang === 'en' ? `This promo requires ${data.target_product} in your cart.` : `Este código requiere ${data.target_product} en el carrito.`);
+            if (!quiet) {
+              setPromoError(lang === 'en' ? `This promo requires ${data.target_product} in your cart.` : `Este código requiere ${data.target_product} en el carrito.`);
+            }
             setPromoLoading(false);
             return;
           }
@@ -2249,10 +2264,10 @@ export default function CatalogPage() {
         setPromoError('');
       } else {
         setPromoData(null);
-        setPromoError(data.error || (lang === 'en' ? 'Invalid code' : 'Código inválido'));
+        if (!quiet) setPromoError(data.error || (lang === 'en' ? 'Invalid code' : 'Código inválido'));
       }
     } catch (err) {
-      setPromoError(lang === 'en' ? 'Validation error' : 'Error de validación');
+      if (!quiet) setPromoError(lang === 'en' ? 'Validation error' : 'Error de validación');
     }
     setPromoLoading(false);
   };
@@ -2293,15 +2308,65 @@ export default function CatalogPage() {
     setPromoError(unitLimitsMessage(promoData, check.unitCount, lang));
   }, [cart, promoData, lang]);
 
+  // A promo link reaches the catalog before the cart exists.
+  //
+  // This used to apply the code once, on mount, where `cart` is still the empty
+  // array from the first render — the saved-cart restore is a sibling mount
+  // effect and its setCart has not landed yet. So every code with a target
+  // product or a minimum count was rejected on arrival: the server counted zero
+  // qualifying vials and the client's own target check found an empty basket.
+  // A flash sale advertised as "40% off when you buy 5" could not be applied by
+  // its own link no matter what the shopper did next, because nothing tried
+  // again once they filled the cart. Only a plain, untargeted, no-minimum code
+  // ever survived the trip.
+  //
+  // The code is now held and re-offered as the cart changes, until it takes.
+  // One effect rather than two: a separate seeding effect would run in the same
+  // commit as this one and be read here with the input state it had not updated
+  // yet, which reads as the customer having cleared the box.
   useEffect(() => {
-    if (autoPromoAppliedRef.current || typeof window === 'undefined') return;
-    const urlParams = new URLSearchParams(window.location.search);
-    const promoParam = urlParams.get('promo_code') || urlParams.get('promo') || urlParams.get('coupon') || urlParams.get('discount');
-    if (!promoParam) return;
+    if (typeof window === 'undefined') return;
 
-    autoPromoAppliedRef.current = true;
-    handleApplyPromo(promoParam);
-  }, []);
+    if (!autoPromoInitRef.current) {
+      autoPromoInitRef.current = true;
+      const urlParams = new URLSearchParams(window.location.search);
+      const promoParam = urlParams.get('promo_code') || urlParams.get('promo') || urlParams.get('coupon') || urlParams.get('discount');
+      const linkCode = String(promoParam || '').trim().toUpperCase();
+      if (!linkCode) return;
+      autoPromoCodeRef.current = linkCode;
+      // Shown in the promo box from the start. A shopper who never builds a
+      // qualifying cart can still read the code they were sent and see what it
+      // asks for, instead of a link that appeared to do nothing at all. Setting
+      // it re-runs this effect, which is where the applying happens.
+      setPromoCodeInput(linkCode);
+      return;
+    }
+
+    const code = autoPromoCodeRef.current;
+    if (!code) return;
+
+    // The customer's own choice wins. Once any code is applied, or they have
+    // typed over the one from the link or emptied the box, the link stops
+    // trying — a code put back on their next vial is a code they said no to.
+    if (promoData?.valid) {
+      autoPromoCodeRef.current = null;
+      return;
+    }
+    if (String(promoCodeInput || '').trim().toUpperCase() !== code) {
+      autoPromoCodeRef.current = null;
+      return;
+    }
+
+    // An empty cart can never satisfy a targeted or minimum-unit code, and the
+    // unit count is what decides every one of those conditions — so a cart that
+    // changed without changing it (a swap, a currency toggle) is not retried.
+    const units = getCartVialCount();
+    if (units <= 0) return;
+    if (autoPromoTriedUnitsRef.current === units) return;
+    autoPromoTriedUnitsRef.current = units;
+
+    handleApplyPromo(code, { quiet: true });
+  }, [cart, promoData, promoCodeInput]);
 
   const getStoredAttribution = () => {
     try {
