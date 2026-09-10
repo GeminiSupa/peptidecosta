@@ -42,19 +42,55 @@ function isCompanyHost(hostname) {
  */
 export function isTrustedStorefrontRequest(request) {
   const origin = request.headers.get('origin');
-  if (!origin) return false;
+  const referer = request.headers.get('referer');
+
+  if (origin) {
+    try {
+      const originUrl = new URL(origin);
+      const requestUrl = new URL(request.url);
+      if (originUrl.origin === requestUrl.origin) return true;
+      if (originUrl.protocol === 'https:' && isCompanyHost(originUrl.hostname)) return true;
+
+      return process.env.NODE_ENV !== 'production'
+        && ['localhost', '127.0.0.1', '::1'].includes(originUrl.hostname);
+    } catch {
+      return false;
+    }
+  }
+
+  if (referer) {
+    try {
+      const refererUrl = new URL(referer);
+      const requestUrl = new URL(request.url);
+      if (refererUrl.origin === requestUrl.origin) return true;
+      if (refererUrl.protocol === 'https:' && isCompanyHost(refererUrl.hostname)) return true;
+
+      return process.env.NODE_ENV !== 'production'
+        && ['localhost', '127.0.0.1', '::1'].includes(refererUrl.hostname);
+    } catch {
+      return false;
+    }
+  }
+
+  const secFetchSite = request.headers.get('sec-fetch-site');
+  if (secFetchSite === 'same-origin' || secFetchSite === 'same-site') return true;
 
   try {
-    const originUrl = new URL(origin);
     const requestUrl = new URL(request.url);
-    if (originUrl.origin === requestUrl.origin) return true;
-    if (originUrl.protocol === 'https:' && isCompanyHost(originUrl.hostname)) return true;
-
-    return process.env.NODE_ENV !== 'production'
-      && ['localhost', '127.0.0.1', '::1'].includes(originUrl.hostname);
+    if (requestUrl.protocol === 'https:' && isCompanyHost(requestUrl.hostname)) return true;
+    if (process.env.NODE_ENV !== 'production' && ['localhost', '127.0.0.1', '::1'].includes(requestUrl.hostname)) return true;
   } catch {
-    return false;
+    // Fall back to host header below
   }
+
+  const host = request.headers.get('host');
+  if (host) {
+    const hostName = host.split(':')[0].toLowerCase();
+    if (isCompanyHost(hostName)) return true;
+    if (process.env.NODE_ENV !== 'production' && ['localhost', '127.0.0.1', '::1'].includes(hostName)) return true;
+  }
+
+  return false;
 }
 
 function rateLimitHash(value) {

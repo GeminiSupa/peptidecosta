@@ -10,7 +10,8 @@ import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, cleanPhoneNumber, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import { getFacebookReviewUrl, getTrustpilotReviewUrl, TRUSTPILOT_RATING } from '@/lib/businessLinks';
+import { getFacebookReviewUrl, getTrustpilotReviewUrl } from '@/lib/businessLinks';
+import { useTrustpilotRating } from '@/hooks/useTrustpilotRating';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
 import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct, replacesVolumeDiscount, promoTargetLabel } from '@/lib/promoEligibility.mjs';
 import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT } from '@/lib/bulkDeal.mjs';
@@ -330,6 +331,7 @@ const bacBreakdownAmountStyle = {
 
 export default function CatalogPage() {
   const { links } = useBusinessLinks();
+  const { rating: liveTrustpilotRating } = useTrustpilotRating();
   const router = useRouter();
   
   // Theme, Lang, Currency States
@@ -3314,7 +3316,7 @@ export default function CatalogPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="trust-badge"
-                aria-label={`Trustpilot rating ${TRUSTPILOT_RATING} out of 5`}
+                aria-label={`Trustpilot rating ${liveTrustpilotRating} out of 5`}
               >
                 <div className="tp-star-box">
                   <Star size={10} fill="#fff" color="#fff" />
@@ -3322,7 +3324,7 @@ export default function CatalogPage() {
                 <div className="trust-text">
                   <span className="trust-score">Trustpilot</span>
                   <span className="trust-desc">
-                    {TRUSTPILOT_RATING} <Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/>
+                    {liveTrustpilotRating} <Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/>
                   </span>
                 </div>
               </a>
