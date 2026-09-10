@@ -24,9 +24,9 @@ const AI_MODE_PERMISSIONS = {
   draft_broadcast: ['broadcasts'],
   generate_journey: ['marketing'],
   explain_metric: ['analytics', 'home'],
-  // help_bot is available to every authenticated admin role — it is the
-  // system assistant, so it needs the broadest possible access.
-  help_bot: ['home', 'orders', 'carts', 'leads', 'spreadsheet', 'cms', 'analytics', 'marketing', 'broadcasts', 'whatsapp_ai', 'customers', 'inquiries', 'live_chat', 'affiliates'],
+  // help_bot: every authenticated admin including sub-users (they get
+  // a filtered knowledge base based on their allowedTabs context).
+  help_bot: ['home'],
 };
 
 export async function POST(request) {
@@ -59,6 +59,8 @@ export async function POST(request) {
       const auth = await verifyAdminSession(request, {
         requireAnyPermission: AI_MODE_PERMISSIONS[mode] || ['home'],
         skipPathPermission: true,
+        // help_bot is available to sub-users too — they just get a filtered knowledge base
+        allowSubUser: mode === 'help_bot',
       });
       if (auth.error) return auth.error;
     }
