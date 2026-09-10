@@ -186,17 +186,17 @@ test('the box offers the bottle picker on a partial refund only', () => {
 });
 
 test('only what is left can be put back', () => {
-  const order = { items: [{ product: 'Retatrutide 20mg', qty: 2 }, { product: 'NAD+ 500mg', qty: 1 }] };
+  const order = { items: [{ product: 'GLP-1 20mg', qty: 2 }, { product: 'NAD+ 500mg', qty: 1 }] };
 
   assert.deepEqual(restockableRemaining(order), [
-    { product: 'Retatrutide 20mg', qty: 2 },
+    { product: 'GLP-1 20mg', qty: 2 },
     { product: 'NAD+ 500mg', qty: 1 },
   ]);
 
   // One already came back on an earlier refund.
-  const afterOne = { ...order, refund_events: [{ restocked: [{ product: 'Retatrutide 20mg', qty: 1 }] }] };
+  const afterOne = { ...order, refund_events: [{ restocked: [{ product: 'GLP-1 20mg', qty: 1 }] }] };
   assert.deepEqual(restockableRemaining(afterOne), [
-    { product: 'Retatrutide 20mg', qty: 1 },
+    { product: 'GLP-1 20mg', qty: 1 },
     { product: 'NAD+ 500mg', qty: 1 },
   ]);
 });
@@ -204,42 +204,42 @@ test('only what is left can be put back', () => {
 test('asking for more bottles than were bought puts back only what is owed', () => {
   // Stock that exists only in the database ends as an order nobody can ship,
   // so the browser's number is a request, never an instruction.
-  const order = { items: [{ product: 'Retatrutide 20mg', qty: 2 }] };
+  const order = { items: [{ product: 'GLP-1 20mg', qty: 2 }] };
 
   assert.deepEqual(
-    planPartialRestock(order, [{ product: 'Retatrutide 20mg', qty: 99 }]),
-    [{ product: 'Retatrutide 20mg', qty: 2 }],
+    planPartialRestock(order, [{ product: 'GLP-1 20mg', qty: 99 }]),
+    [{ product: 'GLP-1 20mg', qty: 2 }],
   );
 });
 
 test('a product that was never on the order is ignored', () => {
-  const order = { items: [{ product: 'Retatrutide 20mg', qty: 2 }] };
+  const order = { items: [{ product: 'GLP-1 20mg', qty: 2 }] };
 
   assert.deepEqual(planPartialRestock(order, [{ product: 'Something Else', qty: 3 }]), []);
-  assert.deepEqual(planPartialRestock(order, [{ product: 'Retatrutide 20mg', qty: 0 }]), []);
+  assert.deepEqual(planPartialRestock(order, [{ product: 'GLP-1 20mg', qty: 0 }]), []);
   assert.deepEqual(planPartialRestock(order, [{ product: '', qty: 2 }]), []);
   assert.deepEqual(planPartialRestock(order, null), []);
 });
 
 test('nothing can come back once the whole order already has', () => {
   const restored = {
-    items: [{ product: 'Retatrutide 20mg', qty: 2 }],
+    items: [{ product: 'GLP-1 20mg', qty: 2 }],
     inventory_restored_at: '2026-08-20T12:00:00Z',
   };
 
   assert.deepEqual(restockableRemaining(restored), []);
-  assert.deepEqual(planPartialRestock(restored, [{ product: 'Retatrutide 20mg', qty: 1 }]), []);
+  assert.deepEqual(planPartialRestock(restored, [{ product: 'GLP-1 20mg', qty: 1 }]), []);
 });
 
 test('two partial refunds cannot between them return more than was bought', () => {
-  const order = { items: [{ product: 'Retatrutide 20mg', qty: 3 }] };
+  const order = { items: [{ product: 'GLP-1 20mg', qty: 3 }] };
 
-  const first = planPartialRestock(order, [{ product: 'Retatrutide 20mg', qty: 2 }]);
-  assert.deepEqual(first, [{ product: 'Retatrutide 20mg', qty: 2 }]);
+  const first = planPartialRestock(order, [{ product: 'GLP-1 20mg', qty: 2 }]);
+  assert.deepEqual(first, [{ product: 'GLP-1 20mg', qty: 2 }]);
 
   const afterFirst = { ...order, refund_events: [{ restocked: first }] };
-  const second = planPartialRestock(afterFirst, [{ product: 'Retatrutide 20mg', qty: 2 }]);
-  assert.deepEqual(second, [{ product: 'Retatrutide 20mg', qty: 1 }], 'only the third bottle is left');
+  const second = planPartialRestock(afterFirst, [{ product: 'GLP-1 20mg', qty: 2 }]);
+  assert.deepEqual(second, [{ product: 'GLP-1 20mg', qty: 1 }], 'only the third bottle is left');
 });
 
 // ------------------------------- the money screens that were still raw

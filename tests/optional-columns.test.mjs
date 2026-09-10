@@ -234,9 +234,9 @@ test('an order edit survives add-inventory-restore.sql not having been run', () 
   const table = fakeTable(['inventory_deducted']);
 
   const patch = {
-    items: [{ product: 'Retatrutide 40mg', qty: 1 }],
+    items: [{ product: 'GLP-1 40mg', qty: 1 }],
     total_crc: 94717,
-    inventory_deducted: [{ product: 'Retatrutide 40mg', qty: 1 }],
+    inventory_deducted: [{ product: 'GLP-1 40mg', qty: 1 }],
   };
 
   return writeDroppingMissingColumns(patch, ORDER_INVENTORY_COLUMNS, table.run)

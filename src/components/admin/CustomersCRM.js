@@ -53,12 +53,12 @@ const resolveRecommendation = (cust) => {
     };
   }
 
-  // 2. Weight Loss / Metabolic (Semaglutide / Tirzepatide / Retatrutide)
+  // 2. Weight Loss / Metabolic (Semaglutide / Tirzepatide / GLP-1)
   if (items.some(name => name.includes('sema') || name.includes('ozempic') || name.includes('tirz') || name.includes('mounj') || name.includes('retat'))) {
     // If bought Semaglutide but not Tirzepatide, suggest Tirzepatide
     const hasTirz = items.some(name => name.includes('tirz') || name.includes('mounj'));
     return {
-      product: hasTirz ? 'Retatrutide 10mg' : 'Tirzepatide 10mg',
+      product: hasTirz ? 'GLP-1 10mg' : 'Tirzepatide 10mg',
       subtext: hasTirz ? 'Termogénico Fase III' : 'Metabolismo de Grasa Avanzado',
       theme: 'metabolic',
       badgeBg: 'rgba(245, 158, 11, 0.12)',
@@ -1976,7 +1976,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
                       rows={3}
                       value={newReminder.note}
                       onChange={event => setNewReminder({ ...newReminder, note: event.target.value })}
-                      placeholder="Example: Check Retatrutide availability and follow up after lunch"
+                      placeholder="Example: Check GLP-1 availability and follow up after lunch"
                     />
                     <button
                       className="crm-workspace-btn primary"

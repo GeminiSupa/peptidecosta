@@ -87,7 +87,7 @@ Caching: none (force-dynamic — always live data)
   "products": [
     {
       "id": "uuid",
-      "name": "Retatrutide 10mg",
+      "name": "GLP-1 10mg",
       "category": "Weight Loss & Metabolism",
       "status": "In Stock",            // "In Stock" | "Out of Stock" | etc.
       "priceUsd": 125,                 // always a number, never a string
@@ -103,7 +103,7 @@ Caching: none (force-dynamic — always live data)
   ],
   "reviews": [
     {
-      "productName": "Retatrutide 10mg",
+      "productName": "GLP-1 10mg",
       "customerName": "Ana G.",
       "rating": 5,
       "comment": "Great results.",

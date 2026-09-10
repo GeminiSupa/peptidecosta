@@ -11,7 +11,7 @@ const ORDER = {
   customerPhone: '50688887777',
   customerEmail: 'buyer@example.com',
   shippingAddress: 'San Jose',
-  items: [{ product: 'Retatrutide', qty: 1, price: 147891 }],
+  items: [{ product: 'GLP-1', qty: 1, price: 147891 }],
   total: 147891,
   currency: 'CRC',
   shipping: 0,
@@ -104,7 +104,7 @@ test('a card order gets one team email that is both the alert and the outcome', 
   assert.match(approved, /A new order has been placed and the card cleared/);
   assert.match(approved, /ready to fulfil/);
   // Still the full order detail, because it is the only mail the team gets.
-  assert.match(approved, /Retatrutide/);
+  assert.match(approved, /GLP-1/);
   assert.match(approved, /Diego/);
 
   const refused = admin('Payment Blocked', {
@@ -115,7 +115,7 @@ test('a card order gets one team email that is both the alert and the outcome', 
   assert.match(refused, /New Order . Card Declined/);
   assert.match(refused, /Card brand not allowed/);
   assert.match(refused, /Nothing was charged and the order is unpaid/);
-  assert.match(refused, /Retatrutide/);
+  assert.match(refused, /GLP-1/);
 });
 
 test('a payment on an order the team already saw does not claim to be new', () => {

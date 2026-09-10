@@ -24,7 +24,7 @@ const ORDER = {
   shipping_cost_crc: 0,
   payment_method: 'card',
   status: 'Paid',
-  items: [{ product: 'Retatrutide', qty: 1, price: 147891 }],
+  items: [{ product: 'GLP-1', qty: 1, price: 147891 }],
 };
 
 function makeFetch(results = { adminNotification: { sent: true }, customerReceipt: { sent: true } }) {

@@ -47,7 +47,7 @@ const PRODUCT_IMAGE_MAP = [
 
 // Fallbacks for products that have no named image
 const FALLBACK_MAP = [
-  { match: ['retatrutide', 'tirzepatide', 'semaglutide', 'tesamorelin', '5-amino', 'slu-pp', 'fat blaster'],
+  { match: ['glp-1', 'tirzepatide', 'semaglutide', 'tesamorelin', '5-amino', 'slu-pp', 'fat blaster'],
     file: 'vial_costarica_hero.png' },
   { match: ['bpc-157', 'tb-4', 'klow', 'super human', 'pt-141', 'selank', 'adamax', 'semax', 'pinealon'],
     file: 'hero_peptide_vial.png' },

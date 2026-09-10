@@ -1849,7 +1849,7 @@ export default function CatalogPage() {
   };
 
   const popularTerms = [
-    { en: 'Retatrutide', es: 'Retatrutide' },
+    { en: 'GLP-1', es: 'GLP-1' },
     { en: 'Tirzepatide', es: 'Tirzepatide' },
     { en: 'Semaglutide', es: 'Semaglutide' },
     { en: 'Weight Loss', es: 'Pérdida de Peso' },
@@ -1877,7 +1877,7 @@ export default function CatalogPage() {
     if (!query) {
       return visible.slice(0, 3);
     }
-    // Ten, because that is the largest single product family (Retatrutide has
+    // Ten, because that is the largest single product family (GLP-1 has
     // ten sizes, Tirzepatide seven). At five, searching a family name hid the
     // largest sizes and made them look unavailable. The dropdown caps its own
     // height and scrolls, so a longer list does not grow the panel.

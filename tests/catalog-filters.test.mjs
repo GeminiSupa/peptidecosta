@@ -12,7 +12,7 @@ import {
 // The real category names on the products table — deliberately not the
 // "Peptides For Weight Loss" style the old links used.
 const products = [
-  { product: 'Retatrutide', category: 'Weight Loss & Metabolism' },
+  { product: 'GLP-1', category: 'Weight Loss & Metabolism' },
   { product: 'Sermorelin', category: 'Performance & Hormones' },
   { product: 'DSIP', category: 'Sleep' },
   { product: 'Bac Water', category: null },

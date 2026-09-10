@@ -32,7 +32,7 @@ test('a cart nobody can be contacted about is not stored', () => {
 test('the request IP and user agent outrank anything the browser claims', () => {
   const row = buildAbandonedCartRow({
     sessionId: 'session_abcdefghijk',
-    cart: [{ product: 'Retatrutide 10mg', qty: 1 }],
+    cart: [{ product: 'GLP-1 10mg', qty: 1 }],
     customerName: ' Ana ',
     metadata: {
       ip_address: '1.2.3.4',

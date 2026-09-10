@@ -92,8 +92,8 @@ WhatsApp phone line:
 *   Interactive Orders: When a user clicks "Order via WhatsApp" inside a 
     product detail modal, the application automatically prepares a pre-filled 
     custom message, e.g.:
-    "Estoy interesado en Retatrutide 10mg" (Spanish view) or
-    "I'm interested in Retatrutide 10mg" (English view).
+    "Estoy interesado en GLP-1 10mg" (Spanish view) or
+    "I'm interested in GLP-1 10mg" (English view).
 
 ------------------------------------------------------------------------
 6. HOW THE GOOGLE SHEETS LINKING WORKS

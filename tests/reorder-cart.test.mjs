@@ -10,16 +10,16 @@ import {
 } from '../src/lib/reorderCart.mjs';
 
 const PRODUCTS = [
-  { product: 'Retatrutide 10mg', priceUsd: 135, status: 'In Stock' },
+  { product: 'GLP-1 10mg', priceUsd: 135, status: 'In Stock' },
   { product: 'BPC-157 5mg', priceUsd: 60, status: 'In Stock' },
   { product: 'Tirzepatide 10mg', priceUsd: 120, status: 'Out of Stock' },
   { product: 'Bacteriostatic Water 3ml', priceUsd: 10, status: 'In Stock' },
 ];
 
 test('a reorder carries quantities but never the old price', () => {
-  // The order was placed when Retatrutide was $125. The rebuilt line must hand
+  // The order was placed when GLP-1 was $125. The rebuilt line must hand
   // back the live product row so today's $135 is what gets charged.
-  const order = { items: [{ product: 'Retatrutide 10mg', qty: 2, price: 125 }] };
+  const order = { items: [{ product: 'GLP-1 10mg', qty: 2, price: 125 }] };
 
   const { lines } = buildReorderLines(order.items, PRODUCTS);
 
@@ -60,14 +60,14 @@ test('paid BAC water is carried over', () => {
 
 test('sold-out and discontinued lines are reported, not silently dropped', () => {
   const items = [
-    { product: 'Retatrutide 10mg', qty: 1, price: 125 },
+    { product: 'GLP-1 10mg', qty: 1, price: 125 },
     { product: 'Tirzepatide 10mg', qty: 1, price: 120 },
     { product: 'Discontinued Peptide 2mg', qty: 1, price: 90 },
   ];
 
   const result = buildReorderLines(items, PRODUCTS);
 
-  assert.deepEqual(result.lines.map((l) => l.product.product), ['Retatrutide 10mg']);
+  assert.deepEqual(result.lines.map((l) => l.product.product), ['GLP-1 10mg']);
   assert.deepEqual(result.unavailable, ['Tirzepatide 10mg']);
   assert.deepEqual(result.missing, ['Discontinued Peptide 2mg']);
 
@@ -78,8 +78,8 @@ test('sold-out and discontinued lines are reported, not silently dropped', () =>
 });
 
 test('product names match despite casing and spacing drift', () => {
-  const { lines } = buildReorderLines([{ product: '  retatrutide   10MG ', qty: 1, price: 1 }], PRODUCTS);
-  assert.equal(lines[0].product.product, 'Retatrutide 10mg');
+  const { lines } = buildReorderLines([{ product: '  glp-1   10MG ', qty: 1, price: 1 }], PRODUCTS);
+  assert.equal(lines[0].product.product, 'GLP-1 10mg');
 });
 
 test('a product listed twice becomes one line', () => {
@@ -99,7 +99,7 @@ test('reordering mid-shop tops up the cart instead of resetting it', () => {
   const { lines } = buildReorderLines(
     [
       { product: 'BPC-157 5mg', qty: 2, price: 55 },
-      { product: 'Retatrutide 10mg', qty: 1, price: 125 },
+      { product: 'GLP-1 10mg', qty: 1, price: 125 },
     ],
     PRODUCTS,
   );
@@ -108,7 +108,7 @@ test('reordering mid-shop tops up the cart instead of resetting it', () => {
 
   assert.equal(merged.length, 2);
   assert.equal(merged.find((i) => i.product === 'BPC-157 5mg').qty, 3);
-  assert.equal(merged.find((i) => i.product === 'Retatrutide 10mg').qty, 1);
+  assert.equal(merged.find((i) => i.product === 'GLP-1 10mg').qty, 1);
   // The original cart array is left untouched.
   assert.equal(cart[0].qty, 1);
 });

@@ -45,11 +45,11 @@ test('the recorded deduction wins over the order quantities', () => {
   // The deduction clamps at zero: this order asked for 5 but only 2 were in
   // stock, so only 2 were taken. Returning 5 would invent three vials.
   const order = {
-    items: [{ product: 'Retatrutide 10mg', qty: 5 }],
-    inventory_deducted: [{ product: 'Retatrutide 10mg', qty: 2 }],
+    items: [{ product: 'GLP-1 10mg', qty: 5 }],
+    inventory_deducted: [{ product: 'GLP-1 10mg', qty: 2 }],
   };
 
-  assert.deepEqual(restorableQuantities(order), [{ product: 'Retatrutide 10mg', qty: 2 }]);
+  assert.deepEqual(restorableQuantities(order), [{ product: 'GLP-1 10mg', qty: 2 }]);
 });
 
 test('orders placed before the record existed fall back to their quantities', () => {

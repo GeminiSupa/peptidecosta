@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     customer_name TEXT NOT NULL,
     customer_phone TEXT NOT NULL,
-    items JSONB NOT NULL, -- Format: [{ "product": "Retatrutide 10mg", "qty": 1, "price": 125 }]
+    items JSONB NOT NULL, -- Format: [{ "product": "GLP-1 10mg", "qty": 1, "price": 125 }]
     total_usd NUMERIC,
     total_crc NUMERIC,
     currency TEXT NOT NULL DEFAULT 'CRC',

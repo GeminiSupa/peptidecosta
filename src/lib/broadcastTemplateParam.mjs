@@ -5,7 +5,7 @@
  * template, so a nameless contact still needs *something* readable in that slot.
  *
  * greetingVariable=true is for templates whose {{1}} carries the whole greeting
- * (e.g. "👋 {{1}} ¡Retatrutide...") — a nameless contact then reads "¡Buenas!"
+ * (e.g. "👋 {{1}} ¡GLP-1...") — a nameless contact then reads "¡Buenas!"
  * rather than an English "Customer" stranded in a Spanish message.
  * greetingVariable=false is the classic shape, where {{1}} is a bare first name
  * and the greeting is baked into the template (e.g. "¡Hola {{1}}!").

@@ -52,10 +52,10 @@ test('inactive, expired, not-yet-started and used-up promos do not badge', () =>
 });
 
 test('targets products by partial name, or all products when unset', () => {
-  assert.equal(promoTargetsProduct(promo({ target_product: 'Retatrutide' }), 'Retatrutide 10mg'), true);
-  assert.equal(promoTargetsProduct(promo({ target_product: 'retatrutide' }), 'Retatrutide 10mg'), true);
-  assert.equal(promoTargetsProduct(promo({ target_product: 'Retatrutide' }), 'Tesamorelin 10mg'), false);
-  assert.equal(promoTargetsProduct(promo({ target_product: 'Retatrutide, Epithalon' }), 'Epithalon 50mg'), true);
+  assert.equal(promoTargetsProduct(promo({ target_product: 'GLP-1' }), 'GLP-1 10mg'), true);
+  assert.equal(promoTargetsProduct(promo({ target_product: 'glp-1' }), 'GLP-1 10mg'), true);
+  assert.equal(promoTargetsProduct(promo({ target_product: 'GLP-1' }), 'Tesamorelin 10mg'), false);
+  assert.equal(promoTargetsProduct(promo({ target_product: 'GLP-1, Epithalon' }), 'Epithalon 50mg'), true);
   assert.equal(promoTargetsProduct(promo({ target_product: null }), 'Anything'), true);
 });
 
@@ -98,7 +98,7 @@ test('picks the biggest qualifying discount for a product', () => {
     promo({ code: 'BIG', discount_pct: 0.30 }),
     promo({ code: 'HIDDEN', discount_pct: 0.90, hidden: true }),
   ];
-  const badge = getPromoBadgeForProduct(promos, 'Retatrutide 10mg', 'en');
+  const badge = getPromoBadgeForProduct(promos, 'GLP-1 10mg', 'en');
   assert.equal(badge.code, 'BIG');
   assert.equal(badge.discountPct, 30);
   assert.equal(badge.text, '30% off with BIG');
@@ -106,12 +106,12 @@ test('picks the biggest qualifying discount for a product', () => {
 
 test('a hidden promo cannot win even with the deepest discount', () => {
   const promos = [promo({ code: 'PRIVATE', discount_pct: 0.5, hidden: true })];
-  assert.equal(getPromoBadgeForProduct(promos, 'Retatrutide 10mg', 'en'), null);
+  assert.equal(getPromoBadgeForProduct(promos, 'GLP-1 10mg', 'en'), null);
 });
 
 test('no badge when nothing targets the product', () => {
   const promos = [promo({ target_product: 'Tesamorelin' })];
-  assert.equal(getPromoBadgeForProduct(promos, 'Retatrutide 10mg', 'en'), null);
+  assert.equal(getPromoBadgeForProduct(promos, 'GLP-1 10mg', 'en'), null);
 });
 
 test('wording options show the discount actually selected, not a fixed example', () => {

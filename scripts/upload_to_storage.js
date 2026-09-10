@@ -96,7 +96,7 @@ async function migrate() {
       targetImage = 'vials_group_costarica.png';
     } else if (nameLower.includes('bpc-157') || nameLower.includes('tb-500') || nameLower.includes('tb-4') || nameLower.includes('klow') || nameLower.includes('pt-141') || nameLower.includes('selank') || nameLower.includes('adamax') || nameLower.includes('semax') || nameLower.includes('pinealon')) {
       targetImage = 'hero_peptide_vial.png';
-    } else if (catLower.includes('weight') || nameLower.includes('retatrutide') || nameLower.includes('tirzepatide') || nameLower.includes('semaglutide') || nameLower.includes('tesamorelin') || nameLower.includes('5-amino') || nameLower.includes('slu-pp332')) {
+    } else if (catLower.includes('weight') || nameLower.includes('glp-1') || nameLower.includes('tirzepatide') || nameLower.includes('semaglutide') || nameLower.includes('tesamorelin') || nameLower.includes('5-amino') || nameLower.includes('slu-pp332')) {
       targetImage = 'vial_costarica_hero.png';
     } else {
       targetImage = 'modern_3d_vial_hero.png';

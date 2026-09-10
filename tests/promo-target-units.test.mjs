@@ -18,12 +18,12 @@ const CELLULAR40 = {
 
 test('a cart padded with products the code does not cover stays locked', () => {
   // The exact basket that exposed this: three SS-31, one MOTS-C and one
-  // Retatrutide. Five vials, but only four the sale covers, and the fifth was
+  // GLP-1. Five vials, but only four the sale covers, and the fifth was
   // enough to hand over 40% on the other $1,500.
   const cart = [
     { product: 'SS-31 25mg', qty: 3 },
     { product: 'Mots-C 40mg', qty: 1 },
-    { product: 'Retatrutide 5mg', qty: 1 },
+    { product: 'GLP-1 5mg', qty: 1 },
   ];
 
   assert.equal(countCartUnits(cart), 5, 'the basket really does hold five vials');
@@ -50,7 +50,7 @@ test('both NAD+ sizes count, because the target is matched as a substring', () =
 });
 
 test('uncovered products alone never unlock a targeted code', () => {
-  const cart = [{ product: 'Retatrutide 5mg', qty: 40 }];
+  const cart = [{ product: 'GLP-1 5mg', qty: 40 }];
   assert.equal(countPromoEligibleUnits(CELLULAR40, cart), 0);
   assert.equal(checkUnitLimits(CELLULAR40, countPromoEligibleUnits(CELLULAR40, cart)).ok, false);
 });
@@ -60,7 +60,7 @@ test('an untargeted code still counts the whole cart', () => {
   const openCode = { code: 'WELCOME10', min_units: 5, discount_pct: 0.1, target_product: null };
   const cart = [
     { product: 'SS-31 25mg', qty: 2 },
-    { product: 'Retatrutide 5mg', qty: 3 },
+    { product: 'GLP-1 5mg', qty: 3 },
   ];
   assert.equal(countPromoEligibleUnits(openCode, cart), 5);
   assert.equal(checkUnitLimits(openCode, countPromoEligibleUnits(openCode, cart)).ok, true);
@@ -69,7 +69,7 @@ test('an untargeted code still counts the whole cart', () => {
 test('order lines are counted whether they name the product or the item', () => {
   // The storefront cart uses `product`; admin order items arrive as `name`.
   assert.equal(countPromoEligibleUnits(CELLULAR40, [{ name: 'SS-31 25mg', qty: 5 }]), 5);
-  assert.equal(countPromoEligibleUnits(CELLULAR40, [{ name: 'Retatrutide 5mg', qty: 5 }]), 0);
+  assert.equal(countPromoEligibleUnits(CELLULAR40, [{ name: 'GLP-1 5mg', qty: 5 }]), 0);
 });
 
 test('quantity is read from either qty or quantity, and rubbish counts as none', () => {
@@ -83,7 +83,7 @@ test('a maximum is scoped to the covered products too', () => {
   const capped = { code: 'FIRST4', max_units: 4, discount_pct: 0.15, target_product: 'SS-31' };
   const cart = [
     { product: 'SS-31 25mg', qty: 4 },
-    { product: 'Retatrutide 5mg', qty: 9 },
+    { product: 'GLP-1 5mg', qty: 9 },
   ];
   assert.equal(countPromoEligibleUnits(capped, cart), 4);
   assert.equal(checkUnitLimits(capped, countPromoEligibleUnits(capped, cart)).ok, true);

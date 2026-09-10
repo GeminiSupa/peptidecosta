@@ -307,7 +307,7 @@ export default function AnalyticsDashboard({ orders: parentOrders = [], abandone
   const [showSimulator, setShowSimulator] = useState(false);
   
   // 🧬 AI Sales Recommender Simulator States
-  const [selectedSimPeptide, setSelectedSimPeptide] = useState('Retatrutide 10mg');
+  const [selectedSimPeptide, setSelectedSimPeptide] = useState('GLP-1 10mg');
   const [projectedViewsMultiplier, setProjectedViewsMultiplier] = useState(1.5);
   
   // AI Insights States
@@ -880,7 +880,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   // Compile list of store product names to track zero-click items
   const allStoreProductNames = parentProducts && parentProducts.length > 0
     ? parentProducts.map(p => p.product)
-    : ['Tirzepatide 10mg', 'Semaglutide 5mg', 'Retatrutide 10mg', 'BPC-157 5mg', 'TB-500 5mg', 'Ipamorelin 5mg', 'CJC-1295 5mg', 'AOD-9604 5mg'];
+    : ['Tirzepatide 10mg', 'Semaglutide 5mg', 'GLP-1 10mg', 'BPC-157 5mg', 'TB-500 5mg', 'Ipamorelin 5mg', 'CJC-1295 5mg', 'AOD-9604 5mg'];
 
   // MergeViews and Purchases, including zero-click products
   const allProductNames = Array.from(new Set([
@@ -927,7 +927,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     const n = name.toLowerCase();
     if (n.includes('tirzepatide')) return 145;
     if (n.includes('semaglutide')) return 95;
-    if (n.includes('retatrutide')) return 120;
+    if (n.includes('glp-1')) return 120;
     if (n.includes('bpc-157') || n.includes('bpc157')) return 95;
     if (n.includes('tb-500') || n.includes('tb500')) return 95;
     if (n.includes('aod-9604') || n.includes('aod9604')) return 110;
@@ -946,9 +946,9 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   const getSimulatedHook = (name) => {
     const n = name.toLowerCase();
-    if (n.includes('retatrutide')) {
+    if (n.includes('glp-1')) {
       return {
-        title: "🧬 Retatrutide Triple Agonist Hook",
+        title: "🧬 GLP-1 Triple Agonist Hook",
         desc: "Highlight triple-action receptor clinical breakthroughs (GLP-1, GIP, GCGR) to attract high-tier longevity researchers looking for advanced metabolic efficiency solutions.",
         badge: "Highest Premium Margin",
         color: "var(--an-warning)",

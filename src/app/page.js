@@ -33,7 +33,7 @@ const CATEGORY_FALLBACKS = [
   'CJC-1295',
   'GHK-Cu',
   'NAD+',
-  'Retatrutide',
+  'GLP-1',
   'Semaglutide',
   'Sermorelin',
   'TB-500',
@@ -49,7 +49,7 @@ const FALLBACK_PRODUCTS = [
     image_url: '/modern_3d_vial_hero.png',
   },
   {
-    product: 'Retatrutide 10mg',
+    product: 'GLP-1 10mg',
     category: 'Weight Loss & Metabolism',
     price_usd: '$115.00',
     price_crc: '₡58,000',

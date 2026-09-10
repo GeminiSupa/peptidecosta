@@ -22,7 +22,7 @@ import {
 import { authoritativeCheckout } from '../src/lib/authoritativeCheckout.mjs';
 
 // Ten vials at ₡45,037 — the order from the report that prompted this.
-const ITEMS = [{ product: 'Retatrutide 5mg', qty: 10, price: 45037 }];
+const ITEMS = [{ product: 'GLP-1 5mg', qty: 10, price: 45037 }];
 const SHIPPING = 5;
 
 test('the reported order: 25% typed is 25% taken, not 40%', () => {
@@ -93,7 +93,7 @@ test('the server rebuild drops the tier the same way the screen does', () => {
   // screen and on the server alike, so the fixture has to be self-consistent:
   // $100 at ₡450.37 is the ₡45,037 the agent sees in the items list.
   const products = [{
-    product: 'Retatrutide 5mg',
+    product: 'GLP-1 5mg',
     price_usd: 100,
     price_crc: 45037,
     status: 'In Stock',
@@ -143,7 +143,7 @@ test('the orders list badge reports what was taken, not what was qualified for',
   // Seven vials qualify for the 15% tier. On a manual order carrying a
   // negotiated discount that tier is not applied, and the list must not
   // advertise it beside a total that plainly excludes it.
-  const items = [{ product: 'Retatrutide 5mg', qty: 7, price: 45037 }];
+  const items = [{ product: 'GLP-1 5mg', qty: 7, price: 45037 }];
   assert.equal(getAdminVolumeDiscountPct(items), 15);
 
   const manualOrder = {
