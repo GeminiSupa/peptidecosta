@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Zap, Loader, AlertTriangle, CheckCircle, Megaphone, RotateCcw, Clock, Search, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { formatCrInstant } from '@/lib/crTime.mjs';
-import { toPercent, hasUntrackedStock, isUnavailableForDeal, weekWindow } from '@/lib/dealOfWeek.mjs';
+import { toPercent, hasUntrackedStock, isUnavailableForDeal, weekWindow, stackedDiscountPercent } from '@/lib/dealOfWeek.mjs';
+import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT, isBulkDealActive, BULK_DEAL_END_MS } from '@/lib/bulkDeal.mjs';
 
 /**
  * Deal of the Week — one promotion a week, ending Sunday midnight Costa Rica.
@@ -85,6 +86,27 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
   // server clock, and this one is resolved on the admin's laptop.
   const localWindow = useMemo(() => weekWindow(new Date()), []);
   const plannedWindow = preview?.window || localWindow;
+
+  // The volume tiers in force right now, and what the percentage on screen
+  // actually costs once they are applied on top of it. Read from the same
+  // source the cart charges from, so the worked example below cannot drift away
+  // from the real till the way a written-out number would.
+  const tiers = useMemo(() => {
+    const tenPlus = tenPlusDiscountPct();
+    const dealPct = percentIsValid ? Number(percent) : 15;
+    const shelf = 100;
+    return {
+      fivePlus: STANDARD_FIVE_PLUS_PCT,
+      tenPlus,
+      bulkWeek: isBulkDealActive(),
+      bulkEnds: new Date(BULK_DEAL_END_MS).toISOString(),
+      dealPct,
+      priceAlone: (shelf * (1 - dealPct / 100)).toFixed(2),
+      priceAtFive: (shelf * (1 - stackedDiscountPercent(dealPct / 100, STANDARD_FIVE_PLUS_PCT) / 100)).toFixed(2),
+      priceAtTen: (shelf * (1 - stackedDiscountPercent(dealPct / 100, tenPlus) / 100)).toFixed(2),
+      stackedAtTen: stackedDiscountPercent(dealPct / 100, tenPlus),
+    };
+  }, [percent, percentIsValid]);
 
   const outOfStockSelected = useMemo(() => (
     selected.filter((name) => {
@@ -334,8 +356,55 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
           </h3>
           <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '4px 0 0' }}>
             One promotion for the week, ending Sunday at midnight Costa Rica time. The
-            discount is applied to the shelf price — customers do not enter a code — and it
-            stacks on top of the automatic volume discounts.
+            discount is applied to the shelf price, so customers do not enter a code.
+          </p>
+        </div>
+      </div>
+
+      {/* The single most expensive thing to misunderstand on this screen. The
+          percentage typed into the box is NOT what a bulk order pays: the
+          volume tier comes off the already-discounted price on top of it. That
+          was one clause at the end of the intro paragraph, which is not where
+          anyone looks before typing a number into a box marked "discount". */}
+      <div
+        style={{
+          ...card,
+          borderColor: 'rgba(251,191,36,0.5)',
+          background: 'rgba(251,191,36,0.08)',
+          display: 'flex',
+          gap: '12px',
+          alignItems: 'flex-start',
+        }}
+      >
+        <AlertTriangle size={20} color="#fbbf24" style={{ flexShrink: 0, marginTop: '2px' }} />
+        <div>
+          <strong style={{ color: '#fbbf24', fontSize: '0.9rem', display: 'block', marginBottom: '6px' }}>
+            Important: this discount stacks on top of the volume discount
+          </strong>
+          <p style={{ color: '#fde68a', fontSize: '0.83rem', margin: '0 0 10px', lineHeight: 1.5 }}>
+            A deal cuts the shelf price. The automatic volume discount is then taken off
+            that already-cut price. It is not one or the other, and a bulk buyer pays far
+            less than the percentage you type here.
+          </p>
+          <div style={{ color: '#e2e8f0', fontSize: '0.82rem', lineHeight: 1.6 }}>
+            Volume tiers in force right now: <strong>5+ vials {tiers.fivePlus}%</strong>,{' '}
+            <strong>10+ vials {tiers.tenPlus}%</strong>
+            {tiers.bulkWeek && (
+              <span style={{ color: '#fbbf24' }}>
+                {' '}(bulk week — back to 20% after {formatCrInstant(tiers.bulkEnds)})
+              </span>
+            )}
+            .
+            <div style={{ marginTop: '8px' }}>
+              A <strong>{tiers.dealPct}%</strong> deal on a $100 vial: customers pay{' '}
+              <strong>${tiers.priceAlone}</strong> buying one,{' '}
+              <strong>${tiers.priceAtFive}</strong> at 5 vials, and{' '}
+              <strong>${tiers.priceAtTen}</strong> at 10 vials —{' '}
+              <strong style={{ color: '#fca5a5' }}>{tiers.stackedAtTen}% off</strong> in total.
+            </div>
+          </div>
+          <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '10px 0 0' }}>
+            Check the three numbers in the preview before you launch, not the one you typed.
           </p>
         </div>
       </div>
@@ -700,12 +769,13 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
               </div>
               <div style={{ marginTop: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
                 These products get the orange sale ribbon and move to the top of the catalog.
-                A customer buying 5+ vials still gets their 15% volume discount on top of this price.
+                A customer buying 5+ vials still gets their {tiers.fivePlus}% volume discount on top of this price,
+                and one buying 10+ gets {tiers.tenPlus}%.
               </div>
               <div className="weekly-deal-stack-summary">
                 <div><span>Deal alone</span><strong>{preview.safety?.pct}% off</strong></div>
-                <div><span>At 5+ vials</span><strong>{preview.safety?.stackedAtFive}% off</strong></div>
-                <div><span>At 10+ vials</span><strong>{preview.safety?.stackedAtTen}% off</strong></div>
+                <div><span>At 5+ vials (+{preview.safety?.fivePlusPct ?? tiers.fivePlus}%)</span><strong>{preview.safety?.stackedAtFive}% off</strong></div>
+                <div><span>At 10+ vials (+{preview.safety?.tenPlusPct ?? tiers.tenPlus}%)</span><strong>{preview.safety?.stackedAtTen}% off</strong></div>
               </div>
               {preview.safety?.needsConfirmation && (
                 <div className="weekly-deal-inline-alert is-warning">

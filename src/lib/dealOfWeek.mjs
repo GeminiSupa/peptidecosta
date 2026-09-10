@@ -18,6 +18,7 @@
 
 import { crWallToIso, CR_UTC_OFFSET_HOURS } from './crTime.mjs';
 import { dealFieldsMatch } from './dealProductProtection.mjs';
+import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT } from './bulkDeal.mjs';
 
 const CR_OFFSET_MS = CR_UTC_OFFSET_HOURS * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -178,10 +179,24 @@ export function isUnavailableForDeal(product) {
  * only after an explicit review, while a commercially dangerous combined
  * markdown is refused outright.
  */
-export function dealSafety(discountPct, { confirmedHighDiscount = false } = {}) {
+export function dealSafety(discountPct, {
+  confirmedHighDiscount = false,
+  // The volume tiers actually in force. Both were hardcoded here, and the 10+
+  // one was wrong every time a bulk week raised the rate: with the tier at 35%
+  // a 15% deal really costs 44.75% on a bulk order, but this reported 32% and
+  // the screen printed that number. The safety limit was computed on the same
+  // understatement, so the check that exists to refuse a commercially dangerous
+  // total was quietly measuring a different, smaller one — a 40% deal passed at
+  // "52%" while really giving away 61%.
+  //
+  // Injectable so tests can pin a rate rather than depending on the day they
+  // run, and so a preview can be shown for a future week.
+  tenPlusPct = tenPlusDiscountPct(),
+  fivePlusPct = STANDARD_FIVE_PLUS_PCT,
+} = {}) {
   const pct = toPercent(discountPct);
-  const stackedAtFive = stackedDiscountPercent(discountPct, 15);
-  const stackedAtTen = stackedDiscountPercent(discountPct, 20);
+  const stackedAtFive = stackedDiscountPercent(discountPct, fivePlusPct);
+  const stackedAtTen = stackedDiscountPercent(discountPct, tenPlusPct);
 
   if (pct <= 0 || pct >= 100) {
     return { ok: false, error: 'The discount must be between 1% and 99%.', pct, stackedAtFive, stackedAtTen };
@@ -192,7 +207,7 @@ export function dealSafety(discountPct, { confirmedHighDiscount = false } = {}) 
   if (stackedAtTen > DEAL_MAX_STACKED_DISCOUNT_PCT) {
     return {
       ok: false,
-      error: `With the 10+ vial discount this becomes ${stackedAtTen}% off, above the ${DEAL_MAX_STACKED_DISCOUNT_PCT}% safety limit.`,
+      error: `With the ${tenPlusPct}% 10+ vial discount stacked on top, this becomes ${stackedAtTen}% off, above the ${DEAL_MAX_STACKED_DISCOUNT_PCT}% safety limit.`,
       pct,
       stackedAtFive,
       stackedAtTen,
@@ -202,13 +217,13 @@ export function dealSafety(discountPct, { confirmedHighDiscount = false } = {}) 
     return {
       ok: false,
       needsConfirmation: true,
-      error: `Review required: ${pct}% becomes ${stackedAtTen}% off on 10+ vials.`,
+      error: `Review required: ${pct}% becomes ${stackedAtTen}% off on 10+ vials, because the ${tenPlusPct}% volume discount stacks on top of it.`,
       pct,
       stackedAtFive,
       stackedAtTen,
     };
   }
-  return { ok: true, pct, stackedAtFive, stackedAtTen };
+  return { ok: true, pct, stackedAtFive, stackedAtTen, tenPlusPct, fivePlusPct };
 }
 
 /** A deal-specific catalog destination that survives channel handoffs and attributes orders. */

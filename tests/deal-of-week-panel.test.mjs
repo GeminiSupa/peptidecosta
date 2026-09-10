@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { weekWindow } from '../src/lib/dealOfWeek.mjs';
+import { weekWindow, dealSafety } from '../src/lib/dealOfWeek.mjs';
 
 const panel = fs.readFileSync('src/components/admin/DealOfWeekPanel.js', 'utf8');
 const engine = fs.readFileSync('src/lib/dealsEngine.js', 'utf8');
 const route = fs.readFileSync('src/app/api/admin/deals/route.js', 'utf8');
+const dealSource = fs.readFileSync('src/lib/dealOfWeek.mjs', 'utf8');
 
 // ---------------------------------------------------------------------------
 // The end date does not depend on the products
@@ -161,4 +162,71 @@ test('the banner wording is folded away but says when it is set', () => {
   assert.match(panel, /Write the banner myself/);
   assert.match(panel, /\{!showAdvanced && \(titleEn\.trim\(\) \|\| titleEs\.trim\(\)\) && \(/);
   assert.match(panel, /\(custom text set\)/);
+});
+
+// ---------------------------------------------------------------------------
+// Stacking: the number typed in the box is not the number a bulk buyer pays
+// ---------------------------------------------------------------------------
+
+test('the safety check reads the volume tier actually in force', () => {
+  // Both tiers were hardcoded here, and the 10+ one was wrong for the whole of
+  // any bulk week that raised the rate.
+  const at20 = dealSafety(0.15, { tenPlusPct: 20 });
+  const at35 = dealSafety(0.15, { tenPlusPct: 35 });
+  assert.equal(at20.stackedAtTen, 32);
+  assert.equal(at35.stackedAtTen, 44.75);
+});
+
+test('a deal that would breach the combined cap is refused at the real rate', () => {
+  // 40% off looked safe at "52%" while the tier was assumed to be 20%. With the
+  // tier at 35% it really gives away 61%, past the 55% limit that exists to
+  // refuse exactly this.
+  const assumed = dealSafety(0.4, { confirmedHighDiscount: true, tenPlusPct: 20 });
+  const real = dealSafety(0.4, { confirmedHighDiscount: true, tenPlusPct: 35 });
+  assert.equal(assumed.ok, true, 'the old assumption let this through');
+  assert.equal(real.ok, false);
+  assert.equal(real.stackedAtTen, 61);
+  assert.match(real.error, /35% 10\+ vial discount/);
+});
+
+test('the tiers used are reported back, so the screen can name them', () => {
+  const safety = dealSafety(0.15, { tenPlusPct: 35 });
+  assert.equal(safety.tenPlusPct, 35);
+  assert.equal(safety.fivePlusPct, 15);
+});
+
+test('the live rate is the default, not a hardcoded 20', () => {
+  assert.match(dealSource, /tenPlusPct = tenPlusDiscountPct\(\),/);
+  assert.match(dealSource, /fivePlusPct = STANDARD_FIVE_PLUS_PCT,/);
+  assert.ok(
+    !/stackedDiscountPercent\(discountPct, 20\)/.test(dealSource),
+    'the 10+ tier is still hardcoded to 20',
+  );
+});
+
+test('the panel warns about stacking before anything is picked', () => {
+  // It used to be one clause at the end of the intro paragraph, which is not
+  // where anyone looks before typing a number into a box marked "discount".
+  assert.match(panel, /Important: this discount stacks on top of the volume discount/);
+  assert.match(panel, /It is not one or the other/);
+  const noteAt = panel.indexOf('Important: this discount stacks');
+  const formAt = panel.indexOf('Extra discount (%)');
+  assert.ok(noteAt > 0 && noteAt < formAt, 'the warning sits below the discount box');
+});
+
+test('the worked example is computed, not written out', () => {
+  // A hand-written "so 15% becomes 32%" goes stale the moment a bulk week moves
+  // the tier, which is the same failure this whole fix is about.
+  assert.match(panel, /tenPlusPct: tenPlus|const tenPlus = tenPlusDiscountPct\(\);/);
+  assert.match(panel, /stackedDiscountPercent\(dealPct \/ 100, tenPlus\)/);
+  assert.ok(!panel.includes('their 15% volume discount on top'), 'a hardcoded 15% is still printed');
+});
+
+test('the preview names which tier each stacked figure used', () => {
+  assert.match(panel, /At 5\+ vials \(\+\{preview\.safety\?\.fivePlusPct \?\? tiers\.fivePlus\}%\)/);
+  assert.match(panel, /At 10\+ vials \(\+\{preview\.safety\?\.tenPlusPct \?\? tiers\.tenPlus\}%\)/);
+});
+
+test('a bulk week says when the raised tier drops back', () => {
+  assert.match(panel, /bulk week — back to 20% after/);
 });
