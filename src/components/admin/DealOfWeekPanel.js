@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Zap, Loader, AlertTriangle, CheckCircle, Megaphone, RotateCcw, Clock, Search, X } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Zap, Loader, AlertTriangle, CheckCircle, Megaphone, RotateCcw, Clock, Search, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import { formatCrInstant } from '@/lib/crTime.mjs';
-import { toPercent, hasUntrackedStock, isUnavailableForDeal } from '@/lib/dealOfWeek.mjs';
+import { toPercent, hasUntrackedStock, isUnavailableForDeal, weekWindow } from '@/lib/dealOfWeek.mjs';
 
 /**
  * Deal of the Week — one promotion a week, ending Sunday midnight Costa Rica.
@@ -70,9 +70,21 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
   const [confirmedHighDiscount, setConfirmedHighDiscount] = useState(false);
   const [allowUntrackedStock, setAllowUntrackedStock] = useState(false);
   const [showLaunchReview, setShowLaunchReview] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const discountPct = useMemo(() => Number(percent) / 100, [percent]);
   const percentIsValid = Number(percent) > 0 && Number(percent) < 100;
+
+  // When the deal being planned would end, known before a single product is
+  // picked. The end is always the coming Sunday in Costa Rica and has nothing
+  // to do with the products, but the field used to read "Pick a product…"
+  // because it waited for the server preview to say so — which made the one
+  // genuinely fixed thing on the screen look like another decision to make.
+  //
+  // The preview's window still wins once it arrives: it is resolved on the
+  // server clock, and this one is resolved on the admin's laptop.
+  const localWindow = useMemo(() => weekWindow(new Date()), []);
+  const plannedWindow = preview?.window || localWindow;
 
   const outOfStockSelected = useMemo(() => (
     selected.filter((name) => {
@@ -95,6 +107,33 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
     ));
   }, [productQuery, products]);
 
+  // Guards the saving effect below until the stored draft has been read. Without
+  // it the effect fires on the empty starting form and writes that blank over
+  // the real draft before it has had a chance to load.
+  const draftHydratedRef = useRef(false);
+
+  /**
+   * Put the saved setup back on screen.
+   *
+   * The shared copy wins. localStorage is only the fallback, for a draft
+   * started before the setup was shared and for the case where the save request
+   * never landed.
+   */
+  const hydrateDraft = (serverDraft) => {
+    draftHydratedRef.current = true;
+
+    let draft = serverDraft;
+    if (!draft) {
+      try { draft = JSON.parse(localStorage.getItem('weekly_deal_draft_v2') || 'null'); } catch { draft = null; }
+    }
+    if (!draft) return;
+
+    if (Array.isArray(draft.selected)) setSelected(draft.selected);
+    if (draft.percent) setPercent(draft.percent);
+    if (typeof draft.titleEn === 'string') setTitleEn(draft.titleEn);
+    if (typeof draft.titleEs === 'string') setTitleEs(draft.titleEs);
+  };
+
   const load = async () => {
     try {
       setLoading(true);
@@ -103,8 +142,15 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       if (!res.ok) throw new Error(data.error || 'Could not load deals');
       setLive(data.live || null);
       setRecent(data.recent || []);
+      // Only on the first load. `load` runs again after a launch, and
+      // re-hydrating there would put the setup that was just launched back into
+      // the form.
+      if (!draftHydratedRef.current) hydrateDraft(data.draft || null);
     } catch (err) {
       setPreviewError(err.message);
+      // Even a failed load must leave the form editable and saving, so fall
+      // back to whatever this browser held.
+      if (!draftHydratedRef.current) hydrateDraft(null);
     } finally {
       setLoading(false);
     }
@@ -112,23 +158,33 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
 
   useEffect(() => { load(); }, []);
 
-  // Setup survives a refresh or an accidental tab change. It is local to this
-  // browser and cleared only after a successful launch.
+  // Setup survives a refresh, a closed tab, a different device and a different
+  // person. It used to live only in localStorage, which meant a deal begun on
+  // the laptop was not there on the phone and a cleared browser lost it.
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('weekly_deal_draft_v2') || 'null');
-      if (!saved) return;
-      if (Array.isArray(saved.selected)) setSelected(saved.selected);
-      if (saved.percent) setPercent(saved.percent);
-      if (typeof saved.titleEn === 'string') setTitleEn(saved.titleEn);
-      if (typeof saved.titleEs === 'string') setTitleEs(saved.titleEs);
-    } catch {}
-  }, []);
+    if (!draftHydratedRef.current) return;
 
-  useEffect(() => {
+    // The local mirror is written immediately so a refresh two seconds later
+    // still has it; the shared copy follows on a debounce, because one write
+    // per keystroke is one write too many.
     try {
       localStorage.setItem('weekly_deal_draft_v2', JSON.stringify({ selected, percent, titleEn, titleEs }));
     } catch {}
+
+    const timer = setTimeout(() => {
+      adminFetch('/api/admin/deals', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'save_draft',
+          draft: selected.length > 0 ? { selected, percent, titleEn, titleEs } : null,
+        }),
+      }).catch(() => {
+        // A draft that failed to save is not worth interrupting setup over —
+        // the local mirror above still has it.
+      });
+    }, 1200);
+
+    return () => clearTimeout(timer);
   }, [selected, percent, titleEn, titleEs]);
 
   // The preview is the only place the resolved Sunday and the real before/after
@@ -191,7 +247,10 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       const res = await adminFetch('/api/admin/deals', {
         method: 'POST',
         body: JSON.stringify({
-          action: 'launch',
+          // Replacing ends the running deal and restores its prices first, so
+          // the new percentage is applied to the real shelf price rather than
+          // to one that is already discounted.
+          action: live ? 'replace' : 'launch',
           product_names: selected,
           discount_pct: discountPct,
           title_en: titleEn,
@@ -218,7 +277,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
         console.warn('[weekly-deal] Product refresh after launch failed:', refreshError);
       }
     } catch (err) {
-      alert('Could not launch the deal: ' + err.message);
+      alert(`Could not ${live ? 'replace' : 'launch'} the deal: ${err.message}`);
     } finally {
       setIsLaunching(false);
     }
@@ -402,10 +461,24 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
         </div>
       )}
 
-      {/* ---------- Set up the next deal ---------- */}
-      {!loading && !live && (
+      {/* ---------- Set up the next deal ----------
+
+          Shown whether or not a deal is running. Hiding it while one was live
+          meant next week could not be planned during this week, and a deal
+          could not be corrected at all: changing one percentage required
+          ending the deal first, which put every price back to full and threw
+          the setup away, so the form to rebuild it only appeared once the
+          storefront had already lost the sale. */}
+      {!loading && (
         <div style={card}>
-          <h4 style={{ margin: '0 0 14px', color: '#f8fafc', fontSize: '0.95rem' }}>Set up this week&apos;s deal</h4>
+          <h4 style={{ margin: '0 0 4px', color: '#f8fafc', fontSize: '0.95rem' }}>
+            {live ? 'Change or replace the running deal' : "Set up this week's deal"}
+          </h4>
+          <p style={{ margin: '0 0 14px', color: '#94a3b8', fontSize: '0.8rem' }}>
+            {live
+              ? 'Launching from here puts the running deal\u2019s prices back first, then marks these ones down. The storefront is at full price for the moment in between.'
+              : 'Pick the products and the percentage. Nothing changes on the site until you confirm.'}
+          </p>
 
           <div style={{ display: 'grid', gap: '14px', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: '14px' }}>
             <div>
@@ -425,10 +498,10 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             </div>
             <div>
               <label style={labelStyle}>Ends</label>
-              <div className="admin-input" style={{ width: '100%', color: preview ? '#f8fafc' : '#64748b' }}>
-                {preview ? formatCrInstant(preview.window.endsAt) : 'Pick a product…'}
+              <div className="admin-input" style={{ width: '100%', color: '#f8fafc' }}>
+                {formatCrInstant(plannedWindow.endsAt)}
               </div>
-              {preview?.window?.rolledForward && (
+              {plannedWindow.rolledForward && (
                 <div style={{ fontSize: '0.75rem', color: '#fbbf24', marginTop: '4px' }}>
                   This Sunday is less than a day away, so the deal runs to the following Sunday.
                 </div>
@@ -520,7 +593,26 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             )}
           </div>
 
-          <div style={{ display: 'grid', gap: '14px', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', marginBottom: '14px' }}>
+          {/* Both banner fields write themselves from the products and the
+              percentage, and are left blank on almost every deal. Folded away
+              so the ordinary path is products, percentage, launch. */}
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((open) => !open)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px', background: 'none',
+              border: 'none', padding: 0, marginBottom: showAdvanced ? '12px' : '14px',
+              color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            {showAdvanced ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            Write the banner myself
+            {!showAdvanced && (titleEn.trim() || titleEs.trim()) && (
+              <span style={{ color: '#fbbf24' }}>(custom text set)</span>
+            )}
+          </button>
+
+          <div style={{ display: showAdvanced ? 'grid' : 'none', gap: '14px', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', marginBottom: '14px' }}>
             <div>
               <label style={labelStyle}>Banner text EN (optional)</label>
               <input
@@ -555,17 +647,17 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             </div>
           )}
 
+          {/* Stated here, ticked in the final review. Two tickboxes in the
+              form plus a confirmation dialog on top of them was three gates in
+              front of one button, and a gate nobody reads is not a safeguard. */}
           {untrackedStockSelected.length > 0 && (
-            <label className="weekly-deal-confirm-row">
-              <input
-                type="checkbox"
-                checked={allowUntrackedStock}
-                onChange={(event) => setAllowUntrackedStock(event.target.checked)}
-              />
+            <div className="weekly-deal-inline-alert">
+              <AlertTriangle size={16} />
               <span>
-                <strong>Confirm stock manually.</strong> {untrackedStockSelected.join(', ')} {untrackedStockSelected.length === 1 ? 'has' : 'have'} no inventory count. I verified enough units are available for this deal.
+                {untrackedStockSelected.join(', ')} {untrackedStockSelected.length === 1 ? 'has' : 'have'} no inventory count.
+                You will be asked to confirm the stock in the final review.
               </span>
-            </label>
+            </div>
           )}
 
           {previewError && (
@@ -616,14 +708,13 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                 <div><span>At 10+ vials</span><strong>{preview.safety?.stackedAtTen}% off</strong></div>
               </div>
               {preview.safety?.needsConfirmation && (
-                <label className="weekly-deal-confirm-row is-warning">
-                  <input
-                    type="checkbox"
-                    checked={confirmedHighDiscount}
-                    onChange={(event) => setConfirmedHighDiscount(event.target.checked)}
-                  />
-                  <span><strong>High-discount review:</strong> I understand that the 10+ vial total becomes {preview.safety.stackedAtTen}% off.</span>
-                </label>
+                <div className="weekly-deal-inline-alert is-warning">
+                  <AlertTriangle size={16} />
+                  <span>
+                    A 10+ vial order comes to {preview.safety.stackedAtTen}% off in total.
+                    You will be asked to confirm this in the final review.
+                  </span>
+                </div>
               )}
             </div>
           )}
@@ -631,14 +722,14 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
           <button
             className="admin-btn primary"
             onClick={handleLaunch}
-            disabled={!preview || isLaunching || isPreviewing || outOfStockSelected.length > 0 || (untrackedStockSelected.length > 0 && !allowUntrackedStock) || Boolean(preview?.safety?.needsConfirmation && !confirmedHighDiscount)}
+            disabled={!preview || isLaunching || isPreviewing || outOfStockSelected.length > 0}
             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
             {isLaunching ? <Loader size={15} className="spin" /> : <Zap size={15} />}
-            Launch deal
+            {live ? 'Replace the live deal' : 'Launch deal'}
           </button>
           <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '8px' }}>
-            Launching changes prices on the live site right away. The email and WhatsApp
+            {live ? 'Replacing' : 'Launching'} changes prices on the live site right away. The email and WhatsApp
             announcement is drafted for you to review and send afterwards.
           </div>
         </div>
@@ -673,7 +764,9 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             <div className="weekly-deal-modal-heading">
               <div>
                 <span>Final review</span>
-                <h4 id="weekly-deal-review-title">Launch {preview.safety?.pct}% weekly deal?</h4>
+                <h4 id="weekly-deal-review-title">
+                  {live ? 'Replace' : 'Launch'} {preview.safety?.pct}% weekly deal?
+                </h4>
               </div>
               <button type="button" onClick={() => setShowLaunchReview(false)} aria-label="Close launch review">
                 <X size={18} />
@@ -697,14 +790,53 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             </div>
 
             <div className="weekly-deal-inline-alert is-warning">
-              <AlertTriangle size={16} /> Launch changes the live catalog immediately. The announcement is created as a separate review step and is not sent automatically.
+              <AlertTriangle size={16} />
+              {live
+                ? ` The running ${toPercent(live.discount_pct)}% deal ends and every one of its prices goes back to normal before these are marked down. Its announcement is not recalled.`
+                : ' Launch changes the live catalog immediately. The announcement is created as a separate review step and is not sent automatically.'}
             </div>
+
+            {/* Both confirmations live here now, at the last moment before the
+                prices move, rather than as tickboxes further up a long form
+                that had to be satisfied before this dialog would even open. */}
+            {untrackedStockSelected.length > 0 && (
+              <label className="weekly-deal-confirm-row">
+                <input
+                  type="checkbox"
+                  checked={allowUntrackedStock}
+                  onChange={(event) => setAllowUntrackedStock(event.target.checked)}
+                />
+                <span>
+                  <strong>Confirm stock manually.</strong> {untrackedStockSelected.join(', ')} {untrackedStockSelected.length === 1 ? 'has' : 'have'} no inventory count. I verified enough units are available for this deal.
+                </span>
+              </label>
+            )}
+
+            {preview.safety?.needsConfirmation && (
+              <label className="weekly-deal-confirm-row is-warning">
+                <input
+                  type="checkbox"
+                  checked={confirmedHighDiscount}
+                  onChange={(event) => setConfirmedHighDiscount(event.target.checked)}
+                />
+                <span><strong>High-discount review:</strong> I understand that the 10+ vial total becomes {preview.safety.stackedAtTen}% off.</span>
+              </label>
+            )}
 
             <div className="weekly-deal-modal-actions">
               <button type="button" className="admin-btn" onClick={() => setShowLaunchReview(false)}>Go back</button>
-              <button type="button" className="admin-btn primary" onClick={confirmLaunch} disabled={isLaunching}>
+              <button
+                type="button"
+                className="admin-btn primary"
+                onClick={confirmLaunch}
+                disabled={
+                  isLaunching
+                  || (untrackedStockSelected.length > 0 && !allowUntrackedStock)
+                  || Boolean(preview.safety?.needsConfirmation && !confirmedHighDiscount)
+                }
+              >
                 {isLaunching ? <Loader size={15} className="spin" /> : <Zap size={15} />}
-                Confirm &amp; launch
+                {live ? 'Confirm & replace' : 'Confirm & launch'}
               </button>
             </div>
           </section>

@@ -32,6 +32,71 @@ import {
 } from '@/lib/dealOfWeek.mjs';
 
 const BANNERS_SETTING_ID = 'announcement_banners';
+const DRAFT_SETTING_ID = 'weekly_deal_draft';
+
+/**
+ * The half-built deal, shared rather than stuck in one browser.
+ *
+ * Setup used to live in localStorage, so it belonged to whichever device
+ * started it: a deal begun on the laptop was simply not there on the phone, a
+ * cleared browser lost it, and the colleague who was meant to finish it could
+ * not see it at all. It is a plan for a shop-wide price change, not a personal
+ * scratchpad.
+ *
+ * Deliberately NOT a `status: 'draft'` row in the deals table. That table is
+ * the record of deals that happened, listDeals reads all of it for the history
+ * card, and a draft rewritten on every keystroke would fill the history with
+ * versions of a deal that never ran.
+ */
+function normalizeDealDraft(value) {
+  if (!value || typeof value !== 'object') return null;
+
+  const selected = Array.isArray(value.selected)
+    ? [...new Set(value.selected.map((name) => String(name || '').trim()).filter(Boolean))]
+    : [];
+  const percent = Number(value.percent);
+
+  // A draft is defined by having products chosen. Without that there is nothing
+  // to restore, and treating an empty selection as a draft would mean the save
+  // that follows a successful launch stored a blank one straight back.
+  if (selected.length === 0) return null;
+
+  return {
+    selected,
+    percent: Number.isFinite(percent) && percent > 0 && percent < 100 ? percent : 15,
+    titleEn: String(value.titleEn || ''),
+    titleEs: String(value.titleEs || ''),
+    updatedAt: value.updatedAt || null,
+  };
+}
+
+export async function getDealDraft(supabase) {
+  const { data, error } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('id', DRAFT_SETTING_ID)
+    .maybeSingle();
+
+  // A missing draft must never break the screen that shows the live deal.
+  if (error) {
+    console.warn('[deals] could not read the saved draft:', error.message);
+    return null;
+  }
+  return normalizeDealDraft(data?.value);
+}
+
+/** Passing null clears it, which is what a successful launch does. */
+export async function saveDealDraft(supabase, draft) {
+  const normalized = draft === null ? null : normalizeDealDraft(draft);
+  const value = normalized ? { ...normalized, updatedAt: new Date().toISOString() } : {};
+
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ id: DRAFT_SETTING_ID, value, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+
+  if (error) throw new Error(`Could not save the draft: ${error.message}`);
+  return normalized;
+}
 
 /** The deal currently marked live, or null. Also used to block a second one. */
 export async function getLiveDeal(supabase) {
@@ -465,6 +530,53 @@ export async function endDeal(deal) {
   if (error) throw new Error(`Prices restored but the deal row did not close: ${error.message}`);
 
   return { restored };
+}
+
+/**
+ * Change a running deal: put the old prices back, then mark down the new ones.
+ *
+ * Changing a live deal used to mean pressing "End deal & restore prices",
+ * watching the storefront go back to full price, and then building the whole
+ * thing again from an empty form. Correcting one percentage cost the entire
+ * setup, so in practice a wrong deal was left wrong for the week.
+ *
+ * End-then-launch rather than editing the row in place, because the markdown is
+ * always computed from the baseline snapshot: restoring first is what makes the
+ * new percentage apply to the real shelf price instead of to the already
+ * discounted one. Editing the row would have to reproduce that, and get it
+ * wrong exactly once to sell at 15% off twice over.
+ *
+ * The unsafe moment is between the two halves. If the launch fails, the old
+ * deal is already ended — so the shop is at full price with no deal, which is
+ * the safe direction to fail in, and the error says so plainly rather than
+ * leaving the admin to guess what state their prices are in.
+ */
+export async function replaceLiveDeal(options) {
+  const supabase = getSupabaseAdmin();
+
+  const live = await getLiveDeal(supabase);
+  if (!live) throw new Error('No deal is currently live, so there is nothing to replace.');
+
+  // Validate the replacement BEFORE ending anything. A percentage over the hard
+  // limit or an unconfirmed high discount would otherwise take the running deal
+  // down and put nothing in its place.
+  const safety = dealSafety(Number(options.discountPct), {
+    confirmedHighDiscount: options.confirmedHighDiscount === true,
+  });
+  if (!safety.ok) throw new Error(safety.error);
+  await resolveProducts(supabase, options.productNames);
+
+  await endDeal(live);
+
+  try {
+    const result = await launchDeal(options);
+    return { ...result, replaced: { id: live.id, title_en: live.title_en, discount_pct: live.discount_pct } };
+  } catch (err) {
+    throw new Error(
+      `The previous deal was ended and every price is back to normal, but the new deal could not start — ${err.message}. `
+      + 'Nothing is discounted right now; fix the problem and launch again.'
+    );
+  }
 }
 
 /** Cron entry point: end any live deal whose Sunday has passed. */

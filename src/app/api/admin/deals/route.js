@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { getLiveDeal, listDeals, getDealOperations, previewDeal, launchDeal, endDeal } from '@/lib/dealsEngine';
+import { getLiveDeal, listDeals, getDealOperations, previewDeal, launchDeal, endDeal, replaceLiveDeal, getDealDraft, saveDealDraft } from '@/lib/dealsEngine';
 
 export const runtime = 'nodejs';
 
@@ -12,11 +12,16 @@ export async function GET(request) {
 
   try {
     const supabase = getSupabaseAdmin();
-    const [live, recent] = await Promise.all([getLiveDeal(supabase), listDeals(supabase)]);
+    const [live, recent, draft] = await Promise.all([
+      getLiveDeal(supabase),
+      listDeals(supabase),
+      getDealDraft(supabase),
+    ]);
     const operations = live ? await getDealOperations(supabase, live) : null;
     return NextResponse.json({
       live: live && operations ? { ...live, ...operations } : live,
       recent,
+      draft,
     });
   } catch (err) {
     console.error('[admin/deals GET]', err);
@@ -25,8 +30,10 @@ export async function GET(request) {
 }
 
 /**
+ * save_draft → remember the half-built setup so any device can pick it up
  * preview → what the deal would do, writing nothing
  * launch  → mark the prices down and raise the banner (does NOT send announcements)
+ * replace → put the running deal's prices back, then launch this one in its place
  * end     → restore the prices and take the banner down
  */
 export async function POST(request) {
@@ -49,6 +56,26 @@ export async function POST(request) {
 
     if (action === 'launch') {
       const result = await launchDeal({
+        productNames: body.product_names,
+        discountPct: body.discount_pct,
+        titleEn: body.title_en,
+        titleEs: body.title_es,
+        createdBy: auth.user?.id || null,
+        confirmedHighDiscount: body.confirm_high_discount === true,
+        allowUntrackedStock: body.allow_untracked_stock === true,
+      });
+      return NextResponse.json({ ok: true, ...result });
+    }
+
+    // Setup in progress. Saved on a debounce as the admin works, so it belongs
+    // to the business rather than to the browser tab it was started in.
+    if (action === 'save_draft') {
+      const draft = await saveDealDraft(getSupabaseAdmin(), body.draft ?? null);
+      return NextResponse.json({ ok: true, draft });
+    }
+
+    if (action === 'replace') {
+      const result = await replaceLiveDeal({
         productNames: body.product_names,
         discountPct: body.discount_pct,
         titleEn: body.title_en,
