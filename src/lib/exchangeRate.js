@@ -6,12 +6,13 @@ import {
   getUsdToCrcRate,
   isPlausibleRate,
 } from '@/lib/pricing';
+import { maybeAlertStaleExchangeRate } from '@/lib/exchangeRateAlert.mjs';
 
 export const EXCHANGE_RATE_SETTING_ID = 'exchange_rate';
 export const EXCHANGE_RATE_MAX_AGE_MS = 60 * 60 * 1000;
-// How long a stored rate may keep pricing the storefront once every provider is
-// unreachable. Past this we would rather quote a known constant than a number
-// whose age we can no longer justify to a customer.
+// When a stored rate stops being defensible on its own. It still prices the
+// shop past this point — the alternative is a constant from the source tree,
+// which is older still — but from here the owner is told about it.
 export const EXCHANGE_RATE_STALE_LIMIT_MS = 24 * 60 * 60 * 1000;
 
 function normalizeRate(value) {
@@ -106,18 +107,26 @@ export async function getDatabaseBackedUsdToCrcRate({ syncProducts = false } = {
     // corroborated against, before it is allowed to reprice the storefront.
     const live = await fetchLiveUsdToCrcRate({ previousRate: stored?.rate ?? null });
     if (!live && stored) {
-      // Serve the stored rate only while it is still recent enough to defend.
-      // Previously this had no limit, so one bad value could price the site
-      // indefinitely if the providers stayed unreachable.
-      if (stored.ageMs < EXCHANGE_RATE_STALE_LIMIT_MS) {
-        return { ...stored, source: `${stored.source}:stale`, productRowsSynced: 0 };
+      // Keep the last rate a provider actually confirmed, however old it is.
+      //
+      // This used to expire after a day and fall back to a constant compiled
+      // into the source. That constant is not a better number than the stored
+      // one — it is an older one, frozen at whatever the rate happened to be
+      // when somebody last edited the file — and swapping to it moved every
+      // colón price on the site by several colones per dollar in one step,
+      // silently, at the moment the feed was already known to be unwell. It
+      // also put the browser and the server on different numbers, which is a
+      // checkout that cannot complete.
+      //
+      // Staleness is now something we report rather than something we act on:
+      // past EXCHANGE_RATE_ALERT_AFTER_MS the owner is emailed once a day until
+      // the feed returns.
+      if (stored.ageMs >= EXCHANGE_RATE_STALE_LIMIT_MS) {
+        // Deliberately not awaited into the caller's critical path beyond this
+        // helper's own guarantee never to throw.
+        await maybeAlertStaleExchangeRate(supabase, stored);
       }
-      return {
-        rate: FALLBACK_EXCHANGE_RATE,
-        updatedAt: stored.updatedAt,
-        source: 'fallback:expired',
-        productRowsSynced: 0,
-      };
+      return { ...stored, source: `${stored.source}:stale`, productRowsSynced: 0 };
     }
 
     const rate = live ? live.rate : FALLBACK_EXCHANGE_RATE;

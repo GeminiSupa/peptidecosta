@@ -136,6 +136,44 @@ export async function consumeDurableRateLimit(supabase, {
   };
 }
 
+/**
+ * Read a durable limit without spending from it.
+ *
+ * Some limits count outcomes rather than attempts. An order-per-customer cap is
+ * one: a customer whose checkout is refused has not placed an order, and
+ * charging her a slot for it locked her out of the shop for a day over attempts
+ * that never saved anything. Those callers peek first, do the work, and consume
+ * only once the work succeeded.
+ *
+ * Fails closed for the same reason `consumeDurableRateLimit` does: an
+ * unreachable limiter must not read as "under the limit".
+ */
+export async function peekDurableRateLimit(supabase, {
+  bucket,
+  key,
+  limit,
+  windowSeconds,
+}) {
+  const { data, error } = await supabase.rpc('peek_api_rate_limit', {
+    p_bucket: String(bucket),
+    p_key_hash: rateLimitHash(key),
+    p_limit: Number(limit),
+    p_window_seconds: Number(windowSeconds),
+  });
+
+  if (error) {
+    console.error(`[security] Durable rate limiter unavailable for ${bucket}:`, error.message);
+    return { allowed: false, unavailable: true, retryAfter: 60 };
+  }
+
+  const row = firstRpcRow(data) || {};
+  return {
+    allowed: row.allowed === true,
+    remaining: Math.max(0, Number(row.remaining) || 0),
+    retryAfter: Math.max(1, Number(row.retry_after) || windowSeconds),
+  };
+}
+
 export function rateLimitHeaders(result) {
   return {
     'Retry-After': String(result.retryAfter || 60),

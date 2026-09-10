@@ -71,6 +71,10 @@ import {
 } from '@/lib/catalogFilters.mjs';
 import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
 import { areCardPaymentsPausedForClient } from '@/lib/cardPaymentsPaused.mjs';
+// Band-checked before this page will price anything in it: a rate handed back
+// by the API is still a number from off this machine.
+import { isPlausibleRate } from '@/lib/pricing';
+import { tooManyAttemptsMessage, tooManyAttemptsTitle } from '@/lib/checkoutRateLimits.mjs';
 
 // const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
 const FALLBACK_EXCHANGE_RATE = 454.48;
@@ -1439,25 +1443,53 @@ export default function CatalogPage() {
     try {
       const res = await fetch('/api/exchange-rate');
       const data = await res.json();
-      if (data.rate) {
-        const rate = data.rate;
+      // res.ok matters here. The route answers a failure with HTTP 500 and a
+      // hardcoded rate in the body, and this used to read the body without
+      // looking at the status — so a broken feed quietly put this page on a
+      // number the server was not using, and every colón order from it was
+      // refused for a total that could not be made to match.
+      if (res.ok && isPlausibleRate(data.rate)) {
+        const rate = Number(data.rate);
         const now = data.updatedAt ? Date.parse(data.updatedAt) : Date.now();
         setExchangeRate(rate);
         setExchangeRateUpdatedAt(now);
         localStorage.setItem('exchangeRate_USDCRC', rate.toString());
         localStorage.setItem('exchangeRate_USDCRC_time', now.toString());
+        return;
       }
+      // Answered, but with nothing worth pricing in. Same treatment as no
+      // answer at all — the branch that did nothing here left the page on the
+      // constant in this file, which is the one number the server is certain
+      // not to be using.
+      console.error('Live exchange rate unusable, falling back to cache:', res.status, data?.rate);
+      useCachedExchangeRate();
     } catch (err) {
       console.error('Live exchange rate fetch failed, using fallback:', err);
+      useCachedExchangeRate();
+    }
+  };
+
+  /**
+   * Last rate this browser saw, when the API cannot give us one now.
+   *
+   * Better than the compiled-in constant and still not authoritative: the
+   * server may well be on a different number. That disagreement no longer
+   * strands the customer, because a repricing refusal now carries the server's
+   * own rate and the checkout adopts it. See saveOrderToDatabase.
+   */
+  const useCachedExchangeRate = () => {
+    try {
       const cached = localStorage.getItem('exchangeRate_USDCRC');
       const cachedTime = localStorage.getItem('exchangeRate_USDCRC_time');
-      if (cached && cachedTime) {
+      if (cached && cachedTime && isPlausibleRate(cached)) {
         setExchangeRate(parseFloat(cached));
         setExchangeRateUpdatedAt(parseInt(cachedTime, 10));
-      } else {
-        setExchangeRateUpdatedAt(Date.now());
+        return;
       }
+    } catch {
+      // Storage blocked (private browsing).
     }
+    setExchangeRateUpdatedAt(Date.now());
   };
 
   // Supabase Realtime subscription — live sync when admin changes prices/stock/products
@@ -2330,7 +2362,63 @@ export default function CatalogPage() {
     return orderRow;
   };
 
-  const saveOrderToDatabase = async (orderRow) => {
+  /**
+   * Bring the cart into line with what the server just said it costs.
+   *
+   * Returns the server's own total for this cart, so the caller can decide
+   * whether the customer has to be told about it.
+   */
+  const adoptServerPricing = (data) => {
+    if (isPlausibleRate(data?.exchangeRate)) {
+      setExchangeRate(Number(data.exchangeRate));
+      setExchangeRateUpdatedAt(Date.now());
+      try {
+        localStorage.setItem('exchangeRate_USDCRC', String(data.exchangeRate));
+        localStorage.setItem('exchangeRate_USDCRC_time', String(Date.now()));
+      } catch {
+        // Storage blocked (private browsing). The rate still applies to this
+        // page, it just will not survive a reload.
+      }
+    }
+
+    if (Array.isArray(data?.pricing?.products)) {
+      const currentByName = new Map(data.pricing.products.map((product) => [product.product, product]));
+      setProducts((current) => current.map((product) => (
+        currentByName.has(product.product)
+          ? { ...product, ...currentByName.get(product.product) }
+          : product
+      )));
+      setCart((current) => current.map((item) => (
+        currentByName.has(item.product)
+          ? { ...item, ...currentByName.get(item.product) }
+          : item
+      )));
+    }
+
+    const total = Number(data?.pricing?.total);
+    return Number.isFinite(total) ? total : null;
+  };
+
+  /**
+   * Post one order to the API.
+   *
+   * `repriceRetriesLeft` exists because of a checkout that could not be
+   * completed at all. Colón totals are compared to the exact colón, and the
+   * page reads the USD/CRC rate once on load and never again — so once the
+   * server's hourly refresh moved the rate, the total this page posted could
+   * never match the total the server computed. The old code answered that by
+   * telling the customer to press the button again and merging the unchanged
+   * dollar price back into her cart, which changed nothing: the same request
+   * failed the same way every time, and after five presses the abuse limiter
+   * locked her out of the shop for a day.
+   *
+   * So a repricing refusal is now something this function handles rather than
+   * something the customer is asked to solve. It takes the server's rate,
+   * re-posts at the server's own total, and only interrupts her if that total
+   * is HIGHER than the one she agreed to — nobody is charged more than the
+   * figure on the button without being shown it first.
+   */
+  const saveOrderToDatabase = async (orderRow, { repriceRetriesLeft = 1 } = {}) => {
     try {
       const orderPayload = applyStoredAttribution(orderRow);
 
@@ -2348,18 +2436,25 @@ export default function CatalogPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (data.errorCode === 'price_changed' && Array.isArray(data.pricing?.products)) {
-          const currentByName = new Map(data.pricing.products.map((product) => [product.product, product]));
-          setProducts((current) => current.map((product) => (
-            currentByName.has(product.product)
-              ? { ...product, ...currentByName.get(product.product) }
-              : product
-          )));
-          setCart((current) => current.map((item) => (
-            currentByName.has(item.product)
-              ? { ...item, ...currentByName.get(item.product) }
-              : item
-          )));
+        if (data.errorCode === 'price_changed') {
+          const serverTotal = adoptServerPricing(data);
+          const shownTotal = orderRow.currency === 'USD'
+            ? Number(orderRow.total_usd || 0)
+            : Number(orderRow.total_crc || 0);
+
+          // Same price or cheaper: she loses nothing, so finish the order she
+          // already asked for rather than making her press the button again to
+          // agree to a number she will not even notice changing.
+          if (serverTotal !== null && repriceRetriesLeft > 0 && serverTotal <= shownTotal) {
+            return saveOrderToDatabase(
+              {
+                ...orderRow,
+                total_usd: data.pricing.totalUsd,
+                total_crc: data.pricing.totalCrc,
+              },
+              { repriceRetriesLeft: repriceRetriesLeft - 1 },
+            );
+          }
         }
         console.error('Order save failed:', data.error || res.statusText);
         return { ok: false, error: data.error || res.statusText, errorCode: data.errorCode || null };
@@ -2421,6 +2516,54 @@ export default function CatalogPage() {
   const failCheckout = (title, detail) => {
     setCheckoutError({ title, detail });
     revealField('checkoutError');
+  };
+
+  /**
+   * Turn a refused save into something worth reading.
+   *
+   * The server states, in the customer's own language, exactly why it said no:
+   * the promo code expired, the product sold out, the daily limit is reached.
+   * All of that used to be discarded in favour of one sentence that fitted none
+   * of them — "we could not save your order, press the button again" — which at
+   * best said nothing and at worst was wrong. A customer stopped by the abuse
+   * limiter was being told to do the one thing that kept her stopped.
+   *
+   * So the server's sentence is the message unless there is genuinely no
+   * server sentence to show, which now only happens when the request never
+   * arrived at all.
+   */
+  const checkoutFailureNotice = (result, { cardCheckout = false } = {}) => {
+    const serverMessage = String(result?.error || '').trim();
+
+    if (result?.errorCode === 'too_many_attempts') {
+      return { title: tooManyAttemptsTitle(lang), detail: serverMessage || tooManyAttemptsMessage(lang) };
+    }
+
+    if (result?.errorCode === 'price_changed') {
+      return {
+        title: lang === 'en' ? 'Your total has changed' : 'Su total cambió',
+        detail: serverMessage,
+      };
+    }
+
+    // Nothing left our side, and on a card checkout that is the question the
+    // customer is actually asking.
+    const reassurance = cardCheckout
+      ? (lang === 'en'
+        ? 'Your card has not been charged.'
+        : 'No se ha realizado ningún cargo a su tarjeta.')
+      : (lang === 'en'
+        ? 'Nothing has been sent yet and your cart is untouched.'
+        : 'Todavía no se ha enviado nada y su carrito sigue igual.');
+
+    const fallback = lang === 'en'
+      ? 'Please try again, or message us on WhatsApp.'
+      : 'Inténtelo de nuevo o escríbanos por WhatsApp.';
+
+    return {
+      title: lang === 'en' ? 'We could not save your order' : 'No pudimos guardar su pedido',
+      detail: `${reassurance} ${serverMessage || fallback}`,
+    };
   };
 
   /**
@@ -2591,16 +2734,8 @@ export default function CatalogPage() {
       cardSubmitLockRef.current = false;
       // Nothing was charged — worth saying, because "could not save your
       // order" on a card checkout otherwise reads as "did my card go through?"
-      failCheckout(
-        cardSave.errorCode === 'price_changed'
-          ? (lang === 'en' ? 'Your cart prices were updated' : 'Actualizamos los precios del carrito')
-          : (lang === 'en' ? 'We could not save your order' : 'No pudimos guardar su pedido'),
-        cardSave.errorCode === 'price_changed'
-          ? cardSave.error
-          : (lang === 'en'
-            ? 'Your card has not been charged. Please press the button again — if it keeps failing, message us on WhatsApp and we will take the order for you.'
-            : 'No se ha realizado ningún cargo a su tarjeta. Presione el botón de nuevo — si sigue fallando, escríbanos por WhatsApp y tomamos su pedido.'),
-      );
+      const notice = checkoutFailureNotice(cardSave, { cardCheckout: true });
+      failCheckout(notice.title, notice.detail);
       return;
     }
 
@@ -2785,16 +2920,8 @@ export default function CatalogPage() {
 
     if (!saveResult.ok) {
       setOrderSubmitting(false);
-      failCheckout(
-        saveResult.errorCode === 'price_changed'
-          ? (lang === 'en' ? 'Your cart prices were updated' : 'Actualizamos los precios del carrito')
-          : (lang === 'en' ? 'We could not save your order' : 'No pudimos guardar su pedido'),
-        saveResult.errorCode === 'price_changed'
-          ? saveResult.error
-          : (lang === 'en'
-            ? 'Nothing has been sent yet and your cart is untouched. Press the button again — if it keeps failing, message us on WhatsApp and we will take the order for you.'
-            : 'Todavía no se ha enviado nada y su carrito sigue igual. Presione el botón de nuevo — si sigue fallando, escríbanos por WhatsApp y tomamos su pedido.'),
-      );
+      const notice = checkoutFailureNotice(saveResult);
+      failCheckout(notice.title, notice.detail);
       return;
     }
 

@@ -25,10 +25,18 @@ import {
   consumeDurableRateLimit,
   getRequestIp,
   isTrustedStorefrontRequest,
+  peekDurableRateLimit,
   rateLimitHeaders,
   readLimitedJson,
   RequestBodyError,
 } from '@/lib/publicApiSecurity.mjs';
+import {
+  limiterUnavailableMessage,
+  orderContactLimits,
+  tooManyAttemptsMessage,
+  ORDER_ATTEMPTS_PER_IP_PER_HOUR,
+  ORDER_IP_WINDOW_SECONDS,
+} from '@/lib/checkoutRateLimits.mjs';
 import {
   applySalesAgentReferral,
   isEligibleSalesAgentProfile,
@@ -356,31 +364,51 @@ export async function POST(request) {
     }
 
     const supabase = getSupabaseAdmin();
+    // Resolved before the limits so a blocked customer is refused in her own
+    // language. It used to be read further down, after three English-only
+    // rejections had already been written.
+    const orderLang = order.lang === 'en' ? 'en' : 'es';
+
     const ip = getRequestIp(request);
+    // Attempts, not orders: this counter's whole purpose is to notice a machine
+    // hammering the endpoint, and a refused attempt is exactly what that looks
+    // like. See checkoutRateLimits.mjs for why it sits so far above the
+    // per-person caps.
     const ipLimit = await consumeDurableRateLimit(supabase, {
       bucket: 'order-create-ip',
       key: ip,
-      limit: 6,
-      windowSeconds: 60 * 60,
+      limit: ORDER_ATTEMPTS_PER_IP_PER_HOUR,
+      windowSeconds: ORDER_IP_WINDOW_SECONDS,
     });
     if (!ipLimit.allowed) {
       return NextResponse.json(
-        { error: ipLimit.unavailable ? 'Checkout protection is temporarily unavailable' : 'Too many order attempts. Please try again later.' },
+        {
+          error: ipLimit.unavailable
+            ? limiterUnavailableMessage(orderLang)
+            : tooManyAttemptsMessage(orderLang),
+          errorCode: ipLimit.unavailable ? 'limiter_unavailable' : 'too_many_attempts',
+        },
         { status: ipLimit.unavailable ? 503 : 429, headers: rateLimitHeaders(ipLimit) },
       );
     }
 
-    const contactKey = `${String(order.customer_email || '').trim().toLowerCase()}|${String(order.customer_phone || '').replace(/\D/g, '')}`;
-    const contactLimit = await consumeDurableRateLimit(supabase, {
-      bucket: 'order-create-contact',
-      key: contactKey,
-      limit: 5,
-      windowSeconds: 24 * 60 * 60,
-    });
-    if (!contactLimit.allowed) {
+    // Peeked, not consumed. These cap how much one person may buy in a day, so
+    // they may only count orders that actually saved — a customer refused by
+    // the validation below has bought nothing, and charging her a slot for it
+    // spends her allowance on our own failures. The matching consume runs once
+    // the insert has succeeded.
+    const contactLimits = orderContactLimits(order);
+    for (const contactLimit of contactLimits) {
+      const result = await peekDurableRateLimit(supabase, contactLimit);
+      if (result.allowed) continue;
       return NextResponse.json(
-        { error: contactLimit.unavailable ? 'Checkout protection is temporarily unavailable' : 'Too many orders for these contact details today.' },
-        { status: contactLimit.unavailable ? 503 : 429, headers: rateLimitHeaders(contactLimit) },
+        {
+          error: result.unavailable
+            ? limiterUnavailableMessage(orderLang)
+            : tooManyAttemptsMessage(orderLang),
+          errorCode: result.unavailable ? 'limiter_unavailable' : 'too_many_attempts',
+        },
+        { status: result.unavailable ? 503 : 429, headers: rateLimitHeaders(result) },
       );
     }
 
@@ -398,7 +426,6 @@ export async function POST(request) {
     // the authority: a stale tab, a retry from a saved payload or a direct post
     // would otherwise write a name nobody can address a package to. Names are
     // stored normalized so the staff alert and the courier label match.
-    const orderLang = order.lang === 'en' ? 'en' : 'es';
     const nameCheck = validateCustomerName(order.customer_name);
     if (!nameCheck.ok) {
       return NextResponse.json({ error: identityMessage(nameCheck.reason, orderLang) }, { status: 400 });
@@ -513,11 +540,21 @@ export async function POST(request) {
       return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });
     }
     if (authoritative.changed) {
+      // The rate travels with the refusal, and it is the field that makes this
+      // recoverable. Colón totals are compared exactly, and the browser fetches
+      // the USD/CRC rate once when the page loads and never again — so a page
+      // left open across an hourly refresh posts a total that can never match,
+      // and every retry from that tab fails identically. Telling the customer
+      // to "submit again" was the worst possible answer: nothing in the cart
+      // was wrong, and nothing she could do would change the number. With the
+      // rate in hand the checkout re-prices itself and only interrupts her if
+      // the new total is actually higher than the one she agreed to.
       return NextResponse.json({
         error: orderLang === 'en'
-          ? 'A product price changed while this cart was open. We updated the cart; review the new total and submit again.'
-          : 'El precio de un producto cambió mientras el carrito estaba abierto. Actualizamos el carrito; revise el nuevo total y envíe de nuevo.',
+          ? 'Prices moved while this cart was open. Please review the new total.'
+          : 'Los precios cambiaron mientras el carrito estaba abierto. Revise el nuevo total.',
         errorCode: 'price_changed',
+        exchangeRate: rateResult.rate,
         pricing: authoritative,
       }, { status: 409 });
     }
@@ -624,6 +661,20 @@ export async function POST(request) {
         // notification table may not exist yet
       }
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // The order exists, so now it counts. Every `return` above this line leaves
+    // the customer's daily allowance untouched, which is the whole point: she
+    // is capped on what she buys, never on what we refused to sell her.
+    //
+    // Best-effort. A limiter that cannot record a saved order must not undo one
+    // that is already in the database.
+    for (const contactLimit of contactLimits) {
+      try {
+        await consumeDurableRateLimit(supabase, contactLimit);
+      } catch (limitErr) {
+        console.error('[orders/create] Could not record order against contact limit:', limitErr.message);
+      }
     }
 
     // Raise the bell before anything that can fail slowly. Email and WhatsApp
