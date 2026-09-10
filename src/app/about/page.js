@@ -1,23 +1,18 @@
 "use client";
 
 import Link from 'next/link';
-import { ArrowUpRight, CheckCircle, MessageCircle, ShieldCheck, Truck } from 'lucide-react';
+import { ArrowUpRight, MessageCircle } from 'lucide-react';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { usePublicPageContent, localized } from '@/hooks/usePublicPageContent';
 import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
-import TrustFlowBand from '@/components/TrustFlowBand';
 import MobileActionBar from '@/components/MobileActionBar';
 import { openContactForm } from '@/lib/contactForm';
 import '../landing.css';
 import './about.css';
 
-const PROCESS_ICONS = [ShieldCheck, CheckCircle, Truck];
-
 export default function AboutPage() {
   const { lang, setLang, landingSettings, pageSettings } = usePublicPageContent('page_about');
   const { links } = useBusinessLinks();
-
-  const principles = pageSettings.principles || [];
 
   return (
     <div className="clone-home about-page">
@@ -30,92 +25,30 @@ export default function AboutPage() {
               <p className="about-eyebrow">{localized(pageSettings, 'heroKicker', lang)}</p>
               <h1>{localized(pageSettings, 'heroTitle', lang)}</h1>
               <p className="about-intro">{localized(pageSettings, 'heroText', lang)}</p>
-              <div className="about-hero-points" aria-label={lang === 'en' ? 'Peptides Costa Rica trust points' : 'Puntos de confianza de Peptides Costa Rica'}>
-                {principles.slice(0, 3).map((principle, index) => (
-                  <span key={`${principle.labelEn}-${index}`}><CheckCircle size={15} /> {localized(principle, 'label', lang)}</span>
-                ))}
-              </div>
             </div>
           </div>
         </section>
 
-        <TrustFlowBand lang={lang} compact />
-
-        <section className="about-proof-band">
-          <div className="container about-proof-grid">
-            <div>
-              <p className="about-section-number">{localized(pageSettings, 'proofKicker', lang)}</p>
-              <h2>{localized(pageSettings, 'proofTitle', lang)}</h2>
-            </div>
-            <p>{localized(pageSettings, 'proofText', lang)}</p>
-          </div>
-        </section>
-
-        <section className="about-story container">
-          <div className="about-story-copy">
-            <p className="about-section-number">01</p>
-            <h2>{localized(pageSettings, 'originTitle', lang)}</h2>
-            <p>{localized(pageSettings, 'originText', lang)}</p>
-          </div>
-          <aside className="about-founders" aria-label={localized(pageSettings, 'originTitle', lang)}>
-            {(pageSettings.founders || []).map((founder, index) => (
-              <div className="about-founder" key={`${founder.name}-${index}`}>
-                <span>{founder.initials}</span>
-                <div><strong>{founder.name}</strong><small>{localized(founder, 'role', lang)}</small></div>
-              </div>
-            ))}
-          </aside>
-        </section>
-
-        <blockquote className="about-quote">
-          <div className="container">
-            <span>“</span>{localized(pageSettings, 'quote', lang)}
-            <cite>{pageSettings.quoteAuthor}</cite>
-          </div>
-        </blockquote>
-
-        <section className="about-chapters container">
-          <article>
-            <p className="about-section-number">02</p>
-            <h2>{localized(pageSettings, 'problemTitle', lang)}</h2>
-            <p>{localized(pageSettings, 'problemText', lang)}</p>
+        <section className="about-chapters container" style={{ marginTop: '4rem', marginBottom: '4rem' }}>
+          <article style={{ marginBottom: '3rem' }}>
+            <h2 style={{ fontSize: '1.75rem', marginBottom: '1rem', color: '#1e293b' }}>{localized(pageSettings, 'backgroundTitle', lang)}</h2>
+            <p style={{ whiteSpace: 'pre-wrap', color: '#475569', fontSize: '1.1rem', lineHeight: '1.7' }}>{localized(pageSettings, 'backgroundText', lang)}</p>
           </article>
-          <article>
-            <p className="about-section-number">03</p>
-            <h2>{localized(pageSettings, 'todayTitle', lang)}</h2>
-            <p>{localized(pageSettings, 'todayText', lang)}</p>
+          
+          <article style={{ marginBottom: '3rem' }}>
+            <h2 style={{ fontSize: '1.75rem', marginBottom: '1rem', color: '#1e293b' }}>{localized(pageSettings, 'startedTitle', lang)}</h2>
+            <p style={{ whiteSpace: 'pre-wrap', color: '#475569', fontSize: '1.1rem', lineHeight: '1.7' }}>{localized(pageSettings, 'startedText', lang)}</p>
           </article>
-        </section>
 
-        <section className="about-process">
-          <div className="container">
-            <div className="about-process-header">
-              <p className="about-section-number">04</p>
-              <h2>{localized(pageSettings, 'processTitle', lang)}</h2>
-            </div>
-            <div className="about-process-grid">
-              {(pageSettings.process || []).map((step, index) => {
-                const Icon = PROCESS_ICONS[index] || ShieldCheck;
-                return (
-                  <article key={`${step.titleEn}-${index}`}>
-                    <Icon size={24} strokeWidth={1.8} />
-                    <span>{String(index + 1).padStart(2, '0')}</span>
-                    <h3>{localized(step, 'title', lang)}</h3>
-                    <p>{localized(step, 'text', lang)}</p>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-        </section>
+          <article style={{ marginBottom: '3rem' }}>
+            <h2 style={{ fontSize: '1.75rem', marginBottom: '1rem', color: '#1e293b' }}>{localized(pageSettings, 'approachTitle', lang)}</h2>
+            <p style={{ whiteSpace: 'pre-wrap', color: '#475569', fontSize: '1.1rem', lineHeight: '1.7' }}>{localized(pageSettings, 'approachText', lang)}</p>
+          </article>
 
-        <section className="about-principles container" aria-label={lang === 'en' ? 'How we work' : 'Cómo trabajamos'}>
-          {principles.map((principle, index) => (
-            <div key={`${principle.labelEn}-${index}`}>
-              <span>0{index + 1}</span>
-              <p>{localized(principle, 'label', lang)}</p>
-            </div>
-          ))}
+          <article style={{ marginBottom: '2rem' }}>
+            <h2 style={{ fontSize: '1.75rem', marginBottom: '1rem', color: '#1e293b' }}>{localized(pageSettings, 'aheadTitle', lang)}</h2>
+            <p style={{ whiteSpace: 'pre-wrap', color: '#475569', fontSize: '1.1rem', lineHeight: '1.7' }}>{localized(pageSettings, 'aheadText', lang)}</p>
+          </article>
         </section>
 
         <section className="about-cta">
