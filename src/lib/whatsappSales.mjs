@@ -48,8 +48,14 @@ function readableNames(names, lang) {
   return `${values.slice(0, -1).join(', ')}${conjunction}${values.at(-1)}`;
 }
 
-function activePublicPromo(promo, now) {
-  if (!promo?.is_active || promo.hidden) return false;
+function activePublicPromo(promo, now, customerKeys = []) {
+  if (!promo?.is_active) return false;
+
+  if (promo.hidden) {
+    if (!promo.issued_to) return false;
+    if (!customerKeys.includes(promo.issued_to)) return false;
+  }
+
   if (!inWindow(promo, now)) return false;
   if (
     promo.usage_limit !== null
@@ -65,6 +71,7 @@ export function buildWhatsAppSalesSnapshot({
   liveDeal = null,
   excludedPromoCodes = [],
   now = new Date(),
+  customerKeys = [],
 } = {}) {
   const dealIsLive = liveDeal?.status === 'live' && inWindow(liveDeal, now);
   const dealNames = new Set((dealIsLive ? liveDeal.product_names : []).map((name) => String(name).toLowerCase()));
@@ -99,7 +106,7 @@ export function buildWhatsAppSalesSnapshot({
     });
   }
 
-  for (const promo of (promos || []).filter((item) => activePublicPromo(item, now))) {
+  for (const promo of (promos || []).filter((item) => activePublicPromo(item, now, customerKeys))) {
     const pct = percent(promo.discount_pct);
     const code = String(promo.code || '').trim().toUpperCase();
     if (!code || excludedCodes.has(code)) continue;

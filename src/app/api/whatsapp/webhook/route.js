@@ -9,6 +9,7 @@ import {
   replyMatchesWhatsAppLanguage,
   resolveWhatsAppReplyLanguage,
 } from '@/lib/whatsappRecovery';
+import { identityKeys } from '@/lib/exitIntentOffer.mjs';
 import {
   buildWhatsAppCatalogFormatReply,
   buildWhatsAppSalesReply,
@@ -362,13 +363,16 @@ export async function POST(request) {
               // the assistant the same weekly deal and public promo truth the
               // storefront uses, and keep a structured snapshot for exact sale
               // replies that do not depend on model interpretation.
-              let salesSnapshot = buildWhatsAppSalesSnapshot({ products: catalogProducts });
+              let customerKeys = [];
+              if (waId) customerKeys = identityKeys({ phone: waId });
+              let salesSnapshot = buildWhatsAppSalesSnapshot({ products: catalogProducts, customerKeys });
               let salesContext = formatWhatsAppSalesContext(salesSnapshot);
               if (supabase && aiAutoReply) {
                 try {
                   const nowIso = new Date().toISOString();
+                  const phoneTail = String(waId).replace(/\D/g, '').slice(-8);
                   const [promoResult, dealResult] = await Promise.all([
-                    supabase.from('promo_codes').select('*').eq('is_active', true),
+                    supabase.from('promo_codes').select('*').eq('is_active', true).or(`hidden.eq.false,issued_to.ilike.%${phoneTail}%`),
                     supabase
                       .from('deals')
                       .select('id,title_en,title_es,product_names,discount_pct,starts_at,ends_at,status')
@@ -384,6 +388,7 @@ export async function POST(request) {
                     promos: promoResult.data || [],
                     liveDeal: dealResult.data || null,
                     excludedPromoCodes: aiHiddenPromoCodes,
+                    customerKeys,
                   });
                   salesContext = formatWhatsAppSalesContext(salesSnapshot);
                 } catch (err) {
