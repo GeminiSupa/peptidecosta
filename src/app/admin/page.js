@@ -1880,8 +1880,8 @@ Core Rules:
     isSubUserProfile
       ? ['my_earnings', 'my_qr', 'team_chat']
       : adminProfile?.is_superadmin
-        ? ['home', 'orders', 'whatsapp_ai', 'spreadsheet']
-        : ['orders', 'whatsapp_ai', 'carts', 'customers', 'leads', 'team_chat', 'home']
+        ? ['home', 'orders', 'leads', 'spreadsheet']
+        : ['orders', 'carts', 'customers', 'leads', 'team_chat', 'home']
   ).filter((tabId) => hasAccess(tabId)).slice(0, 4);
 
   const badgeClassForTone = (tone) => {

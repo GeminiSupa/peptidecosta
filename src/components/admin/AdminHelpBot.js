@@ -543,9 +543,15 @@ export default function AdminHelpBot({ activeTab = '', profile = null }) {
         .ahb-send:disabled { opacity: 0.4; cursor: default; }
         .ahb-spin { animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 480px) {
-          .ahb-panel { right: 12px; bottom: 80px; width: calc(100vw - 24px); }
-          .ahb-trigger { right: 16px; bottom: 20px; }
+        /* Desktop only. Below 1024px the admin shows its fixed bottom quick-nav
+           (Home / Orders / WhatsApp / Products / More), and this pill sits on
+           top of it — on a phone it covers the tab bar's right-hand buttons
+           outright. There is no free corner to move it to: the bar spans the
+           full width and the header is already crowded, so on small screens
+           the assistant is simply not offered. Breakpoint matches the one that
+           turns the quick-nav on in admin.css. */
+        @media (max-width: 1023px) {
+          .ahb-trigger, .ahb-panel { display: none; }
         }
       `}</style>
     </>
