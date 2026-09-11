@@ -165,7 +165,10 @@ export default function AdminHelpBot({ activeTab = '', profile = null }) {
       body: JSON.stringify({
         mode: 'help_bot',
         prompt: question,
-        context: { activeTab, allowedTabs: allowedTabIds, isSuperAdmin, isSubUser: isSubUserProfile, lang },
+        // Role and reach are no longer sent: the route derives both from the
+        // verified session, because a browser asked to describe its own
+        // privileges will answer whatever it is told to.
+        context: { activeTab, lang },
       }),
     });
 

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession, PUBLIC_AI_MODES } from '@/lib/adminAuth';
+import { isSubUser } from '@/lib/subUserTier.mjs';
+import { ADMIN_MODULES, resolveAdminTabAccess } from '@/lib/adminModules';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
   consumeDurableRateLimit,
@@ -25,7 +27,7 @@ const AI_MODE_PERMISSIONS = {
   generate_journey: ['marketing'],
   explain_metric: ['analytics', 'home'],
   // help_bot: every authenticated admin including sub-users (they get
-  // a filtered knowledge base based on their allowedTabs context).
+  // a knowledge base filtered from their own profile, server-side).
   help_bot: ['home'],
 };
 
@@ -38,6 +40,8 @@ export async function POST(request) {
       console.error('[AI API] GEMINI_API_KEY is not configured on the server.');
       return NextResponse.json({ error: 'Gemini API Key is not configured on the server.' }, { status: 500 });
     }
+
+    let adminProfile = null;
 
     if (PUBLIC_AI_MODES.has(mode)) {
       if (!isTrustedStorefrontRequest(request)) {
@@ -63,6 +67,7 @@ export async function POST(request) {
         allowSubUser: mode === 'help_bot',
       });
       if (auth.error) return auth.error;
+      adminProfile = auth.profile;
     }
 
     let finalPrompt = '';
@@ -352,12 +357,19 @@ Rules:
     } else if (mode === 'help_bot') {
       const userQuestion = String(prompt || '').trim().slice(0, 2000);
       const activeTab = String(context.activeTab || '').trim().slice(0, 80);
-      const isSuperAdmin = Boolean(context.isSuperAdmin);
-      const isSubUserAgent = Boolean(context.isSubUser);
+      // Role and reach come from the verified session, never from the request
+      // body. The browser used to be asked, which meant any authenticated
+      // sub-user could post isSuperAdmin: true and be handed the full
+      // super-admin knowledge base — every section of the system explained,
+      // including the ones their account is specifically walled off from.
+      const isSuperAdmin = Boolean(adminProfile?.is_superadmin);
+      const isSubUserAgent = isSubUser(adminProfile);
       const agentLang = context.lang === 'en' ? 'en' : 'es'; // default Spanish
-      const allowedTabs = Array.isArray(context.allowedTabs)
-        ? context.allowedTabs.map((t) => String(t).trim()).filter(Boolean)
-        : null; // null means not specified → show all
+      // Derived from the same rule the nav uses, so what the bot is willing to
+      // explain cannot drift from what the agent can actually open.
+      const allowedTabs = ADMIN_MODULES
+        .filter((module) => resolveAdminTabAccess(module.id, adminProfile))
+        .map((module) => module.id);
 
       if (!userQuestion) {
         return NextResponse.json({ error: 'Missing question for help bot' }, { status: 400 });
