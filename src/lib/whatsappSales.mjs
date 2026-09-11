@@ -135,7 +135,28 @@ export function buildWhatsAppSalesSnapshot({
 
 export function formatWhatsAppSalesContext(snapshot) {
   const lines = [...(snapshot?.offers || []), snapshot?.volumeDiscount].filter(Boolean);
-  return `Verified current offers (database source of truth):\n${lines.map((offer) => `- EN: ${offer.en}\n  ES: ${offer.es}`).join('\n')}\nNever claim there is no sale when an offer is listed above.`;
+  const codes = (snapshot?.offers || [])
+    .filter((offer) => offer.kind === 'promo_code')
+    .map((offer) => (offer.en.match(/^Code ([A-Z0-9_-]+)/) || [])[1])
+    .filter(Boolean);
+
+  // The list above is built fresh every message and already excludes anything
+  // expired, used up, or issued to someone else. The model still has to be told
+  // that the list is exhaustive, because the rest of its context is not: a code
+  // it quoted correctly a fortnight ago is still sitting in the conversation
+  // history, and a customer holding a dead code will quote it too. Without this
+  // the assistant reads either one as evidence the discount exists and honours
+  // a promotion the checkout will then refuse.
+  const codeRule = codes.length
+    ? `The only promo codes that are valid right now are: ${codes.join(', ')}.`
+    : 'There are no promo codes valid right now.';
+
+  return [
+    `Verified current offers (database source of truth):`,
+    lines.map((offer) => `- EN: ${offer.en}\n  ES: ${offer.es}`).join('\n'),
+    `Never claim there is no sale when an offer is listed above.`,
+    `${codeRule} Any other code is expired or does not exist — including one you quoted earlier in this conversation and one the customer says they hold. Never confirm, repeat, extend or honour a code that is not in this list. If the customer names a code that is not listed, tell them it is no longer valid and point them to the offers above.`,
+  ].join('\n');
 }
 
 export function buildWhatsAppSalesReply(snapshot, lang = 'es') {
