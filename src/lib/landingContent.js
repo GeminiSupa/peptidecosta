@@ -154,11 +154,20 @@ export const DEFAULT_LANDING_PAGE_SETTINGS = {
     { labelEn: 'Blog', labelEs: 'Blog', href: '/blog' },
   ],
   footerCategoryLinks: [
-    { labelEn: 'BPC-157', labelEs: 'BPC-157', href: '/catalog?category=BPC-157' },
-    { labelEn: 'CJC-1295', labelEs: 'CJC-1295', href: '/catalog?category=CJC-1295' },
-    { labelEn: 'GHK-Cu', labelEs: 'GHK-Cu', href: '/catalog?category=GHK-Cu' },
-    { labelEn: 'GLP-1', labelEs: 'GLP-1', href: '/catalog?category=GLP-1' },
-    { labelEn: 'Semaglutide', labelEs: 'Semaglutide', href: '/catalog?category=Semaglutide' },
+    // These are compound names, not categories, so they deep-link through
+    // ?search= — which matches the product name — and not ?category=, which is
+    // resolved against the category values actually stored on products and
+    // falls back to the unfiltered catalog when nothing matches. Every one of
+    // these links pointed at ?category= and silently showed the whole catalog.
+    //
+    // Linking by compound rather than by category is also the safer shape for
+    // the card processor: a compound name makes no claim about what the
+    // product is for, where "Weight Loss & Metabolism" plainly does.
+    { labelEn: 'BPC-157', labelEs: 'BPC-157', href: '/catalog?search=BPC-157' },
+    { labelEn: 'CJC-1295', labelEs: 'CJC-1295', href: '/catalog?search=CJC-1295' },
+    { labelEn: 'GHK-Cu', labelEs: 'GHK-Cu', href: '/catalog?search=GHK-Cu' },
+    { labelEn: 'GLP-1', labelEs: 'GLP-1', href: '/catalog?search=GLP-1' },
+    { labelEn: 'Semaglutide', labelEs: 'Semaglutide', href: '/catalog?search=Semaglutide' },
     { labelEn: 'View All', labelEs: 'Ver todo', href: '/catalog' },
   ],
 };
@@ -224,31 +233,39 @@ export const DEFAULT_PUBLIC_PAGE_SETTINGS = {
     heroKickerEs: 'Biblioteca de recursos',
     heroTitleEn: 'The Peptide Info Center',
     heroTitleEs: 'Centro de información de péptidos',
-    heroTextEn: 'Clear, simple answers about peptides, reconstitution, dosing questions, storage, and product comparisons.',
-    heroTextEs: 'Respuestas claras sobre péptidos, reconstitución, preguntas de dosificación, almacenamiento y comparaciones.',
+    heroTextEn: 'Clear, simple answers about the products we supply, their documentation, storage, and how ordering works.',
+    heroTextEs: 'Respuestas claras sobre los productos que suministramos, su documentación, almacenamiento y cómo funciona el pedido.',
     searchPlaceholderEn: 'Search articles, peptides, or questions...',
     searchPlaceholderEs: 'Buscar artículos, péptidos o preguntas...',
+    // Every link here must point at something that exists. The four that stood
+    // here pointed at blog slugs that were never written, and all four returned
+    // a blank page under a 200 — a dead end that reads as a broken site.
+    //
+    // The dosing and injection entry is gone on top of that: the About page
+    // states "We do not provide personal dosing, administration, or treatment
+    // recommendations", and an underwriter reading both pages finds the
+    // contradiction immediately.
     quickLinks: [
-      { labelEn: 'How to reconstitute', labelEs: 'Cómo reconstituir', href: '/blog/how-to-reconstitute-peptides' },
-      { labelEn: 'Dosing & injection guide', labelEs: 'Guía de dosificación', href: '/blog/dosing-injection-basics' },
-      { labelEn: 'Storing peptides', labelEs: 'Almacenar péptidos', href: '/blog/storing-peptides-safely' },
-      { labelEn: 'GLP-1 guide', labelEs: 'Guía de GLP-1', href: '/blog/what-is-glp-1' },
+      { labelEn: 'Read the articles', labelEs: 'Leer los artículos', href: '/blog' },
+      { labelEn: 'Certificates of analysis', labelEs: 'Certificados de análisis', href: '/coa-database' },
+      { labelEn: 'Reconstitution supplies', labelEs: 'Suministros de reconstitución', href: '/catalog?category=Reconstitution%20Supply' },
+      { labelEn: 'Frequently asked questions', labelEs: 'Preguntas frecuentes', href: '/faq' },
     ],
     startTitleEn: 'Start here',
     startTitleEs: 'Empieza aquí',
     steps: [
-      { titleEn: 'How to reconstitute peptides', titleEs: 'Cómo reconstituir péptidos', textEn: 'Mix bacteriostatic water with your vial step by step.', textEs: 'Mezcla agua bacteriostática con tu vial paso a paso.' },
-      { titleEn: 'Dosing & injection basics', titleEs: 'Bases de dosificación e inyección', textEn: 'How much to take, where to draw, and where to inject.', textEs: 'Cuánto tomar, dónde cargar y dónde aplicar.' },
+      { titleEn: 'What a COA tells you', titleEs: 'Qué indica un COA', textEn: 'How to read purity and identity results for a batch.', textEs: 'Cómo leer los resultados de pureza e identidad de un lote.' },
       { titleEn: 'Storage & handling', titleEs: 'Almacenamiento y manejo', textEn: 'Keep products stable in Costa Rica climate.', textEs: 'Mantén productos estables en el clima de Costa Rica.' },
-      { titleEn: 'Choosing your first peptide', titleEs: 'Elegir tu primer péptido', textEn: 'Match goals to the right compound.', textEs: 'Relaciona tus objetivos con el compuesto correcto.' },
+      { titleEn: 'Ordering and delivery', titleEs: 'Pedidos y entrega', textEn: 'How ordering, payment and local delivery work.', textEs: 'Cómo funcionan el pedido, el pago y la entrega local.' },
+      { titleEn: 'Talking to our team', titleEs: 'Hablar con nuestro equipo', textEn: 'Ask about availability, documentation or an order.', textEs: 'Consulta disponibilidad, documentación o un pedido.' },
     ],
     topics: [
       { titleEn: 'Foundations', titleEs: 'Fundamentos', textEn: 'The basics: what peptides are and how they work.', textEs: 'Lo básico: qué son los péptidos y cómo funcionan.' },
       { titleEn: 'Getting started', titleEs: 'Para empezar', textEn: 'Practical guides for buyers and new users.', textEs: 'Guías prácticas para compradores y usuarios nuevos.' },
-      { titleEn: 'Healing & recovery', titleEs: 'Recuperación', textEn: 'BPC-157, TB-500, and tissue-repair peptides.', textEs: 'BPC-157, TB-500 y péptidos de reparación.' },
-      { titleEn: 'Metabolic & weight', titleEs: 'Metabolismo y peso', textEn: 'GLP-1, MOTS-C, and metabolic research.', textEs: 'GLP-1, MOTS-C e investigación metabólica.' },
-      { titleEn: 'Growth hormone & anti-aging', titleEs: 'GH y anti-aging', textEn: 'Sermorelin, CJC-1295, Tesamorelin, NAD+.', textEs: 'Sermorelin, CJC-1295, Tesamorelin, NAD+.' },
-      { titleEn: 'Safety & side effects', titleEs: 'Seguridad y efectos', textEn: 'What research says about risk and tolerability.', textEs: 'Lo que dice la investigación sobre riesgos y tolerancia.' },
+      { titleEn: 'Repair peptides', titleEs: 'Péptidos de reparación', textEn: 'BPC-157, TB-500 and related compounds.', textEs: 'BPC-157, TB-500 y compuestos relacionados.' },
+      { titleEn: 'Metabolic compounds', titleEs: 'Compuestos metabólicos', textEn: 'GLP-1, MOTS-C and related research material.', textEs: 'GLP-1, MOTS-C y material de investigación relacionado.' },
+      { titleEn: 'Growth factor compounds', titleEs: 'Factores de crecimiento', textEn: 'Sermorelin, CJC-1295, Tesamorelin, NAD+.', textEs: 'Sermorelin, CJC-1295, Tesamorelin, NAD+.' },
+      { titleEn: 'Handling & precautions', titleEs: 'Manejo y precauciones', textEn: 'What the literature reports about handling these materials.', textEs: 'Lo que la literatura reporta sobre el manejo de estos materiales.' },
     ],
     coaTitleEn: 'COA Library',
     coaTitleEs: 'Biblioteca COA',
@@ -261,8 +278,8 @@ export const DEFAULT_PUBLIC_PAGE_SETTINGS = {
     ],
     ctaTitleEn: "Can't find what you're looking for?",
     ctaTitleEs: '¿No encuentras lo que buscas?',
-    ctaTextEn: 'Our team is happy to help with product or dosing questions over a call.',
-    ctaTextEs: 'Nuestro equipo puede ayudar con preguntas de productos o dosificación.',
+    ctaTextEn: 'Our team is happy to help with availability, documentation or an order over a call.',
+    ctaTextEs: 'Nuestro equipo puede ayudar con disponibilidad, documentación o un pedido por teléfono.',
   },
   page_affiliate_program: {
     pageVersion: 'v1',
