@@ -130,6 +130,21 @@ export const ORDER_INVENTORY_COLUMNS = [
   'inventory_restored_at',
 ];
 
+/**
+ * What add-order-research-acknowledgement.sql adds.
+ *
+ * Which wording of the research-use acknowledgement the customer agreed to, and
+ * when we accepted it. The gate itself does not depend on these: api/orders/create
+ * refuses an order that did not carry the acknowledgement regardless of whether
+ * the SQL has been run. All that is lost without the migration is the record of
+ * it — and a checkout that refused every order for the hours between a deploy
+ * and a hand-pasted migration would defeat the point of having the gate at all.
+ */
+export const ORDER_RESEARCH_ACK_COLUMNS = [
+  'research_ack_version',
+  'research_ack_at',
+];
+
 /** Columns added by fulfillment-migration.sql. */
 export const ORDER_FULFILLMENT_COLUMNS = [
   'ready_to_prepare_at',

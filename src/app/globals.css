@@ -1793,6 +1793,94 @@ body {
     transform: scale(1.1);
 }
 
+/* The research-use gate that stands in front of the checkout form.
+   Styled as a panel rather than one more field: it is the only thing on
+   screen at this step, and it has to read as a decision the customer is
+   making, not a checkbox to skim past on the way to paying. */
+.research-ack-gate {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg-card);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+}
+
+.research-ack-gate__title {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--text-main);
+    margin: 0 0 6px 0;
+}
+
+.research-ack-gate__intro {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0 0 16px 0;
+}
+
+.research-ack-gate__check {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    cursor: pointer;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--text-main);
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.research-ack-gate__check:hover {
+    border-color: var(--primary);
+}
+
+.research-ack-gate__check--error {
+    border-color: var(--danger-border);
+    background: var(--danger-bg);
+}
+
+/* 20px, not the browser default: this is the one control on the step and it
+   is tapped with a thumb. */
+.research-ack-gate__check input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    margin: 1px 0 0 0;
+    flex-shrink: 0;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.research-ack-gate__error {
+    color: var(--danger);
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin: 10px 0 0 0;
+}
+
+.research-ack-gate__btn {
+    width: 100%;
+    margin-top: 16px;
+    padding: 15px;
+    border: none;
+    border-radius: 12px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: filter 0.2s, transform 0.2s;
+}
+
+.research-ack-gate__btn:hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+}
+
 /* Checkout Step Headers */
 .checkout-step-header {
     display: flex;

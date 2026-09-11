@@ -9,7 +9,7 @@ import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
 import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
 import { checkoutOrderStatus } from '@/lib/checkoutOrderStatus.mjs';
-import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import { ORDER_RESEARCH_ACK_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import {
   CustomerSessionError,
@@ -20,6 +20,7 @@ import { agentMatchKeys } from '@/lib/agentOrders';
 import { CUSTOMER_HISTORY_SOURCE, buildAgentNameResolver, lookupHistoricalAgent } from '@/lib/agentAttribution.mjs';
 import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
 import { identityMessage, validateCustomerName } from '@/lib/checkoutIdentity.mjs';
+import { researchAckMessage, researchAckRecord, validateResearchAck } from '@/lib/researchAcknowledgement.mjs';
 import { createCardCheckoutToken } from '@/lib/cardPaymentLink';
 import {
   consumeDurableRateLimit,
@@ -432,6 +433,26 @@ export async function POST(request) {
     }
     order.customer_name = nameCheck.name;
 
+    // The bank's condition on the card account: no order may be created — and
+    // therefore no card checkout token minted — without the research-use
+    // acknowledgement the storefront gates the checkout form behind. Checked
+    // here rather than only in the browser for the same reason as the name
+    // above, and because this endpoint is the single door the card path and
+    // the WhatsApp path both go through.
+    const ackCheck = validateResearchAck(order.research_ack);
+    if (!ackCheck.ok) {
+      return NextResponse.json(
+        { error: researchAckMessage(ackCheck.reason, orderLang), errorCode: ackCheck.reason },
+        { status: 400 },
+      );
+    }
+    // What the browser sent was a claim; what goes on the row is our own record
+    // of accepting it, stamped with our clock. The nested object itself must not
+    // survive — nothing whitelists the order fields before the insert, so a
+    // stray key here becomes an unknown column and fails the whole order.
+    delete order.research_ack;
+    Object.assign(order, researchAckRecord());
+
     let resolvedPromo = null;
 
     try {
@@ -629,7 +650,18 @@ export async function POST(request) {
     // than its marketing tag.
     let { data, error, droppedColumns } = await writeDroppingMissingColumns(
       orderRow,
-      ['utm_campaign', 'deal_id', 'inventory_deducted', 'volume_discount_pct'],
+      [
+        'utm_campaign',
+        'deal_id',
+        'inventory_deducted',
+        'volume_discount_pct',
+        // add-order-research-acknowledgement.sql. The gate is enforced above
+        // whether or not this SQL has been pasted in; without it we simply lose
+        // the audit trail of which wording was agreed to. Refusing the order
+        // instead would take checkout down for the window between the deploy
+        // and the migration, which is the opposite of what the bank wants.
+        ...ORDER_RESEARCH_ACK_COLUMNS,
+      ],
       (row) => supabase.from('orders').insert(row).select('id, order_number').single(),
     );
     if (droppedColumns?.length) {
