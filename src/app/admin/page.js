@@ -572,6 +572,7 @@ export default function AdminPage() {
 
   // Edit Description Modal States
   const [editDescModalOpen, setEditDescModalOpen] = useState(false);
+  const [changedProductIds, setChangedProductIds] = useState(() => new Set());
   const [editDescProduct, setEditDescProduct] = useState(null);
   const [editDescEn, setEditDescEn] = useState('');
   const [editDescEs, setEditDescEs] = useState('');
@@ -3082,6 +3083,16 @@ Core Rules:
     setProducts(prev => prev.map(p =>
       p.id === productId ? { ...p, [fieldName]: val } : p
     ));
+    // Remembered so the save confirmation can name what it is about to write.
+    // Nothing on this grid saves as you type — an operator can edit thirty
+    // cells across ten rows and then walk away, and until now the only signal
+    // that anything was pending was remembering that you had typed.
+    setChangedProductIds(prev => {
+      if (prev.has(productId)) return prev;
+      const next = new Set(prev);
+      next.add(productId);
+      return next;
+    });
   };
 
   // Toggle a product's visibility on the public catalog.
@@ -4697,6 +4708,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           if (!res.ok || data.error) throw new Error(data.error || 'Failed to save products');
 
           setSaveStatus("Changes successfully saved to database!");
+          setChangedProductIds(new Set()); // the pending list is now written
           loadAdminData(); // reload fresh rows
         } catch (err) {
           console.error("Database save changes error:", err);
@@ -5452,6 +5464,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             setEditDescEs={setEditDescEs} setEditDescModalOpen={setEditDescModalOpen}
             handleMoveRow={handleMoveRow} handleDeleteRow={handleDeleteRow}
             handleToggleHidden={handleToggleHidden}
+            changedProductIds={changedProductIds}
           />
           </ErrorBoundary>
         )}

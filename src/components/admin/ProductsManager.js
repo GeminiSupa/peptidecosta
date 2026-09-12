@@ -35,10 +35,21 @@ export default function ProductsManager({
   handleImageCellUpload,
   setEditDescProduct, setEditDescEn, setEditDescEs, setEditDescModalOpen,
   handleMoveRow, handleDeleteRow,
-  handleToggleHidden
+  handleToggleHidden,
+  changedProductIds
 }) {
   const [mobileEditProduct, setMobileEditProduct] = useState(null);
   const [mobileProductError, setMobileProductError] = useState('');
+  const [saveConfirmOpen, setSaveConfirmOpen] = useState(false);
+
+  // Which rows have been edited since the last save. Save Changes writes the
+  // whole grid regardless — this is only so the operator is told what they are
+  // about to commit, which on a table this wide is not otherwise knowable.
+  const changedProducts = useMemo(() => {
+    if (!changedProductIds || changedProductIds.size === 0) return [];
+    return products.filter((p) => changedProductIds.has(p.id));
+  }, [products, changedProductIds]);
+  const changedCount = changedProducts.length;
 
   const formatDerivedCrc = (usdPrice) => {
     const usdNum = parseFloat(String(usdPrice || '').replace(/[^0-9.]/g, '')) || 0;
@@ -219,9 +230,12 @@ export default function ProductsManager({
             <Plus size={16} />
             Add Product Row
           </button>
-          <button className="admin-btn admin-btn-primary" onClick={() => handleSaveChanges()} disabled={saveLoading}>
+          <button className="admin-btn admin-btn-primary" onClick={() => setSaveConfirmOpen(true)} disabled={saveLoading}>
             <Save size={16} />
             {saveLoading ? 'Syncing DB...' : 'Save Changes'}
+            {changedCount > 0 && (
+              <span className="pm-pending-count">{changedCount}</span>
+            )}
           </button>
           {products.length > 0 && (
             <button
@@ -351,12 +365,31 @@ export default function ProductsManager({
             <tbody>
               {filteredProducts.map((p) => {
                 const idx = products.findIndex(prod => prod.id === p.id);
+                // Clicking the row opens the description editor. That is the
+                // reason anyone comes to this grid for a specific product, and
+                // it was previously reachable only by scrolling sideways past
+                // ten columns to find the Edit Info button.
+                //
+                // Every other cell here is a live control, so the click is
+                // ignored when it lands on one — otherwise picking a category
+                // or correcting a price would fling a modal over the grid.
+                // closest() rather than testing the target directly, because
+                // the click often lands on an icon inside a button. A drag that
+                // selected text is a read, not a click, and is ignored too.
                 return (
                 <tr
                   key={p.id}
                   id={`product-row-${p.id}`}
                   className={highlightedProductId === p.id ? 'row-highlight' : ''}
                   style={p.hidden ? { opacity: 0.5 } : undefined}
+                  onClick={(e) => {
+                    if (e.target.closest('input, select, textarea, button, a, label, [contenteditable="true"]')) return;
+                    if (window.getSelection && String(window.getSelection()).length > 0) return;
+                    setEditDescProduct(p);
+                    setEditDescEn(p.descriptionEn || '');
+                    setEditDescEs(p.descriptionEs || '');
+                    setEditDescModalOpen(true);
+                  }}
                 >
                   <td data-label="#" style={{ color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>{idx + 1}</td>
                   
@@ -943,6 +976,127 @@ export default function ProductsManager({
           </div>
         </div>
       )}
+      {saveConfirmOpen && (
+        <div className="pm-confirm-overlay" onClick={() => setSaveConfirmOpen(false)}>
+          <div className="pm-confirm" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="pm-confirm-title">
+            <h3 id="pm-confirm-title">Save to the live catalog?</h3>
+
+            {changedCount > 0 ? (
+              <>
+                <p>
+                  {changedCount === 1
+                    ? 'One product has been edited since the last save:'
+                    : `${changedCount} products have been edited since the last save:`}
+                </p>
+                <ul className="pm-confirm-list">
+                  {changedProducts.slice(0, 12).map((p) => (
+                    <li key={p.id}>{p.product || '(unnamed row)'}</li>
+                  ))}
+                  {changedCount > 12 && <li className="pm-confirm-more">and {changedCount - 12} more</li>}
+                </ul>
+              </>
+            ) : (
+              <p>
+                No edits are pending. Saving now rewrites every row with what is
+                currently on screen, which is harmless but does nothing.
+              </p>
+            )}
+
+            <p className="pm-confirm-note">
+              This writes to the database immediately and customers see it on the
+              storefront straight away. There is no undo.
+            </p>
+
+            <div className="pm-confirm-actions">
+              <button type="button" className="admin-btn" onClick={() => setSaveConfirmOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn-primary"
+                disabled={saveLoading}
+                onClick={() => { setSaveConfirmOpen(false); handleSaveChanges(); }}
+              >
+                <Save size={15} />
+                {changedCount > 0 ? `Save ${changedCount} change${changedCount === 1 ? '' : 's'}` : 'Save anyway'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .pm-pending-count {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 18px;
+          height: 18px;
+          margin-left: 6px;
+          padding: 0 5px;
+          border-radius: 9px;
+          background: rgba(255, 255, 255, 0.25);
+          font-size: 0.68rem;
+          font-weight: 800;
+        }
+        .pm-confirm-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 10000;
+          background: rgba(2, 6, 23, 0.72);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          overflow-y: auto;
+        }
+        .pm-confirm {
+          background: #0f172a;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 14px;
+          padding: 24px;
+          width: 100%;
+          max-width: 460px;
+          margin: auto;
+          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+          color: #e2e8f0;
+        }
+        .pm-confirm h3 {
+          margin: 0 0 12px;
+          font-size: 1.05rem;
+          font-weight: 800;
+        }
+        .pm-confirm p {
+          margin: 0 0 12px;
+          font-size: 0.85rem;
+          line-height: 1.5;
+          color: #cbd5e1;
+        }
+        .pm-confirm-list {
+          margin: 0 0 14px;
+          padding-left: 20px;
+          max-height: 190px;
+          overflow-y: auto;
+          font-size: 0.82rem;
+          line-height: 1.6;
+          color: #e2e8f0;
+        }
+        .pm-confirm-more { color: #94a3b8; list-style: none; margin-left: -20px; }
+        .pm-confirm-note {
+          padding: 10px 12px;
+          border-radius: 8px;
+          background: rgba(234, 179, 8, 0.1);
+          border: 1px solid rgba(234, 179, 8, 0.25);
+          color: #fbbf24 !important;
+          font-size: 0.78rem !important;
+        }
+        .pm-confirm-actions {
+          display: flex;
+          gap: 10px;
+          justify-content: flex-end;
+          margin-top: 4px;
+        }
+      `}</style>
     </div>
   );
 }
