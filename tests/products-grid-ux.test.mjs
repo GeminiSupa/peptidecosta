@@ -16,12 +16,26 @@ const admin = await readFile(
   'utf8',
 );
 
-test('clicking a row opens the description editor', () => {
-  // Edit Info sat ten columns to the right, past a horizontal scrollbar, which
-  // is a long way to travel for the thing most people open the grid to change.
-  assert.match(grid, /onClick=\{\(e\) => \{[\s\S]{0,400}setEditDescModalOpen\(true\)/);
-  assert.match(grid, /setEditDescEn\(p\.descriptionEn \|\| ''\)/);
-  assert.match(grid, /setEditDescEs\(p\.descriptionEs \|\| ''\)/);
+test('clicking a row opens the full product editor', () => {
+  // Editing a product otherwise means scrolling a fifteen-column table sideways
+  // and landing on the right cell in the right row.
+  assert.match(grid, /onClick=\{\(e\) => \{[\s\S]{0,300}openMobileEditor\(p\)/);
+});
+
+test('the product editor is not restricted to phones any more', () => {
+  // Every rule for this panel used to live inside the 768px media query, and
+  // the markup carried admin-mobile-only. Desktop opens the same panel now.
+  assert.doesNotMatch(grid, /product-mobile-drawer-overlay admin-mobile-only/);
+});
+
+test('saving the panel cannot revert a description edited from inside it', () => {
+  // mobileEditProduct is a snapshot from when the panel opened. The description
+  // modal writes to the grid separately, so spreading the whole snapshot on
+  // save would put the old text back over the new — losing the edit with no
+  // error and no sign anything happened.
+  assert.match(grid, /const \{ descriptionEn, descriptionEs, \.\.\.draft \} = mobileEditProduct;/);
+  assert.match(grid, /\{ \.\.\.product, \.\.\.draft \}/);
+  assert.doesNotMatch(grid, /\{ \.\.\.product, \.\.\.mobileEditProduct \}/);
 });
 
 test('a click on any live control does not open the editor', () => {

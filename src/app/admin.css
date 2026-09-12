@@ -8736,6 +8736,44 @@
     display: none;
 }
 
+/*
+ * The product editor panel.
+ *
+ * It was built for the mobile card list and every rule for it lived inside the
+ * 768px media query. Clicking a row on desktop now opens the same panel — one
+ * editor for one product, rather than a second desktop-only form that would
+ * drift out of step with this one — so it needs a desktop shape as well.
+ *
+ * On a phone it stays a bottom sheet, which is where a thumb is. On a wide
+ * screen a sheet stuck to the bottom edge reads as a notification, so here it
+ * is a centred dialog. The class names still say "mobile" because renaming them
+ * would touch a hundred call sites for no behavioural gain.
+ */
+.product-mobile-drawer-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
+    background: rgba(0, 0, 0, 0.68);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    overflow-y: auto;
+}
+
+.product-mobile-drawer {
+    width: 100%;
+    max-width: 560px;
+    max-height: 86vh;
+    margin: auto;
+    overflow: auto;
+    background: #0e1626;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 22px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
 @media (max-width: 768px) {
     .admin-mobile-only {
         display: block;

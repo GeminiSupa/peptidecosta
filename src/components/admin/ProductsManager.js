@@ -130,8 +130,15 @@ export default function ProductsManager({
     }
     const original = products.find((p) => p.id === mobileEditProduct.id);
     if (!original) return;
+    // The draft is a snapshot taken when the panel opened, and it does not own
+    // the descriptions — those are edited in their own modal, which writes
+    // straight to the grid through handleCellChange. Spreading the whole draft
+    // would put the snapshot's stale copy back over a description that was
+    // just rewritten, silently undoing it. Everything else here the panel does
+    // own, so it wins.
+    const { descriptionEn, descriptionEs, ...draft } = mobileEditProduct;
     const nextProducts = products.map((product) => (
-      product.id === mobileEditProduct.id ? { ...product, ...mobileEditProduct } : product
+      product.id === mobileEditProduct.id ? { ...product, ...draft } : product
     ));
     [
       'product',
@@ -365,10 +372,11 @@ export default function ProductsManager({
             <tbody>
               {filteredProducts.map((p) => {
                 const idx = products.findIndex(prod => prod.id === p.id);
-                // Clicking the row opens the description editor. That is the
-                // reason anyone comes to this grid for a specific product, and
-                // it was previously reachable only by scrolling sideways past
-                // ten columns to find the Edit Info button.
+                // Clicking the row opens the full product editor — the same
+                // panel the mobile card list uses, which already carries every
+                // field on this row plus a way through to the description.
+                // Editing a product otherwise means scrolling a fifteen-column
+                // table sideways and hitting the right cell in the right row.
                 //
                 // Every other cell here is a live control, so the click is
                 // ignored when it lands on one — otherwise picking a category
@@ -385,10 +393,7 @@ export default function ProductsManager({
                   onClick={(e) => {
                     if (e.target.closest('input, select, textarea, button, a, label, [contenteditable="true"]')) return;
                     if (window.getSelection && String(window.getSelection()).length > 0) return;
-                    setEditDescProduct(p);
-                    setEditDescEn(p.descriptionEn || '');
-                    setEditDescEs(p.descriptionEs || '');
-                    setEditDescModalOpen(true);
+                    openMobileEditor(p);
                   }}
                 >
                   <td data-label="#" style={{ color: '#64748b', fontWeight: 'bold', textAlign: 'center' }}>{idx + 1}</td>
@@ -778,7 +783,7 @@ export default function ProductsManager({
       )}
 
       {mobileEditProduct && (
-        <div className="product-mobile-drawer-overlay admin-mobile-only" onClick={() => setMobileEditProduct(null)}>
+        <div className="product-mobile-drawer-overlay" onClick={() => setMobileEditProduct(null)}>
           <div className="product-mobile-drawer" role="dialog" aria-label="Edit product" onClick={(e) => e.stopPropagation()}>
             <div className="product-mobile-drawer-header">
               <div>
