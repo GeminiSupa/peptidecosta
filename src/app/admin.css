@@ -8774,6 +8774,150 @@
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
 }
 
+/* The panel's contents. These lived inside the 768px query with everything
+   else, which left the desktop dialog rendering as raw unstyled labels and
+   inputs running into each other. Nothing here is width-specific — the
+   bottom-sheet positioning is what stays behind in the media query. */
+.product-mobile-drawer-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.product-mobile-drawer-header h3 {
+    margin: 0;
+    color: #f8fafc;
+    font-size: 1rem;
+}
+
+.product-mobile-drawer-header p {
+    margin: 3px 0 0;
+    color: #94a3b8;
+    font-size: 0.74rem;
+}
+
+.product-mobile-close {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: #cbd5e1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.product-mobile-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.product-mobile-hint,
+.product-mobile-error {
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+.product-mobile-hint {
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.18);
+    color: #bae6fd;
+}
+
+.product-mobile-error {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: rgba(248, 113, 113, 0.12);
+    border: 1px solid rgba(248, 113, 113, 0.26);
+    color: #fca5a5;
+    margin-bottom: 12px;
+}
+
+.product-mobile-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.product-mobile-form label span {
+    color: #94a3b8;
+    font-size: 0.7rem;
+    font-weight: 850;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.product-mobile-form input,
+.product-mobile-form select,
+.product-mobile-form textarea {
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #111a2c;
+    color: #f8fafc;
+    border-radius: 10px;
+    padding: 11px 12px;
+    font-size: 0.9rem;
+    outline: none;
+}
+
+.product-mobile-form textarea {
+    resize: vertical;
+}
+
+.product-mobile-form small {
+    color: #64748b;
+    font-size: 0.7rem;
+}
+
+.product-mobile-secondary-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.product-mobile-secondary-actions .admin-btn {
+    min-height: 42px;
+    padding: 8px 10px;
+    justify-content: center;
+    font-size: 0.76rem;
+}
+
+.product-mobile-secondary-actions .product-mobile-danger {
+    grid-column: 1 / -1;
+    border-color: rgba(248, 113, 113, 0.28);
+    color: #fca5a5;
+    background: rgba(248, 113, 113, 0.1);
+}
+
+.product-mobile-field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.product-mobile-drawer-actions {
+    position: sticky;
+    bottom: 0;
+    display: grid;
+    grid-template-columns: 1fr 1.35fr;
+    gap: 10px;
+    padding-top: 14px;
+    margin-top: 4px;
+    background: linear-gradient(to top, #0e1626 78%, rgba(14, 22, 38, 0));
+}
+
+.product-mobile-drawer-actions .admin-btn {
+    min-height: 44px;
+    justify-content: center;
+}
+
 @media (max-width: 768px) {
     .admin-mobile-only {
         display: block;
@@ -9626,145 +9770,6 @@
         box-shadow: 0 -16px 38px rgba(0, 0, 0, 0.38);
     }
 
-    .product-mobile-drawer-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 14px;
-    }
-
-    .product-mobile-drawer-header h3 {
-        margin: 0;
-        color: #f8fafc;
-        font-size: 1rem;
-    }
-
-    .product-mobile-drawer-header p {
-        margin: 3px 0 0;
-        color: #94a3b8;
-        font-size: 0.74rem;
-    }
-
-    .product-mobile-close {
-        width: 36px;
-        height: 36px;
-        border-radius: 10px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(255, 255, 255, 0.04);
-        color: #cbd5e1;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .product-mobile-form {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
-
-    .product-mobile-hint,
-    .product-mobile-error {
-        border-radius: 10px;
-        padding: 10px 12px;
-        font-size: 0.75rem;
-        line-height: 1.45;
-    }
-
-    .product-mobile-hint {
-        background: rgba(56, 189, 248, 0.1);
-        border: 1px solid rgba(56, 189, 248, 0.18);
-        color: #bae6fd;
-    }
-
-    .product-mobile-error {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        background: rgba(248, 113, 113, 0.12);
-        border: 1px solid rgba(248, 113, 113, 0.26);
-        color: #fca5a5;
-        margin-bottom: 12px;
-    }
-
-    .product-mobile-form label {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-
-    .product-mobile-form label span {
-        color: #94a3b8;
-        font-size: 0.7rem;
-        font-weight: 850;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-    }
-
-    .product-mobile-form input,
-    .product-mobile-form select,
-    .product-mobile-form textarea {
-        width: 100%;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: #111a2c;
-        color: #f8fafc;
-        border-radius: 10px;
-        padding: 11px 12px;
-        font-size: 0.9rem;
-        outline: none;
-    }
-
-    .product-mobile-form textarea {
-        resize: vertical;
-    }
-
-    .product-mobile-form small {
-        color: #64748b;
-        font-size: 0.7rem;
-    }
-
-    .product-mobile-secondary-actions {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
-    }
-
-    .product-mobile-secondary-actions .admin-btn {
-        min-height: 42px;
-        padding: 8px 10px;
-        justify-content: center;
-        font-size: 0.76rem;
-    }
-
-    .product-mobile-secondary-actions .product-mobile-danger {
-        grid-column: 1 / -1;
-        border-color: rgba(248, 113, 113, 0.28);
-        color: #fca5a5;
-        background: rgba(248, 113, 113, 0.1);
-    }
-
-    .product-mobile-field-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-    }
-
-    .product-mobile-drawer-actions {
-        position: sticky;
-        bottom: 0;
-        display: grid;
-        grid-template-columns: 1fr 1.35fr;
-        gap: 10px;
-        padding-top: 14px;
-        margin-top: 4px;
-        background: linear-gradient(to top, #0e1626 78%, rgba(14, 22, 38, 0));
-    }
-
-    .product-mobile-drawer-actions .admin-btn {
-        min-height: 44px;
-        justify-content: center;
-    }
 }
 
 /* Final mobile guardrails for the WhatsApp-style CRM.
