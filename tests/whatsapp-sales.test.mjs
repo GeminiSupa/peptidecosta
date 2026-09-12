@@ -90,3 +90,55 @@ test('no limited promotion still reports truthful automatic volume savings', () 
   assert.match(reply, /15% off 5\+ vials/);
   assert.doesNotMatch(reply, /competitively priced/i);
 });
+
+test('the context names the valid codes and forbids every other one', () => {
+  // Filtering the list is not enough on its own. A code the assistant quoted
+  // correctly weeks ago is still in the conversation history, and a customer
+  // holding a dead code will quote it too — both read as evidence the discount
+  // exists unless the model is told the list is the whole list.
+  const snapshot = buildWhatsAppSalesSnapshot({
+    now: NOW,
+    promos: [
+      { code: 'LIVE15', discount_pct: 0.15, is_active: true, hidden: false },
+      { code: 'DEAD10', discount_pct: 0.1, is_active: true, hidden: false, valid_until: '2026-08-01T00:00:00.000Z' },
+    ],
+  });
+
+  const context = formatWhatsAppSalesContext(snapshot);
+  assert.match(context, /The only promo codes that are valid right now are: LIVE15\./);
+  assert.doesNotMatch(context, /DEAD10/);
+  assert.match(context, /quoted earlier in this conversation/);
+  assert.match(context, /the customer says they hold/);
+  assert.match(context, /Never confirm, repeat, extend or honour a code that is not in this list/);
+});
+
+test('with nothing live the context says so rather than staying silent', () => {
+  // Saying nothing leaves the model free to fall back on whatever code it can
+  // see in the history. It has to be told there are none.
+  const snapshot = buildWhatsAppSalesSnapshot({
+    now: NOW,
+    promos: [
+      { code: 'EXPIRED', discount_pct: 0.2, is_active: true, hidden: false, valid_until: '2026-08-01T00:00:00.000Z' },
+    ],
+  });
+
+  const context = formatWhatsAppSalesContext(snapshot);
+  assert.match(context, /There are no promo codes valid right now\./);
+  assert.doesNotMatch(context, /EXPIRED/);
+  // The automatic volume saving is real and unconditional, so it stays.
+  assert.match(context, /15% off 5\+ vials/);
+});
+
+test('a code used up to its limit is not named as valid', () => {
+  const snapshot = buildWhatsAppSalesSnapshot({
+    now: NOW,
+    promos: [
+      { code: 'GONE', discount_pct: 0.2, is_active: true, hidden: false, usage_limit: 5, usage_count: 5 },
+      { code: 'LEFT', discount_pct: 0.2, is_active: true, hidden: false, usage_limit: 5, usage_count: 4 },
+    ],
+  });
+
+  const context = formatWhatsAppSalesContext(snapshot);
+  assert.match(context, /valid right now are: LEFT\./);
+  assert.doesNotMatch(context, /GONE/);
+});

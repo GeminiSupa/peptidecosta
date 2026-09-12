@@ -13,6 +13,14 @@ import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { getFacebookReviewUrl, getTrustpilotReviewUrl } from '@/lib/businessLinks';
 import { useTrustpilotRating } from '@/hooks/useTrustpilotRating';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
+import {
+  RESEARCH_ACK_VERSION,
+  researchAckContinue,
+  researchAckIntro,
+  researchAckMessage,
+  researchAckText,
+  researchAckTitle,
+} from '@/lib/researchAcknowledgement.mjs';
 import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage, effectiveVolumeDiscountPct, replacesVolumeDiscount } from '@/lib/promoEligibility.mjs';
 import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT } from '@/lib/bulkDeal.mjs';
 import {
@@ -93,6 +101,9 @@ const CARD_CHECKOUT_AVAILABLE = CARD_CHECKOUT_ENABLED && !CARD_PAYMENTS_PAUSED;
 const CARD_CHECKOUT_LIVE = process.env.NEXT_PUBLIC_CARD_CHECKOUT_MODE === 'live';
 const GATE_BYPASS_VALUES = new Set(['1', 'true', 'yes', 'skip', 'bypass']);
 const USER_SELECTED_LANG_KEY = 'lang_user_selected';
+// The stored value is the wording's version, not a bare "true", so that
+// revising the sentence re-asks everyone who agreed to the old one.
+const RESEARCH_ACK_STORAGE_KEY = 'research_ack';
 
 const CATEGORY_TRANSLATIONS = {
   'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
@@ -418,6 +429,14 @@ export default function CatalogPage() {
   });
   const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState({});
+  // Has the customer ticked the research-use acknowledgement that stands in
+  // front of the checkout form? Our processor's bank requires the payment
+  // fields be unreachable until they have. Held in session storage rather than
+  // local: a refresh part-way through checkout must not throw the box away,
+  // but coming back tomorrow should ask again.
+  const [researchAck, setResearchAck] = useState(false);
+  const [researchAckTicked, setResearchAckTicked] = useState(false);
+  const [researchAckError, setResearchAckError] = useState(false);
   // Why the order could not be placed, in words the customer can act on.
   // { title, detail } — see failCheckout().
   const [checkoutError, setCheckoutError] = useState(null);
@@ -1032,6 +1051,15 @@ export default function CatalogPage() {
     // Viewmode loaded from localStorage
     const savedView = localStorage.getItem('viewMode') || 'list';
     setViewMode(savedView === 'compact' ? 'list' : savedView);
+
+    // The acknowledgement survives a reload, but only for as long as this tab
+    // is open, and only if it was given against the wording we still show. A
+    // revised sentence re-asks rather than counting an agreement to text the
+    // customer never read — which is also what the server enforces.
+    if (safeSessionStorage.getItem(RESEARCH_ACK_STORAGE_KEY) === RESEARCH_ACK_VERSION) {
+      setResearchAck(true);
+      setResearchAckTicked(true);
+    }
 
     // Cart loaded from localStorage
     const savedCart = localStorage.getItem('cart');
@@ -2420,7 +2448,15 @@ export default function CatalogPage() {
    */
   const saveOrderToDatabase = async (orderRow, { repriceRetriesLeft = 1 } = {}) => {
     try {
-      const orderPayload = applyStoredAttribution(orderRow);
+      // Both checkout paths — the card button and the WhatsApp submit — come
+      // through here, so the acknowledgement is attached once rather than at
+      // each call site where one of them could quietly be missed. The server
+      // stamps its own time against it; all that travels is which wording was
+      // agreed to.
+      const orderPayload = {
+        ...applyStoredAttribution(orderRow),
+        research_ack: { accepted: true, version: RESEARCH_ACK_VERSION },
+      };
 
       // A signed-in customer's session travels with the order so the server can
       // stamp its owner. The id itself is never sent from here — the API derives
@@ -2543,6 +2579,20 @@ export default function CatalogPage() {
       return {
         title: lang === 'en' ? 'Your total has changed' : 'Su total cambió',
         detail: serverMessage,
+      };
+    }
+
+    // The server would only refuse on the acknowledgement if this tab got past
+    // the gate and the server disagrees — a session whose storage was cleared
+    // mid-checkout, or a tab held open across a change to the wording. Put the
+    // gate back rather than leaving them on a form whose submit cannot work.
+    if (result?.errorCode === 'ackMissing' || result?.errorCode === 'ackStale') {
+      setResearchAck(false);
+      setResearchAckTicked(false);
+      safeSessionStorage.removeItem(RESEARCH_ACK_STORAGE_KEY);
+      return {
+        title: lang === 'en' ? 'One more confirmation needed' : 'Falta una confirmación',
+        detail: serverMessage || researchAckMessage(result?.errorCode, lang),
       };
     }
 
@@ -4486,11 +4536,59 @@ export default function CatalogPage() {
               )}
             </div>
 
-            {/* noValidate is deliberate: native constraint validation runs before
+            {/* The research-use gate. Our card processor's bank requires that
+                nobody reaches a payment form without passing this first, so the
+                checkout fields are genuinely not rendered until it is ticked —
+                not merely disabled, and not a box at the bottom of the form.
+                api/orders/create refuses an order that skipped it either way. */}
+            {!researchAck ? (
+            <div className="research-ack-gate">
+              <h3 className="research-ack-gate__title">{researchAckTitle(lang)}</h3>
+              <p className="research-ack-gate__intro">{researchAckIntro(lang)}</p>
+
+              <label className={`research-ack-gate__check${researchAckError ? ' research-ack-gate__check--error' : ''}`}>
+                <input
+                  id="field-researchAck"
+                  type="checkbox"
+                  checked={researchAckTicked}
+                  onChange={(e) => {
+                    setResearchAckTicked(e.target.checked);
+                    if (e.target.checked) setResearchAckError(false);
+                  }}
+                />
+                <span>{researchAckText(lang)}</span>
+              </label>
+
+              {researchAckError && (
+                <p className="research-ack-gate__error" role="alert">
+                  {researchAckMessage('ackMissing', lang)}
+                </p>
+              )}
+
+              <button
+                type="button"
+                className="research-ack-gate__btn"
+                onClick={() => {
+                  if (!researchAckTicked) {
+                    // Say what is missing where they are looking, rather than
+                    // leaving a dead button they have to guess about.
+                    setResearchAckError(true);
+                    revealField('researchAck');
+                    return;
+                  }
+                  setResearchAck(true);
+                  safeSessionStorage.setItem(RESEARCH_ACK_STORAGE_KEY, RESEARCH_ACK_VERSION);
+                }}
+              >
+                {researchAckContinue(lang)}
+              </button>
+            </div>
+            ) : (
+            /* noValidate is deliberate: native constraint validation runs before
                 the submit event, so without it the browser's own bubble preempts
-                validateForm() and none of the inline field errors ever render. */}
+                validateForm() and none of the inline field errors ever render. */
             <form id="checkout-form-main" noValidate onSubmit={handleCheckoutSubmit} className="checkout-form" style={{ paddingBottom: '80px' }}>
-              
+
               <div className="checkout-step-header">
                 <span className="checkout-step-number">1</span>
                 <h3>{lang === 'en' ? 'Contact & Shipping' : 'Contacto y Envío'}</h3>
@@ -5055,6 +5153,7 @@ export default function CatalogPage() {
                 </div>
               )}
             </form>
+            )}
           </div>
         )}
         </div>
