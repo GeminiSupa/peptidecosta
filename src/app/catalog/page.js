@@ -1781,6 +1781,29 @@ export default function CatalogPage() {
     return statusText;
   };
 
+  /**
+   * The units-on-hand line the payment processor asked to see on every product.
+   *
+   * The count was always in the data and was only ever surfaced as an urgency
+   * badge below the low-stock threshold, which meant 57 of 73 products showed
+   * nothing at all. The processor wants the number present, not the warning.
+   *
+   * Returns null rather than a zero line when there is no count to show: a
+   * product nobody has counted yet (11 of them) must not claim "0 available",
+   * which reads as sold out, and an out-of-stock product already says so in its
+   * own badge. Below the threshold the red urgency badge is still the one that
+   * speaks, so this stays quiet and does not repeat the number beside it.
+   */
+  const stockUnitsLabel = (product) => {
+    if (!product) return null;
+    const count = product.inventoryCount;
+    if (count === null || count === undefined || !Number.isFinite(Number(count))) return null;
+    const units = Number(count);
+    if (units <= 0) return null;
+    if (units <= (product.lowStockThreshold || 5)) return null;
+    return lang === 'en' ? `${units} in stock` : `${units} disponibles`;
+  };
+
   const translateCategory = (catText) => {
     if (!catText) return '';
     
@@ -3967,6 +3990,11 @@ export default function CatalogPage() {
                           {translateStatus(p.status)}
                         </span>
                       </div>
+                      {inStock && stockUnitsLabel(p) && (
+                        <div className="stock-units-badge">
+                          <span>{stockUnitsLabel(p)}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="product-actions">
                       {inStock ? (
@@ -5154,6 +5182,11 @@ export default function CatalogPage() {
               {isInStock(selectedProduct.status) && selectedProduct.inventoryCount !== null && selectedProduct.inventoryCount <= (selectedProduct.lowStockThreshold || 5) && selectedProduct.inventoryCount > 0 && (
                 <div className="stock-badge stock-soon" style={{ position: 'static', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
                   {lang === 'en' ? `Only ${selectedProduct.inventoryCount} left in stock!` : `¡Solo quedan ${selectedProduct.inventoryCount} en inventario!`}
+                </div>
+              )}
+              {isInStock(selectedProduct.status) && stockUnitsLabel(selectedProduct) && (
+                <div className="stock-units-badge">
+                  <span>{stockUnitsLabel(selectedProduct)}</span>
                 </div>
               )}
             </div>

@@ -933,6 +933,33 @@ body {
 .stock-out { background: #fee2e2; color: #991b1b; border: 1px solid rgba(153, 27, 27, 0.15); }
 .stock-soon { background: #fef9c3; color: #854d0e; border: 1px solid rgba(133, 77, 14, 0.15); }
 
+/*
+ * Units on hand, shown on every in-stock product.
+ *
+ * The card processor asked for the inventory to be visible on the page. It sits
+ * beside the In Stock badge and is styled a step quieter than it — this is a
+ * statement of fact for a reviewer, not a selling point, and it must not
+ * compete with the status badge or the red "Only 3 left!" urgency badge that
+ * takes over below the low-stock threshold.
+ *
+ * Not uppercased, unlike its neighbour: "157 IN STOCK" reads as a shout, and
+ * the number is the part that matters.
+ */
+.stock-units-badge {
+    position: relative;
+    margin: 0;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    height: fit-content;
+    white-space: nowrap;
+    background: var(--bg-secondary);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+}
+
 /* Out of Stock Card Visuals */
 .card-out-of-stock .product-image img, 
 .card-out-of-stock .product-image {
