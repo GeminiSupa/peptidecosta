@@ -27,6 +27,24 @@ function isMissingDealsTable(error) {
 const normalizeName = (value) => String(value || '').trim().toLowerCase();
 
 /**
+ * Reviews are stored against the product's name, so a rename leaves them on the
+ * old name and they stop showing. Moved only when the person renaming asked for
+ * it, and only from this product's own previous name to its new one.
+ *
+ * @returns {Promise<number>} how many reviews moved
+ */
+async function moveReviewsToNewName(supabase, fromName, toName) {
+  if (!fromName || !toName || fromName === toName) return 0;
+  const { data, error } = await supabase
+    .from('product_reviews')
+    .update({ product_name: toName })
+    .eq('product_name', fromName)
+    .select('id');
+  if (error) throw error;
+  return (data || []).length;
+}
+
+/**
  * The live Weekly Deal, or null.
  *
  * Product editing predates Weekly Deals. A database that has not installed that
@@ -60,7 +78,7 @@ export async function PUT(request) {
   if (auth.error) return auth.error;
 
   try {
-    const { products, loadedIds, baseline } = await request.json();
+    const { products, loadedIds, baseline, moveReviewsForIds } = await request.json();
     if (!Array.isArray(products)) {
       return NextResponse.json({ error: 'products array is required' }, { status: 400 });
     }
@@ -133,12 +151,24 @@ export async function PUT(request) {
       if (error) throw error;
     }
 
+    // Only rows this save actually wrote, and only their own old -> new name,
+    // read from the database rather than from what the page claims.
+    const moveIds = new Set((Array.isArray(moveReviewsForIds) ? moveReviewsForIds : []).map(String));
+    const currentById = new Map((currentRows || []).map((row) => [String(row.id), row]));
+    let movedReviews = 0;
+    for (const row of toUpdate) {
+      if (!moveIds.has(String(row.id))) continue;
+      const before = currentById.get(String(row.id));
+      movedReviews += await moveReviewsToNewName(supabase, before?.product, row.product);
+    }
+
     return NextResponse.json({
       ok: true,
       updated: toUpdate.length,
       inserted: toInsert.length,
       deleted: plan.toDelete.length,
       skipped: plan.skipped,
+      movedReviews,
     });
   } catch (err) {
     console.error('[admin/products] save failed:', err);
@@ -152,7 +182,7 @@ export async function PUT(request) {
  * Refused when the product has changed since the page loaded, so an old tab
  * cannot put its copy back over a teammate's edit.
  */
-async function saveOneProduct(supabase, { product, baseline }) {
+async function saveOneProduct(supabase, { product, baseline, moveReviews }) {
   const id = product?.id;
   if (!isExistingProductId(id)) {
     return NextResponse.json({ error: 'This product has not been saved yet. Use Save Changes to add it.' }, { status: 400 });
@@ -194,7 +224,11 @@ async function saveOneProduct(supabase, { product, baseline }) {
     .single();
   if (writeError) throw writeError;
 
-  return NextResponse.json({ ok: true, product: saved, fingerprint: productFingerprint(saved) });
+  const movedReviews = moveReviews === true
+    ? await moveReviewsToNewName(supabase, currentRow.product, saved.product)
+    : 0;
+
+  return NextResponse.json({ ok: true, product: saved, fingerprint: productFingerprint(saved), movedReviews });
 }
 
 export async function PATCH(request) {

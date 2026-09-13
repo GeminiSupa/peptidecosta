@@ -561,6 +561,12 @@ export default function AdminPage() {
   // Every product as this tab loaded it (id -> fingerprint). Sent with each
   // save so the server can tell this tab's edits from a teammate's newer ones.
   const [productBaseline, setProductBaseline] = useState({});
+  // Each product's name as saved in the database, to spot a rename.
+  const [loadedProductNames, setLoadedProductNames] = useState({});
+  // True while the table holds edits not yet saved. A live reload (a new order,
+  // a review, a teammate's save) then leaves the table alone instead of
+  // silently wiping those edits; the save check still refuses any overwrite.
+  const productsDirtyRef = React.useRef(false);
   const [editDescProduct, setEditDescProduct] = useState(null);
   const [editDescEn, setEditDescEn] = useState('');
   const [editDescEs, setEditDescEs] = useState('');
@@ -2428,7 +2434,10 @@ Core Rules:
   };
 
   // Fetch admin products and orders
-  const loadAdminData = async () => {
+  const loadAdminData = async (options = {}) => {
+    // Called bare from live updates and buttons (a button passes its click
+    // event, which carries no forceProducts). Only a finished save forces it.
+    const forceProducts = options?.forceProducts === true;
     if (adminProfile && isSubUser(adminProfile)) {
       setLoadingProducts(false);
       setLoadingOrders(false);
@@ -2485,7 +2494,10 @@ Core Rules:
     fetchOrderAffiliates();
 
     // 1. Fetch Products
-    if (isSupabaseConfigured && supabase) {
+    const keepUnsavedProducts = productsDirtyRef.current && !forceProducts;
+    if (keepUnsavedProducts) {
+      console.log('Products table has unsaved edits; not reloading it.');
+    } else if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase
           .from('products')
@@ -2541,6 +2553,7 @@ Core Rules:
               : 1,
           }));
           setProductBaseline(buildProductBaseline(data));
+          setLoadedProductNames(Object.fromEntries(data.map((item) => [item.id, item.product || ''])));
           setIsDbConnected(true);
         }
       } catch (err) {
@@ -2550,7 +2563,9 @@ Core Rules:
     }
 
     // Fallback to local CSV products if database is empty or not configured
-    if (loadedProducts.length === 0) {
+    if (keepUnsavedProducts) {
+      // The unsaved table stays exactly as it is.
+    } else if (loadedProducts.length === 0) {
       try {
         const response = await fetch('/master_sheet.csv');
         const csvText = await response.text();
@@ -2611,6 +2626,7 @@ Core Rules:
         console.error("Local CSV load error:", err);
       }
     } else {
+      productsDirtyRef.current = false;
       setProducts(loadedProducts);
     }
     setLoadingProducts(false);
@@ -3069,6 +3085,7 @@ Core Rules:
 
   // Spreadsheet Cell modification helper
   const handleCellChange = (productId, fieldName, val) => {
+    productsDirtyRef.current = true;
     setProducts(prev => prev.map(p =>
       p.id === productId ? { ...p, [fieldName]: val } : p
     ));
@@ -3147,11 +3164,13 @@ Core Rules:
       freeBacSizeMl: 3,
       freeBacVialsPerItem: 1,
     };
+    productsDirtyRef.current = true;
     setProducts([newRow, ...products]);
   };
 
   // Delete row
   const handleDeleteRow = (productId) => {
+    productsDirtyRef.current = true;
     setProducts(products.filter(p => p.id !== productId));
   };
 
@@ -3164,6 +3183,7 @@ Core Rules:
     updated.splice(newIndex, 0, moved);
     // Update priority values so the order persists on save
     const withPriority = updated.map((p, i) => ({ ...p, priority: i }));
+    productsDirtyRef.current = true;
     setProducts(withPriority);
   };
 
@@ -3254,6 +3274,7 @@ Core Rules:
             };
           });
 
+        productsDirtyRef.current = true;
         setProducts(imported);
         setCsvStatus(`Successfully loaded ${imported.length} products from CSV into grid. Click "Save Changes" to sync database.`);
         setCsvLoading(false);
@@ -4670,7 +4691,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     return newP;
   };
 
-  const handleSaveChanges = async (productRowsArg) => {
+  const handleSaveChanges = async (productRowsArg, options = {}) => {
     const productRows = Array.isArray(productRowsArg) ? productRowsArg : products;
 
     if (!isDbConnected) {
@@ -4700,16 +4721,22 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               products: filled,
               loadedIds: Object.keys(productBaseline),
               baseline: productBaseline,
+              // Renamed products whose reviews should follow the new name.
+              moveReviewsForIds: Array.isArray(options?.moveReviewsForIds) ? options.moveReviewsForIds : [],
             }),
           });
           const data = await res.json();
           if (!res.ok || data.error) throw new Error(data.error || 'Failed to save products');
 
+          const movedNote = data.movedReviews > 0
+            ? ` Moved ${data.movedReviews} review${data.movedReviews === 1 ? '' : 's'} to the new name${data.movedReviews === 1 ? '' : 's'}.`
+            : '';
           setSaveStatus(data.skipped?.length
-            ? `Saved. Kept someone else's newer changes to: ${data.skipped.join(', ')}.`
-            : "Changes successfully saved to database!");
+            ? `Saved. Kept someone else's newer changes to: ${data.skipped.join(', ')}.${movedNote}`
+            : `Changes successfully saved to database!${movedNote}`);
           setChangedProductIds(new Set()); // the pending list is now written
-          loadAdminData(); // reload fresh rows
+          productsDirtyRef.current = false; // everything in the table is now written
+          loadAdminData({ forceProducts: true }); // reload fresh rows
         } catch (err) {
           console.error("Database save changes error:", err);
           setSaveStatus(`Failed to save: ${err.message || 'Row Level Security error'}`);
@@ -4733,7 +4760,10 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
    * product has changed since this tab loaded it. Returns { ok, error } so the
    * drawer can stay open and show why.
    */
-  const handleSaveProduct = async (product) => {
+  /** How many reviews (any status) are stored under a product name. */
+  const reviewCountFor = (name) => (name ? reviews.filter((r) => r.product_name === name).length : 0);
+
+  const handleSaveProduct = async (product, { moveReviews = false } = {}) => {
     if (!isDbConnected) {
       const error = 'Cannot save: Database is offline or in local fallback mode.';
       setSaveStatus(`❌ ${error}`);
@@ -4754,7 +4784,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       const filled = fillCrcFromUsd(product);
       const res = await adminFetch('/api/admin/products', {
         method: 'PATCH',
-        body: JSON.stringify({ product: filled, baseline: productBaseline[product.id] }),
+        body: JSON.stringify({ product: filled, baseline: productBaseline[product.id], moveReviews }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) {
@@ -4772,7 +4802,16 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         next.delete(product.id);
         return next;
       });
-      setSaveStatus(`"${filled.product}" saved to database.`);
+      const previousName = loadedProductNames[product.id];
+      setLoadedProductNames((prev) => ({ ...prev, [product.id]: filled.product }));
+      if (data.movedReviews > 0 && previousName) {
+        setReviews((prev) => prev.map((r) => (
+          r.product_name === previousName ? { ...r, product_name: filled.product } : r
+        )));
+      }
+      setSaveStatus(data.movedReviews > 0
+        ? `"${filled.product}" saved, and ${data.movedReviews} review${data.movedReviews === 1 ? '' : 's'} moved to it.`
+        : `"${filled.product}" saved to database.`);
       return { ok: true };
     } catch (err) {
       console.error('Save product error:', err);
@@ -5507,7 +5546,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             isCsvOpen={isCsvOpen} setIsCsvOpen={setIsCsvOpen}
             csvDragActive={csvDragActive} handleCsvDrag={handleCsvDrag} 
             handleCsvDrop={handleCsvDrop} handleCsvFileSelect={handleCsvFileSelect}
-            handleAddRow={handleAddRow} handleSaveChanges={handleSaveChanges} handleSaveProduct={handleSaveProduct} 
+            handleAddRow={handleAddRow} handleSaveChanges={handleSaveChanges} handleSaveProduct={handleSaveProduct} loadedProductNames={loadedProductNames} reviewCountFor={reviewCountFor} 
             saveLoading={saveLoading} saveStatus={saveStatus}
             setExportModalType={setExportModalType}
             csvStatus={csvStatus} setCsvStatus={setCsvStatus}

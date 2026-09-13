@@ -58,9 +58,25 @@ test('Save Changes asks before it writes', () => {
   // was about to change and no undo afterwards.
   assert.match(grid, /onClick=\{\(\) => setSaveConfirmOpen\(true\)\}/);
   assert.doesNotMatch(grid, /onClick=\{\(\) => handleSaveChanges\(\)\}/);
-  // The confirm button is the only path left to the actual save.
-  assert.match(grid, /setSaveConfirmOpen\(false\); handleSaveChanges\(\);/);
+  // The confirm button is the only path left to the actual save. It passes on
+  // which renamed products should take their reviews with them.
+  assert.match(grid, /setSaveConfirmOpen\(false\);\s*handleSaveChanges\(undefined, \{\s*moveReviewsForIds:/);
   assert.match(grid, /There is no undo/);
+});
+
+test('renaming a product with reviews asks whether to move them', async () => {
+  // Reviews are stored against the product name, so a silent rename left them
+  // behind where no customer sees them.
+  assert.match(grid, /Keep the reviews\?/);
+  assert.match(grid, /finishMobileSave\(renamePrompt\.product, true\)/);
+  assert.match(grid, /finishMobileSave\(renamePrompt\.product, false\)/);
+  // Save Changes asks per renamed product, ticked (move) by default.
+  assert.match(grid, /checked=\{!leaveReviewsById\[r\.id\]\}/);
+  // The server moves only a product's own old name to its new one, read from
+  // the database rather than from what the page claims.
+  const route = await readFile(new URL('../src/app/api/admin/products/route.js', import.meta.url), 'utf8');
+  assert.match(route, /moveReviewsToNewName\(supabase, before\?\.product, row\.product\)/);
+  assert.match(route, /moveReviewsToNewName\(supabase, currentRow\.product, saved\.product\)/);
 });
 
 test('the confirmation names the products it is about to write', () => {
