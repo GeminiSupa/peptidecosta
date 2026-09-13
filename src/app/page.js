@@ -42,7 +42,7 @@ const CATEGORY_FALLBACKS = [
 const FALLBACK_PRODUCTS = [
   {
     product: 'BPC-157 10mg',
-    category: 'Recovery & Healing',
+    category: 'Tissue Repair Compounds',
     price_usd: '$44.97',
     price_crc: '₡22,500',
     status: 'In Stock',
@@ -50,7 +50,7 @@ const FALLBACK_PRODUCTS = [
   },
   {
     product: 'GLP-1 10mg',
-    category: 'Weight Loss & Metabolism',
+    category: 'Metabolic & GLP-1 Compounds',
     price_usd: '$115.00',
     price_crc: '₡58,000',
     status: 'In Stock',
@@ -58,7 +58,7 @@ const FALLBACK_PRODUCTS = [
   },
   {
     product: 'Semaglutide 5mg',
-    category: 'Weight Loss & Metabolism',
+    category: 'Metabolic & GLP-1 Compounds',
     price_usd: '$84.50',
     price_crc: '₡42,500',
     status: 'In Stock',
@@ -66,7 +66,7 @@ const FALLBACK_PRODUCTS = [
   },
   {
     product: 'GHK-Cu 50mg',
-    category: 'Skin & Hair',
+    category: 'Copper & Dermatological Peptides',
     price_usd: '$64.00',
     price_crc: '₡32,000',
     status: 'In Stock',

@@ -331,7 +331,7 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
   const categoryList = categories.length
     ? categories.slice(0, 5)
     // Fallback only — must match real product categories so the links filter.
-    : ['Weight Loss & Metabolism', 'Performance & Hormones', 'Anti-Aging & Longevity', 'Recovery & Healing'];
+    : ['Metabolic & GLP-1 Compounds', 'Growth Hormone Secretagogues', 'Tissue Repair Compounds', 'Bioregulator Peptides'];
   const reviewLinks = [
     { id: 'trustpilot', label: 'Trustpilot', score: liveTrustpilotRating, logo: '★', href: getTrustpilotReviewUrl(lang, links) },
     { id: 'google', label: 'Google', score: '5.0', logo: 'G', href: links.googleReviewUrl || links.googleMapsUrl },

@@ -1,21 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, Trash2, FileText, Eye, EyeOff } from 'lucide-react';
 
-const CATEGORY_TRANSLATIONS = {
-  'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
-  'Exercise Mimetic & Metabolic Modulator': 'Exercise Mimetic & Metabolic Modulator',
-  'Recovery & Healing': 'Recuperación y curación',
-  'Anti-Inflammatory': 'Antiinflamatorio',
-  'Performance & Hormones': 'Rendimiento y hormonas',
-  'Anti-Aging & Longevity': 'Antienvejecimiento y longevidad',
-  'Immune System Modulation': 'Modulación del sistema inmunitario',
-  'Cognitive & Mood': 'Cognitivo y estado de ánimo',
-  'Sleep': 'Dormir',
-  'Sexual Health': 'Salud sexual',
-  'Tanning & Sexual Function': 'Bronceado y función sexual',
-  'Skin & Hair': 'Piel y cabello',
-  'Immune & Antioxidant': 'Sistema inmunitario y antioxidante',
-};
+import { CATALOG_CATEGORY_NAMES } from '@/lib/catalogCategories.mjs';
 
 export default function ProductsManager({
   products,
@@ -68,13 +54,16 @@ export default function ProductsManager({
     ),
     [products, productSearch]
   );
-  const categoryOptions = useMemo(
-    () => Array.from(new Set([
-      ...Object.keys(CATEGORY_TRANSLATIONS),
-      ...products.map(prod => prod.category).filter(Boolean)
-    ])).sort(),
-    [products]
-  );
+  // The current category list first, in its own order, then any other category
+  // a product still carries. An old name drops out of the list on its own once
+  // no product uses it, so moving products across is the whole migration.
+  const categoryOptions = useMemo(() => {
+    const current = new Set(CATALOG_CATEGORY_NAMES);
+    const others = Array.from(new Set(products.map(prod => prod.category).filter(Boolean)))
+      .filter((cat) => !current.has(cat))
+      .sort();
+    return [...CATALOG_CATEGORY_NAMES, ...others];
+  }, [products]);
   const mobileDirty = Boolean(mobileEditProduct && products.find((p) => p.id === mobileEditProduct.id && (
     p.product !== mobileEditProduct.product ||
     p.category !== mobileEditProduct.category ||

@@ -50,6 +50,9 @@ test('supplies are not peptides and not BAC water', () => {
 test('ready-to-use amino blends earn no free vial, but 5-Amino-1MQ still does', () => {
   assert.equal(isReadyToUseBlend('Fat Blaster Amino Blend 10ml'), true);
   assert.equal(isReadyToUseBlend('SUPER Human Amino Blend 10ml'), true);
+  // The same two blends after their rename in the admin.
+  assert.equal(isReadyToUseBlend('Amino Acid Blend 10ml'), true);
+  assert.equal(isReadyToUseBlend('Lipotropic Blend 10ml'), true);
   // 5-Amino-1MQ is a lyophilised peptide: it carries "amino" but not "blend",
   // so it keeps its free vial.
   assert.equal(isReadyToUseBlend('5-amino-1mq 5mg'), false);

@@ -225,22 +225,6 @@ function getDefaultTab(profile) {
   return getDefaultAdminTab(profile);
 }
 
-const CATEGORY_TRANSLATIONS = {
-  'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
-  'Exercise Mimetic & Metabolic Modulator': 'Exercise Mimetic & Metabolic Modulator',
-  'Recovery & Healing': 'Recuperación y curación',
-  'Anti-Inflammatory': 'Antiinflamatorio',
-  'Performance & Hormones': 'Rendimiento y hormonas',
-  'Anti-Aging & Longevity': 'Antienvejecimiento y longevidad',
-  'Immune System Modulation': 'Modulación del sistema inmunitario',
-  'Cognitive & Mood': 'Cognitivo y estado de ánimo',
-  'Sleep': 'Dormir',
-  'Sexual Health': 'Salud sexual',
-  'Tanning & Sexual Function': 'Bronceado y función sexual',
-  'Skin & Hair': 'Piel y cabello',
-  'Immune & Antioxidant': 'Sistema inmunitario y antioxidante',
-};
-
 const getReferralLabel = (lead) => {
   const source = lead.utm_source;
   const referrer = lead.referrer;
@@ -3140,7 +3124,7 @@ Core Rules:
     const newRow = {
       id: `temp-${Date.now()}`,
       product: 'New Peptide Name',
-      category: 'Weight Loss & Metabolism',
+      category: 'Metabolic & GLP-1 Compounds',
       priceUsd: '$100',
       priceCrc: '₡45,448',
       originalPriceUsd: '',
