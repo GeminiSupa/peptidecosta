@@ -34,8 +34,10 @@ test('saving the panel cannot revert a description edited from inside it', () =>
   // save would put the old text back over the new — losing the edit with no
   // error and no sign anything happened.
   assert.match(grid, /const \{ descriptionEn, descriptionEs, \.\.\.draft \} = mobileEditProduct;/);
-  assert.match(grid, /\{ \.\.\.product, \.\.\.draft \}/);
-  assert.doesNotMatch(grid, /\{ \.\.\.product, \.\.\.mobileEditProduct \}/);
+  // The saved row is the grid's own copy (which holds the latest descriptions)
+  // with only the panel's fields laid over it.
+  assert.match(grid, /\{ \.\.\.original, \.\.\.draft \}/);
+  assert.doesNotMatch(grid, /\{ \.\.\.(product|original), \.\.\.mobileEditProduct \}/);
 });
 
 test('a click on any live control does not open the editor', () => {

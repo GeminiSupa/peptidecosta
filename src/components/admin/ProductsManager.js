@@ -8,7 +8,7 @@ export default function ProductsManager({
   productSearch, setProductSearch,
   isCsvOpen, setIsCsvOpen,
   csvDragActive, handleCsvDrag, handleCsvDrop, handleCsvFileSelect,
-  handleAddRow, handleSaveChanges, saveLoading, saveStatus,
+  handleAddRow, handleSaveChanges, handleSaveProduct, saveLoading, saveStatus,
   setExportModalType,
   csvStatus, setCsvStatus,
   loadingProducts,
@@ -126,32 +126,15 @@ export default function ProductsManager({
     // just rewritten, silently undoing it. Everything else here the panel does
     // own, so it wins.
     const { descriptionEn, descriptionEs, ...draft } = mobileEditProduct;
-    const nextProducts = products.map((product) => (
-      product.id === mobileEditProduct.id ? { ...product, ...draft } : product
-    ));
-    [
-      'product',
-      'category',
-      'priceUsd',
-      'originalPriceUsd',
-      'saleStartTime',
-      'saleEndTime',
-      'status',
-      'inventoryCount',
-      'lowStockThreshold',
-      'discount',
-      'imageUrl',
-      'coa',
-      'freeBacWater',
-      'freeBacSizeMl',
-      'freeBacVialsPerItem',
-    ].forEach((field) => {
-      if (String(original[field] ?? '') !== String(mobileEditProduct[field] ?? '')) {
-        handleCellChange(mobileEditProduct.id, field, mobileEditProduct[field]);
-      }
-    });
-    setMobileEditProduct(null);
-    await handleSaveChanges(nextProducts);
+    // Saves this one product only. Other unsaved edits in the grid are not
+    // sent, and the panel stays open with the reason if the save is refused
+    // (for example, someone else changed this product after the page loaded).
+    const result = await handleSaveProduct({ ...original, ...draft });
+    if (result?.ok) {
+      setMobileEditProduct(null);
+    } else {
+      setMobileProductError(result?.error || 'Could not save this product.');
+    }
   };
   const mobileEditIndex = mobileEditProduct
     ? products.findIndex((p) => p.id === mobileEditProduct.id)
@@ -793,7 +776,7 @@ export default function ProductsManager({
 
             <div className="product-mobile-form">
               <div className="product-mobile-hint">
-                Drawer edits apply to the product grid. Use the main Save Changes button to sync them to the database.
+                Save product saves this product to the database straight away. Other unsaved edits in the table are not included.
               </div>
               <label>
                 <span>Name</span>
