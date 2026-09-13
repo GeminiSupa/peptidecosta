@@ -1308,8 +1308,18 @@ function trap(e){
   else if(!e.shiftKey && document.activeElement===last){e.preventDefault(); first.focus();}
 }
 
+// A double-click or double tap moved two steps: Back twice from the contact step
+// skipped the language question, and two clicks on an answer could jump one
+// forward. A click that lands while a step change is still settling is dropped.
+var navLockedUntil=0;
+function navLocked(ms){
+  if(Date.now()<navLockedUntil) return true;
+  navLockedUntil=Date.now()+ms;
+  return false;
+}
 $$(".opt").forEach(function(btn){
   btn.addEventListener("click", function(){
+    if(navLocked(450)) return;
     var q=btn.getAttribute("data-q");
     answers[q]=btn.getAttribute("data-val");
     $$(".opt",btn.parentNode).forEach(function(o){o.classList.remove("sel");});
@@ -1319,7 +1329,7 @@ $$(".opt").forEach(function(btn){
     setTimeout(function(){goTo(Math.min(current+1,TOTAL));},200);
   });
 });
-$("#mBack").addEventListener("click", function(){ if(current>1) goTo(current-1); });
+$("#mBack").addEventListener("click", function(){ if(current>1 && !navLocked(400)) goTo(current-1); });
 
 // Any edit makes the previous transport error stale — drop it immediately
 // rather than leaving the visitor reading an error about a past attempt.

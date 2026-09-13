@@ -838,6 +838,16 @@ function wizard(prefix, where){
   var step   = 1;
   var answers = {};
   var started = false;
+  // A double-click or double tap moved two steps: Back twice from the contact
+  // step skipped the language question, and two clicks on an answer could jump
+  // one forward. A click that lands while a step change is still settling is
+  // dropped.
+  var lockedUntil = 0;
+  function locked(ms){
+    if (Date.now() < lockedUntil) return true;
+    lockedUntil = Date.now() + ms;
+    return false;
+  }
   // When this wizard was first shown, for the route's form_ms check. The hero
   // form is there from page load; the popup wizard is restarted when it opens,
   // via restartClock() on the handle below, so a visitor who fills it in ten
@@ -871,6 +881,7 @@ function wizard(prefix, where){
 
   $$(".opt", root).forEach(function(opt){
     opt.addEventListener("click", function(){
+      if (locked(450)) return;
       var q = opt.getAttribute("data-q");
       $$('.opt[data-q="' + q + '"]', root).forEach(function(o){ o.classList.remove("sel"); });
       opt.classList.add("sel");
@@ -882,7 +893,7 @@ function wizard(prefix, where){
     });
   });
 
-  backEl.addEventListener("click", function(){ go(step - 1); });
+  backEl.addEventListener("click", function(){ if (!locked(400)) go(step - 1); });
 
   $$("input", root).forEach(function(i){
     i.addEventListener("focus", function(){ if (where === "hero") engaged = true; });
