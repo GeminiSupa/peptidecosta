@@ -60,6 +60,7 @@ import ManualOrderModal from '@/components/admin/ManualOrderModal';
 import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
 import WebsitePanel from '@/components/admin/WebsitePanel';
 import AdminHelpBot from '@/components/admin/AdminHelpBot';
+import { productBaseline as buildProductBaseline } from '@/lib/productSaveGuard.mjs';
 import DealOfWeekPanel from '@/components/admin/DealOfWeekPanel';
 import WhatsAppInbox from '@/components/admin/WhatsAppInbox';
 import WhatsAppAnalyticsPanel from '@/components/admin/WhatsAppAnalyticsPanel';
@@ -224,22 +225,6 @@ function resolveTabAccess(tabId, profile) {
 function getDefaultTab(profile) {
   return getDefaultAdminTab(profile);
 }
-
-const CATEGORY_TRANSLATIONS = {
-  'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
-  'Exercise Mimetic & Metabolic Modulator': 'Exercise Mimetic & Metabolic Modulator',
-  'Recovery & Healing': 'Recuperación y curación',
-  'Anti-Inflammatory': 'Antiinflamatorio',
-  'Performance & Hormones': 'Rendimiento y hormonas',
-  'Anti-Aging & Longevity': 'Antienvejecimiento y longevidad',
-  'Immune System Modulation': 'Modulación del sistema inmunitario',
-  'Cognitive & Mood': 'Cognitivo y estado de ánimo',
-  'Sleep': 'Dormir',
-  'Sexual Health': 'Salud sexual',
-  'Tanning & Sexual Function': 'Bronceado y función sexual',
-  'Skin & Hair': 'Piel y cabello',
-  'Immune & Antioxidant': 'Sistema inmunitario y antioxidante',
-};
 
 const getReferralLabel = (lead) => {
   const source = lead.utm_source;
@@ -573,6 +558,15 @@ export default function AdminPage() {
   // Edit Description Modal States
   const [editDescModalOpen, setEditDescModalOpen] = useState(false);
   const [changedProductIds, setChangedProductIds] = useState(() => new Set());
+  // Every product as this tab loaded it (id -> fingerprint). Sent with each
+  // save so the server can tell this tab's edits from a teammate's newer ones.
+  const [productBaseline, setProductBaseline] = useState({});
+  // Each product's name as saved in the database, to spot a rename.
+  const [loadedProductNames, setLoadedProductNames] = useState({});
+  // True while the table holds edits not yet saved. A live reload (a new order,
+  // a review, a teammate's save) then leaves the table alone instead of
+  // silently wiping those edits; the save check still refuses any overwrite.
+  const productsDirtyRef = React.useRef(false);
   const [editDescProduct, setEditDescProduct] = useState(null);
   const [editDescEn, setEditDescEn] = useState('');
   const [editDescEs, setEditDescEs] = useState('');
@@ -2440,7 +2434,10 @@ Core Rules:
   };
 
   // Fetch admin products and orders
-  const loadAdminData = async () => {
+  const loadAdminData = async (options = {}) => {
+    // Called bare from live updates and buttons (a button passes its click
+    // event, which carries no forceProducts). Only a finished save forces it.
+    const forceProducts = options?.forceProducts === true;
     if (adminProfile && isSubUser(adminProfile)) {
       setLoadingProducts(false);
       setLoadingOrders(false);
@@ -2497,7 +2494,10 @@ Core Rules:
     fetchOrderAffiliates();
 
     // 1. Fetch Products
-    if (isSupabaseConfigured && supabase) {
+    const keepUnsavedProducts = productsDirtyRef.current && !forceProducts;
+    if (keepUnsavedProducts) {
+      console.log('Products table has unsaved edits; not reloading it.');
+    } else if (isSupabaseConfigured && supabase) {
       try {
         const { data, error } = await supabase
           .from('products')
@@ -2552,6 +2552,8 @@ Core Rules:
               ? item.free_bac_vials_per_item
               : 1,
           }));
+          setProductBaseline(buildProductBaseline(data));
+          setLoadedProductNames(Object.fromEntries(data.map((item) => [item.id, item.product || ''])));
           setIsDbConnected(true);
         }
       } catch (err) {
@@ -2561,7 +2563,9 @@ Core Rules:
     }
 
     // Fallback to local CSV products if database is empty or not configured
-    if (loadedProducts.length === 0) {
+    if (keepUnsavedProducts) {
+      // The unsaved table stays exactly as it is.
+    } else if (loadedProducts.length === 0) {
       try {
         const response = await fetch('/master_sheet.csv');
         const csvText = await response.text();
@@ -2622,6 +2626,7 @@ Core Rules:
         console.error("Local CSV load error:", err);
       }
     } else {
+      productsDirtyRef.current = false;
       setProducts(loadedProducts);
     }
     setLoadingProducts(false);
@@ -3080,6 +3085,7 @@ Core Rules:
 
   // Spreadsheet Cell modification helper
   const handleCellChange = (productId, fieldName, val) => {
+    productsDirtyRef.current = true;
     setProducts(prev => prev.map(p =>
       p.id === productId ? { ...p, [fieldName]: val } : p
     ));
@@ -3140,7 +3146,7 @@ Core Rules:
     const newRow = {
       id: `temp-${Date.now()}`,
       product: 'New Peptide Name',
-      category: 'Weight Loss & Metabolism',
+      category: 'Metabolic & GLP-1 Compounds',
       priceUsd: '$100',
       priceCrc: '₡45,448',
       originalPriceUsd: '',
@@ -3158,11 +3164,13 @@ Core Rules:
       freeBacSizeMl: 3,
       freeBacVialsPerItem: 1,
     };
+    productsDirtyRef.current = true;
     setProducts([newRow, ...products]);
   };
 
   // Delete row
   const handleDeleteRow = (productId) => {
+    productsDirtyRef.current = true;
     setProducts(products.filter(p => p.id !== productId));
   };
 
@@ -3175,6 +3183,7 @@ Core Rules:
     updated.splice(newIndex, 0, moved);
     // Update priority values so the order persists on save
     const withPriority = updated.map((p, i) => ({ ...p, priority: i }));
+    productsDirtyRef.current = true;
     setProducts(withPriority);
   };
 
@@ -3265,6 +3274,7 @@ Core Rules:
             };
           });
 
+        productsDirtyRef.current = true;
         setProducts(imported);
         setCsvStatus(`Successfully loaded ${imported.length} products from CSV into grid. Click "Save Changes" to sync database.`);
         setCsvLoading(false);
@@ -4663,7 +4673,25 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
   // The mobile drawer passes an explicit row array; the desktop Save button is
   // wired to onClick and can hand us a click event instead. Only an actual
   // array is a caller-supplied list — anything else means "save the grid".
-  const handleSaveChanges = async (productRowsArg) => {
+  // Keep legacy CRC columns synced from USD, while USD remains the source of truth.
+  const fillCrcFromUsd = (p) => {
+    const newP = { ...p };
+    if (newP.priceUsd) {
+      const usdNum = parseFloat(String(newP.priceUsd).replace(/[^0-9.]/g, '')) || 0;
+      if (usdNum > 0) {
+        newP.priceCrc = `₡${Math.round(usdNum * exchangeRate).toLocaleString('en-US')}`;
+      }
+    }
+    if (newP.originalPriceUsd) {
+      const origUsdNum = parseFloat(String(newP.originalPriceUsd).replace(/[^0-9.]/g, '')) || 0;
+      if (origUsdNum > 0) {
+        newP.originalPriceCrc = `₡${Math.round(origUsdNum * exchangeRate).toLocaleString('en-US')}`;
+      }
+    }
+    return newP;
+  };
+
+  const handleSaveChanges = async (productRowsArg, options = {}) => {
     const productRows = Array.isArray(productRowsArg) ? productRowsArg : products;
 
     if (!isDbConnected) {
@@ -4679,22 +4707,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     // out of "Syncing DB..." even if something unexpected throws.
     try {
       // Keep legacy CRC columns synced from USD, while USD remains the source of truth.
-      const filled = productRows.map(p => {
-        let newP = { ...p };
-        if (newP.priceUsd) {
-          const usdNum = parseFloat(String(newP.priceUsd).replace(/[^0-9.]/g, '')) || 0;
-          if (usdNum > 0) {
-            newP.priceCrc = `₡${Math.round(usdNum * exchangeRate).toLocaleString('en-US')}`;
-          }
-        }
-        if (newP.originalPriceUsd) {
-          const origUsdNum = parseFloat(String(newP.originalPriceUsd).replace(/[^0-9.]/g, '')) || 0;
-          if (origUsdNum > 0) {
-            newP.originalPriceCrc = `₡${Math.round(origUsdNum * exchangeRate).toLocaleString('en-US')}`;
-          }
-        }
-        return newP;
-      });
+      const filled = productRows.map(fillCrcFromUsd);
       // Update state so the UI reflects the auto-filled values
       setProducts(filled);
 
@@ -4702,14 +4715,28 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         try {
           const res = await adminFetch('/api/admin/products', {
             method: 'PUT',
-            body: JSON.stringify({ products: filled }),
+            // What this tab loaded, so the server deletes only products removed
+            // here and never overwrites a row someone else changed since.
+            body: JSON.stringify({
+              products: filled,
+              loadedIds: Object.keys(productBaseline),
+              baseline: productBaseline,
+              // Renamed products whose reviews should follow the new name.
+              moveReviewsForIds: Array.isArray(options?.moveReviewsForIds) ? options.moveReviewsForIds : [],
+            }),
           });
           const data = await res.json();
           if (!res.ok || data.error) throw new Error(data.error || 'Failed to save products');
 
-          setSaveStatus("Changes successfully saved to database!");
+          const movedNote = data.movedReviews > 0
+            ? ` Moved ${data.movedReviews} review${data.movedReviews === 1 ? '' : 's'} to the new name${data.movedReviews === 1 ? '' : 's'}.`
+            : '';
+          setSaveStatus(data.skipped?.length
+            ? `Saved. Kept someone else's newer changes to: ${data.skipped.join(', ')}.${movedNote}`
+            : `Changes successfully saved to database!${movedNote}`);
           setChangedProductIds(new Set()); // the pending list is now written
-          loadAdminData(); // reload fresh rows
+          productsDirtyRef.current = false; // everything in the table is now written
+          loadAdminData({ forceProducts: true }); // reload fresh rows
         } catch (err) {
           console.error("Database save changes error:", err);
           setSaveStatus(`Failed to save: ${err.message || 'Row Level Security error'}`);
@@ -4720,6 +4747,77 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     } catch (err) {
       console.error("Save changes error:", err);
       setSaveStatus(`Failed to save: ${err.message || 'Unexpected error'}`);
+    } finally {
+      setSaveLoading(false);
+      setTimeout(() => setSaveStatus(''), 4000);
+    }
+  };
+
+  /**
+   * "Save product" in the drawer: writes this one product and nothing else.
+   *
+   * Other unsaved edits in the grid stay unsaved. The server refuses if the
+   * product has changed since this tab loaded it. Returns { ok, error } so the
+   * drawer can stay open and show why.
+   */
+  /** How many reviews (any status) are stored under a product name. */
+  const reviewCountFor = (name) => (name ? reviews.filter((r) => r.product_name === name).length : 0);
+
+  const handleSaveProduct = async (product, { moveReviews = false } = {}) => {
+    if (!isDbConnected) {
+      const error = 'Cannot save: Database is offline or in local fallback mode.';
+      setSaveStatus(`❌ ${error}`);
+      setTimeout(() => setSaveStatus(''), 5000);
+      return { ok: false, error };
+    }
+
+    // A row added in the grid does not exist yet, so there is nothing to update
+    // on its own — it has to be inserted, which is what Save Changes does.
+    if (String(product?.id || '').startsWith('temp-') || String(product?.id || '').startsWith('local-')) {
+      await handleSaveChanges(products.map((p) => (p.id === product.id ? product : p)));
+      return { ok: true };
+    }
+
+    setSaveLoading(true);
+    setSaveStatus('');
+    try {
+      const filled = fillCrcFromUsd(product);
+      const res = await adminFetch('/api/admin/products', {
+        method: 'PATCH',
+        body: JSON.stringify({ product: filled, baseline: productBaseline[product.id], moveReviews }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        const error = data.error || 'Failed to save product';
+        setSaveStatus(`Failed to save: ${error}`);
+        return { ok: false, error };
+      }
+
+      setProducts((prev) => prev.map((p) => (p.id === product.id ? filled : p)));
+      if (data.fingerprint) {
+        setProductBaseline((prev) => ({ ...prev, [product.id]: data.fingerprint }));
+      }
+      setChangedProductIds((prev) => {
+        const next = new Set(prev);
+        next.delete(product.id);
+        return next;
+      });
+      const previousName = loadedProductNames[product.id];
+      setLoadedProductNames((prev) => ({ ...prev, [product.id]: filled.product }));
+      if (data.movedReviews > 0 && previousName) {
+        setReviews((prev) => prev.map((r) => (
+          r.product_name === previousName ? { ...r, product_name: filled.product } : r
+        )));
+      }
+      setSaveStatus(data.movedReviews > 0
+        ? `"${filled.product}" saved, and ${data.movedReviews} review${data.movedReviews === 1 ? '' : 's'} moved to it.`
+        : `"${filled.product}" saved to database.`);
+      return { ok: true };
+    } catch (err) {
+      console.error('Save product error:', err);
+      const error = err.message || 'Unexpected error';
+      setSaveStatus(`Failed to save: ${error}`);
+      return { ok: false, error };
     } finally {
       setSaveLoading(false);
       setTimeout(() => setSaveStatus(''), 4000);
@@ -5448,7 +5546,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             isCsvOpen={isCsvOpen} setIsCsvOpen={setIsCsvOpen}
             csvDragActive={csvDragActive} handleCsvDrag={handleCsvDrag} 
             handleCsvDrop={handleCsvDrop} handleCsvFileSelect={handleCsvFileSelect}
-            handleAddRow={handleAddRow} handleSaveChanges={handleSaveChanges} 
+            handleAddRow={handleAddRow} handleSaveChanges={handleSaveChanges} handleSaveProduct={handleSaveProduct} loadedProductNames={loadedProductNames} reviewCountFor={reviewCountFor} 
             saveLoading={saveLoading} saveStatus={saveStatus}
             setExportModalType={setExportModalType}
             csvStatus={csvStatus} setCsvStatus={setCsvStatus}

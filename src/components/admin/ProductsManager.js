@@ -1,28 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, Trash2, FileText, Eye, EyeOff } from 'lucide-react';
 
-const CATEGORY_TRANSLATIONS = {
-  'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
-  'Exercise Mimetic & Metabolic Modulator': 'Exercise Mimetic & Metabolic Modulator',
-  'Recovery & Healing': 'Recuperación y curación',
-  'Anti-Inflammatory': 'Antiinflamatorio',
-  'Performance & Hormones': 'Rendimiento y hormonas',
-  'Anti-Aging & Longevity': 'Antienvejecimiento y longevidad',
-  'Immune System Modulation': 'Modulación del sistema inmunitario',
-  'Cognitive & Mood': 'Cognitivo y estado de ánimo',
-  'Sleep': 'Dormir',
-  'Sexual Health': 'Salud sexual',
-  'Tanning & Sexual Function': 'Bronceado y función sexual',
-  'Skin & Hair': 'Piel y cabello',
-  'Immune & Antioxidant': 'Sistema inmunitario y antioxidante',
-};
+import { CATALOG_CATEGORY_NAMES } from '@/lib/catalogCategories.mjs';
 
 export default function ProductsManager({
   products,
   productSearch, setProductSearch,
   isCsvOpen, setIsCsvOpen,
   csvDragActive, handleCsvDrag, handleCsvDrop, handleCsvFileSelect,
-  handleAddRow, handleSaveChanges, saveLoading, saveStatus,
+  handleAddRow, handleSaveChanges, handleSaveProduct, saveLoading, saveStatus,
+  loadedProductNames, reviewCountFor,
   setExportModalType,
   csvStatus, setCsvStatus,
   loadingProducts,
@@ -41,6 +28,10 @@ export default function ProductsManager({
   const [mobileEditProduct, setMobileEditProduct] = useState(null);
   const [mobileProductError, setMobileProductError] = useState('');
   const [saveConfirmOpen, setSaveConfirmOpen] = useState(false);
+  // The "keep the reviews?" question for a rename made in the drawer.
+  const [renamePrompt, setRenamePrompt] = useState(null);
+  // Save Changes: renamed products whose reviews should stay on the old name.
+  const [leaveReviewsById, setLeaveReviewsById] = useState({});
 
   // Which rows have been edited since the last save. Save Changes writes the
   // whole grid regardless — this is only so the operator is told what they are
@@ -50,6 +41,16 @@ export default function ProductsManager({
     return products.filter((p) => changedProductIds.has(p.id));
   }, [products, changedProductIds]);
   const changedCount = changedProducts.length;
+
+  // Edited products whose name changed and whose old name has reviews. Reviews
+  // are stored by name, so each one is asked about before Save Changes writes.
+  const renamedWithReviews = changedProducts
+    .map((p) => {
+      const from = loadedProductNames?.[p.id];
+      const count = from && from !== p.product && reviewCountFor ? reviewCountFor(from) : 0;
+      return { id: p.id, from, to: p.product, count };
+    })
+    .filter((r) => r.count > 0);
 
   const formatDerivedCrc = (usdPrice) => {
     const usdNum = parseFloat(String(usdPrice || '').replace(/[^0-9.]/g, '')) || 0;
@@ -68,13 +69,16 @@ export default function ProductsManager({
     ),
     [products, productSearch]
   );
-  const categoryOptions = useMemo(
-    () => Array.from(new Set([
-      ...Object.keys(CATEGORY_TRANSLATIONS),
-      ...products.map(prod => prod.category).filter(Boolean)
-    ])).sort(),
-    [products]
-  );
+  // The current category list first, in its own order, then any other category
+  // a product still carries. An old name drops out of the list on its own once
+  // no product uses it, so moving products across is the whole migration.
+  const categoryOptions = useMemo(() => {
+    const current = new Set(CATALOG_CATEGORY_NAMES);
+    const others = Array.from(new Set(products.map(prod => prod.category).filter(Boolean)))
+      .filter((cat) => !current.has(cat))
+      .sort();
+    return [...CATALOG_CATEGORY_NAMES, ...others];
+  }, [products]);
   const mobileDirty = Boolean(mobileEditProduct && products.find((p) => p.id === mobileEditProduct.id && (
     p.product !== mobileEditProduct.product ||
     p.category !== mobileEditProduct.category ||
@@ -137,32 +141,29 @@ export default function ProductsManager({
     // just rewritten, silently undoing it. Everything else here the panel does
     // own, so it wins.
     const { descriptionEn, descriptionEs, ...draft } = mobileEditProduct;
-    const nextProducts = products.map((product) => (
-      product.id === mobileEditProduct.id ? { ...product, ...draft } : product
-    ));
-    [
-      'product',
-      'category',
-      'priceUsd',
-      'originalPriceUsd',
-      'saleStartTime',
-      'saleEndTime',
-      'status',
-      'inventoryCount',
-      'lowStockThreshold',
-      'discount',
-      'imageUrl',
-      'coa',
-      'freeBacWater',
-      'freeBacSizeMl',
-      'freeBacVialsPerItem',
-    ].forEach((field) => {
-      if (String(original[field] ?? '') !== String(mobileEditProduct[field] ?? '')) {
-        handleCellChange(mobileEditProduct.id, field, mobileEditProduct[field]);
-      }
-    });
-    setMobileEditProduct(null);
-    await handleSaveChanges(nextProducts);
+    const nextProduct = { ...original, ...draft };
+    // A rename leaves the product's reviews on the old name, so ask first.
+    const savedName = loadedProductNames?.[original.id] ?? original.product;
+    const reviewCount = savedName && savedName !== nextProduct.product && reviewCountFor
+      ? reviewCountFor(savedName)
+      : 0;
+    if (reviewCount > 0) {
+      setRenamePrompt({ product: nextProduct, oldName: savedName, newName: nextProduct.product, count: reviewCount });
+      return;
+    }
+    await finishMobileSave(nextProduct, false);
+  };
+  // Saves this one product only. Other unsaved edits in the grid are not
+  // sent, and the panel stays open with the reason if the save is refused
+  // (for example, someone else changed this product after the page loaded).
+  const finishMobileSave = async (product, moveReviews) => {
+    setRenamePrompt(null);
+    const result = await handleSaveProduct(product, { moveReviews });
+    if (result?.ok) {
+      setMobileEditProduct(null);
+    } else {
+      setMobileProductError(result?.error || 'Could not save this product.');
+    }
   };
   const mobileEditIndex = mobileEditProduct
     ? products.findIndex((p) => p.id === mobileEditProduct.id)
@@ -804,7 +805,7 @@ export default function ProductsManager({
 
             <div className="product-mobile-form">
               <div className="product-mobile-hint">
-                Drawer edits apply to the product grid. Use the main Save Changes button to sync them to the database.
+                Save product saves this product to the database straight away. Other unsaved edits in the table are not included.
               </div>
               <label>
                 <span>Name</span>
@@ -981,6 +982,43 @@ export default function ProductsManager({
           </div>
         </div>
       )}
+      {renamePrompt && (
+        <div className="pm-confirm-overlay pm-confirm-overlay--top" onClick={() => setRenamePrompt(null)}>
+          <div className="pm-confirm" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="pm-rename-title">
+            <h3 id="pm-rename-title">Keep the reviews?</h3>
+            <p>
+              <strong>{renamePrompt.oldName}</strong> has {renamePrompt.count} review{renamePrompt.count === 1 ? '' : 's'}.
+              You are renaming it to <strong>{renamePrompt.newName}</strong>.
+            </p>
+            <p className="pm-confirm-note">
+              Reviews are linked to the product name. Move them and they keep showing on
+              this product. Leave them and they stay on the old name, where no customer sees them.
+            </p>
+            <div className="pm-confirm-actions">
+              <button type="button" className="admin-btn" onClick={() => setRenamePrompt(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="admin-btn"
+                disabled={saveLoading}
+                onClick={() => finishMobileSave(renamePrompt.product, false)}
+              >
+                Leave reviews
+              </button>
+              <button
+                type="button"
+                className="admin-btn admin-btn-primary"
+                disabled={saveLoading}
+                onClick={() => finishMobileSave(renamePrompt.product, true)}
+              >
+                <Save size={15} />
+                Move reviews and save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {saveConfirmOpen && (
         <div className="pm-confirm-overlay" onClick={() => setSaveConfirmOpen(false)}>
           <div className="pm-confirm" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="pm-confirm-title">
@@ -999,6 +1037,26 @@ export default function ProductsManager({
                   ))}
                   {changedCount > 12 && <li className="pm-confirm-more">and {changedCount - 12} more</li>}
                 </ul>
+                {renamedWithReviews.length > 0 && (
+                  <div className="pm-confirm-renames">
+                    <p>
+                      {renamedWithReviews.length === 1 ? 'This renamed product has' : 'These renamed products have'} reviews.
+                      Ticked means the reviews move to the new name; unticked leaves them on the old name, where they stop showing.
+                    </p>
+                    {renamedWithReviews.map((r) => (
+                      <label key={r.id} className="pm-confirm-rename">
+                        <input
+                          type="checkbox"
+                          checked={!leaveReviewsById[r.id]}
+                          onChange={(e) => setLeaveReviewsById((prev) => ({ ...prev, [r.id]: !e.target.checked }))}
+                        />
+                        <span>
+                          {r.from} → {r.to} <em>({r.count} review{r.count === 1 ? '' : 's'})</em>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </>
             ) : (
               <p>
@@ -1020,7 +1078,12 @@ export default function ProductsManager({
                 type="button"
                 className="admin-btn admin-btn-primary"
                 disabled={saveLoading}
-                onClick={() => { setSaveConfirmOpen(false); handleSaveChanges(); }}
+                onClick={() => {
+                  setSaveConfirmOpen(false);
+                  handleSaveChanges(undefined, {
+                    moveReviewsForIds: renamedWithReviews.filter((r) => !leaveReviewsById[r.id]).map((r) => r.id),
+                  });
+                }}
               >
                 <Save size={15} />
                 {changedCount > 0 ? `Save ${changedCount} change${changedCount === 1 ? '' : 's'}` : 'Save anyway'}
@@ -1043,6 +1106,37 @@ export default function ProductsManager({
           background: rgba(255, 255, 255, 0.25);
           font-size: 0.68rem;
           font-weight: 800;
+        }
+        .pm-confirm-overlay--top {
+          z-index: 2147483000 !important;
+        }
+        .pm-confirm-renames {
+          margin: 12px 0 4px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: rgba(251, 191, 36, 0.08);
+          border: 1px solid rgba(251, 191, 36, 0.25);
+          font-size: 0.85rem;
+        }
+        .pm-confirm-renames p {
+          margin: 0 0 8px;
+        }
+        .pm-confirm-rename {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          margin-top: 6px;
+          cursor: pointer;
+        }
+        .pm-confirm-rename input {
+          margin-top: 3px;
+        }
+        .pm-confirm-rename em {
+          color: #94a3b8;
+          font-style: normal;
+        }
+        .pm-confirm-actions {
+          flex-wrap: wrap;
         }
         .pm-confirm-overlay {
           position: fixed;

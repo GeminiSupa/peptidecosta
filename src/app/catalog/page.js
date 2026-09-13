@@ -14,6 +14,12 @@ import { getFacebookReviewUrl, getTrustpilotReviewUrl } from '@/lib/businessLink
 import { useTrustpilotRating } from '@/hooks/useTrustpilotRating';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
 import {
+  translateCategoryLabel,
+  isMetabolicCategory,
+  productComposition,
+  buildAzList,
+} from '@/lib/catalogCategories.mjs';
+import {
   RESEARCH_ACK_VERSION,
   researchAckContinue,
   researchAckIntro,
@@ -105,32 +111,9 @@ const USER_SELECTED_LANG_KEY = 'lang_user_selected';
 // revising the sentence re-asks everyone who agreed to the old one.
 const RESEARCH_ACK_STORAGE_KEY = 'research_ack';
 
-const CATEGORY_TRANSLATIONS = {
-  'Weight Loss & Metabolism': 'Pérdida de peso y metabolismo',
-  'Exercise Mimetic & Metabolic Modulator': 'Exercise Mimetic & Metabolic Modulator',
-  'Recovery & Healing': 'Recuperación y curación',
-  'Anti-Inflammatory': 'Antiinflamatorio',
-  'Performance & Hormones': 'Rendimiento y hormonas',
-  'Anti-Aging & Longevity': 'Antienvejecimiento y longevidad',
-  'Immune System Modulation': 'Modulación del sistema inmunitario',
-  'Cognitive & Mood': 'Cognitivo y estado de ánimo',
-  'Sleep': 'Dormir',
-  'Sexual Health': 'Salud sexual',
-  'Tanning & Sexual Function': 'Bronceado y función sexual',
-  'Skin & Hair': 'Piel y cabello',
-  'Immune & Antioxidant': 'Sistema inmunitario y antioxidante',
-  'Reconstitution Supply': 'Suministro de reconstitución'
-};
-
-const isWeightLossCategory = (catText) => {
-  const normalized = String(catText || '').toLowerCase();
-  return (
-    normalized.includes('weight loss') ||
-    normalized.includes('perder peso') ||
-    normalized.includes('perdida de peso') ||
-    normalized.includes('pérdida de peso')
-  );
-};
+// The metabolic group is pinned first in the category chips. It is recognised
+// under its old and new names, since products move to the new name in the admin.
+const isWeightLossCategory = isMetabolicCategory;
 
 const STATUS_TRANSLATIONS = {
   es: {
@@ -1050,7 +1033,7 @@ export default function CatalogPage() {
 
     // Viewmode loaded from localStorage
     const savedView = localStorage.getItem('viewMode') || 'list';
-    setViewMode(savedView === 'compact' ? 'list' : savedView);
+    setViewMode(['list', 'grid', 'az'].includes(savedView) ? savedView : 'list');
 
     // The acknowledgement survives a reload, but only for as long as this tab
     // is open, and only if it was given against the wording we still show. A
@@ -1832,28 +1815,104 @@ export default function CatalogPage() {
     return lang === 'en' ? `${units} in stock` : `${units} disponibles`;
   };
 
-  const translateCategory = (catText) => {
-    if (!catText) return '';
-    
-    // Auto-translation for custom categories using the slash format (e.g., "Hair Growth / Crecimiento del cabello")
-    if (catText.includes('/')) {
-      const parts = catText.split('/').map(p => p.trim());
-      if (parts.length >= 2) {
-        return lang === 'en' ? parts[0] : parts[1];
-      }
-    }
+  // New and old category names, plus the "English / Español" custom format.
+  const translateCategory = (catText) => translateCategoryLabel(catText, lang);
 
-    if (lang === 'es' && CATEGORY_TRANSLATIONS[catText]) {
-      return CATEGORY_TRANSLATIONS[catText];
-    }
-    return catText;
-  };
+  // The chip shows the category's own name. It used to swap the metabolic group
+  // for "Weight Loss", which is a therapeutic claim used as navigation.
+  const getCategoryChipLabel = (catText) => translateCategory(catText);
 
-  const getCategoryChipLabel = (catText) => {
-    if (isWeightLossCategory(catText)) {
-      return lang === 'en' ? 'Weight Loss' : 'Perder Peso';
-    }
-    return translateCategory(catText);
+  /**
+   * The A–Z compound list: a plain grid with a letter jump bar.
+   *
+   * Compound, vial size, stock status and price, and nothing else — no
+   * description text. Blends and stacks are listed apart with what is in them,
+   * so a name like GLOW is never left to identify the product on its own. It
+   * lists the same products the grid would (search, category and stock filters
+   * all apply); BAC water is a supply, not a compound, so it is left out.
+   * A row opens the product, where it can be added to the cart.
+   */
+  const renderAzList = () => {
+    const { groups, blends } = buildAzList(filteredProducts, isBacWater);
+    const jumpTo = (letter) => {
+      const target = document.getElementById(`az-${letter === '#' ? 'num' : letter}`);
+      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    const statusClass = (p) => (isInStock(p.status) ? 'stock-in' : isComingSoon(p.status) ? 'stock-soon' : 'stock-out');
+    const renderRow = (row, withComposition) => {
+      const p = row.product;
+      const sub = currency === 'USD' ? getPriceLabel(p, 'CRC') : getPriceLabel(p, 'USD');
+      return (
+        <button
+          type="button"
+          key={p.product}
+          className={`az-row ${isInStock(p.status) ? '' : 'az-row--unavailable'}`}
+          onClick={() => handleProductClick(p)}
+        >
+          <span className="az-name">
+            {row.compound}
+            {withComposition && productComposition(p.product, lang) && (
+              <span className="az-composition">{productComposition(p.product, lang)}</span>
+            )}
+          </span>
+          <span className="az-size">{row.size || '—'}</span>
+          <span className={`az-stock ${statusClass(p)}`}>{translateStatus(p.status)}</span>
+          <span className="az-price">
+            <span className="az-price-main">{getPriceLabel(p, currency)}</span>
+            {sub && <span className="az-price-sub">{sub}</span>}
+          </span>
+        </button>
+      );
+    };
+    const header = (
+      <div className="az-row az-row--head" aria-hidden="true">
+        <span>{lang === 'en' ? 'Compound' : 'Compuesto'}</span>
+        <span>{lang === 'en' ? 'Vial size' : 'Tamaño del vial'}</span>
+        <span>{lang === 'en' ? 'Stock' : 'Disponibilidad'}</span>
+        <span>{lang === 'en' ? 'Price' : 'Precio'}</span>
+      </div>
+    );
+
+    return (
+      <div className="az-view">
+        {groups.length > 0 && (
+          <nav className="az-jump" aria-label={lang === 'en' ? 'Jump to letter' : 'Ir a la letra'}>
+            {groups.map((group) => (
+              <button type="button" key={group.letter} onClick={() => jumpTo(group.letter)}>
+                {group.letter}
+              </button>
+            ))}
+            {blends.length > 0 && (
+              <button type="button" onClick={() => jumpTo('blends')} className="az-jump-blends">
+                {lang === 'en' ? 'Blends' : 'Mezclas'}
+              </button>
+            )}
+          </nav>
+        )}
+
+        {groups.map((group) => (
+          <section key={group.letter} className="az-group" id={`az-${group.letter === '#' ? 'num' : group.letter}`}>
+            <h2 className="az-letter">{group.letter}</h2>
+            <div className="az-table">
+              {header}
+              {group.rows.map((row) => renderRow(row, false))}
+            </div>
+          </section>
+        ))}
+
+        {blends.length > 0 && (
+          <section className="az-group" id="az-blends">
+            <h2 className="az-letter az-letter--wide">
+              {lang === 'en' ? 'Blends and stacks' : 'Mezclas y combinaciones'}
+            </h2>
+            <div className="az-table">
+              {header}
+              {blends.map((row) => renderRow(row, true))}
+            </div>
+          </section>
+        )}
+      </div>
+    );
   };
 
   const parsePrice = (priceStr) => {
@@ -1903,7 +1962,8 @@ export default function CatalogPage() {
     { en: 'GLP-1', es: 'GLP-1' },
     { en: 'Tirzepatide', es: 'Tirzepatide' },
     { en: 'Semaglutide', es: 'Semaglutide' },
-    { en: 'Weight Loss', es: 'Pérdida de Peso' },
+    // Compound names only: "Weight Loss" here was a claim, not a product.
+    { en: 'BPC-157', es: 'BPC-157' },
     { en: 'Recovery', es: 'Recuperación' }
   ];
 
@@ -1957,6 +2017,13 @@ export default function CatalogPage() {
 
   const handleViewToggle = () => {
     const nextView = viewMode === 'list' ? 'grid' : 'list';
+    setViewMode(nextView);
+    localStorage.setItem('viewMode', nextView);
+  };
+
+  // The A–Z compound list is its own view, toggled on and off beside grid/list.
+  const handleAzToggle = () => {
+    const nextView = viewMode === 'az' ? 'list' : 'az';
     setViewMode(nextView);
     localStorage.setItem('viewMode', nextView);
   };
@@ -3620,6 +3687,15 @@ export default function CatalogPage() {
             <button onClick={handleViewToggle} className="filter-btn" title={viewMode === 'list' ? (lang === 'en' ? 'Grid View' : 'Vista Cuadrícula') : (lang === 'en' ? 'List View' : 'Vista Lista')}>
               {viewMode === 'list' ? <Grid size={18} /> : <List size={18} />}
             </button>
+            <button
+              type="button"
+              onClick={handleAzToggle}
+              className={`filter-btn az-toggle-btn ${viewMode === 'az' ? 'active' : ''}`}
+              aria-pressed={viewMode === 'az'}
+              title={lang === 'en' ? 'A–Z compound list' : 'Lista de compuestos A–Z'}
+            >
+              A–Z
+            </button>
             <button 
               onClick={() => setShowFilters(!showFilters)} 
               className={`filter-btn ${showFilters ? 'active' : ''}`} 
@@ -3885,6 +3961,8 @@ export default function CatalogPage() {
           <div className="loader">
             {lang === 'en' ? 'No products matching filters.' : 'No se encontraron productos.'}
           </div>
+        ) : viewMode === 'az' ? (
+          renderAzList()
         ) : (
           <>
           <div className={`product-grid ${viewMode}-view`}>
@@ -3989,6 +4067,9 @@ export default function CatalogPage() {
                   <div className="product-info">
                     <div className="product-category">{translateCategory(p.category)}</div>
                     <h3 className="product-name">{p.product}</h3>
+                    {productComposition(p.product, lang) && (
+                      <div className="product-composition">{productComposition(p.product, lang)}</div>
+                    )}
                     <div className="product-rating-slot">
                       {renderRatingSummary(p.product)}
                     </div>
@@ -5221,8 +5302,13 @@ export default function CatalogPage() {
                   <Share2 size={18} />
                 </button>
               </div>
+              {productComposition(selectedProduct.product, lang) && (
+                <div className="product-composition product-composition--detail">
+                  {productComposition(selectedProduct.product, lang)}
+                </div>
+              )}
             </div>
-            
+
             <div className="product-detail-price">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignProps: 'center', marginProps: '4px' }}>
                 <span style={{ fontWeight: '700', color: 'var(--text-muted)', fontSize: '0.8rem' }}>

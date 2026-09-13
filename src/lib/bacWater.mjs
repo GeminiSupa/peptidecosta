@@ -80,16 +80,23 @@ export function isSupplyItem(name) {
 }
 
 /**
- * Pre-mixed amino blends (Fat Blaster, SUPER Human). They are liquid and ready
- * to use, so buying one earns no free vial — there is nothing to reconstitute.
+ * Pre-mixed liquid blends. They are ready to use, so buying one earns no free
+ * vial — there is nothing to reconstitute.
  *
- * The match is on "amino blend", which is deliberate: the 5-Amino-1MQ peptides
- * carry "amino" but not "blend", and they DO need water, so they keep their
- * free vial. Both blends are sold in English only, so no Spanish name is needed.
+ * Matched on the blend names, old and new: "Fat Blaster Amino Blend" is being
+ * renamed "Lipotropic Blend" and "SUPER Human Amino Blend" "Amino Acid Blend".
+ * The rename happens in the admin, so both spellings must be recognised or a
+ * renamed blend would silently start earning free water. A bare "amino" is not
+ * enough: the 5-Amino-1MQ peptides carry "amino" but not "blend", and they DO
+ * need water, so they keep their free vial. The blends are sold in English
+ * only, so no Spanish name is needed.
  */
 export function isReadyToUseBlend(name) {
   if (!name) return false;
-  return String(name).toLowerCase().includes('amino blend');
+  const n = String(name).toLowerCase();
+  return n.includes('amino blend')
+    || n.includes('amino acid blend')
+    || n.includes('lipotropic blend');
 }
 
 function qtyOf(item) {
