@@ -3299,6 +3299,11 @@ body {
 .product-grid.grid-view .stock-badges-slot {
     flex-wrap: wrap;
     row-gap: 4px;
+    /* Always room for both lines. The price sits at the bottom of the card, so
+       a card showing only "Disponible" (no count) would otherwise drop its
+       price below its neighbours'. */
+    min-height: 52px;
+    align-content: flex-start;
 }
 
 .product-grid.grid-view .product-image {
@@ -6541,10 +6546,18 @@ body:has(.product-grid.grid-view) {
     letter-spacing: 0.05em;
 }
 
+/* Grid cards used to reserve room for the longest possible name and for a star
+   rating most products do not have, so short cards showed a large empty gap
+   above the price. Now the name and rating take only the space they need, and
+   the price, stock and button sit at the bottom of the card instead: cards in a
+   row still line up, and the gap only appears where a neighbour genuinely needs
+   the room. */
 .product-grid.grid-view .product-name {
     font-size: 0.72rem;
     line-height: 1.18;
-    height: 1.7rem;
+    height: auto;
+    min-height: 0;
+    -webkit-line-clamp: 3;
     margin-bottom: 4px;
 }
 
@@ -6556,10 +6569,15 @@ body:has(.product-grid.grid-view) {
     width: 100%;
 }
 
+.product-grid.grid-view .product-rating-slot:empty {
+    min-height: 0;
+}
+
 .product-grid.grid-view .product-pricing {
     gap: 4px;
     line-height: 1;
-    margin-top: 2px;
+    margin-top: auto;
+    padding-top: 2px;
 }
 
 .product-grid.grid-view .price-main {

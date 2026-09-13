@@ -3994,13 +3994,13 @@ export default function CatalogPage() {
                     </div>
                     <div className="product-pricing">
                       {isBac ? (
-                        // Both sizes are priced per vial; only the minimum differs.
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                        // Priced per vial like everything else, so it shows both
+                        // currencies the same way: the selected one prominent,
+                        // the other beside it.
+                        <>
                           <span className="price-main">{pMain}</span>
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: '700' }}>
-                            {lang === 'en' ? 'each' : 'c/u'}
-                          </span>
-                        </div>
+                          {pSub && <span className="price-sub">{pSub}</span>}
+                        </>
                       ) : p.originalPriceUsd && p.originalPriceUsd !== p.priceUsd ? (
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
                           <span className="price-main" style={{ color: '#ef4444' }}>{pMain}</span>
