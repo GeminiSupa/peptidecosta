@@ -1042,6 +1042,10 @@ body {
 .product-grid.list-view .stock-badges-slot {
     justify-content: center !important;
     margin-bottom: 12px !important;   /* consistent gap before the button (overrides inline 8px) */
+    /* On a phone the info column is ~172px and "DISPONIBLE" + "89 disponibles"
+       needs ~189px, so the row ran past the card edge. Let the count wrap. */
+    flex-wrap: wrap;
+    row-gap: 4px;
 }
 
 /* Sit the button right after the badge instead of being pushed to the card bottom */

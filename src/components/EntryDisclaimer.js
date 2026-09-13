@@ -159,6 +159,11 @@ export default function EntryDisclaimer() {
           left: 0;
           width: 100vw;
           height: 100vh;
+          /* On phones 100vh includes the strip behind the browser's own
+             toolbar, so the bottom of this scrolling overlay sat under it and
+             "No, no acepto" could never be scrolled into view. dvh is the
+             height actually visible; 100vh stays as the fallback. */
+          height: 100dvh;
           background-color: rgba(0, 0, 0, 0.85);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
@@ -277,6 +282,9 @@ export default function EntryDisclaimer() {
         @media (max-width: 480px) {
           .entry-disclaimer-overlay {
             padding: 20px 16px;
+            /* Clear the phone's gesture bar too, so the last button is never
+               under it. */
+            padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
           }
 
           .entry-disclaimer-modal {
