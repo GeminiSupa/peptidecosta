@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/adminApi';
+import { formatCrDate } from '@/lib/crTime.mjs';
 
 /**
  * What the review requests have actually achieved.
@@ -33,16 +34,34 @@ function Stat({ label, value, sub, tone }) {
   );
 }
 
-const shortDate = (iso) => {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '—' : d.toISOString().slice(0, 10);
+// Costa Rica time, not the reader's clock: an ask sent late evening in CR must
+// not read as the next day to someone eleven hours ahead.
+const shortDate = (iso) => formatCrDate(iso, { day: 'numeric', month: 'short', year: 'numeric' }) || '—';
+
+const SITES = {
+  google: { label: 'Google', color: '#4ade80', bg: 'rgba(74,222,128,0.12)' },
+  facebook: { label: 'Facebook', color: '#60a5fa', bg: 'rgba(96,165,250,0.12)' },
+  trustpilot: { label: 'Trustpilot', color: '#2dd4bf', bg: 'rgba(45,212,191,0.12)' },
 };
+
+// Enough to see what went out lately without the list taking over the page.
+const RECENT_PREVIEW = 8;
+
+function SiteBadge({ id }) {
+  const site = SITES[id] || { label: id, color: '#94a3b8', bg: 'rgba(148,163,184,0.12)' };
+  return (
+    <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: '999px', fontSize: '0.74rem', fontWeight: 700, color: site.color, background: site.bg, whiteSpace: 'nowrap' }}>
+      {site.label}
+    </span>
+  );
+}
 
 export default function SocialReviewResults() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [recentSite, setRecentSite] = useState('all');
+  const [showAllRecent, setShowAllRecent] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -187,39 +206,85 @@ export default function SocialReviewResults() {
       </div>
 
       <div style={card}>
-        <h3 style={{ color: '#f8fafc', fontSize: '1rem', margin: '0 0 12px' }}>Recent requests</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+          <h3 style={{ color: '#f8fafc', fontSize: '1rem', margin: 0 }}>Recent requests</h3>
+          {recent.length > 0 && <span style={muted}>Latest {recent.length} sent</span>}
+        </div>
         {recent.length === 0 ? (
           <div style={{ color: '#64748b', fontSize: '0.88rem' }}>No requests sent yet.</div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-              <thead>
-                <tr style={{ color: '#64748b', textAlign: 'left' }}>
-                  <th style={{ padding: '6px 8px', fontWeight: 600 }}>Customer</th>
-                  <th style={{ padding: '6px 8px', fontWeight: 600 }}>Order</th>
-                  <th style={{ padding: '6px 8px', fontWeight: 600 }}>Asked for</th>
-                  <th style={{ padding: '6px 8px', fontWeight: 600 }}>Sent</th>
-                  <th style={{ padding: '6px 8px', fontWeight: 600 }}>Clicked</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map((r, i) => (
-                  <tr key={`${r.email}-${r.askedAt}-${i}`} style={{ borderTop: '1px solid rgba(255,255,255,0.05)', color: '#cbd5e1' }}>
-                    <td style={{ padding: '7px 8px' }}>{r.email}</td>
-                    <td style={{ padding: '7px 8px', color: '#94a3b8' }}>{r.orderNumber || '—'}</td>
-                    <td style={{ padding: '7px 8px', textTransform: 'capitalize' }}>{(r.platforms || []).join(', ') || '—'}</td>
-                    <td style={{ padding: '7px 8px', color: '#94a3b8' }}>{shortDate(r.askedAt)}</td>
-                    <td style={{ padding: '7px 8px' }}>
-                      {r.clicked
-                        ? <span style={{ color: '#4ade80', fontWeight: 700, textTransform: 'capitalize' }}>{r.clicked}</span>
-                        : <span style={{ color: '#64748b' }}>{(r.platforms || []).includes('trustpilot') ? 'not measurable' : '—'}</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        ) : (() => {
+          const siteOf = (r) => (r.platforms || [])[0] || '';
+          const counts = recent.reduce((acc, r) => { acc[siteOf(r)] = (acc[siteOf(r)] || 0) + 1; return acc; }, {});
+          const filters = [{ id: 'all', label: 'All', count: recent.length }]
+            .concat(Object.keys(SITES).filter((id) => counts[id]).map((id) => ({ id, label: SITES[id].label, count: counts[id] })));
+          const activeSite = filters.some((f) => f.id === recentSite) ? recentSite : 'all';
+          const matching = activeSite === 'all' ? recent : recent.filter((r) => siteOf(r) === activeSite);
+          const shown = showAllRecent ? matching : matching.slice(0, RECENT_PREVIEW);
+
+          return (
+            <>
+              {filters.length > 2 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                  {filters.map((f) => {
+                    const on = f.id === activeSite;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => { setRecentSite(f.id); setShowAllRecent(false); }}
+                        style={{
+                          padding: '4px 11px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+                          background: on ? 'rgba(56,189,248,0.14)' : 'rgba(148,163,184,0.08)',
+                          border: `1px solid ${on ? 'rgba(56,189,248,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                          color: on ? '#38bdf8' : '#94a3b8',
+                        }}
+                      >
+                        {f.label} <span style={{ opacity: 0.7 }}>{f.count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {shown.map((r, i) => {
+                  const site = siteOf(r);
+                  return (
+                    <div
+                      key={`${r.email}-${r.askedAt}-${i}`}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '10px 2px', borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)' }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: '#e2e8f0', fontSize: '0.88rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.email}>
+                          {r.email}
+                        </div>
+                        <div style={{ ...muted, marginTop: '2px' }}>
+                          {r.orderNumber ? `#${r.orderNumber} · ` : ''}{shortDate(r.askedAt)}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <SiteBadge id={site} />
+                        <div style={{ fontSize: '0.74rem', marginTop: '4px', color: r.clicked ? '#4ade80' : '#64748b', fontWeight: r.clicked ? 700 : 400 }}>
+                          {r.clicked ? 'Clicked' : site === 'trustpilot' ? 'Click not measurable' : 'Not clicked yet'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {matching.length > RECENT_PREVIEW && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllRecent((v) => !v)}
+                  style={{ marginTop: '10px', width: '100%', background: 'rgba(148,163,184,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8', borderRadius: 8, padding: '7px 12px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  {showAllRecent ? 'Show fewer' : `Show all ${matching.length}`}
+                </button>
+              )}
+            </>
+          );
+        })()}
       </div>
     </>
   );
