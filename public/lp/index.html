@@ -784,12 +784,12 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19 12H6m0 0 5.5-5.5M6 12l5.5 5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span data-i18n="mod.back">Back</span>
       </button>
-      <span class="mod__step" id="mStep">Step 1 of 5</span>
+      <span class="mod__step" id="mStep">Step 1 of 4</span>
       <span class="mod__left" id="mLeft">~40s left</span>
     </div>
 
-    <div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="20" aria-label="Progress"><div class="pbar__f" id="mBar"></div></div>
-    <div class="dots" id="mDots" aria-hidden="true"><i class="done"></i><i></i><i></i><i></i><i></i></div>
+    <div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="25" aria-label="Progress"><div class="pbar__f" id="mBar"></div></div>
+    <div class="dots" id="mDots" aria-hidden="true"><i class="done"></i><i></i><i></i><i></i></div>
     <div class="chips" id="mChips"></div>
 
     <div aria-live="polite">
@@ -806,16 +806,6 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       </div>
 
       <div class="pane" data-step="2">
-        <h3 class="mq" data-i18n="s2.q">Where should it go?</h3>
-        <p class="mh" data-i18n="s2.h">So we can confirm the delivery options available to you.</p>
-        <div class="opts">
-          <button type="button" class="opt" data-q="location" data-val="United States"><span class="opt__d"></span><span class="opt__t" data-i18n="s2.o1">United States</span></button>
-          <button type="button" class="opt" data-q="location" data-val="Costa Rica"><span class="opt__d"></span><span class="opt__t" data-i18n="s2.o2">Costa Rica</span></button>
-          <button type="button" class="opt" data-q="location" data-val="Somewhere else"><span class="opt__d"></span><span class="opt__t" data-i18n="s2.o3">Somewhere else<span class="opt__s" data-i18n="s2.o3s">Tell us where and we will check</span></span></button>
-        </div>
-      </div>
-
-      <div class="pane" data-step="3">
         <h3 class="mq" data-i18n="s3.q">How many vials, roughly?</h3>
         <p class="mh" data-i18n="s3.h">An estimate is fine. It decides whether the bulk discount applies.</p>
         <div class="opts">
@@ -826,7 +816,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         </div>
       </div>
 
-      <div class="pane" data-step="4">
+      <div class="pane" data-step="3">
         <h3 class="mq" data-i18n="s4.q">Which language should we reply in?</h3>
         <p class="mh" data-i18n="s4.h">Your specialist will use this for every message.</p>
         <div class="opts">
@@ -835,7 +825,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         </div>
       </div>
 
-      <div class="pane" data-step="5">
+      <div class="pane" data-step="4">
         <h3 class="mq" data-i18n="s5.q">How can we reach you?</h3>
         <p class="mh" data-i18n="s5.h">Last step — then a specialist picks it up from here.</p>
         <form id="qForm" novalidate>
@@ -887,7 +877,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       </div>
 
       <!-- THANK YOU -->
-      <div class="pane" data-step="6">
+      <div class="pane" data-step="5">
         <div class="done">
           <div class="done__r"><svg width="33" height="33" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           <h3 id="doneH" data-i18n="done.h">Thank you — your request has been received.</h3>
@@ -1235,7 +1225,9 @@ $$(".acc__btn").forEach(function(btn){
 
 /* ---------- modal ---------- */
 var ov=$("#ov"), mod=$("#mod");
-var TOTAL=5, current=1, started=false, completed=false, everOpened=false, lastFocus=null;
+// The "Where should it go?" step was removed while we only advertise and ship
+// to Costa Rica. location stays "" and every consumer skips a blank answer.
+var TOTAL=4, current=1, started=false, completed=false, everOpened=false, lastFocus=null;
 // When the visitor was first shown a field, for the route's form_ms check.
 // Page load is the fallback and the modal opening resets it, because this
 // modal auto-opens on a timer or a scroll depth and a visitor who fills it in
@@ -1807,7 +1799,7 @@ function success(l){
 
   $("#doneH").textContent = UI[lang].thanks(l.firstName);
 
-  goTo(6,false);
+  goTo(5,false);
   $("#mStep").textContent=UI[lang].done;
   $("#mLeft").textContent="";
   $("#mBar").style.width="100%";
