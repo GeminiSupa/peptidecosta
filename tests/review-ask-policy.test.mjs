@@ -108,7 +108,34 @@ test('a Trustpilot ask does not count as ignored, since a click was invisible', 
   const r = ask({ history: [{ platforms: ['trustpilot'], asked_at: daysAgo(300) }] });
   assert.equal(r.ask, true);
   assert.equal(r.platform, 'google');
-  assert.match(r.reason, /unknowable/);
+  assert.match(r.reason, /only asked on Trustpilot/);
+});
+
+// The bug fixed 2026-09-13: the 180-day gap ran before this rule, so 43 repeat
+// buyers whose only asks were Trustpilot (most dropped over the monthly cap)
+// got nothing at all in a week, while only 31 were sent to Google or Facebook.
+test('a customer asked only on Trustpilot days ago is still asked on Google or Facebook', () => {
+  for (const age of [0, 4, 14, 179]) {
+    const r = ask({ history: [{ platforms: ['trustpilot'], asked_at: daysAgo(age) }], firstChoice: 'facebook', trustpilotHasRoom: false });
+    assert.equal(r.ask, true, `asked on Trustpilot ${age}d ago`);
+    assert.deepEqual(r.offer, ['facebook'], 'the ratio still picks the site');
+  }
+});
+
+test('many recent Trustpilot asks still earn only one Google ask', () => {
+  const tenTrustpilot = Array.from({ length: 10 }, (_, i) => ({ platforms: ['trustpilot'], asked_at: daysAgo(3 + i * 7) }));
+  assert.equal(ask({ history: tenTrustpilot }).platform, 'google');
+});
+
+test('once that Google or Facebook ask has gone out, the gap applies again', () => {
+  const r = ask({
+    history: [
+      { platforms: ['trustpilot'], asked_at: daysAgo(20) },
+      { platforms: ['google'], asked_at: daysAgo(5) },
+    ],
+  });
+  assert.equal(r.ask, false);
+  assert.match(r.reason, /under the 180d gap/);
 });
 
 test('after the Trustpilot concession the normal limit applies', () => {

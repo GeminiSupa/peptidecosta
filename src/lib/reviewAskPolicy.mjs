@@ -153,6 +153,21 @@ export function decideReviewAsk({
     return { ask: true, platform: site, offer: [site], reason: 'first ask' };
   }
 
+  const clicked = new Set(asks.map((a) => a.clicked).filter(Boolean));
+  const remaining = TRACKABLE_PLATFORMS.filter((p) => !clicked.has(p));
+  const askedTrustpilot = asks.some((a) => a.platforms.includes('trustpilot'));
+  const nonTrustpilotAsks = asks.filter((a) => !a.platforms.includes('trustpilot')).length;
+  const preferred = TRACKABLE_PLATFORMS.includes(firstChoice) ? firstChoice : 'google';
+
+  // Only ever asked on Trustpilot: one Google/Facebook ask, with no wait
+  // (Omer, 2026-09-13). The gap below used to run first and held these
+  // customers back six months — 43 repeat buyers in a week — though most of
+  // those invitations went out in July and August, when Trustpilot was far
+  // over its 50 a month and dropped them, so many were never asked at all.
+  if (clicked.size === 0 && askedTrustpilot && nonTrustpilotAsks === 0) {
+    return { ask: true, platform: preferred, offer: [preferred], reason: 'only asked on Trustpilot, one ask on a site we can see' };
+  }
+
   // Never two asks close together, whatever else is true. This is the guard
   // that stops a customer who orders weekly from being asked weekly.
   const last = asks[asks.length - 1];
@@ -160,10 +175,6 @@ export function decideReviewAsk({
   if (days(nowMs - last.askedMs) < gap) {
     return no(`asked ${Math.floor(days(nowMs - last.askedMs))}d ago, under the ${gap}d gap`);
   }
-
-  const clicked = new Set(asks.map((a) => a.clicked).filter(Boolean));
-  const remaining = TRACKABLE_PLATFORMS.filter((p) => !clicked.has(p));
-  const askedTrustpilot = asks.some((a) => a.platforms.includes('trustpilot'));
 
   if (clicked.size > 0) {
     // They engaged, so they are worth asking again — but only about a site they
@@ -179,17 +190,9 @@ export function decideReviewAsk({
     return no('every site has been clicked or offered');
   }
 
-  // No click on record.
-  //
-  // A Trustpilot ask is the one case where "no click" means nothing at all —
-  // their click would have been invisible to us. So it does not count towards
-  // the ignored-ask limit, and they get one Google/Facebook ask instead.
-  const nonTrustpilotAsks = asks.filter((a) => !a.platforms.includes('trustpilot')).length;
-  const preferred = TRACKABLE_PLATFORMS.includes(firstChoice) ? firstChoice : 'google';
-  if (askedTrustpilot && nonTrustpilotAsks === 0) {
-    return { ask: true, platform: preferred, offer: [preferred], reason: 'Trustpilot result unknowable, one ask on a site we can see' };
-  }
-
+  // No click on record, and at least one Google/Facebook ask already made.
+  // Trustpilot asks never count towards the ignored-ask limit: a click on one
+  // would have been invisible to us.
   const maxAsks = Number.isFinite(policy?.maxAsksWithoutClick)
     ? policy.maxAsksWithoutClick
     : MAX_ASKS_WITHOUT_A_CLICK;
