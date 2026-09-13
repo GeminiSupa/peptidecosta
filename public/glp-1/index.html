@@ -190,6 +190,8 @@ h1 em{font-style:normal;color:var(--b500);white-space:nowrap}
 .fld input{width:100%;min-height:50px;padding:12px 14px 12px 44px;border:1px solid var(--line);
   border-radius:10px;font:inherit;font-size:.95rem;color:var(--ink);background:var(--surface)}
 .fld input::placeholder{color:var(--ink3)}
+/* A field with no icon (Last name) gets no empty icon gutter */
+.fld input:first-child{padding-left:14px}
 .fld input:focus{outline:0;border-color:var(--b500);box-shadow:0 0 0 3px var(--b100)}
 .fld input[aria-invalid="true"]{border-color:#C4573A;background:#FFF8F6}
 .fld__e{margin-top:5px;font-size:.8rem;color:#9E3F22;font-weight:500}
@@ -239,8 +241,9 @@ h1 em{font-style:normal;color:var(--b500);white-space:nowrap}
 .opt__s{display:block;margin-top:2px;font-size:.79rem;color:var(--ink3);font-weight:400}
 @media (prefers-reduced-motion:reduce){.opt,.opt__d{transition:none}}
 
-.row2{display:grid;gap:12px}
-@media (min-width:420px){.row2{grid-template-columns:1fr 1fr}}
+.row2{display:grid;gap:0}
+/* No side-by-side columns: both forms sit in a card of ~400px, where each half
+   left "Last name (optional)" 2px short of fitting and cut it off. */
 .consent{display:flex;gap:10px;align-items:flex-start;font-size:.81rem;color:var(--ink2);
   line-height:1.48;cursor:pointer;padding:2px 0}
 .consent input{flex:0 0 auto;width:18px;height:18px;margin-top:2px;accent-color:var(--b600);cursor:pointer}
@@ -455,7 +458,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       <div class="wiz" id="wiz" data-prefix="">
         <div class="wiz__top">
           <button type="button" class="wiz__back" id="back" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4.5 15.5 12 8 19.5"/></svg><span data-i18n="wiz.back">Back</span></button>
-          <p class="wiz__step" id="step">Step 1 of 5</p>
+          <p class="wiz__step" id="step">Step 1 of 4</p>
         </div>
         <div class="wiz__bar"><i id="bar"></i></div>
         <div class="wiz__chips" id="chips"></div>
@@ -471,15 +474,6 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           </div>
         </div>
         <div class="pane" data-step="2" hidden>
-          <p class="pane__q" data-i18n="q.location">Where are you based?</p>
-          <p class="pane__h" data-i18n="q.location.h">So we can point you to what is relevant where you are.</p>
-          <div class="opts">
-            <button type="button" class="opt" data-q="location" data-val="United States"><span class="opt__d"></span><span class="opt__t" data-i18n="o.united-states">United States</span></button>
-            <button type="button" class="opt" data-q="location" data-val="Costa Rica"><span class="opt__d"></span><span class="opt__t" data-i18n="o.costa-rica">Costa Rica</span></button>
-            <button type="button" class="opt" data-q="location" data-val="Somewhere else"><span class="opt__d"></span><span class="opt__t" data-i18n="o.somewhere-else">Somewhere else<span class="opt__s" data-i18n="o.somewhere-else.s">Tell us where and we will adapt</span></span></button>
-          </div>
-        </div>
-        <div class="pane" data-step="3" hidden>
           <p class="pane__q" data-i18n="q.stage">Where are you in the process?</p>
           <p class="pane__h" data-i18n="q.stage.h">There is no wrong answer — it just sets the level we pitch it at.</p>
           <div class="opts">
@@ -489,7 +483,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             <button type="button" class="opt" data-q="stage" data-val="Not sure yet"><span class="opt__d"></span><span class="opt__t" data-i18n="o.not-sure-yet">Not sure yet</span></button>
           </div>
         </div>
-        <div class="pane" data-step="4" hidden>
+        <div class="pane" data-step="3" hidden>
           <p class="pane__q" data-i18n="q.language">Which language should we reply in?</p>
           <p class="pane__h" data-i18n="q.language.h">Every message will come in the language you pick.</p>
           <div class="opts">
@@ -497,7 +491,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             <button type="button" class="opt" data-q="language" data-val="Español"><span class="opt__d"></span><span class="opt__t" data-i18n="o.español">Español</span></button>
           </div>
         </div>
-        <div class="pane" data-step="5" hidden>
+        <div class="pane" data-step="4" hidden>
           <p class="pane__q" data-i18n="q.contact">Where should we send it?</p>
           <p class="pane__h" data-i18n="q.contact.h">Last step — then someone picks it up from here.</p>
           <div class="frm">
@@ -677,7 +671,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       <div class="wiz" id="popwiz" data-prefix="pop">
         <div class="wiz__top">
           <button type="button" class="wiz__back" id="popback" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4.5 15.5 12 8 19.5"/></svg><span data-i18n="wiz.back">Back</span></button>
-          <p class="wiz__step" id="popstep">Step 1 of 5</p>
+          <p class="wiz__step" id="popstep">Step 1 of 4</p>
         </div>
         <div class="wiz__bar"><i id="popbar"></i></div>
         <div class="wiz__chips" id="popchips"></div>
@@ -693,15 +687,6 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           </div>
         </div>
         <div class="pane" data-step="2" hidden>
-          <p class="pane__q" data-i18n="q.location">Where are you based?</p>
-          <p class="pane__h" data-i18n="q.location.h">So we can point you to what is relevant where you are.</p>
-          <div class="opts">
-            <button type="button" class="opt" data-q="location" data-val="United States"><span class="opt__d"></span><span class="opt__t" data-i18n="o.united-states">United States</span></button>
-            <button type="button" class="opt" data-q="location" data-val="Costa Rica"><span class="opt__d"></span><span class="opt__t" data-i18n="o.costa-rica">Costa Rica</span></button>
-            <button type="button" class="opt" data-q="location" data-val="Somewhere else"><span class="opt__d"></span><span class="opt__t" data-i18n="o.somewhere-else">Somewhere else<span class="opt__s" data-i18n="o.somewhere-else.s">Tell us where and we will adapt</span></span></button>
-          </div>
-        </div>
-        <div class="pane" data-step="3" hidden>
           <p class="pane__q" data-i18n="q.stage">Where are you in the process?</p>
           <p class="pane__h" data-i18n="q.stage.h">There is no wrong answer — it just sets the level we pitch it at.</p>
           <div class="opts">
@@ -711,7 +696,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             <button type="button" class="opt" data-q="stage" data-val="Not sure yet"><span class="opt__d"></span><span class="opt__t" data-i18n="o.not-sure-yet">Not sure yet</span></button>
           </div>
         </div>
-        <div class="pane" data-step="4" hidden>
+        <div class="pane" data-step="3" hidden>
           <p class="pane__q" data-i18n="q.language">Which language should we reply in?</p>
           <p class="pane__h" data-i18n="q.language.h">Every message will come in the language you pick.</p>
           <div class="opts">
@@ -719,7 +704,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
             <button type="button" class="opt" data-q="language" data-val="Español"><span class="opt__d"></span><span class="opt__t" data-i18n="o.español">Español</span></button>
           </div>
         </div>
-        <div class="pane" data-step="5" hidden>
+        <div class="pane" data-step="4" hidden>
           <p class="pane__q" data-i18n="q.contact">Where should we send it?</p>
           <p class="pane__h" data-i18n="q.contact.h">Last step — then someone picks it up from here.</p>
           <div class="frm">
@@ -849,7 +834,7 @@ function wizard(prefix, where){
   var btn    = document.getElementById(prefix + "btn");
   var box    = document.getElementById(prefix + "err");
   var label  = btn.innerHTML;
-  var total  = panes.length;
+  var total  = panes.length;   // 4: the location step was removed (CR-only for now)
   var step   = 1;
   var answers = {};
   var started = false;
