@@ -190,6 +190,8 @@ h1 em{font-style:normal;color:var(--b500);white-space:nowrap}
 .fld input{width:100%;min-height:50px;padding:12px 14px 12px 44px;border:1px solid var(--line);
   border-radius:10px;font:inherit;font-size:.95rem;color:var(--ink);background:var(--surface)}
 .fld input::placeholder{color:var(--ink3)}
+/* A field with no icon (Last name) gets no empty icon gutter */
+.fld input:first-child{padding-left:14px}
 .fld input:focus{outline:0;border-color:var(--b500);box-shadow:0 0 0 3px var(--b100)}
 .fld input[aria-invalid="true"]{border-color:#C4573A;background:#FFF8F6}
 .fld__e{margin-top:5px;font-size:.8rem;color:#9E3F22;font-weight:500}
@@ -239,8 +241,9 @@ h1 em{font-style:normal;color:var(--b500);white-space:nowrap}
 .opt__s{display:block;margin-top:2px;font-size:.79rem;color:var(--ink3);font-weight:400}
 @media (prefers-reduced-motion:reduce){.opt,.opt__d{transition:none}}
 
-.row2{display:grid;gap:12px}
-@media (min-width:420px){.row2{grid-template-columns:1fr 1fr}}
+.row2{display:grid;gap:0}
+/* No side-by-side columns: both forms sit in a card of ~400px, where each half
+   left "Last name (optional)" 2px short of fitting and cut it off. */
 .consent{display:flex;gap:10px;align-items:flex-start;font-size:.81rem;color:var(--ink2);
   line-height:1.48;cursor:pointer;padding:2px 0}
 .consent input{flex:0 0 auto;width:18px;height:18px;margin-top:2px;accent-color:var(--b600);cursor:pointer}
