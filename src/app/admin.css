@@ -1994,7 +1994,10 @@
            against the dark dashboard. */
         border-right: 1px solid rgba(0, 0, 0, 0.45) !important;
         border-bottom: none !important;
-        padding: 20px 12px 90px 12px !important;
+        /* 16px at the bottom, not 90: that empty band was taken straight out
+           of the menu's height, and on a short window the menu is what gets
+           squeezed. */
+        padding: 20px 12px 16px 12px !important;
         display: flex !important;
         flex-direction: column !important;
         justify-content: flex-start !important;
@@ -2239,21 +2242,27 @@
         border-top: 1px solid rgba(148, 163, 184, 0.08) !important;
     }
     
+    /* One row — avatar, name, then the two buttons — instead of a stacked card.
+       Stacked it was 113px tall, all of it taken from the menu above; in a row
+       it is 56px. Measured at a 673px-tall window: menu 333px -> 453px. */
     .admin-sidebar-footer {
         display: flex !important;
-        flex-direction: column !important;
-        gap: 12px !important;
-        padding: 16px 12px !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 8px !important;
+        padding: 10px 12px !important;
         border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
         margin-top: auto !important; /* Push to bottom */
         background: rgba(14, 26, 51, 0.3) !important;
         border-radius: 12px !important;
     }
-    
+
     .admin-user-info {
         display: flex !important;
         align-items: center !important;
         gap: 10px !important;
+        min-width: 0 !important;
     }
     
     .admin-user-avatar {
@@ -2283,7 +2292,7 @@
         display: flex !important;
         flex-direction: column !important;
         overflow: hidden !important;
-        max-width: 150px !important;
+        max-width: 120px !important;
     }
     
     .admin-user-name {
@@ -2302,10 +2311,10 @@
     }
     
     .admin-session-actions {
-        display: grid !important;
-        grid-template-columns: 1fr 1fr !important;
-        gap: 8px !important;
-        width: 100% !important;
+        display: flex !important;
+        gap: 6px !important;
+        width: auto !important;
+        flex-shrink: 0 !important;
     }
     
     .admin-footer-btn {
@@ -2332,7 +2341,13 @@
         border-color: rgba(239, 68, 68, 0.2) !important;
         color: #ef4444 !important;
     }
-    
+
+    /* The collapsed rail is 82px wide, too narrow for the row: stack there, and
+       go back to the row when it expands on hover. */
+    .admin-sidebar-collapsed .admin-navbar:not(:hover):not(:focus-within) .admin-sidebar-footer {
+        flex-direction: column !important;
+    }
+
     .admin-navbar ~ .admin-container {
         margin-left: 264px !important;
         width: calc(100% - 264px) !important;
@@ -10819,3 +10834,15 @@
 
 /* A folded card is still a search target: filtering forces every section open
    (see cmsSectionProps), so a match can never hide inside one. */
+
+/* Short windows: the Workspace box repeats the page's own heading, and on a
+   window this short its height is better spent on the menu. Last in the file,
+   and naming the collapsed-hover selectors too, so it outranks the rules that
+   show the box when the collapsed rail expands. */
+@media (min-width: 1024px) and (max-height: 760px) {
+    .admin-navbar .admin-sidebar-context,
+    .admin-sidebar-collapsed .admin-navbar:hover .admin-sidebar-context,
+    .admin-sidebar-collapsed .admin-navbar:focus-within .admin-sidebar-context {
+        display: none !important;
+    }
+}
