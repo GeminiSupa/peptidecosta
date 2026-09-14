@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   readCatalogParams,
   resolveCategoryParam,
+  catalogSearchAliases,
   productMatchesCatalogSearch,
   rankCatalogSearchResults,
   productSortRank,
@@ -99,6 +100,38 @@ test('name matches rank ahead of broad category matches', () => {
   const matches = rankCatalogSearchResults(searchableProducts, 'recovery');
 
   assert.deepEqual(matches.map((p) => p.product), ['Recovery Stack', 'Generic Repair Blend']);
+});
+
+test('renamed products remain findable by the names customers already know', () => {
+  assert.equal(productMatchesCatalogSearch({ product: 'Amino Acid Blend' }, 'super human'), true);
+  assert.equal(productMatchesCatalogSearch({ product: 'Lipotropic Blend' }, 'fat blaster'), true);
+  assert.equal(productMatchesCatalogSearch({ product: 'GLP-1' }, 'retatrutide'), true);
+});
+
+test('blend ingredients and common shorthand lead to the current product', () => {
+  assert.ok(catalogSearchAliases({ product: 'KLOW 70mg' }).includes('KPV'));
+  assert.equal(productMatchesCatalogSearch({ product: 'KLOW 70mg' }, 'KPV'), true);
+  assert.equal(productMatchesCatalogSearch({ product: 'Melanotan II 10mg' }, 'melanotan 2'), true);
+  assert.equal(productMatchesCatalogSearch({ product: 'TB-4 10mg' }, 'TB500'), true);
+});
+
+test('search tolerates a small typo in a specific product name', () => {
+  assert.equal(productMatchesCatalogSearch({ product: 'Semaglutide 10mg' }, 'semaglutied'), true);
+  // Very short searches are not fuzzied: they would make the catalog noisy.
+  assert.equal(productMatchesCatalogSearch({ product: 'GLOW 70mg' }, 'GLP'), false);
+});
+
+test('relevance ordering puts the requested product before description-only matches', () => {
+  const searchableProducts = [
+    { product: 'Amino Acid Blend', descriptionEn: 'A general blend with semaglutide-related research notes.' },
+    { product: 'Semaglutide 10mg' },
+    { product: 'Semaglutide 5mg' },
+  ];
+
+  assert.deepEqual(
+    rankCatalogSearchResults(searchableProducts, 'semaglutide').map((p) => p.product),
+    ['Semaglutide 10mg', 'Semaglutide 5mg', 'Amino Acid Blend']
+  );
 });
 
 // --- Grid ordering: on-sale to the top -----------------------------------

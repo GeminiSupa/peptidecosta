@@ -253,6 +253,10 @@ body {
     top: auto;
 }
 
+.catalog-page-shell.catalog-search-open .header-sticky-section {
+    z-index: 10000;
+}
+
 .header-sticky-section {
     position: sticky;
     top: 0;
@@ -598,9 +602,11 @@ body {
 }
 
 #searchInput {
+    position: relative;
+    z-index: 10000;
     width: 100%;
     height: 44px;
-    padding: 12px 12px 12px 42px;
+    padding: 12px 42px;
     border-radius: 14px;
     border: 1px solid var(--border);
     background: var(--bg-secondary);
@@ -5663,6 +5669,40 @@ body {
     position: relative; /* Anchor for autocomplete suggestions */
 }
 
+.search-input-wrapper .search-icon {
+    z-index: 10001;
+    pointer-events: none;
+}
+
+.search-clear-btn {
+    position: absolute;
+    z-index: 10001;
+    top: 50%;
+    right: 7px;
+    width: 30px;
+    height: 30px;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.category-filter-group {
+    grid-column: 1 / -1;
+}
+
+.search-clear-btn:hover,
+.search-clear-btn:focus-visible {
+    color: var(--text-main);
+    box-shadow: 0 0 0 2px var(--border);
+    outline: none;
+}
+
 .search-overlay-backdrop {
     position: fixed;
     inset: 0;
@@ -5723,7 +5763,7 @@ body {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     box-sizing: border-box;
-    max-height: 480px;
+    max-height: min(480px, calc(100vh - 132px));
     overflow-y: auto;
     animation: slideDownFade 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -5788,8 +5828,13 @@ body {
     text-align: left;
 }
 
-.suggested-product-row:hover {
+.suggested-product-row:hover,
+.suggested-product-row.active {
     background: var(--bg-secondary);
+}
+
+.suggested-product-row.active {
+    box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .suggested-product-img {
@@ -5873,6 +5918,62 @@ body {
     color: var(--text-muted);
     text-align: center;
     padding: 12px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.search-reset-filters,
+.search-view-results {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    color: var(--text-main);
+    min-height: 38px;
+    padding: 8px 14px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.search-view-results {
+    width: 100%;
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+.search-reset-filters:hover,
+.search-reset-filters:focus-visible,
+.search-view-results:hover,
+.search-view-results:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+    outline: none;
+}
+
+.catalog-results-anchor {
+    scroll-margin-top: 18px;
+}
+
+.catalog-result-summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    color: var(--text-main);
+    font-size: 0.82rem;
+    font-weight: 750;
+}
+
+.catalog-empty-results {
+    gap: 12px;
 }
 
 /* --- Premium Toast & Flying Vial Animations --- */

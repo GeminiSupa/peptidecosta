@@ -349,7 +349,9 @@ export default function CatalogPage() {
   // Search & Filtering States
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [searchResultIndex, setSearchResultIndex] = useState(-1);
   const searchRef = useRef(null);
+  const resultsRef = useRef(null);
   const categoryScrollRef = useRef(null);
   const suggestionsScrollRef = useRef(null);
   const autoPromoAppliedRef = useRef(false);
@@ -363,7 +365,7 @@ export default function CatalogPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [priceFilter, setPriceFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState('pop');
-  const [inStockOnly, setInStockOnly] = useState(true);
+  const [inStockOnly, setInStockOnly] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list', 'grid'
 
   // Cart & Modals States
@@ -682,6 +684,7 @@ export default function CatalogPage() {
 
   const closeSearch = useCallback(() => {
     setSearchFocused(false);
+    setSearchResultIndex(-1);
     document.getElementById('searchInput')?.blur();
   }, []);
 
@@ -707,6 +710,10 @@ export default function CatalogPage() {
       document.removeEventListener('keydown', handleEscape);
     };
   }, [searchFocused, closeSearch]);
+
+  useEffect(() => {
+    setSearchResultIndex(-1);
+  }, [searchQuery, activeCategory, priceFilter, inStockOnly, sortOrder]);
 
   // Handle 'product' URL parameter linking
   useEffect(() => {
@@ -1982,19 +1989,6 @@ export default function CatalogPage() {
     return true;
   };
 
-  const getSearchSuggestions = () => {
-    const query = searchQuery.trim();
-    const visible = products.filter(isListableProduct);
-    if (!query) {
-      return visible.slice(0, 3);
-    }
-    // Ten, because that is the largest single product family (GLP-1 has
-    // ten sizes, Tirzepatide seven). At five, searching a family name hid the
-    // largest sizes and made them look unavailable. The dropdown caps its own
-    // height and scrolls, so a longer list does not grow the panel.
-    return rankCatalogSearchResults(visible, query, { limit: 10 });
-  };
-
   const handlePopularTermClick = (term) => {
     setSearchQuery(term);
     setSearchFocused(true);
@@ -3194,7 +3188,7 @@ export default function CatalogPage() {
   ];
 
   // Filtering + Sorting Logic
-  const baseFilteredProducts = products.filter(p => {
+  const matchesActiveCatalogFilters = (p) => {
     // 0. Admin-hidden rows, and BAC sizes that are not sold. Shared with the
     // search dropdown and the cart suggestions so the three lists cannot drift.
     if (!isListableProduct(p)) return false;
@@ -3222,7 +3216,9 @@ export default function CatalogPage() {
     }
 
     return true;
-  });
+  };
+
+  const baseFilteredProducts = products.filter(matchesActiveCatalogFilters);
 
   // Sorting — on-sale in-stock items first, then the rest of the in-stock
   // items, out-of-stock at the bottom. The banding is shared with the tests in
@@ -3246,9 +3242,11 @@ export default function CatalogPage() {
 
   let filteredProducts;
   if (sortOrder === 'pop') {
-    filteredProducts = [...baseFilteredProducts].sort(
-      (a, b) => compareBySaleAndStock(a, b, sortPredicates)
-    );
+    filteredProducts = searchQuery.trim()
+      ? rankCatalogSearchResults(baseFilteredProducts, searchQuery)
+      : [...baseFilteredProducts].sort(
+          (a, b) => compareBySaleAndStock(a, b, sortPredicates)
+        );
   } else {
     // Price sort, but still banded by sale and stock first
     filteredProducts = [...baseFilteredProducts].sort((a, b) => {
@@ -3259,6 +3257,53 @@ export default function CatalogPage() {
       return sortOrder === 'lowToHigh' ? priceA - priceB : priceB - priceA;
     });
   }
+
+  // The dropdown is a preview of the actual result set, not a second search
+  // with different stock/category/price rules. Ten covers the largest family;
+  // the final row submits the search and reveals the complete grid.
+  const searchSuggestions = filteredProducts.slice(0, searchQuery.trim() ? 10 : 3);
+  const hasRestrictiveFilters = activeCategory !== 'all' || priceFilter !== 'all' || inStockOnly;
+
+  const revealSearchResults = () => {
+    closeSearch();
+    window.setTimeout(() => {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
+
+  const selectSearchSuggestion = (product) => {
+    handleProductClick(product);
+    closeSearch();
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSearchFocused(true);
+      setSearchResultIndex((current) => Math.min(current + 1, searchSuggestions.length - 1));
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSearchResultIndex((current) => Math.max(current - 1, -1));
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const selectedMatch = searchSuggestions[searchResultIndex];
+      if (selectedMatch) {
+        selectSearchSuggestion(selectedMatch);
+      } else {
+        revealSearchResults();
+      }
+    }
+  };
+
+  const clearRestrictiveFilters = () => {
+    setActiveCategory('all');
+    setPriceFilter('all');
+    setInStockOnly(false);
+  };
 
   const renderOrderSummary = ({ showHeading = false, compact = false } = {}) => {
     const shipFee = getShippingFee();
@@ -3400,7 +3445,11 @@ export default function CatalogPage() {
   };
 
   return (
-    <div id="app" className="catalog-page-shell min-h-screen" suppressHydrationWarning>
+    <div
+      id="app"
+      className={`catalog-page-shell min-h-screen${searchFocused ? ' catalog-search-open' : ''}`}
+      suppressHydrationWarning
+    >
       <CatalogPromoBanner lang={lang} settings={landingSettings} forceActive mode="ticker" />
       {/* Utility controls stay in normal flow above the persistent brand row. */}
       <header className="header-top-section">
@@ -3563,7 +3612,29 @@ export default function CatalogPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setSearchFocused(true)}
+                onKeyDown={handleSearchKeyDown}
+                role="combobox"
+                aria-label={lang === 'en' ? 'Search catalog products' : 'Buscar productos del catálogo'}
+                aria-autocomplete="list"
+                aria-expanded={searchFocused}
+                aria-controls="catalog-search-results"
+                aria-activedescendant={searchResultIndex >= 0 ? `catalog-search-option-${searchResultIndex}` : undefined}
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="search-clear-btn"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setSearchFocused(true);
+                    document.getElementById('searchInput')?.focus();
+                  }}
+                  aria-label={lang === 'en' ? 'Clear search' : 'Borrar búsqueda'}
+                >
+                  <X size={15} />
+                </button>
+              )}
               {searchFocused && (
                 <>
                 <div
@@ -3575,7 +3646,7 @@ export default function CatalogPage() {
                 <div className="search-suggestions-dropdown" onClick={(e) => e.stopPropagation()}>
                   <div className="search-dropdown-header">
                     <span className="search-dropdown-title">
-                      {lang === 'en' ? 'Search' : 'Buscar'}
+                      {lang === 'en' ? 'Search products' : 'Buscar productos'}
                     </span>
                     <button
                       type="button"
@@ -3586,41 +3657,54 @@ export default function CatalogPage() {
                       <X size={18} />
                     </button>
                   </div>
-                  <div className="suggestions-section">
-                    <span className="section-title">
-                      {lang === 'en' ? 'Popular Searches' : 'Búsquedas Populares'}
-                    </span>
-                    <div className="popular-tags">
-                      {popularTerms.map((term, idx) => {
-                        const label = lang === 'en' ? term.en : term.es;
-                        return (
-                          <button 
-                            key={idx} 
-                            type="button" 
-                            className="popular-tag"
-                            onClick={() => handlePopularTermClick(label)}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
+                  {!searchQuery.trim() && (
+                    <div className="suggestions-section">
+                      <span className="section-title">
+                        {lang === 'en' ? 'Popular searches' : 'Búsquedas populares'}
+                      </span>
+                      <div className="popular-tags">
+                        {popularTerms.map((term, idx) => {
+                          const label = lang === 'en' ? term.en : term.es;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              className="popular-tag"
+                              onClick={() => handlePopularTermClick(label)}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="suggestions-section">
                     <span className="section-title">
                       {searchQuery.trim() 
-                        ? (lang === 'en' ? 'Products Matches' : 'Productos Coincidentes') 
+                        ? (lang === 'en'
+                            ? `${filteredProducts.length} ${filteredProducts.length === 1 ? 'result' : 'results'}`
+                            : `${filteredProducts.length} ${filteredProducts.length === 1 ? 'resultado' : 'resultados'}`)
                         : (lang === 'en' ? 'Suggested Peptides' : 'Péptidos Sugeridos')
                       }
                     </span>
-                    <div className="suggested-products">
-                      {getSearchSuggestions().length === 0 ? (
+                    <div className="suggested-products" id="catalog-search-results" role="listbox">
+                      {searchSuggestions.length === 0 ? (
                         <div className="no-matches-msg">
-                          {lang === 'en' ? 'No products found.' : 'No se encontraron productos.'}
+                          <span>
+                            {lang === 'en'
+                              ? 'No products found with the current filters.'
+                              : 'No se encontraron productos con los filtros actuales.'}
+                          </span>
+                          {hasRestrictiveFilters && (
+                            <button type="button" className="search-reset-filters" onClick={clearRestrictiveFilters}>
+                              {lang === 'en' ? 'Clear filters' : 'Borrar filtros'}
+                            </button>
+                          )}
                         </div>
                       ) : (
-                        getSearchSuggestions().map((match, idx) => {
+                        searchSuggestions.map((match, idx) => {
                           const formattedPrice = formatPriceVal(getPriceAsNumber(match, currency), currency);
                           const isBac = isBacWater(match.product);
                           const inStock = isBac || isInStock(match.status);
@@ -3628,20 +3712,14 @@ export default function CatalogPage() {
 
                           return (
                             <div 
-                              key={idx} 
-                              className="suggested-product-row"
+                              key={match.id || match.product}
+                              id={`catalog-search-option-${idx}`}
+                              className={`suggested-product-row${searchResultIndex === idx ? ' active' : ''}`}
+                              role="option"
+                              aria-selected={searchResultIndex === idx}
                               onMouseDown={(e) => e.preventDefault()}
-                              onTouchEnd={(e) => {
-                                // e.preventDefault() prevents the ghost click, but we want to allow scrolling if they dragged.
-                                // React handles scrolling vs tap reasonably well on onTouchEnd if not prevented, 
-                                // but if we want to ensure it fires instead of getting swallowed:
-                                handleProductClick(match);
-                                closeSearch();
-                              }}
-                              onClick={() => {
-                                handleProductClick(match);
-                                closeSearch();
-                              }}
+                              onMouseEnter={() => setSearchResultIndex(idx)}
+                              onClick={() => selectSearchSuggestion(match)}
                             >
                               <div className="suggested-product-img">
                                 {match.imageUrl ? (
@@ -3679,6 +3757,13 @@ export default function CatalogPage() {
                         })
                       )}
                     </div>
+                    {searchQuery.trim() && searchSuggestions.length > 0 && (
+                      <button type="button" className="search-view-results" onClick={revealSearchResults}>
+                        {lang === 'en'
+                          ? `View all ${filteredProducts.length} ${filteredProducts.length === 1 ? 'result' : 'results'}`
+                          : `Ver ${filteredProducts.length === 1 ? 'el resultado' : `los ${filteredProducts.length} resultados`}`}
+                      </button>
+                    )}
                   </div>
                 </div>
                 </>
@@ -3698,7 +3783,8 @@ export default function CatalogPage() {
             </button>
             <button 
               onClick={() => setShowFilters(!showFilters)} 
-              className={`filter-btn ${showFilters ? 'active' : ''}`} 
+              className={`filter-btn ${showFilters || hasRestrictiveFilters ? 'active' : ''}`}
+              aria-pressed={showFilters}
               title={lang === 'en' ? 'Filters' : 'Filtros'}
             >
               <SlidersHorizontal size={18} />
@@ -3706,6 +3792,24 @@ export default function CatalogPage() {
           </div>
 
           <div className={`filter-panel ${showFilters ? 'active' : ''}`}>
+            <div className="filter-group category-filter-group">
+              <label htmlFor="catalogCategoryFilter">
+                {lang === 'en' ? 'Product Category' : 'Categoría de Producto'}
+              </label>
+              <select
+                id="catalogCategoryFilter"
+                value={activeCategory}
+                onChange={(e) => setActiveCategory(e.target.value)}
+              >
+                {categoriesList.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat === 'all'
+                      ? (lang === 'en' ? 'All Products' : 'Todos los Productos')
+                      : getCategoryChipLabel(cat)}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="filter-group">
               <label>{lang === 'en' ? 'Price Range' : 'Rango de Precio'}</label>
               <select value={priceFilter} onChange={(e) => setPriceFilter(e.target.value)}>
@@ -3944,6 +4048,8 @@ export default function CatalogPage() {
 
         {!gateLoading && (
           <div
+            ref={resultsRef}
+            className="catalog-results-anchor"
             aria-hidden={!gateAccessGranted && gateVisible}
             style={{
               opacity: 1,
@@ -3952,14 +4058,34 @@ export default function CatalogPage() {
               transition: 'filter 0.3s',
             }}
           >
+          {!loading && searchQuery.trim() && (
+            <div className="catalog-result-summary" role="status" aria-live="polite">
+              <Search size={16} aria-hidden="true" />
+              <span>
+                {lang === 'en'
+                  ? `${filteredProducts.length} ${filteredProducts.length === 1 ? 'result' : 'results'} for “${searchQuery.trim()}”`
+                  : `${filteredProducts.length} ${filteredProducts.length === 1 ? 'resultado' : 'resultados'} para “${searchQuery.trim()}”`}
+              </span>
+            </div>
+          )}
           {loading ? (
           <div className="loader">
             <div className="sync-spinner" style={{ marginBottom: '16px' }}></div>
             <div>{lang === 'en' ? 'Syncing catalog...' : 'Sincronizando catálogo...'}</div>
           </div>
         ) : filteredProducts.length === 0 ? (
-          <div className="loader">
-            {lang === 'en' ? 'No products matching filters.' : 'No se encontraron productos.'}
+          <div className="loader catalog-empty-results">
+            <span>{lang === 'en' ? 'No products match this search and filter combination.' : 'Ningún producto coincide con esta búsqueda y filtros.'}</span>
+            <button
+              type="button"
+              className="search-reset-filters"
+              onClick={() => {
+                setSearchQuery('');
+                clearRestrictiveFilters();
+              }}
+            >
+              {lang === 'en' ? 'Clear search and filters' : 'Borrar búsqueda y filtros'}
+            </button>
           </div>
         ) : viewMode === 'az' ? (
           renderAzList()
@@ -4322,6 +4448,40 @@ export default function CatalogPage() {
             padding-bottom: 0;
           }
         }
+
+        /* Search owns the centre of the screen. Keep WhatsApp available as a
+           compact corner action instead of letting the full-width bar cover
+           suggestion rows or the first catalog results. */
+        .catalog-page-shell.catalog-search-open .cart-container-wrapper:not(.has-items) {
+          z-index: 10001;
+          left: auto;
+          right: 14px;
+          bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+          width: auto;
+          padding: 0;
+          background: none;
+          justify-content: flex-end;
+        }
+
+        .catalog-page-shell.catalog-search-open .catalog-whatsapp-sticky {
+          width: 54px;
+          height: 54px;
+          min-width: 54px;
+          padding: 0;
+          border-radius: 50%;
+          gap: 0;
+          box-shadow: 0 8px 24px rgba(217,83,0,0.38);
+        }
+
+        .catalog-page-shell.catalog-search-open .catalog-whatsapp-sticky-label {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+          clip-path: inset(50%);
+          white-space: nowrap;
+        }
       `}</style>
 
       <div className={`cart-container-wrapper ${cart.length > 0 ? 'has-items' : ''}`}>
@@ -4357,6 +4517,7 @@ export default function CatalogPage() {
               id="catalog-whatsapp-btn"
               className="catalog-whatsapp-sticky"
               onClick={openCatalogWhatsApp}
+              aria-label={lang === 'en' ? 'Order on WhatsApp' : 'Ordenar por WhatsApp'}
             >
               <span className="catalog-whatsapp-sticky-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -4364,7 +4525,9 @@ export default function CatalogPage() {
                   <path d="M9.4 8.3c.3 2.4 1.9 4 4.3 4.3" />
                 </svg>
               </span>
-              <span>{lang === 'en' ? 'Order on WhatsApp' : 'Ordenar por WhatsApp'}</span>
+              <span className="catalog-whatsapp-sticky-label">
+                {lang === 'en' ? 'Order on WhatsApp' : 'Ordenar por WhatsApp'}
+              </span>
             </button>
           )
         )}
