@@ -54,7 +54,38 @@ function searchAcronym(value = '') {
     .join('');
 }
 
-function textMatchRank(value = '', query = '') {
+function editDistance(left = '', right = '') {
+  const a = String(left);
+  const b = String(right);
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+
+  for (let row = 1; row <= a.length; row += 1) {
+    let diagonal = previous[0];
+    previous[0] = row;
+    for (let column = 1; column <= b.length; column += 1) {
+      const above = previous[column];
+      previous[column] = a[row - 1] === b[column - 1]
+        ? diagonal
+        : 1 + Math.min(diagonal, above, previous[column - 1]);
+      diagonal = above;
+    }
+  }
+
+  return previous[b.length];
+}
+
+function isCloseSearchToken(left = '', right = '') {
+  const a = compactSearchText(left);
+  const b = compactSearchText(right);
+  if (a.length < 4 || b.length < 4) return false;
+
+  const longest = Math.max(a.length, b.length);
+  const tolerance = longest >= 8 ? 2 : 1;
+  if (Math.abs(a.length - b.length) > tolerance) return false;
+  return editDistance(a, b) <= tolerance;
+}
+
+function textMatchRank(value = '', query = '', { allowFuzzy = false } = {}) {
   const text = normalizeCatalogSearchText(value);
   const compact = compactSearchText(value);
   const words = text.split(/\s+/).filter(Boolean);
@@ -67,15 +98,63 @@ function textMatchRank(value = '', query = '') {
   if (words.some((word) => word.startsWith(q)) || acronym.startsWith(qCompact)) return 1;
   if (text.includes(q) || compact.includes(qCompact)) return 2;
   if (acronym.includes(qCompact)) return 3;
+  if (allowFuzzy && (isCloseSearchToken(compact, qCompact) || words.some((word) => isCloseSearchToken(word, q)))) {
+    return 4;
+  }
   return null;
+}
+
+/**
+ * Former storefront names and common shorthand customers still type.
+ *
+ * These aliases stay with search rather than the product data because they are
+ * navigation language, not claims or customer-facing product names. Ingredient
+ * aliases for named blends let a customer find the blend from a component they
+ * already know without making the component the displayed product name.
+ */
+export function catalogSearchAliases(product = {}) {
+  const name = normalizeCatalogSearchText(product?.product);
+  const aliases = [];
+
+  if (name.includes('amino acid blend')) {
+    aliases.push('SUPER Human', 'SUPER Human Amino Blend');
+  }
+  if (name.includes('lipotropic blend')) {
+    aliases.push('Fat Blaster', 'Fat Blaster Amino Blend');
+  }
+  if (/(^| )glp 1( |$)/.test(name)) {
+    aliases.push('Retatrutide', 'Reta');
+  }
+  if (name.includes('melanotan ii')) {
+    aliases.push('Melanotan 2', 'MT-II', 'MT2');
+  }
+  if (/(^| )tb 4( |$)/.test(name)) {
+    aliases.push('TB-500', 'TB500');
+  }
+  if (/(^| )cjc( |$)/.test(name) && /(^| )ipa( |$)/.test(name)) {
+    aliases.push('Ipamorelin');
+  }
+  if (/(^| )glow( |$)/.test(name)) {
+    aliases.push('GHK-Cu', 'BPC-157', 'TB-500');
+  }
+  if (/(^| )klow( |$)/.test(name)) {
+    aliases.push('KPV', 'GHK-Cu', 'BPC-157', 'TB-500');
+  }
+
+  return aliases;
 }
 
 export function catalogSearchMatchRank(product = {}, query = '') {
   const q = normalizeCatalogSearchText(query);
   if (!q) return 0;
 
-  const nameRank = textMatchRank(product?.product, q);
+  const nameRank = textMatchRank(product?.product, q, { allowFuzzy: true });
   if (nameRank !== null) return nameRank;
+
+  const aliasRanks = catalogSearchAliases(product)
+    .map((alias) => textMatchRank(alias, q, { allowFuzzy: true }))
+    .filter((rank) => rank !== null);
+  if (aliasRanks.length > 0) return 5 + Math.min(...aliasRanks);
 
   const categoryRank = textMatchRank(product?.category, q);
   if (categoryRank !== null) return 10 + categoryRank;
