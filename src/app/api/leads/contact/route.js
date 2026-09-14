@@ -14,7 +14,7 @@ import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { enqueueAndProcessLeadNotification } from '@/lib/leadNotificationDelivery';
 import { responseDeadline } from '@/lib/leadNotifications.mjs';
 import { leadNotificationEmailSubject, leadNotificationTitle } from '@/lib/tiktokLeadPosting.mjs';
-import { sendAdLeadToChatwoot } from '@/lib/chatwootLead.mjs';
+import { loadChatwootLeadEnabled, sendAdLeadToChatwoot } from '@/lib/chatwootLead.mjs';
 import {
   hasLandingQualification,
   isDuplicateLandingLeadSubmission,
@@ -411,7 +411,10 @@ export async function POST(request) {
     // Team > Notification Settings. A Chatwoot outage cannot reject or retry a
     // lead that is already safely stored in the CRM.
     let chatwootResult = null;
-    if (isAdLandingSource(source)) {
+    const chatwootEnabled = isAdLandingSource(source)
+      ? await loadChatwootLeadEnabled(supabase)
+      : false;
+    if (chatwootEnabled) {
       chatwootResult = await sendAdLeadToChatwoot({
         leadId,
         name,
@@ -474,7 +477,11 @@ export async function POST(request) {
       record: existing ? 'updated' : 'created',
       assignedAgent: owner || null,
       chatwoot: isAdLandingSource(source)
-        ? { configured: chatwootResult?.configured === true, sent: chatwootResult?.sent === true }
+        ? {
+          enabled: chatwootEnabled,
+          configured: chatwootEnabled ? chatwootResult?.configured === true : null,
+          sent: chatwootEnabled ? chatwootResult?.sent === true : false,
+        }
         : undefined,
       notifications: notificationResult?.outbox
         ? {

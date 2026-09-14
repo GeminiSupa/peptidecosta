@@ -7,6 +7,7 @@ import {
   isUsableDestination,
   normalizeDestination,
 } from '@/lib/notificationRecipients.mjs';
+import { CHATWOOT_LEAD_SETTING_ID } from '@/lib/chatwootLead.mjs';
 
 export const runtime = 'nodejs';
 
@@ -65,7 +66,30 @@ export async function GET(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ recipients: data || [], tableReady: true });
+  let chatwootEnabled = true;
+  try {
+    const { data: setting, error: settingError } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('id', CHATWOOT_LEAD_SETTING_ID)
+      .maybeSingle();
+    if (settingError) throw settingError;
+    chatwootEnabled = setting?.value?.enabled !== false;
+  } catch (settingError) {
+    console.warn('[notification-recipients] Chatwoot switch fallback:', settingError.message);
+  }
+  const chatwootConfigured = Boolean(
+    process.env.CHATWOOT_BASE_URL
+      && process.env.CHATWOOT_ACCOUNT_ID
+      && process.env.CHATWOOT_INBOX_ID
+      && process.env.CHATWOOT_API_ACCESS_TOKEN
+  );
+
+  return NextResponse.json({
+    recipients: data || [],
+    tableReady: true,
+    chatwoot: { enabled: chatwootEnabled, configured: chatwootConfigured },
+  });
 }
 
 export async function POST(request) {
@@ -150,6 +174,19 @@ export async function PATCH(request) {
 
   try {
     const body = await request.json();
+    if (body?.chatwootEnabled !== undefined) {
+      const supabase = getSupabaseAdmin();
+      const enabled = body.chatwootEnabled === true;
+      const { error } = await supabase.from('site_settings').upsert({
+        id: CHATWOOT_LEAD_SETTING_ID,
+        value: { enabled },
+      });
+      if (error) {
+        console.error('[notification-recipients] Chatwoot switch failed:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ chatwoot: { enabled } });
+    }
     if (!body?.id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
     const patch = {};

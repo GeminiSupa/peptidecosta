@@ -1,6 +1,24 @@
 const TIMEOUT_MS = 8000;
+export const CHATWOOT_LEAD_SETTING_ID = 'google_ads_chatwoot';
 
 const clean = (value) => String(value ?? '').trim();
+
+export async function loadChatwootLeadEnabled(supabase) {
+  try {
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('id', CHATWOOT_LEAD_SETTING_ID)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.value?.enabled !== false;
+  } catch (error) {
+    // Keep the integration on when an older deployment has not created the
+    // setting row yet. The admin switch writes that row on its first change.
+    console.warn('[Chatwoot] Could not read the admin switch; using enabled:', error.message);
+    return true;
+  }
+}
 
 function readConfig(env) {
   const baseUrl = clean(env.CHATWOOT_BASE_URL).replace(/\/+$/, '');

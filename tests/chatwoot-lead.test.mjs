@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { buildChatwootLeadMessage, sendAdLeadToChatwoot } from '../src/lib/chatwootLead.mjs';
+import {
+  buildChatwootLeadMessage,
+  loadChatwootLeadEnabled,
+  sendAdLeadToChatwoot,
+} from '../src/lib/chatwootLead.mjs';
 
 const ENV = {
   CHATWOOT_BASE_URL: 'https://chat.example.com/',
@@ -32,6 +37,32 @@ test('missing Chatwoot environment skips delivery without making a network call'
   });
   assert.deepEqual(result, { configured: false, sent: false });
   assert.equal(called, false);
+});
+
+test('the admin Chatwoot switch defaults on and honours an explicit off value', async () => {
+  const fakeSupabase = (value, error = null) => {
+    const query = {
+      select: () => query,
+      eq: () => query,
+      maybeSingle: async () => ({ data: value === undefined ? null : { value }, error }),
+    };
+    return { from: () => query };
+  };
+  assert.equal(await loadChatwootLeadEnabled(fakeSupabase(undefined)), true);
+  assert.equal(await loadChatwootLeadEnabled(fakeSupabase({ enabled: false })), false);
+  assert.equal(await loadChatwootLeadEnabled(fakeSupabase({ enabled: true })), true);
+});
+
+test('the lead route and Team notification API share the admin Chatwoot switch', async () => {
+  const [leadRoute, adminRoute, teamScreen] = await Promise.all([
+    readFile(new URL('../src/app/api/leads/contact/route.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/app/api/admin/notification-recipients/route.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/admin/TeamManagement.js', import.meta.url), 'utf8'),
+  ]);
+  assert.match(leadRoute, /loadChatwootLeadEnabled\(supabase\)/);
+  assert.match(adminRoute, /CHATWOOT_LEAD_SETTING_ID/);
+  assert.match(adminRoute, /chatwootEnabled/);
+  assert.match(teamScreen, /Send Google Ads leads to Chatwoot/);
 });
 
 test('creates a contact, conversation and incoming message in the configured inbox', async () => {

@@ -35,7 +35,7 @@ const CLOSE_BTN_STYLE = {
 };
 
 /** One labelled on/off row in the member notification panel. */
-function NotificationToggle({ icon, title, hint, checked, onChange, activeColor = '#38bdf8' }) {
+function NotificationToggle({ icon, title, hint, checked, onChange, activeColor = '#38bdf8', disabled = false }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', padding: '10px 0' }}>
       <div>
@@ -48,6 +48,7 @@ function NotificationToggle({ icon, title, hint, checked, onChange, activeColor 
         <input
           type="checkbox"
           checked={checked}
+          disabled={disabled}
           onChange={e => onChange(e.target.checked)}
           style={{ opacity: 0, width: 0, height: 0 }}
         />
@@ -71,6 +72,7 @@ function displayDestination(recipient) {
  */
 function NotificationSettings({
   recipients, tableReady, hint, loading, error, savingId, canEdit,
+  chatwootEnabled, chatwootConfigured, chatwootSaving, onChatwootChange,
   newLabel, setNewLabel, newChannel, setNewChannel, newDestination, setNewDestination,
   adding, onAdd, onUpdate, onRemove,
 }) {
@@ -115,7 +117,7 @@ function NotificationSettings({
               )}
               {/* Offered on both channels: email goes to the ops inboxes, WhatsApp
                   to the agent working the campaign on their own phone. */}
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#fbbf24', cursor: canEdit ? 'pointer' : 'not-allowed' }} title="Email or WhatsApp copy for Google Ads leads from /lp and /glp-1. Chatwoot delivery stays enabled.">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#fbbf24', cursor: canEdit ? 'pointer' : 'not-allowed' }} title="Email or WhatsApp copy for Google Ads leads from /lp and /glp-1. The Chatwoot switch above is separate.">
                 <input
                   type="checkbox"
                   checked={!!r.adwords_lead}
@@ -151,6 +153,20 @@ function NotificationSettings({
         Destinations for new-order alerts and optional lead copies. Google Ads leads from /lp and /glp-1 go to Chatwoot;
         use the Google Ads checkbox here only for email or WhatsApp monitoring copies. Ordinary leads still notify their assigned agent directly.
       </p>
+
+      <div style={panel}>
+        <NotificationToggle
+          icon={<MessageCircle size={15} />}
+          title="Send Google Ads leads to Chatwoot"
+          hint={chatwootConfigured
+            ? 'Controls automatic Chatwoot conversations for /lp and /glp-1. Email and WhatsApp copies are controlled separately below.'
+            : 'Chatwoot credentials are missing in Vercel. Add them before enabling this integration.'}
+          checked={chatwootEnabled}
+          disabled={!canEdit || chatwootSaving}
+          onChange={onChatwootChange}
+          activeColor="#22c55e"
+        />
+      </div>
 
       {!tableReady && (
         <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.25)', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px', fontSize: '0.85rem', color: '#fde68a' }}>
@@ -226,6 +242,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [recipientsHint, setRecipientsHint] = useState('');
   const [recipientsLoading, setRecipientsLoading] = useState(false);
   const [recipientsError, setRecipientsError] = useState('');
+  const [chatwootEnabled, setChatwootEnabled] = useState(true);
+  const [chatwootConfigured, setChatwootConfigured] = useState(false);
+  const [chatwootSaving, setChatwootSaving] = useState(false);
   const [recipientSavingId, setRecipientSavingId] = useState(null);
   const [newRecipientLabel, setNewRecipientLabel] = useState('');
   const [newRecipientChannel, setNewRecipientChannel] = useState('whatsapp');
@@ -309,10 +328,31 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setRecipients(data.recipients || []);
       setRecipientsReady(data.tableReady !== false);
       setRecipientsHint(data.hint || '');
+      setChatwootEnabled(data.chatwoot?.enabled !== false);
+      setChatwootConfigured(data.chatwoot?.configured === true);
     } catch (err) {
       setRecipientsError(err.message);
     }
     setRecipientsLoading(false);
+  };
+
+  const updateChatwootEnabled = async (enabled) => {
+    setChatwootSaving(true);
+    setRecipientsError('');
+    setChatwootEnabled(enabled);
+    try {
+      const res = await adminFetch('/api/admin/notification-recipients', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatwootEnabled: enabled }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not save the Chatwoot setting');
+    } catch (err) {
+      setRecipientsError(err.message);
+      await fetchRecipients();
+    }
+    setChatwootSaving(false);
   };
 
   const addRecipient = async (e) => {
@@ -1113,6 +1153,10 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
           error={recipientsError}
           savingId={recipientSavingId}
           canEdit={!!currentUserProfile?.is_superadmin}
+          chatwootEnabled={chatwootEnabled}
+          chatwootConfigured={chatwootConfigured}
+          chatwootSaving={chatwootSaving}
+          onChatwootChange={updateChatwootEnabled}
           newLabel={newRecipientLabel}
           setNewLabel={setNewRecipientLabel}
           newChannel={newRecipientChannel}

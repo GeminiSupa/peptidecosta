@@ -107,6 +107,9 @@ lead instead; it settles the question in two minutes.
 Chatwoot delivery requires these server-only Vercel variables in Production:
 `CHATWOOT_BASE_URL`, `CHATWOOT_ACCOUNT_ID`, `CHATWOOT_INBOX_ID`, and
 `CHATWOOT_API_ACCESS_TOKEN`. Do not prefix the token with `NEXT_PUBLIC_`.
+Once configured, turn delivery on or off from **Team → Notification Settings →
+Send Google Ads leads to Chatwoot**. The per-destination Google Ads checkboxes
+below it control only monitoring copies.
 
 ### 3. What settings is the running deployment actually using?
 
